@@ -1,0 +1,79 @@
+# The Frost Warden
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male sentinel, pale skin, silver eyes, fur cloak, northern armor, stone bridge, candlelit ambience, quiet confidence, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Ice Mage
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female mage, platinum hair, cold aura, blue robes with runes, royal war tent, fiery reflections, mystical aura, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Wolf Knight
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male warrior, fur-trimmed armor, scarred face, stern gaze, battlefield camp, diffused morning light, heroic composure, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Runebinder
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female scholar, gray cloak, glowing blue tattoos, icy book of spells, sunlit garden, diffused morning light, heroic composure, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Hearth Keeper
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+elder woman, warm face, thick furs, tending fire, forge interior, moonlight haze, heroic composure, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Raven Scout
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male scout, hooded, black feathers, bow and knife, misty forest edge, diffused morning light, determined focus, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Frost Monk
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male monk, bald, frostbitten hands, simple gray robes, royal war tent, crisp daylight, serene calm, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Glacier Queen
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female monarch, sapphire crown, flowing icy gown, snowy mountain pass, torchlight glow, introspective stillness, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Snowblade
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male knight, frost-covered armor, pale sword, frozen battlefield, ancient library, overcast dawn, serene calm, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Ice Druid
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female shaman, antler crown, braids, surrounded by snowstorm, sunlit garden, gentle rim lighting, graceful poise, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting

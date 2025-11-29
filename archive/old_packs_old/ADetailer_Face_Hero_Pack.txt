@@ -1,0 +1,21 @@
+# ADetailer Phase - Hero Portrait Refinement
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR, ultra-detailed skin texture, natural lighting, sharp focus, cinematic tone)
+heroic expression, intense eyes, defined jawline, realistic skin pores, smooth complexion, balanced highlights and shadows,
+subtle film grain, natural depth of field, perfect facial symmetry, highly detailed eyes and eyelashes,
+intricate hair strands, clear facial geometry, soft rim light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: blurry, low quality, cartoon, extra eyes, asymmetrical face, bad eyes, bad teeth, overexposed skin,
+plastic skin, shiny forehead, unnatural shadowing, low detail, overprocessed, deformed pupils, distorted mouth,
+artifacting, wax texture, makeup smears, discolored skin tones
+
+# Recommended ADetailer settings
+steps: 12
+sampler: DPM++ 2M
+cfg_scale: 6.0
+denoise_strength: 0.26
+mask_feather: 8
+model: face_yolov8n.pt
+detection_confidence: 0.69

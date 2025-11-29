@@ -1,0 +1,16 @@
+# Professional Embeddings and LoRA Test Pack
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character portrait, natural skin, realistic hands, clean lighting, subtle pores
+young shieldmaiden, matte steel, cloak clasp, hand resting on rim, steady gaze, 3/4 angle
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:1.0>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces
+
+beautiful landscape, mountains at sunset, dramatic lighting
+<lora:landscape_enhancer:0.8> <lora:dramatic_lighting:0.6>
+neg: <embedding:bad_prompt_version2> blurry, low quality, oversaturated
+
+simple portrait test without any embeddings or LoRA
+professional studio lighting, clean composition
+neg: ugly, distorted, amateur lighting

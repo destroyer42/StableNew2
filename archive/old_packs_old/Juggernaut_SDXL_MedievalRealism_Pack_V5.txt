@@ -1,0 +1,79 @@
+# The River Paladin
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male paladin, silver-blue armor, dark hair, reflective eyes, ancient library, torchlight glow, mystical aura, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Grove Sentinel
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female ranger, forest cloak, leaf-etched bow, vigilant gaze, castle courtyard, gentle rim lighting, thoughtful presence, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Ember Monk
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male monk, shaved head, red robes, glowing tattoos, royal war tent, moonlight haze, heroic composure, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Iron Duchess
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female noble, steel corset armor, crown of thorns, proud expression, battlefield camp, moonlight haze, quiet confidence, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Starbound Sage
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male astronomer, dark robe, celestial instruments, focused eyes, royal war tent, fiery reflections, serene calm, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Skyblade
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female knight, white armor, wind-swept hair, airborne stance, stone bridge, candlelit ambience, graceful poise, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Stone Mason
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male builder, rough hands, dust-covered tunic, sculpting expression, misty forest edge, sunset flare, introspective stillness, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Dawn Healer
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female cleric, white robe, glowing staff, sunrise backdrop, sunlit garden, diffused morning light, determined focus, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Sea Captain
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+male sailor, weathered face, naval coat, storm clouds behind, moonlit riverbank, sunset flare, resolute defiance, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Shadow Archivist
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female scholar, black robes, candlelight face, ancient tomes, castle courtyard, candlelit ambience, thoughtful presence, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting

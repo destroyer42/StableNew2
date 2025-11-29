@@ -1,0 +1,903 @@
+# StableNew V2 Inventory — Phase 1 Classification (V2-P1)
+
+This document reflects Phase 1 classification of the snapshot `StableNew-snapshot-20251128-111334.zip`.
+
+Categories:
+- **V2 Canonical** (`v2_canonical`): V2 implementation files that should survive and be wired.
+- **V2 Experimental** (`v2_experimental`): V2 files present but not yet wired (none detected in this snapshot).
+- **V1 Legacy** (`v1_legacy`): Old / hybrid implementation to archive (especially GUI).
+- **Shared Core** (`shared_core`): Non-GUI or neutral runtime code shared between eras.
+- **V2 Canonical Tests** (`v2_canonical_test`): Tests explicitly targeting V2 behavior.
+- **V1 Legacy Tests** (`v1_legacy_test`): Tests that only exercise legacy (to archive).
+- **Neutral Tests** (`neutral_test`): Cross-cutting tests not tied strongly to V1/V2.
+- **Other** (`other`): Docs, configs, and non-code artifacts.
+
+## V2 Canonical Implementation (`v2_canonical`)
+
+These are the V2 implementation files that should remain as the canonical surface going forward.
+
+**Count:** 38
+
+- `src/gui/app_state_v2.py`
+- `src/gui/core_config_panel_v2.py`
+- `src/gui/job_history_panel_v2.py`
+- `src/gui/layout_v2.py`
+- `src/gui/learning_review_dialog_v2.py`
+- `src/gui/main_window_v2.py`
+- `src/gui/model_list_adapter_v2.py`
+- `src/gui/model_manager_panel_v2.py`
+- `src/gui/negative_prompt_panel_v2.py`
+- `src/gui/output_settings_panel_v2.py`
+- `src/gui/panels_v2/layout_manager_v2.py`
+- `src/gui/panels_v2/pipeline_panel_v2.py`
+- `src/gui/panels_v2/preview_panel_v2.py`
+- `src/gui/panels_v2/randomizer_panel_v2.py`
+- `src/gui/panels_v2/sidebar_panel_v2.py`
+- `src/gui/panels_v2/status_bar_v2.py`
+- `src/gui/pipeline_command_bar_v2.py`
+- `src/gui/pipeline_panel_v2.py`
+- `src/gui/preview_panel_v2.py`
+- `src/gui/prompt_pack_adapter_v2.py`
+- `src/gui/prompt_pack_panel_v2.py`
+- `src/gui/randomizer_panel_v2.py`
+- `src/gui/resolution_panel_v2.py`
+- `src/gui/sidebar_panel_v2.py`
+- `src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py`
+- `src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py`
+- `src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py`
+- `src/gui/stage_cards_v2/base_stage_card_v2.py`
+- `src/gui/status_bar_v2.py`
+- `src/gui/theme_v2.py`
+- `src/gui/widgets/scrollable_frame_v2.py`
+- `src/gui_v2/adapters/learning_adapter_v2.py`
+- `src/gui_v2/adapters/pipeline_adapter_v2.py`
+- `src/gui_v2/adapters/randomizer_adapter_v2.py`
+- `src/gui_v2/adapters/status_adapter_v2.py`
+- `src/pipeline/last_run_store_v2_5.py`
+- `src/pipeline/randomizer_v2.py`
+- `src/utils/file_access_log_v2_5_2025_11_26.py`
+
+## V2 Experimental Implementation (`v2_experimental`)
+
+V2-named files that exist but are not yet wired into main entrypoints or V2 tests. None were detected with the current heuristics.
+
+**Count:** 0
+
+- _(none detected in this snapshot)_
+
+## V1 Legacy Implementation (`v1_legacy`)
+
+Implementation files considered V1 or hybrid (e.g., StableNewGUI, AppLayoutV2, theme.py). These are candidates for immediate archival.
+
+**Count:** 4
+
+- `src/gui/app_layout_v2.py`
+- `src/gui/main_window.py`
+- `src/gui/prompt_pack_panel.py`
+- `src/gui/theme.py`
+
+## Shared Core (`shared_core`)
+
+Core non-GUI modules and utilities shared across V1/V2. These generally remain as-is for Phase 1.
+
+**Count:** 113
+
+- `src/__init__.py`
+- `src/ai/settings_generator_adapter.py`
+- `src/ai/settings_generator_contract.py`
+- `src/ai/settings_generator_driver.py`
+- `src/api/__init__.py`
+- `src/api/client.py`
+- `src/api/healthcheck.py`
+- `src/api/webui_api.py`
+- `src/api/webui_process_manager.py`
+- `src/api/webui_resources.py`
+- `src/app_factory.py`
+- `src/cli.py`
+- `src/cluster/__init__.py`
+- `src/cluster/worker_model.py`
+- `src/cluster/worker_registry.py`
+- `src/config/app_config.py`
+- `src/controller/__init__.py`
+- `src/controller/app_controller.py`
+- `src/controller/cluster_controller.py`
+- `src/controller/job_execution_controller.py`
+- `src/controller/job_history_service.py`
+- `src/controller/learning_execution_controller.py`
+- `src/controller/pipeline_config_assembler.py`
+- `src/controller/pipeline_controller.py`
+- `src/controller/queue_execution_controller.py`
+- `src/controller/settings_suggestion_controller.py`
+- `src/controller/webui_connection_controller.py`
+- `src/gui/__init__.py`
+- `src/gui/adetailer_config_panel.py`
+- `src/gui/advanced_prompt_editor.py`
+- `src/gui/api_status_panel.py`
+- `src/gui/center_panel.py`
+- `src/gui/config_panel.py`
+- `src/gui/controller.py`
+- `src/gui/controllers/learning_controller.py`
+- `src/gui/engine_settings_dialog.py`
+- `src/gui/enhanced_slider.py`
+- `src/gui/gui_invoker.py`
+- `src/gui/img2img_stage_card.py`
+- `src/gui/learning_state.py`
+- `src/gui/log_panel.py`
+- `src/gui/models/prompt_metadata.py`
+- `src/gui/models/prompt_pack_model.py`
+- `src/gui/panels_v2/__init__.py`
+- `src/gui/pipeline_controls_panel.py`
+- `src/gui/prompt_pack_list_manager.py`
+- `src/gui/prompt_workspace_state.py`
+- `src/gui/scrolling.py`
+- `src/gui/stage_cards_v2/components.py`
+- `src/gui/stage_cards_v2/validation_result.py`
+- `src/gui/stage_chooser.py`
+- `src/gui/state.py`
+- `src/gui/tooltip.py`
+- `src/gui/txt2img_stage_card.py`
+- `src/gui/upscale_stage_card.py`
+- `src/gui/utils/lora_embedding_parser.py`
+- `src/gui/views/__init__.py`
+- `src/gui/views/experiment_design_panel.py`
+- `src/gui/views/learning_plan_table.py`
+- `src/gui/views/learning_review_panel.py`
+- `src/gui/views/learning_tab_frame.py`
+- `src/gui/views/pipeline_config_panel.py`
+- `src/gui/views/pipeline_tab_frame.py`
+- `src/gui/views/prompt_tab_frame.py`
+- `src/gui/views/run_control_bar.py`
+- `src/gui/views/stage_cards_panel.py`
+- `src/gui/widgets/matrix_helper_widget.py`
+- `src/gui_v2/adapters/__init__.py`
+- `src/gui_v2/randomizer_adapter.py`
+- `src/gui_v2/validation/__init__.py`
+- `src/gui_v2/validation/pipeline_txt2img_validator.py`
+- `src/learning/dataset_builder.py`
+- `src/learning/feedback_manager.py`
+- `src/learning/learning_adapter.py`
+- `src/learning/learning_contract.py`
+- `src/learning/learning_execution.py`
+- `src/learning/learning_feedback.py`
+- `src/learning/learning_plan.py`
+- `src/learning/learning_profile_sidecar.py`
+- `src/learning/learning_record.py`
+- `src/learning/learning_record_builder.py`
+- `src/learning/learning_runner.py`
+- `src/learning/model_profiles.py`
+- `src/learning/recommendation_engine.py`
+- `src/learning/run_metadata.py`
+- `src/main.py`
+- `src/pipeline/__init__.py`
+- `src/pipeline/executor.py`
+- `src/pipeline/pipeline_runner.py`
+- `src/pipeline/run_plan.py`
+- `src/pipeline/stage_sequencer.py`
+- `src/pipeline/variant_planner.py`
+- `src/pipeline/video.py`
+- `src/queue/__init__.py`
+- `src/queue/job_history_store.py`
+- `src/queue/job_model.py`
+- `src/queue/job_queue.py`
+- `src/queue/single_node_runner.py`
+- `src/services/config_service.py`
+- `src/utils/__init__.py`
+- `src/utils/_extract_name_prefix.py`
+- `src/utils/aesthetic.py`
+- `src/utils/aesthetic_detection.py`
+- `src/utils/config.py`
+- `src/utils/file_io.py`
+- `src/utils/logger.py`
+- `src/utils/preferences.py`
+- `src/utils/prompt_pack.py`
+- `src/utils/prompt_packs.py`
+- `src/utils/randomizer.py`
+- `src/utils/state.py`
+- `src/utils/webui_discovery.py`
+- `src/utils/webui_launcher.py`
+
+## V2 Canonical Tests (`v2_canonical_test`)
+
+Tests that explicitly exercise V2 GUI or learning behavior.
+
+**Count:** 58
+
+- `tests/gui_v2/conftest.py`
+- `tests/gui_v2/test_advanced_prompt_editor_v2.py`
+- `tests/gui_v2/test_api_status_panel_webui_states_v2.py`
+- `tests/gui_v2/test_command_bar_v2.py`
+- `tests/gui_v2/test_core_config_panel_v2.py`
+- `tests/gui_v2/test_entrypoint_uses_v2_gui.py`
+- `tests/gui_v2/test_gui_v2_advanced_stage_cards_layout.py`
+- `tests/gui_v2/test_gui_v2_advanced_stage_cards_roundtrip.py`
+- `tests/gui_v2/test_gui_v2_advanced_stage_cards_validation.py`
+- `tests/gui_v2/test_gui_v2_ai_settings_button_guarded.py`
+- `tests/gui_v2/test_gui_v2_layout_skeleton.py`
+- `tests/gui_v2/test_gui_v2_mainwindow_split_structure.py`
+- `tests/gui_v2/test_gui_v2_panel_wiring.py`
+- `tests/gui_v2/test_gui_v2_pipeline_adapter.py`
+- `tests/gui_v2/test_gui_v2_pipeline_button_wiring.py`
+- `tests/gui_v2/test_gui_v2_pipeline_config_roundtrip.py`
+- `tests/gui_v2/test_gui_v2_pipeline_txt2img_validation.py`
+- `tests/gui_v2/test_gui_v2_randomizer_adapter_integration.py`
+- `tests/gui_v2/test_gui_v2_randomizer_integration.py`
+- `tests/gui_v2/test_gui_v2_randomizer_matrix_ui.py`
+- `tests/gui_v2/test_gui_v2_randomizer_matrix_ux.py`
+- `tests/gui_v2/test_gui_v2_randomizer_preview_list.py`
+- `tests/gui_v2/test_gui_v2_randomizer_variant_count_banner.py`
+- `tests/gui_v2/test_gui_v2_randomizer_variant_count_preview.py`
+- `tests/gui_v2/test_gui_v2_stage_cards_layout.py`
+- `tests/gui_v2/test_gui_v2_stage_cards_roundtrip.py`
+- `tests/gui_v2/test_gui_v2_startup.py`
+- `tests/gui_v2/test_gui_v2_status_adapter_progress_eta.py`
+- `tests/gui_v2/test_gui_v2_status_bar_progress_eta.py`
+- `tests/gui_v2/test_job_history_panel_v2.py`
+- `tests/gui_v2/test_learning_review_dialog.py`
+- `tests/gui_v2/test_learning_toggle.py`
+- `tests/gui_v2/test_learning_toggle_and_dialog.py`
+- `tests/gui_v2/test_main_window_tabs_v2.py`
+- `tests/gui_v2/test_model_manager_panel_v2.py`
+- `tests/gui_v2/test_negative_prompt_panel_v2.py`
+- `tests/gui_v2/test_output_settings_panel_v2.py`
+- `tests/gui_v2/test_pipeline_prompt_integration_v2.py`
+- `tests/gui_v2/test_pipeline_stage_cards_v2.py`
+- `tests/gui_v2/test_pipeline_tab_layout_v2.py`
+- `tests/gui_v2/test_pipeline_tab_stage_cards.py`
+- `tests/gui_v2/test_preview_panel_v2.py`
+- `tests/gui_v2/test_prompt_pack_panel_v2.py`
+- `tests/gui_v2/test_prompt_pack_to_prompt_roundtrip_v2.py`
+- `tests/gui_v2/test_resolution_panel_v2.py`
+- `tests/gui_v2/test_run_button_queue_mode_toggle.py`
+- `tests/gui_v2/test_run_button_queue_smoke.py`
+- `tests/gui_v2/test_scrollable_pipeline_panel_v2.py`
+- `tests/gui_v2/test_stagecard_base_v2.py`
+- `tests/gui_v2/test_status_bar_v2_composite.py`
+- `tests/gui_v2/test_theme_v2.py`
+- `tests/learning_v2/smoke_test_learning_workflow.py`
+- `tests/learning_v2/test_dataset_builder.py`
+- `tests/learning_v2/test_learning_contract.py`
+- `tests/learning_v2/test_learning_execution_controller_integration.py`
+- `tests/learning_v2/test_learning_execution_runner_happy_path.py`
+- `tests/learning_v2/test_recommendation_engine.py`
+- `tests/learning_v2/test_run_metadata_and_feedback.py`
+
+## V1 Legacy Tests (`v1_legacy_test`)
+
+Tests that exclusively target the old GUI or legacy behavior; safe to archive with V1.
+
+**Count:** 43
+
+- `tests/legacy/test_advanced_features.py`
+- `tests/legacy/test_advanced_prompt_editor_regressions.py`
+- `tests/legacy/test_aesthetic_detection.py`
+- `tests/legacy/test_aesthetic_integration.py`
+- `tests/legacy/test_api.py`
+- `tests/legacy/test_api_client_backoff.py`
+- `tests/legacy/test_api_status_panel.py`
+- `tests/legacy/test_archive_unused.py`
+- `tests/legacy/test_complete_workflow.py`
+- `tests/legacy/test_config.py`
+- `tests/legacy/test_config_manager_defaults.py`
+- `tests/legacy/test_config_panel.py`
+- `tests/legacy/test_controller.py`
+- `tests/legacy/test_default_preset.py`
+- `tests/legacy/test_file_io.py`
+- `tests/legacy/test_global_negative_stage_flags.py`
+- `tests/legacy/test_gui_enhancements.py`
+- `tests/legacy/test_gui_system.py`
+- `tests/legacy/test_gui_visibility.py`
+- `tests/legacy/test_log_panel.py`
+- `tests/legacy/test_logger.py`
+- `tests/legacy/test_matrix_base_prompt_fix.py`
+- `tests/legacy/test_matrix_prompt_mode_examples.py`
+- `tests/legacy/test_new_features.py`
+- `tests/legacy/test_pack_config.py`
+- `tests/legacy/test_pipeline_controls_panel.py`
+- `tests/legacy/test_pipeline_journey.py`
+- `tests/legacy/test_pipeline_throughput.py`
+- `tests/legacy/test_preferences_manager.py`
+- `tests/legacy/test_prompt_editor.py`
+- `tests/legacy/test_prompt_pack_list_manager.py`
+- `tests/legacy/test_prompt_pack_panel.py`
+- `tests/legacy/test_randomization_pipeline.py`
+- `tests/legacy/test_refiner_compare_mode.py`
+- `tests/legacy/test_refiner_support.py`
+- `tests/legacy/test_refiner_switch_math.py`
+- `tests/legacy/test_stage_chooser.py`
+- `tests/legacy/test_state.py`
+- `tests/legacy/test_structured_logger.py`
+- `tests/legacy/test_txt2img_stage.py`
+- `tests/legacy/test_upscale_stage.py`
+- `tests/legacy/test_variant_planner.py`
+- `tests/legacy/test_video.py`
+
+## Neutral Tests (`neutral_test`)
+
+Tests that cut across eras or exercise shared subsystems.
+
+**Count:** 89
+
+- `tests/__init__.py`
+- `tests/ai_v2/test_local_stub_settings_generator_behavior.py`
+- `tests/ai_v2/test_settings_generator_adapter_from_learning.py`
+- `tests/ai_v2/test_settings_generator_contract_roundtrip.py`
+- `tests/ai_v2/test_settings_suggestion_controller_apply.py`
+- `tests/api/test_webui_healthcheck.py`
+- `tests/api/test_webui_process_manager.py`
+- `tests/api/test_webui_resources.py`
+- `tests/app/test_bootstrap_webui_autostart.py`
+- `tests/cluster/test_worker_model_and_registry.py`
+- `tests/conftest.py`
+- `tests/controller/test_app_controller_config.py`
+- `tests/controller/test_app_controller_packs.py`
+- `tests/controller/test_app_controller_pipeline_flow_pr0.py`
+- `tests/controller/test_app_controller_pipeline_integration.py`
+- `tests/controller/test_cluster_controller.py`
+- `tests/controller/test_controller_job_lifecycle.py`
+- `tests/controller/test_controller_learning_toggle.py`
+- `tests/controller/test_controller_queue_execution.py`
+- `tests/controller/test_job_history_service.py`
+- `tests/controller/test_learning_execution_controller_gui_contract.py`
+- `tests/controller/test_pipeline_config_assembler.py`
+- `tests/controller/test_pipeline_config_assembler_core_fields.py`
+- `tests/controller/test_pipeline_config_assembler_model_fields.py`
+- `tests/controller/test_pipeline_config_assembler_negative_prompt.py`
+- `tests/controller/test_pipeline_config_assembler_output_settings.py`
+- `tests/controller/test_pipeline_config_assembler_resolution.py`
+- `tests/controller/test_pipeline_controller_config_path.py`
+- `tests/controller/test_pipeline_controller_queue_mode.py`
+- `tests/controller/test_pipeline_controller_webui_gating.py`
+- `tests/controller/test_profile_integration.py`
+- `tests/controller/test_queue_execution_controller.py`
+- `tests/controller/test_stage_sequencer_controller_integration.py`
+- `tests/controller/test_webui_connection_controller.py`
+- `tests/integration/__init__.py`
+- `tests/journeys/fakes/fake_pipeline_runner.py`
+- `tests/journeys/test_jt01_prompt_pack_authoring.py`
+- `tests/journeys/test_jt02_lora_embedding_integration.py`
+- `tests/journeys/test_jt03_txt2img_pipeline_run.py`
+- `tests/journeys/test_jt04_img2img_adetailer_run.py`
+- `tests/journeys/test_jt05_upscale_stage_run.py`
+- `tests/journeys/test_v2_full_pipeline_journey.py`
+- `tests/learning/test_learning_adapter_stub.py`
+- `tests/learning/test_learning_adapter_v2.py`
+- `tests/learning/test_learning_feedback_packaging.py`
+- `tests/learning/test_learning_hooks_controller.py`
+- `tests/learning/test_learning_hooks_pipeline_runner.py`
+- `tests/learning/test_learning_plan_factory.py`
+- `tests/learning/test_learning_record_builder.py`
+- `tests/learning/test_learning_record_serialization.py`
+- `tests/learning/test_learning_record_writer_integration.py`
+- `tests/learning/test_learning_runner_stubs.py`
+- `tests/learning/test_model_profiles.py`
+- `tests/pipeline/__init__.py`
+- `tests/pipeline/test_executor_cancellation.py`
+- `tests/pipeline/test_last_run_store_v2_5.py`
+- `tests/pipeline/test_pipeline_io_contracts.py`
+- `tests/pipeline/test_pipeline_learning_hooks.py`
+- `tests/pipeline/test_pipeline_runner_cancel_token.py`
+- `tests/pipeline/test_pipeline_runner_variants.py`
+- `tests/pipeline/test_stage_sequencer_plan_builder.py`
+- `tests/pipeline/test_stage_sequencer_runner_integration.py`
+- `tests/pipeline/test_upscale_hang_diag.py`
+- `tests/queue/test_job_history_store.py`
+- `tests/queue/test_job_model.py`
+- `tests/queue/test_job_queue_basic.py`
+- `tests/queue/test_jobrunner_integration.py`
+- `tests/queue/test_single_node_runner_loopback.py`
+- `tests/safety/test_advanced_stage_cards_import_safety.py`
+- `tests/safety/test_ai_settings_generator_no_tk_imports.py`
+- `tests/safety/test_gui_v2_adapters_no_tk_imports.py`
+- `tests/safety/test_gui_v2_randomizer_ux_no_tk_imports.py`
+- `tests/safety/test_learning_execution_no_tk_imports.py`
+- `tests/safety/test_no_gui_imports_in_utils_safety.py`
+- `tests/safety/test_randomizer_import_isolation_safety.py`
+- `tests/state/test_prompt_workspace_state.py`
+- `tests/test_api_client.py`
+- `tests/test_cancel_token.py`
+- `tests/test_config_passthrough.py`
+- `tests/test_main_single_instance.py`
+- `tests/utils/test_lora_embedding_parser.py`
+- `tests/utils/test_no_gui_imports_in_utils.py`
+- `tests/utils/test_prompt_packs.py`
+- `tests/utils/test_prompt_randomizer.py`
+- `tests/utils/test_randomizer_import_isolation.py`
+- `tests/utils/test_randomizer_matrix_base_prompt.py`
+- `tests/utils/test_randomizer_matrix_prompt_modes.py`
+- `tests/utils/test_randomizer_parity.py`
+- `tests/utils/test_randomizer_sanitization.py`
+
+## Other Artifacts (`other`)
+
+Markdown, JSON, and config files included here for completeness.
+
+**Count:** 488
+
+- `.github/CODEX_SOP.md`
+- `.github/ISSUE_TEMPLATE/01_s1_a_prompt_pack_panel.md`
+- `.github/ISSUE_TEMPLATE/02_s1_b_pipeline_controls_panel.md`
+- `.github/ISSUE_TEMPLATE/03_s1_c_config_panel_basic.md`
+- `.github/ISSUE_TEMPLATE/04_s1_d_api_status_and_log_panels.md`
+- `.github/ISSUE_TEMPLATE/05_s1_e_coordinator_stop_wiring.md`
+- `.github/ISSUE_TEMPLATE/06_s2_a_hr_hires_steps.md`
+- `.github/ISSUE_TEMPLATE/07_s2_b_max_dimensions_2260.md`
+- `.github/ISSUE_TEMPLATE/08_s2_c_face_restoration.md`
+- `.github/ISSUE_TEMPLATE/09_s2_d_adetailer_stage.md`
+- `.github/ISSUE_TEMPLATE/10_s2_e_stage_chooser.md`
+- `.github/ISSUE_TEMPLATE/11_s2_f_editor_fixes.md`
+- `.github/ISSUE_TEMPLATE/12_s3_a_fix_legacy_tests.md`
+- `.github/ISSUE_TEMPLATE/13_s3_b_progress_status_eta.md`
+- `.github/ISSUE_TEMPLATE/14_s3_c_ci_pipeline.md`
+- `.github/PULL_REQUEST_TEMPLATE.md`
+- `.github/agents/AGENTS.md`
+- `.github/agents/CODEX_5_1_MAX_instructions.md`
+- `.github/agents/controller_lead_engineer.md`
+- `.github/agents/docs.md`
+- `.github/agents/docs_changelog_specialist.md`
+- `.github/agents/gui.md`
+- `.github/agents/gui_revamp_archiver_agent.md`
+- `.github/agents/gui_ux_specialist.md`
+- `.github/agents/implementer.md`
+- `.github/agents/implementer_feature_bugfix.md`
+- `.github/agents/refactor.md`
+- `.github/agents/refactor_python_best_practices.md`
+- `.github/agents/tester.md`
+- `.github/agents/tester_tdd_ci.md`
+- `.github/agents/ui_polish_agent_20251105.md`
+- `.github/co-pilot documentation and best practices.md`
+- `.github/copilot-instructions.md`
+- `.github/instructions/archive.instructions.md`
+- `.github/instructions/controller.instructions.md`
+- `.github/instructions/gui.instructions.md`
+- `.github/instructions/learning.instructions.md`
+- `.github/instructions/pipeline.instructions.md`
+- `.github/instructions/tests.instructions.md`
+- `.github/instructions/tools.instructions.md`
+- `.github/instructions/utils.instructions.md`
+- `.github/workflows/ci.yml`
+- `.github/workflows/codex-autofix.yml`
+- `.github/workflows/copilot-setup-steps.yml`
+- `.pre-commit-config.yaml`
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `README.md`
+- `StableNew_Roadmap_v2.1.md`
+- `archive/ARCHIVE_MAP.md`
+- `archive/GUI_IMPROVEMENTS_SUMMARY_OLD.md`
+- `archive/HEROES_JOURNEY_RESULTS_OLD.md`
+- `archive/IMPROVEMENTS_COMPLETE_OLD.md`
+- `archive/README.md`
+- `archive/READMEV2.md`
+- `archive/README_agent_block.md`
+- `archive/RESOLUTION_SUMMARY_OLD.md`
+- `archive/old_packs_old/Abethkara.json`
+- `archive/old_packs_old/CPT_Moroni.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_Hybrid.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V1.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V2.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V3.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V3_Fantasy.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V3_Realistic.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V4.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V4_Fantasy.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V4_Realistic.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V5.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V5_Fantasy.json`
+- `archive/old_packs_old/Juggernaut_SDXL_MedievalRealism_Pack_V5_Realistic.json`
+- `archive/old_packs_old/README_RandomizationGuide.md`
+- `archive/old_packs_old/SDXL_batch_prompts_characters_ALT_FIXED.json`
+- `archive/old_packs_old/SDXL_batch_prompts_characters_FIXED.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_ALT.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_Fantasy.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_Realistic.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_ALT.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_ALT_Fantasy.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_ALT_Realistic.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_DUEL.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_DUEL_Fantasy.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_DUEL_Realistic.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_Fantasy.json`
+- `archive/old_packs_old/SDXL_batch_prompts_heroes_vs_villains_Realistic.json`
+- `archive/old_packs_old/SDXL_batch_prompts_npc_characters.json`
+- `archive/old_packs_old/SDXL_batch_prompts_npc_characters_ALT.json`
+- `archive/old_packs_old/SDXL_batch_prompts_villains.json`
+- `archive/old_packs_old/SDXL_batch_prompts_villains_ALT.json`
+- `archive/old_packs_old/SDXL_characters_10.json`
+- `archive/old_packs_old/SDXL_characters_10_ALT.json`
+- `archive/old_packs_old/SDXL_heroes_10.json`
+- `archive/old_packs_old/SDXL_heroes_10_ALT.json`
+- `archive/old_packs_old/SDXL_heroes_10_ALT_Fantasy.json`
+- `archive/old_packs_old/SDXL_heroes_10_ALT_MOD.json`
+- `archive/old_packs_old/SDXL_heroes_10_ALT_MOD_Fantasy.json`
+- `archive/old_packs_old/SDXL_heroes_10_ALT_MOD_Realistic.json`
+- `archive/old_packs_old/SDXL_heroes_10_ALT_Realistic.json`
+- `archive/old_packs_old/SDXL_heroes_13_ChatGPTAdjusted.json`
+- `archive/old_packs_old/Test_Hero_Portrait.json`
+- `archive/old_packs_old/combo.json`
+- `archive/old_packs_old/embeddings_lora_multiline.json`
+- `archive/old_packs_old/embeddings_lora_test.json`
+- `archive/old_packs_old/embeddings_lora_test_fixed.json`
+- `archive/old_packs_old/heroeHers_sdxl_pack.json`
+- `archive/old_packs_old/heroes.json`
+- `archive/old_packs_old/heroes_sdxl_pack.json`
+- `archive/old_packs_old/international_test.json`
+- `archive/old_packs_old/landscapes.json`
+- `archive/old_packs_old/portraits.json`
+- `archive/old_packs_old/test_gui_pack.json`
+- `archive/old_packs_old/test_pack.json`
+- `archive/old_presets_old/AllPeoplePacksWithChatGPT.json`
+- `archive/old_presets_old/GPT-Portraits.json`
+- `archive/old_presets_old/Heroes13.json`
+- `archive/old_presets_old/HeroesPreset.json`
+- `archive/old_presets_old/People  Presets Close Up.json`
+- `archive/old_presets_old/People.json`
+- `archive/old_presets_old/PickMeRandomizer.json`
+- `archive/old_presets_old/RANDOMIZATION_EXAMPLE_README.md`
+- `archive/old_presets_old/RandomizerOptimized.json`
+- `archive/old_presets_old/architecture.json`
+- `archive/old_presets_old/close_up_macro.json`
+- `archive/old_presets_old/complex_cinematic.json`
+- `archive/old_presets_old/default.json`
+- `archive/old_presets_old/heroes_sdxl.json`
+- `archive/old_presets_old/high_quality.json`
+- `archive/old_presets_old/landscape_nature.json`
+- `archive/old_presets_old/last_settings.json`
+- `archive/old_presets_old/medium_distance.json`
+- `archive/old_presets_old/people_portrait.json`
+- `archive/old_presets_old/randomization_example.json`
+- `archive/old_presets_old/wide_panoramic.json`
+- `archive/packs_didn't work/SDXL_angelic_warriors_fantasy_v1.json`
+- `archive/packs_didn't work/SDXL_angelic_warriors_realistic_v1.json`
+- `archive/packs_didn't work/SDXL_beautiful_women_fantasy_v1.json`
+- `archive/packs_didn't work/SDXL_beautiful_women_realistic_v1.json`
+- `archive/packs_didn't work/SDXL_epic_structures_fantasy_v1.json`
+- `archive/packs_didn't work/SDXL_epic_structures_realistic_v1.json`
+- `archive/packs_didn't work/SDXL_female_heroes_aligned_fantasy_v1b.json`
+- `archive/packs_didn't work/SDXL_female_heroes_aligned_realistic_v1b.json`
+- `archive/packs_didn't work/SDXL_female_heroes_fantasy_v1.json`
+- `archive/packs_didn't work/SDXL_female_heroes_realistic_v1.json`
+- `archive/packs_didn't work/SDXL_male_heroes_fantasy_v1.json`
+- `archive/packs_didn't work/SDXL_male_heroes_realistic_v1.json`
+- `archive/packs_didn't work/SDXL_myth_beasts_fantasy_v1.json`
+- `archive/packs_didn't work/SDXL_myth_beasts_realistic_v1.json`
+- `archive/snapshot_tree.md`
+- `archive/src_contents.md`
+- `archive/src_directory.md`
+- `custom_pack_lists.json`
+- `data/webui_cache.json`
+- `docs/ACTIVE_MODULES.md`
+- `docs/AI_Development_Mode_Checklist.md`
+- `docs/ARCHITECTURE_v2.md`
+- `docs/ARCHITECTURE_v2_COMBINED.md`
+- `docs/AllPlanFilesCombined(11-24-2025).md`
+- `docs/Cluster_Compute_Vision_v2.md`
+- `docs/Codex Safety Briefing (11-27-25).md`
+- `docs/Coding_Best_Practices.md`
+- `docs/Context_Optimization_Guide.md`
+- `docs/Future_Learning_Roadmap_2025-11-26_1115.md`
+- `docs/GUI-V2-DOCS-DIFF-GUIDE.md`
+- `docs/GUI-V2-THREE-TAB-SUMMARY.md`
+- `docs/GUI_V2_Progress_Summary_PR1_to_PR2.md`
+- `docs/High-Level-Reasoning-and-Plan(ChatGPT-11-27-25).md`
+- `docs/Journey_Test_Plan_2025-11-26_1115.md`
+- `docs/LAUNCHERS.md`
+- `docs/LEGACY_CANDIDATES.md`
+- `docs/LearningSystem_MasterIndex_2025-11-26_0512.md`
+- `docs/Learning_System_Spec_v2.md`
+- `docs/MATRIX_PROMPT_MODE.md`
+- `docs/NewPlan.md`
+- `docs/Next_Features_Backlog.md`
+- `docs/PHASE1-1-ConceptualPlanV2_5_P2(11-28-25).md`
+- `docs/PIPELINE_RULES.md`
+- `docs/PROJECT_CONTEXT.md`
+- `docs/RANDOMIZATION_AND_MATRIX_UI_SUMMARY.md`
+- `docs/ROLLING_SUMMARY_FINAL.md`
+- `docs/STABLE-DIFFUSION-README.md`
+- `docs/StabeNewV2-SUPER-CurrentProjectInstructions.md`
+- `docs/StableNew AI Self-Discipline Protocol (11-27-25).md`
+- `docs/StableNew Interactive AI Development Checklist-11-27-25-v2.md`
+- `docs/StableNewV2 — High-Stability Request Format v4.0.md`
+- `docs/StableNewV2 — Test Runner Plan.md`
+- `docs/StableNewV2_5P2-ROADMAP-2025-11-27.md`
+- `docs/StableNewV2_Coding_Best_Practices_AI_Optimized.md`
+- `docs/StableNew_Development_Doctrine.md`
+- `docs/StableNew_PR_Template_Guardrails.md`
+- `docs/StableNew_Roadmap_v2.0.md`
+- `docs/StableNew_V2_Rescue_Summary_and_Plan(24NOV-2154).md`
+- `docs/Unified GUI V2 Redesign Summary(11-25-2025-1611).md`
+- `docs/WIRING_V2_5_ReachableFromMain_2025-11-26.md`
+- `docs/archive/ARCHITECTURE_v2.md`
+- `docs/archive/Agents_and_Automation_v2.md`
+- `docs/archive/CHANGELOG.md`
+- `docs/archive/Migration_Notes_V1_to_V2.md`
+- `docs/archive/Post_Merge_Smoke_Test_SAFE_RAND_THEME.md`
+- `docs/archive/README_CHANGELOG_V2_PACKAGE/PR-README-CHANGELOG-V2-001.md`
+- `docs/archive/ROADMAP_v2.md`
+- `docs/archive/Randomizer_System_Spec_v2.md`
+- `docs/archive/StableNew_Roadmap_v2.0.md`
+- `docs/archive/Testing_Strategy_v2.md`
+- `docs/archive/_toc.md`
+- `docs/archive/agents/AGENTS_AND_AI_WORKFLOW.md`
+- `docs/archive/agents/CODEX_5_1_MAX_Instructions.md`
+- `docs/archive/agents/CODEX_PR_Usage_SOP.md`
+- `docs/archive/agents/engineering_standards.md`
+- `docs/archive/architecture/ARCHITECTURE_v2.md`
+- `docs/archive/architecture/ARCHITECTURE_v2_Translation_Plan.md`
+- `docs/archive/dev/snapshots.md`
+- `docs/archive/gui/GUI_V2_Status_2025-11-19.md`
+- `docs/archive/history/BUG_FIX_GUI_HANG_SECOND_RUN.md`
+- `docs/archive/history/CHANGELOG.md`
+- `docs/archive/history/Known_Bugs_And_Issues_Summary.md`
+- `docs/archive/history/PROJECT_REORGANIZATION_SUMMARY.md`
+- `docs/archive/history/RECENT_BUGS_AND_LESSONS.md`
+- `docs/archive/history/ROLLING_SUMMARY.md`
+- `docs/archive/history/SPRINT_SUMMARY.md`
+- `docs/archive/history/SPRINT_SUMMARY_PR_F-H.md`
+- `docs/archive/history/StableNew_History_Summary.md`
+- `docs/archive/history/StableNew_diff_2025-11-20.md`
+- `docs/archive/history/THREADING_FIX.md`
+- `docs/archive/history/gui_overview.md`
+- `docs/archive/history/gui_theming.md`
+- `docs/archive/history/roadmap/StableNew_Roadmap_v1.0.md`
+- `docs/archive/legacy/ARCHITECTURE.md`
+- `docs/archive/legacy/AUDIT_REPORT_S3_S4_READINESS.md`
+- `docs/archive/legacy/GUI_ENHANCEMENTS.md`
+- `docs/archive/legacy/ISSUE_ANALYSIS.md`
+- `docs/archive/legacy/OPEN_ISSUES_RECOMMENDATIONS.md`
+- `docs/archive/refactor_plan_main_window_gui_20251102_postAgent_OLD.md`
+- `docs/archive/schemas/CONFIGURATION_TESTING_GUIDE.md`
+- `docs/archive/schemas/journey_test_coverage_checklist.md`
+- `docs/archive/schemas/temp_prefs.json`
+- `docs/archive/schemas/temp_prefs2.json`
+- `docs/archive/schemas/temp_prefs3.json`
+- `docs/codex_context/ARCHITECTURE_v2_COMBINED.md`
+- `docs/codex_context/CODEX_5_1_MAX_Instructions.md`
+- `docs/codex_context/CODEX_PR_Usage_SOP_COMBINED.md`
+- `docs/codex_context/CODING_STANDARDS.md`
+- `docs/codex_context/Integrated Request Format v4.0.md`
+- `docs/codex_context/LEARNING_SYSTEM_SPEC.md`
+- `docs/codex_context/PIPELINE_RULES.md`
+- `docs/codex_context/PROJECT_CONTEXT.md`
+- `docs/codex_context/PR_TEMPLATE_StableNewV2.md`
+- `docs/codex_context/Thinking about PR for moving Run tab to Pipeline Tab.md`
+- `docs/packs_and_presets.md`
+- `docs/pr_templates/Codex_Safety_Wrapper_Template.md`
+- `docs/pr_templates/ExamplePR-CTRL-LC-001_gui_example PR.md`
+- `docs/pr_templates/Potential_work/COD-PR-GUI-V2-DROPDOWN-PAYLOAD-LASTRUN-V2_5-001(P1V3)(11-28).md`
+- `docs/pr_templates/Potential_work/CODEX-PROMPT-PR-CORE-V2-CLASSIFY-ARCHIVE(P1V3)-11-28-25-001.md`
+- `docs/pr_templates/Potential_work/FutureRoadmap-PR-3S-PR-3W-V2.md`
+- `docs/pr_templates/Potential_work/PR-06D_StageCard_Prototype_Cleanup(Optional).md`
+- `docs/pr_templates/Potential_work/PR-CLEAN-01-V2.5-FileAccessLogger-2025-11-26.md`
+- `docs/pr_templates/Potential_work/PR-CORE-V2-CLASSIFY-ARCHIVE(P1V3)(11-28-2025)-001.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-DROPDOWN-PAYLOAD-LASTRUN-V2_5-001(P1V3)(11-28-25).md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3L.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3M_VISUAL-CHARTS_2025-11-26_0450.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3N_CACHE-PERSISTENCE_2025-11-26_0450.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3O_PIPELINE-AUTO-TUNE_2025-11-26_0450.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3P_LEARNING-MODULE-DOCS_2025-11-26_0450.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3Q_XY-EXPERIMENTS_2025-11-26_0507.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3R_XY-UX-REFINEMENTS_2025-11-26_0512.md`
+- `docs/pr_templates/Potential_work/PR-GUI-V2-SCAFFOLD-ZONEMAP-FIXES-001(P1V3)(11-28-25).md`
+- `docs/pr_templates/PriorWork_complete/Codex_Execution_Guide_PR-0.1.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Execution_Guide_PR-GUI-01.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-LEARNING-RUNNER-STUB-001.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-001.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-002.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-003.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-RANDOMIZER-UI-EXPANSION-002.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-PIPE-DIAG-001_and_PR-CTRL-LC-001.md`
+- `docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-PIPE-V2-LEARNING-HOOKS-002.md`
+- `docs/pr_templates/PriorWork_complete/DEFAULT_PRESET_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/Dark-Mode-GlobalNeg-11-26-25.md`
+- `docs/pr_templates/PriorWork_complete/ExamplePR-CTRL-LC-001_gui_example PR.md`
+- `docs/pr_templates/PriorWork_complete/Execution Script for PR-#53 – Advanced Resolution Controls.md`
+- `docs/pr_templates/PriorWork_complete/GUI_REVAMP_SUMMARY.md`
+- `docs/pr_templates/PriorWork_complete/JT-01-PromptPack-Authoring-and-Randomization-2025-11-26_1133.md`
+- `docs/pr_templates/PriorWork_complete/JT-02-LoRA-Embedding-Integration-2025-11-26_1133.md`
+- `docs/pr_templates/PriorWork_complete/JT-03-txt2img-Pipeline-Run-2025-11-26_1133.md`
+- `docs/pr_templates/PriorWork_complete/JT-04-img2img-ADetailer-Run-2025-11-26_1133.md`
+- `docs/pr_templates/PriorWork_complete/JT-05-Upscale-Stage-Run-2025-11-26_1134.md`
+- `docs/pr_templates/PriorWork_complete/JT-06-Video-Pipeline-Run-Placeholder-2025-11-26_1134.md`
+- `docs/pr_templates/PriorWork_complete/JT-07-Startup-Async-WebUI-Bootstrap-2025-11-26_1134.md`
+- `docs/pr_templates/PriorWork_complete/JT-08-Single-Variable-Learning-Plan-2025-11-26_1134.md`
+- `docs/pr_templates/PriorWork_complete/JT-09-X-Y-Learning-Experiment-2025-11-26_1136.md`
+- `docs/pr_templates/PriorWork_complete/JT-10-Ratings-and-Review-2025-11-26_1136.md`
+- `docs/pr_templates/PriorWork_complete/JT-11-Presets-and-Styles-2025-11-26_1136.md`
+- `docs/pr_templates/PriorWork_complete/JT-12-Run-Stop-Run-Lifecycle-2025-11-26_1136.md`
+- `docs/pr_templates/PriorWork_complete/JT-13-Logging-and-Error-Surfacing-2025-11-26_1136.md`
+- `docs/pr_templates/PriorWork_complete/Main_Entry_Design_Notes_PR-0.1.md`
+- `docs/pr_templates/PriorWork_complete/PR-#33-LEARNING-V2-RecordWriterIntegration-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#34-GUI-V2-LearningToggleAndReviewDialog-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#35-QUEUE-V2-JobQueueAndRunnerFoundation-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#36-CONTROLLER-V2-QueueExecutionBridge-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#37-API-V2-WebUIProcessAndHealthCheck-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#38-PIPELINE-V2-GUIConfigToPipelineConfig-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#39-GUI-V2-RunButtonQueueSmoke-001 (1).md`
+- `docs/pr_templates/PriorWork_complete/PR-#40-CONTROLLER-V2-QueueExecutionController-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#41-QUEUE-V2-JobPersistenceAndHistory-001 (1).md`
+- `docs/pr_templates/PriorWork_complete/PR-#42-GUI-V2-JobHistoryPanel-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#43-GUI-V2-JobActions-QueueControl-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#44-CLUSTER-V2-WorkerRegistryAndLocalWorker-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#45-CONTROLLER-V2-QueueBackedRunIntegration-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#46-PIPELINE-V2-PipelineConfigAssemblerEnforcement-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#47-PIPELINE-V2-AssemblerEnforcement-Finish-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#47B-PIPELINE-V2-AssemblerEnforcement-Hotfix-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#48-GUI-V2-CommandBar-RunStopQueue-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#49-GUI-V2-AdvancedPromptEditor-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#50-GUI-V2-PromptPackManager-Integration-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#51-GUI-V2-CoreConfigPanel-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#52-GUI-V2-NegativePromptPanel-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#53-GUI-V2-ResolutionAdvancedControls-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#54-GUI-V2-OutputSettingsPanel-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#55-GUI-V2-ModelManagerPanel-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#56-CTRL-WEBUI-BOOTSTRAP-GUIHEALTH-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-#57-CTRL-API-WEBUI-AUTODETECT-AUTOLAUNCH-001_webui_autostart_and_gui_controls.md`
+- `docs/pr_templates/PriorWork_complete/PR-#58-MAIN-GUI-WEBUI-BOOTSTRAP-ALIGN-001_webui_startup_and_status_panel_alignment.md`
+- `docs/pr_templates/PriorWork_complete/PR-#59-GUI-V2-STATUSBAR-COMPOSITE-001_webui_statusbar_combine_api_controls.md`
+- `docs/pr_templates/PriorWork_complete/PR-#60-WEBUI-CONNECTION-HARDFIX-001_webui_autostart_and_gating_hardening.md`
+- `docs/pr_templates/PriorWork_complete/PR-0.1_Runtime_Entry_Alignment.md`
+- `docs/pr_templates/PriorWork_complete/PR-00A_WebUI_GUI_Controls.md`
+- `docs/pr_templates/PriorWork_complete/PR-00_WebUI_Process_Manager_and_Autostart_Separation.md`
+- `docs/pr_templates/PriorWork_complete/PR-01 Repo Inventory & Source of Truth(NOV24).md`
+- `docs/pr_templates/PriorWork_complete/PR-02 — Move LegacyV1Files to Archive(NOV24).md`
+- `docs/pr_templates/PriorWork_complete/PR-02_Move_Legacy_V1_to_Archive.md`
+- `docs/pr_templates/PriorWork_complete/PR-02a_Move_GUI_V1_Tests_To_Archive.md`
+- `docs/pr_templates/PriorWork_complete/PR-03 Create V2 App Spine(NOV24).md`
+- `docs/pr_templates/PriorWork_complete/PR-03_Create_V2_App_Spine(24NOV).md`
+- `docs/pr_templates/PriorWork_complete/PR-04_Theme_Engine_V2.md`
+- `docs/pr_templates/PriorWork_complete/PR-05A_Scrollable_Areas_V2.md`
+- `docs/pr_templates/PriorWork_complete/PR-05_Layout_and_Resizing_V2.md`
+- `docs/pr_templates/PriorWork_complete/PR-06A_BaseStageCardV2_and_Components.md`
+- `docs/pr_templates/PriorWork_complete/PR-06B_Migrate_Txt2Img_To_BaseStageCardV2.md`
+- `docs/pr_templates/PriorWork_complete/PR-06C_Migrate_Img2Img_and_Upscale_To_BaseStageCardV2.md`
+- `docs/pr_templates/PriorWork_complete/PR-07A_Test_Safe_GUI_Threading_and_Teardown.md`
+- `docs/pr_templates/PriorWork_complete/PR-07_Wire_V2_Panels_and_Controllers_into_MainWindowV2.md`
+- `docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/Codex_Execution_Guide_PR-0.md`
+- `docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/PR-0_Pipeline_Execution_Hotfix.md`
+- `docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/PipelineRunner_Design_Notes.md`
+- `docs/pr_templates/PriorWork_complete/PR-3A_Learning_Tab_Scaffold.md`
+- `docs/pr_templates/PriorWork_complete/PR-3B_Learning_Tab_Layout_Skeleton.md`
+- `docs/pr_templates/PriorWork_complete/PR-3C_Learning_State_Controller_Skeleton.md`
+- `docs/pr_templates/PriorWork_complete/PR-AI-V2-SETTINGS-GENERATOR-001_ai_settings_generator_groundwork.md`
+- `docs/pr_templates/PriorWork_complete/PR-CTRL-LC-001_gui_lifecycle_run_stop_run_hardening - Copy.md`
+- `docs/pr_templates/PriorWork_complete/PR-CTRL-LC-001_gui_lifecycle_run_stop_run_hardening.md`
+- `docs/pr_templates/PriorWork_complete/PR-DOCS-GUI-V2-UPDATE-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-01_Theme_Foundations.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/Codex_Execution_Guide_PR-GUI-01b.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/PR-GUI-01b_Theme_Contrast_Touchup.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/Theme_Contrast_Notes_PR-GUI-01b.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/Codex_Execution_Guide_PR-GUI-02.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/LeftZone_Layout_Notes_PR-GUI-02.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/PR-GUI-02_LeftZone_Layout_Polish.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-031_adetailer_scheduler_persistence_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-032_gui_test_noninteractive_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-033_thread_safety_and_state_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/Codex_Execution_Guide_PR-GUI-CENTER-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/ConfigPanel_Design_Notes_PR-GUI-CENTER-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/PR-GUI-CENTER-01_ConfigPanel_Skeleton.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/Codex_Execution_Guide_PR-GUI-LEFT-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PR-GUI-LEFT-01_PacksPanel_Wiring.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PR-GUI-LEFT-01_Packs_Presets_Panel.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PacksPanel_Design_Notes_PR-GUI-LEFT-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-THEME-FIX-001_restore_theme_constants_and_theme_class.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-ADAPTERS-001_gui_v2_adapters_consolidation.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-ADVANCED-PROMPT-TAB-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3A.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3B.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3C.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3D.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3E.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3F.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3G.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3H.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3I.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3J.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3K.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-ENTRYPOINT-001_gui_learning_mode_and_review_dialog.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-GROUNDWORK-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-HOOKS-002.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-RUNNER-STUB-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-TAB-003.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MAINWINDOW-REDUX-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MAINWINDOW-SPLIT-001 (1).md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MAINWINDOW-SPLIT-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-001_Archive_Legacy_GUI_Tests_And_Introduce_GUI_V2_Harness.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-002_Introduce_Modular_GUI_V2_Panels.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-003_Real_Pipeline_Config_Behavior.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-004_StatusBarV2_Progress_ETA.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-005.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-006.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPECards into Pipeline Center Panel (2025-11-26).md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-CONFIG-WIRING-002-(2025-11-26).md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-IO-001_pipeline_io_contracts.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-PREVIEW-001-2025-11-26.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001A_stage_cards_center_2025-11-26.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001B_remove_run_tab_2025-11-26.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001C_tests_runtab_merge_2025-11-26.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-STAGECARDS-001-Wire Cards-11-26-2025-0816.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-TAB-002.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-RANDOMIZER-INTEGRATION-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-RANDOMIZER-UI-EXPANSION-002.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-RANDOMIZER-UX-002_randomizer_experience_deepening.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-V2-STAGE-PANELS-ADVANCED-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-WINDOW-01_Default_Window_Geometry_Bundle/Codex_Execution_Guide_PR-GUI-WINDOW-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-GUI-WINDOW-01_Default_Window_Geometry_Bundle/PR-GUI-WINDOW-01_Default_Window_Geometry.md`
+- `docs/pr_templates/PriorWork_complete/PR-LEARN-PROFILES-001-Model & LoRA Profile Sidecars as Priors for Learning.md`
+- `docs/pr_templates/PriorWork_complete/PR-LEARN-V2-RECORDWRITER-001_pipeline_learningrecord_integration.md`
+- `docs/pr_templates/PriorWork_complete/PR-LEARNING-V2-EXECUTION-001.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-023_adetailer_scheduler_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-024_sampler_scheduler_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-025_tests_sampler_scheduler_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-026_cancel_token_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-027_pipeline_logging_PRD.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_Addendum_Bundle/Codex_Clarification_Notes_PR-PIPE-CORE-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_Addendum_Bundle/PR-PIPE-CORE-01_Addendum_PipelineRunner_Location_and_Construction.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/Codex_Execution_Guide_PR-PIPE-CORE-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/PipelineIntegration_Design_Notes_PR-PIPE-CORE-01.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-DIAG-001_upscale_hang_repro_and_telemetry.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPE-V2-LEARNING-HOOKS-002.md`
+- `docs/pr_templates/PriorWork_complete/PR-PIPELINE-V2-EXECUTOR-STAGEEVENTS-003.md`
+- `docs/pr_templates/PriorWork_complete/PR-QUEUE-V2-JOBMODEL-001_queue_model_and_single_node_runner_skeleton.md`
+- `docs/pr_templates/PriorWork_complete/PR-RAND-SAN-001_randomizer_matrix_sanitization_and_parity.md`
+- `docs/pr_templates/PriorWork_complete/PR-SAFE-ISOLATION-001_codex_safety_wrapper_and_gui_utils_isolation.md`
+- `docs/pr_templates/PriorWork_complete/PR-V2-PIPELINE-STAGE-SEQUENCER-002.md`
+- `docs/pr_templates/PriorWork_complete/PR14_complete/PR-PIPE-014_upscale_tiling.md`
+- `docs/pr_templates/PriorWork_complete/Script for PR-#51 – Core Config Panel V2.md`
+- `docs/pr_templates/PriorWork_complete/Script for PR-#52 – Negative Prompt Panel V2.md`
+- `docs/pr_templates/PriorWork_complete/Script for PR-#54 – Output Settings Panel V2.md`
+- `docs/pr_templates/PriorWork_complete/Script for PR-#55 – Model Manager Panel V2.md`
+- `docs/pr_templates/PriorWork_complete/Theme_Design_Notes_PR-GUI-01.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR10_SINGLE_INSTANCE_AND_EXIT.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR1_CONFIG_BANNER_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR2_CONFIG_SERVICE_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR3_LOAD_CONTROLS_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR4_CONFIG_LOCK_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR5_APPLY_TO_PACKS_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR6_PRESET_CRUD_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR7_LIST_MANAGEMENT_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR8_PREVIEW_PAYLOAD_IMPLEMENTATION.md`
+- `docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR9_RANDOMIZATION_REFINEMENT.md`
+- `docs/pr_templates/PriorWork_complete/repo_cleanup_plan.md`
+- `docs/pr_templates/Unknown Status/PR-08_V2_Journey_Test_Full_Pipeline.md`
+- `docs/pr_templates/Unknown Status/PR-WIRE-00-V2.5-11-26-2025.md`
+- `docs/pr_templates/Unknown Status/PR-WIRE-01-V2.5 – “Minimal Happy Path”-11-26-2025-1918.md`
+- `docs/pr_templates/Unknown Status/PR-WIRE-02-V2.5 – Entrypoint Contracts (11-26-2025-1916).md`
+- `docs/pr_templates/Work_aborted/PR-06_StageCard_Componentization_V2.md`
+- `docs/pr_templates/index.yaml`
+- `lists/Full List.json`
+- `lists/RandomizerList.json`
+- `package-lock.json`
+- `packs/SDXL_angelic_warriors_Fantasy.json`
+- `packs/SDXL_angelic_warriors_Realistic.json`
+- `packs/SDXL_beautiful_women_Fantasy.json`
+- `packs/SDXL_beautiful_women_Realistic.json`
+- `packs/SDXL_epic_structures_Fantasy.json`
+- `packs/SDXL_epic_structures_Realistic.json`
+- `packs/SDXL_female_fantasy_heroes_Fantasy.json`
+- `packs/SDXL_female_fantasy_heroes_Realistic.json`
+- `packs/SDXL_male_fantasy_heroes_Fantasy.json`
+- `packs/SDXL_male_fantasy_heroes_Realistic.json`
+- `packs/SDXL_mythical_beasts_Fantasy.json`
+- `packs/SDXL_mythical_beasts_Realistic.json`
+- `packs/heroes.json`
+- `packs/somethingNew_test_v2.5.json`
+- `packs/test_pack.json`
+- `presets/Beast_Boss_Juggernaut_SDXL.json`
+- `presets/Group_Scene_Juggernaut_SDXL.json`
+- `presets/Heroe13.json`
+- `presets/Juggernaut_MedievalHeroes_RandomizerAligned_v1b.json`
+- `presets/Landscape_Scenery_Juggernaut_SDXL.json`
+- `presets/Photoreal_Character_Juggernaut_SDXL.json`
+- `presets/Portrait_CloseUp_Juggernaut_SDXL.json`
+- `presets/default.json`
+- `presets/last_settings.json`
+- `presets/medieval_heroes_master_fantasy_v1.json`
+- `presets/medieval_heroes_master_realistic_v1.json`
+- `presets/randomizedMAX.json`
+- `repo_inventory.json`
+- `reports/file_access/CLEANHOUSE_REPORT_V2_5_2025_11_26.md`
+- `tests/Journey Test Suite – Comprehensive Plan.md`
+- `tests/StableNewV2 — Test Runner Plan.md`

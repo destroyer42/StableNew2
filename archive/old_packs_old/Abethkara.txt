@@ -1,0 +1,69 @@
+﻿<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+Male, Caucasian, tall, short silvery hair, sharp gray eyes, strong build, handsome, in his mid-50's, lightly armored, medieval setting
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+Female, Caucasian, long dirty blonde hair, lighter skin tone, freckles across bridge of nose, hazel eyes, athletic build. Early 50's, medieval dress
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+Female, Caucasian, white-blonde hair, icy blue eyes, sharp facial features, tall, elegant, thin. Early 50's, medieval sage
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+Male, Light-skinned African-American, dark curly hair, strong build, slightly wider nose, slightly bigger lips, light golden brown eyes, in his mid-50's, leather armor
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+ Male, Caucasian, short black hair with white streak, green eyes, angular features, lean build. Early 50's, medieval town square
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+warrior, Male, olive skin, curly brown hair, short but muscular, wide nose, big lips, brown eyes, dangerous expression
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+Female, Caucasian, olive skin, curly black hair, light blue eyes, feminine and beautiful. 18 years old. Medieval dress.
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+Male, Caucasian, darker olive skin, broad shoulders, muscular build, tall, strong jawline, moss-green eyes, long eyelashes, dark brown hair. 20 years old, chainmail
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+Male, Caucasian, light skin, light brown hair, brown eyes, lean but strong, average looking, 18 years old, Furtive expression.
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) fantasy portrait, natural skin, realistic hands, subtle expression, cinematic light
+mystic seer,  Female, bronze skin, red hair in a long braid, light golden brown eyes, slightly wider nose, slightly larger lips, 21 years old.
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils

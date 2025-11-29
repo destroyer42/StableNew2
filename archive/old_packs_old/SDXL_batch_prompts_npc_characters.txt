@@ -1,0 +1,69 @@
+﻿<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+smithy master, hammer at rest, apron soot, warm forge rim light, steady look
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+mapmaker, vellum spread, compass in hand, careful posture, focused eyes
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+innkeeper hostess, polished mug, sleeve rolled, welcoming smile, believable grip
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+senior librarian, quill poised, ledger lines neat, fingers relaxed, gentle gaze
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+watch sergeant, baton and tabard, duty belt tidy, authoritative stance
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+herbal apothecary, mortar and sprigs, soft daylight, calm presence
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+stable master, bridle leather coiled, calloused hands, even footing
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+dockmaster, wax tablet, cloak in brine wind, composed eyes
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+road cleric, wooden charm, travel dust, kind expression
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character study, natural skin, realistic hands, subtle expression, clean light
+tavern bard, lute tuning, chord hand accurate, faint smile
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils

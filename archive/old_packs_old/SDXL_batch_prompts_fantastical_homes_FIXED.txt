@@ -1,0 +1,69 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+elm-crowned cottage, wrap deck, thick planks, rope rail, lantern glow at dusk
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+sea-cliff roundhouse, porthole windows, stone rings, moss roof, minimal clutter
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+canal row home, arched door, broad window bays, crisp reflections, sparse planters
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+ridge windmill home, stout base, smooth sails, limited trim, golden field
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+oasis courtyard house, shaded arcade, plain plaster, patterned rugs, simple lattice
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+pond-lily hut, broad leaves roof, neat stem columns, calm water plane
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+burrow dwelling, round door set, even timber arcs, trimmed hedges, straight path
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+ice-block cottage, thick translucent walls, clear seams, blue subsurface glow
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+lava-stone bungalow, deep eaves, simple lintels, warm interior light, tidy masonry
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dwelling study, clean edges, controlled ornament, readable shapes, tidy joins
+headland lighthouse duplex, smooth walls, tidy balcony, clean railings
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl

@@ -1,0 +1,130 @@
+{
+  "preset": "default",
+  "selected_packs": [],
+  "override_pack": false,
+  "pipeline_controls": {
+    "txt2img_enabled": true,
+    "img2img_enabled": true,
+    "adetailer_enabled": false,
+    "upscale_enabled": true,
+    "upscale_only_last": true,
+    "video_enabled": false,
+    "loop_type": "single",
+    "loop_count": 1,
+    "pack_mode": "selected",
+    "images_per_prompt": 1,
+    "model_matrix": [],
+    "hypernetworks": [],
+    "variant_mode": "fanout"
+  },
+  "config": {
+    "txt2img": {
+      "steps": 20,
+      "cfg_scale": 7.0,
+      "width": 512,
+      "height": 512,
+      "sampler_name": "Euler a",
+      "scheduler": "Normal",
+      "seed": -1,
+      "clip_skip": 2,
+      "model": "",
+      "vae": "",
+      "negative_prompt": "",
+      "hypernetwork": "None",
+      "hypernetwork_strength": 1.0,
+      "enable_hr": false,
+      "hr_scale": 2.0,
+      "hr_upscaler": "Latent",
+      "hr_sampler_name": "",
+      "denoising_strength": 0.7,
+      "hires_steps": 0,
+      "face_restoration_enabled": false,
+      "face_restoration_model": "GFPGAN",
+      "face_restoration_weight": 0.5,
+      "refiner_checkpoint": "None",
+      "refiner_switch_at": 0.8,
+      "refiner_switch_steps": 0,
+      "hr_second_pass_steps": 0
+    },
+    "img2img": {
+      "steps": 15,
+      "denoising_strength": 0.3,
+      "cfg_scale": 7.0,
+      "sampler_name": "Euler a",
+      "scheduler": "Normal",
+      "seed": -1,
+      "clip_skip": 2,
+      "model": "",
+      "vae": "",
+      "hypernetwork": "None",
+      "hypernetwork_strength": 1.0,
+      "prompt_adjust": "",
+      "negative_adjust": ""
+    },
+    "upscale": {
+      "upscaler": "R-ESRGAN 4x+",
+      "upscaling_resize": 2.0,
+      "upscale_mode": "single",
+      "steps": 20,
+      "sampler_name": "Euler a",
+      "scheduler": "Normal",
+      "denoising_strength": 0.2,
+      "gfpgan_visibility": 0.0,
+      "codeformer_visibility": 0.0,
+      "codeformer_weight": 0.5
+    },
+    "api": {
+      "base_url": "http://127.0.0.1:7860",
+      "timeout": 30
+    },
+    "adetailer": {
+      "adetailer_enabled": false,
+      "adetailer_model": "face_yolov8n.pt",
+      "adetailer_confidence": 0.3,
+      "adetailer_mask_feather": 4,
+      "adetailer_sampler": "DPM++ 2M",
+      "adetailer_steps": 28,
+      "adetailer_denoise": 0.4,
+      "adetailer_cfg": 7.0,
+      "adetailer_prompt": "",
+      "adetailer_negative_prompt": ""
+    },
+    "randomization": {
+      "enabled": false,
+      "prompt_sr": {
+        "enabled": false,
+        "mode": "random",
+        "rules": [],
+        "raw_text": ""
+      },
+      "wildcards": {
+        "enabled": false,
+        "mode": "random",
+        "tokens": [],
+        "raw_text": ""
+      },
+      "matrix": {
+        "enabled": false,
+        "mode": "fanout",
+        "prompt_mode": "replace",
+        "limit": 8,
+        "slots": [],
+        "raw_text": "",
+        "base_prompt": ""
+      }
+    },
+    "aesthetic": {
+      "enabled": false,
+      "mode": "prompt",
+      "weight": 0.9,
+      "steps": 5,
+      "learning_rate": 0.0001,
+      "slerp": false,
+      "slerp_angle": 0.1,
+      "embedding": "None",
+      "text": "",
+      "text_is_negative": false,
+      "fallback_prompt": ""
+    }
+  }
+}

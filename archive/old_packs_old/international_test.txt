@@ -1,0 +1,15 @@
+# Test UTF-8 Encoding with International Characters
+美丽的日式花园，樱花盛开，宁静的氛围 (Beautiful Japanese garden, cherry blossoms, serene atmosphere)
+neg: 模糊，低质量 (blurry, low quality)
+
+Hermoso paisaje montañoso, picos nevados, atmósfera épica
+neg: borroso, mala calidad
+
+Красивый зимний пейзаж, снежные горы, величественная природа
+neg: размытый, плохое качество
+
+Schöne Landschaft mit Bergen, kristallklarer See, dramatische Beleuchtung
+neg: unscharf, schlechte Qualität
+
+美しい自然の風景、山々と湖、黄金の時間の光
+neg: ぼやけた、低品質

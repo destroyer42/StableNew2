@@ -1,0 +1,120 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, natural skin, balanced lighting, fine facial texture
+young shieldmaiden, brushed steel armor, cloak clasp, hand on shield, calm gaze, 3/4 view, aesthetic armor, babe
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.65><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, plastic skin, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, ultra-detailed, HDR lighting) character portrait, natural skin tone, realistic hands visible, clean lighting,
+greenwarden huntress, leather and elm bow, on hand on wood of bow, one hand on bowstring, freckles, wind-tossed hair, single arrow nocked, confident eyes,
+coherent anatomy, natural posture, well endowed
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) full-body portrait, golden rim light, clean contrast
+female knight, silver armor with gold filigree, sun flare behind, castle parapet, sword raised high, wind-tossed hair, resolute gaze, sexy babe
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: overexposure, cartoon style, muddy lighting, crooked horizon, plastic texture, face mush, deformed hands, extra digits
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character portrait, natural skin, clean lighting
+stormcaller adept, braided hair, faint arc glow, grounded posture, subtle pores, beautiful faint smile, sad eyes
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character portrait, natural skin, clean lighting
+glass templar, pale cloak, reflective inlays, gentle rim light, tanned skin, gorgeous features, feminine body
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, soft natural light, healthy skin tone, smiling eyes
+female archer captain, athletic build, bracer lacing visible, feathered cloak, soft backlight, traditional longbow (not compound), wooden bow, single bowstring, swimsuit armor, babe
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.65><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: malformed hands, twisted wrists, asymmetrical eyes, plastic skin, face mush, low-res feathers, extra arrows, multiple bowstrings, broken bowstring, warped bow, floating arrows, misplaced arrow, missing arrowhead, arrow through body, bowstring intersecting face, disjoint limbs, compound bow, crossbow, sci-fi bow, weapon glitch, doubled strings
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character portrait, natural skin, clean lighting
+desert scout, indigo veil, sand-'soft light, hand holding hilt of a dagger with a curved blade, steady look, long flowing hair, jouyous smile
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, ambient moonlight, magical atmosphere
+female sorceress, ornate staff with violet fire, floating spell sigils, ancient runic circle, flowing robes, mischievous eyes, bikini armor, seductress
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.7><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: warped glyphs, uneven glow, blurry runes, deformed hands, melted faces, plastic fabric, symmetry errors
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character portrait, natural skin, clean lighting
+court mage, book with runes, parchment texture, fingers relaxed, thoughtful expression
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) character portrait, natural skin, clean lighting
+knight wearing wolf-pelt with wolfhead as hat, fur mantle, scar across cheek, sword at rest, eyes sharp, clean catchlights
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, rubber skin, plastic speculars, face mush, double pupils
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, chiaroscuro lighting, street shadows
+female rogue, hood up, dual daggers, crouched mid-motion, torchlight glint on blades, flowing cloak, sly smile, sharp eyes, rakish, tight leotard, babe
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.65><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: cartoon outlines, flat light, disconnected limbs, deformed hands, plastic texture, face mush, blurred edges
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) action portrait, golden sunset rim light, crisp edge detail
+female elf archer, slim athletic build, high cliff overlook, hair swept by wind, ornate minimal armor filigree, babe, longbow held in left hand, right hand drawing single bowstring with single nocked arrow, single arrow tip pointed forward, single taut bowstring
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.6><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: motion blur, uneven sky, twisted pose, poor bow alignment, deformed hands, face mush, soft edges, extra arrows, multiple bowstrings, broken bowstring, warped bow, floating arrows, misplaced arrow, missing arrowhead, arrow through body, bowstring intersecting face, disjoint limbs
+<<<<<<< HEAD
+
+# The Falcon Huntress
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female huntress, long dirty blonde hair, freckles, hazel eyes, athletic build, confident stance, ancient library, crisp daylight, introspective stillness, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Frost Queen
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female queen, white-blonde hair, icy blue eyes, tall elegant frame, regal demeanor, sunlit garden, torchlight glow, mystical aura, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Sapphire Maiden
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female maiden, olive skin, curly black hair, light blue eyes, graceful beauty, castle courtyard, fiery reflections, mystical aura, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+
+# The Emberblade
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic character portrait, natural skin, realistic hands in frame, coherent lighting
+female warrior, bronze skin, red hair in braid, golden-brown eyes, fiery determination, royal war tent, torchlight glow, serene calm, ultra-detailed, fantasy realism, photorealistic skin, volumetric light
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, melted faces, plastic speculars, face mush, blurry details, bad lighting
+=======
+>>>>>>> MajorRefactor

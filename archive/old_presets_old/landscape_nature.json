@@ -1,0 +1,29 @@
+{
+  "txt2img": {
+    "steps": 30,
+    "sampler_name": "DPM++ SDE Karras",
+    "cfg_scale": 7.0,
+    "width": 768,
+    "height": 512,
+    "negative_prompt": "urban elements, buildings, people, vehicles, pollution, artificial lighting, indoor, low quality, blurry"
+  },
+  "img2img": {
+    "steps": 25,
+    "sampler_name": "DPM++ SDE Karras",
+    "cfg_scale": 6.5,
+    "denoising_strength": 0.3
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.5
+  },
+  "video": {
+    "fps": 24,
+    "codec": "libx264",
+    "quality": "high"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  }
+}

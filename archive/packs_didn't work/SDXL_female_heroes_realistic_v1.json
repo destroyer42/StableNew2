@@ -1,0 +1,264 @@
+{
+  "txt2img": {
+    "steps": 30,
+    "cfg_scale": 6.0,
+    "width": 1024,
+    "height": 1024,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "seed": -1,
+    "clip_skip": 2,
+    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+    "vae": "",
+    "negative_prompt": "blurry, bad quality, distorted",
+    "hypernetwork": "None",
+    "hypernetwork_strength": 1.0,
+    "enable_hr": false,
+    "hr_scale": 1.5,
+    "hr_upscaler": "Latent",
+    "hr_sampler_name": "DPM++ 2M",
+    "denoising_strength": 0.27,
+    "hires_steps": 12,
+    "face_restoration_enabled": false,
+    "face_restoration_model": "GFPGAN",
+    "face_restoration_weight": 0.5,
+    "refiner_checkpoint": "None",
+    "refiner_switch_at": 0.8,
+    "refiner_switch_steps": 0,
+    "hr_second_pass_steps": 12
+  },
+  "img2img": {
+    "steps": 15,
+    "denoising_strength": 0.3,
+    "cfg_scale": 7.0,
+    "sampler_name": "Euler a",
+    "scheduler": "Normal",
+    "seed": -1,
+    "clip_skip": 2,
+    "model": "",
+    "vae": "",
+    "hypernetwork": "None",
+    "hypernetwork_strength": 1.0,
+    "prompt_adjust": "",
+    "negative_adjust": ""
+  },
+  "upscale": {
+    "upscaler": "4x-UltraSharpV2",
+    "upscaling_resize": 2.0,
+    "upscale_mode": "single",
+    "steps": 15,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "denoising_strength": 0.2,
+    "gfpgan_visibility": 0.0,
+    "codeformer_visibility": 0.0,
+    "codeformer_weight": 0.0,
+    "scale": 2.0
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  },
+  "pipeline": {
+    "txt2img_enabled": true,
+    "img2img_enabled": false,
+    "adetailer_enabled": true,
+    "upscale_enabled": true,
+    "video_enabled": false,
+    "apply_global_negative_txt2img": true,
+    "apply_global_negative_img2img": false,
+    "apply_global_negative_upscale": false,
+    "apply_global_negative_adetailer": false,
+    "loop_type": "pipeline",
+    "loop_count": 3,
+    "pack_mode": "selected",
+    "images_per_prompt": 1,
+    "model_matrix": [],
+    "hypernetworks": [],
+    "variant_mode": "fanout",
+    "allow_hr_with_stages": false
+  },
+  "adetailer": {
+    "adetailer_enabled": true,
+    "adetailer_model": "face_yolov8n.pt",
+    "adetailer_confidence": 0.6916666666666667,
+    "adetailer_mask_feather": 8,
+    "adetailer_sampler": "DPM++ 2M",
+    "adetailer_steps": 12,
+    "adetailer_denoise": 0.25833333333333336,
+    "adetailer_cfg": 6.0,
+    "adetailer_prompt": "natural skin texture, clear eyes, detailed eyelashes, balanced highlights, subtle film grain, sharp focus",
+    "adetailer_negative_prompt": "asymmetrical eyes, glossy skin, melted face, face mush, deformed nose, overexposed highlights"
+  },
+  "randomization": {
+    "enabled": true,
+    "prompt_sr": {
+      "enabled": true,
+      "mode": "random",
+      "rules": [
+        {
+          "search": "cinematic",
+          "replacements": [
+            "cinematic",
+            "epic",
+            "dramatic"
+          ]
+        },
+        {
+          "search": "fantasy",
+          "replacements": [
+            "fantasy",
+            "mythic",
+            "legendary"
+          ]
+        },
+        {
+          "search": "detailed",
+          "replacements": [
+            "detailed",
+            "intricate",
+            "highly detailed"
+          ]
+        },
+        {
+          "search": "portrait",
+          "replacements": [
+            "portrait",
+            "close-up portrait",
+            "cinematic portrait",
+            "character study"
+          ]
+        }
+      ],
+      "raw_text": "cinematic => cinematic|epic|dramatic\nfantasy => fantasy|mythic|legendary\ndetailed => detailed|intricate|highly detailed\nportrait => portrait|close-up portrait|cinematic portrait|character study"
+    },
+    "wildcards": {
+      "enabled": true,
+      "mode": "random",
+      "tokens": [
+        {
+          "token": "__mood__",
+          "values": [
+            "dramatic",
+            "serene",
+            "ominous",
+            "hopeful",
+            "melancholic",
+            "triumphant"
+          ]
+        },
+        {
+          "token": "__world__",
+          "values": [
+            "high fantasy world",
+            "low fantasy kingdom",
+            "dark gothic realm",
+            "mythic ancient land",
+            "celestial plane"
+          ]
+        },
+        {
+          "token": "__props__",
+          "values": [
+            "ancient relics",
+            "floating embers",
+            "arcane sigils",
+            "falling leaves",
+            "sparkling dust"
+          ]
+        }
+      ],
+      "raw_text": "__mood__: dramatic | serene | ominous | hopeful | melancholic | triumphant\n__world__: high fantasy world | low fantasy kingdom | dark gothic realm | mythic ancient land | celestial plane\n__props__: ancient relics | floating embers | arcane sigils | falling leaves | sparkling dust"
+    },
+    "matrix": {
+      "enabled": true,
+      "mode": "rotate",
+      "prompt_mode": "prepend",
+      "base_prompt": "a [[hair]]-haired [[role]] heroine wearing [[clothes]] in a [[environment]], lit by [[lighting]], captured as a [[camera]]",
+      "slots": [
+        {
+          "name": "hair",
+          "values": [
+            "blonde",
+            "black",
+            "auburn",
+            "silver",
+            "red",
+            "brown"
+          ]
+        },
+        {
+          "name": "clothes",
+          "values": [
+            "elegant leather armor",
+            "ornate plate armor",
+            "battle robes",
+            "assassin leathers",
+            "flowing gown with armor accents"
+          ]
+        },
+        {
+          "name": "role",
+          "values": [
+            "warrior",
+            "ranger",
+            "sorceress",
+            "paladin",
+            "battle priestess"
+          ]
+        },
+        {
+          "name": "environment",
+          "values": [
+            "castle courtyard",
+            "forest edge",
+            "mountain pass",
+            "ancient ruins",
+            "stormy cliffside"
+          ]
+        },
+        {
+          "name": "lighting",
+          "values": [
+            "golden hour sunlight",
+            "cool moonlight",
+            "harsh torchlight",
+            "soft overcast light",
+            "dramatic rim lighting"
+          ]
+        },
+        {
+          "name": "camera",
+          "values": [
+            "waist-up portrait",
+            "full-body stance",
+            "low-angle heroic shot",
+            "three-quarter view"
+          ]
+        }
+      ],
+      "limit": 0,
+      "raw_text": "# Matrix base prompt and slots are auto-generated for theme female_heroes"
+    }
+  },
+  "aesthetic": {
+    "enabled": false,
+    "mode": "prompt",
+    "weight": 0.9,
+    "steps": 5,
+    "learning_rate": 0.0001,
+    "slerp": false,
+    "slerp_angle": 0.1,
+    "embedding": "None",
+    "text": "cinematic medieval fantasy",
+    "text_is_negative": false,
+    "fallback_prompt": ""
+  },
+  "meta": {
+    "theme": "female_heroes",
+    "theme_label": "Female Fantasy Heroes",
+    "flavor": "realistic",
+    "flavor_label": "Realistic",
+    "version": "v1"
+  }
+}

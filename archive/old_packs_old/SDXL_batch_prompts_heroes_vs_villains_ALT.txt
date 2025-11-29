@@ -1,0 +1,6 @@
+﻿<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) dark cinematic fantasy, intense contrast, brooding tone, moody volumetric lighting
+corrupted hero in blackened armor, glowing eyes under cracked helm, ash and embers swirling, smoke-filled background
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+blurry, dull light, muddy texture, low detail, flat lighting, unrealistic anatomy, washed out shadows

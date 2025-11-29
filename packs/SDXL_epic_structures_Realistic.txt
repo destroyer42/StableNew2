@@ -1,0 +1,79 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+crumbling [[structure_type]] with collapsed arches in [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+sunken [[structure_type]] half-buried in [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+spiraling [[structure_type]] with flying buttresses over [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+[[age]] [[material]] [[structure_type]] rising above [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+fortified [[structure_type]] with banners whipping over [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+mystic [[structure_type]] glowing with runes at [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+towering [[structure_type]] gate flanked by statues in [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+vast [[structure_type]] carved from [[material]] atop [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+sacred [[structure_type]] shimmering in haze above [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) wide cinematic shot, deep depth of field, volumetric lighting, grounded realism, subtle grading
+bridge-like [[structure_type]] spanning chasm in [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+

@@ -1,0 +1,12 @@
+tests/test_main_single_instance.py
+tests/test_api_client.py
+tests/api/test_webui_healthcheck.py
+tests/controller/test_app_controller_config.py
+tests/controller/test_app_controller_packs.py
+tests/controller/test_app_controller_pipeline_flow_pr0.py
+tests/controller/test_app_controller_pipeline_integration.py
+tests/pipeline/test_last_run_store_v2_5.py
+tests/pipeline/test_stage_sequencer_plan_builder.py
+tests/gui_v2/test_gui_v2_layout_skeleton.py
+tests/gui_v2/test_entrypoint_uses_v2_gui.py
+tests/gui_v2/test_theme_v2.py

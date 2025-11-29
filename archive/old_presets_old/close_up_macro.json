@@ -1,0 +1,32 @@
+{
+  "txt2img": {
+    "steps": 22,
+    "sampler_name": "Euler a",
+    "cfg_scale": 7.0,
+    "width": 512,
+    "height": 768,
+    "negative_prompt": "distant view, wide shot, tiny details, far away, small subject, landscape view, low detail, blurry, soft focus"
+  },
+  "img2img": {
+    "steps": 18,
+    "sampler_name": "Euler a",
+    "cfg_scale": 6.5,
+    "denoising_strength": 0.4
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.0,
+    "codeformer_visibility": 0.8,
+    "codeformer_weight": 0.5,
+    "gfpgan_visibility": 0.0
+  },
+  "video": {
+    "fps": 24,
+    "codec": "libx264",
+    "quality": "high"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  }
+}

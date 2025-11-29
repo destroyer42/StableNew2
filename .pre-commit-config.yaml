@@ -1,0 +1,46 @@
+# Pre-commit hooks for code quality and consistency
+# Install with: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(archive|ARCHIVE)/
+      - id: end-of-file-fixer
+        exclude: ^(archive|ARCHIVE)/
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+        exclude: ^(archive|ARCHIVE)/
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.15
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        exclude: ^(archive|ARCHIVE)/
+      - id: ruff-format
+        exclude: ^(archive|ARCHIVE)/
+
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.11
+        exclude: ^(archive|ARCHIVE)/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-requests]
+        exclude: ^(tests|archive|ARCHIVE)/
+        args: [--ignore-missing-imports, --show-error-codes]

@@ -1,0 +1,18 @@
+{
+  "Landscape and portrait": [
+    "landscapes.txt",
+    "portraits.txt"
+  ],
+  "CharactersList": [
+    "Juggernaut_SDXL_MedievalRealism_Pack_Hybrid.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V1.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V2.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V3.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V4.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V5.txt",
+    "SDXL_characters_10.txt",
+    "SDXL_characters_10_ALT.txt",
+    "SDXL_heroes_10.txt",
+    "SDXL_heroes_10_ALT.txt"
+  ]
+}

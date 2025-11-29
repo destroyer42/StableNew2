@@ -1,0 +1,117 @@
+# RECOMMENDED TXT2IMG settings
+# sampler_name: DPM++ 2M SDE (if available; otherwise keep DPM++ 2M)
+# scheduler: Karras
+# steps: 30–34 (start 32)
+# cfg_scale: 5.8–6.2 (start 5.9)
+# clip_skip: 2
+# Hi-Res Fix (recommended for portraits)
+# enable_hr: true
+# hr_scale: 1.5 (gives ~1536×1536)
+# hr_upscaler: Prefer 4x-UltraSharp (or 4x-AnimeSharp if you don’t have UltraSharp). If neither, keep R-ESRGAN 4x+ but expect a slightly sharper, sometimes harsher finish.
+# denoising_strength: 0.25–0.32 (start 0.28)
+# hr_second_pass_steps: 10–14 (start 12)
+# Aesthetic Embeddings script
+# Either disable for this run, or switch to a portrait-centric aesthetic and lower its strength. Your current args look like [1.0, 25, "0.0001", false, "flower_plant", "Magical flowers", 0.1, false]. For portraits, consider disabling entirely, or drop to something like strength ~0.2 with a portrait tag if you have one.
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, natural skin, balanced lighting, fine facial texture
+young shieldmaiden, brushed steel armor, cloak clasp, hand on shield, calm gaze, 3/4 view, aesthetic armor, babe
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.65><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, twisted wrists, asymmetrical eyes, plastic skin, face mush, double pupils
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, gentle rim light, soft focus, subtle pores
+battle chaplain, iron mace engraved with cross, thoughtful expression, faint halo glow
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, asymmetrical eyes, rubber skin, plastic highlights, face mush, warped symbols
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, soft natural light, healthy skin tone, smiling eyes
+female archer captain, athletic build, bracer lacing visible, feathered cloak, soft backlight, traditional longbow (not compound), wooden bow, single bowstring, swimsuit armor, babe
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.65><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: malformed hands, twisted wrists, asymmetrical eyes, plastic skin, face mush, low-res feathers, extra arrows, multiple bowstrings, broken bowstring, warped bow, floating arrows, misplaced arrow, missing arrowhead, arrow through body, bowstring intersecting face, disjoint limbs, compound bow, crossbow, sci-fi bow, weapon glitch, doubled strings
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) full-body portrait, golden rim light, clean contrast
+female knight, silver armor with gold filigree, sun flare behind, castle parapet, sword raised high, wind-tossed hair, resolute gaze, babe
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: overexposure, cartoon style, muddy lighting, crooked horizon, plastic texture, face mush, deformed hands, extra digits
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) action portrait, mist and motion depth, cinematic contrast
+male ranger, forest cloak, worn leather armor, bow drawn mid-action, glowing arrow, woodland fog, hawk companion, longbow held in left hand, right hand drawing bowstring with single glowing nocked arrow, arrow tip pointed forward, single taut bowstring
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: stiff pose, bad foliage, metallic reflections, color bleed, deformed hands, face mush, extra arrows, multiple bowstrings, broken bowstring, warped bow, floating arrows, misplaced arrow, missing arrowhead, arrow through body, bowstring intersecting face, disjoint limbs, compound bow, crossbow, sci-fi bow, weapon glitch, doubled strings
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, ambient moonlight, magical atmosphere
+female sorceress, ornate staff with violet fire, floating spell sigils, ancient runic circle, flowing robes, mischievous eyes, bikini armor, babe
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.7><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: warped glyphs, uneven glow, blurry runes, deformed hands, melted faces, plastic fabric, symmetry errors
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) close-up portrait, divine lighting, glass reflections
+male paladin, kneeling before cathedral altar, polished armor catching stained-glass hues, holy sword on stone floor
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: glare, ghosting, distorted reflections, melted faces, deformed hands, chaotic lighting, face mush
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, chiaroscuro lighting, street shadows
+female rogue, hood up, dual daggers, crouched mid-motion, torchlight glint on blades, flowing cloak, sly smile, sharp eyes, rakish, tight leotard, babe
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.65><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: cartoon outlines, flat light, disconnected limbs, deformed hands, plastic texture, face mush, blurred edges
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) action portrait, dynamic snow particles, cold tone lighting
+male barbarian, fur-lined armor, massive greataxe, snowstorm battlefield, roaring stance, frost breath, motion blur depth
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: muddy snow, exaggerated muscles, flat depth, deformed hands, missing weapon detail, face mush
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) serene scene, diffused warm light, intimate framing
+female healer, gentle expression, glowing hands over patient’s chest, golden aura, soft bokeh, hair illuminated by window light, babe
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.45><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: overexposed glow, messy hands, smudged fabric detail, plastic speculars, face mush, warped posture
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) silhouette portrait, dramatic backlight, atmospheric haze
+male assassin, rooftop stance over burning city, smoke trails, cloak motion blur
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: blurry skyline, grain noise, floating debris, flame halos, poor perspective, face mush
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) action portrait, golden sunset rim light, crisp edge detail
+female archer, athletic build, high cliff overlook, hair swept by wind, ornate minimal armor filigree, babe, longbow held in left hand, right hand drawing single bowstring with single nocked arrow, single arrow tip pointed forward, single taut bowstring
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.6><lora:babesByStableYogiPony_xlV4:1.0>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: motion blur, uneven sky, twisted pose, poor bow alignment, deformed hands, face mush, soft edges, extra arrows, multiple bowstrings, broken bowstring, warped bow, floating arrows, misplaced arrow, missing arrowhead, arrow through body, bowstring intersecting face, disjoint limbs
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic low-angle portrait, ember haze, cinematic composition
+male crusader, tattered red cape, scorched battlefield, shield raised, swirling embers, determined expression, warm contrast, gripping weapon
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: melted faces, twisted wrists, rubber skin, plastic speculars, face mush, poor fire detail<lora:babesByStableYogiPony_xlV4:1.0>

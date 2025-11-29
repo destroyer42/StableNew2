@@ -1,0 +1,27 @@
+# Setting	Recommended Value	Notes
+# Sampler	DPM++ 2M SDE	Smooth gradients, crisp armor details
+# Scheduler	Karras	Works best with realism models
+# Steps	34	Optimal for SDXL + cinematic lighting
+# CFG Scale	5.8	Prevents overcontrast halos
+# Clip Skip	2	SDXL realism sweet spot
+# Resolution	1024 × 1024	Base render (portrait ratio 1:1 or 1152×896 for scene)
+# Seed	fixed for reproducibility (e.g., 3498274411)	Optional; -1 for randomness
+# Restore Faces	false	Avoid global restoration
+# Enable HR	true	For epic fidelity
+# HR Scale	1.7	Expands scope, keeps sharp armor
+# HR Upscaler	4x-UltraSharp or R-ESRGAN 4x+	Best for metallic detail
+# HR Second Pass Steps	12	Refines armor edges
+# Denoising Strength	0.27	Maintains consistency while refining
+# CFG (HiRes pass)	6.0	Slight contrast boost for dynamic lighting
+# Batch Size	1	Individual render control
+# LoRAs	add-detail-xl:0.6, CinematicStyle_v1:0.5, HeroicComposition_XL:0.45	Heroic realism balance
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic battlefield portrait, cinematic realism, dramatic clouds and dust, golden rim light
+young captain Moroni, age 25, standing at the forefront of Nephite armies, detailed armor with bronze breastplate, iron arm-shields, and head shield
+commanding presence, cloak caught in wind, holding raised sword, troops behind with swords and cimeters, morale high
+in the distance the Lamanite army retreats in fear, half-armored warriors, skin girded at loins, chaos and dust, sunbeams piercing clouds
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:HeroicComposition_XL:0.45>
+neg: <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:negative_hands>
+neg: deformed hands, extra digits, fused fingers, asymmetrical eyes, melted faces, plastic armor, broken weapons, cartoon proportions, overexposed light, disjoint limbs, chaotic anatomy, missing faces

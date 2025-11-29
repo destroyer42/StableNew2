@@ -1,0 +1,16 @@
+{
+  "packs": [
+    "SDXL_angelic_warriors_Fantasy.txt",
+    "SDXL_angelic_warriors_Realistic.txt",
+    "SDXL_beautiful_women_Fantasy.txt",
+    "SDXL_beautiful_women_Realistic.txt",
+    "SDXL_epic_structures_Fantasy.txt",
+    "SDXL_epic_structures_Realistic.txt",
+    "SDXL_female_fantasy_heroes_Fantasy.txt",
+    "SDXL_female_fantasy_heroes_Realistic.txt",
+    "SDXL_male_fantasy_heroes_Fantasy.txt",
+    "SDXL_male_fantasy_heroes_Realistic.txt",
+    "SDXL_mythical_beasts_Fantasy.txt",
+    "SDXL_mythical_beasts_Realistic.txt"
+  ]
+}

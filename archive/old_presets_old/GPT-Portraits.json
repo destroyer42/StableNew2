@@ -1,0 +1,139 @@
+{
+  "txt2img": {
+    "steps": 20,
+    "sampler_name": "Euler a",
+    "scheduler": "Normal",
+    "cfg_scale": 7.0,
+    "width": 512,
+    "height": 512,
+    "negative_prompt": "blurry, bad quality, distorted",
+    "seed": -1,
+    "seed_resize_from_h": -1,
+    "seed_resize_from_w": -1,
+    "enable_hr": false,
+    "hr_scale": 2.0,
+    "hr_upscaler": "Latent",
+    "hr_sampler_name": "",
+    "hr_second_pass_steps": 0,
+    "hr_resize_x": 0,
+    "hr_resize_y": 0,
+    "denoising_strength": 0.7,
+    "clip_skip": 2,
+    "model": "",
+    "vae": "",
+    "hypernetwork": "None",
+    "hypernetwork_strength": 1.0,
+    "styles": [],
+    "refiner_checkpoint": "",
+    "refiner_switch_at": 0.8,
+    "refiner_switch_steps": 0,
+    "hires_steps": 0,
+    "face_restoration_enabled": false,
+    "face_restoration_model": "GFPGAN",
+    "face_restoration_weight": 0.5
+  },
+  "img2img": {
+    "steps": 15,
+    "sampler_name": "Euler a",
+    "scheduler": "Normal",
+    "cfg_scale": 7.0,
+    "denoising_strength": 0.3,
+    "seed": -1,
+    "clip_skip": 2,
+    "model": "",
+    "vae": "",
+    "hypernetwork": "None",
+    "hypernetwork_strength": 1.0,
+    "prompt_adjust": "",
+    "negative_adjust": ""
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.0,
+    "upscale_mode": "single",
+    "denoising_strength": 0.35,
+    "steps": 20,
+    "sampler_name": "Euler a",
+    "scheduler": "Normal",
+    "gfpgan_visibility": 0.0,
+    "codeformer_visibility": 0.0,
+    "codeformer_weight": 0.5
+  },
+  "adetailer": {
+    "adetailer_enabled": false,
+    "adetailer_model": "face_yolov8n.pt",
+    "adetailer_confidence": 0.3,
+    "adetailer_mask_feather": 4,
+    "adetailer_sampler": "DPM++ 2M",
+    "adetailer_steps": 28,
+    "adetailer_denoise": 0.4,
+    "adetailer_cfg": 7.0,
+    "adetailer_prompt": "",
+    "adetailer_negative_prompt": ""
+  },
+  "video": {
+    "fps": 24,
+    "codec": "libx264",
+    "quality": "medium"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  },
+  "randomization": {
+    "enabled": false,
+    "prompt_sr": {
+      "enabled": false,
+      "mode": "random",
+      "rules": [],
+      "raw_text": ""
+    },
+    "wildcards": {
+      "enabled": false,
+      "mode": "random",
+      "tokens": [],
+      "raw_text": ""
+    },
+    "matrix": {
+      "enabled": false,
+      "mode": "fanout",
+      "limit": 8,
+      "slots": [],
+      "raw_text": "",
+      "base_prompt": ""
+    }
+  },
+  "aesthetic": {
+    "enabled": false,
+    "mode": "script",
+    "weight": 0.9,
+    "steps": 5,
+    "learning_rate": 0.0001,
+    "slerp": false,
+    "slerp_angle": 0.1,
+    "embedding": "None",
+    "text": "",
+    "text_is_negative": false,
+    "fallback_prompt": ""
+  },
+  "pipeline": {
+    "img2img_enabled": true,
+    "upscale_enabled": true,
+    "adetailer_enabled": false,
+    "allow_hr_with_stages": false,
+    "refiner_compare_mode": false,
+    "apply_global_negative_txt2img": true,
+    "apply_global_negative_img2img": true,
+    "apply_global_negative_upscale": true,
+    "apply_global_negative_adetailer": true,
+    "txt2img_enabled": true,
+    "video_enabled": false,
+    "loop_type": "single",
+    "loop_count": 1,
+    "pack_mode": "selected",
+    "images_per_prompt": 1,
+    "model_matrix": [],
+    "hypernetworks": [],
+    "variant_mode": "fanout"
+  }
+}

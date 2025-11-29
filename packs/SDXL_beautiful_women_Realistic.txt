@@ -1,0 +1,79 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+[[hair]]-haired noblewoman in intricate gown walking through [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+masked dancer performing under lanterns in [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+wandering minstrel reclining beside fountain in [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+royal advisor gazing through stained glass toward [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+smiling tavern owner welcoming guests from [[environment]] entrance
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+mysterious traveler adjusting cloak within [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+regal lady in [[clothes]] leaning against balcony above [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+priestess raising chalice in temple at [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+warrior princess resting on throne overlooking [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+scholar-mage reading tome by window facing [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.45> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:0.9> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+

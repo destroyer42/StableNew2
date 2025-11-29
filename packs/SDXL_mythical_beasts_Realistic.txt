@@ -1,0 +1,79 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+lava serpent bursting from cracks in [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+giant frost wyrm circling over [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+abyssal kraken grasping ruins in [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+celestial lion with burning mane guarding [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+shadowy demon titan emerging from [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+ancient bone colossus striding over [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+colossal hydra rising from [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+winged chimera roaring against the sky of [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+armored basilisk glaring across [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, grounded realism, subtle grading
+towering dragon coiled above [[environment]]
+<lora:add-detail-xl:0.55> <lora:CinematicStyle_v1:0.5>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+

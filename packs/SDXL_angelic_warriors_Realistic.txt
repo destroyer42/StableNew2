@@ -1,0 +1,78 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+armored angelic knight with radiant wings over [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+halo-crowned warrior gripping flaming sword in [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+dual-blade seraph hovering above [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+battle choir of winged warriors circling [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+lancer angel riding winged steed above [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+spear-wielding celestial guardian descending into [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+celestial archer loosing light arrows into [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+shield-and-sword archangel blocking demons at [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+trumpet-bearing herald angel shining over [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+radiant commander angel directing troops across [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured

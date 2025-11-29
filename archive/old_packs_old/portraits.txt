@@ -1,0 +1,16 @@
+# Sample Portrait Prompts
+professional headshot portrait, business attire, confident expression, studio lighting
+(masterpiece, best quality, 8k, HDR) portrait photography, sharp focus, natural skin texture
+neg: cartoon, anime, low quality, blurry, distorted features
+
+elegant fashion portrait, model in designer clothing, dramatic lighting setup
+high fashion photography, editorial style, creative composition, luxury fashion
+neg: casual wear, amateur, poor lighting, unflattering angle
+
+elderly wisdom portrait, weathered face showing character, warm natural lighting
+life experience shown in facial features, gentle expression, documentary style photography
+neg: young, smooth skin, artificial, heavy makeup
+
+artistic black and white portrait, dramatic shadows and highlights, fine art photography
+monochrome portrait, classic lighting technique, timeless composition
+neg: color, bright, cheerful, commercial

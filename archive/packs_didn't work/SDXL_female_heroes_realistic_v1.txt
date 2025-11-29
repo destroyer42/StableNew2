@@ -1,0 +1,4 @@
+heroic [[role]] leading a charge across the battlefield, __mood__, __world__, surrounded by __props__, grounded realism, cinematic lighting
+[[role]] standing alone atop a [[environment]], cloak whipping in the wind, ultra detailed, __mood__, grounded realism, cinematic lighting
+[[role]] preparing a spell in a sacred chamber, glowing runes, particle effects, __world__, __props__, grounded realism, cinematic lighting
+[[role]] resting at a campfire after battle, armor scattered nearby, intimate atmosphere, __mood__, grounded realism, cinematic lighting

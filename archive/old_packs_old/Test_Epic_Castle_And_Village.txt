@@ -1,0 +1,7 @@
+# Test Pack
+# 40 steps, CFH 7.25, Sampler DPM++ 2M Karras 1024x1024
+epic medieval castle on a misty mountain, vast valley below, rising sun shining through clouds, cinematic lighting, ultra-detailed, 32k concept art, fantasy environmen
+neg: modern buildings, sci-fi structures, futuristic vehicles, blurry, low detail, cartoonish
+
+medieval village beside a river, peasants at market, smoke from chimneys, warm sunlight, realistic fantasy painting, detailed foliage
+neg: modern vehicles, cityscape, low detail, desaturated, sci-fi

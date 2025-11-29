@@ -1,0 +1,79 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+dragon-slayer bracing spear as beast circles [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+ancient rune-knight with glowing armor in [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+battle-scarred barbarian roaring on [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+war cleric raising shield emblazoned with holy sigil in [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+storm mage channeling lightning over [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+shadow assassin poised atop ledge in [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+weathered ranger tracking footprints across [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+phantom duelist emerging from mist in [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+royal captain pointing sword toward enemy across [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, grounded realism, subtle grading
+ironclad knight with engraved greatsword in [[environment]]
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.6> <lora:epiCRealismHelper:0.6>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+

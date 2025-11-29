@@ -1,0 +1,6 @@
+# Test Dragon Battle Scene
+# Add your prompts here. Separate different prompts with blank lines.
+# Use 'neg:' prefix for negative prompts within a block.
+# Settings: 60 steps | CFG 8 | Sampler: DPM++ 2M Karras | 1216×832
+massive dragon attacking castle, knights on ramparts, flames, smoke, epic scale, golden hour lighting, ultra-detailed fantasy art, dynamic composition
+neg: robots, science fiction, spaceships, messy background, low resolution

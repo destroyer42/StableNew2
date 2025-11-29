@@ -1,0 +1,11 @@
+# Default owner
+* @destroyer42
+
+# GUI-related files
+src/gui/* @StableNew GUI/UX
+
+# Tests
+tests/** @StableNew Tester
+
+# Docs
+docs/** @StableNew Documentor

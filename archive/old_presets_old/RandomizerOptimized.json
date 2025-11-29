@@ -1,0 +1,18 @@
+{
+  "txt2img_enabled": true,
+  "img2img_enabled": false,
+  "adetailer_enabled": true,
+  "upscale_enabled": true,
+  "video_enabled": false,
+  "apply_global_negative_txt2img": false,
+  "apply_global_negative_img2img": false,
+  "apply_global_negative_upscale": false,
+  "apply_global_negative_adetailer": false,
+  "loop_type": "pipeline",
+  "loop_count": 3,
+  "pack_mode": "selected",
+  "images_per_prompt": 1,
+  "model_matrix": [],
+  "hypernetworks": [],
+  "variant_mode": "fanout"
+}

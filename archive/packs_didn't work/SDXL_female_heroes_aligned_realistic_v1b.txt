@@ -1,0 +1,2 @@
+a [[hair]]-haired beautiful woman wearing [[clothes]], looking [[style]] in a [[environment]] under [[lighting]] from a [[camera]] perspective, <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>, cinematic detailed portrait, __mood__, __world__, __props__
+a [[hair]]-haired goddess wearing [[clothes]], standing in a [[environment]], dramatic [[lighting]], [[camera]] framing, spark particles, volumetric light, __mood__, __world__, __props__

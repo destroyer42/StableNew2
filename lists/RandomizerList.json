@@ -1,0 +1,23 @@
+{
+  "packs": [
+    "Juggernaut_SDXL_MedievalRealism_Pack_V3_Fantasy.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V3_Realistic.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V4_Fantasy.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V4_Realistic.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V5_Fantasy.txt",
+    "Juggernaut_SDXL_MedievalRealism_Pack_V5_Realistic.txt",
+    "SDXL_batch_prompts_heroes_Fantasy.txt",
+    "SDXL_batch_prompts_heroes_Realistic.txt",
+    "SDXL_batch_prompts_heroes_vs_villains_ALT_Fantasy.txt",
+    "SDXL_batch_prompts_heroes_vs_villains_ALT_Realistic.txt",
+    "SDXL_batch_prompts_heroes_vs_villains_DUEL_Fantasy.txt",
+    "SDXL_batch_prompts_heroes_vs_villains_DUEL_Realistic.txt",
+    "SDXL_batch_prompts_heroes_vs_villains_Fantasy.txt",
+    "SDXL_batch_prompts_heroes_vs_villains_Realistic.txt",
+    "SDXL_heroes_10_ALT_Fantasy.txt",
+    "SDXL_heroes_10_ALT_MOD.txt",
+    "SDXL_heroes_10_ALT_MOD_Fantasy.txt",
+    "SDXL_heroes_10_ALT_MOD_Realistic.txt",
+    "SDXL_heroes_10_ALT_Realistic.txt"
+  ]
+}

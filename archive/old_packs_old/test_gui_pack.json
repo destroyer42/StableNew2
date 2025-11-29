@@ -1,0 +1,8 @@
+{
+  "txt2img": {
+    "steps": 30,
+    "cfg_scale": 7.5,
+    "width": 768,
+    "height": 768
+  }
+}

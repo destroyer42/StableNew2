@@ -1,0 +1,69 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Amber Steppe - cataphracts wheel against spear host, dust banners, sun low on horizon, clear wedge geometry
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Winter Siege - mangonels arc stones, snow-'bathed battlements, defenders rotate ranks, readable parapet spacing
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Blackwater Strait - lantern fleets cross at dusk, rams prepared, spray trails, horizon level
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Midnight Assault - torch rivers through fog, shield wall compresses, pike hedge advances, rim-'lit smoke
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+High Pass - mountain guard blocks giantkin, avalanched scree, tight formation, visible interlocked shields
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Dragonwake - paired wyvern squadrons strafe battlements, firelines curve, altitude separation, fortress scale lines
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Arc Salvos - opposing mages trace clean parabolas over ravine, rock spalls, tents in ordered rows
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Thornwood Ambush - horn bows snap from treeline, cavalry bunches in choke, mist layers separated
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+South Gate Ram - iron-'shod ram under pavise screen, oil fire falls, silhouettes crisp against glow
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) grand strategy view, clean silhouettes, controlled crowd detail, balanced haze
+Seven Arches Bridge - standard held aloft, rain sheets, formations compress center span, readable ranks
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes

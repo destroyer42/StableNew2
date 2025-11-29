@@ -1,0 +1,69 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+arcaded market hall, broad vaults, even bays, tidy stalls, clean floor plane
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+helical observatory tower, terraced rings, big window panels, restrained tracery
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+canal colonnade, shallow arches, splayed light, minimal banners, aligned facades
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+rock-cut amphitheater, smooth concentric seating, mirror pool center, tidy edges
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+sky terrace cloister, square columns, planar walls, subtle reliefs, calm sky
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+triple-arch aqueduct palace, massive spans, simplified cornices, calm river
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+oasis quarter with windcatchers, rectilinear masses, screened loggias, ordered rhythm
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+glass-and-iron winter garden, wide panes, clear ribs, neat lattice shadows
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+tidal library on stilts, clean footings, plank walks, quiet horizon line
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) architectural clarity, measured ornament, smooth planes, strong forms
+mountain tram terminus, terraced platforms, large ashlar blocks, minimal clutter
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl

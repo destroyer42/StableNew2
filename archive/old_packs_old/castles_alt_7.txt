@@ -1,0 +1,48 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+fjord watchcastle on needle spire, rope bridge, smooth parapets, sharp silhouette, mist bands
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+alpine gatehouse spanning ravine, ribbed arch, stone in large blocks, snow dusting, crisp shadow
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+forest stronghold with curtain wall, square towers, tiered terraces, little ornament, moss only
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+tidal island keep with causeway, slick stones, lighthouse beacon, simplified crenels, moonlight
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+river bastion with star fort traces, geometry clear, no micro-‘ornament, smooth water plane
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+volcanic caldera redoubt, vent plumes distant, chunky silhouettes, heavy buttresses, stable horizon
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+plain-‘rise palace-‘fort, broad facets, stepped terraces, restrained carving, banner count limited
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl

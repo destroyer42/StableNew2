@@ -1,0 +1,90 @@
+# Juggernaut SDXL Medieval Realism Prompt Pack (Hybrid Optimized)
+
+# 1. The Silver Knight
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+male knight, silver plate armor, gray eyes, short silvery hair, strong handsome build, mid-50s
+standing in dawn mist at a medieval castle courtyard, cinematic lighting, soft sunlight reflecting on armor, ultra-detailed face, fantasy realism, masterpiece
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: deformed hands, extra digits, fused fingers, asymmetrical eyes, melted faces, blurry, plastic speculars
+
+
+# 2. The Falcon Huntress
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+female huntress, long dirty blonde hair partially greying, hazel eyes, athletic build, freckles across nose, middle-aged
+wearing green cloak and leather tunic, holding falcon in misty forest clearing at dawn, soft natural light filtering through trees, sharp cinematic focus, fantasy realism
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: bad hands, flat light, overexposed, cartoonish, low detail
+
+
+# 3. The Frost Queen
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+female queen, white-blonde hair, beautiful, piercing icy blue eyes, sharp features, tall and elegant, thin build, middle-aged
+wearing silver gown and fur cloak, standing on frozen balcony with falling snow, blue light from ice pillars, regal expression, cinematic fantasy realism
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed face, lowres, poor lighting, distorted anatomy, asymmetry
+
+
+# 4. The Golden Commander
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+male commander, light-skinned African-American, super-short curly hair, golden-brown eyes, strong build, middle-aged
+wearing ornate gold armor and red cloak, inside medieval war tent lit by lanterns, confident posture, maps on wooden table, dramatic light, high realism
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+neg: blurry, dull light, bad proportions, deformed, plastic skin
+
+
+# 5. The Emerald Sage
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+male sage, short black hair with white streak, green eyes, lean build, angular face, middle-aged, handsome gentleman
+wearing emerald robes embroidered with runes, standing in candlelit medieval study with scrolls and tomes, holding glowing crystal, warm volumetric light, cinematic detail
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: unsharp, flat color, low detail, deformed hands
+
+
+# 6. The Mountain Guard
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+male warrior, olive skin, curly brown hair, short muscular build, wide nose, big lips, brown eyes, middle-aged, polynesian
+wearing chainmail and heavy leather armor, standing on rocky mountain pass under storm clouds, strong expression, cinematic realism, heroic atmosphere
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands>
+neg: blurred details, distorted anatomy, bad metal texture, fake reflections
+
+
+# 7. The Sapphire Maiden
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+female maiden, olive skin, curly black hair, light blue eyes, youthful beauty
+wearing royal blue gown with silver embroidery, standing in flower-filled castle courtyard, soft daylight, painterly realism, serene expression
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands>
+neg: plastic look, overexposed, cartoon style, poor anatomy
+
+
+# 8. The Lion Knight
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+male knight, olive skin, dark brown hair, moss-green eyes, tall and muscular, strong jawline, caucasian
+wearing steel armor embossed with lion crest, battlefield at sunset, medieval fortress background, warm cinematic lighting, photorealistic heroism
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands>
+neg: distorted face, oversaturated, low detail, deformed proportions
+
+
+# 9. The Apprentice Scribe
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+male scholar, light brown hair, brown eyes, lean build, calm demeanor
+wearing medieval scholar robes, sitting at wooden desk writing on parchment by candlelight, surrounded by ancient books, warm glow, detailed realism
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands>
+neg: blurry, bad lighting, deformed hands, low resolution
+
+
+# 10. The Emberblade
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+female warrior, bronze skin, red hair in long braid, mesmerizing golden-brown eyes, strong confident pose, mixed race
+wearing blackened steel armor with glowing red runes, standing in forge chamber with lava reflections, cinematic firelight, dramatic contrast, ultra-realistic
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: cartoon style, low detail, blurry, artifacted

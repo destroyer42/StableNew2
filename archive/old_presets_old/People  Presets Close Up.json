@@ -1,0 +1,62 @@
+{
+  "txt2img": {
+    "steps": 36,
+    "cfg_scale": 6.0,
+    "width": 1024,
+    "height": 1024,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "seed": -1,
+    "clip_skip": 2,
+    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+    "vae": "",
+    "negative_prompt": "blurry, bad quality, distorted, ugly, malformed",
+    "enable_hr": false,
+    "hr_scale": 2.0,
+    "hr_upscaler": "R-ESRGAN 4x+",
+    "denoising_strength": 0.7,
+    "hires_steps": 10,
+    "face_restoration_enabled": false,
+    "face_restoration_model": "GFPGAN",
+    "face_restoration_weight": 0.5
+  },
+  "img2img": {
+    "steps": 24,
+    "denoising_strength": 0.31,
+    "cfg_scale": 6.8,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "seed": -1,
+    "clip_skip": 2,
+    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+    "vae": "sdxl_vae.safetensors",
+    "prompt_adjust": "",
+    "negative_adjust": ""
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.0,
+    "upscale_mode": "single",
+    "steps": 17,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "denoising_strength": 0.0,
+    "gfpgan_visibility": 0.0,
+    "codeformer_visibility": 0.0,
+    "codeformer_weight": 0.0
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  },
+  "pipeline": {
+    "txt2img_enabled": true,
+    "img2img_enabled": false,
+    "upscale_enabled": true,
+    "video_enabled": false,
+    "loop_type": "single",
+    "loop_count": 1,
+    "pack_mode": "selected",
+    "images_per_prompt": 1
+  }
+}

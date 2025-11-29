@@ -1,0 +1,22 @@
+{
+  "txt2img": {
+    "steps": 30,
+    "sampler_name": "DPM++ 2M",
+    "cfg_scale": 5.455426356589148,
+    "width": 512,
+    "height": 512,
+    "negative_prompt": "blurry, bad quality, distorted, ugly, malformed"
+  },
+  "img2img": {
+    "steps": 15,
+    "denoising_strength": 0.3
+  },
+  "upscale": {
+    "upscaler": "ESRGAN_4x",
+    "upscaling_resize": 2.0
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  }
+}

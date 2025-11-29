@@ -1,0 +1,44 @@
+{
+  "txt2img": {
+    "steps": 25,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "cfg_scale": 7.5,
+    "width": 1024,
+    "height": 1024,
+    "negative_prompt": "blurry, bad quality, distorted, ugly, malformed, amateur, low resolution",
+    "sd_model_checkpoint": "juggernautXL_ragnarokBy.safetensors",
+    "batch_size": 1,
+    "n_iter": 1,
+    "restore_faces": true,
+    "tiling": false,
+    "do_not_save_samples": false,
+    "do_not_save_grid": false,
+    "refiner_checkpoint": "None",
+    "refiner_switch_at": 0.8
+  },
+  "img2img": {
+    "steps": 20,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "cfg_scale": 7.5,
+    "denoising_strength": 0.25,
+    "restore_faces": true
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.0,
+    "gfpgan_visibility": 0.1,
+    "codeformer_visibility": 0.0,
+    "codeformer_weight": 0.5
+  },
+  "video": {
+    "fps": 24,
+    "codec": "libx264",
+    "quality": "medium"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  }
+}

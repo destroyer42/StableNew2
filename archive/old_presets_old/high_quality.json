@@ -1,0 +1,50 @@
+{
+  "txt2img": {
+    "steps": 30,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "cfg_scale": 8.0,
+    "width": 768,
+    "height": 768,
+    "negative_prompt": "blurry, bad quality, distorted, ugly, malformed, low resolution",
+    "seed": -1,
+    "clip_skip": 2,
+    "enable_hr": true,
+    "hr_scale": 1.5,
+    "hr_upscaler": "R-ESRGAN 4x+",
+    "hr_second_pass_steps": 15,
+    "denoising_strength": 0.6,
+    "model": "",
+    "vae": "",
+    "styles": []
+  },
+  "img2img": {
+    "steps": 20,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "cfg_scale": 7.5,
+    "denoising_strength": 0.4,
+    "seed": -1,
+    "clip_skip": 2,
+    "model": "",
+    "vae": ""
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.0,
+    "upscale_mode": "img2img",
+    "denoising_strength": 0.25,
+    "gfpgan_visibility": 0.1,
+    "codeformer_visibility": 0.0,
+    "codeformer_weight": 0.6
+  },
+  "video": {
+    "fps": 30,
+    "codec": "libx264",
+    "quality": "high"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  }
+}

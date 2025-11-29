@@ -1,0 +1,34 @@
+{
+  "txt2img": {
+    "steps": 35,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "cfg_scale": 8.5,
+    "width": 768,
+    "height": 768,
+    "negative_prompt": "low quality, blurry, simple composition, amateur, boring, static, flat lighting, dull colors, poor composition"
+  },
+  "img2img": {
+    "steps": 28,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "cfg_scale": 8.0,
+    "denoising_strength": 0.4
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 3.0,
+    "codeformer_visibility": 0.5,
+    "codeformer_weight": 0.7,
+    "gfpgan_visibility": 0.0
+  },
+  "video": {
+    "fps": 30,
+    "codec": "libx264",
+    "quality": "ultra"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 400
+  }
+}

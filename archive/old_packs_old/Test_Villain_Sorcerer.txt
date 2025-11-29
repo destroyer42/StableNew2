@@ -1,0 +1,6 @@
+# Villain Sorcerer
+# Add your prompts here. Separate different prompts with blank lines.
+# Use 'neg:' prefix for negative prompts within a block.
+# Settings: 45 steps | CFG 9 | Sampler: DPM++ SDE | 1024×1024
+dark sorcerer casting spell in gothic ruins, glowing runes, shadowy atmosphere, cinematic lighting, ultra-realistic fantasy concept art
+neg: cartoon, anime, modern clothing, overexposed, washed out

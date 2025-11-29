@@ -1,0 +1,44 @@
+{
+  "txt2img": {
+    "steps": 35,
+    "cfg_scale": 6.541666666666667,
+    "width": 768,
+    "height": 768,
+    "negative_prompt": "blurry, bad quality, distorted, ugly, malformed",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "seed": -1,
+    "clip_skip": 1,
+    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+    "vae": "",
+    "enable_hr": false,
+    "hr_scale": 2.0,
+    "hr_upscaler": "R-ESRGAN 4x+",
+    "denoising_strength": 0.7,
+    "prompt": "normal anatomy, coherent lighting, cinematic composition, photorealistic skin"
+  },
+  "img2img": {
+    "steps": 25,
+    "denoising_strength": 0.20833333333333334,
+    "sampler_name": "DPM++ SDE Karras",
+    "scheduler": "Karras",
+    "cfg_scale": 6.383333333333333,
+    "seed": -1,
+    "clip_skip": 2,
+    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+    "vae": ""
+  },
+  "upscale": {
+    "upscaler": "4xUltrasharp_4xUltrasharpV10",
+    "upscaling_resize": 2.0,
+    "mode": "single",
+    "denoising_strength": 0.2,
+    "gfpgan_visibility": 0.5,
+    "codeformer_visibility": 0.0,
+    "codeformer_weight": 0.5
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  }
+}

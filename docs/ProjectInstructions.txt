@@ -1,0 +1,154 @@
+# StableNewV2 — Project Instruction Directive
+
+The following rules govern all ChatGPT/Codex development for the StableNewV2 project. 
+They are ALWAYS in effect for this project.
+
+------------------------------------------------------------
+1. The project is V2-ONLY.
+------------------------------------------------------------
+Never use V1 code or reference the structure/architecture. V1 files
+ are legacy and forbidden and can only be utilized for historical context.
+
+------------------------------------------------------------
+2. Enforce the StableNew Development Doctrine.
+------------------------------------------------------------
+Follow the 4-layer architecture and subsystem contracts:
+GUI (V2 only) → Controller → Pipeline Runtime → API Layer.
+
+------------------------------------------------------------
+3. File Modification Safety Rules
+------------------------------------------------------------
+• Only modify files explicitly provided in each PR prompt.
+• Apply changes surgically and minimally.
+• Forbidden Files must never be modified unless explicitly unlocked.
+• Refer to the Forbidden Files Matrix as authoritative.
+
+------------------------------------------------------------
+4. Forbidden Files (Hard-Lock)
+------------------------------------------------------------
+These may NEVER be modified unless the user explicitly unlocks
+ them or the PR specifically calls for it:
+- src/gui/main_window_v2.py
+- src/gui/theme_v2.py
+- src/pipeline/executor.py
+- src/pipeline/pipeline_runner.py
+- src/main.py
+- src/api/*
+- archive/*
+- Any *V1* file in any location
+
+------------------------------------------------------------
+5. Soft-Lock Files (Require Explicit Unlock)
+------------------------------------------------------------
+- src/controller/app_controller.py
+- src/gui/pipeline_panel_v2.py
+- src/gui/advanced_*_stage_card_v2.py
+- src/learn/learning_record_writer_v2.py
+- src/resources/webui_resources.py
+- src/api/last_run_store_v2_5.py
+
+------------------------------------------------------------
+6. All PRs Must Use the Snapshot System
+------------------------------------------------------------
+Before making ANY changes:
+• Snapshot ZIP must exist
+• repo_inventory.json must be up to date
+• PR must reference snapshot name
+
+------------------------------------------------------------
+7. Tests Are the Oracle
+------------------------------------------------------------
+No PR may break:
+• Pipeline flow tests
+• V2 GUI entrypoint tests
+• WebUI healthcheck tests
+• Resource discovery tests
+• Last-run config tests
+• Any contract tests
+
+------------------------------------------------------------
+8. One PR = One File (or a tiny cluster)
+------------------------------------------------------------
+Never propose multi-file rewrites, refactors, or architecture overhauls.
+Never “clean up” unrelated code.
+
+------------------------------------------------------------
+9. GUI Rules (V2 Only)
+------------------------------------------------------------
+• GUI must use zone-based layout: header, left, center, bottom.
+• GUI must never talk directly to the pipeline or WebUI.
+• All data comes from the Controller.
+• Never reintroduce V1 GUI logic or patterns.
+
+------------------------------------------------------------
+10. Controller Rules
+------------------------------------------------------------
+• Controller is the single source of truth for:
+  - dropdown data
+  - last-run config
+  - pipeline config updates
+• No Tkinter widgets inside Controller.
+
+------------------------------------------------------------
+11. Pipeline Runtime Rules
+------------------------------------------------------------
+• Payload building must remain deterministic.
+• No hardcoded model/vae/sampler names.
+• All execution flows through Executor.
+
+------------------------------------------------------------
+12. API Layer Rules
+------------------------------------------------------------
+• Only V2 canonical healthcheck + discovery may be used.
+• No new API logic without explicit instruction.
+
+------------------------------------------------------------
+13. Last-Run Config Rules
+------------------------------------------------------------
+• Must load at startup using V2 store.
+• Must save after every successful pipeline run.
+• Consistent structure only.
+
+------------------------------------------------------------
+14. Learning System Rules
+------------------------------------------------------------
+• JSONL learning records must remain stable.
+• Rating updates must flow through AppController.
+• No new learning features without explicit instruction.
+
+------------------------------------------------------------
+15. Randomization & Prompt Editor Rules
+------------------------------------------------------------
+• Only work with V2 randomization/editor modules.
+• Never reuse V1 modules.
+
+------------------------------------------------------------
+16. Diff Quality Requirements
+------------------------------------------------------------
+• Minimal, surgical changes only.
+• No whitespace churn.
+• No renames or deletions unless requested.
+• No new classes or modules without explicit design approval.
+
+------------------------------------------------------------
+17. Assume the Project Folder contains authoritative docs.
+------------------------------------------------------------
+StableNew Doctrine, PR Templates, Checklists, and Roadmaps govern behavior.
+
+------------------------------------------------------------
+18. Never hallucinate missing files or paths.
+------------------------------------------------------------
+If a file is needed, request it or wait for upload.
+
+------------------------------------------------------------
+19. Always prioritize stability and determinism.
+------------------------------------------------------------
+If unsure, prefer:
+• smallest change
+• V2 patterns
+• existing contracts
+
+------------------------------------------------------------
+20. ChatGPT’s default stance in this project:
+------------------------------------------------------------
+“When in doubt, do not modify the file. Request clarification.”

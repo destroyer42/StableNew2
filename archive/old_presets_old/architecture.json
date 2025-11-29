@@ -1,0 +1,29 @@
+{
+  "txt2img": {
+    "steps": 28,
+    "sampler_name": "Euler a",
+    "cfg_scale": 8.0,
+    "width": 768,
+    "height": 512,
+    "negative_prompt": "blurry, soft focus, oversaturated, cartoonish, low quality, distorted perspective, warped buildings"
+  },
+  "img2img": {
+    "steps": 22,
+    "sampler_name": "Euler a",
+    "cfg_scale": 7.5,
+    "denoising_strength": 0.25
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.0
+  },
+  "video": {
+    "fps": 30,
+    "codec": "libx264",
+    "quality": "high"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  }
+}

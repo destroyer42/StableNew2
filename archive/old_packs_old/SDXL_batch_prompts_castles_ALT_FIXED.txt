@@ -1,0 +1,20 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+basalt cliff fortress over stormy inlet, tiered battlements, spare ornament, clean merlons, gulls in distance
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl, moire, cross-hatching, stippling, dot pattern, fabric weave, canvas texture, micro-ornament, excessive skin pores, over-sharpened, sharpening halos, chalky, waxy, crunchy detail, noise pattern, tiling, repetitive pattern
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+hilltop concentric castle at golden hour, dry moat, causeway lines, long shadows, sparse banners
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl, moire, cross-hatching, stippling, dot pattern, fabric weave, canvas texture, micro-ornament, excessive skin pores, over-sharpened, sharpening halos, chalky, waxy, crunchy detail, noise pattern, tiling, repetitive pattern
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) clean masonry, crisp edges, uninterrupted planes, readable silhouettes
+desert citadel cut into red rock, buttressed keeps, minimal filigree, sand haze layers, clear skyline
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+spindly detail, jitter lines, scribble texture, over-ornament, noisy micro-detail, aliasing, moire, banding, posterization, texture crawl, moire, cross-hatching, stippling, dot pattern, fabric weave, canvas texture, micro-ornament, excessive skin pores, over-sharpened, sharpening halos, chalky, waxy, crunchy detail, noise pattern, tiling, repetitive pattern

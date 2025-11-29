@@ -1,0 +1,362 @@
+# CLEANHOUSE File Access Report (V2.5)
+
+_Generated: 2025-11-26 16:51:07_
+
+**Total files:** 335
+
+- A_RUNTIME_CORE: 98
+- B_RUNTIME_ADJACENT: 25
+- C_TEST: 205
+- D_ARCHIVE_OR_LEGACY: 0
+- E_OTHER: 7
+
+## Category A_RUNTIME_CORE
+
+- `src/ai/settings_generator_adapter.py` | touched: false | reachable_from_main: true
+- `src/ai/settings_generator_contract.py` | touched: false | reachable_from_main: true
+- `src/ai/settings_generator_driver.py` | touched: false | reachable_from_main: true
+- `src/api/__init__.py` | touched: false | reachable_from_main: true
+- `src/api/client.py` | touched: false | reachable_from_main: true
+- `src/api/healthcheck.py` | touched: false | reachable_from_main: true
+- `src/api/webui_process_manager.py` | touched: false | reachable_from_main: true
+- `src/cluster/worker_model.py` | touched: false | reachable_from_main: true
+- `src/cluster/worker_registry.py` | touched: false | reachable_from_main: true
+- `src/config/app_config.py` | touched: false | reachable_from_main: true
+- `src/controller/__init__.py` | touched: false | reachable_from_main: true
+- `src/controller/app_controller.py` | touched: false | reachable_from_main: true | GUI
+- `src/controller/job_execution_controller.py` | touched: false | reachable_from_main: true
+- `src/controller/job_history_service.py` | touched: false | reachable_from_main: true
+- `src/controller/learning_execution_controller.py` | touched: false | reachable_from_main: true
+- `src/controller/pipeline_config_assembler.py` | touched: false | reachable_from_main: true
+- `src/controller/pipeline_controller.py` | touched: false | reachable_from_main: true
+- `src/controller/queue_execution_controller.py` | touched: false | reachable_from_main: true
+- `src/controller/settings_suggestion_controller.py` | touched: false | reachable_from_main: true
+- `src/controller/webui_connection_controller.py` | touched: false | reachable_from_main: true
+- `src/gui/__init__.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/advanced_prompt_editor.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/api_status_panel.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/app_layout_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/config_panel.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/controller.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/core_config_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/engine_settings_dialog.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/enhanced_slider.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/job_history_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/learning_review_dialog_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/log_panel.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/main_window.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/main_window_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/model_list_adapter_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/model_manager_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/negative_prompt_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/output_settings_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/panels_v2/__init__.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/panels_v2/pipeline_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/panels_v2/preview_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/panels_v2/randomizer_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/panels_v2/sidebar_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/panels_v2/status_bar_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/pipeline_command_bar_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/pipeline_controls_panel.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/pipeline_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/preview_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/prompt_pack_adapter_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/prompt_pack_panel.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/prompt_pack_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/randomizer_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/resolution_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/scrolling.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/sidebar_panel_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/stage_cards_v2/validation_result.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/state.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/status_bar_v2.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/theme.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui/tooltip.py` | touched: false | reachable_from_main: true | GUI
+- `src/gui_v2/adapters/learning_adapter_v2.py` | touched: false | reachable_from_main: true
+- `src/gui_v2/adapters/pipeline_adapter_v2.py` | touched: false | reachable_from_main: true
+- `src/gui_v2/adapters/randomizer_adapter_v2.py` | touched: false | reachable_from_main: true
+- `src/gui_v2/adapters/status_adapter_v2.py` | touched: false | reachable_from_main: true
+- `src/learning/dataset_builder.py` | touched: false | reachable_from_main: true
+- `src/learning/learning_adapter.py` | touched: false | reachable_from_main: true
+- `src/learning/learning_execution.py` | touched: false | reachable_from_main: true
+- `src/learning/learning_plan.py` | touched: false | reachable_from_main: true
+- `src/learning/learning_profile_sidecar.py` | touched: false | reachable_from_main: true
+- `src/learning/learning_record.py` | touched: false | reachable_from_main: true
+- `src/learning/learning_record_builder.py` | touched: false | reachable_from_main: true
+- `src/learning/learning_runner.py` | touched: false | reachable_from_main: true
+- `src/learning/model_profiles.py` | touched: false | reachable_from_main: true
+- `src/learning/run_metadata.py` | touched: false | reachable_from_main: true
+- `src/main.py` | touched: false | reachable_from_main: true | GUI
+- `src/pipeline/executor.py` | touched: false | reachable_from_main: true
+- `src/pipeline/pipeline_runner.py` | touched: false | reachable_from_main: true
+- `src/pipeline/stage_sequencer.py` | touched: false | reachable_from_main: true
+- `src/pipeline/variant_planner.py` | touched: false | reachable_from_main: true
+- `src/queue/__init__.py` | touched: false | reachable_from_main: true
+- `src/queue/job_history_store.py` | touched: false | reachable_from_main: true
+- `src/queue/job_model.py` | touched: false | reachable_from_main: true
+- `src/queue/job_queue.py` | touched: false | reachable_from_main: true
+- `src/queue/single_node_runner.py` | touched: false | reachable_from_main: true
+- `src/services/config_service.py` | touched: false | reachable_from_main: true
+- `src/utils/__init__.py` | touched: false | reachable_from_main: true
+- `src/utils/aesthetic_detection.py` | touched: false | reachable_from_main: true
+- `src/utils/config.py` | touched: false | reachable_from_main: true
+- `src/utils/file_io.py` | touched: false | reachable_from_main: true
+- `src/utils/preferences.py` | touched: false | reachable_from_main: true
+- `src/utils/prompt_packs.py` | touched: false | reachable_from_main: true
+- `src/utils/randomizer.py` | touched: false | reachable_from_main: true
+- `src/utils/state.py` | touched: false | reachable_from_main: true
+- `src/utils/webui_discovery.py` | touched: false | reachable_from_main: true
+- `src/utils/webui_launcher.py` | touched: false | reachable_from_main: true
+
+## Category B_RUNTIME_ADJACENT
+
+- `src/__init__.py` | touched: false | reachable_from_main: false
+- `src/cli.py` | touched: false | reachable_from_main: false
+- `src/cluster/__init__.py` | touched: false | reachable_from_main: false
+- `src/controller/cluster_controller.py` | touched: false | reachable_from_main: false
+- `src/gui/adetailer_config_panel.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui/center_panel.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui/img2img_stage_card.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui/panels_v2/layout_manager_v2.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui/prompt_pack_list_manager.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui/stage_chooser.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui/txt2img_stage_card.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui/upscale_stage_card.py` | touched: false | reachable_from_main: false | GUI
+- `src/gui_v2/adapters/__init__.py` | touched: false | reachable_from_main: false
+- `src/gui_v2/randomizer_adapter.py` | touched: false | reachable_from_main: false
+- `src/gui_v2/validation/__init__.py` | touched: false | reachable_from_main: false
+- `src/gui_v2/validation/pipeline_txt2img_validator.py` | touched: false | reachable_from_main: false
+- `src/learning/feedback_manager.py` | touched: false | reachable_from_main: false
+- `src/learning/learning_contract.py` | touched: false | reachable_from_main: false
+- `src/learning/learning_feedback.py` | touched: false | reachable_from_main: false
+- `src/pipeline/__init__.py` | touched: false | reachable_from_main: false
+- `src/pipeline/video.py` | touched: false | reachable_from_main: false
+- `src/utils/_extract_name_prefix.py` | touched: false | reachable_from_main: false
+- `src/utils/aesthetic.py` | touched: false | reachable_from_main: false
+- `src/utils/logger.py` | touched: false | reachable_from_main: false
+- `src/utils/prompt_pack.py` | touched: false | reachable_from_main: false
+
+## Category C_TEST
+
+- `tests/__init__.py` | touched: false | reachable_from_main: false | TEST
+- `tests/ai_v2/test_local_stub_settings_generator_behavior.py` | touched: false | reachable_from_main: false | TEST
+- `tests/ai_v2/test_settings_generator_adapter_from_learning.py` | touched: false | reachable_from_main: false | TEST
+- `tests/ai_v2/test_settings_generator_contract_roundtrip.py` | touched: false | reachable_from_main: false | TEST
+- `tests/ai_v2/test_settings_suggestion_controller_apply.py` | touched: false | reachable_from_main: false | TEST
+- `tests/api/test_webui_healthcheck.py` | touched: false | reachable_from_main: false | TEST
+- `tests/api/test_webui_process_manager.py` | touched: false | reachable_from_main: false | TEST
+- `tests/app/test_bootstrap_webui_autostart.py` | touched: false | reachable_from_main: false | TEST
+- `tests/cluster/test_worker_model_and_registry.py` | touched: false | reachable_from_main: false | TEST
+- `tests/conftest.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/controller/test_app_controller_config.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_app_controller_packs.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/controller/test_app_controller_pipeline_flow_pr0.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/controller/test_app_controller_pipeline_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_cluster_controller.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_controller_job_lifecycle.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_controller_learning_toggle.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_controller_queue_execution.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_job_history_service.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_learning_execution_controller_gui_contract.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_config_assembler.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_config_assembler_core_fields.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_config_assembler_model_fields.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_config_assembler_negative_prompt.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_config_assembler_output_settings.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_config_assembler_resolution.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_controller_config_path.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_controller_queue_mode.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_pipeline_controller_webui_gating.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_profile_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_queue_execution_controller.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_stage_sequencer_controller_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/controller/test_webui_connection_controller.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v1_legacy/__init__.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/conftest.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_adetailer_panel.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_api_status_panel.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_config_meta_updates.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_config_panel.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_controller_lifecycle.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_editor_and_summary.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_functional_buttons.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_gui_test_mode.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_gui_thread_marshaling.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_layout_dedup.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_load_config_behavior.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_log_panel.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_logpanel_binding.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_main_window_pipeline.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_main_window_threading.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_matrix_ui.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_pipeline_controls_panel.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_pipeline_double_run.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_pipeline_runs.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_pipeline_state_cleanup.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_pr1_layout_cleanup.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_progress_eta.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_prompt_pack_editor.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_prompt_pack_panel.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_prompt_sanitization.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_randomization_parsing.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_refiner_dropdown.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_scrollbars_and_resizing.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_stage_chooser.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_startup_nonblocking.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_status_bar_progress.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_stop_behavior.py` | touched: false | reachable_from_main: false | ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_theme_baseline.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v1_legacy/test_unsaved_state.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/gui_v2/conftest.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_advanced_prompt_editor_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_api_status_panel_webui_states_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_command_bar_v2.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_core_config_panel_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_entrypoint_uses_v2_gui.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_advanced_stage_cards_layout.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_gui_v2_advanced_stage_cards_roundtrip.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_gui_v2_advanced_stage_cards_validation.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_gui_v2_ai_settings_button_guarded.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_layout_skeleton.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_mainwindow_split_structure.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_panel_wiring.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_gui_v2_pipeline_adapter.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_pipeline_button_wiring.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_pipeline_config_roundtrip.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_pipeline_txt2img_validation.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_gui_v2_randomizer_adapter_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_randomizer_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_randomizer_matrix_ui.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_randomizer_matrix_ux.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_gui_v2_randomizer_preview_list.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_gui_v2_randomizer_variant_count_banner.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_randomizer_variant_count_preview.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_stage_cards_layout.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_stage_cards_roundtrip.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_startup.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_status_adapter_progress_eta.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_gui_v2_status_bar_progress_eta.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_job_history_panel_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_learning_review_dialog.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_learning_toggle.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_learning_toggle_and_dialog.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_model_manager_panel_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_negative_prompt_panel_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_output_settings_panel_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_pipeline_prompt_integration_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_prompt_pack_panel_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_prompt_pack_to_prompt_roundtrip_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_resolution_panel_v2.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_run_button_queue_mode_toggle.py` | touched: false | reachable_from_main: false | TEST
+- `tests/gui_v2/test_run_button_queue_smoke.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/gui_v2/test_status_bar_v2_composite.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/integration/__init__.py` | touched: false | reachable_from_main: false | TEST
+- `tests/integration/test_matrix_base_prompt_fix.py` | touched: false | reachable_from_main: false | TEST
+- `tests/integration/test_matrix_prompt_mode_examples.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_adapter_stub.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_adapter_v2.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_feedback_packaging.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_hooks_controller.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_hooks_pipeline_runner.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_plan_factory.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_record_builder.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_record_serialization.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_record_writer_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_learning_runner_stubs.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning/test_model_profiles.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning_v2/test_dataset_builder.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning_v2/test_learning_contract.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning_v2/test_learning_execution_controller_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning_v2/test_learning_execution_runner_happy_path.py` | touched: false | reachable_from_main: false | TEST
+- `tests/learning_v2/test_run_metadata_and_feedback.py` | touched: false | reachable_from_main: false | TEST
+- `tests/legacy/test_advanced_features.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/legacy/test_gui_enhancements.py` | touched: false | reachable_from_main: false | GUI; ARCHIVE/LEGACY; TEST
+- `tests/pipeline/__init__.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_aesthetic_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_executor_cancellation.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_global_negative_stage_flags.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_pipeline_io_contracts.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_pipeline_learning_hooks.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_pipeline_runner_cancel_token.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_pipeline_runner_variants.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_randomization_pipeline.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_refiner_compare_mode.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_refiner_support.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_refiner_switch_math.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_stage_sequencer_plan_builder.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_stage_sequencer_runner_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_upscale_hang_diag.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_upscale_stage.py` | touched: false | reachable_from_main: false | TEST
+- `tests/pipeline/test_variant_planner.py` | touched: false | reachable_from_main: false | TEST
+- `tests/queue/test_job_history_store.py` | touched: false | reachable_from_main: false | TEST
+- `tests/queue/test_job_model.py` | touched: false | reachable_from_main: false | TEST
+- `tests/queue/test_job_queue_basic.py` | touched: false | reachable_from_main: false | TEST
+- `tests/queue/test_jobrunner_integration.py` | touched: false | reachable_from_main: false | TEST
+- `tests/queue/test_single_node_runner_loopback.py` | touched: false | reachable_from_main: false | TEST
+- `tests/safety/test_advanced_stage_cards_import_safety.py` | touched: false | reachable_from_main: false | TEST
+- `tests/safety/test_ai_settings_generator_no_tk_imports.py` | touched: false | reachable_from_main: false | TEST
+- `tests/safety/test_gui_v2_adapters_no_tk_imports.py` | touched: false | reachable_from_main: false | TEST
+- `tests/safety/test_gui_v2_randomizer_ux_no_tk_imports.py` | touched: false | reachable_from_main: false | TEST
+- `tests/safety/test_learning_execution_no_tk_imports.py` | touched: false | reachable_from_main: false | TEST
+- `tests/safety/test_no_gui_imports_in_utils_safety.py` | touched: false | reachable_from_main: false | TEST
+- `tests/safety/test_randomizer_import_isolation_safety.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_advanced_prompt_editor_regressions.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_api.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_api_client.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_api_client_backoff.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_api_status_panel.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_archive_unused.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_cancel_token.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_complete_workflow.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_config.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_config_panel.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_config_passthrough.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_controller.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_default_preset.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_file_io.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_gui_system.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_gui_visibility.py` | touched: false | reachable_from_main: false | GUI; TEST
+- `tests/test_log_panel.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_logger.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_main_single_instance.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_new_features.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_pack_config.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_pipeline_controls_panel.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_pipeline_journey.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_pipeline_throughput.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_preferences_manager.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_prompt_editor.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_prompt_pack_list_manager.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_prompt_pack_panel.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_stage_chooser.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_state.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_structured_logger.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_txt2img_stage.py` | touched: false | reachable_from_main: false | TEST
+- `tests/test_video.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_aesthetic_detection.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_config_manager_defaults.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_no_gui_imports_in_utils.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_prompt_packs.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_prompt_randomizer.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_randomizer_import_isolation.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_randomizer_matrix_base_prompt.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_randomizer_matrix_prompt_modes.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_randomizer_parity.py` | touched: false | reachable_from_main: false | TEST
+- `tests/utils/test_randomizer_sanitization.py` | touched: false | reachable_from_main: false | TEST
+
+## Category D_ARCHIVE_OR_LEGACY
+
+
+## Category E_OTHER
+
+- `data/webui_cache.json` | touched: true
+- `docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/tests_controller_test_app_controller_pipeline_flow_pr0.py` | touched: false | reachable_from_main: false | GUI
+- `docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/tests_controller_test_app_controller_packs_integration.py` | touched: false | reachable_from_main: false
+- `docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/tests_utils_test_prompt_packs_service.py` | touched: false | reachable_from_main: false
+- `packs/SDXL_male_fantasy_heroes_Fantasy.json` | touched: true
+- `packs/somethingNew_test_v2.5.json` | touched: true
+- `presets/global_negative.txt` | touched: true
+

@@ -1,0 +1,49 @@
+check_in_thread refactor
+
+In src/gui/main_window.py:
+
+Find check_in_thread and the code that starts Thread(target=check_in_thread, ...).
+
+Move all self.api_url_var.get() and _normalize_api_url calls to the main thread, before thread creation.
+
+Change check_in_thread(self) to check_in_thread(self, api_url) (or similar) and only operate on that plain string.
+
+Error marshaling
+
+In StableNewGUI.on_error:
+
+Ensure error handling from worker threads:
+
+Uses root.after to dispatch to a main-thread handler, or sets state via a thread-safe path.
+
+Ensure the state transition to GUIState.ERROR is not inside a if not is_gui_test_mode() or if not STABLENEW_NO_ERROR_DIALOG block.
+
+Move any dialogs (messagebox / Toplevel) into a block that is guarded by test mode and STABLENEW_NO_ERROR_DIALOG.
+
+Cancel → IDLE
+
+In src/gui/main_window.py:
+
+Confirm Cancel button handler calls into the controller as before.
+
+Confirm whatever callback is invoked on cancel (e.g., on_pipeline_cancelled, on_pipeline_done(cancelled=True), etc.):
+
+Sets state to IDLE.
+
+Updates status bar text to the “ready” string from the test.
+
+If any new “test-mode controller wiring hook” changed this behavior, restore the original callback semantics while keeping the test-mode features.
+
+Tests
+
+Do not change the core assertions in:
+
+test_gui_thread_marshaling
+
+test_cancel_transitions_to_idle_with_ready_status
+
+Only adjust them if absolutely necessary due to function signature changes, but keep:
+
+Error ⇒ ERROR state.
+
+Cancel ⇒ IDLE state and ready status.

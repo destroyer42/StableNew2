@@ -1,0 +1,5403 @@
+{
+  "generated_at": "2025-11-26T23:18:09.988685Z",
+  "root": "C:\\Users\\rob\\projects\\StableNew",
+  "files": [
+    {
+      "path": "docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/tests_controller_test_app_controller_pipeline_flow_pr0.py",
+      "module": null,
+      "line_count": 125,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "typing",
+        "pytest",
+        "src.gui.main_window_v2",
+        "src.controller.app_controller"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/__init__.py",
+      "module": "src",
+      "line_count": 3,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/ai/settings_generator_adapter.py",
+      "module": "src.ai.settings_generator_adapter",
+      "line_count": 47,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "typing",
+        "src.ai.settings_generator_contract",
+        "src.learning.dataset_builder",
+        "src.learning.learning_record",
+        "json"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/ai/settings_generator_contract.py",
+      "module": "src.ai.settings_generator_contract",
+      "line_count": 95,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "dataclasses",
+        "enum",
+        "typing",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/ai/settings_generator_driver.py",
+      "module": "src.ai.settings_generator_driver",
+      "line_count": 43,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "abc",
+        "copy",
+        "typing",
+        "src.ai.settings_generator_contract"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/api/__init__.py",
+      "module": "src.api",
+      "line_count": 5,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.client"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/api/client.py",
+      "module": "src.api.client",
+      "line_count": 833,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "logging",
+        "random",
+        "time",
+        "typing",
+        "requests",
+        "src.api.healthcheck",
+        "src.utils",
+        "src.utils"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/api/healthcheck.py",
+      "module": "src.api.healthcheck",
+      "line_count": 71,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "time",
+        "requests",
+        "logging",
+        "logging"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/api/webui_process_manager.py",
+      "module": "src.api.webui_process_manager",
+      "line_count": 231,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "os",
+        "subprocess",
+        "json",
+        "dataclasses",
+        "typing",
+        "pathlib",
+        "time",
+        "logging",
+        "src.config",
+        "threading",
+        "logging"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/app_factory.py",
+      "module": "src.app_factory",
+      "line_count": 43,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "typing",
+        "src.controller.app_controller",
+        "src.gui.app_state_v2",
+        "src.gui.main_window_v2",
+        "src.api.webui_process_manager"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/cli.py",
+      "module": "src.cli",
+      "line_count": 157,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "argparse",
+        "logging",
+        "pathlib",
+        "src.api",
+        "src.pipeline",
+        "src.utils"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/cluster/__init__.py",
+      "module": "src.cluster",
+      "line_count": 6,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/cluster/worker_model.py",
+      "module": "src.cluster.worker_model",
+      "line_count": 45,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "datetime",
+        "enum",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/cluster/worker_registry.py",
+      "module": "src.cluster.worker_registry",
+      "line_count": 42,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "threading",
+        "typing",
+        "src.cluster.worker_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/config/app_config.py",
+      "module": "src.config.app_config",
+      "line_count": 490,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "os",
+        "src.api.webui_process_manager"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/__init__.py",
+      "module": "src.controller",
+      "line_count": 1,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/controller/app_controller.py",
+      "module": "src.controller.app_controller",
+      "line_count": 572,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "enum",
+        "pathlib",
+        "typing",
+        "threading",
+        "src.api.client",
+        "src.gui.main_window_v2",
+        "src.pipeline.pipeline_runner",
+        "src.utils",
+        "src.utils.file_io",
+        "src.utils.prompt_packs",
+        "tkinter",
+        "src.gui.main_window_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/controller/cluster_controller.py",
+      "module": "src.controller.cluster_controller",
+      "line_count": 22,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.cluster.worker_model",
+        "src.cluster.worker_registry"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/job_execution_controller.py",
+      "module": "src.controller.job_execution_controller",
+      "line_count": 98,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "threading",
+        "uuid",
+        "typing",
+        "src.queue.job_model",
+        "src.queue.job_queue",
+        "src.queue.single_node_runner",
+        "src.queue.job_history_store",
+        "pathlib",
+        "src.config.app_config",
+        "src.cluster.worker_registry",
+        "src.cluster.worker_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/job_history_service.py",
+      "module": "src.controller.job_history_service",
+      "line_count": 137,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing",
+        "src.queue.job_model",
+        "src.queue.job_queue",
+        "src.queue.job_history_store"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/learning_execution_controller.py",
+      "module": "src.controller.learning_execution_controller",
+      "line_count": 74,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "typing",
+        "src.learning.learning_execution",
+        "src.learning.learning_plan",
+        "src.gui_v2.adapters.learning_adapter_v2",
+        "src.pipeline.pipeline_runner",
+        "src.config.app_config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/pipeline_config_assembler.py",
+      "module": "src.controller.pipeline_config_assembler",
+      "line_count": 244,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "math",
+        "copy",
+        "dataclasses",
+        "typing",
+        "src.pipeline.pipeline_runner",
+        "src.utils.config",
+        "src.utils.randomizer",
+        "src.gui.prompt_workspace_state",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/pipeline_controller.py",
+      "module": "src.controller.pipeline_controller",
+      "line_count": 477,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "typing",
+        "src.gui.controller",
+        "src.gui.state",
+        "src.learning.learning_record",
+        "src.controller.job_execution_controller",
+        "src.controller.queue_execution_controller",
+        "src.queue.job_model",
+        "src.pipeline.stage_sequencer",
+        "src.pipeline.pipeline_runner",
+        "src.gui.state",
+        "src.controller.webui_connection_controller",
+        "src.config",
+        "src.config.app_config",
+        "src.controller.job_history_service",
+        "src.controller.pipeline_config_assembler",
+        "src.gui.prompt_workspace_state",
+        "src.gui.state",
+        "src.api.client",
+        "src.utils",
+        "pathlib",
+        "src.learning.model_profiles",
+        "logging",
+        "src.learning.learning_runner",
+        "src.queue.job_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/queue_execution_controller.py",
+      "module": "src.controller.queue_execution_controller",
+      "line_count": 44,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing",
+        "src.controller.job_execution_controller",
+        "src.queue.job_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/settings_suggestion_controller.py",
+      "module": "src.controller.settings_suggestion_controller",
+      "line_count": 42,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "typing",
+        "src.ai.settings_generator_adapter",
+        "src.ai.settings_generator_contract",
+        "src.ai.settings_generator_driver"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/controller/webui_connection_controller.py",
+      "module": "src.controller.webui_connection_controller",
+      "line_count": 115,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "logging",
+        "time",
+        "enum",
+        "typing",
+        "src.api.healthcheck",
+        "src.api.webui_process_manager",
+        "src.config",
+        "src.api.healthcheck"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/__init__.py",
+      "module": "src.gui",
+      "line_count": 17,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller",
+        "src.state"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/adetailer_config_panel.py",
+      "module": "src.gui.adetailer_config_panel",
+      "line_count": 399,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "tkinter",
+        "tkinter",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/advanced_prompt_editor.py",
+      "module": "src.gui.advanced_prompt_editor",
+      "line_count": 1639,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "os",
+        "re",
+        "tkinter",
+        "pathlib",
+        "tkinter",
+        "typing",
+        "src.utils.config",
+        "src.gui.scrolling",
+        "src.gui.theme",
+        "src.gui.tooltip"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/api_status_panel.py",
+      "module": "src.gui.api_status_panel",
+      "line_count": 130,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "logging",
+        "tkinter",
+        "tkinter",
+        "src.gui",
+        "src.controller.webui_connection_controller"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/app_layout_v2.py",
+      "module": "src.gui.app_layout_v2",
+      "line_count": 184,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing",
+        "tkinter",
+        "src.gui.panels_v2",
+        "src.gui.prompt_pack_adapter_v2",
+        "src.gui.job_history_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/app_state_v2.py",
+      "module": "src.gui.app_state_v2",
+      "line_count": 94,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing",
+        "src.gui.gui_invoker",
+        "src.gui.prompt_workspace_state"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/center_panel.py",
+      "module": "src.gui.center_panel",
+      "line_count": 10,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/config_panel.py",
+      "module": "src.gui.config_panel",
+      "line_count": 306,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/controller.py",
+      "module": "src.gui.controller",
+      "line_count": 352,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "queue",
+        "subprocess",
+        "threading",
+        "time",
+        "collections.abc",
+        "typing",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/controllers/learning_controller.py",
+      "module": "src.gui.controllers.learning_controller",
+      "line_count": 364,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing",
+        "src.gui.learning_state",
+        "src.gui.prompt_workspace_state",
+        "src.learning.learning_record",
+        "src.learning.learning_record_builder",
+        "src.learning.learning_record",
+        "src.learning.recommendation_engine",
+        "src.gui.learning_state"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/core_config_panel_v2.py",
+      "module": "src.gui.core_config_panel_v2",
+      "line_count": 152,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.config",
+        "src.gui.resolution_panel_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/engine_settings_dialog.py",
+      "module": "src.gui.engine_settings_dialog",
+      "line_count": 240,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.api.client"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/enhanced_slider.py",
+      "module": "src.gui.enhanced_slider",
+      "line_count": 219,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "tkinter"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/gui_invoker.py",
+      "module": "src.gui.gui_invoker",
+      "line_count": 31,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "threading",
+        "tkinter",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/img2img_stage_card.py",
+      "module": "src.gui.img2img_stage_card",
+      "line_count": 125,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/job_history_panel_v2.py",
+      "module": "src.gui.job_history_panel_v2",
+      "line_count": 221,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.controller.job_history_service",
+        "src.gui"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/layout_v2.py",
+      "module": "src.gui.layout_v2",
+      "line_count": 14,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/learning_review_dialog_v2.py",
+      "module": "src.gui.learning_review_dialog_v2",
+      "line_count": 100,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui_v2.adapters.learning_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/learning_state.py",
+      "module": "src.gui.learning_state",
+      "line_count": 48,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/log_panel.py",
+      "module": "src.gui.log_panel",
+      "line_count": 397,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "queue",
+        "tkinter",
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/main_window.py",
+      "module": "src.gui.main_window",
+      "line_count": 7379,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "logging",
+        "os",
+        "re",
+        "subprocess",
+        "sys",
+        "threading",
+        "time",
+        "tkinter",
+        "copy",
+        "enum",
+        "pathlib",
+        "tkinter",
+        "typing",
+        "src.api.client",
+        "src.controller.pipeline_controller",
+        "src.controller.learning_execution_controller",
+        "src.gui.advanced_prompt_editor",
+        "src.gui.api_status_panel",
+        "src.gui.config_panel",
+        "src.gui.enhanced_slider",
+        "src.gui.engine_settings_dialog",
+        "src.gui.learning_review_dialog_v2",
+        "src.gui.log_panel",
+        "src.gui.pipeline_controls_panel",
+        "src.gui.prompt_pack_panel",
+        "src.gui.panels_v2",
+        "src.gui.app_layout_v2",
+        "src.gui_v2.adapters.pipeline_adapter_v2",
+        "src.gui_v2.adapters.randomizer_adapter_v2",
+        "src.gui_v2.adapters.status_adapter_v2",
+        "src.controller.settings_suggestion_controller",
+        "src.ai.settings_generator_contract",
+        "src.gui.scrolling",
+        "src.gui.state",
+        "src.gui.theme",
+        "src.gui.tooltip",
+        "src.api.webui_process_manager",
+        "src.pipeline.executor",
+        "src.services.config_service",
+        "src.utils",
+        "src.utils.aesthetic_detection",
+        "src.utils.config",
+        "src.utils.file_io",
+        "src.utils.preferences",
+        "src.utils.randomizer",
+        "src.utils.state",
+        "src.utils.webui_discovery",
+        "src.utils.webui_launcher",
+        "src.controller.webui_connection_controller",
+        "src.config.app_config",
+        "datetime",
+        "sys",
+        "threading",
+        "src.utils.file_io",
+        "src.gui.state",
+        "tkinter",
+        "tkinter",
+        "tkinter",
+        "os",
+        "sys",
+        "threading",
+        "functools",
+        "functools",
+        "functools",
+        "random",
+        "tkinter",
+        "time",
+        "os",
+        "src.gui.state",
+        "sys",
+        "src.gui.state",
+        "src.gui.state",
+        "os"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/main_window_v2.py",
+      "module": "src.gui.main_window_v2",
+      "line_count": 414,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.api.webui_process_manager",
+        "src.gui.app_state_v2",
+        "src.gui.gui_invoker",
+        "src.gui.layout_v2",
+        "src.gui.theme_v2",
+        "src.gui.sidebar_panel_v2",
+        "src.gui.pipeline_panel_v2",
+        "src.gui.preview_panel_v2",
+        "src.gui.status_bar_v2",
+        "src.gui.views.prompt_tab_frame",
+        "src.gui.views.pipeline_tab_frame",
+        "src.gui.views.learning_tab_frame"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/model_list_adapter_v2.py",
+      "module": "src.gui.model_list_adapter_v2",
+      "line_count": 75,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/model_manager_panel_v2.py",
+      "module": "src.gui.model_manager_panel_v2",
+      "line_count": 94,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.config",
+        "src.gui.model_list_adapter_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/models/prompt_metadata.py",
+      "module": "src.gui.models.prompt_metadata",
+      "line_count": 34,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "re",
+        "dataclasses",
+        "typing",
+        "src.gui.utils.lora_embedding_parser"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/models/prompt_pack_model.py",
+      "module": "src.gui.models.prompt_pack_model",
+      "line_count": 70,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "dataclasses",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/negative_prompt_panel_v2.py",
+      "module": "src.gui.negative_prompt_panel_v2",
+      "line_count": 47,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.config",
+        "src.gui"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/output_settings_panel_v2.py",
+      "module": "src.gui.output_settings_panel_v2",
+      "line_count": 87,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.config"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/panels_v2/__init__.py",
+      "module": "src.gui.panels_v2",
+      "line_count": 15,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.panels_v2.pipeline_panel_v2",
+        "src.gui.panels_v2.preview_panel_v2",
+        "src.gui.panels_v2.randomizer_panel_v2",
+        "src.gui.panels_v2.sidebar_panel_v2",
+        "src.gui.panels_v2.status_bar_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/panels_v2/layout_manager_v2.py",
+      "module": "src.gui.panels_v2.layout_manager_v2",
+      "line_count": 37,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing",
+        "src.gui.panels_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/panels_v2/pipeline_panel_v2.py",
+      "module": "src.gui.panels_v2.pipeline_panel_v2",
+      "line_count": 5,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.pipeline_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/panels_v2/preview_panel_v2.py",
+      "module": "src.gui.panels_v2.preview_panel_v2",
+      "line_count": 5,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.preview_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/panels_v2/randomizer_panel_v2.py",
+      "module": "src.gui.panels_v2.randomizer_panel_v2",
+      "line_count": 5,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.randomizer_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/panels_v2/sidebar_panel_v2.py",
+      "module": "src.gui.panels_v2.sidebar_panel_v2",
+      "line_count": 5,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.sidebar_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/panels_v2/status_bar_v2.py",
+      "module": "src.gui.panels_v2.status_bar_v2",
+      "line_count": 5,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.status_bar_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/pipeline_command_bar_v2.py",
+      "module": "src.gui.pipeline_command_bar_v2",
+      "line_count": 81,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/pipeline_controls_panel.py",
+      "module": "src.gui.pipeline_controls_panel",
+      "line_count": 600,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "re",
+        "tkinter",
+        "tkinter",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/pipeline_panel_v2.py",
+      "module": "src.gui.pipeline_panel_v2",
+      "line_count": 101,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2",
+        "src.gui.stage_cards_v2.validation_result",
+        "src.gui.widgets.scrollable_frame_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/preview_panel_v2.py",
+      "module": "src.gui.preview_panel_v2",
+      "line_count": 64,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui",
+        "src.gui.widgets.scrollable_frame_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/prompt_pack_adapter_v2.py",
+      "module": "src.gui.prompt_pack_adapter_v2",
+      "line_count": 76,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "pathlib",
+        "typing",
+        "src.utils.file_io",
+        "src.utils.prompt_packs"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/prompt_pack_list_manager.py",
+      "module": "src.gui.prompt_pack_list_manager",
+      "line_count": 95,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "pathlib"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/prompt_pack_panel.py",
+      "module": "src.gui.prompt_pack_panel",
+      "line_count": 491,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "os",
+        "queue",
+        "threading",
+        "tkinter",
+        "collections.abc",
+        "pathlib",
+        "tkinter",
+        "src.utils.file_io",
+        "src.gui.theme",
+        "src.gui.tooltip",
+        "src.gui.theme"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/prompt_pack_panel_v2.py",
+      "module": "src.gui.prompt_pack_panel_v2",
+      "line_count": 121,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui",
+        "src.gui.prompt_pack_adapter_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/prompt_workspace_state.py",
+      "module": "src.gui.prompt_workspace_state",
+      "line_count": 81,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "typing",
+        "src.gui.models.prompt_pack_model",
+        "src.gui.models.prompt_metadata"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/randomizer_panel_v2.py",
+      "module": "src.gui.randomizer_panel_v2",
+      "line_count": 354,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "dataclasses",
+        "src.gui",
+        "src.gui_v2.adapters.randomizer_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/resolution_panel_v2.py",
+      "module": "src.gui.resolution_panel_v2",
+      "line_count": 134,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/scrolling.py",
+      "module": "src.gui.scrolling",
+      "line_count": 68,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/sidebar_panel_v2.py",
+      "module": "src.gui.sidebar_panel_v2",
+      "line_count": 343,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.core_config_panel_v2",
+        "src.gui.model_list_adapter_v2",
+        "src.gui.model_manager_panel_v2",
+        "src.gui.negative_prompt_panel_v2",
+        "src.gui.output_settings_panel_v2",
+        "src.gui.prompt_pack_adapter_v2",
+        "src.gui.prompt_pack_panel_v2",
+        "src.gui.widgets.scrollable_frame_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py",
+      "module": "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+      "line_count": 206,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.stage_cards_v2.base_stage_card_v2",
+        "src.gui.stage_cards_v2.components",
+        "src.gui.stage_cards_v2.validation_result",
+        "src.gui.enhanced_slider"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py",
+      "module": "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+      "line_count": 234,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.stage_cards_v2.base_stage_card_v2",
+        "src.gui.stage_cards_v2.components",
+        "src.gui.stage_cards_v2.validation_result"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py",
+      "module": "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2",
+      "line_count": 117,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.stage_cards_v2.base_stage_card_v2",
+        "src.gui.stage_cards_v2.validation_result"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/stage_cards_v2/base_stage_card_v2.py",
+      "module": "src.gui.stage_cards_v2.base_stage_card_v2",
+      "line_count": 76,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.stage_cards_v2.validation_result"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/stage_cards_v2/components.py",
+      "module": "src.gui.stage_cards_v2.components",
+      "line_count": 70,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/stage_cards_v2/validation_result.py",
+      "module": "src.gui.stage_cards_v2.validation_result",
+      "line_count": 17,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/stage_chooser.py",
+      "module": "src.gui.stage_chooser",
+      "line_count": 352,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "queue",
+        "tkinter",
+        "collections.abc",
+        "enum",
+        "pathlib",
+        "tkinter",
+        "PIL",
+        "src.gui.theme"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/state.py",
+      "module": "src.gui.state",
+      "line_count": 263,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "threading",
+        "collections.abc",
+        "dataclasses",
+        "enum",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/status_bar_v2.py",
+      "module": "src.gui.status_bar_v2",
+      "line_count": 165,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui",
+        "src.gui.api_status_panel",
+        "src.controller.webui_connection_controller"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/theme.py",
+      "module": "src.gui.theme",
+      "line_count": 267,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/theme_v2.py",
+      "module": "src.gui.theme_v2",
+      "line_count": 185,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/tooltip.py",
+      "module": "src.gui.tooltip",
+      "line_count": 71,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/txt2img_stage_card.py",
+      "module": "src.gui.txt2img_stage_card",
+      "line_count": 158,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/upscale_stage_card.py",
+      "module": "src.gui.upscale_stage_card",
+      "line_count": 121,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/utils/lora_embedding_parser.py",
+      "module": "src.gui.utils.lora_embedding_parser",
+      "line_count": 86,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "re",
+        "dataclasses",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/views/__init__.py",
+      "module": "src.gui.views",
+      "line_count": 6,
+      "has_tk": false,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.pipeline_tab_frame",
+        "src.gui.prompt_tab_frame",
+        "src.gui.pipeline_config_panel",
+        "src.gui.stage_cards_panel"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/views/experiment_design_panel.py",
+      "module": "src.gui.views.experiment_design_panel",
+      "line_count": 214,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.controllers.learning_controller"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/views/learning_plan_table.py",
+      "module": "src.gui.views.learning_plan_table",
+      "line_count": 144,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.learning_state"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/views/learning_review_panel.py",
+      "module": "src.gui.views.learning_review_panel",
+      "line_count": 208,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.learning_state"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/views/learning_tab_frame.py",
+      "module": "src.gui.views.learning_tab_frame",
+      "line_count": 88,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.app_state_v2",
+        "src.gui.controllers.learning_controller",
+        "src.gui.learning_state",
+        "src.gui.views.experiment_design_panel",
+        "src.gui.views.learning_plan_table",
+        "src.gui.views.learning_review_panel",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/views/pipeline_config_panel.py",
+      "module": "src.gui.views.pipeline_config_panel",
+      "line_count": 179,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/views/pipeline_tab_frame.py",
+      "module": "src.gui.views.pipeline_tab_frame",
+      "line_count": 120,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.views.stage_cards_panel",
+        "src.gui.widgets.scrollable_frame_v2",
+        "src.gui.sidebar_panel_v2",
+        "src.gui.preview_panel_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/views/prompt_tab_frame.py",
+      "module": "src.gui.views.prompt_tab_frame",
+      "line_count": 248,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.app_state_v2",
+        "src.gui.prompt_workspace_state",
+        "src.gui.widgets.matrix_helper_widget"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/views/run_control_bar.py",
+      "module": "src.gui.views.run_control_bar",
+      "line_count": 164,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.state",
+        "src.gui.views.stage_cards_panel",
+        "src.pipeline.randomizer_v2",
+        "src.pipeline.run_plan"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui/views/stage_cards_panel.py",
+      "module": "src.gui.views.stage_cards_panel",
+      "line_count": 171,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/widgets/matrix_helper_widget.py",
+      "module": "src.gui.widgets.matrix_helper_widget",
+      "line_count": 42,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui/widgets/scrollable_frame_v2.py",
+      "module": "src.gui.widgets.scrollable_frame_v2",
+      "line_count": 65,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "tkinter",
+        "src.gui"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/gui_v2/adapters/__init__.py",
+      "module": "src.gui_v2.adapters",
+      "line_count": 10,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui_v2/adapters/learning_adapter_v2.py",
+      "module": "src.gui_v2.adapters.learning_adapter_v2",
+      "line_count": 160,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "dataclasses",
+        "pathlib",
+        "typing",
+        "src.learning.learning_adapter",
+        "src.learning.learning_record",
+        "src.learning.learning_plan",
+        "src.learning.learning_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui_v2/adapters/pipeline_adapter_v2.py",
+      "module": "src.gui_v2.adapters.pipeline_adapter_v2",
+      "line_count": 87,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "dataclasses",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui_v2/adapters/randomizer_adapter_v2.py",
+      "module": "src.gui_v2.adapters.randomizer_adapter_v2",
+      "line_count": 184,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "dataclasses",
+        "enum",
+        "typing",
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui_v2/adapters/status_adapter_v2.py",
+      "module": "src.gui_v2.adapters.status_adapter_v2",
+      "line_count": 34,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui_v2/randomizer_adapter.py",
+      "module": "src.gui_v2.randomizer_adapter",
+      "line_count": 11,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.gui_v2.adapters.randomizer_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui_v2/validation/__init__.py",
+      "module": "src.gui_v2.validation",
+      "line_count": 1,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/gui_v2/validation/pipeline_txt2img_validator.py",
+      "module": "src.gui_v2.validation.pipeline_txt2img_validator",
+      "line_count": 89,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/dataset_builder.py",
+      "module": "src.learning.dataset_builder",
+      "line_count": 61,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/feedback_manager.py",
+      "module": "src.learning.feedback_manager",
+      "line_count": 48,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "datetime",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/learning_adapter.py",
+      "module": "src.learning.learning_adapter",
+      "line_count": 56,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "typing",
+        "src.learning.learning_plan",
+        "src.learning.learning_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/learning_contract.py",
+      "module": "src.learning.learning_contract",
+      "line_count": 32,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/learning_execution.py",
+      "module": "src.learning.learning_execution",
+      "line_count": 66,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing",
+        "src.learning.learning_plan",
+        "src.learning.learning_runner",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/learning_feedback.py",
+      "module": "src.learning.learning_feedback",
+      "line_count": 46,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing",
+        "src.learning.learning_plan"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/learning_plan.py",
+      "module": "src.learning.learning_plan",
+      "line_count": 83,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "enum",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/learning_profile_sidecar.py",
+      "module": "src.learning.learning_profile_sidecar",
+      "line_count": 47,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pathlib",
+        "typing",
+        "json"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/learning/learning_record.py",
+      "module": "src.learning.learning_record",
+      "line_count": 152,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "logging",
+        "os",
+        "time",
+        "uuid",
+        "dataclasses",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/learning/learning_record_builder.py",
+      "module": "src.learning.learning_record_builder",
+      "line_count": 102,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing",
+        "src.learning.learning_record",
+        "src.pipeline.pipeline_runner",
+        "pathlib",
+        "src.learning.learning_profile_sidecar"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/learning/learning_runner.py",
+      "module": "src.learning.learning_runner",
+      "line_count": 84,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "typing",
+        "src.learning.learning_plan"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/model_profiles.py",
+      "module": "src.learning.model_profiles",
+      "line_count": 139,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing",
+        "pathlib",
+        "json",
+        "logging"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/learning/recommendation_engine.py",
+      "module": "src.learning.recommendation_engine",
+      "line_count": 299,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "logging",
+        "os",
+        "statistics",
+        "time",
+        "collections",
+        "dataclasses",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/learning/run_metadata.py",
+      "module": "src.learning.run_metadata",
+      "line_count": 41,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "datetime",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/main.py",
+      "module": "src.main",
+      "line_count": 355,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "os",
+        "socket",
+        "sys",
+        "typing",
+        "builtins",
+        "importlib",
+        "time",
+        "traceback",
+        "pathlib",
+        "src.api.webui_process_manager",
+        "src.app_factory",
+        "src.utils",
+        "src.utils.file_access_log_v2_5_2025_11_26",
+        "tkinter",
+        "tkinter",
+        "src.controller.webui_connection_controller",
+        "threading",
+        "src.controller.webui_connection_controller",
+        "src.controller.webui_connection_controller"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/pipeline/__init__.py",
+      "module": "src.pipeline",
+      "line_count": 25,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.executor",
+        "src.pipeline_runner",
+        "src.stage_sequencer",
+        "src.video"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/pipeline/executor.py",
+      "module": "src.pipeline.executor",
+      "line_count": 2527,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "base64",
+        "json",
+        "logging",
+        "re",
+        "time",
+        "copy",
+        "datetime",
+        "functools",
+        "io",
+        "pathlib",
+        "typing",
+        "PIL",
+        "src.api",
+        "src.gui.state",
+        "src.utils"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/pipeline/pipeline_runner.py",
+      "module": "src.pipeline.pipeline_runner",
+      "line_count": 360,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "dataclasses",
+        "pathlib",
+        "typing",
+        "uuid",
+        "src.api.client",
+        "src.learning.learning_record",
+        "src.learning.learning_record_builder",
+        "src.learning.run_metadata",
+        "src.gui.state",
+        "src.pipeline.executor",
+        "src.pipeline.stage_sequencer",
+        "src.utils",
+        "src.utils.config",
+        "src.controller.app_controller"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/pipeline/randomizer_v2.py",
+      "module": "src.pipeline.randomizer_v2",
+      "line_count": 30,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "typing",
+        "src.gui.models.prompt_metadata"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/pipeline/run_plan.py",
+      "module": "src.pipeline.run_plan",
+      "line_count": 22,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/pipeline/stage_sequencer.py",
+      "module": "src.pipeline.stage_sequencer",
+      "line_count": 137,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "enum",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/pipeline/variant_planner.py",
+      "module": "src.pipeline.variant_planner",
+      "line_count": 166,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "collections.abc",
+        "copy",
+        "dataclasses",
+        "itertools",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/pipeline/video.py",
+      "module": "src.pipeline.video",
+      "line_count": 269,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "subprocess",
+        "pathlib",
+        "shutil",
+        "shutil"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/queue/__init__.py",
+      "module": "src.queue",
+      "line_count": 7,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.job_model",
+        "src.job_queue",
+        "src.single_node_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/queue/job_history_store.py",
+      "module": "src.queue.job_history_store",
+      "line_count": 166,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "threading",
+        "dataclasses",
+        "datetime",
+        "pathlib",
+        "typing",
+        "src.queue.job_model",
+        "src.cluster.worker_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/queue/job_model.py",
+      "module": "src.queue.job_model",
+      "line_count": 75,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "datetime",
+        "enum",
+        "typing",
+        "src.pipeline.pipeline_runner",
+        "src.cluster.worker_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/queue/job_queue.py",
+      "module": "src.queue.job_queue",
+      "line_count": 89,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "heapq",
+        "threading",
+        "typing",
+        "src.queue.job_model",
+        "src.queue.job_history_store",
+        "datetime"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/queue/single_node_runner.py",
+      "module": "src.queue.single_node_runner",
+      "line_count": 67,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "threading",
+        "time",
+        "typing",
+        "src.queue.job_model",
+        "src.queue.job_queue"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/services/config_service.py",
+      "module": "src.services.config_service",
+      "line_count": 87,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/__init__.py",
+      "module": "src.utils",
+      "line_count": 58,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "importlib",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/utils/_extract_name_prefix.py",
+      "module": "src.utils._extract_name_prefix",
+      "line_count": 14,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "re"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/aesthetic.py",
+      "module": "src.utils.aesthetic",
+      "line_count": 54,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "collections.abc",
+        "pathlib"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/aesthetic_detection.py",
+      "module": "src.utils.aesthetic_detection",
+      "line_count": 14,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/config.py",
+      "module": "src.utils.config",
+      "line_count": 648,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "logging",
+        "copy",
+        "pathlib",
+        "typing",
+        "copy",
+        "pathlib",
+        "pathlib"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/utils/file_access_log_v2_5_2025_11_26.py",
+      "module": "src.utils.file_access_log_v2_5_2025_11_26",
+      "line_count": 64,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "threading",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/utils/file_io.py",
+      "module": "src.utils.file_io",
+      "line_count": 235,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "base64",
+        "logging",
+        "io",
+        "pathlib",
+        "PIL"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/utils/logger.py",
+      "module": "src.utils.logger",
+      "line_count": 346,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "csv",
+        "json",
+        "logging",
+        "datetime",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/preferences.py",
+      "module": "src.utils.preferences",
+      "line_count": 132,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "json",
+        "logging",
+        "datetime",
+        "pathlib",
+        "typing"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/prompt_pack.py",
+      "module": "src.utils.prompt_pack",
+      "line_count": 9,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/prompt_packs.py",
+      "module": "src.utils.prompt_packs",
+      "line_count": 48,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "pathlib",
+        "typing",
+        "src.utils.file_io"
+      ],
+      "reachable_from_main": true
+    },
+    {
+      "path": "src/utils/randomizer.py",
+      "module": "src.utils.randomizer",
+      "line_count": 595,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "logging",
+        "random",
+        "re",
+        "copy",
+        "dataclasses",
+        "typing",
+        "src.pipeline.variant_planner",
+        "src.pipeline.variant_planner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/state.py",
+      "module": "src.utils.state",
+      "line_count": 4,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/webui_discovery.py",
+      "module": "src.utils.webui_discovery",
+      "line_count": 273,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "logging",
+        "os",
+        "subprocess",
+        "sys",
+        "time",
+        "pathlib",
+        "requests",
+        "logging",
+        "subprocess",
+        "time",
+        "pathlib",
+        "requests"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "src/utils/webui_launcher.py",
+      "module": "src.utils.webui_launcher",
+      "line_count": 5,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils.webui_discovery"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/__init__.py",
+      "module": "tests",
+      "line_count": 1,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/ai_v2/test_local_stub_settings_generator_behavior.py",
+      "module": "tests.ai_v2.test_local_stub_settings_generator_behavior",
+      "line_count": 21,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.ai.settings_generator_contract",
+        "src.ai.settings_generator_driver"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/ai_v2/test_settings_generator_adapter_from_learning.py",
+      "module": "tests.ai_v2.test_settings_generator_adapter_from_learning",
+      "line_count": 33,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.ai.settings_generator_adapter",
+        "src.ai.settings_generator_contract"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/ai_v2/test_settings_generator_contract_roundtrip.py",
+      "module": "tests.ai_v2.test_settings_generator_contract_roundtrip",
+      "line_count": 50,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "src.ai.settings_generator_contract",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/ai_v2/test_settings_suggestion_controller_apply.py",
+      "module": "tests.ai_v2.test_settings_suggestion_controller_apply",
+      "line_count": 26,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.ai.settings_generator_contract",
+        "src.controller.settings_suggestion_controller"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/api/test_webui_healthcheck.py",
+      "module": "tests.api.test_webui_healthcheck",
+      "line_count": 35,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "itertools",
+        "unittest",
+        "pytest",
+        "src.api.healthcheck"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/api/test_webui_process_manager.py",
+      "module": "tests.api.test_webui_process_manager",
+      "line_count": 58,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "types",
+        "unittest",
+        "pytest",
+        "src.api.webui_process_manager"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/app/test_bootstrap_webui_autostart.py",
+      "module": "tests.app.test_bootstrap_webui_autostart",
+      "line_count": 35,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest",
+        "src"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/cluster/test_worker_model_and_registry.py",
+      "module": "tests.cluster.test_worker_model_and_registry",
+      "line_count": 26,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.cluster.worker_model",
+        "src.cluster.worker_registry"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/conftest.py",
+      "module": "tests.conftest",
+      "line_count": 92,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "os",
+        "time",
+        "tkinter",
+        "pytest",
+        "src.utils.webui_discovery",
+        "src.api.client",
+        "src.gui.main_window"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_app_controller_config.py",
+      "module": "tests.controller.test_app_controller_config",
+      "line_count": 157,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "src.controller.app_controller"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_app_controller_packs.py",
+      "module": "tests.controller.test_app_controller_packs",
+      "line_count": 78,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "tkinter",
+        "pytest",
+        "src.controller.app_controller",
+        "src.gui.main_window_v2",
+        "src.utils.prompt_packs"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_app_controller_pipeline_flow_pr0.py",
+      "module": "tests.controller.test_app_controller_pipeline_flow_pr0",
+      "line_count": 128,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "typing",
+        "pytest",
+        "src.controller.app_controller",
+        "src.gui.main_window_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_app_controller_pipeline_integration.py",
+      "module": "tests.controller.test_app_controller_pipeline_integration",
+      "line_count": 110,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "threading",
+        "time",
+        "pathlib",
+        "pytest",
+        "src.controller.app_controller",
+        "src.pipeline.pipeline_runner",
+        "src.utils.prompt_packs",
+        "tests.controller.test_app_controller_config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_cluster_controller.py",
+      "module": "tests.controller.test_cluster_controller",
+      "line_count": 12,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.cluster_controller",
+        "src.cluster.worker_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_controller_job_lifecycle.py",
+      "module": "tests.controller.test_controller_job_lifecycle",
+      "line_count": 19,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.controller.pipeline_controller",
+        "src.queue.job_model",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_controller_learning_toggle.py",
+      "module": "tests.controller.test_controller_learning_toggle",
+      "line_count": 45,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.controller.pipeline_controller",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_controller_queue_execution.py",
+      "module": "tests.controller.test_controller_queue_execution",
+      "line_count": 23,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "types",
+        "src.controller.webui_connection_controller",
+        "src.controller.pipeline_controller",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_job_history_service.py",
+      "module": "tests.controller.test_job_history_service",
+      "line_count": 69,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.job_history_service",
+        "src.queue.job_history_store",
+        "src.queue.job_model",
+        "src.queue.job_queue"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_learning_execution_controller_gui_contract.py",
+      "module": "tests.controller.test_learning_execution_controller_gui_contract",
+      "line_count": 52,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "src.controller.learning_execution_controller",
+        "src.learning.learning_record",
+        "src.controller.pipeline_controller"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_config_assembler.py",
+      "module": "tests.controller.test_pipeline_config_assembler",
+      "line_count": 35,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.pipeline_config_assembler"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_config_assembler_core_fields.py",
+      "module": "tests.controller.test_pipeline_config_assembler_core_fields",
+      "line_count": 34,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pytest",
+        "src.controller.pipeline_config_assembler"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_config_assembler_model_fields.py",
+      "module": "tests.controller.test_pipeline_config_assembler_model_fields",
+      "line_count": 12,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.pipeline_config_assembler"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_config_assembler_negative_prompt.py",
+      "module": "tests.controller.test_pipeline_config_assembler_negative_prompt",
+      "line_count": 10,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.pipeline_config_assembler"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_config_assembler_output_settings.py",
+      "module": "tests.controller.test_pipeline_config_assembler_output_settings",
+      "line_count": 20,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.pipeline_config_assembler"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_config_assembler_resolution.py",
+      "module": "tests.controller.test_pipeline_config_assembler_resolution",
+      "line_count": 11,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.pipeline_config_assembler"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_controller_config_path.py",
+      "module": "tests.controller.test_pipeline_controller_config_path",
+      "line_count": 25,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.webui_connection_controller",
+        "unittest",
+        "src.controller.pipeline_controller",
+        "src.controller.pipeline_config_assembler",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_controller_queue_mode.py",
+      "module": "tests.controller.test_pipeline_controller_queue_mode",
+      "line_count": 78,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.controller.webui_connection_controller",
+        "types",
+        "unittest",
+        "pytest",
+        "src.controller.pipeline_controller",
+        "src.queue.job_model",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_pipeline_controller_webui_gating.py",
+      "module": "tests.controller.test_pipeline_controller_webui_gating",
+      "line_count": 44,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest",
+        "src.controller.pipeline_controller",
+        "src.controller.webui_connection_controller",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_profile_integration.py",
+      "module": "tests.controller.test_profile_integration",
+      "line_count": 62,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pytest",
+        "unittest.mock",
+        "src.controller.pipeline_controller",
+        "src.learning.model_profiles"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_queue_execution_controller.py",
+      "module": "tests.controller.test_queue_execution_controller",
+      "line_count": 35,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest",
+        "src.controller.queue_execution_controller",
+        "src.queue.job_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_stage_sequencer_controller_integration.py",
+      "module": "tests.controller.test_stage_sequencer_controller_integration",
+      "line_count": 17,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.controller.pipeline_controller",
+        "src.pipeline.stage_sequencer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/controller/test_webui_connection_controller.py",
+      "module": "tests.controller.test_webui_connection_controller",
+      "line_count": 49,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "types",
+        "unittest",
+        "pytest",
+        "src.controller.webui_connection_controller"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/conftest.py",
+      "module": "tests.gui_v2.conftest",
+      "line_count": 261,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "threading",
+        "tkinter",
+        "types",
+        "pytest",
+        "src.services.config_service",
+        "src.utils.config",
+        "src.utils.preferences",
+        "src.gui.main_window"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_advanced_prompt_editor_v2.py",
+      "module": "tests.gui_v2.test_advanced_prompt_editor_v2",
+      "line_count": 35,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.gui.advanced_prompt_editor"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_api_status_panel_webui_states_v2.py",
+      "module": "tests.gui_v2.test_api_status_panel_webui_states_v2",
+      "line_count": 28,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.controller.webui_connection_controller",
+        "src.gui.api_status_panel"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_command_bar_v2.py",
+      "module": "tests.gui_v2.test_command_bar_v2",
+      "line_count": 30,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest",
+        "src.gui.pipeline_command_bar_v2",
+        "src.gui.pipeline_command_bar_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_core_config_panel_v2.py",
+      "module": "tests.gui_v2.test_core_config_panel_v2",
+      "line_count": 45,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.config",
+        "src.gui.core_config_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_entrypoint_uses_v2_gui.py",
+      "module": "tests.gui_v2.test_entrypoint_uses_v2_gui",
+      "line_count": 20,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "importlib",
+        "src.gui",
+        "src.main"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_advanced_stage_cards_layout.py",
+      "module": "tests.gui_v2.test_gui_v2_advanced_stage_cards_layout",
+      "line_count": 24,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_advanced_stage_cards_roundtrip.py",
+      "module": "tests.gui_v2.test_gui_v2_advanced_stage_cards_roundtrip",
+      "line_count": 50,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_advanced_stage_cards_validation.py",
+      "module": "tests.gui_v2.test_gui_v2_advanced_stage_cards_validation",
+      "line_count": 54,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_ai_settings_button_guarded.py",
+      "module": "tests.gui_v2.test_gui_v2_ai_settings_button_guarded",
+      "line_count": 40,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "os",
+        "pytest",
+        "src.gui.main_window"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_layout_skeleton.py",
+      "module": "tests.gui_v2.test_gui_v2_layout_skeleton",
+      "line_count": 23,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.gui.pipeline_panel_v2",
+        "src.gui.preview_panel_v2",
+        "src.gui.randomizer_panel_v2",
+        "src.gui.sidebar_panel_v2",
+        "src.gui.status_bar_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_mainwindow_split_structure.py",
+      "module": "tests.gui_v2.test_gui_v2_mainwindow_split_structure",
+      "line_count": 23,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest",
+        "src.gui.main_window"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_panel_wiring.py",
+      "module": "tests.gui_v2.test_gui_v2_panel_wiring",
+      "line_count": 26,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.panels_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_pipeline_adapter.py",
+      "module": "tests.gui_v2.test_gui_v2_pipeline_adapter",
+      "line_count": 50,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "copy",
+        "src.gui_v2.adapters.pipeline_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_pipeline_button_wiring.py",
+      "module": "tests.gui_v2.test_gui_v2_pipeline_button_wiring",
+      "line_count": 28,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_pipeline_config_roundtrip.py",
+      "module": "tests.gui_v2.test_gui_v2_pipeline_config_roundtrip",
+      "line_count": 64,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "types"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_pipeline_txt2img_validation.py",
+      "module": "tests.gui_v2.test_gui_v2_pipeline_txt2img_validation",
+      "line_count": 95,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "copy",
+        "pytest",
+        "src.gui_v2.validation.pipeline_txt2img_validator",
+        "tests.gui_v2.conftest"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_randomizer_adapter_integration.py",
+      "module": "tests.gui_v2.test_gui_v2_randomizer_adapter_integration",
+      "line_count": 25,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.gui_v2.adapters.randomizer_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_randomizer_integration.py",
+      "module": "tests.gui_v2.test_gui_v2_randomizer_integration",
+      "line_count": 61,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "importlib",
+        "sys",
+        "types"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_randomizer_matrix_ui.py",
+      "module": "tests.gui_v2.test_gui_v2_randomizer_matrix_ui",
+      "line_count": 33,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_randomizer_matrix_ux.py",
+      "module": "tests.gui_v2.test_gui_v2_randomizer_matrix_ux",
+      "line_count": 33,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.randomizer_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_randomizer_preview_list.py",
+      "module": "tests.gui_v2.test_gui_v2_randomizer_preview_list",
+      "line_count": 21,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.randomizer_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_randomizer_variant_count_banner.py",
+      "module": "tests.gui_v2.test_gui_v2_randomizer_variant_count_banner",
+      "line_count": 15,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.gui_v2.adapters.randomizer_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_randomizer_variant_count_preview.py",
+      "module": "tests.gui_v2.test_gui_v2_randomizer_variant_count_preview",
+      "line_count": 29,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.gui_v2.randomizer_adapter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_stage_cards_layout.py",
+      "module": "tests.gui_v2.test_gui_v2_stage_cards_layout",
+      "line_count": 17,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.gui.pipeline_panel_v2",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_stage_cards_roundtrip.py",
+      "module": "tests.gui_v2.test_gui_v2_stage_cards_roundtrip",
+      "line_count": 15,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_startup.py",
+      "module": "tests.gui_v2.test_gui_v2_startup",
+      "line_count": 16,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_status_adapter_progress_eta.py",
+      "module": "tests.gui_v2.test_gui_v2_status_adapter_progress_eta",
+      "line_count": 51,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.gui_v2.adapters.status_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_gui_v2_status_bar_progress_eta.py",
+      "module": "tests.gui_v2.test_gui_v2_status_bar_progress_eta",
+      "line_count": 37,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_job_history_panel_v2.py",
+      "module": "tests.gui_v2.test_job_history_panel_v2",
+      "line_count": 107,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "tkinter",
+        "src.gui.job_history_panel_v2",
+        "src.controller.job_history_service",
+        "src.queue.job_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_learning_review_dialog.py",
+      "module": "tests.gui_v2.test_learning_review_dialog",
+      "line_count": 48,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.learning_review_dialog_v2",
+        "src.gui_v2.adapters.learning_adapter_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_learning_toggle.py",
+      "module": "tests.gui_v2.test_learning_toggle",
+      "line_count": 42,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest",
+        "src.gui.main_window",
+        "src.gui.main_window"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_learning_toggle_and_dialog.py",
+      "module": "tests.gui_v2.test_learning_toggle_and_dialog",
+      "line_count": 60,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.learning_review_dialog_v2",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_main_window_tabs_v2.py",
+      "module": "tests.gui_v2.test_main_window_tabs_v2",
+      "line_count": 27,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.main_window_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_model_manager_panel_v2.py",
+      "module": "tests.gui_v2.test_model_manager_panel_v2",
+      "line_count": 44,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.gui.model_manager_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_negative_prompt_panel_v2.py",
+      "module": "tests.gui_v2.test_negative_prompt_panel_v2",
+      "line_count": 23,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.gui.negative_prompt_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_output_settings_panel_v2.py",
+      "module": "tests.gui_v2.test_output_settings_panel_v2",
+      "line_count": 26,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.gui.output_settings_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_pipeline_prompt_integration_v2.py",
+      "module": "tests.gui_v2.test_pipeline_prompt_integration_v2",
+      "line_count": 41,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.gui.pipeline_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_pipeline_stage_cards_v2.py",
+      "module": "tests.gui_v2.test_pipeline_stage_cards_v2",
+      "line_count": 88,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_pipeline_tab_layout_v2.py",
+      "module": "tests.gui_v2.test_pipeline_tab_layout_v2",
+      "line_count": 29,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.views.pipeline_tab_frame",
+        "src.gui.sidebar_panel_v2",
+        "src.gui.preview_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_pipeline_tab_stage_cards.py",
+      "module": "tests.gui_v2.test_pipeline_tab_stage_cards",
+      "line_count": 60,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.state",
+        "src.gui.stage_cards_v2.advanced_img2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2",
+        "src.gui.stage_cards_v2.advanced_upscale_stage_card_v2",
+        "src.gui.views.pipeline_tab_frame"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_preview_panel_v2.py",
+      "module": "tests.gui_v2.test_preview_panel_v2",
+      "line_count": 35,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.preview_panel_v2",
+        "src.gui.sidebar_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_prompt_pack_panel_v2.py",
+      "module": "tests.gui_v2.test_prompt_pack_panel_v2",
+      "line_count": 36,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pathlib",
+        "pytest",
+        "src.gui.prompt_pack_adapter_v2",
+        "src.gui.prompt_pack_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_prompt_pack_to_prompt_roundtrip_v2.py",
+      "module": "tests.gui_v2.test_prompt_pack_to_prompt_roundtrip_v2",
+      "line_count": 43,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pathlib",
+        "pytest",
+        "src.gui.pipeline_panel_v2",
+        "src.gui.prompt_pack_adapter_v2",
+        "src.gui.sidebar_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_resolution_panel_v2.py",
+      "module": "tests.gui_v2.test_resolution_panel_v2",
+      "line_count": 26,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.gui.resolution_panel_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_run_button_queue_mode_toggle.py",
+      "module": "tests.gui_v2.test_run_button_queue_mode_toggle",
+      "line_count": 13,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_run_button_queue_smoke.py",
+      "module": "tests.gui_v2.test_run_button_queue_smoke",
+      "line_count": 35,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.controller.app_controller",
+        "src.gui.main_window_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_scrollable_pipeline_panel_v2.py",
+      "module": "tests.gui_v2.test_scrollable_pipeline_panel_v2",
+      "line_count": 44,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.gui.pipeline_panel_v2",
+        "src.gui.widgets.scrollable_frame_v2",
+        "src.gui.views.pipeline_tab_frame"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_stagecard_base_v2.py",
+      "module": "tests.gui_v2.test_stagecard_base_v2",
+      "line_count": 27,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest",
+        "src.gui.stage_cards_v2.base_stage_card_v2",
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_status_bar_v2_composite.py",
+      "module": "tests.gui_v2.test_status_bar_v2_composite",
+      "line_count": 25,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter",
+        "pytest",
+        "src.controller.webui_connection_controller",
+        "src.gui.status_bar_v2"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/gui_v2/test_theme_v2.py",
+      "module": "tests.gui_v2.test_theme_v2",
+      "line_count": 25,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest",
+        "src.gui.theme_v2",
+        "tkinter",
+        "tkinter.ttk"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/integration/__init__.py",
+      "module": "tests.integration",
+      "line_count": 1,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/journeys/fakes/fake_pipeline_runner.py",
+      "module": "tests.journeys.fakes.fake_pipeline_runner",
+      "line_count": 27,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "typing",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/journeys/test_jt01_prompt_pack_authoring.py",
+      "module": "tests.journeys.test_jt01_prompt_pack_authoring",
+      "line_count": 194,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tempfile",
+        "tkinter",
+        "pathlib",
+        "pytest",
+        "src.app_factory",
+        "src.gui.models.prompt_metadata",
+        "src.gui.models.prompt_pack_model",
+        "src.gui.prompt_workspace_state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/journeys/test_jt02_lora_embedding_integration.py",
+      "module": "tests.journeys.test_jt02_lora_embedding_integration",
+      "line_count": 216,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tempfile",
+        "tkinter",
+        "pathlib",
+        "pytest",
+        "src.app_factory",
+        "src.gui.models.prompt_metadata",
+        "src.gui.models.prompt_pack_model",
+        "src.gui.prompt_workspace_state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/journeys/test_jt03_txt2img_pipeline_run.py",
+      "module": "tests.journeys.test_jt03_txt2img_pipeline_run",
+      "line_count": 325,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tempfile",
+        "time",
+        "tkinter",
+        "pathlib",
+        "unittest.mock",
+        "pytest",
+        "src.app_factory",
+        "src.controller.app_controller",
+        "src.gui.models.prompt_pack_model",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/journeys/test_jt04_img2img_adetailer_run.py",
+      "module": "tests.journeys.test_jt04_img2img_adetailer_run",
+      "line_count": 382,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tempfile",
+        "pathlib",
+        "unittest.mock",
+        "pytest",
+        "src.app_factory",
+        "src.gui.models.prompt_pack_model",
+        "src.gui.state",
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/journeys/test_jt05_upscale_stage_run.py",
+      "module": "tests.journeys.test_jt05_upscale_stage_run",
+      "line_count": 256,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tempfile",
+        "pathlib",
+        "unittest.mock",
+        "pytest",
+        "src.main",
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/journeys/test_v2_full_pipeline_journey.py",
+      "module": "tests.journeys.test_v2_full_pipeline_journey",
+      "line_count": 80,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "tkinter",
+        "pytest",
+        "src.app_factory",
+        "src.controller.app_controller",
+        "tests.journeys.fakes.fake_pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_adapter_stub.py",
+      "module": "tests.learning.test_learning_adapter_stub",
+      "line_count": 43,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.learning.learning_adapter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_adapter_v2.py",
+      "module": "tests.learning.test_learning_adapter_v2",
+      "line_count": 52,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "src.gui_v2.adapters.learning_adapter_v2",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_feedback_packaging.py",
+      "module": "tests.learning.test_learning_feedback_packaging",
+      "line_count": 32,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.learning.learning_feedback",
+        "src.learning.learning_plan"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_hooks_controller.py",
+      "module": "tests.learning.test_learning_hooks_controller",
+      "line_count": 49,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.controller.pipeline_controller",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_hooks_pipeline_runner.py",
+      "module": "tests.learning.test_learning_hooks_pipeline_runner",
+      "line_count": 105,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "types",
+        "pytest",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_plan_factory.py",
+      "module": "tests.learning.test_learning_plan_factory",
+      "line_count": 49,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest",
+        "src.learning.learning_plan"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_record_builder.py",
+      "module": "tests.learning.test_learning_record_builder",
+      "line_count": 54,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.learning.learning_record_builder",
+        "src.pipeline.pipeline_runner",
+        "src.pipeline.stage_sequencer",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_record_serialization.py",
+      "module": "tests.learning.test_learning_record_serialization",
+      "line_count": 44,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_record_writer_integration.py",
+      "module": "tests.learning.test_learning_record_writer_integration",
+      "line_count": 31,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "src.learning.learning_record"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_learning_runner_stubs.py",
+      "module": "tests.learning.test_learning_runner_stubs",
+      "line_count": 43,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.learning.learning_plan",
+        "src.learning.learning_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning/test_model_profiles.py",
+      "module": "tests.learning.test_model_profiles",
+      "line_count": 98,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "tempfile",
+        "json",
+        "pathlib",
+        "pytest",
+        "src.learning.model_profiles"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning_v2/smoke_test_learning_workflow.py",
+      "module": "tests.learning_v2.smoke_test_learning_workflow",
+      "line_count": 491,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "sys",
+        "os",
+        "tempfile",
+        "json",
+        "src.gui.views.learning_tab_frame",
+        "src.gui.controllers.learning_controller",
+        "src.gui.views.learning_plan_table",
+        "src.gui.views.learning_review_panel",
+        "src.gui.controllers.learning_controller",
+        "src.gui.learning_state",
+        "src.gui.controllers.learning_controller",
+        "src.gui.learning_state",
+        "src.gui.controllers.learning_controller",
+        "src.gui.learning_state",
+        "src.gui.controllers.learning_controller",
+        "src.gui.learning_state",
+        "src.learning.learning_record",
+        "src.gui.controllers.learning_controller",
+        "src.gui.learning_state",
+        "src.learning.learning_record",
+        "src.gui.app_state_v2",
+        "traceback",
+        "traceback",
+        "traceback"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning_v2/test_dataset_builder.py",
+      "module": "tests.learning_v2.test_dataset_builder",
+      "line_count": 32,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "pathlib",
+        "src.learning.dataset_builder"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning_v2/test_learning_contract.py",
+      "module": "tests.learning_v2.test_learning_contract",
+      "line_count": 15,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.learning"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning_v2/test_learning_execution_controller_integration.py",
+      "module": "tests.learning_v2.test_learning_execution_controller_integration",
+      "line_count": 36,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.controller.learning_execution_controller",
+        "src.learning.learning_plan",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning_v2/test_learning_execution_runner_happy_path.py",
+      "module": "tests.learning_v2.test_learning_execution_runner_happy_path",
+      "line_count": 39,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.learning.learning_execution",
+        "src.learning.learning_plan",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning_v2/test_recommendation_engine.py",
+      "module": "tests.learning_v2.test_recommendation_engine",
+      "line_count": 240,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "tempfile",
+        "unittest",
+        "pathlib",
+        "src.learning.recommendation_engine"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/learning_v2/test_run_metadata_and_feedback.py",
+      "module": "tests.learning_v2.test_run_metadata_and_feedback",
+      "line_count": 30,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "json",
+        "pathlib",
+        "src.learning.feedback_manager",
+        "src.learning.run_metadata"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_advanced_features.py",
+      "module": "tests.legacy.test_advanced_features",
+      "line_count": 223,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "sys",
+        "tkinter",
+        "pathlib",
+        "src.gui.enhanced_slider",
+        "src.gui.advanced_prompt_editor",
+        "src.gui.main_window",
+        "src.utils.config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_advanced_prompt_editor_regressions.py",
+      "module": "tests.legacy.test_advanced_prompt_editor_regressions",
+      "line_count": 39,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pytest",
+        "src.utils._extract_name_prefix"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_aesthetic_detection.py",
+      "module": "tests.legacy.test_aesthetic_detection",
+      "line_count": 31,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils.aesthetic"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_aesthetic_integration.py",
+      "module": "tests.legacy.test_aesthetic_integration",
+      "line_count": 128,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "copy",
+        "pathlib",
+        "pytest",
+        "src.pipeline.executor",
+        "src.utils.config",
+        "src.utils.logger",
+        "PIL"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_api.py",
+      "module": "tests.legacy.test_api",
+      "line_count": 118,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest.mock",
+        "src.api"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_api_client_backoff.py",
+      "module": "tests.legacy.test_api_client_backoff",
+      "line_count": 68,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "unittest.mock",
+        "pytest",
+        "requests",
+        "src.api.client"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_api_status_panel.py",
+      "module": "tests.legacy.test_api_status_panel",
+      "line_count": 32,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.api_status_panel"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_archive_unused.py",
+      "module": "tests.legacy.test_archive_unused",
+      "line_count": 409,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "shutil",
+        "tempfile",
+        "pathlib",
+        "pytest",
+        "tools.archive_unused",
+        "ast",
+        "ast",
+        "ast",
+        "re"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_complete_workflow.py",
+      "module": "tests.legacy.test_complete_workflow",
+      "line_count": 67,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "sys",
+        "pathlib",
+        "src.utils.config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_config.py",
+      "module": "tests.legacy.test_config",
+      "line_count": 77,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_config_manager_defaults.py",
+      "module": "tests.legacy.test_config_manager_defaults",
+      "line_count": 24,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "copy",
+        "src.utils.config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_config_panel.py",
+      "module": "tests.legacy.test_config_panel",
+      "line_count": 152,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.config_panel",
+        "src.gui.config_panel"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_controller.py",
+      "module": "tests.legacy.test_controller",
+      "line_count": 263,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "time",
+        "pytest",
+        "src.gui.controller",
+        "src.gui.state",
+        "subprocess"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_default_preset.py",
+      "module": "tests.legacy.test_default_preset",
+      "line_count": 144,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "tempfile",
+        "pathlib",
+        "pytest",
+        "src.utils.config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_file_io.py",
+      "module": "tests.legacy.test_file_io",
+      "line_count": 169,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils.file_io",
+        "base64",
+        "io",
+        "PIL",
+        "src.utils"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_global_negative_stage_flags.py",
+      "module": "tests.legacy.test_global_negative_stage_flags",
+      "line_count": 112,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "base64",
+        "io",
+        "PIL",
+        "src.pipeline.executor",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_gui_enhancements.py",
+      "module": "tests.legacy.test_gui_enhancements",
+      "line_count": 47,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "tkinter"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_gui_system.py",
+      "module": "tests.legacy.test_gui_system",
+      "line_count": 188,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "sys",
+        "pathlib",
+        "src.utils.config",
+        "src.utils.file_io"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_gui_visibility.py",
+      "module": "tests.legacy.test_gui_visibility",
+      "line_count": 48,
+      "has_tk": true,
+      "is_gui": true,
+      "has_v1_marker": false,
+      "imports": [
+        "sys",
+        "pathlib",
+        "pytest",
+        "threading",
+        "time",
+        "tkinter",
+        "src.gui.main_window"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_log_panel.py",
+      "module": "tests.legacy.test_log_panel",
+      "line_count": 73,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.log_panel"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_logger.py",
+      "module": "tests.legacy.test_logger",
+      "line_count": 105,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils",
+        "json",
+        "json"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_matrix_base_prompt_fix.py",
+      "module": "tests.legacy.test_matrix_base_prompt_fix",
+      "line_count": 125,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_matrix_prompt_mode_examples.py",
+      "module": "tests.legacy.test_matrix_prompt_mode_examples",
+      "line_count": 191,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_new_features.py",
+      "module": "tests.legacy.test_new_features",
+      "line_count": 116,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pytest",
+        "src.services.config_service",
+        "src.gui.main_window",
+        "src.gui.main_window"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_pack_config.py",
+      "module": "tests.legacy.test_pack_config",
+      "line_count": 32,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "sys",
+        "pathlib",
+        "src.utils.config"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_pipeline_controls_panel.py",
+      "module": "tests.legacy.test_pipeline_controls_panel",
+      "line_count": 34,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.pipeline_controls_panel"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_pipeline_journey.py",
+      "module": "tests.legacy.test_pipeline_journey",
+      "line_count": 963,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "pathlib",
+        "unittest.mock",
+        "pytest",
+        "src.pipeline.executor",
+        "src.utils",
+        "src.gui.state",
+        "src.gui.state",
+        "csv"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_pipeline_throughput.py",
+      "module": "tests.legacy.test_pipeline_throughput",
+      "line_count": 36,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest.mock",
+        "pytest",
+        "src.pipeline.executor",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_preferences_manager.py",
+      "module": "tests.legacy.test_preferences_manager",
+      "line_count": 71,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "src.utils.config",
+        "src.utils.preferences"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_prompt_editor.py",
+      "module": "tests.legacy.test_prompt_editor",
+      "line_count": 128,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest",
+        "pathlib",
+        "datetime",
+        "json",
+        "tempfile",
+        "os"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_prompt_pack_list_manager.py",
+      "module": "tests.legacy.test_prompt_pack_list_manager",
+      "line_count": 153,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "os",
+        "sys",
+        "unittest",
+        "pathlib",
+        "src.gui.prompt_pack_list_manager"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_prompt_pack_panel.py",
+      "module": "tests.legacy.test_prompt_pack_panel",
+      "line_count": 40,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pytest",
+        "src.gui.prompt_pack_panel"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_randomization_pipeline.py",
+      "module": "tests.legacy.test_randomization_pipeline",
+      "line_count": 93,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "copy",
+        "pathlib",
+        "pytest",
+        "src.pipeline.executor",
+        "src.utils.config",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_refiner_compare_mode.py",
+      "module": "tests.legacy.test_refiner_compare_mode",
+      "line_count": 110,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "base64",
+        "io",
+        "PIL",
+        "src.pipeline.executor",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_refiner_support.py",
+      "module": "tests.legacy.test_refiner_support",
+      "line_count": 143,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest.mock",
+        "pytest",
+        "src.pipeline.executor",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_refiner_switch_math.py",
+      "module": "tests.legacy.test_refiner_switch_math",
+      "line_count": 48,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.pipeline.executor",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_stage_chooser.py",
+      "module": "tests.legacy.test_stage_chooser",
+      "line_count": 6,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_state.py",
+      "module": "tests.legacy.test_state",
+      "line_count": 209,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "threading",
+        "time",
+        "pytest",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_structured_logger.py",
+      "module": "tests.legacy.test_structured_logger",
+      "line_count": 184,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "csv",
+        "json",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_txt2img_stage.py",
+      "module": "tests.legacy.test_txt2img_stage",
+      "line_count": 83,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest.mock",
+        "pytest",
+        "src.pipeline.executor",
+        "src.utils"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_upscale_stage.py",
+      "module": "tests.legacy.test_upscale_stage",
+      "line_count": 206,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "base64",
+        "io",
+        "pathlib",
+        "pytest",
+        "PIL",
+        "src.pipeline.executor",
+        "src.pipeline.executor",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_variant_planner.py",
+      "module": "tests.legacy.test_variant_planner",
+      "line_count": 79,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pytest",
+        "src.pipeline.variant_planner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/legacy/test_video.py",
+      "module": "tests.legacy.test_video",
+      "line_count": 113,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest.mock",
+        "PIL",
+        "src.pipeline"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/__init__.py",
+      "module": "tests.pipeline",
+      "line_count": 1,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_executor_cancellation.py",
+      "module": "tests.pipeline.test_executor_cancellation",
+      "line_count": 95,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pathlib",
+        "pytest",
+        "src.pipeline.executor",
+        "src.pipeline.executor",
+        "src.gui.state",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_pipeline_io_contracts.py",
+      "module": "tests.pipeline.test_pipeline_io_contracts",
+      "line_count": 94,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "types",
+        "pytest",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_pipeline_learning_hooks.py",
+      "module": "tests.pipeline.test_pipeline_learning_hooks",
+      "line_count": 87,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "types",
+        "pytest",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_pipeline_runner_cancel_token.py",
+      "module": "tests.pipeline.test_pipeline_runner_cancel_token",
+      "line_count": 144,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "uuid",
+        "copy",
+        "pathlib",
+        "unittest.mock",
+        "pytest",
+        "src.gui.state",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_pipeline_runner_variants.py",
+      "module": "tests.pipeline.test_pipeline_runner_variants",
+      "line_count": 68,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "types",
+        "pytest",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_stage_sequencer_plan_builder.py",
+      "module": "tests.pipeline.test_stage_sequencer_plan_builder",
+      "line_count": 60,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pytest",
+        "src.pipeline.stage_sequencer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_stage_sequencer_runner_integration.py",
+      "module": "tests.pipeline.test_stage_sequencer_runner_integration",
+      "line_count": 123,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "types",
+        "pytest",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/pipeline/test_upscale_hang_diag.py",
+      "module": "tests.pipeline.test_upscale_hang_diag",
+      "line_count": 163,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "src.pipeline.executor",
+        "src.utils.logger",
+        "src.gui.state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/queue/test_job_history_store.py",
+      "module": "tests.queue.test_job_history_store",
+      "line_count": 41,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "datetime",
+        "src.queue.job_history_store",
+        "src.queue.job_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/queue/test_job_model.py",
+      "module": "tests.queue.test_job_model",
+      "line_count": 10,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.queue.job_model"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/queue/test_job_queue_basic.py",
+      "module": "tests.queue.test_job_queue_basic",
+      "line_count": 37,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "src.queue.job_model",
+        "src.queue.job_queue",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/queue/test_jobrunner_integration.py",
+      "module": "tests.queue.test_jobrunner_integration",
+      "line_count": 25,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "time",
+        "src.queue.job_model",
+        "src.queue.job_queue",
+        "src.queue.single_node_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/queue/test_single_node_runner_loopback.py",
+      "module": "tests.queue.test_single_node_runner_loopback",
+      "line_count": 33,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "time",
+        "src.queue.job_model",
+        "src.queue.job_queue",
+        "src.queue.single_node_runner",
+        "src.pipeline.pipeline_runner"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/safety/test_advanced_stage_cards_import_safety.py",
+      "module": "tests.safety.test_advanced_stage_cards_import_safety",
+      "line_count": 16,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/safety/test_ai_settings_generator_no_tk_imports.py",
+      "module": "tests.safety.test_ai_settings_generator_no_tk_imports",
+      "line_count": 20,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/safety/test_gui_v2_adapters_no_tk_imports.py",
+      "module": "tests.safety.test_gui_v2_adapters_no_tk_imports",
+      "line_count": 21,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/safety/test_gui_v2_randomizer_ux_no_tk_imports.py",
+      "module": "tests.safety.test_gui_v2_randomizer_ux_no_tk_imports",
+      "line_count": 10,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "pathlib"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/safety/test_learning_execution_no_tk_imports.py",
+      "module": "tests.safety.test_learning_execution_no_tk_imports",
+      "line_count": 16,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "__future__",
+        "sys"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/safety/test_no_gui_imports_in_utils_safety.py",
+      "module": "tests.safety.test_no_gui_imports_in_utils_safety",
+      "line_count": 39,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "importlib",
+        "sys",
+        "types",
+        "pytest"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/safety/test_randomizer_import_isolation_safety.py",
+      "module": "tests.safety.test_randomizer_import_isolation_safety",
+      "line_count": 19,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "importlib",
+        "sys",
+        "pytest"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/state/test_prompt_workspace_state.py",
+      "module": "tests.state.test_prompt_workspace_state",
+      "line_count": 39,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pathlib",
+        "src.gui.models.prompt_pack_model",
+        "src.gui.prompt_workspace_state"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/test_api_client.py",
+      "module": "tests.test_api_client",
+      "line_count": 164,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "unittest.mock",
+        "requests",
+        "requests_mock",
+        "src.api.client"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/test_cancel_token.py",
+      "module": "tests.test_cancel_token",
+      "line_count": 274,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "json",
+        "logging",
+        "shutil",
+        "tempfile",
+        "pathlib",
+        "unittest.mock",
+        "pytest",
+        "src.gui.state",
+        "src.pipeline.executor",
+        "src.utils"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/test_config_passthrough.py",
+      "module": "tests.test_config_passthrough",
+      "line_count": 350,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "sys",
+        "pathlib",
+        "typing",
+        "unittest.mock",
+        "src.api.client",
+        "src.pipeline.executor",
+        "src.utils.config",
+        "src.utils.logger"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/test_main_single_instance.py",
+      "module": "tests.test_main_single_instance",
+      "line_count": 28,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "socket",
+        "pytest",
+        "src.main"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_lora_embedding_parser.py",
+      "module": "tests.utils.test_lora_embedding_parser",
+      "line_count": 19,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.gui.utils.lora_embedding_parser"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_no_gui_imports_in_utils.py",
+      "module": "tests.utils.test_no_gui_imports_in_utils",
+      "line_count": 64,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "ast",
+        "pathlib",
+        "pytest"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_prompt_packs.py",
+      "module": "tests.utils.test_prompt_packs",
+      "line_count": 26,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pathlib",
+        "src.utils.prompt_packs"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_prompt_randomizer.py",
+      "module": "tests.utils.test_prompt_randomizer",
+      "line_count": 281,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "random",
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_randomizer_import_isolation.py",
+      "module": "tests.utils.test_randomizer_import_isolation",
+      "line_count": 53,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "importlib",
+        "sys",
+        "types",
+        "pathlib",
+        "pytest"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_randomizer_matrix_base_prompt.py",
+      "module": "tests.utils.test_randomizer_matrix_base_prompt",
+      "line_count": 151,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_randomizer_matrix_prompt_modes.py",
+      "module": "tests.utils.test_randomizer_matrix_prompt_modes",
+      "line_count": 246,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_randomizer_parity.py",
+      "module": "tests.utils.test_randomizer_parity",
+      "line_count": 70,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "copy",
+        "pytest",
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    },
+    {
+      "path": "tests/utils/test_randomizer_sanitization.py",
+      "module": "tests.utils.test_randomizer_sanitization",
+      "line_count": 47,
+      "has_tk": false,
+      "is_gui": false,
+      "has_v1_marker": false,
+      "imports": [
+        "pytest",
+        "src.utils.randomizer"
+      ],
+      "reachable_from_main": false
+    }
+  ]
+}

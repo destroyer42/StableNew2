@@ -1,0 +1,69 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Golden Field - Suncrest Legion vs Iron Banner Host, cavalry wedge meets pike wall, banners streaming, dust sunbeams, command ridge
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Siege of the Crimson Walls - trebuchets release, counter-'battery smoke, defenders on parapets, siege towers advancing, clear lanes
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Tempest Sound - blue-'sail triremes vs black-'ram galleys, lightning splits sky, white-'cap patterns, readable ship spacing
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Night of a Hundred Braziers - silhouettes in smoke, sparks drifting, line of shields vs advancing pikes, graded firelight layers
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Stone Gate - dwarven phalanx braced in snow pass vs ogre shock troop, shields interlocked, snow flurries, clean ranks
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Sky over Helspire - wyvern flights clash above fortress, flaming dives, tracer glow, fortress scale cue, altitude bands
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Arc Lines at Dawn - magi batteries trade arcs across canyon, shattered rock plumes, clear trajectory lines, command tents behind
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Mists of Alderfen - hidden bow lines trip vanguard, arrows in parabolic arcs, startled ranks, readable ground-'fog layers
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Eastwall Push - siege towers under flaming pitch, defenders on parapets, rams at gate, heavy atmosphere, crisp silhouettes
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) sweeping panorama, layered depth, atmospheric perspective, crisp formation edges
+Bridge of Echoes - last stand on stone span, broken flags, rain-'slick stone, compressed formation, command standard bright
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.45>
+neg: <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+motion smear, micro-detail noise, over-busy crowds, aliasing, banding clouds, fog soup, bloom soup, neon mush, unreadable silhouettes

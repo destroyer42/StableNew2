@@ -1,0 +1,29 @@
+{
+  "txt2img": {
+    "steps": 28,
+    "sampler_name": "DPM++ SDE Karras",
+    "cfg_scale": 6.5,
+    "width": 1024,
+    "height": 512,
+    "negative_prompt": "close up, macro, intimate details, cropped composition, tight framing, indoor, claustrophobic, low quality, blurry"
+  },
+  "img2img": {
+    "steps": 22,
+    "sampler_name": "DPM++ SDE Karras",
+    "cfg_scale": 6.0,
+    "denoising_strength": 0.25
+  },
+  "upscale": {
+    "upscaler": "R-ESRGAN 4x+",
+    "upscaling_resize": 2.5
+  },
+  "video": {
+    "fps": 30,
+    "codec": "libx264",
+    "quality": "high"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 350
+  }
+}

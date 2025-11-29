@@ -1,0 +1,6 @@
+# NTesting Hero Portrait
+# Add your prompts here. Separate different prompts with blank lines.
+# Use 'neg:' prefix for negative prompts within a block.
+# Settings: 50 steps | CFG 8.5 | Sampler: Euler a | 1024×1024
+close-up portrait of a noble medieval knight in ornate armor, scarred but determined expression, soft rim light, detailed metal texture, cinematic tone”
+neg: blurry eyes, missing fingers, cartoon style, modern clothing

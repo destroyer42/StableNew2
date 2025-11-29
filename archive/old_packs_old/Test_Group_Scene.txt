@@ -1,0 +1,6 @@
+# Group Scene
+# Add your prompts here. Separate different prompts with blank lines.
+# Use 'neg:' prefix for negative prompts within a block.
+# Settings: 60 steps | CFG 8 | Sampler: DPM++ 2M Karras | 1216×832
+five fantasy characters — knight, rogue, wizard, cleric, archer — standing together in dramatic composition, epic lighting, cinematic fantasy artwork
+neg: deformed faces, mismatched proportions, extra limbs, messy background

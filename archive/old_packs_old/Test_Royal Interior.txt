@@ -1,0 +1,6 @@
+# Group Scene
+# Add your prompts here. Separate different prompts with blank lines.
+# Use 'neg:' prefix for negative prompts within a block.
+# Settings: 50 steps | CFG 7.5 | Sampler: Euler a | 1024×1024
+throne room with golden chandeliers and stained glass, medieval king and queen on thrones, richly textured fabrics, volumetric light, photoreal fantasy
+neg: modern architecture, low quality, dull lighting

@@ -1,0 +1,16 @@
+# Sample Landscape Prompts
+beautiful mountain landscape, snow-capped peaks, crystal clear lake reflection, golden hour lighting, cinematic composition
+(masterpiece, best quality, 8k, HDR) natural photography, professional landscape shot, dramatic sky
+neg: blurry, low quality, oversaturated, artificial, plastic, cartoon
+
+serene forest path, dappled sunlight through trees, moss-covered rocks, peaceful atmosphere
+ancient oak trees, misty morning light, ethereal glow, nature photography
+neg: urban, buildings, people, vehicles, pollution
+
+dramatic ocean coastline, crashing waves on rocky cliffs, storm clouds gathering
+rugged coastline, wild ocean spray, moody lighting, powerful waves
+neg: calm, peaceful, sunny, beach resort, tropical
+
+autumn vineyard landscape, rolling hills covered in colorful vines, harvest season
+golden autumn colors, vineyard rows stretching to horizon, warm afternoon light
+neg: winter, snow, bare trees, dead vegetation

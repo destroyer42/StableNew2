@@ -1,0 +1,79 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+smiling tavern owner welcoming guests from [[environment]] entrance
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+priestess raising chalice in temple at [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+royal advisor gazing through stained glass toward [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+regal lady in [[clothes]] leaning against balcony above [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+scholar-mage reading tome by window facing [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+warrior princess resting on throne overlooking [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+mysterious traveler adjusting cloak within [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+masked dancer performing under lanterns in [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+wandering minstrel reclining beside fountain in [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+[[hair]]-haired noblewoman in intricate gown walking through [[environment]]
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+

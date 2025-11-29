@@ -1,0 +1,224 @@
+PR: PR-PIPE-023 — ADetailer scheduler dropdown & sampler/scheduler normalization
+NOTE: This diff is a guided patch. Function names and exact contexts may differ slightly;
+adapt to the current code where necessary while preserving the described behavior.
+
+--- a/src/utils/config.py
++++ b/src/utils/config.py
+@@
++from __future__ import annotations
++
++from typing import Dict, Optional
++
++
++def _normalize_scheduler_name(scheduler: Optional[str]) -> Optional[str]:
++    """Normalize scheduler names into a form safe for the WebUI API.
++
++    - None, "", and "None" (any case) are treated as no scheduler.
++    - "Automatic" (default in WebUI) is treated as no explicit scheduler, so we let
++      WebUI decide and do not send a scheduler field.
++    """
++    if scheduler is None:
++        return None
++
++    s = scheduler.strip()
++    if not s:
++        return None
++
++    lowered = s.lower()
++    if lowered in ("none", "automatic"):
++        return None
++
++    return s
++
++
++def build_sampler_scheduler_payload(
++    sampler_name: Optional[str],
++    scheduler_name: Optional[str],
++) -> Dict[str, str]:
++    """Build the sampler-related portion of the WebUI payload.
++
++    Rules:
++    - Always send sampler_name.
++    - If a real scheduler is selected (e.g. "Karras"), send both:
++        sampler_name = "<sampler> <scheduler>"
++        scheduler    = "<scheduler>"
++      This preserves compatibility with older WebUI API behavior that expects a combined name.
++    - If no scheduler is selected (or it's "None"/"Automatic"), send only:
++        sampler_name = "<sampler>"
++      and omit the scheduler field so WebUI uses its default.
++    """
++    payload: Dict[str, str] = {}
++
++    sampler = (sampler_name or "").strip()
++    if not sampler:
++        # No sampler configured; let callers decide whether to omit this.
++        return payload
++
++    normalized_scheduler = _normalize_scheduler_name(scheduler_name)
++
++    if normalized_scheduler:
++        combined = f"{sampler} {normalized_scheduler}"
++        payload["sampler_name"] = combined
++        payload["scheduler"] = normalized_scheduler
++    else:
++        payload["sampler_name"] = sampler
++
++    return payload
++
+@@  # Inside the txt2img/img2img payload builder
+-    if config.sampler_name:
+-        payload["sampler_name"] = config.sampler_name
+-
+-    if getattr(config, "scheduler_name", None):
+-        payload["scheduler"] = config.scheduler_name
++    # Centralized sampler + scheduler serialization.
++    sampler_scheduler = build_sampler_scheduler_payload(
++        sampler_name=getattr(config, "sampler_name", None),
++        scheduler_name=getattr(config, "scheduler_name", None),
++    )
++    payload.update(sampler_scheduler)
++
++    # Remaining payload fields unchanged...
++
++    return payload
++
++# For the ADetailer payload builder, use the same normalization helper.
++# Pseudocode sketch (adapt to your existing ADetailer payload builder):
++#
++# def build_adetailer_payload(config: "RunConfig") -> dict:
++#     ad_cfg = config.adetailer  # or however you access ADetailer settings
++#     ad_payload = {... existing fields ...}
++#
++#     # Scheduler behavior:
++#     # - "inherit" => do not set explicit scheduler; let ADetailer inherit.
++#     # - anything else => normalize and, if real, set the scheduler field.
++#     raw_sched = getattr(ad_cfg, "scheduler", None)
++#     if raw_sched and raw_sched != "inherit":
++#         normalized = _normalize_scheduler_name(raw_sched)
++#         if normalized:
++#             # Use the key that matches the ADetailer extension's expected scheduler field.
++#             ad_payload["scheduler"] = normalized
++#
++#     return ad_payload
++
+--- a/src/gui/adetailer_config_panel.py
++++ b/src/gui/adetailer_config_panel.py
+@@  # Inside ADetailerConfigPanel.__init__
+-        # existing controls (enable checkbox, prompts, model, etc.)
++        # existing controls (enable checkbox, prompts, model, etc.)
++
++        # ADetailer scheduler label + dropdown
++        scheduler_label = ttk.Label(self, text="ADetailer scheduler:")
++        scheduler_label.grid(row=ROW_IDX, column=0, sticky="w", padx=4, pady=2)
++
++        self.adetailer_scheduler_var = tk.StringVar()
++
++        # Value stored in config/state is a short code; map to human labels.
++        scheduler_options = [
++            ("inherit", "Inherit main scheduler"),
++            ("Automatic", "Automatic"),
++            ("Karras", "Karras"),
++            ("Exponential", "Exponential"),
++            ("Polynomial", "Polynomial"),
++        ]
++
++        # Load default from config/state; fall back to "inherit".
++        initial_scheduler = self._get_config_value("adetailer_scheduler", default="inherit")
++        self.adetailer_scheduler_var.set(initial_scheduler)
++
++        scheduler_values = [value for value, _ in scheduler_options]
++        scheduler_combo = ttk.Combobox(
++            self,
++            textvariable=self.adetailer_scheduler_var,
++            values=scheduler_values,
++            state="readonly",
++        )
++        scheduler_combo.grid(row=ROW_IDX, column=1, sticky="we", padx=4, pady=2)
++
++        # Advance ROW_IDX for subsequent controls if applicable.
++        ROW_IDX += 1
++
+@@  # Inside ADetailerConfigPanel.save/apply method
+-        # existing logic to persist panel settings into config/state
++        # existing logic to persist panel settings into config/state
++
++        # Persist ADetailer scheduler selection
++        scheduler_value = self.adetailer_scheduler_var.get() or "inherit"
++        self._set_config_value("adetailer_scheduler", scheduler_value)
++
++        # continue with the rest of the save/apply logic...
++
+--- a/tests/test_config_passthrough.py
++++ b/tests/test_config_passthrough.py
+@@
++from src.utils.config import build_sampler_scheduler_payload
++
++
++class DummyRunConfig:
++    """Minimal stand-in for the real RunConfig used in these tests.
++
++    If the test suite already provides a config fixture, prefer that instead.
++    """
++
++    def __init__(self, sampler_name: str | None, scheduler_name: str | None) -> None:
++        self.sampler_name = sampler_name
++        self.scheduler_name = scheduler_name
++
++
++def test_sampler_scheduler_passthrough_with_explicit_scheduler():
++    """When a real scheduler is selected, we should:
++
++    - Append scheduler to sampler_name for backwards compatibility.
++    - Include an explicit scheduler field.
++    """
++    cfg = DummyRunConfig(sampler_name="DPM++ 2M", scheduler_name="Karras")
++
++    payload = build_sampler_scheduler_payload(
++        sampler_name=cfg.sampler_name,
++        scheduler_name=cfg.scheduler_name,
++    )
++
++    assert payload["sampler_name"] == "DPM++ 2M Karras"
++    assert payload["scheduler"] == "Karras"
++
++
++def test_sampler_scheduler_passthrough_without_scheduler():
++    """When no scheduler is configured (None / "" / "None" / "Automatic"),
++    we keep sampler_name and omit the scheduler field.
++    """
++    for raw_sched in (None, "", "None", "none", "Automatic", "automatic"):
++        payload = build_sampler_scheduler_payload(
++            sampler_name="DPM++ 2M",
++            scheduler_name=raw_sched,
++        )
++
++        assert payload["sampler_name"] == "DPM++ 2M"
++        assert "scheduler" not in payload
++
++
+--- a/tests/gui/test_adetailer_panel.py
++++ b/tests/gui/test_adetailer_panel.py
+@@
++def test_adetailer_panel_has_scheduler_dropdown(adetailer_panel_factory):
++    """The ADetailer panel should expose a scheduler dropdown bound to config."""
++    panel, fake_config = adetailer_panel_factory()
++
++    # Look for the scheduler variable/combobox on the panel.
++    assert hasattr(panel, "adetailer_scheduler_var")
++    assert panel.adetailer_scheduler_var.get() in {"", "inherit", "Automatic", "Karras", "Exponential", "Polynomial"}
++
++
++def test_adetailer_scheduler_default_inherit(adetailer_panel_factory):
++    """Scheduler defaults to 'inherit' when config has no value."""
++    panel, fake_config = adetailer_panel_factory(initial_config={})
++    assert panel.adetailer_scheduler_var.get() == "inherit"
++
++
++def test_adetailer_scheduler_persists_value(adetailer_panel_factory):
++    """Changing the scheduler dropdown is written back to config/state."""
++    panel, fake_config = adetailer_panel_factory(initial_config={})
++
++    panel.adetailer_scheduler_var.set("Karras")
++    panel.save()  # or apply/apply_changes depending on the actual method name
++
++    assert fake_config["adetailer_scheduler"] == "Karras"

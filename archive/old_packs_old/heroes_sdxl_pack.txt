@@ -1,0 +1,69 @@
+# StableNew Heroes Prompt Pack
+# Comprehensive hero prompts with embeddings, LORAs, and SDXL configurations
+# 3 Male Heroes + 3 Female Heroes with appropriate enhancements
+
+# MALE HERO 1: Armored Knight Warrior
+<embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives>
+(masterpiece, best quality, 8k, HDR, ultra detailed) heroic male knight warrior portrait
+strong masculine features, battle-scarred face, determined expression, piercing blue eyes
+intricate medieval plate armor, ornate engravings, weathered steel, sword at side
+dramatic lighting, cinematic composition, 3/4 angle portrait, castle background
+<lora:add-detail-xl:0.8> <lora:CinematicStyle_v1:0.6> <lora:DetailedEyes_V3:0.9>
+neg: <embedding:ac_neg1> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg>
+neg: deformed hands, extra fingers, fused digits, ugly face, feminine features, weak jawline
+
+# MALE HERO 2: Modern Superhero
+<embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives>
+(masterpiece, best quality, 8k, HDR) modern male superhero, dynamic action pose
+muscular build, chiseled jaw, confident smile, cape flowing in wind
+sleek superhero costume, bold colors, city skyline background, heroic stance
+professional photography, dramatic shadows, cinematic lighting, low angle shot
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.8> <lora:DetailedEyes_V3:1.0>
+neg: <embedding:ac_neg1> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg>
+neg: deformed anatomy, ugly costume, amateur photography, cartoon style, feminine build
+
+# MALE HERO 3: Fantasy Ranger
+<embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives>
+(masterpiece, best quality, 8k, HDR) male fantasy ranger hero, rugged outdoorsman
+weathered face, stubbled beard, intense green eyes, leather armor and hood
+longbow and quiver, forest background, dappled sunlight through trees
+natural pose, confident stance, detailed textures, photorealistic style
+<lora:add-detail-xl:0.8> <lora:Realism Lora By Stable Yogi_V3_Lite:0.6> <lora:DetailedEyes_V3:0.9>
+neg: <embedding:ac_neg1> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg>
+neg: clean-shaven, city background, modern clothing, feminine features, soft skin
+
+# FEMALE HERO 1: Warrior Princess
+<embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
+(masterpiece, best quality, 8k, HDR, ultra detailed) female warrior princess portrait
+strong feminine features, fierce determination, flowing hair, battle crown
+ornate armor with feminine curves, sword and shield, regal bearing
+dramatic palace background, golden hour lighting, cinematic composition
+<lora:add-detail-xl:0.8> <lora:CinematicStyle_v1:0.7> <lora:DetailedEyes_V3:1.0>
+neg: <embedding:ac_neg1> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg>
+neg: weak expression, masculine features, modern clothing, ugly armor, deformed anatomy
+
+# FEMALE HERO 2: Magical Sorceress
+<embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
+(masterpiece, best quality, 8k, HDR) powerful female sorceress hero, mystical aura
+elegant facial features, glowing eyes, flowing robes, magical staff
+arcane symbols floating around, magical energy effects, ethereal lighting
+fantasy tower background, dynamic pose, spell-casting gesture, confident expression
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.6> <lora:DetailedEyes_V3:0.9>
+neg: <embedding:ac_neg1> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg>
+neg: mundane clothing, no magical effects, harsh lighting, masculine build, ugly face
+
+# FEMALE HERO 3: Space Marine Commander
+<embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
+(masterpiece, best quality, 8k, HDR) female space marine commander hero, sci-fi setting
+strong leadership presence, determined expression, battle-tested armor
+futuristic weapon, command insignia, spaceship bridge background
+professional military bearing, confident stance, cinematic lighting
+<lora:add-detail-xl:0.8> <lora:CinematicStyle_v1:0.8> <lora:DetailedEyes_V3:1.0>
+neg: <embedding:ac_neg1> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg>
+neg: fantasy setting, weak posture, civilian clothing, feminine weakness, deformed features

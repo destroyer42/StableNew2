@@ -1,0 +1,6 @@
+﻿<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, 8k, HDR) cinematic fantasy portrait, epic confrontation, dramatic lighting, detailed anatomy
+heroic knight standing in blazing light, sword drawn, cloak whipping, fierce determination
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.55> <lora:DetailedEyes_V3:0.85>
+neg: <embedding:ac_neg1> <embedding:negative_hands> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:stable_yogis_anatomy_negatives_v1-neg>
+distorted armor, deformed hands, melted faces, low contrast, dull lighting, bad composition, cartoon style, out of frame

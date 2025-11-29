@@ -1,0 +1,64 @@
+PR: PR-PIPE-026 — CancelToken integration: clean early-out at pipeline boundaries
+NOTE: Guided diff; adapt to actual method names and structure in src/pipeline/executor.py.
+
+1) File: src/pipeline/executor.py
+
+   Locate the public pipeline methods, for example:
+
+       class Pipeline:
+           def run_txt2img(self, config: RunConfig, cancel_token: CancelToken) -> list:
+               # existing logic...
+               images = self._run_txt2img_internal(config, cancel_token)
+               return images
+
+   Wrap the core execution in a try/except for CancellationError:
+
+       from src.gui.state import CancellationError  # or wherever it's defined
+       import logging
+
+       logger = logging.getLogger(__name__)
+
+       class Pipeline:
+           def run_txt2img(self, config: RunConfig, cancel_token: CancelToken) -> list:
+               try:
+                   images = self._run_txt2img_internal(config, cancel_token)
+                   return images
+               except CancellationError as exc:
+                   logger.info("Pipeline cancelled during txt2img (%s); returning early.", exc)
+                   return []
+
+   Apply analogous handling to:
+
+       def run_img2img(...):
+           try:
+               ...
+           except CancellationError as exc:
+               logger.info("Pipeline cancelled during img2img (%s); returning early.", exc)
+               return []
+
+       def run_full_pipeline(...):
+           try:
+               ...
+           except CancellationError as exc:
+               logger.info("Pipeline cancelled during full pipeline (%s); returning early.", exc)
+               return []
+
+   Do not modify the internal helper methods beyond ensuring they continue to call `_ensure_not_cancelled` at appropriate checkpoints.
+
+2) File: tests/test_cancel_token.py
+
+   For each test that currently expects an uncaught CancellationError from pipeline entry points, update the expectation to a clean early return. For example:
+
+       # Before:
+       with pytest.raises(CancellationError):
+           pipeline.run_txt2img(config, cancel_token)
+
+       # After:
+       results = pipeline.run_txt2img(config, cancel_token)
+       assert results == []
+
+   Keep any tests that directly call `_ensure_not_cancelled` and expect it to raise unchanged.
+
+   Ensure tests still verify that:
+   - No further stages run after cancellation.
+   - No additional images are produced beyond the cancellation point.

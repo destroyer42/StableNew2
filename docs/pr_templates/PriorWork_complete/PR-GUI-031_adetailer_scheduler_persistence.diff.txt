@@ -1,0 +1,92 @@
+PR: PR-GUI-031_adetailer_scheduler_persistence — ADetailer scheduler persistence in PromptPack editor
+NOTE: This is a guided diff. Use REPO_SNAPSHOT.md to locate the exact symbols and modules; do not create new structural patterns.
+
+1) PromptPack editor → pack mapping
+
+   File: PromptPack editor GUI module (e.g. src/gui/prompt_pack_editor.py)
+
+   - Locate the class that owns the "Editor" view and the "Apply Editor → Pack(s)" button,
+     typically something like PromptPackEditor or similar.
+   - Find the method that collects editor state into a pack dict, e.g. _editor_to_pack(),
+     build_pack_from_editor(), or the callback bound to the Apply button.
+
+   Ensure that:
+   - The ADetailer scheduler dropdown variable (e.g. self.adetailer_scheduler_var or
+     self.adetailer_panel.scheduler_var) is read when building the pack structure.
+   - Its value is mapped into the ADetailer section of the pack dict under a clear key,
+     for example:
+
+       adetailer_cfg = pack["adetailer"]
+       sched_value = self.adetailer_scheduler_var.get() or "inherit"
+       adetailer_cfg["scheduler"] = sched_value
+
+     Adjust names and nesting based on the actual pack schema you find in REPO_SNAPSHOT.md.
+
+2) Pack → PromptPack editor mapping
+
+   File: Same PromptPack editor GUI module
+
+   - Locate the method that loads a pack into the editor widgets,
+     e.g. _load_pack_into_editor(pack) or similar.
+
+   Ensure that:
+   - It reads the scheduler back from the ADetailer section:
+
+       adetailer_cfg = pack.get("adetailer", {})
+       sched_value = adetailer_cfg.get("scheduler", "inherit")
+
+   - It sets the scheduler dropdown variable accordingly:
+
+       self.adetailer_scheduler_var.set(sched_value)
+
+   - If the pack uses slightly different keys or nesting for ADetailer, adapt as needed,
+     but keep the key name consistent between save and load.
+
+3) ADetailer config panel API (only if needed)
+
+   File: src/gui/adetailer_config_panel.py
+
+   - If the PromptPack editor currently needs to pull/push values through an ADetailer panel
+     rather than directly manipulating StringVars, ensure that the panel exposes clear
+     getters/setters for the scheduler, for example:
+
+       def get_scheduler(self) -> str: ...
+       def set_scheduler(self, value: str) -> None: ...
+
+   - Use these accessors from the editor instead of reaching into internal widget variables
+     if that matches the existing design of the panel.
+
+4) Tests
+
+   File: tests/gui/test_prompt_pack_editor.py (or a new file under tests/gui)
+
+   - Add a test for round-trip persistence:
+
+       def test_adetailer_scheduler_round_trip_in_prompt_pack_editor(...):
+           # Arrange: pack without scheduler
+           pack = make_minimal_pack_without_adetailer_scheduler()
+
+           editor = make_editor_with_pack(pack)
+           assert editor.adetailer_scheduler_var.get() == "inherit"
+
+           # Act: change scheduler and apply
+           editor.adetailer_scheduler_var.set("Karras")
+           editor.apply_editor_to_packs()
+
+           # Assert: pack now has scheduler
+           updated_pack = editor.current_pack  # or appropriate accessor
+           assert updated_pack["adetailer"]["scheduler"] == "Karras"
+
+           # Reload into a new editor instance
+           editor2 = make_editor_with_pack(updated_pack)
+           assert editor2.adetailer_scheduler_var.get() == "Karras"
+
+   - Add a test for default behavior when the scheduler is missing:
+
+       def test_adetailer_scheduler_defaults_to_inherit_when_missing(...):
+           pack = make_minimal_pack_without_adetailer_scheduler()
+           editor = make_editor_with_pack(pack)
+           assert editor.adetailer_scheduler_var.get() == "inherit"
+
+   - Reuse any existing factory/fixture helpers for creating packs and editors instead of
+     hand-rolling them, if available.

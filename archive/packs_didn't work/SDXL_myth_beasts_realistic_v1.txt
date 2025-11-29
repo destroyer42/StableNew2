@@ -1,0 +1,4 @@
+[[creature]] roaring over a shattered fortress, [[element]] energy surging, __mood__, __world__, grounded realism, cinematic lighting
+[[creature]] coiled around a mountain, [[scale]], clouds swirling, __props__ in the air, grounded realism, cinematic lighting
+heroes silhouetted against [[creature]] in a [[environment]], huge scale contrast, __mood__, grounded realism, cinematic lighting
+[[creature]] emerging from a portal above a city, [[lighting]] carving out its shape, __world__, grounded realism, cinematic lighting
