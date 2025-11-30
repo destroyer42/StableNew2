@@ -29,6 +29,8 @@ class SingleNodeJobRunner:
         self._stop_event = threading.Event()
         self._worker: Optional[threading.Thread] = None
         self._on_status_change = on_status_change
+        self._current_job: Job | None = None
+        self._cancel_current = threading.Event()
 
     def start(self) -> None:
         if self._worker and self._worker.is_alive():
@@ -50,7 +52,13 @@ class SingleNodeJobRunner:
                 continue
             self.job_queue.mark_running(job.job_id)
             self._notify(job, JobStatus.RUNNING)
+            self._current_job = job
+            self._cancel_current.clear()
             try:
+                if self._cancel_current.is_set():
+                    self.job_queue.mark_cancelled(job.job_id)
+                    self._notify(job, JobStatus.CANCELLED)
+                    continue
                 if self.run_callable:
                     result = self.run_callable(job)
                 else:
@@ -60,6 +68,8 @@ class SingleNodeJobRunner:
             except Exception as exc:  # noqa: BLE001
                 self.job_queue.mark_failed(job.job_id, error_message=str(exc))
                 self._notify(job, JobStatus.FAILED)
+            finally:
+                self._current_job = None
         return
 
     def _notify(self, job: Job, status: JobStatus) -> None:
@@ -68,3 +78,9 @@ class SingleNodeJobRunner:
                 self._on_status_change(job, status)
             except Exception:
                 pass
+
+    def cancel_current(self) -> None:
+        self._cancel_current.set()
+
+    def is_running(self) -> bool:
+        return self._worker is not None and self._worker.is_alive()

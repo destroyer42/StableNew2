@@ -76,3 +76,12 @@ class Job:
             "pipeline_config": self.pipeline_config.__dict__ if self.pipeline_config is not None else None,
             "worker_id": self.worker_id,
         }
+
+    def summary(self) -> str:
+        if self.pipeline_config:
+            prompt = getattr(self.pipeline_config, "prompt", "") or ""
+            model = getattr(self.pipeline_config, "model", "") or getattr(self.pipeline_config, "model_name", "")
+            return f"{prompt[:64]} | {model}"
+        if self.payload:
+            return str(self.payload)[:64]
+        return self.job_id

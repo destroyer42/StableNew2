@@ -165,23 +165,66 @@ class WebUIProcessManager:
     def stop(self) -> None:
         """Attempt to terminate the process if running."""
 
-        if not self._process:
-            return
-
-        if self.is_running():
-            try:
-                self._process.terminate()
-                self._process.wait(timeout=5)
-            except Exception:
-                try:
-                    self._process.kill()
-                except Exception:
-                    pass
-        self._last_exit_code = self._process.poll()
-        self._process = None
+        self.stop_webui()
 
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
+
+    def shutdown(self, grace_seconds: float = 10.0) -> bool:
+        return self.stop_webui(grace_seconds)
+
+    def stop_webui(self, grace_seconds: float = 10.0) -> bool:
+        """Attempt to stop (gracefully then forcefully) the WebUI process."""
+
+        process = self._process
+        if process is None:
+            return True
+        if process.poll() is not None:
+            self._finalize_process(process)
+            return True
+        try:
+            process.terminate()
+        except Exception:
+            pass
+
+        elapsed = 0.0
+        interval = min(0.25, max(0.05, grace_seconds / 40.0))
+        while elapsed < grace_seconds:
+            if process.poll() is not None:
+                break
+            time.sleep(interval)
+            elapsed += interval
+
+        if process.poll() is None:
+            try:
+                process.kill()
+            except Exception:
+                pass
+            try:
+                process.wait(timeout=2.0)
+            except Exception:
+                pass
+
+        self._finalize_process(process)
+        return not self.is_running()
+
+    def _finalize_process(self, process: subprocess.Popen) -> None:
+        try:
+            if process.stdout:
+                process.stdout.close()
+        except Exception:
+            pass
+        try:
+            if process.stderr:
+                process.stderr.close()
+        except Exception:
+            pass
+        try:
+            self._last_exit_code = process.poll()
+        except Exception:
+            self._last_exit_code = None
+        finally:
+            self._process = None
 
     def get_status(self) -> dict[str, Any]:
         return {

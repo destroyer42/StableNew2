@@ -55,6 +55,9 @@ class JobQueue:
         if job:
             job.error_message = error_message
 
+    def mark_cancelled(self, job_id: str, reason: str | None = None) -> Job | None:
+        return self._update_status(job_id, JobStatus.CANCELLED, reason or "cancelled")
+
     def list_jobs(self, status_filter: JobStatus | None = None) -> List[Job]:
         with self._lock:
             if status_filter is None:

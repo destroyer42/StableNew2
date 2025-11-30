@@ -1,239 +1,65 @@
+"""StableNew V2 theme definitions and helpers."""
+
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
 
-# Palette
-BACKGROUND_DARK = "#121212"
-BACKGROUND_ELEVATED = "#1E1E1E"
-BORDER_SUBTLE = "#2A2A2A"
+from src.gui import design_system_v2 as design_system
 
-TEXT_PRIMARY = "#FFFFFF"
-TEXT_MUTED = "#CCCCCC"
-TEXT_DISABLED = "#777777"
-
-ACCENT_GOLD = "#FFC805"
-ACCENT_GOLD_HOVER = "#FFD94D"
-
-ERROR_RED = "#FF4D4F"
-SUCCESS_GREEN = "#52C41A"
-INFO_BLUE = "#40A9FF"
-
+BACKGROUND_DARK = design_system.Colors.PRIMARY_BG
+BACKGROUND_ELEVATED = design_system.Colors.ELEVATED_SURFACE
+TEXT_PRIMARY = design_system.Colors.TEXT_PRIMARY
+TEXT_MUTED = design_system.Colors.TEXT_MUTED
+TEXT_DISABLED = design_system.Colors.TEXT_DISABLED
+BORDER_SUBTLE = design_system.Colors.BORDER
+ACCENT_GOLD = design_system.Colors.PRIMARY_ACCENT
+ACCENT_GOLD_HOVER = design_system.Colors.PRIMARY_ACCENT_HOVER
+PADDING_SM = design_system.Spacing.SM
+PADDING_MD = design_system.Spacing.MD
 ASWF_BLACK = BACKGROUND_DARK
 ASWF_DARK_GREY = BACKGROUND_ELEVATED
 ASWF_MED_GREY = "#3A393D"
 ASWF_LIGHT_GREY = "#4A4950"
 ASWF_GOLD = ACCENT_GOLD
-ASWF_ERROR_RED = ERROR_RED
-ASWF_OK_GREEN = SUCCESS_GREEN
+ASWF_ERROR_RED = "#FF4D4F"
+ASWF_OK_GREEN = "#52C41A"
 
-# Fonts
-DEFAULT_FONT_FAMILY = "Segoe UI"
-DEFAULT_FONT_SIZE = 10
-HEADING_FONT_SIZE = 11
-MONO_FONT_FAMILY = "Consolas"
-
-# Semantic design tokens for V2 GUI
-SURFACE_BG = BACKGROUND_DARK
-CARD_BG = BACKGROUND_ELEVATED
-
-CARD_BORDER_COLOR = BORDER_SUBTLE
-CARD_BORDER_WIDTH = 1
-
-BODY_TEXT_COLOR = TEXT_PRIMARY
-MUTED_TEXT_COLOR = TEXT_MUTED
-DISABLED_TEXT_COLOR = TEXT_DISABLED
-
-PRIMARY_ACCENT_COLOR = ACCENT_GOLD
-PRIMARY_ACCENT_HOVER = ACCENT_GOLD_HOVER
-
-# Canonical style names
-SURFACE_FRAME_STYLE = "Surface.TFrame"
-CARD_FRAME_STYLE = "Card.TFrame"
-BODY_LABEL_STYLE = "Body.TLabel"
-MUTED_LABEL_STYLE = "Muted.TLabel"
-HEADING_LABEL_STYLE = "Heading.TLabel"
-PRIMARY_BUTTON_STYLE = "Primary.TButton"
-SECONDARY_BUTTON_STYLE = "Secondary.TButton"
-STATUS_LABEL_STYLE = "Status.TLabel"
-STATUS_STRONG_LABEL_STYLE = "StatusStrong.TLabel"
-
-# Padding and style constants for V2 panels
-PADDING_XS = 2
-PADDING_SM = 4
-PADDING_MD = 8
-PADDING_LG = 12
+CARD_FRAME_STYLE = design_system.CARD_FRAME
+SURFACE_FRAME_STYLE = design_system.SECTION_FRAME
+BODY_LABEL_STYLE = design_system.BODY_LABEL
+MUTED_LABEL_STYLE = design_system.MUTED_LABEL
+HEADING_LABEL_STYLE = design_system.HEADING_LABEL
+PRIMARY_BUTTON_STYLE = design_system.PRIMARY_BUTTON
+SECONDARY_BUTTON_STYLE = design_system.SECONDARY_BUTTON
+GHOST_BUTTON_STYLE = design_system.GHOST_BUTTON
 
 
-def apply_theme(root: tk.Tk) -> None:
-    """Apply the StableNew V2 dark theme to the given Tk root."""
-    style = ttk.Style(master=root)
-    try:
-        style.theme_use("alt")
-    except tk.TclError:
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-
-    _configure_global_colors(root)
-    _configure_fonts(root)
-    _configure_panel_styles(style)
-    _configure_button_styles(style)
-    _configure_label_styles(style)
-    _configure_entry_styles(style)
-    _configure_treeview_styles(style)
-    _configure_statusbar_styles(style)
-    _configure_progress_styles(style)
-
-
-def _configure_global_colors(root: tk.Tk) -> None:
+def _configure_global_colors(root: tk.Tk | tk.Toplevel) -> None:
     try:
         root.configure(bg=BACKGROUND_DARK)
     except Exception:
         pass
 
 
-def _configure_fonts(root: tk.Tk) -> None:
-    family = f"{{{DEFAULT_FONT_FAMILY}}}"
-    root.option_add("*Font", f"{family} {DEFAULT_FONT_SIZE}")
-    root.option_add("*TEntry.Font", f"{family} {DEFAULT_FONT_SIZE}")
-    root.option_add("*Text.Font", f"{family} {DEFAULT_FONT_SIZE}")
-    root.option_add("*Treeview.Font", f"{family} {DEFAULT_FONT_SIZE}")
-    root.option_add("*TNotebook.Tab.Font", f"{family} {DEFAULT_FONT_SIZE}")
-    root.option_add("*Heading.Font", f"{family} {HEADING_FONT_SIZE} bold")
-
-
-def _configure_panel_styles(style: ttk.Style) -> None:
-    style.configure(
-        "Panel.TFrame",
-        background=BACKGROUND_ELEVATED,
-        borderwidth=0,
-    )
-    style.configure(
-        "Card.TFrame",
-        background=CARD_BG,
-        borderwidth=CARD_BORDER_WIDTH,
-        relief="solid",
-        bordercolor=CARD_BORDER_COLOR,
-    )
-    # New canonical styles using tokens
-    style.configure(
-        SURFACE_FRAME_STYLE,
-        background=SURFACE_BG,
-    )
-    style.configure(
-        CARD_FRAME_STYLE,
-        background=CARD_BG,
-        borderwidth=CARD_BORDER_WIDTH,
-        relief="solid",
-        bordercolor=CARD_BORDER_COLOR,
-    )
-
-
-def _configure_button_styles(style: ttk.Style) -> None:
-    style.configure(
-        "Primary.TButton",
-        background=ACCENT_GOLD,
-        foreground="#000000",
-        borderwidth=0,
-        focusthickness=1,
-        focustcolor=ACCENT_GOLD_HOVER,
-        padding=(8, 4),
-    )
-    style.map(
-        "Primary.TButton",
-        background=[("active", ACCENT_GOLD_HOVER), ("disabled", BORDER_SUBTLE)],
-        foreground=[("disabled", TEXT_DISABLED)],
-    )
-
-    style.configure(
-        "Secondary.TButton",
-        background=BORDER_SUBTLE,
-        foreground=TEXT_PRIMARY,
-        borderwidth=0,
-        padding=(8, 4),
-    )
-    style.map(
-        "Secondary.TButton",
-        background=[("active", BACKGROUND_ELEVATED), ("disabled", BORDER_SUBTLE)],
-        foreground=[("disabled", TEXT_DISABLED)],
-    )
-
-    # New canonical styles using tokens
-    style.configure(
-        PRIMARY_BUTTON_STYLE,
-        background=PRIMARY_ACCENT_COLOR,
-        foreground="#000000",
-        borderwidth=0,
-        focusthickness=1,
-        focustcolor=PRIMARY_ACCENT_HOVER,
-        padding=(8, 4),
-    )
-    style.map(
-        PRIMARY_BUTTON_STYLE,
-        background=[("active", PRIMARY_ACCENT_HOVER), ("disabled", BORDER_SUBTLE)],
-        foreground=[("disabled", DISABLED_TEXT_COLOR)],
-    )
-
-    style.configure(
-        SECONDARY_BUTTON_STYLE,
-        background=BORDER_SUBTLE,
-        foreground=BODY_TEXT_COLOR,
-        borderwidth=0,
-        padding=(8, 4),
-    )
-    style.map(
-        SECONDARY_BUTTON_STYLE,
-        background=[("active", CARD_BG), ("disabled", BORDER_SUBTLE)],
-        foreground=[("disabled", DISABLED_TEXT_COLOR)],
-    )
-
-
-def _configure_label_styles(style: ttk.Style) -> None:
-    style.configure(
-        "TLabel",
-        background=BACKGROUND_DARK,
-        foreground=TEXT_PRIMARY,
-    )
-    style.configure(
-        "Muted.TLabel",
-        background=BACKGROUND_DARK,
-        foreground=TEXT_MUTED,
-    )
-    style.configure(
-        "Heading.TLabel",
-        background=BACKGROUND_DARK,
-        foreground=TEXT_PRIMARY,
-        font=f"{{{DEFAULT_FONT_FAMILY}}} {HEADING_FONT_SIZE} bold",
-    )
-
-    # New canonical styles using tokens
-    style.configure(
-        BODY_LABEL_STYLE,
-        background=SURFACE_BG,
-        foreground=BODY_TEXT_COLOR,
-    )
-    style.configure(
-        MUTED_LABEL_STYLE,
-        background=SURFACE_BG,
-        foreground=MUTED_TEXT_COLOR,
-    )
+def _configure_fonts(root: tk.Tk | tk.Toplevel) -> None:
+    family = f"{{{design_system.Typography.FAMILY}}}"
+    root.option_add("*Font", f"{family} {design_system.Typography.SM}")
+    root.option_add("*TEntry.Font", f"{family} {design_system.Typography.SM}")
+    root.option_add("*Text.Font", f"{family} {design_system.Typography.SM}")
+    root.option_add("*Treeview.Font", f"{family} {design_system.Typography.SM}")
+    root.option_add("*Heading.Font", f"{family} {design_system.Typography.LG} bold")
 
 
 def _configure_entry_styles(style: ttk.Style) -> None:
     style.configure(
         "TEntry",
         fieldbackground=BACKGROUND_ELEVATED,
-        foreground=TEXT_PRIMARY,
+        foreground=design_system.Colors.TEXT_PRIMARY,
         borderwidth=1,
         relief="solid",
     )
-    style.map(
-        "TEntry",
-        fieldbackground=[("disabled", BACKGROUND_ELEVATED), ("readonly", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_DISABLED)],
-    )
+    style.map("TEntry", fieldbackground=[("disabled", BACKGROUND_ELEVATED)])
 
 
 def _configure_treeview_styles(style: ttk.Style) -> None:
@@ -241,84 +67,66 @@ def _configure_treeview_styles(style: ttk.Style) -> None:
         "Treeview",
         background=BACKGROUND_ELEVATED,
         fieldbackground=BACKGROUND_ELEVATED,
-        foreground=TEXT_PRIMARY,
+        foreground=design_system.Colors.TEXT_PRIMARY,
         borderwidth=0,
     )
-    style.configure(
-        "Treeview.Heading",
-        background=BACKGROUND_DARK,
-        foreground=TEXT_PRIMARY,
-    )
+    style.configure("Treeview.Heading", background=BACKGROUND_DARK, foreground=design_system.Colors.TEXT_PRIMARY)
 
 
 def _configure_statusbar_styles(style: ttk.Style) -> None:
-    style.configure(
-        "StatusBar.TFrame",
-        background=BACKGROUND_ELEVATED,
-        borderwidth=1,
-        relief="solid",
-        bordercolor=BORDER_SUBTLE,
-    )
-    style.configure(
-        "StatusBar.TLabel",
-        background=BACKGROUND_ELEVATED,
-        foreground=TEXT_MUTED,
-    )
+    style.configure("StatusBar.TFrame", background=BACKGROUND_ELEVATED, borderwidth=1, relief="solid", bordercolor=BORDER_SUBTLE)
+    style.configure("StatusBar.TLabel", background=BACKGROUND_ELEVATED, foreground=design_system.Colors.TEXT_MUTED)
+    style.configure("Status.TLabel", background=BACKGROUND_ELEVATED, foreground=design_system.Colors.TEXT_MUTED)
+    style.configure("StatusStrong.TLabel", background=BACKGROUND_ELEVATED, foreground=ACCENT_GOLD, font=(design_system.Typography.FAMILY, design_system.Typography.MD, "bold"))
 
 
 def _configure_progress_styles(style: ttk.Style) -> None:
-    style.configure(
-        "Horizontal.TProgressbar",
-        troughcolor=BACKGROUND_ELEVATED,
-        background=ACCENT_GOLD,
-        bordercolor=BORDER_SUBTLE,
-        lightcolor=ACCENT_GOLD,
-        darkcolor=ACCENT_GOLD,
-    )
+    style.configure("Horizontal.TProgressbar", troughcolor=BACKGROUND_ELEVATED, background=design_system.Colors.PRIMARY_ACCENT)
+
+
+def init_theme(root: tk.Tk | tk.Toplevel) -> ttk.Style:
+    style = ttk.Style(master=root)
+    for candidate in ("alt", "clam"):
+        try:
+            style.theme_use(candidate)
+            break
+        except tk.TclError:
+            continue
+    _configure_global_colors(root)
+    _configure_fonts(root)
+    design_system.apply_design_system(style)
+    style.configure("Panel.TFrame", background=BACKGROUND_ELEVATED)
+    _configure_entry_styles(style)
+    _configure_treeview_styles(style)
+    _configure_statusbar_styles(style)
+    _configure_progress_styles(style)
+    return style
+
+
+def apply_theme(root: tk.Tk | tk.Toplevel) -> ttk.Style:
+    return init_theme(root)
 
 
 class Theme:
-    """
-    Minimal V2 Theme contract for GUI tests and runtime.
-    """
-    def apply_ttk_styles(self, root_or_style) -> None:
-        """
-        Apply ttk styles required by GUI V2 components and tests.
-        Safe to call multiple times; must not raise.
-        """
+    def apply_ttk_styles(self, root_or_style: tk.Tk | ttk.Style) -> None:
         try:
             style = root_or_style
             if not isinstance(style, ttk.Style):
                 style = ttk.Style(master=root_or_style)
-            # Ensure key styles exist for tests
-            style.configure("Primary.TButton", background=ACCENT_GOLD, foreground=TEXT_PRIMARY)
-            style.configure("Panel.TFrame", background=BACKGROUND_ELEVATED)
-            style.configure("StatusBar.TFrame", background=BACKGROUND_DARK)
-            style.configure("Surface.TFrame", background=BACKGROUND_ELEVATED)
-            style.configure("Pipeline.TFrame", background=BACKGROUND_ELEVATED)
-            style.configure("PipelineHeading.TLabel", foreground=ACCENT_GOLD, font=(DEFAULT_FONT_FAMILY, HEADING_FONT_SIZE, "bold"))
-            style.configure("StatusStrong.TLabel", foreground=ACCENT_GOLD, font=(DEFAULT_FONT_FAMILY, HEADING_FONT_SIZE, "bold"))
-            style.configure("Status.TLabel", foreground=TEXT_MUTED, background=BACKGROUND_ELEVATED)
-            style.configure("Dark.TLabel", foreground=TEXT_PRIMARY, background=BACKGROUND_DARK)
-            style.configure("Dark.TEntry", fieldbackground=BACKGROUND_ELEVATED, foreground=TEXT_PRIMARY)
-            style.configure("Dark.TCombobox", fieldbackground=BACKGROUND_ELEVATED, foreground=TEXT_PRIMARY)
-            style.configure("Dark.TRadiobutton", foreground=TEXT_PRIMARY, background=BACKGROUND_DARK)
-            style.configure("Dark.TCheckbutton", foreground=TEXT_PRIMARY, background=BACKGROUND_DARK)
-            style.configure("Dark.TFrame", background=BACKGROUND_ELEVATED)
+            design_system.apply_design_system(style)
         except Exception:
             pass
 
-    def apply_root(self, root) -> None:
-        """
-        Apply global styles to the given Tk root widget.
-        Safe to call multiple times; must not raise.
-        """
+    def apply_root(self, root: tk.Tk) -> None:
         try:
-            apply_theme(root)
+            init_theme(root)
         except Exception:
             pass
+
 
 __all__ = [
+    "init_theme",
+    "apply_theme",
     "Theme",
     "BACKGROUND_DARK",
     "BACKGROUND_ELEVATED",
@@ -328,9 +136,18 @@ __all__ = [
     "TEXT_DISABLED",
     "ACCENT_GOLD",
     "ACCENT_GOLD_HOVER",
-    "ERROR_RED",
-    "SUCCESS_GREEN",
-    "INFO_BLUE",
+    "CARD_FRAME_STYLE",
+    "SURFACE_FRAME_STYLE",
+    "BODY_LABEL_STYLE",
+    "MUTED_LABEL_STYLE",
+    "HEADING_LABEL_STYLE",
+    "PRIMARY_BUTTON_STYLE",
+    "SECONDARY_BUTTON_STYLE",
+    "GHOST_BUTTON_STYLE",
+    "STATUS_LABEL_STYLE",
+    "STATUS_STRONG_LABEL_STYLE",
+    "PADDING_MD",
+    "PADDING_SM",
     "ASWF_BLACK",
     "ASWF_DARK_GREY",
     "ASWF_MED_GREY",
@@ -338,30 +155,6 @@ __all__ = [
     "ASWF_GOLD",
     "ASWF_ERROR_RED",
     "ASWF_OK_GREEN",
-    "DEFAULT_FONT_FAMILY",
-    "DEFAULT_FONT_SIZE",
-    "HEADING_FONT_SIZE",
-    "MONO_FONT_FAMILY",
-    "PADDING_XS",
-    "PADDING_SM",
-    "PADDING_MD",
-    "PADDING_LG",
-    "SURFACE_BG",
-    "CARD_BG",
-    "CARD_BORDER_COLOR",
-    "CARD_BORDER_WIDTH",
-    "BODY_TEXT_COLOR",
-    "MUTED_TEXT_COLOR",
-    "DISABLED_TEXT_COLOR",
-    "PRIMARY_ACCENT_COLOR",
-    "PRIMARY_ACCENT_HOVER",
-    "SURFACE_FRAME_STYLE",
-    "CARD_FRAME_STYLE",
-    "BODY_LABEL_STYLE",
-    "MUTED_LABEL_STYLE",
-    "HEADING_LABEL_STYLE",
-    "PRIMARY_BUTTON_STYLE",
-    "SECONDARY_BUTTON_STYLE",
-    "STATUS_LABEL_STYLE",
-    "STATUS_STRONG_LABEL_STYLE",
 ]
+STATUS_LABEL_STYLE = "Status.TLabel"
+STATUS_STRONG_LABEL_STYLE = "StatusStrong.TLabel"

@@ -97,6 +97,7 @@ class MainWindowV2:
     ) -> None:
         self.root = root
         self._disposed = False
+        self._close_in_progress = False
         self.app_state = app_state or AppStateV2()
         self.webui_process_manager = webui_manager
         self.app_controller = app_controller
@@ -175,6 +176,11 @@ class MainWindowV2:
         if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "pipeline_config_panel"):
             try:
                 self.pipeline_tab.pipeline_config_panel.controller = controller
+            except Exception:
+                pass
+        if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "sidebar"):
+            try:
+                self.pipeline_tab.sidebar.controller = controller
             except Exception:
                 pass
 
@@ -280,7 +286,25 @@ class MainWindowV2:
             pass
 
     def _on_close(self) -> None:
+        self.on_app_close()
+
+    def on_app_close(self) -> None:
+        if self._close_in_progress:
+            return
+        self._close_in_progress = True
+        controller = getattr(self, "app_controller", None)
+        if controller:
+            try:
+                controller.shutdown_app("window-close")
+            except Exception:
+                pass
         self.cleanup()
+        try:
+            self.root.after_idle(self._destroy_root)
+        except Exception:
+            self._destroy_root()
+
+    def _destroy_root(self) -> None:
         try:
             self.root.destroy()
         except Exception:
@@ -289,6 +313,13 @@ class MainWindowV2:
     def _on_destroy(self, event) -> None:
         if event is not None and getattr(event, "widget", None) not in {None, self.root}:
             return
+        if not self._close_in_progress:
+            controller = getattr(self, "app_controller", None)
+            if controller:
+                try:
+                    controller.shutdown_app("destroy")
+                except Exception:
+                    pass
         self.cleanup()
 
     def cleanup(self) -> None:

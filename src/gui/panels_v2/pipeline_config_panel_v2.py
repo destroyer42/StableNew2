@@ -30,8 +30,9 @@ class PipelineConfigPanel(ttk.Frame):
         # Initialize with defaults
         self.run_mode_var = tk.StringVar(value="direct")
         self.batch_var = tk.IntVar(value=1)
-        self.randomizer_var = tk.StringVar(value="off")
+        self.randomizer_enabled_var = tk.BooleanVar(value=False)
         self.max_variants_var = tk.IntVar(value=1)
+        self._max_variants_spinbox: ttk.Spinbox | None = None
         self.txt2img_var = tk.BooleanVar(value=True)
         self.img2img_var = tk.BooleanVar(value=True)
         self.upscale_var = tk.BooleanVar(value=True)
@@ -66,28 +67,6 @@ class PipelineConfigPanel(ttk.Frame):
         batch_spin.bind("<FocusOut>", lambda _e: self._on_batch_change())
         row += 1
         
-        # Randomizer
-        ttk.Label(self, text="Randomizer:", style=BODY_LABEL_STYLE).grid(row=row, column=0, sticky="w", pady=2)
-        rand_combo = ttk.Combobox(
-            self,
-            values=["off", "sequential", "rotate", "random"],
-            state="readonly",
-            textvariable=self.randomizer_var,
-            width=12
-        )
-        rand_combo.grid(row=row, column=1, sticky="w", pady=2)
-        rand_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_randomizer_change())
-        row += 1
-        
-        # Max Variants
-        ttk.Label(self, text="Max Variants:", style=BODY_LABEL_STYLE).grid(row=row, column=0, sticky="w", pady=2)
-        max_spin = ttk.Spinbox(
-            self, from_=1, to=50, textvariable=self.max_variants_var, width=6, command=self._on_max_variants_change
-        )
-        max_spin.grid(row=row, column=1, sticky="w", pady=2)
-        max_spin.bind("<FocusOut>", lambda _e: self._on_max_variants_change())
-        row += 1
-        
         # Stages
         ttk.Label(self, text="Stages:", style=BODY_LABEL_STYLE).grid(row=row, column=0, sticky="nw", pady=2)
         stages_frame = ttk.Frame(self, style=CARD_FRAME_STYLE)
@@ -95,10 +74,43 @@ class PipelineConfigPanel(ttk.Frame):
         ttk.Checkbutton(stages_frame, text="Enable txt2img", variable=self.txt2img_var, command=self._on_stage_change).pack(anchor="w")
         ttk.Checkbutton(stages_frame, text="Enable img2img/adetailer", variable=self.img2img_var, command=self._on_stage_change).pack(anchor="w")
         ttk.Checkbutton(stages_frame, text="Enable upscale", variable=self.upscale_var, command=self._on_stage_change).pack(anchor="w")
+
+        row += 1
+        randomizer_label = ttk.Label(self, text="Randomizer:", style=BODY_LABEL_STYLE)
+        randomizer_label.grid(row=row, column=0, sticky="w", pady=2)
+        randomizer_frame = ttk.Frame(self, style=CARD_FRAME_STYLE)
+        randomizer_frame.grid(row=row, column=1, sticky="w", pady=2)
+        enable_cb = ttk.Checkbutton(
+            randomizer_frame,
+            text="Enable randomization",
+            variable=self.randomizer_enabled_var,
+            command=self._on_randomizer_toggle,
+            style="Dark.TCheckbutton",
+        )
+        enable_cb.pack(side="left")
+        max_spin = ttk.Spinbox(
+            randomizer_frame,
+            from_=1,
+            to=999,
+            textvariable=self.max_variants_var,
+            width=6,
+            command=self._on_max_variants_change,
+        )
+        max_spin.pack(side="left", padx=(8, 0))
+        max_spin.bind("<FocusOut>", lambda _e: self._on_max_variants_change())
+        ttk.Label(randomizer_frame, text="Max variants", style=BODY_LABEL_STYLE).pack(side="left", padx=(6, 0))
+        self._max_variants_spinbox = max_spin
+        self._update_randomizer_spin_state(bool(self.randomizer_enabled_var.get()))
+
+        self._lora_container = ttk.Frame(self, style=CARD_FRAME_STYLE)
+        row += 1
+        self._lora_container.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        row += 1
+        self._refresh_lora_controls()
         
         # Legacy queue status label - removed for cleaner UI
         # self.queue_label_var = tk.StringVar()
-        # ttk.Label(self, textvariable=self.queue_label_var).grid(row=row+1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        # ttk.Label(self, textvariable=self.queue_label_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
     def _setup_callbacks(self) -> None:
         """Setup callbacks for config changes."""
@@ -124,9 +136,20 @@ class PipelineConfigPanel(ttk.Frame):
                 self.batch_var.set(max(1, batch_count))
             except (ValueError, TypeError):
                 pass
-        
+
         # TODO: Update model/sampler dropdowns when available
-        # TODO: Update randomization settings when available
+        self._apply_randomizer_config(config)
+        self._refresh_lora_controls()
+
+    def _apply_randomizer_config(self, config: dict[str, Any]) -> None:
+        enabled = bool(config.get("randomization_enabled", False))
+        try:
+            max_variants = max(1, int(config.get("max_variants", 1)))
+        except (TypeError, ValueError):
+            max_variants = 1
+        self.randomizer_enabled_var.set(enabled)
+        self.max_variants_var.set(max_variants)
+        self._update_randomizer_spin_state(enabled)
 
     def apply_resources(self, resources: dict[str, list[Any]]) -> None:
         """Apply resource lists (models, samplers, etc.) to dropdowns."""
@@ -162,10 +185,6 @@ class PipelineConfigPanel(ttk.Frame):
         if callable(self._on_change):
             self._on_change()
 
-    def _on_randomizer_change(self) -> None:
-        if callable(self._on_change):
-            self._on_change()
-
     def _on_max_variants_change(self) -> None:
         try:
             value = int(self.max_variants_var.get())
@@ -173,9 +192,108 @@ class PipelineConfigPanel(ttk.Frame):
             value = 1
         value = max(1, value)
         self.max_variants_var.set(value)
+        if self.controller and hasattr(self.controller, "on_randomizer_max_variants_changed"):
+            try:
+                self.controller.on_randomizer_max_variants_changed(value)
+            except Exception:
+                pass
         if callable(self._on_change):
             self._on_change()
 
     def _on_stage_change(self) -> None:
+        if callable(self._on_change):
+            self._on_change()
+
+    def _on_randomizer_toggle(self) -> None:
+        enabled = bool(self.randomizer_enabled_var.get())
+        self._update_randomizer_spin_state(enabled)
+        if self.controller and hasattr(self.controller, "on_randomization_toggled"):
+            try:
+                self.controller.on_randomization_toggled(enabled)
+            except Exception:
+                pass
+        if callable(self._on_change):
+            self._on_change()
+
+    def _update_randomizer_spin_state(self, enabled: bool) -> None:
+        if self._max_variants_spinbox is not None:
+            state = "normal" if enabled else "disabled"
+            try:
+                self._max_variants_spinbox.configure(state=state)
+            except Exception:
+                pass
+
+    def _refresh_lora_controls(self) -> None:
+        """Render LoRA settings fetched from the controller."""
+        for child in self._lora_container.winfo_children():
+            child.destroy()
+        self._lora_controls.clear()
+        entries = self._get_lora_settings()
+        if not entries:
+            ttk.Label(self._lora_container, text="LoRA strengths not available", style=BODY_LABEL_STYLE).pack(anchor="w", pady=2)
+            return
+        for entry in entries:
+            name = str(entry.get("name") or "Unnamed").strip()
+            if not name:
+                continue
+            enabled = bool(entry.get("enabled", True))
+            strength = float(entry.get("strength", 1.0))
+            frame = ttk.Frame(self._lora_container)
+            frame.pack(fill="x", pady=4)
+            ttk.Label(frame, text=name, style=BODY_LABEL_STYLE).pack(anchor="w")
+            controls = ttk.Frame(frame)
+            controls.pack(fill="x", pady=(2, 0))
+            var = tk.DoubleVar(value=strength)
+            scale = ttk.Scale(
+                controls,
+                from_=0.0,
+                to=2.0,
+                variable=var,
+                orient="horizontal",
+                command=lambda value, lora=name: self._on_lora_strength_change(lora, value),
+            )
+            scale.pack(side="left", fill="x", expand=True, padx=(0, 4))
+            check_var = tk.BooleanVar(value=enabled)
+            chk = ttk.Checkbutton(
+                controls,
+                text="Enabled",
+                variable=check_var,
+                command=lambda lora=name, var=check_var: self._on_lora_enabled_change(lora, var.get()),
+            )
+            chk.pack(side="right")
+            self._lora_controls[name] = (check_var, scale)
+
+    def _get_lora_settings(self) -> list[dict[str, Any]]:
+        if self.controller and hasattr(self.controller, "get_lora_runtime_settings"):
+            try:
+                return self.controller.get_lora_runtime_settings()
+            except Exception:
+                return []
+        return []
+
+    def get_randomizer_config(self) -> dict[str, Any]:
+        enabled = bool(self.randomizer_enabled_var.get())
+        try:
+            max_variants = max(1, int(self.max_variants_var.get()))
+        except Exception:
+            max_variants = 1
+        return {"randomization_enabled": enabled, "max_variants": max_variants}
+
+    def _on_lora_strength_change(self, lora_name: str, value: Any) -> None:
+        if not self.controller or not hasattr(self.controller, "update_lora_runtime_strength"):
+            return
+        try:
+            strength = float(value)
+        except Exception:
+            return
+        self.controller.update_lora_runtime_strength(lora_name, strength)
+        if callable(self._on_change):
+            self._on_change()
+
+    def _on_lora_enabled_change(self, lora_name: str, value: Any) -> None:
+        if not self.controller or not hasattr(self.controller, "update_lora_runtime_enabled"):
+            return
+        enabled = bool(value)
+        self.controller.update_lora_runtime_enabled(lora_name, enabled)
         if callable(self._on_change):
             self._on_change()

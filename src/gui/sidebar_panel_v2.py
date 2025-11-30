@@ -5,9 +5,19 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable
 
-from src.gui.theme_v2 import CARD_FRAME_STYLE, BODY_LABEL_STYLE, HEADING_LABEL_STYLE, MUTED_LABEL_STYLE
-
+from src.gui.scrolling import enable_mousewheel
+from src.gui.theme_v2 import (
+    ACCENT_GOLD,
+    ASWF_DARK_GREY,
+    BACKGROUND_ELEVATED,
+    BODY_LABEL_STYLE,
+    CARD_FRAME_STYLE,
+    HEADING_LABEL_STYLE,
+    MUTED_LABEL_STYLE,
+    TEXT_PRIMARY,
+)
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
+from src.utils.file_io import read_prompt_pack
 
 from .core_config_panel_v2 import CoreConfigPanelV2
 from .model_list_adapter_v2 import ModelListAdapterV2
@@ -15,7 +25,6 @@ from .model_manager_panel_v2 import ModelManagerPanelV2
 from .output_settings_panel_v2 import OutputSettingsPanelV2
 from .prompt_pack_adapter_v2 import PromptPackAdapterV2, PromptPackSummary
 from .prompt_pack_list_manager import PromptPackListManager
-from .prompt_pack_panel_v2 import PromptPackPanelV2
 
 
 class _SidebarCard(BaseStageCardV2):
@@ -97,9 +106,16 @@ class _SidebarCard(BaseStageCardV2):
                 self._apply_dark_styles(child)
 class SidebarPanelV2(ttk.Frame):
     """Container for sidebar content (core config + negative prompt + packs + pipeline controls)."""
-    # Card width variable for easy adjustment
+    _STAGE_ORDER = ["txt2img", "img2img", "adetailer", "upscale"]
+    _STAGE_LABELS = {
+        "txt2img": "Enable txt2img",
+        "img2img": "Enable img2img",
+        "adetailer": "Enable ADetailer",
+        "upscale": "Enable upscale",
+    }
     CARD_BASE_WIDTH = 240
     CARD_WIDTH = 80
+    _MAX_PREVIEW_CHARS = 4000
 
     def __init__(
         self,
@@ -119,65 +135,67 @@ class SidebarPanelV2(ttk.Frame):
         self._on_apply_pack = on_apply_pack
         self._on_change = on_change
 
-        # Legacy attributes for pipeline controls
+        adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", False))
         self.stage_states: dict[str, tk.BooleanVar] = {
             "txt2img": tk.BooleanVar(value=True),
             "img2img": tk.BooleanVar(value=True),
+            "adetailer": tk.BooleanVar(value=adetailer_default),
             "upscale": tk.BooleanVar(value=True),
         }
         self.run_mode_var = tk.StringVar(value="direct")
         self.run_scope_var = tk.StringVar(value="full")
-        # Removed grid_propagate(False) to allow natural expansion
-        self.columnconfigure(0, weight=1)
-        # Configure rows for proper expansion
-        for i in range(8):
-            self.rowconfigure(i, weight=1 if i >= 3 else 0)
 
-        # --- Config Source Banner ---
+        self.columnconfigure(0, weight=1)
+        for i in range(6):
+            self.rowconfigure(i, weight=1 if i >= 2 else 0)
+
         self.config_source_label = ttk.Label(self, text="Defaults", style=BODY_LABEL_STYLE)
         self.config_source_label.grid(row=0, column=0, sticky="ew", pady=(0, 8))
 
-        # --- Pipeline Preset Section ---
-        # Initialize preset data first
         from src.utils.config import ConfigManager
         self.config_manager = ConfigManager()
         self.preset_names = self.config_manager.list_presets() if hasattr(self.config_manager, "list_presets") else []
         self.preset_var = tk.StringVar(value=self.preset_names[0] if self.preset_names else "")
-
-        self.preset_label = ttk.Label(self, text="Pipeline Preset:", style=BODY_LABEL_STYLE)
-        self.preset_label.grid(row=2, column=0, sticky="w", padx=8, pady=(0, 2))
-        self.preset_dropdown = ttk.Combobox(
-            self,
-            values=self.preset_names,
-            textvariable=self.preset_var,
-            state="readonly",
-            style="Dark.TCombobox"
-        )
-        self.preset_dropdown.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
-        self.preset_dropdown.bind("<<ComboboxSelected>>", self._on_preset_selected)
+        self.preset_combo: ttk.Combobox | None = None
+        self.preset_menu_button: ttk.Menubutton | None = None
+        self.preset_menu: tk.Menu | None = None
 
         self.pack_list_manager = PromptPackListManager()
         self.pack_list_names = self.pack_list_manager.get_list_names()
         self.pack_list_var = tk.StringVar(value=self.pack_list_names[0] if self.pack_list_names else "")
-        self.pack_list_combo: ttk.Combobox | None = None
-        self.prompt_pack_panel: PromptPackPanelV2 | None = None
+        self.pack_listbox: tk.Listbox | None = None
+        self.load_config_button: ttk.Button | None = None
+        self.apply_config_button: ttk.Button | None = None
+        self.add_to_job_button: ttk.Button | None = None
+        self.preview_toggle_button: ttk.Button | None = None
+
+        self._preview_visible = False
+        self._preview_frame: ttk.Frame | None = None
+        self.pack_preview_text: tk.Text | None = None
         self._prompt_summaries: list[PromptPackSummary] = []
         self._manual_pack_names: list[str] | None = None
+        self._current_pack_names: list[str] = []
+        self._preview_cache: dict[Path, str] = {}
 
-        # --- Create sidebar cards ---
-        self.global_negative_enabled_var: tk.BooleanVar = tk.BooleanVar(value=False)
-        self.global_negative_text_var: tk.StringVar = tk.StringVar(value="")
+        self.global_negative_enabled_var = tk.BooleanVar(value=False)
+        self.global_negative_text_var = tk.StringVar(value="")
 
-        self.prompt_settings_card = _SidebarCard(
+        self.preset_card = _SidebarCard(
             self,
-            title="Prompt Settings",
-            build_child=lambda parent: self._build_prompt_settings_section(parent),
+            title="Pipeline Presets",
+            build_child=lambda parent: self._build_preset_actions_section(parent),
+        )
+        self.preset_card.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
+
+        self.pack_selector_card = _SidebarCard(
+            self,
+            title="Pack Selector",
+            build_child=lambda parent: self._build_pack_selector_section(parent),
             collapsible=True,
         )
-        self.prompt_settings_card.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.pack_selector_card.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 4))
 
         self.model_adapter = ModelListAdapterV2(lambda: getattr(self.controller, "client", None))
-        # TODO: Replace with actual sampler adapter if available
         self.sampler_adapter = self.model_adapter
 
         self.core_config_card = _SidebarCard(
@@ -195,31 +213,75 @@ class SidebarPanelV2(ttk.Frame):
             collapsible=True,
         )
         self.core_config_panel = self.core_config_card.child
-        self.core_config_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.core_config_card.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 4))
 
         self.pipeline_config_card = _SidebarCard(
             self,
             title="Pipeline Config",
-            build_child=lambda parent: self._build_pipeline_config_section(parent)
+            build_child=lambda parent: self._build_pipeline_config_section(parent),
         )
-        self.pipeline_config_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.pipeline_config_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
 
         self.output_settings_card = _SidebarCard(
             self,
             title="Output Settings",
-            build_child=lambda parent: OutputSettingsPanelV2(parent)
+            build_child=lambda parent: OutputSettingsPanelV2(parent),
         )
-        self.output_settings_card.grid(row=6, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.output_settings_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
 
 
-    def _build_prompt_settings_section(self, parent: ttk.Frame) -> ttk.Frame:
+    def _build_preset_actions_section(self, parent: ttk.Frame) -> ttk.Frame:
+        frame = ttk.Frame(parent)
+        frame.columnconfigure(0, weight=1)
+        combo_frame = ttk.Frame(frame)
+        combo_frame.grid(row=0, column=0, sticky="ew")
+        combo_frame.columnconfigure(0, weight=1)
+
+        self.preset_combo = ttk.Combobox(
+            combo_frame,
+            values=self.preset_names,
+            textvariable=self.preset_var,
+            state="readonly",
+            style="Dark.TCombobox",
+        )
+        self.preset_combo.grid(row=0, column=0, sticky="ew")
+        self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_selected)
+
+        self.preset_menu_button = ttk.Menubutton(combo_frame, text="Actions", direction="below")
+        self.preset_menu_button.grid(row=0, column=1, padx=(4, 0))
+        self.preset_menu = tk.Menu(self.preset_menu_button, tearoff=0)
+        self.preset_menu.add_command(label="Apply to Default", command=self._on_preset_apply_to_default)
+        self.preset_menu.add_command(label="Apply to Selected Packs", command=self._on_preset_apply_to_packs)
+        self.preset_menu.add_command(label="Load to Stages", command=self._on_preset_load_to_stages)
+        self.preset_menu.add_command(label="Save from Stages", command=self._on_preset_save_from_stages)
+        self.preset_menu.add_command(label="Delete", command=self._on_preset_delete)
+        self.preset_menu_button.config(menu=self.preset_menu)
+
+        self._populate_preset_combo()
+        return frame
+
+    def _build_pack_selector_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
 
+        btn_frame = ttk.Frame(frame)
+        btn_frame.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        btn_frame.columnconfigure(0, weight=1)
+        btn_frame.columnconfigure(1, weight=1)
+        btn_frame.columnconfigure(2, weight=1)
+        btn_frame.columnconfigure(3, weight=1)
+        self.load_config_button = ttk.Button(btn_frame, text="Load Config", command=self._on_pack_load_config)
+        self.load_config_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
+        self.apply_config_button = ttk.Button(btn_frame, text="Apply Config", command=self._on_pack_apply_config)
+        self.apply_config_button.grid(row=0, column=1, sticky="ew", padx=(0, 2))
+        self.add_to_job_button = ttk.Button(btn_frame, text="Add to Job", command=self._on_add_to_job)
+        self.add_to_job_button.grid(row=0, column=2, sticky="ew", padx=(0, 2))
+        self.preview_toggle_button = ttk.Button(btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED)
+        self.preview_toggle_button.grid(row=0, column=3, sticky="ew")
+
         list_frame = ttk.Frame(frame)
-        list_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        list_frame.columnconfigure(1, weight=1)
-        ttk.Label(list_frame, text="Prompt Pack List:", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w")
+        list_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
+        list_frame.columnconfigure(0, weight=1)
         self.pack_list_combo = ttk.Combobox(
             list_frame,
             values=self.pack_list_names,
@@ -227,19 +289,62 @@ class SidebarPanelV2(ttk.Frame):
             state="readonly",
             style="Dark.TCombobox",
         )
-        self.pack_list_combo.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        self.pack_list_combo.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         self.pack_list_combo.bind("<<ComboboxSelected>>", self._on_pack_list_selected)
 
-        self.prompt_pack_panel = PromptPackPanelV2(
-            frame,
-            packs=[],
-            on_apply=self._handle_apply_pack,
+        list_box_frame = ttk.Frame(list_frame)
+        list_box_frame.grid(row=1, column=0, sticky="nsew")
+        list_box_frame.rowconfigure(0, weight=1)
+        list_box_frame.columnconfigure(0, weight=1)
+        self.pack_listbox = tk.Listbox(
+            list_box_frame,
+            selectmode="extended",
+            background=ASWF_DARK_GREY,
+            foreground=TEXT_PRIMARY,
+            selectbackground=ACCENT_GOLD,
+            selectforeground=BACKGROUND_ELEVATED,
+            borderwidth=0,
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=BACKGROUND_ELEVATED,
+            activestyle="none",
+            height=8,
         )
-        frame.rowconfigure(1, weight=1)
-        self.prompt_pack_panel.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
+        self.pack_listbox.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(list_box_frame, orient=tk.VERTICAL, command=self.pack_listbox.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.pack_listbox.config(yscrollcommand=scrollbar.set)
+        enable_mousewheel(self.pack_listbox)
+        self.pack_listbox.bind("<<ListboxSelect>>", lambda event=None: self._on_pack_selection_changed())
+        self.packs_list = self.pack_listbox
+
+        self._preview_frame = ttk.Frame(frame)
+        self._preview_frame.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        self._preview_frame.columnconfigure(0, weight=1)
+        preview_label = ttk.Label(self._preview_frame, text="Prompt Preview", style=BODY_LABEL_STYLE)
+        preview_label.grid(row=0, column=0, sticky="w")
+        preview_text_frame = ttk.Frame(self._preview_frame)
+        preview_text_frame.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
+        preview_text_frame.columnconfigure(0, weight=1)
+        self.pack_preview_text = tk.Text(
+            preview_text_frame,
+            height=10,
+            wrap="word",
+            state="disabled",
+            background=BACKGROUND_ELEVATED,
+            foreground=TEXT_PRIMARY,
+            relief="solid",
+            borderwidth=1,
+        )
+        self.pack_preview_text.grid(row=0, column=0, sticky="nsew")
+        preview_scrollbar = ttk.Scrollbar(preview_text_frame, orient=tk.VERTICAL, command=self.pack_preview_text.yview)
+        preview_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.pack_preview_text.config(yscrollcommand=preview_scrollbar.set)
+        self._preview_frame.grid_remove()
+        self._preview_current_path: Path | None = None
 
         global_frame = ttk.Frame(frame)
-        global_frame.grid(row=2, column=0, sticky="ew")
+        global_frame.grid(row=3, column=0, sticky="ew")
         enable_cb = ttk.Checkbutton(
             global_frame,
             text="Enable Global Negative",
@@ -255,13 +360,18 @@ class SidebarPanelV2(ttk.Frame):
         negative_entry.grid(row=0, column=1, sticky="ew", padx=(8, 0))
         global_frame.columnconfigure(1, weight=1)
 
+        frame.rowconfigure(1, weight=1)
         self._populate_packs_for_selected_list()
+        self._update_pack_actions_state()
         return frame
 
+    def _on_pack_selection_changed(self) -> None:
+        self._update_pack_actions_state()
+
     def _on_pack_list_selected(self, event: object | None = None) -> None:
-        if event is not None and hasattr(event, "widget"):
+        if event is not None and getattr(event, "widget", None) is self.pack_list_combo:
             try:
-                self.pack_list_var.set(event.widget.get())
+                self.pack_list_var.set(self.pack_list_combo.get())
             except Exception:
                 pass
         self._populate_packs_for_selected_list()
@@ -278,10 +388,10 @@ class SidebarPanelV2(ttk.Frame):
         return summaries
 
     def _populate_packs_for_selected_list(self) -> None:
-        if not self.prompt_pack_panel:
+        if not self.pack_listbox:
             return
         summaries = self._load_prompt_summaries() or self._prompt_summaries
-        selected_list = self.pack_list_var.get().strip()
+        selected_list = (self.pack_list_var.get() or "").strip()
         packs: list[PromptPackSummary] = []
         if selected_list:
             pack_names = self.pack_list_manager.get_list(selected_list) or []
@@ -292,20 +402,204 @@ class SidebarPanelV2(ttk.Frame):
             packs = [
                 PromptPackSummary(name=pn, description="", prompt_count=1, path=Path("")) for pn in self._manual_pack_names
             ]
-        self.prompt_pack_panel.set_packs(packs)
+        self._current_pack_names = [summary.name for summary in packs]
+        self.pack_listbox.delete(0, "end")
+        for name in self._current_pack_names:
+            self.pack_listbox.insert("end", name)
+        self._update_pack_actions_state()
 
-    def _handle_apply_pack(self, summary: PromptPackSummary) -> None:
-        prompt_text = ""
-        if self.prompt_pack_adapter:
+    def _populate_preset_combo(self) -> None:
+        if not self.preset_combo:
+            return
+        presets = self.config_manager.list_presets() if hasattr(self.config_manager, "list_presets") else []
+        self.preset_combo.config(values=presets)
+        if presets:
+            self.preset_combo.set(presets[0])
+        else:
+            self.preset_var.set("")
+
+    def _on_pack_load_config(self) -> None:
+        if not self.pack_listbox:
+            return
+        selection = self.pack_listbox.curselection()
+        if len(selection) != 1:
+            return
+        pack_id = self._current_pack_names[selection[0]] if selection[0] < len(self._current_pack_names) else None
+        if not pack_id:
+            return
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_pack_load_config"):
             try:
-                prompt_text = self.prompt_pack_adapter.get_base_prompt(summary)
-            except Exception:
-                prompt_text = ""
-        if self._on_apply_pack:
-            try:
-                self._on_apply_pack(prompt_text, summary)
+                controller.on_pipeline_pack_load_config(pack_id)
             except Exception:
                 pass
+
+    def _on_pack_apply_config(self) -> None:
+        if not self.pack_listbox:
+            return
+        selection = self.pack_listbox.curselection()
+        if not selection:
+            return
+        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_pack_apply_config"):
+            try:
+                controller.on_pipeline_pack_apply_config(pack_ids)
+            except Exception:
+                pass
+
+    def _on_add_to_job(self) -> None:
+        if not self.pack_listbox:
+            return
+        selection = self.pack_listbox.curselection()
+        if not selection:
+            return
+        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
+            try:
+                controller.on_pipeline_add_packs_to_job(pack_ids)
+            except Exception:
+                pass
+
+    def _toggle_pack_preview(self) -> None:
+        if not self.preview_toggle_button or not self.pack_listbox:
+            return
+        selection = self.pack_listbox.curselection()
+        if len(selection) != 1:
+            return
+        if self._preview_visible:
+            self._hide_pack_preview()
+        else:
+            self._show_pack_preview()
+
+    def _show_pack_preview(self) -> None:
+        if not self._preview_frame or not self.preview_toggle_button:
+            return
+        if not self._refresh_preview_for_current_selection():
+            return
+        self._preview_frame.grid()
+        self._preview_visible = True
+        self.preview_toggle_button.config(text="Hide Preview")
+
+    def _hide_pack_preview(self) -> None:
+        if not self._preview_frame or not self.preview_toggle_button:
+            return
+        self._preview_frame.grid_remove()
+        self._preview_visible = False
+        self._preview_current_path = None
+        self.preview_toggle_button.config(text="Show Preview")
+
+    def _update_preview_text(self, summary: PromptPackSummary) -> None:
+        if not self.pack_preview_text:
+            return
+        preview = self._describe_first_prompt(summary)
+        try:
+            self.pack_preview_text.config(state="normal")
+            self.pack_preview_text.delete("1.0", "end")
+            self.pack_preview_text.insert("end", preview)
+        finally:
+            self.pack_preview_text.config(state="disabled")
+
+    def _refresh_preview_for_current_selection(self) -> bool:
+        """Ensure the preview text matches the current single selection (no redundant repaint)."""
+        summary = self._get_selected_pack_summary()
+        if summary is None:
+            self._hide_pack_preview()
+            return False
+        if self._preview_visible and self._preview_current_path == summary.path:
+            return True
+        self._update_preview_text(summary)
+        self._preview_current_path = summary.path
+        return True
+
+    def _limit_preview_text(self, preview: str) -> str:
+        """Truncate overly large preview strings to keep Tk safe."""
+        max_chars = self._MAX_PREVIEW_CHARS
+        if len(preview) <= max_chars:
+            return preview
+        truncated = preview[:max_chars].rstrip()
+        return f"{truncated}\n\n[Preview truncated]"
+
+    def _describe_first_prompt(self, summary: PromptPackSummary) -> str:
+        cached = self._preview_cache.get(summary.path)
+        if cached:
+            return cached
+        prompts = read_prompt_pack(summary.path)
+        if not prompts:
+            preview = f"Pack: {summary.name}\nPrompts: {summary.prompt_count}\n\nNo preview available."
+            self._preview_cache[summary.path] = preview
+            return preview
+        block_lines = self._read_first_block(summary.path)
+        header = [
+            f"Pack: {summary.name}",
+            f"Prompts: {summary.prompt_count}",
+            "",
+        ]
+        if block_lines:
+            block_content = [line for line in block_lines.splitlines() if line.strip()]
+            preview = "\n".join(header + block_content)
+        else:
+            first = prompts[0]
+            positive = (first.get("positive") or "").strip()
+            negative = (first.get("negative") or "").strip()
+            if positive:
+                header.extend(["Positive Prompt:", positive, ""])
+            if negative:
+                header.extend(["Negative Prompt:", negative, ""])
+            preview = "\n".join(header)
+        preview = self._limit_preview_text(preview)
+        self._preview_cache[summary.path] = preview
+        return preview
+
+    def _read_first_block(self, pack_path: Path) -> str:
+        try:
+            content = pack_path.read_text(encoding="utf-8")
+        except Exception:
+            return ""
+        blocks = [block.strip() for block in content.split("\n\n") if block.strip()]
+        if not blocks:
+            return ""
+        return blocks[0]
+
+    def _update_pack_actions_state(self) -> None:
+        if not self.pack_listbox:
+            return
+        selection = self.pack_listbox.curselection()
+        single = len(selection) == 1
+        has_any = len(selection) > 0
+        if self.load_config_button:
+            self.load_config_button.config(state=tk.NORMAL if single else tk.DISABLED)
+        if self.apply_config_button:
+            self.apply_config_button.config(state=tk.NORMAL)
+        if self.add_to_job_button:
+            self.add_to_job_button.config(state=tk.NORMAL)
+        if self.preview_toggle_button:
+            if not single:
+                self.preview_toggle_button.config(state=tk.DISABLED)
+                if self._preview_visible:
+                    self._hide_pack_preview()
+            else:
+                self.preview_toggle_button.config(state=tk.NORMAL)
+                if self._preview_visible:
+                    self._refresh_preview_for_current_selection()
+
+    def _get_selected_pack_summary(self) -> PromptPackSummary | None:
+        if len(self._current_pack_names) == 0 or not self.pack_listbox:
+            return None
+        summary_name = None
+        selection = self.pack_listbox.curselection()
+        if len(selection) != 1:
+            return None
+        idx = selection[0]
+        if idx < len(self._current_pack_names):
+            summary_name = self._current_pack_names[idx]
+        if not summary_name:
+            return None
+        for summary in self._prompt_summaries:
+            if summary.name == summary_name:
+                return summary
+        return None
 
     def refresh_prompt_packs(self) -> None:
         if not self.prompt_pack_adapter:
@@ -318,10 +612,11 @@ class SidebarPanelV2(ttk.Frame):
     def set_pack_names(self, names: list[str]) -> None:
         """Best-effort helper for simple string lists (used by AppController)."""
         self._manual_pack_names = names
-        self._set_pack_list_values(names)
-        if self.prompt_pack_panel:
-            packs = [PromptPackSummary(name=name, description="", prompt_count=0, path=Path("")) for name in names]
-            self.prompt_pack_panel.set_packs(packs)
+        self._current_pack_names = list(names)
+        if self.pack_listbox:
+            self.pack_listbox.delete(0, "end")
+            for name in self._current_pack_names:
+                self.pack_listbox.insert("end", name)
 
     def _set_pack_list_values(self, names: list[str]) -> None:
         self.pack_list_names = names
@@ -341,12 +636,90 @@ class SidebarPanelV2(ttk.Frame):
         self.config_source_label.config(text=f"Preset: {selected_preset}")
         self.grid_columnconfigure(0, weight=1)
 
+    def _on_preset_apply_to_default(self) -> None:
+        preset_name = self.preset_var.get()
+        if not preset_name:
+            return
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_preset_apply_to_default"):
+            try:
+                controller.on_pipeline_preset_apply_to_default(preset_name)
+            except Exception:
+                pass
+
+    def _on_preset_apply_to_packs(self) -> None:
+        preset_name = self.preset_var.get()
+        if not preset_name or not self.pack_listbox:
+            return
+        selection = self.pack_listbox.curselection()
+        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_preset_apply_to_packs"):
+            try:
+                controller.on_pipeline_preset_apply_to_packs(preset_name, pack_ids)
+            except Exception:
+                pass
+
+    def _on_preset_load_to_stages(self) -> None:
+        preset_name = self.preset_var.get()
+        if not preset_name:
+            return
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_preset_load_to_stages"):
+            try:
+                controller.on_pipeline_preset_load_to_stages(preset_name)
+            except Exception:
+                pass
+
+    def _on_preset_save_from_stages(self) -> None:
+        preset_name = self.preset_var.get()
+        if not preset_name:
+            return
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_preset_save_from_stages"):
+            try:
+                controller.on_pipeline_preset_save_from_stages(preset_name)
+            except Exception:
+                pass
+
+    def _on_preset_delete(self) -> None:
+        preset_name = self.preset_var.get()
+        if not preset_name:
+            return
+        controller = self.controller
+        if controller and hasattr(controller, "on_pipeline_preset_delete"):
+            try:
+                controller.on_pipeline_preset_delete(preset_name)
+            except Exception:
+                pass
+
     def _build_stages_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
-        for idx, (name, var) in enumerate(self.stage_states.items()):
-            cb = ttk.Checkbutton(frame, text=name.title(), variable=var, command=self._emit_change, style="Dark.TCheckbutton")
+        for idx, stage in enumerate(self._STAGE_ORDER):
+            var = self.stage_states.get(stage)
+            label = self._STAGE_LABELS.get(stage, stage.title())
+            cb = ttk.Checkbutton(
+                frame,
+                text=label,
+                variable=var,
+                command=lambda stage_name=stage: self._on_stage_toggle(stage_name),
+                style="Dark.TCheckbutton",
+            )
             cb.grid(row=idx, column=0, sticky="w", pady=2)
         return frame
+
+    def _on_stage_toggle(self, stage: str) -> None:
+        var = self.stage_states.get(stage)
+        if var is None:
+            return
+        enabled = bool(var.get())
+        controller = self.controller
+        if controller and hasattr(controller, "on_stage_toggled"):
+            try:
+                controller.on_stage_toggled(stage, enabled)
+            except Exception:
+                pass
+        self._emit_change()
 
     def _build_run_mode_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
@@ -385,25 +758,25 @@ class SidebarPanelV2(ttk.Frame):
         # Prompt Pack Panel (below grid)
         # Removed obsolete code: old layout and duplicate panel instantiations
 
-    def refresh_prompt_packs(self) -> None:
-        if not self.prompt_pack_adapter:
-            return
-            # Add vertical padding between all direct children for spacing
-            for child in self.winfo_children():
-                child.grid_configure(pady=8)
-        try:
-            summaries = self.prompt_pack_adapter.load_summaries()
-        except Exception:
-            summaries = []
-        # Prompt pack panel functionality removed in card refactor
-
-    def set_pack_names(self, names: list[str]) -> None:
-        """Best-effort helper for simple string lists (used by AppController)."""
-        # set_pack_names functionality removed in card refactor
-
     # --- Pipeline control helpers -------------------------------------
     def get_enabled_stages(self) -> list[str]:
-        return [name for name, var in self.stage_states.items() if var.get()]
+        return [
+            stage
+            for stage in self._STAGE_ORDER
+            if self.stage_states.get(stage) and bool(self.stage_states[stage].get())
+        ]
+
+    def set_stage_state(self, stage: str, enabled: bool, *, emit_change: bool = True) -> None:
+        var = self.stage_states.get(stage)
+        if var is None:
+            return
+        normalized = bool(enabled)
+        current = bool(var.get())
+        if current == normalized:
+            return
+        var.set(normalized)
+        if emit_change:
+            self._emit_change()
 
     def get_run_mode(self) -> str:
         return self.run_mode_var.get()
@@ -436,19 +809,6 @@ class SidebarPanelV2(ttk.Frame):
             "enabled": bool(self.global_negative_enabled_var.get()),
             "text": self.global_negative_text_var.get().strip(),
         }
-
-    def _handle_apply_pack(self, summary: PromptPackSummary) -> None:
-        prompt_text = ""
-        if self.prompt_pack_adapter:
-            try:
-                prompt_text = self.prompt_pack_adapter.get_base_prompt(summary)
-            except Exception:
-                prompt_text = ""
-        if self._on_apply_pack:
-            try:
-                self._on_apply_pack(prompt_text, summary)
-            except Exception:
-                pass
 
     def get_core_config_panel(self) -> CoreConfigPanelV2 | None:
         return getattr(self, "core_config_panel", None)

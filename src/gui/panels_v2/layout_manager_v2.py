@@ -59,6 +59,7 @@ class LayoutManagerV2:
 
         mw.sidebar_panel_v2 = getattr(mw.pipeline_tab, "sidebar", None)
         stage_panel = getattr(mw.pipeline_tab, "stage_cards_panel", None)
+        mw.pipeline_config_panel_v2 = getattr(getattr(mw.pipeline_tab, "sidebar", None), "pipeline_config_panel", None)
         mw.pipeline_panel_v2 = stage_panel
         mw.randomizer_panel_v2 = getattr(mw.pipeline_tab, "randomizer_panel", None)
         mw.preview_panel_v2 = getattr(mw.pipeline_tab, "preview_panel", None)

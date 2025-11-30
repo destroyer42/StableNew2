@@ -157,6 +157,9 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
 def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> None:
     """Update the window with the WebUI manager (called from main thread)."""
     window.webui_process_manager = webui_manager
+    controller = getattr(window, "app_controller", None)
+    if controller:
+        controller.webui_process_manager = webui_manager
     
     # Set up WebUI status monitoring using the proper framework
     if hasattr(window, 'status_bar_v2') and window.status_bar_v2:
@@ -405,7 +408,13 @@ def main() -> None:
     # Start WebUI connection/bootstrap asynchronously after GUI is shown
     root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
     
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        try:
+            app_controller.shutdown_app("main-finally")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
