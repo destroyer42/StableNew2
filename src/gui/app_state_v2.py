@@ -9,10 +9,15 @@ from src.gui.gui_invoker import GuiInvoker
 if TYPE_CHECKING:  # pragma: no cover
     from src.gui.prompt_workspace_state import PromptWorkspaceState
 
-Listener = Callable[[], None]
-ResourceListener = Callable[[Dict[str, List[Any]]], None]
+@dataclass
+class PackJobEntry:
+    pack_id: str
+    pack_name: str
+    config_snapshot: dict[str, Any]  # includes randomization-related fields
 
-logger = logging.getLogger(__name__)
+@dataclass
+class JobDraft:
+    packs: list[PackJobEntry] = field(default_factory=list)
 
 
 @dataclass
@@ -43,6 +48,7 @@ class AppStateV2:
     )
     run_config: Dict[str, Any] = field(default_factory=dict)
     _resource_listeners: List[Callable[[Dict[str, List[Any]]], None]] = field(default_factory=list)
+    job_draft: JobDraft = field(default_factory=JobDraft)
 
     def set_invoker(self, invoker: GuiInvoker) -> None:
         """Set an invoker used to marshal notifications onto the GUI thread."""
@@ -151,3 +157,11 @@ class AppStateV2:
         if self.run_config != value:
             self.run_config = dict(value)
             self._notify("run_config")
+
+    def add_packs_to_job_draft(self, entries: list[PackJobEntry]) -> None:
+        self.job_draft.packs.extend(entries)
+        self._notify("job_draft")
+
+    def clear_job_draft(self) -> None:
+        self.job_draft.packs.clear()
+        self._notify("job_draft")

@@ -10,6 +10,7 @@ from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.enhanced_slider import EnhancedSlider
+from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 
 
 class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
@@ -42,7 +43,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
                 child.destroy()
         except Exception:
             pass
-        ttk.Label(self.sampler_section, text="Sampler", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
         self.sampler_combo = ttk.Combobox(
             self.sampler_section,
             textvariable=self.sampler_var,
@@ -52,7 +53,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         )
         self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
-        ttk.Label(self.sampler_section, text="Steps", style="Muted.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
         self.steps_spin = tk.Spinbox(
             self.sampler_section,
             from_=1,
@@ -63,7 +64,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         )
         self.steps_spin.grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(self.sampler_section, text="CFG", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
+        ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
         self.cfg_spin = tk.Spinbox(
             self.sampler_section,
             from_=1.0,
@@ -77,11 +78,11 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         for col in range(4):
             self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
 
-        meta = ttk.Frame(parent, style="Panel.TFrame")
+        meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         meta.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
-        ttk.Label(meta, text="Denoise", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 4))
-        slider_frame = ttk.Frame(meta, style="Panel.TFrame")
+        ttk.Label(meta, text="Denoise", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
+        slider_frame = ttk.Frame(meta, style=SURFACE_FRAME_STYLE)
         slider_frame.grid(row=0, column=1, sticky="ew", padx=(0, 8))
         EnhancedSlider(
             slider_frame,
@@ -92,7 +93,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             label="",
         ).pack(fill="x", expand=True)
 
-        ttk.Label(meta, text="Mask mode", style="Muted.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(meta, text="Mask mode", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
         ttk.Combobox(
             meta,
             textvariable=self.mask_mode_var,
@@ -101,11 +102,11 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             width=12,
         ).grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(meta, text="Width", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))
         tk.Spinbox(meta, from_=64, to=4096, increment=64, textvariable=self.width_var, width=8).grid(
             row=1, column=1, sticky="ew", padx=(0, 8)
         )
-        ttk.Label(meta, text="Height", style="Muted.TLabel").grid(row=1, column=2, sticky="w", pady=(6, 2))
+        ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
         tk.Spinbox(meta, from_=64, to=4096, increment=64, textvariable=self.height_var, width=8).grid(
             row=1, column=3, sticky="ew"
         )

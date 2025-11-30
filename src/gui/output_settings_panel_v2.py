@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from src.config import app_config
+from src.gui.theme_v2 import HEADING_LABEL_STYLE
 
 
 class OutputSettingsPanelV2(ttk.Frame):
@@ -16,7 +17,7 @@ class OutputSettingsPanelV2(ttk.Frame):
 
     def __init__(self, master: tk.Misc) -> None:
         super().__init__(master, style="Panel.TFrame", padding=8)
-        ttk.Label(self, text="Output Settings", style="Heading.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        ttk.Label(self, text="Output Settings", style=HEADING_LABEL_STYLE).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
         self.output_dir_var = tk.StringVar(value=app_config.output_dir_default())
         self.filename_pattern_var = tk.StringVar(value=app_config.filename_pattern_default())

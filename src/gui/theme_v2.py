@@ -33,14 +33,36 @@ DEFAULT_FONT_SIZE = 10
 HEADING_FONT_SIZE = 11
 MONO_FONT_FAMILY = "Consolas"
 
+# Semantic design tokens for V2 GUI
+SURFACE_BG = BACKGROUND_DARK
+CARD_BG = BACKGROUND_ELEVATED
+
+CARD_BORDER_COLOR = BORDER_SUBTLE
+CARD_BORDER_WIDTH = 1
+
+BODY_TEXT_COLOR = TEXT_PRIMARY
+MUTED_TEXT_COLOR = TEXT_MUTED
+DISABLED_TEXT_COLOR = TEXT_DISABLED
+
+PRIMARY_ACCENT_COLOR = ACCENT_GOLD
+PRIMARY_ACCENT_HOVER = ACCENT_GOLD_HOVER
+
+# Canonical style names
+SURFACE_FRAME_STYLE = "Surface.TFrame"
+CARD_FRAME_STYLE = "Card.TFrame"
+BODY_LABEL_STYLE = "Body.TLabel"
+MUTED_LABEL_STYLE = "Muted.TLabel"
+HEADING_LABEL_STYLE = "Heading.TLabel"
+PRIMARY_BUTTON_STYLE = "Primary.TButton"
+SECONDARY_BUTTON_STYLE = "Secondary.TButton"
+STATUS_LABEL_STYLE = "Status.TLabel"
+STATUS_STRONG_LABEL_STYLE = "StatusStrong.TLabel"
+
 # Padding and style constants for V2 panels
 PADDING_XS = 2
 PADDING_SM = 4
 PADDING_MD = 8
 PADDING_LG = 12
-SURFACE_FRAME_STYLE = "Surface.TFrame"
-STATUS_LABEL_STYLE = "Status.TLabel"
-STATUS_STRONG_LABEL_STYLE = "StatusStrong.TLabel"
 
 
 def apply_theme(root: tk.Tk) -> None:
@@ -85,15 +107,27 @@ def _configure_fonts(root: tk.Tk) -> None:
 def _configure_panel_styles(style: ttk.Style) -> None:
     style.configure(
         "Panel.TFrame",
-        background=BACKGROUND_DARK,
+        background=BACKGROUND_ELEVATED,
         borderwidth=0,
     )
     style.configure(
         "Card.TFrame",
-        background=BACKGROUND_ELEVATED,
-        borderwidth=1,
+        background=CARD_BG,
+        borderwidth=CARD_BORDER_WIDTH,
         relief="solid",
-        bordercolor=BORDER_SUBTLE,
+        bordercolor=CARD_BORDER_COLOR,
+    )
+    # New canonical styles using tokens
+    style.configure(
+        SURFACE_FRAME_STYLE,
+        background=SURFACE_BG,
+    )
+    style.configure(
+        CARD_FRAME_STYLE,
+        background=CARD_BG,
+        borderwidth=CARD_BORDER_WIDTH,
+        relief="solid",
+        bordercolor=CARD_BORDER_COLOR,
     )
 
 
@@ -126,6 +160,35 @@ def _configure_button_styles(style: ttk.Style) -> None:
         foreground=[("disabled", TEXT_DISABLED)],
     )
 
+    # New canonical styles using tokens
+    style.configure(
+        PRIMARY_BUTTON_STYLE,
+        background=PRIMARY_ACCENT_COLOR,
+        foreground="#000000",
+        borderwidth=0,
+        focusthickness=1,
+        focustcolor=PRIMARY_ACCENT_HOVER,
+        padding=(8, 4),
+    )
+    style.map(
+        PRIMARY_BUTTON_STYLE,
+        background=[("active", PRIMARY_ACCENT_HOVER), ("disabled", BORDER_SUBTLE)],
+        foreground=[("disabled", DISABLED_TEXT_COLOR)],
+    )
+
+    style.configure(
+        SECONDARY_BUTTON_STYLE,
+        background=BORDER_SUBTLE,
+        foreground=BODY_TEXT_COLOR,
+        borderwidth=0,
+        padding=(8, 4),
+    )
+    style.map(
+        SECONDARY_BUTTON_STYLE,
+        background=[("active", CARD_BG), ("disabled", BORDER_SUBTLE)],
+        foreground=[("disabled", DISABLED_TEXT_COLOR)],
+    )
+
 
 def _configure_label_styles(style: ttk.Style) -> None:
     style.configure(
@@ -143,6 +206,18 @@ def _configure_label_styles(style: ttk.Style) -> None:
         background=BACKGROUND_DARK,
         foreground=TEXT_PRIMARY,
         font=f"{{{DEFAULT_FONT_FAMILY}}} {HEADING_FONT_SIZE} bold",
+    )
+
+    # New canonical styles using tokens
+    style.configure(
+        BODY_LABEL_STYLE,
+        background=SURFACE_BG,
+        foreground=BODY_TEXT_COLOR,
+    )
+    style.configure(
+        MUTED_LABEL_STYLE,
+        background=SURFACE_BG,
+        foreground=MUTED_TEXT_COLOR,
     )
 
 
@@ -227,6 +302,9 @@ class Theme:
             style.configure("Dark.TLabel", foreground=TEXT_PRIMARY, background=BACKGROUND_DARK)
             style.configure("Dark.TEntry", fieldbackground=BACKGROUND_ELEVATED, foreground=TEXT_PRIMARY)
             style.configure("Dark.TCombobox", fieldbackground=BACKGROUND_ELEVATED, foreground=TEXT_PRIMARY)
+            style.configure("Dark.TRadiobutton", foreground=TEXT_PRIMARY, background=BACKGROUND_DARK)
+            style.configure("Dark.TCheckbutton", foreground=TEXT_PRIMARY, background=BACKGROUND_DARK)
+            style.configure("Dark.TFrame", background=BACKGROUND_ELEVATED)
         except Exception:
             pass
 
@@ -260,11 +338,30 @@ __all__ = [
     "ASWF_GOLD",
     "ASWF_ERROR_RED",
     "ASWF_OK_GREEN",
+    "DEFAULT_FONT_FAMILY",
+    "DEFAULT_FONT_SIZE",
+    "HEADING_FONT_SIZE",
+    "MONO_FONT_FAMILY",
     "PADDING_XS",
     "PADDING_SM",
     "PADDING_MD",
     "PADDING_LG",
+    "SURFACE_BG",
+    "CARD_BG",
+    "CARD_BORDER_COLOR",
+    "CARD_BORDER_WIDTH",
+    "BODY_TEXT_COLOR",
+    "MUTED_TEXT_COLOR",
+    "DISABLED_TEXT_COLOR",
+    "PRIMARY_ACCENT_COLOR",
+    "PRIMARY_ACCENT_HOVER",
     "SURFACE_FRAME_STYLE",
+    "CARD_FRAME_STYLE",
+    "BODY_LABEL_STYLE",
+    "MUTED_LABEL_STYLE",
+    "HEADING_LABEL_STYLE",
+    "PRIMARY_BUTTON_STYLE",
+    "SECONDARY_BUTTON_STYLE",
     "STATUS_LABEL_STYLE",
     "STATUS_STRONG_LABEL_STYLE",
 ]

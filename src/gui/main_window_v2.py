@@ -29,6 +29,7 @@ class HeaderZone(ttk.Frame):
         self.stop_button = ttk.Button(self, text="Stop", style="Secondary.TButton")
         self.preview_button = ttk.Button(self, text="Preview", style="Secondary.TButton")
         self.settings_button = ttk.Button(self, text="Settings", style="Secondary.TButton")
+        self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
         self.help_button = ttk.Button(self, text="Help", style="Secondary.TButton")
 
         for idx, btn in enumerate(
@@ -37,6 +38,7 @@ class HeaderZone(ttk.Frame):
                 self.stop_button,
                 self.preview_button,
                 self.settings_button,
+                self.refresh_button,
                 self.help_button,
             ]
         ):
@@ -203,6 +205,7 @@ class MainWindowV2:
                 ("on_stop_clicked", header.stop_button),
                 ("on_preview_clicked", header.preview_button),
                 ("on_open_settings", header.settings_button),
+                ("on_refresh_clicked", header.refresh_button),
                 ("on_help_clicked", header.help_button),
             ]:
                 callback = getattr(ctrl, attr, None)

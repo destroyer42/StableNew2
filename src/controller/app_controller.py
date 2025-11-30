@@ -34,6 +34,7 @@ from src.utils.config import ConfigManager
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils import InMemoryLogHandler
+from src.gui.app_state_v2 import PackJobEntry
 
 import logging
 logger = logging.getLogger(__name__)
@@ -255,10 +256,15 @@ class AppController:
         header.help_button.configure(command=self.on_help_clicked)
 
         # Left zone events
-        left.load_pack_button.configure(command=self.on_load_pack)
-        left.edit_pack_button.configure(command=self.on_edit_pack)
-        left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
-        left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
+        if hasattr(left, "load_config_button"):
+            # New V2 _PackLoaderCompat - buttons are already wired in the UI class
+            pass
+        else:
+            # Legacy LeftZone wiring
+            left.load_pack_button.configure(command=self.on_load_pack)
+            left.edit_pack_button.configure(command=self.on_edit_pack)
+            left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
+            left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
 
         # Initial API status (placeholder)
         bottom.api_status_label.configure(text="API: Unknown")
@@ -586,6 +592,10 @@ class AppController:
         self._append_log("[controller] Help clicked (stub).")
         # TODO: open docs/README in browser or show help overlay.
 
+    def on_refresh_clicked(self) -> None:
+        self._append_log("[controller] Refresh clicked.")
+        self.refresh_resources_from_webui()
+
     def stop_all_background_work(self) -> None:
         """Best-effort shutdown used by GUI teardown to avoid late Tk calls."""
         try:
@@ -635,6 +645,11 @@ class AppController:
                 except Exception:
                     pass
             
+            # Extract core config fields from preset and apply to core config panel
+            core_overrides = self._extract_core_overrides_from_preset(preset_config)
+            if core_overrides:
+                self._apply_core_overrides(core_overrides)
+            
             # Update PipelineConfigPanelV2 if available
             pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
             if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
@@ -647,6 +662,80 @@ class AppController:
             
         except Exception as e:
             self._append_log(f"[controller] Error applying preset '{preset_name}': {e}")
+
+    def _extract_core_overrides_from_preset(self, preset_config: dict[str, Any]) -> dict[str, Any]:
+        """Extract core configuration overrides from preset config."""
+        overrides = {}
+        
+        # Get txt2img config as primary source
+        txt2img_config = preset_config.get("txt2img", {})
+        
+        # Extract model
+        if "model" in txt2img_config and txt2img_config["model"]:
+            overrides["model"] = txt2img_config["model"]
+        
+        # Extract sampler
+        if "sampler_name" in txt2img_config and txt2img_config["sampler_name"]:
+            overrides["sampler"] = txt2img_config["sampler_name"]
+        
+        # Extract steps
+        if "steps" in txt2img_config:
+            try:
+                overrides["steps"] = int(txt2img_config["steps"])
+            except (ValueError, TypeError):
+                pass
+        
+        # Extract cfg_scale
+        if "cfg_scale" in txt2img_config:
+            try:
+                overrides["cfg_scale"] = float(txt2img_config["cfg_scale"])
+            except (ValueError, TypeError):
+                pass
+        
+        # Extract resolution
+        if "width" in txt2img_config and "height" in txt2img_config:
+            try:
+                width = int(txt2img_config["width"])
+                height = int(txt2img_config["height"])
+                overrides["width"] = width
+                overrides["height"] = height
+                # Create a preset label for common resolutions
+                if width == 512 and height == 512:
+                    overrides["resolution_preset"] = "512x512"
+                elif width == 768 and height == 768:
+                    overrides["resolution_preset"] = "768x768"
+                elif width == 1024 and height == 1024:
+                    overrides["resolution_preset"] = "1024x1024"
+                else:
+                    overrides["resolution_preset"] = f"{width}x{height}"
+            except (ValueError, TypeError):
+                pass
+        
+        return overrides
+
+    def _apply_core_overrides(self, overrides: dict[str, Any]) -> None:
+        """Apply core configuration overrides to the core config panel."""
+        try:
+            # Find the core config panel in the sidebar
+            pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+            if pipeline_tab is None:
+                return
+            
+            sidebar_panel = getattr(pipeline_tab, "sidebar", None)
+            if sidebar_panel is None:
+                return
+            
+            core_config_panel = getattr(sidebar_panel, "get_core_config_panel", lambda: None)()
+            if core_config_panel is None:
+                return
+            
+            # Apply the overrides
+            if hasattr(core_config_panel, "apply_from_overrides"):
+                core_config_panel.apply_from_overrides(overrides)
+                self._append_log(f"[controller] Applied core config overrides: {overrides}")
+                
+        except Exception as e:
+            self._append_log(f"[controller] Error applying core config overrides: {e}")
 
     def _on_pack_list_select(self, event) -> None:  # type: ignore[override]
         lb = self.main_window.left_zone.packs_list
@@ -671,12 +760,12 @@ class AppController:
         pack = self.packs[index]
         self._append_log(f"[controller] Pack selected: {pack.name}")
 
-    def _get_selected_pack(self) -> Optional[PromptPackInfo]:
-        if self._selected_pack_index is None:
-            return None
-        if self._selected_pack_index < 0 or self._selected_pack_index >= len(self.packs):
-            return None
-        return self.packs[self._selected_pack_index]
+    def _find_pack_by_id(self, pack_id: str) -> Optional[PromptPackInfo]:
+        """Find a pack by its ID (name)."""
+        for pack in self.packs:
+            if pack.name == pack_id:
+                return pack
+        return None
 
     def on_load_pack(self) -> None:
         pack = self._get_selected_pack()
@@ -898,6 +987,159 @@ class AppController:
                 updater(self.state.resources)
             except Exception:
                 pass
+
+    # ------------------------------------------------------------------
+    # Pipeline Pack Config & Job Builder (PR-035)
+    # ------------------------------------------------------------------
+
+    def on_pipeline_pack_load_config(self, pack_id: str) -> None:
+        """Load a pack's config into the stage cards."""
+        self._append_log(f"[controller] Loading config for pack: {pack_id}")
+        
+        # Try to load pack config via ConfigManager
+        pack_config = self._config_manager.load_pack_config(pack_id)
+        if pack_config is None:
+            self._append_log(f"[controller] No config found for pack: {pack_id}")
+            return
+        
+        # Apply to run config
+        if self.app_state:
+            self.app_state.set_run_config(pack_config)
+        
+        # Update stage cards if available
+        pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+        if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
+            try:
+                pipeline_config_panel.apply_run_config(pack_config)
+            except Exception as e:
+                self._append_log(f"[controller] Error applying pack config to stages: {e}")
+        
+        self._append_log(f"[controller] Loaded config for pack '{pack_id}'")
+
+    def on_pipeline_pack_apply_config(self, pack_ids: list[str]) -> None:
+        """Write current stage config into one or more packs."""
+        self._append_log(f"[controller] Applying config to packs: {pack_ids}")
+        
+        # Get current run config
+        current_config = self.app_state.run_config if self.app_state else {}
+        if not current_config:
+            self._append_log("[controller] No current config to apply")
+            return
+        
+        # Save to each pack
+        for pack_id in pack_ids:
+            success = self._config_manager.save_pack_config(pack_id, current_config)
+            if success:
+                self._append_log(f"[controller] Applied config to pack '{pack_id}'")
+            else:
+                self._append_log(f"[controller] Failed to apply config to pack '{pack_id}'")
+
+    def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
+        """Add one or more packs to the current job draft."""
+        self._append_log(f"[controller] Adding packs to job: {pack_ids}")
+        
+        entries = []
+        for pack_id in pack_ids:
+            pack = self._find_pack_by_id(pack_id)
+            if pack is None:
+                self._append_log(f"[controller] Pack not found: {pack_id}")
+                continue
+            
+            # Get current run config from app_state
+            run_config = self.app_state.run_config.copy() if self.app_state else {}
+            
+            # Ensure randomization is included
+            if "randomization_enabled" not in run_config:
+                run_config["randomization_enabled"] = self.state.current_config.randomization_enabled
+            
+            entry = PackJobEntry(
+                pack_id=pack_id,
+                pack_name=pack.name,
+                config_snapshot=run_config
+            )
+            entries.append(entry)
+        
+        if entries and self.app_state:
+            self.app_state.add_packs_to_job_draft(entries)
+            self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
+
+    def on_pipeline_preset_apply_to_default(self, preset_name: str) -> None:
+        """Apply preset to global default run config."""
+        self._append_log(f"[controller] Applying preset '{preset_name}' to default")
+        
+        # Set as default preset
+        success = self._config_manager.set_default_preset(preset_name)
+        if success:
+            self._append_log(f"[controller] Set '{preset_name}' as default preset")
+        else:
+            self._append_log(f"[controller] Failed to set default preset")
+
+    def on_pipeline_preset_apply_to_packs(self, preset_name: str, pack_ids: list[str]) -> None:
+        """Copy preset values into configs of selected packs."""
+        self._append_log(f"[controller] Applying preset '{preset_name}' to packs: {pack_ids}")
+        
+        preset_config = self._config_manager.load_preset(preset_name)
+        if preset_config is None:
+            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+            return
+        
+        # Apply to each pack
+        for pack_id in pack_ids:
+            success = self._config_manager.save_pack_config(pack_id, preset_config)
+            if success:
+                self._append_log(f"[controller] Applied preset to pack '{pack_id}'")
+            else:
+                self._append_log(f"[controller] Failed to apply preset to pack '{pack_id}'")
+
+    def on_pipeline_preset_load_to_stages(self, preset_name: str) -> None:
+        """Load preset values into stage cards."""
+        self._append_log(f"[controller] Loading preset '{preset_name}' to stages")
+        
+        preset_config = self._config_manager.load_preset(preset_name)
+        if preset_config is None:
+            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+            return
+        
+        # Apply to run config
+        if self.app_state:
+            self.app_state.set_run_config(preset_config)
+        
+        # Update stage cards
+        pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+        if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
+            try:
+                pipeline_config_panel.apply_run_config(preset_config)
+                self._append_log(f"[controller] Loaded preset '{preset_name}' to stages")
+            except Exception as e:
+                self._append_log(f"[controller] Error loading preset to stages: {e}")
+
+    def on_pipeline_preset_save_from_stages(self, preset_name: str) -> None:
+        """Save current stage config as a preset."""
+        self._append_log(f"[controller] Saving preset '{preset_name}' from stages")
+        
+        # Get current config
+        current_config = self.app_state.run_config if self.app_state else {}
+        if not current_config:
+            self._append_log("[controller] No current config to save")
+            return
+        
+        # Save as preset
+        success = self._config_manager.save_preset(preset_name, current_config)
+        if success:
+            self._append_log(f"[controller] Saved preset '{preset_name}'")
+        else:
+            self._append_log(f"[controller] Failed to save preset '{preset_name}'")
+
+    def on_pipeline_preset_delete(self, preset_name: str) -> None:
+        """Remove an existing preset."""
+        self._append_log(f"[controller] Deleting preset '{preset_name}'")
+        
+        # TODO: Add confirmation dialog if needed
+        success = self._config_manager.delete_preset(preset_name)
+        if success:
+            self._append_log(f"[controller] Deleted preset '{preset_name}'")
+        else:
+            self._append_log(f"[controller] Failed to delete preset '{preset_name}'")
 
 
 # Convenience entrypoint for testing the skeleton standalone

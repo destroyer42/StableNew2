@@ -13,7 +13,7 @@ from src.gui.scrolling import enable_mousewheel
 from src.gui.tooltip import attach_tooltip
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
-from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
+from src.gui.theme_v2 import SURFACE_FRAME_STYLE, CARD_FRAME_STYLE, BODY_LABEL_STYLE
 
 
 class PipelineTabFrame(ttk.Frame):
@@ -44,7 +44,7 @@ class PipelineTabFrame(ttk.Frame):
         self.state_manager = getattr(self.pipeline_controller, "state_manager", None)
 
         # Body with three columns
-        self.body_frame = ttk.Frame(self, padding=8, style="Panel.TFrame")
+        self.body_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.body_frame.grid(row=0, column=0, sticky="nsew")
         self.body_frame.columnconfigure(0, weight=1)
         self.body_frame.columnconfigure(1, weight=2)
@@ -52,9 +52,9 @@ class PipelineTabFrame(ttk.Frame):
         self.body_frame.rowconfigure(0, weight=1)
 
         # Scrollable left column for sidebar/global negative/prompt packs
-        self.left_scroll = ScrollableFrame(self.body_frame, style="Panel.TFrame")
+        self.left_scroll = ScrollableFrame(self.body_frame, style=CARD_FRAME_STYLE)
         self.left_inner = self.left_scroll.inner
-        self.left_scroll.grid(row=0, column=0, sticky="nsw", padx=(0, 4))
+        self.left_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
         self.left_inner.update_idletasks()
         self.body_frame.grid_propagate(False)
 
@@ -67,16 +67,9 @@ class PipelineTabFrame(ttk.Frame):
         )
         self.sidebar.pack(fill="x", pady=(0, 16))
 
-        # Pipeline config panel below sidebar
-        self.pipeline_config_panel = PipelineConfigPanel(
-            self.left_inner,
-            controller=self.pipeline_controller,
-            app_state=self.app_state,
-            on_change=lambda: self._handle_config_change(),
-        )
-        self.pipeline_config_panel.pack(fill="x", pady=(0, 16))
+        # Pipeline config panel is now integrated into the sidebar
 
-        self.stage_scroll = ScrollableFrame(self.body_frame, style="Panel.TFrame")
+        self.stage_scroll = ScrollableFrame(self.body_frame, style=CARD_FRAME_STYLE)
         self.stage_cards_frame = self.stage_scroll.inner
         self.stage_scroll.grid(row=0, column=1, sticky="nsew", padx=4)
         self.stage_scroll.inner.update_idletasks()
@@ -97,15 +90,21 @@ class PipelineTabFrame(ttk.Frame):
         if self.app_state is not None:
             try:
                 self.app_state.add_resource_listener(self._on_app_state_resources_changed)
+                self.app_state.subscribe("job_draft", self._on_job_draft_changed)
             except Exception:
                 pass
             self._on_app_state_resources_changed(self.app_state.resources)
+            self._on_job_draft_changed()
         enable_mousewheel(self.left_inner)
         enable_mousewheel(self.stage_cards_frame)
         attach_tooltip(self.sidebar, "Pipeline controls and prompt packs.")
 
         self.pack_loader_compat = _PackLoaderCompat(self)
         self.left_compat = self.pack_loader_compat
+
+    def update_pack_list(self, pack_names: list[str]) -> None:
+        """Update the pack list in the pack loader compat."""
+        self.pack_loader_compat.set_pack_names(pack_names)
 
     def _sync_state_overrides(self) -> None:
         """Push current stage card values into the pipeline controller state manager."""
@@ -153,11 +152,6 @@ class PipelineTabFrame(ttk.Frame):
         except Exception:
             pass
 
-    def _handle_config_change(self) -> None:
-        """Handle changes from the pipeline config panel."""
-        # TODO: Forward config changes to controller if needed
-        pass
-
     def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None) -> None:
         panel = getattr(self, "stage_cards_panel", None)
         if panel is not None:
@@ -166,33 +160,177 @@ class PipelineTabFrame(ttk.Frame):
             except Exception:
                 pass
 
-        # Also update pipeline config panel with resources
-        config_panel = getattr(self, "pipeline_config_panel", None)
-        if config_panel is not None and resources is not None:
-            try:
-                config_panel.apply_resources(resources)
-            except Exception:
-                pass
+        # Pipeline config panel is now in sidebar, resources handled there
+
+    def _on_job_draft_changed(self) -> None:
+        if self.app_state is None:
+            return
+        try:
+            job_draft = self.app_state.job_draft
+            if hasattr(self, "preview_panel"):
+                self.preview_panel.update_from_job_draft(job_draft)
+        except Exception:
+            pass
 
 class _PackLoaderCompat:
     def __init__(self, owner: PipelineTabFrame) -> None:
         self._owner = owner
-        # Create dummy widgets for compatibility since pack loader was removed
-        self.load_pack_button = ttk.Button(owner.left_inner, text="Load Pack (removed)")
-        self.load_pack_button.pack_forget()  # Hide it
-        self.edit_pack_button = ttk.Button(owner.left_inner, text="Edit Pack (removed)")
-        self.edit_pack_button.pack_forget()  # Hide it
-        self.packs_list = tk.Listbox(owner.left_inner)
-        self.packs_list.pack_forget()  # Hide it
-        self.preset_combo = ttk.Combobox(owner.left_inner, values=[])
-        self.preset_combo.pack_forget()  # Hide it
+        # Pack selector for job/config tool
+        ttk.Label(owner.left_inner, text="Pack Selector", style=BODY_LABEL_STYLE).pack(anchor="w", pady=(0, 4))
+        
+        # Pack list with multi-select
+        self.packs_list = tk.Listbox(owner.left_inner, selectmode="extended", height=8)
+        self.packs_list.pack(fill="both", expand=True, pady=(0, 4))
+        enable_mousewheel(self.packs_list)
+        
+        # Buttons for config operations
+        btn_frame = ttk.Frame(owner.left_inner)
+        btn_frame.pack(fill="x", pady=(0, 8))
+        self.load_config_button = ttk.Button(btn_frame, text="Load Config", command=self._on_load_config)
+        self.load_config_button.pack(side="left", fill="x", expand=True, padx=(0, 2))
+        self.apply_config_button = ttk.Button(btn_frame, text="Apply Config", command=self._on_apply_config)
+        self.apply_config_button.pack(side="left", fill="x", expand=True, padx=(0, 2))
+        self.add_to_job_button = ttk.Button(btn_frame, text="Add to Job", command=self._on_add_to_job)
+        self.add_to_job_button.pack(side="left", fill="x", expand=True)
+        
+        # Preset combobox with actions
+        ttk.Label(owner.left_inner, text="Pipeline Preset", style=BODY_LABEL_STYLE).pack(anchor="w", pady=(0, 2))
+        preset_frame = ttk.Frame(owner.left_inner)
+        preset_frame.pack(fill="x", pady=(0, 4))
+        self.preset_combo = ttk.Combobox(preset_frame, values=[], state="readonly")
+        self.preset_combo.pack(side="left", fill="x", expand=True)
+        self.preset_menu_button = ttk.Menubutton(preset_frame, text="Actions", direction="below")
+        self.preset_menu_button.pack(side="right", padx=(4, 0))
+        
+        # Populate preset combo
+        self._populate_preset_combo()
+        
+        # Preset actions menu
+        self.preset_menu = tk.Menu(self.preset_menu_button, tearoff=0)
+        self.preset_menu.add_command(label="Apply to Default", command=self._on_preset_apply_to_default)
+        self.preset_menu.add_command(label="Apply to Selected Packs", command=self._on_preset_apply_to_packs)
+        self.preset_menu.add_command(label="Load to Stages", command=self._on_preset_load_to_stages)
+        self.preset_menu.add_command(label="Save from Stages", command=self._on_preset_save_from_stages)
+        self.preset_menu.add_command(label="Delete", command=self._on_preset_delete)
+        self.preset_menu_button.config(menu=self.preset_menu)
+        
+        # Wire preset combo selection
+        self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_selected)
+
+    def _on_load_config(self) -> None:
+        selection = self.packs_list.curselection()
+        if len(selection) != 1:
+            return  # Only allow single selection for load
+        pack_index = selection[0]
+        pack_names = list(self.packs_list.get(0, "end"))
+        if pack_index < len(pack_names):
+            pack_id = pack_names[pack_index]
+            controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+            if controller and hasattr(controller, "on_pipeline_pack_load_config"):
+                try:
+                    controller.on_pipeline_pack_load_config(pack_id)
+                except Exception:
+                    pass
+
+    def _on_apply_config(self) -> None:
+        selection = self.packs_list.curselection()
+        if not selection:
+            return
+        pack_names = list(self.packs_list.get(0, "end"))
+        pack_ids = [pack_names[i] for i in selection if i < len(pack_names)]
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_pipeline_pack_apply_config"):
+            try:
+                controller.on_pipeline_pack_apply_config(pack_ids)
+            except Exception:
+                pass
+
+    def _on_add_to_job(self) -> None:
+        selection = self.packs_list.curselection()
+        if not selection:
+            return
+        pack_names = list(self.packs_list.get(0, "end"))
+        pack_ids = [pack_names[i] for i in selection if i < len(pack_names)]
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
+            try:
+                controller.on_pipeline_add_packs_to_job(pack_ids)
+            except Exception:
+                pass
+
+    def _on_preset_selected(self, event) -> None:
+        preset_name = self.preset_combo.get()
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_preset_selected"):
+            try:
+                controller.on_preset_selected(preset_name)
+            except Exception:
+                pass
+
+    def _on_preset_apply_to_default(self) -> None:
+        preset_name = self.preset_combo.get()
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_pipeline_preset_apply_to_default"):
+            try:
+                controller.on_pipeline_preset_apply_to_default(preset_name)
+            except Exception:
+                pass
+
+    def _on_preset_apply_to_packs(self) -> None:
+        preset_name = self.preset_combo.get()
+        selection = self.packs_list.curselection()
+        pack_names = list(self.packs_list.get(0, "end"))
+        pack_ids = [pack_names[i] for i in selection if i < len(pack_names)]
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_pipeline_preset_apply_to_packs"):
+            try:
+                controller.on_pipeline_preset_apply_to_packs(preset_name, pack_ids)
+            except Exception:
+                pass
+
+    def _on_preset_load_to_stages(self) -> None:
+        preset_name = self.preset_combo.get()
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_pipeline_preset_load_to_stages"):
+            try:
+                controller.on_pipeline_preset_load_to_stages(preset_name)
+            except Exception:
+                pass
+
+    def _on_preset_save_from_stages(self) -> None:
+        preset_name = self.preset_combo.get()
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_pipeline_preset_save_from_stages"):
+            try:
+                controller.on_pipeline_preset_save_from_stages(preset_name)
+            except Exception:
+                pass
+
+    def _on_preset_delete(self) -> None:
+        preset_name = self.preset_combo.get()
+        # TODO: Add confirmation dialog
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "on_pipeline_preset_delete"):
+            try:
+                controller.on_pipeline_preset_delete(preset_name)
+            except Exception:
+                pass
 
     def bind(self, *args: Any, **kwargs: Any) -> None:
-        # No-op since pack loader was removed
+        # No-op
         pass
 
     def set_pack_names(self, names: list[str]) -> None:
-        # No-op since pack loader was removed
-        pass
+        self.packs_list.delete(0, "end")
+        for name in names:
+            self.packs_list.insert("end", name)
+
+    def _populate_preset_combo(self) -> None:
+        controller = getattr(self._owner, "app_controller", None) or getattr(self._owner, "pipeline_controller", None)
+        if controller and hasattr(controller, "_config_manager"):
+            presets = controller._config_manager.list_presets()
+            self.preset_combo.config(values=presets)
+            if presets:
+                self.preset_combo.set(presets[0])
 
 PipelineTabFrame = PipelineTabFrame

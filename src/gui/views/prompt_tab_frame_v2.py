@@ -13,6 +13,7 @@ from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.gui.tooltip import attach_tooltip
 from src.gui.scrolling import enable_mousewheel
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
+from src.gui.theme_v2 import SURFACE_FRAME_STYLE, BODY_LABEL_STYLE
 
 
 class PromptTabFrame(ttk.Frame):
@@ -48,9 +49,9 @@ class PromptTabFrame(ttk.Frame):
 		self.columnconfigure(2, weight=1, uniform="prompt_col")
 		self.rowconfigure(0, weight=1)
 
-		self.left_frame = ttk.Frame(self, padding=8, style="Panel.TFrame")
-		self.center_frame = ttk.Frame(self, padding=8, style="Panel.TFrame")
-		self.right_frame = ttk.Frame(self, padding=8, style="Panel.TFrame")
+		self.left_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
+		self.center_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
+		self.right_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
 
 		self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 4), pady=4)
 		self.center_frame.grid(row=0, column=1, sticky="nsew", padx=4, pady=4)
@@ -64,7 +65,7 @@ class PromptTabFrame(ttk.Frame):
 
 	# Left column -------------------------------------------------------
 	def _build_left_panel(self) -> None:
-		header = ttk.Label(self.left_frame, text="Prompt Slots")
+		header = ttk.Label(self.left_frame, text="Prompt Slots", style=BODY_LABEL_STYLE)
 		header.pack(anchor="w")
 
 		btn_frame = ttk.Frame(self.left_frame)
@@ -87,7 +88,7 @@ class PromptTabFrame(ttk.Frame):
 	def _build_center_panel(self) -> None:
 		header_frame = ttk.Frame(self.center_frame)
 		header_frame.pack(fill="x")
-		self.pack_name_label = ttk.Label(header_frame, text="Editor")
+		self.pack_name_label = ttk.Label(header_frame, text="Editor", style=BODY_LABEL_STYLE)
 		self.pack_name_label.pack(side="left")
 		advanced_btn = ttk.Button(
 			header_frame, text="Advanced Editor", command=self._on_open_advanced_editor
@@ -106,7 +107,7 @@ class PromptTabFrame(ttk.Frame):
 
 	# Right column ------------------------------------------------------
 	def _build_right_panel(self) -> None:
-		self.summary_label = ttk.Label(self.right_frame, text="Current Slot Summary")
+		self.summary_label = ttk.Label(self.right_frame, text="Current Slot Summary", style=BODY_LABEL_STYLE)
 		self.summary_label.pack(anchor="w", pady=(0, 6))
 
 		self.meta_text = tk.Text(self.right_frame, height=12, wrap="word", state="disabled")
