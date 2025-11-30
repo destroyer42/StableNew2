@@ -30,6 +30,16 @@ def build_v2_app(
 
     app_state = AppStateV2()
 
+    # Create controller first to get gui_log_handler
+    config_manager = config_manager or ConfigManager()
+    app_controller = AppController(
+        None,  # main_window=None for now
+        pipeline_runner=pipeline_runner,
+        threaded=threaded,
+        webui_process_manager=webui_manager,
+        config_manager=config_manager,
+    )
+
     window = MainWindowV2(
         root=root,
         app_state=app_state,
@@ -37,23 +47,10 @@ def build_v2_app(
         app_controller=None,
         packs_controller=None,
         pipeline_controller=None,
+        gui_log_handler=app_controller.get_gui_log_handler(),
     )
 
-    # Attach GUI-aware logging handler so the window can surface logs.
-    try:
-        window.gui_log_handler = attach_gui_log_handler()  # type: ignore[attr-defined]
-    except Exception:
-        pass
-
-    config_manager = config_manager or ConfigManager()
-    app_controller = AppController(
-        window,
-        pipeline_runner=pipeline_runner,
-        threaded=threaded,
-        webui_process_manager=webui_manager,
-        config_manager=config_manager,
-    )
-    if hasattr(window, "connect_controller"):
-        window.connect_controller(app_controller)
+    # Now set the main_window on controller
+    app_controller.set_main_window(window)
 
     return root, app_state, app_controller, window

@@ -41,6 +41,7 @@ class AppStateV2:
             "schedulers": [],
         }
     )
+    run_config: Dict[str, Any] = field(default_factory=dict)
     _resource_listeners: List[Callable[[Dict[str, List[Any]]], None]] = field(default_factory=list)
 
     def set_invoker(self, invoker: GuiInvoker) -> None:
@@ -143,3 +144,10 @@ class AppStateV2:
             self.resources = normalized
             self._notify("resources")
             self._notify_resource_listeners()
+
+    def set_run_config(self, value: dict[str, Any] | None) -> None:
+        if value is None:
+            return
+        if self.run_config != value:
+            self.run_config = dict(value)
+            self._notify("run_config")

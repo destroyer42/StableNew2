@@ -20,10 +20,11 @@ def test_log_trace_panel_v2_smoke():
 
     panel = LogTracePanelV2(root, log_handler=handler)
     panel.refresh()
-    assert panel._log_list.size() == 0
+    assert panel._log_text.get("1.0", tk.END).strip() == ""
 
     logger.error("Test error")
     panel.refresh()
-    assert panel._log_list.size() >= 1
+    content = panel._log_text.get("1.0", tk.END).strip()
+    assert "Test error" in content
 
     root.destroy()

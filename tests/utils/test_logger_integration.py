@@ -40,3 +40,21 @@ def test_inmemory_log_handler_respects_max_entries() -> None:
         assert any("message-9" in entry["message"] for entry in entries)
     finally:
         logger.setLevel(original_level)
+
+
+def test_attach_gui_log_handler() -> None:
+    """Test that attach_gui_log_handler creates and attaches handler."""
+    from src.utils import attach_gui_log_handler
+    handler = attach_gui_log_handler(max_entries=10)
+    assert isinstance(handler, InMemoryLogHandler)
+    assert handler._max_entries == 10
+
+    # Check it's attached to root logger
+    root_logger = logging.getLogger()
+    assert handler in root_logger.handlers
+
+    # Test logging
+    root_logger.info("test message")
+    entries = list(handler.get_entries())
+    assert len(entries) >= 1
+    assert "test message" in entries[-1]["message"]

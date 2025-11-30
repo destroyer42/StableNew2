@@ -23,6 +23,7 @@ class LayoutManagerV2:
             return
 
         app_state = getattr(mw, "app_state", None)
+        app_controller = getattr(mw, "app_controller", None)
         pipeline_controller = getattr(mw, "pipeline_controller", None)
         prompt_workspace_state = getattr(mw, "prompt_workspace_state", None)
         theme = getattr(mw, "theme", None)
@@ -37,6 +38,7 @@ class LayoutManagerV2:
             notebook,
             prompt_workspace_state=prompt_workspace_state,
             app_state=app_state,
+            app_controller=app_controller,
             pipeline_controller=pipeline_controller,
             theme=theme,
         )

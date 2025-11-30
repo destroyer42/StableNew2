@@ -19,8 +19,7 @@ from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
-from src.utils.config import ConfigManager
-from src.gui.engine_settings_dialog import EngineSettingsDialog
+from src.utils import InMemoryLogHandler
 
 
 class HeaderZone(ttk.Frame):
@@ -63,7 +62,7 @@ class BottomZone(ttk.Frame):
     def __init__(self, master: tk.Misc, *, controller=None, app_state=None):
         super().__init__(master, style="StatusBar.TFrame")
         self.status_bar_v2 = StatusBarV2(self, controller=controller, app_state=app_state)
-        self.status_bar_v2.pack(side=tk.TOP, fill="x", padx=4, pady=(4, 2))
+        self.status_bar_v2.grid(row=1, column=0, sticky="ew")
 
         # Compatibility aliases expected by AppController-based tests.
         self.api_status_label = getattr(getattr(self.status_bar_v2, "webui_panel", None), "status_label", None)
@@ -73,7 +72,12 @@ class BottomZone(ttk.Frame):
 
         log_style_kwargs = {"bg": BACKGROUND_ELEVATED, "fg": TEXT_PRIMARY, "insertbackground": TEXT_PRIMARY}
         self.log_text = tk.Text(self, height=6, **log_style_kwargs)
-        self.log_text.pack_forget()
+        self.log_text.grid_forget()
+
+        # Configure grid weights
+        self.rowconfigure(0, weight=1)  # log panel
+        self.rowconfigure(1, weight=0)  # status bar
+        self.columnconfigure(0, weight=1)
 
 
 class MainWindowV2:
@@ -87,6 +91,7 @@ class MainWindowV2:
         app_controller=None,
         packs_controller=None,
         pipeline_controller=None,
+        gui_log_handler: InMemoryLogHandler | None = None,
     ) -> None:
         self.root = root
         self._disposed = False
@@ -95,6 +100,7 @@ class MainWindowV2:
         self.app_controller = app_controller
         self.packs_controller = packs_controller
         self.pipeline_controller = pipeline_controller
+        self.gui_log_handler = gui_log_handler
         self._invoker = GuiInvoker(self.root)
         self.app_state.set_invoker(self._invoker)
 
@@ -120,9 +126,9 @@ class MainWindowV2:
 
         gui_log_handler = getattr(self, "gui_log_handler", None)
         self.log_trace_panel_v2: LogTracePanelV2 | None = None
-        if gui_log_handler is not None:
-            self.log_trace_panel_v2 = LogTracePanelV2(self.bottom_zone, log_handler=gui_log_handler)
-            self.log_trace_panel_v2.pack(side=tk.TOP, fill="x", padx=4, pady=(0, 2))
+        if self.gui_log_handler is not None:
+            self.log_trace_panel_v2 = LogTracePanelV2(self.bottom_zone, log_handler=self.gui_log_handler)
+            self.log_trace_panel_v2.grid(row=0, column=0, sticky="nsew")
 
         # --- Attach panels to zones ---
         from src.gui.panels_v2.layout_manager_v2 import LayoutManagerV2
@@ -162,6 +168,13 @@ class MainWindowV2:
             self.app_state.controller = controller
         except Exception:
             pass
+
+        # Update pipeline tab with controller if it exists
+        if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "pipeline_config_panel"):
+            try:
+                self.pipeline_tab.pipeline_config_panel.controller = controller
+            except Exception:
+                pass
 
     def update_pack_list(self, packs: list[str]) -> None:
         left = getattr(self, "left_zone", None)

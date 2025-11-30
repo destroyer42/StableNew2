@@ -13,6 +13,7 @@ from src.gui.scrolling import enable_mousewheel
 from src.gui.tooltip import attach_tooltip
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
+from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
 
 
 class PipelineTabFrame(ttk.Frame):
@@ -27,6 +28,7 @@ class PipelineTabFrame(ttk.Frame):
         *,
         prompt_workspace_state: Any = None,
         app_state: Any = None,
+        app_controller: Any = None,
         pipeline_controller: Any = None,
         theme: Any = None,
         **kwargs,
@@ -36,6 +38,7 @@ class PipelineTabFrame(ttk.Frame):
         self.rowconfigure(0, weight=1)
         self.prompt_workspace_state = prompt_workspace_state
         self.app_state = app_state
+        self.app_controller = app_controller
         self.pipeline_controller = pipeline_controller
         self.theme = theme
         self.state_manager = getattr(self.pipeline_controller, "state_manager", None)
@@ -55,32 +58,23 @@ class PipelineTabFrame(ttk.Frame):
         self.left_inner.update_idletasks()
         self.body_frame.grid_propagate(False)
 
-        self.pack_loader_frame = ttk.Frame(self.left_inner, padding=8, style="Panel.TFrame")
-        self.pack_loader_frame.pack(fill="x", pady=(0, 8))
-
-        self.load_pack_button = ttk.Button(self.pack_loader_frame, text="Load Pack")
-        self.load_pack_button.pack(fill="x", padx=4, pady=2)
-        self.edit_pack_button = ttk.Button(self.pack_loader_frame, text="Edit Pack")
-        self.edit_pack_button.pack(fill="x", padx=4, pady=2)
-
-        self.packs_list = tk.Listbox(self.pack_loader_frame, exportselection=False, height=6)
-        self.packs_list.pack(fill="both", expand=True, padx=4, pady=4)
-
-        ttk.Label(self.pack_loader_frame, text="Preset").pack(anchor="w", padx=4)
-        self.preset_combo = ttk.Combobox(self.pack_loader_frame, values=[], state="readonly")
-        self.preset_combo.pack(fill="x", padx=4, pady=(0, 4))
-
         self.sidebar = SidebarPanelV2(
             self.left_inner,
-            controller=self.pipeline_controller,
+            controller=self.app_controller or self.pipeline_controller,
             app_state=self.app_state,
             theme=self.theme,
             on_change=lambda: self._handle_sidebar_change(),
         )
-        self.sidebar.pack(fill="x", pady=(0, 8))
+        self.sidebar.pack(fill="x", pady=(0, 16))
 
-        # Add global negative prompt and prompt pack selector here as needed
-        # ...existing code for global negative/prompt packs if present...
+        # Pipeline config panel below sidebar
+        self.pipeline_config_panel = PipelineConfigPanel(
+            self.left_inner,
+            controller=self.pipeline_controller,
+            app_state=self.app_state,
+            on_change=lambda: self._handle_config_change(),
+        )
+        self.pipeline_config_panel.pack(fill="x", pady=(0, 16))
 
         self.stage_scroll = ScrollableFrame(self.body_frame, style="Panel.TFrame")
         self.stage_cards_frame = self.stage_scroll.inner
@@ -159,6 +153,11 @@ class PipelineTabFrame(ttk.Frame):
         except Exception:
             pass
 
+    def _handle_config_change(self) -> None:
+        """Handle changes from the pipeline config panel."""
+        # TODO: Forward config changes to controller if needed
+        pass
+
     def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None) -> None:
         panel = getattr(self, "stage_cards_panel", None)
         if panel is not None:
@@ -167,21 +166,33 @@ class PipelineTabFrame(ttk.Frame):
             except Exception:
                 pass
 
+        # Also update pipeline config panel with resources
+        config_panel = getattr(self, "pipeline_config_panel", None)
+        if config_panel is not None and resources is not None:
+            try:
+                config_panel.apply_resources(resources)
+            except Exception:
+                pass
+
 class _PackLoaderCompat:
     def __init__(self, owner: PipelineTabFrame) -> None:
         self._owner = owner
-        self.load_pack_button = owner.load_pack_button
-        self.edit_pack_button = owner.edit_pack_button
-        self.packs_list = owner.packs_list
-        self.preset_combo = owner.preset_combo
+        # Create dummy widgets for compatibility since pack loader was removed
+        self.load_pack_button = ttk.Button(owner.left_inner, text="Load Pack (removed)")
+        self.load_pack_button.pack_forget()  # Hide it
+        self.edit_pack_button = ttk.Button(owner.left_inner, text="Edit Pack (removed)")
+        self.edit_pack_button.pack_forget()  # Hide it
+        self.packs_list = tk.Listbox(owner.left_inner)
+        self.packs_list.pack_forget()  # Hide it
+        self.preset_combo = ttk.Combobox(owner.left_inner, values=[])
+        self.preset_combo.pack_forget()  # Hide it
 
     def bind(self, *args: Any, **kwargs: Any) -> None:
-        if hasattr(self.packs_list, "bind"):
-            self.packs_list.bind(*args, **kwargs)
+        # No-op since pack loader was removed
+        pass
 
     def set_pack_names(self, names: list[str]) -> None:
-        self.packs_list.delete(0, "end")
-        for name in names:
-            self.packs_list.insert("end", name)
+        # No-op since pack loader was removed
+        pass
 
 PipelineTabFrame = PipelineTabFrame

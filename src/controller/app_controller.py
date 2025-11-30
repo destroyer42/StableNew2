@@ -33,6 +33,7 @@ from src.utils import StructuredLogger
 from src.utils.config import ConfigManager
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
+from src.utils import InMemoryLogHandler
 
 import logging
 logger = logging.getLogger(__name__)
@@ -137,10 +138,8 @@ class AppController:
     def list_embeddings(self) -> list[WebUIResource]:
         return self.resource_service.list_embeddings()
 
-    def get_last_run_config(self) -> LastRunConfigV2_5 | None:
-        if not hasattr(self, "_last_run_store"):
-            from src.pipeline.last_run_store_v2_5 import LastRunStoreV2_5
-        return self._last_run_store.load()
+    def get_gui_log_handler(self) -> Optional[InMemoryLogHandler]:
+        return self.gui_log_handler
     def run_txt2img_once(self, config: dict[str, Any] | None = None) -> None:
         self._append_log("[controller] run_txt2img_once called.")
         if config is None:
@@ -176,7 +175,7 @@ class AppController:
 
     def __init__(
         self,
-        main_window: MainWindow,
+        main_window: MainWindow | None,
         pipeline_runner: Optional[PipelineRunner] = None,
         threaded: bool = True,
         packs_dir: Path | str | None = None,
@@ -209,7 +208,22 @@ class AppController:
         self.packs: list[PromptPackInfo] = []
         self._selected_pack_index: Optional[int] = None
 
+        # GUI log handler for LogTracePanelV2
+        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
+        root_logger = logging.getLogger()
+        if root_logger.level > logging.INFO or root_logger.level == logging.NOTSET:
+            root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(self.gui_log_handler)
+
         # Let the GUI wire its callbacks to us
+        if self.main_window is not None:
+            self._attach_to_gui()
+            if hasattr(self.main_window, "connect_controller"):
+                self.main_window.connect_controller(self)
+
+    def set_main_window(self, main_window: MainWindow) -> None:
+        """Set the main window and wire GUI callbacks."""
+        self.main_window = main_window
         self._attach_to_gui()
         if hasattr(self.main_window, "connect_controller"):
             self.main_window.connect_controller(self)
@@ -601,8 +615,38 @@ class AppController:
 
     def on_preset_selected(self, preset_name: str) -> None:
         self._append_log(f"[controller] Preset selected: {preset_name}")
-        self.state.current_config.preset_name = preset_name
-        # TODO: load preset JSON, update GUI fields, etc.
+        
+        # Load preset using config manager
+        preset_config = self._config_manager.load_preset(preset_name)
+        if preset_config is None:
+            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+            return
+        
+        # Apply preset to run config
+        self.apply_preset_to_run_config(preset_config, preset_name)
+
+    def apply_preset_to_run_config(self, preset_config: dict[str, Any], preset_name: str) -> None:
+        """Apply preset configuration to the current run config."""
+        try:
+            # Update AppStateV2 run_config
+            if self.app_state is not None:
+                try:
+                    self.app_state.set_run_config(preset_config)
+                except Exception:
+                    pass
+            
+            # Update PipelineConfigPanelV2 if available
+            pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+            if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
+                try:
+                    pipeline_config_panel.apply_run_config(preset_config)
+                except Exception:
+                    pass
+            
+            self._append_log(f"[controller] Applied preset '{preset_name}' to run config")
+            
+        except Exception as e:
+            self._append_log(f"[controller] Error applying preset '{preset_name}': {e}")
 
     def _on_pack_list_select(self, event) -> None:  # type: ignore[override]
         lb = self.main_window.left_zone.packs_list

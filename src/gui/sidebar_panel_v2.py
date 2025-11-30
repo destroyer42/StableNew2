@@ -73,36 +73,96 @@ class SidebarPanelV2(ttk.Frame):
         }
         self.run_mode_var = tk.StringVar(value="direct")
         self.run_scope_var = tk.StringVar(value="full")
-        self.grid_propagate(False)
+        # Removed grid_propagate(False) to allow natural expansion
+        self.columnconfigure(0, weight=1)
+        # Configure rows for proper expansion
+        for i in range(6):  # Increased to 6 rows for preset section
+            self.rowconfigure(i, weight=1 if i >= 2 else 0)  # Cards should expand, headers should not
 
         # --- Config Source Banner ---
         self.config_source_label = ttk.Label(self, text="Defaults", style="Banner.TLabel")
         self.config_source_label.grid(row=0, column=0, sticky="ew", pady=(0, 8))
 
-        # --- Packs Section ---
+        # --- Pipeline Preset Section ---
+        # Initialize preset data first
+        from src.utils.config import ConfigManager
+        self.config_manager = ConfigManager()
+        self.preset_names = self.config_manager.list_presets() if hasattr(self.config_manager, "list_presets") else []
+        self.preset_var = tk.StringVar(value=self.preset_names[0] if self.preset_names else "")
+
+        self.preset_label = ttk.Label(self, text="Pipeline Preset:", style="CardTitle.TLabel")
+        self.preset_label.grid(row=1, column=0, sticky="w", padx=8, pady=(0, 2))
+        self.preset_dropdown = ttk.Combobox(
+            self,
+            values=self.preset_names,
+            textvariable=self.preset_var,
+            state="readonly",
+            style="Dark.TCombobox"
+        )
+        self.preset_dropdown.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.preset_dropdown.bind("<<ComboboxSelected>>", self._on_preset_selected)
+
+        # --- Packs Section - HIDDEN ---
+        # Remove pack list combo and pack panel from layout
         from src.gui.prompt_pack_panel_v2 import PromptPackPanelV2
         from src.gui.prompt_pack_list_manager import PromptPackListManager
         self.pack_list_manager = PromptPackListManager()
         self.pack_list_names = self.pack_list_manager.get_list_names()
         self.pack_list_var = tk.StringVar(value=self.pack_list_names[0] if self.pack_list_names else "")
         self.pack_list_combo = ttk.Combobox(self, values=self.pack_list_names, textvariable=self.pack_list_var, state="readonly")
-        self.pack_list_combo.grid(row=1, column=0, sticky="ew", pady=(0, 4))
-        self.pack_list_combo.bind("<<ComboboxSelected>>", self._on_pack_list_selected)
+        # Hide the pack list combo
+        self.pack_list_combo.grid_remove()
 
         self.pack_panel = PromptPackPanelV2(self, packs=[], on_apply=self._on_apply_pack_clicked)
-        self.pack_panel.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        # Hide the pack panel
+        self.pack_panel.grid_remove()
 
-        # --- Presets Section ---
-        from src.utils.config import ConfigManager
-        self.config_manager = ConfigManager()
-        self.preset_names = self.config_manager.list_presets() if hasattr(self.config_manager, "list_presets") else []
-        self.preset_var = tk.StringVar(value=self.preset_names[0] if self.preset_names else "")
-        self.preset_dropdown = ttk.Combobox(self, values=self.preset_names, textvariable=self.preset_var, state="readonly")
-        self.preset_dropdown.grid(row=3, column=0, sticky="ew", pady=(0, 8))
-        self.preset_dropdown.bind("<<ComboboxSelected>>", self._on_preset_selected)
+        # --- Initial population --- (commented out since pack panel is hidden)
+        # self._populate_packs_for_selected_list()
 
-        # --- Initial population ---
-        self._populate_packs_for_selected_list()
+        # --- Create sidebar cards ---
+        self.global_negative_enabled_var: tk.BooleanVar = tk.BooleanVar(value=False)
+        self.global_negative_text_var: tk.StringVar = tk.StringVar(value="")
+
+        self.model_adapter = ModelListAdapterV2(lambda: getattr(self.controller, "client", None))
+        # TODO: Replace with actual sampler adapter if available
+        self.sampler_adapter = self.model_adapter
+
+        self.core_config_card = _SidebarCard(
+            self,
+            title="Core Config",
+            build_child=lambda parent: CoreConfigPanelV2(
+                parent,
+                show_label=False,
+                include_vae=True,
+                include_refresh=True,
+                model_adapter=self.model_adapter,
+                vae_adapter=self.model_adapter,
+                sampler_adapter=self.sampler_adapter
+            )
+        )
+        self.core_config_card.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 4))
+
+        self.output_settings_card = _SidebarCard(
+            self,
+            title="Output Settings",
+            build_child=lambda parent: OutputSettingsPanelV2(parent)
+        )
+        self.output_settings_card.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 4))
+
+        self.global_negative_card = _SidebarCard(
+            self,
+            title="Global Negative",
+            build_child=lambda parent: self._build_global_negative_section(parent)
+        )
+        self.global_negative_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
+
+        self.prompt_pack_card = _SidebarCard(
+            self,
+            title="Prompt Pack",
+            build_child=lambda parent: self._build_prompt_pack_section(parent)
+        )
+        self.prompt_pack_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
 
     def _on_pack_list_selected(self, event: object = None) -> None:
         self._populate_packs_for_selected_list()
@@ -125,71 +185,14 @@ class SidebarPanelV2(ttk.Frame):
 
     def _on_preset_selected(self, event: object = None) -> None:
         selected_preset = self.preset_var.get()
-        # Apply preset config via config manager
-        if hasattr(self.config_manager, "load_preset"):
-            self.config_manager.load_preset(selected_preset)
+        # Call controller method to handle preset selection
+        if self.controller and hasattr(self.controller, "on_preset_selected"):
+            try:
+                self.controller.on_preset_selected(selected_preset)
+            except Exception:
+                pass
         self.config_source_label.config(text=f"Preset: {selected_preset}")
         self.grid_columnconfigure(0, weight=1)
-
-
-        self.core_config_card = _SidebarCard(
-            self,
-            title="Core Config",
-            build_child=lambda parent: CoreConfigPanelV2(parent, show_label=False)
-        )
-        self.core_config_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
-
-
-        self.output_settings_card = _SidebarCard(
-            self,
-            title="Output Settings",
-            build_child=lambda parent: OutputSettingsPanelV2(parent)
-        )
-        self.output_settings_card.grid(row=6, column=0, sticky="ew", padx=8, pady=(0, 4))
-
-
-        self.global_negative_enabled_var: tk.BooleanVar = tk.BooleanVar(value=False)
-        self.global_negative_text_var: tk.StringVar = tk.StringVar(value="")
-
-        self.model_adapter = ModelListAdapterV2(lambda: getattr(self.controller, "client", None))
-        # TODO: Replace with actual sampler adapter if available
-        self.sampler_adapter = self.model_adapter
-        self.core_config_card = _SidebarCard(
-            self,
-            title="Core Config",
-            build_child=lambda parent: CoreConfigPanelV2(
-                parent,
-                show_label=False,
-                include_vae=True,
-                include_refresh=True,
-                model_adapter=self.model_adapter,
-                vae_adapter=self.model_adapter,
-                sampler_adapter=self.sampler_adapter
-            )
-        )
-        self.core_config_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
-
-        self.output_settings_card = _SidebarCard(
-            self,
-            title="Output Settings",
-            build_child=lambda parent: OutputSettingsPanelV2(parent)
-        )
-        self.output_settings_card.grid(row=6, column=0, sticky="ew", padx=8, pady=(0, 4))
-
-        self.global_negative_card = _SidebarCard(
-            self,
-            title="Global Negative",
-            build_child=lambda parent: self._build_global_negative_section(parent)
-        )
-        self.global_negative_card.grid(row=7, column=0, sticky="ew", padx=8, pady=(0, 4))
-
-
-        self.prompt_pack_card = _SidebarCard(
-            self,
-            title="Prompt Pack",
-            build_child=lambda parent: self._build_prompt_pack_section(parent)
-        )
-        self.prompt_pack_card.grid(row=8, column=0, sticky="ew", padx=8, pady=(0, 4))
 
     def _build_stages_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent, style="Panel.TFrame")
@@ -208,6 +211,8 @@ class SidebarPanelV2(ttk.Frame):
 
     def _build_prompt_pack_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
+
+        # Add the prompt pack panel
         packs = []
         if self.prompt_pack_adapter:
             try:

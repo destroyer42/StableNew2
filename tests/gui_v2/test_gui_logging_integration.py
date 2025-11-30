@@ -25,6 +25,12 @@ def test_build_v2_app_attaches_gui_log_handler() -> None:
     entries = list(handler.get_entries())
     assert isinstance(entries, list)
 
+    # Check that LogTracePanelV2 is present and has the handler
+    log_panel = getattr(window, "log_trace_panel_v2", None)
+    assert log_panel is not None
+    assert hasattr(log_panel, "_log_handler")
+    assert log_panel._log_handler is handler
+
     try:
         root.destroy()
     except Exception:
