@@ -317,8 +317,20 @@ class PipelineRunner:
         if config.preset_name:
             metadata["preset_name"] = config.preset_name
         pipeline_flags = base.setdefault("pipeline", {})
+        metadata_flag = (config.metadata or {}).get("adetailer_enabled")
+        if isinstance(metadata_flag, bool):
+            pipeline_flags["adetailer_enabled"] = metadata_flag
+        pipeline_flags.setdefault("adetailer_enabled", False)
+        up_enabled = pipeline_flags.get("upscale_enabled", False)
         upscale = base.setdefault("upscale", {})
-        upscale.setdefault("enabled", pipeline_flags.get("upscale_enabled", False))
+        upscale.setdefault("enabled", up_enabled)
+
+        ad_cfg = base.setdefault("adetailer", {})
+        metadata_adetailer = (config.metadata or {}).get("adetailer")
+        if isinstance(metadata_adetailer, dict):
+            ad_cfg.update(metadata_adetailer)
+        ad_cfg["enabled"] = pipeline_flags["adetailer_enabled"]
+        ad_cfg["adetailer_enabled"] = pipeline_flags["adetailer_enabled"]
 
         return base
 

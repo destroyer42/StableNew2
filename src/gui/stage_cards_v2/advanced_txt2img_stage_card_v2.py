@@ -9,6 +9,7 @@ from typing import Any
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
+from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 
 
 class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
@@ -43,7 +44,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 child.destroy()
         except Exception:
             pass
-        ttk.Label(self.sampler_section, text="Sampler", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
         sampler_resources = self.controller.list_upscalers() if self.controller and hasattr(self.controller, "list_upscalers") else []
         sampler_values = [r.display_name for r in sampler_resources] if sampler_resources else getattr(self.controller, "get_available_samplers", lambda: [])() if self.controller else ["Euler", "DPM++ 2M"]
         self.sampler_combo = ttk.Combobox(
@@ -52,10 +53,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=sampler_values,
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         )
         self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
-        ttk.Label(self.sampler_section, text="Steps", style="Muted.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
         self.steps_spin = tk.Spinbox(
             self.sampler_section,
             from_=1,
@@ -66,7 +68,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         )
         self.steps_spin.grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(self.sampler_section, text="CFG", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
+        ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
         self.cfg_spin = tk.Spinbox(
             self.sampler_section,
             from_=1.0,
@@ -81,9 +83,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
 
         # Model/vae/scheduler/clip/size
-        meta = ttk.Frame(parent, style="Panel.TFrame")
+        meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         meta.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        ttk.Label(meta, text="Model", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(meta, text="Model", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
         model_resources = self.controller.list_models() if self.controller and hasattr(self.controller, "list_models") else []
         model_display_names = [r.display_name for r in model_resources] if model_resources else ["sd_xl_base_1.0", "sd15"]
         self.model_combo = ttk.Combobox(
@@ -92,9 +94,10 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=model_display_names,
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         )
         self.model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(meta, text="VAE", style="Muted.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(meta, text="VAE", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
         vae_resources = self.controller.list_vaes() if self.controller and hasattr(self.controller, "list_vaes") else []
         vae_display_names = [r.display_name for r in vae_resources] if vae_resources else ["default"]
         self.vae_combo = ttk.Combobox(
@@ -103,6 +106,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=vae_display_names,
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         )
         self.vae_combo.grid(row=0, column=3, sticky="ew")
         # Map display_name to internal name for config
@@ -153,7 +157,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 if hasattr(last_run, "height"):
                     self.height_var.set(getattr(last_run, "height", 512))
 
-        ttk.Label(meta, text="Scheduler", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(meta, text="Scheduler", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))
         scheduler_values = getattr(self.controller, "get_available_schedulers", lambda: [])() if self.controller else ["Normal", "Karras"]
         self.scheduler_combo = ttk.Combobox(
             meta,
@@ -161,16 +165,17 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=scheduler_values,
             state="readonly",
             width=14,
+            style="Dark.TCombobox",
         )
         self.scheduler_combo.grid(row=1, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(meta, text="Clip skip", style="Muted.TLabel").grid(row=1, column=2, sticky="w", pady=(6, 2))
+        ttk.Label(meta, text="Clip skip", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
         self.clip_skip_spin = tk.Spinbox(meta, from_=1, to=8, increment=1, textvariable=self.clip_skip_var, width=6)
         self.clip_skip_spin.grid(row=1, column=3, sticky="ew")
 
-        ttk.Label(meta, text="Width", style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(row=2, column=0, sticky="w", pady=(6, 2))
         self.width_spin = tk.Spinbox(meta, from_=64, to=4096, increment=64, textvariable=self.width_var, width=8)
         self.width_spin.grid(row=2, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(meta, text="Height", style="Muted.TLabel").grid(row=2, column=2, sticky="w", pady=(6, 2))
+        ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE).grid(row=2, column=2, sticky="w", pady=(6, 2))
         self.height_spin = tk.Spinbox(meta, from_=64, to=4096, increment=64, textvariable=self.height_var, width=8)
         self.height_spin.grid(row=2, column=3, sticky="ew")
         for col in range(4):

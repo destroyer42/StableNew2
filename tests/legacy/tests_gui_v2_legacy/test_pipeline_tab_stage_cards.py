@@ -22,13 +22,13 @@ def test_pipeline_tab_hosts_advanced_stage_cards():
         tab = PipelineTabFrame(root)
         panel = tab.stage_cards_panel
 
-        assert isinstance(panel.txt2img_card._child, AdvancedTxt2ImgStageCardV2)
-        assert isinstance(panel.img2img_card._child, AdvancedImg2ImgStageCardV2)
-        assert isinstance(panel.upscale_card._child, AdvancedUpscaleStageCardV2)
+        assert isinstance(panel.txt2img_card, AdvancedTxt2ImgStageCardV2)
+        assert isinstance(panel.img2img_card, AdvancedImg2ImgStageCardV2)
+        assert isinstance(panel.upscale_card, AdvancedUpscaleStageCardV2)
 
         # Spot-check a couple of expected controls on the txt2img and img2img cards
-        assert hasattr(panel.txt2img_card._child, "sampler_section")
-        assert hasattr(panel.img2img_card._child, "denoise_var")
+        assert hasattr(panel.txt2img_card, "sampler_section")
+        assert hasattr(panel.img2img_card, "denoise_var")
     finally:
         try:
             root.destroy()
@@ -47,8 +47,8 @@ def test_pipeline_tab_syncs_overrides_into_state_manager():
         dummy_ctrl = type("C", (), {"state_manager": StateManager()})()
         tab = PipelineTabFrame(root, pipeline_controller=dummy_ctrl)
         # Simulate user edits
-        tab.stage_cards_panel.txt2img_card._child.model_var.set("sdxl")
-        tab.stage_cards_panel.txt2img_card._child.width_var.set("768")
+        tab.stage_cards_panel.txt2img_card.model_var.set("sdxl")
+        tab.stage_cards_panel.txt2img_card.width_var.set("768")
         tab._sync_state_overrides()
         overrides = dummy_ctrl.state_manager.get_pipeline_overrides()
         assert overrides.get("model_name") == "sdxl"

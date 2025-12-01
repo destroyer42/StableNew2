@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 from src.api.client import SDWebUIClient
 from src.api.webui_resources import WebUIResourceService as BaseWebUIResourceService
@@ -18,11 +18,15 @@ class WebUIResourceService(BaseWebUIResourceService):
         vaes = self.list_vaes() or []
         samplers = self._normalize_sampler_names(self.client.get_samplers() or [])
         schedulers = list(self.client.get_schedulers() or [])
+        adetailer_models = self.list_adetailer_models()
+        adetailer_detectors = self.list_adetailer_detectors()
         return {
             "models": models,
             "vaes": vaes,
             "samplers": samplers,
             "schedulers": schedulers,
+            "adetailer_models": adetailer_models,
+            "adetailer_detectors": adetailer_detectors,
         }
 
     @staticmethod
@@ -48,3 +52,21 @@ class WebUIResourceService(BaseWebUIResourceService):
             seen.add(name)
             values.append(name)
         return values
+
+    def list_adetailer_models(self) -> list[str]:
+        getter = getattr(self.client, "get_adetailer_models", None)
+        if callable(getter):
+            try:
+                return [str(item).strip() for item in getter() or [] if str(item).strip()]
+            except Exception:
+                pass
+        return []
+
+    def list_adetailer_detectors(self) -> list[str]:
+        getter = getattr(self.client, "get_adetailer_detectors", None)
+        if callable(getter):
+            try:
+                return [str(item).strip() for item in getter() or [] if str(item).strip()]
+            except Exception:
+                pass
+        return []

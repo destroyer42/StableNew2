@@ -29,6 +29,8 @@ def _create_root() -> tk.Tk:
         pytest.fail(f"Tkinter unavailable for journey test: {exc}")
 
 
+@pytest.mark.journey
+@pytest.mark.slow
 def test_jt02_lora_embedding_integration():
     """JT-02: Validate LoRA and embedding integration from Prompt to Pipeline tabs."""
 

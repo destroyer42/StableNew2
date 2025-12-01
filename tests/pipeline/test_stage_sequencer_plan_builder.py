@@ -58,3 +58,9 @@ def test_plan_builder_includes_adetailer_before_upscale():
     assert [s.stage_type for s in plan.stages] == ["txt2img", "adetailer", "upscale"]
     assert plan.stages[1].requires_input_image is True
     assert plan.stages[2].order_index == 2
+
+
+def test_plan_builder_excludes_adetailer_by_default():
+    cfg = _base_config()
+    plan = build_stage_execution_plan(cfg)
+    assert all(stage.stage_type != "adetailer" for stage in plan.stages)

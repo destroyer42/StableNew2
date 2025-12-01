@@ -51,14 +51,31 @@ New code should use `get_logger(__name__)` and `log_with_ctx` for pipeline/API l
   - WebUI connection state.
 - Driven by controller/pipeline events, not raw log messages.
 
-### 4.2 LogTracePanelV2 (Detailed trace lane)
+LogTracePanelV2 (Detailed trace lane)
 
 - Collapsible panel, hidden by default.
 - Backed by `InMemoryLogHandler` attached during GUI boot.
 - Shows:
   - Recent log entries (level + message).
   - Filter options: ALL / WARN+ / ERROR.
+- Refreshes automatically every second to show new logs.
 - Intended for developers/power users troubleshooting issues.
+
+---
+
+## 8. V2 GUI Log Panel Behavior
+
+The app always attaches InMemoryLogHandler when the V2 GUI starts.
+
+MainWindowV2 always creates LogTracePanelV2 when gui_log_handler is present.
+
+Users can expect:
+
+The bottom panel to show recent logs.
+
+Logs from WebUI, pipeline, and GUI events to appear there.
+
+Auto-scroll is enabled for new entries.
 
 ---
 

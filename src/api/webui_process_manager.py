@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import os
-import subprocess
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Mapping, Any
-from pathlib import Path
+import os
+import platform
+import signal
+import subprocess
 import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Mapping
 
 from src.utils import get_logger, LogContext, log_with_ctx
 
@@ -69,6 +71,7 @@ class WebUIProcessManager:
         self._last_exit_code: int | None = None
         self._start_time: float | None = None
         self._health_cache: bool | None = None
+        self._pid: int | None = None
 
     @property
     def process(self) -> subprocess.Popen | None:
@@ -145,6 +148,7 @@ class WebUIProcessManager:
                 stderr=subprocess.PIPE,
                 shell=os.name == "nt" and self._config.command[0].endswith(".bat"),  # Use shell for .bat files on Windows
             )
+            self._pid = self._process.pid
             self._start_time = time.time()
             # Log process output in background
             import threading
@@ -165,23 +169,79 @@ class WebUIProcessManager:
     def stop(self) -> None:
         """Attempt to terminate the process if running."""
 
-        if not self._process:
-            return
-
-        if self.is_running():
-            try:
-                self._process.terminate()
-                self._process.wait(timeout=5)
-            except Exception:
-                try:
-                    self._process.kill()
-                except Exception:
-                    pass
-        self._last_exit_code = self._process.poll()
-        self._process = None
+        self.stop_webui()
 
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
+
+    def shutdown(self, grace_seconds: float = 10.0) -> bool:
+        return self.stop_webui(grace_seconds)
+
+    def stop_webui(self, grace_seconds: float = 10.0) -> bool:
+        """Attempt to stop (gracefully then forcefully) the WebUI process."""
+
+        process = self._process
+        if process is None:
+            return True
+        if process.poll() is not None:
+            self._finalize_process(process)
+            return True
+        pid = getattr(process, "pid", None)
+        logger.info("Initiating WebUI shutdown (pid=%s, grace=%.1fs)", pid, grace_seconds)
+        try:
+            process.terminate()
+        except Exception:
+            pass
+
+        elapsed = 0.0
+        interval = min(0.25, max(0.05, grace_seconds / 40.0))
+        while elapsed < grace_seconds:
+            if process.poll() is not None:
+                break
+            time.sleep(interval)
+            elapsed += interval
+
+        if process.poll() is None:
+            try:
+                process.kill()
+            except Exception:
+                pass
+            try:
+                process.wait(timeout=2.0)
+            except Exception:
+                pass
+            if process.poll() is None:
+                self._kill_process_tree(getattr(process, "pid", None))
+
+        self._finalize_process(process)
+        exit_code = self._last_exit_code
+        running = self.is_running()
+        logger.info(
+            "WebUI shutdown complete (pid=%s, exit_code=%s, running=%s)",
+            getattr(process, "pid", None),
+            exit_code,
+            running,
+        )
+        return not self.is_running()
+
+    def _finalize_process(self, process: subprocess.Popen) -> None:
+        try:
+            if process.stdout:
+                process.stdout.close()
+        except Exception:
+            pass
+        try:
+            if process.stderr:
+                process.stderr.close()
+        except Exception:
+            pass
+        try:
+            self._last_exit_code = process.poll()
+        except Exception:
+            self._last_exit_code = None
+        finally:
+            self._process = None
+            self._pid = None
 
     def get_status(self) -> dict[str, Any]:
         return {
@@ -192,6 +252,28 @@ class WebUIProcessManager:
             "command": list(self._config.command),
             "working_dir": self._config.working_dir,
         }
+
+    @property
+    def pid(self) -> int | None:
+        return self._pid
+
+    def _kill_process_tree(self, pid: int | None) -> None:
+        if pid is None:
+            return
+        try:
+            if platform.system() == "Windows":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    check=False,
+                    capture_output=True,
+                )
+            else:
+                try:
+                    os.killpg(pid, signal.SIGTERM)
+                except Exception:
+                    os.kill(pid, signal.SIGTERM)
+        except Exception:
+            logger.exception("Failed to kill WebUI process tree for pid %s", pid)
 
 
 def detect_default_webui_workdir(base_dir: str | None = None) -> str | None:

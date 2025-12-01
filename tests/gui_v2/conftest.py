@@ -41,6 +41,10 @@ DEFAULT_UPSCALE_CFG = {
     "denoising_strength": 0.35,
 }
 
+simpledialog_stub = SimpleNamespace(
+    askstring=lambda *args, **kwargs: None,
+)
+
 
 class DummyConfigManager:
     def __init__(self):

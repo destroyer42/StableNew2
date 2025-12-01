@@ -1,176 +1,206 @@
-# Renamed from stage_cards_panel.py to stage_cards_panel_v2.py
-# ...existing code...
-
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable, Any
+from typing import Any, Callable
 
 from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_upscale_stage_card_v2 import AdvancedUpscaleStageCardV2
-
-
-class _StageCard(ttk.Frame):
-	"""Wrapper that provides a header toggle around a real stage card."""
-
-	def __init__(
-		self,
-		master: tk.Misc,
-		title: str,
-		*,
-		build_child: Callable[[ttk.Frame], ttk.Frame],
-		on_change: Callable[[], None] | None = None,
-		**kwargs,
-	) -> None:
-		super().__init__(master, **kwargs)
-		self.columnconfigure(0, weight=1)
-		self._on_change = on_change
-
-		header = ttk.Frame(self)
-		header.grid(row=0, column=0, sticky="ew")
-		header.columnconfigure(0, weight=1)
-		ttk.Label(header, text=title).grid(row=0, column=0, sticky="w")
-		self.toggle_btn = ttk.Button(header, text="Hide", width=8, command=self._toggle_body)
-		self.toggle_btn.grid(row=0, column=1, sticky="e")
-
-		self.body = ttk.Frame(self, padding=6, style="Panel.TFrame")
-		self.body.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
-		child = build_child(self.body)
-		child.pack(fill="both", expand=True)
-		self._child = child
-		self._bind_watchers()
-		self._visible = True
-
-	def _toggle_body(self) -> None:
-		if self._visible:
-			self.body.grid_remove()
-			self.toggle_btn.config(text="Show")
-		else:
-			self.body.grid()
-			self.toggle_btn.config(text="Hide")
-		self._visible = not self._visible
-
-	def _bind_watchers(self) -> None:
-		"""Attach variable traces if the child exposes watchable_vars()."""
-		if not self._on_change:
-			return
-		try:
-			watchable = getattr(self._child, "watchable_vars", None)
-			if callable(watchable):
-				for var in watchable() or []:
-					try:
-						var.trace_add("write", lambda *_: self._on_change())
-					except Exception:
-						pass
-		except Exception:
-			pass
+from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
+from src.gui.zone_map_v2 import get_pipeline_stage_order
 
 
 class StageCardsPanel(ttk.Frame):
-	"""Container for pipeline stage cards."""
+    """Container for the pipeline stage cards."""
 
-	def __init__(
-		self,
-		master: tk.Misc,
-		controller=None,
-		theme=None,
-		on_change: Callable[[], None] | None = None,
-		*args,
-		**kwargs,
-	) -> None:
-		super().__init__(master, *args, **kwargs)
-		self.columnconfigure(0, weight=1)
-		self._on_change = on_change
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        controller=None,
+        theme=None,
+        app_state: Any | None = None,
+        on_change: Callable[[], None] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(master, **kwargs)
+        self.columnconfigure(0, weight=1)
+        self._on_change = on_change
+        self.app_state = app_state
+        self._stage_order = get_pipeline_stage_order() or ["txt2img", "adetailer", "img2img", "upscale"]
+        self.stage_order: list[str] = []
+        self._stage_builders: dict[str, Callable[[tk.Misc], ttk.Frame]] = {
+            "txt2img": lambda parent: AdvancedTxt2ImgStageCardV2(parent, controller=controller, theme=theme),
+            "img2img": lambda parent: AdvancedImg2ImgStageCardV2(parent, controller=controller, theme=theme),
+            "adetailer": lambda parent: ADetailerStageCardV2(parent, theme=theme),
+            "upscale": lambda parent: AdvancedUpscaleStageCardV2(parent, controller=controller, theme=theme),
+        }
+        self._stage_cards: dict[str, ttk.Frame] = {}
+        for stage_name in self._stage_order:
+            builder = self._stage_builders.get(stage_name)
+            if not builder:
+                continue
+            card = builder(self)
+            self._stage_cards[stage_name] = card
+            setattr(self, f"{stage_name}_card", card)
+            self.stage_order.append(stage_name)
+        self._layout_stage_cards()
+        self._attach_watchers()
+        self._adetailer_listeners: list[Callable[[dict[str, Any]], None]] = []
+        self._attach_adetailer_watchers()
+        if self.app_state is not None:
+            try:
+                self.app_state.add_resource_listener(self._on_app_state_resources_changed)
+            except Exception:
+                pass
+            try:
+                self.app_state.subscribe("resources", self._on_app_state_resources_changed)
+            except Exception:
+                pass
+            self._on_app_state_resources_changed(self.app_state.resources)
 
-		self.txt2img_card = _StageCard(
-			self,
-			title="txt2img Stage",
-			build_child=lambda parent: AdvancedTxt2ImgStageCardV2(parent, controller=controller, theme=theme),
-			on_change=self._on_change,
-		)
-		self.img2img_card = _StageCard(
-			self,
-			title="img2img / ADetailer Stage",
-			build_child=lambda parent: AdvancedImg2ImgStageCardV2(parent, controller=controller, theme=theme),
-			on_change=self._on_change,
-		)
-		self.upscale_card = _StageCard(
-			self,
-			title="Upscale Stage",
-			build_child=lambda parent: AdvancedUpscaleStageCardV2(parent, controller=controller, theme=theme),
-			on_change=self._on_change,
-		)
+    def _layout_stage_cards(self) -> None:
+        last_idx = len(self.stage_order) - 1
+        for idx, stage_name in enumerate(self.stage_order):
+            card = self._stage_cards.get(stage_name)
+            if not card:
+                continue
+            pady = (0, 0) if idx == last_idx else (0, 6)
+            card.grid(row=idx, column=0, sticky="nsew", pady=pady)
+        for idx in range(len(self.stage_order)):
+            self.rowconfigure(idx, weight=1)
 
-		self.txt2img_card.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
-		self.img2img_card.grid(row=1, column=0, sticky="nsew", pady=(0, 6))
-		self.upscale_card.grid(row=2, column=0, sticky="nsew")
+    def _attach_watchers(self) -> None:
+        if not callable(self._on_change):
+            return
+        for card in self._stage_cards.values():
+            watcher = getattr(card, "watchable_vars", None)
+            if not callable(watcher):
+                continue
+            for var in watcher() or []:
+                try:
+                    var.trace_add("write", lambda *_: self._on_change())
+                except Exception:
+                    pass
 
-		self.rowconfigure(0, weight=1)
-		self.rowconfigure(1, weight=1)
-		self.rowconfigure(2, weight=1)
+    def _attach_adetailer_watchers(self) -> None:
+        card = getattr(self, "adetailer_card", None)
+        if card is None:
+            return
+        watchable = getattr(card, "watchable_vars", None)
+        if not callable(watchable):
+            return
+        for var in watchable() or []:
+            try:
+                var.trace_add("write", lambda *_: self._notify_adetailer_listeners())
+            except Exception:
+                pass
+        self._notify_adetailer_listeners()
 
-		# Propagate change callbacks to cards that expose a setter
-		try:
-			setter = getattr(self.txt2img_card._child, "set_on_change", None)
-			if callable(setter):
-				setter(lambda: self._on_change() if self._on_change else None)
-		except Exception:
-			pass
+    def _notify_adetailer_listeners(self) -> None:
+        if not self._adetailer_listeners:
+            return
+        config = self.collect_adetailer_config()
+        for listener in list(self._adetailer_listeners):
+            try:
+                listener(config)
+            except Exception:
+                pass
 
-	def set_stage_enabled(self, stage: str, enabled: bool) -> None:
-		mapping = {
-			"txt2img": self.txt2img_card,
-			"img2img": self.img2img_card,
-			"upscale": self.upscale_card,
-		}
-		card = mapping.get(stage)
-		if not card:
-			return
-		if enabled and not card._visible:
-			card._toggle_body()
-		elif not enabled and card._visible:
-			card._toggle_body()
+    def set_stage_enabled(self, stage: str, enabled: bool) -> None:
+        card = self._stage_cards.get(stage)
+        if not card:
+            return
+        currently = bool(card.winfo_ismapped())
+        if enabled and not currently:
+            card.grid()
+        elif not enabled and currently:
+            card.grid_remove()
+        self._apply_stage_visibility()
 
-	def to_overrides(self, prompt_text: str | None = None) -> dict[str, Any]:
-		"""Flatten stage card configs into a GuiOverrides-friendly dict."""
-		overrides: dict[str, Any] = {}
-		txt_cfg = getattr(self.txt2img_card, "_child", None)
-		if txt_cfg:
-			try:
-				section = txt_cfg.to_config_dict().get("txt2img", {}) or {}
-				overrides.update(
-					{
-						"prompt": prompt_text or "",
-						"model": section.get("model", ""),
-						"model_name": section.get("model", ""),
-						"vae_name": section.get("vae", ""),
-						"sampler": section.get("sampler_name", ""),
-						"steps": int(section.get("steps", 20) or 20),
-						"cfg_scale": float(section.get("cfg_scale", 7.0) or 7.0),
-						"width": int(section.get("width", 512) or 512),
-						"height": int(section.get("height", 512) or 512),
-					}
-				)
-			except Exception:
-				pass
+    def to_overrides(self, prompt_text: str | None = None) -> dict[str, Any]:
+        overrides: dict[str, Any] = {}
+        txt_cfg = getattr(self, "txt2img_card", None)
+        if txt_cfg and hasattr(txt_cfg, "to_config_dict"):
+            try:
+                section = txt_cfg.to_config_dict().get("txt2img", {}) or {}
+                overrides.update(
+                    {
+                        "prompt": prompt_text or "",
+                        "model": section.get("model", ""),
+                        "model_name": section.get("model", ""),
+                        "vae_name": section.get("vae", ""),
+                        "sampler": section.get("sampler_name", ""),
+                        "steps": int(section.get("steps", 20) or 20),
+                        "cfg_scale": float(section.get("cfg_scale", 7.0) or 7.0),
+                        "width": int(section.get("width", 512) or 512),
+                        "height": int(section.get("height", 512) or 512),
+                    }
+                )
+            except Exception:
+                pass
+        metadata: dict[str, Any] = {}
+        img_cfg = getattr(self, "img2img_card", None)
+        if img_cfg and hasattr(img_cfg, "to_config_dict"):
+            try:
+                metadata["img2img"] = img_cfg.to_config_dict().get("img2img", {})
+            except Exception:
+                metadata["img2img"] = {}
+        up_cfg = getattr(self, "upscale_card", None)
+        if up_cfg and hasattr(up_cfg, "to_config_dict"):
+            try:
+                metadata["upscale"] = up_cfg.to_config_dict().get("upscale", {})
+            except Exception:
+                metadata["upscale"] = {}
+        if metadata:
+            overrides["metadata"] = metadata
+        return overrides
 
-		metadata: dict[str, Any] = {}
-		img_cfg = getattr(self.img2img_card, "_child", None)
-		if img_cfg:
-			try:
-				metadata["img2img"] = img_cfg.to_config_dict().get("img2img", {})
-			except Exception:
-				metadata["img2img"] = {}
-		up_cfg = getattr(self.upscale_card, "_child", None)
-		if up_cfg:
-			try:
-				metadata["upscale"] = up_cfg.to_config_dict().get("upscale", {})
-			except Exception:
-				metadata["upscale"] = {}
-		if metadata:
-			overrides["metadata"] = metadata
-		return overrides
+    def collect_adetailer_config(self) -> dict[str, Any]:
+        card = getattr(self, "adetailer_card", None)
+        if not card or not hasattr(card, "to_config_dict"):
+            return {}
+        try:
+            return dict(card.to_config_dict())
+        except Exception:
+            return {}
+
+    def load_adetailer_config(self, config: dict[str, Any]) -> None:
+        card = getattr(self, "adetailer_card", None)
+        if not card or not hasattr(card, "load_from_dict"):
+            return
+        try:
+            card.load_from_dict(config)
+        except Exception:
+            pass
+
+    def add_adetailer_listener(self, listener: Callable[[dict[str, Any]], None]) -> None:
+        if listener not in self._adetailer_listeners:
+            self._adetailer_listeners.append(listener)
+        try:
+            listener(self.collect_adetailer_config())
+        except Exception:
+            pass
+
+    def apply_resource_update(self, resources: dict[str, list[Any]] | None) -> None:
+        if not resources:
+            return
+        for card in self._stage_cards.values():
+            updater = getattr(card, "apply_resource_update", None)
+            if callable(updater):
+                try:
+                    updater(resources)
+                except Exception:
+                    pass
+
+    def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None = None) -> None:
+        if resources is None and self.app_state is not None:
+            try:
+                resources = self.app_state.resources
+            except Exception:
+                resources = None
+        self.apply_resource_update(resources)
+
 
 StageCardsPanel = StageCardsPanel

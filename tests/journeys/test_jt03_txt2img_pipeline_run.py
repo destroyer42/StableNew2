@@ -31,6 +31,8 @@ def _create_root() -> tk.Tk:
         pytest.fail(f"Tkinter unavailable for journey test: {exc}")
 
 
+@pytest.mark.journey
+@pytest.mark.slow
 def test_jt03_txt2img_pipeline_run():
     """JT-03: Validate complete txt2img generation flow using Pipeline tab."""
 

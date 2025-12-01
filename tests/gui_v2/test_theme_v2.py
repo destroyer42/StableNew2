@@ -9,7 +9,7 @@ def test_apply_theme_sets_styles():
     except Exception as exc:  # pragma: no cover - Tk may be unavailable
         pytest.skip(f"Tk not available: {exc}")
 
-    from src.gui.theme_v2 import apply_theme
+    from src.gui.theme_v2 import apply_theme, CARD_FRAME_STYLE, BODY_LABEL_STYLE, PRIMARY_BUTTON_STYLE
 
     root = tk.Tk()
     try:
@@ -21,5 +21,10 @@ def test_apply_theme_sets_styles():
         assert style.lookup("Primary.TButton", "background") != ""
         assert style.lookup("Panel.TFrame", "background") != ""
         assert style.lookup("StatusBar.TFrame", "background") != ""
+        
+        # Test new canonical styles
+        assert style.lookup(CARD_FRAME_STYLE, "background") != ""
+        assert style.lookup(BODY_LABEL_STYLE, "foreground") != ""
+        assert style.lookup(PRIMARY_BUTTON_STYLE, "background") != ""
     finally:
         root.destroy()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from . import theme as theme_mod
+from src.gui.theme_v2 import SURFACE_FRAME_STYLE, STATUS_LABEL_STYLE, STATUS_STRONG_LABEL_STYLE, PADDING_SM
 from .api_status_panel import APIStatusPanel, resolve_webui_state_display
 from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 
@@ -14,27 +14,24 @@ class StatusBarV2(ttk.Frame):
     """Status/ETA/progress container."""
 
     def __init__(self, master: tk.Misc, *, controller=None, theme=None, app_state=None, **kwargs) -> None:
-        style_name = getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
-        super().__init__(master, style=style_name, padding=theme_mod.PADDING_SM, **kwargs)
+        super().__init__(master, style=SURFACE_FRAME_STYLE, padding=PADDING_SM, **kwargs)
         self.controller = controller
         self.theme = theme
         self._has_validation_error = False
         self.app_state = app_state
-        header_style = getattr(theme, "STATUS_LABEL_STYLE", theme_mod.STATUS_LABEL_STYLE)
-        self.header_label = ttk.Label(self, text="Status", style=header_style)
+        self.header_label = ttk.Label(self, text="Status", style=STATUS_LABEL_STYLE)
         self.header_label.pack(anchor=tk.W)
 
-        body_style = getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
-        self.body = ttk.Frame(self, style=body_style)
+        self.body = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         self.body.pack(fill=tk.BOTH, expand=True)
 
-        self.body_left = ttk.Frame(self.body, style=body_style)
+        self.body_left = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
         self.body_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         self.status_label = ttk.Label(
             self.body_left,
             text="Idle",
-            style=getattr(theme, "STATUS_STRONG_LABEL_STYLE", theme_mod.STATUS_STRONG_LABEL_STYLE),
+            style=STATUS_STRONG_LABEL_STYLE,
         )
         self.status_label.pack(side=tk.LEFT, padx=(0, 10))
 
@@ -51,12 +48,12 @@ class StatusBarV2(ttk.Frame):
         self.eta_label = ttk.Label(
             self.body_left,
             text="",
-            style=getattr(theme, "STATUS_LABEL_STYLE", theme_mod.STATUS_LABEL_STYLE),
+            style=STATUS_LABEL_STYLE,
         )
         self.eta_label.pack(side=tk.LEFT, padx=10)
 
         # WebUI status/controls on the right side of the same bar
-        self.webui_panel = APIStatusPanel(self.body, style=body_style)
+        self.webui_panel = APIStatusPanel(self.body, style=SURFACE_FRAME_STYLE)
         self.webui_panel.pack(side=tk.RIGHT, padx=(8, 0))
 
         self._webui_controller: WebUIConnectionController | None = None

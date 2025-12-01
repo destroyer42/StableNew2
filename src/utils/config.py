@@ -3,8 +3,9 @@
 import json
 import logging
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
     "blurry, bad quality, distorted, ugly, malformed, nsfw, nude, naked, explicit, "
@@ -12,6 +13,7 @@ DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
 )
 
 logger = logging.getLogger(__name__)
+LAST_RUN_PATH = Path("state/last_run_v2.json")
 
 
 def _normalize_scheduler_name(scheduler: str | None) -> str | None:
@@ -62,6 +64,39 @@ def build_sampler_scheduler_payload(
         payload["sampler_name"] = sampler
 
     return payload
+
+
+@dataclass(frozen=True)
+class LoraRuntimeConfig:
+    """Lightweight runtime configuration for a LoRA block."""
+
+    name: str
+    strength: float = 1.0
+    enabled: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LoraRuntimeConfig":
+        return cls(
+            name=str(data.get("name", "") or "").strip(),
+            strength=float(data.get("strength", 1.0) or 1.0),
+            enabled=bool(data.get("enabled", True)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "strength": self.strength, "enabled": self.enabled}
+
+
+def normalize_lora_strengths(raw: Iterable[dict[str, Any]] | None) -> list[LoraRuntimeConfig]:
+    if not raw:
+        return []
+    configs: list[LoraRuntimeConfig] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        config = LoraRuntimeConfig.from_dict(entry)
+        if config.name:
+            configs.append(config)
+    return configs
 
 
 class ConfigManager:
@@ -244,19 +279,20 @@ class ConfigManager:
                 "codeformer_visibility": 0.0,  # Face restoration alternative
                 "codeformer_weight": 0.5,  # CodeFormer fidelity
             },
-        "adetailer": {
-            "adetailer_enabled": False,
-            "adetailer_model": "face_yolov8n.pt",
-            "adetailer_confidence": 0.3,
-            "adetailer_mask_feather": 4,
-            "adetailer_sampler": "DPM++ 2M",
-            "adetailer_scheduler": "inherit",
-            "adetailer_steps": 28,
-            "adetailer_denoise": 0.4,
-            "adetailer_cfg": 7.0,
-            "adetailer_prompt": "",
-            "adetailer_negative_prompt": "",
-            },
+            "adetailer": {
+                "enabled": False,
+                "adetailer_enabled": False,
+                "adetailer_model": "face_yolov8n.pt",
+                "adetailer_confidence": 0.3,
+                "adetailer_mask_feather": 4,
+                "adetailer_sampler": "DPM++ 2M",
+                "adetailer_scheduler": "inherit",
+                "adetailer_steps": 28,
+                "adetailer_denoise": 0.4,
+                "adetailer_cfg": 7.0,
+                "adetailer_prompt": "",
+                "adetailer_negative_prompt": "",
+                },
             "video": {"fps": 24, "codec": "libx264", "quality": "medium"},
             "api": {"base_url": "http://127.0.0.1:7860", "timeout": 300},
             "randomization": {
@@ -309,6 +345,9 @@ class ConfigManager:
                 "apply_global_negative_upscale": True,
                 "apply_global_negative_adetailer": True,
             },
+            "randomization_enabled": False,
+            "max_variants": 1,
+            "lora_strengths": [],
         }
 
     def resolve_config(
@@ -710,3 +749,28 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to clear default preset: {e}")
             return False
+
+    def write_last_run(self, payload: dict[str, Any]) -> None:
+        """Persist the last-run payload so the GUI can restore it later."""
+
+        if not payload:
+            return
+        try:
+            LAST_RUN_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with LAST_RUN_PATH.open("w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
+            logger.info("Last run configuration written to %s", LAST_RUN_PATH)
+        except Exception as exc:
+            logger.warning("Failed to write last run configuration: %s", exc)
+
+    def load_last_run(self) -> dict[str, Any] | None:
+        """Read the previously saved last-run payload."""
+
+        if not LAST_RUN_PATH.exists():
+            return None
+        try:
+            with LAST_RUN_PATH.open("r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception as exc:
+            logger.warning("Failed to load last run configuration: %s", exc)
+            return None

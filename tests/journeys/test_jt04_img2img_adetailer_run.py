@@ -28,6 +28,8 @@ def _create_root():
         pytest.fail(f"Tkinter unavailable for journey test: {exc}")
 
 
+@pytest.mark.journey
+@pytest.mark.slow
 def test_jt04_img2img_adetailer_pipeline_run():
     """JT-04: Validate img2img and ADetailer pipeline transformation."""
 

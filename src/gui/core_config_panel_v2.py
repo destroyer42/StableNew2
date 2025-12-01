@@ -7,10 +7,11 @@ from tkinter import ttk
 from typing import Iterable
 
 from src.config import app_config
-from src.gui.resolution_panel_v2 import ResolutionPanelV2
+from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
+from src.gui.theme_v2 import BODY_LABEL_STYLE, PRIMARY_BUTTON_STYLE
 
 
-class CoreConfigPanelV2(ttk.Frame):
+class CoreConfigPanelV2(BaseStageCardV2):
     """Expose core pipeline fields (model, sampler, steps, cfg, resolution)."""
 
     def __init__(
@@ -20,70 +21,124 @@ class CoreConfigPanelV2(ttk.Frame):
         models: Iterable[str] | None = None,
         vaes: Iterable[str] | None = None,
         samplers: Iterable[str] | None = None,
-        show_label: bool = True,
         include_vae: bool = False,
         include_refresh: bool = False,
-        model_adapter: object = None,
-        vae_adapter: object = None,
-        sampler_adapter: object = None,
+        model_adapter: object | None = None,
+        vae_adapter: object | None = None,
+        sampler_adapter: object | None = None,
+        show_header: bool = True,
+        **kwargs: object,
     ) -> None:
-        super().__init__(master, style="Panel.TFrame", padding=8)
+        self._include_vae = include_vae
+        self._include_refresh = include_refresh
+        self._model_adapter = model_adapter
+        self._vae_adapter = vae_adapter
+        self._sampler_adapter = sampler_adapter
+        self._models = models
+        self._vaes = vaes
+        self._samplers = samplers
 
-        # Vars seeded from app_config defaults
         self.model_var = tk.StringVar(value=app_config.get_core_model_name())
         self.vae_var = tk.StringVar(value=app_config.get_core_vae_name())
         self.sampler_var = tk.StringVar(value=app_config.get_core_sampler_name())
         self.steps_var = tk.StringVar(value=str(app_config.get_core_steps()))
         self.cfg_var = tk.StringVar(value=str(app_config.get_core_cfg_scale()))
-
-        self._model_adapter = model_adapter
-        self._vae_adapter = vae_adapter
-        self._sampler_adapter = sampler_adapter
-
-        if show_label:
-            ttk.Label(self, text="Core Config", style="Heading.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        self.width_var = tk.StringVar(value="768")
+        self.height_var = tk.StringVar(value="768")
+        self.resolution_preset_var = tk.StringVar(value="768x768")
+        self.ratio_var = tk.StringVar(value="1:1")
 
         self._model_combo: ttk.Combobox | None = None
         self._vae_combo: ttk.Combobox | None = None
         self._sampler_combo: ttk.Combobox | None = None
-        row_idx = 1
-        self._model_combo = self._build_combo(self.model_var, [])
-        if models:
-            self._model_combo["values"] = tuple(models)
+
+        super().__init__(master, title="Core Config", show_header=show_header, **kwargs)
+
+    def _build_body(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=0)
+        parent.columnconfigure(1, weight=1)
+        parent.columnconfigure(2, weight=0)
+        parent.columnconfigure(3, weight=1)
+
+        row_idx = 0
+        self._model_combo = self._build_combo(parent, self.model_var, [])
+        if self._models:
+            self._model_combo["values"] = tuple(self._models)
         else:
             self._model_combo["values"] = tuple(self._names_from_adapter(self._model_adapter, "get_model_names"))
-        self._build_row("Model", self._model_combo, row_idx)
+        self._build_row(parent, "Model", self._model_combo, row_idx)
         row_idx += 1
-        if include_vae:
-            self._vae_combo = self._build_combo(self.vae_var, [])
-            if vaes:
-                self._vae_combo["values"] = tuple(vaes)
+
+        if self._include_vae:
+            self._vae_combo = self._build_combo(parent, self.vae_var, [])
+            if self._vaes:
+                self._vae_combo["values"] = tuple(self._vaes)
             else:
                 self._vae_combo["values"] = tuple(self._names_from_adapter(self._vae_adapter, "get_vae_names"))
-            self._build_row("VAE", self._vae_combo, row_idx)
-            if include_refresh:
-                refresh_btn = ttk.Button(self, text="Refresh", style="Primary.TButton", command=self._on_refresh)
-                refresh_btn.grid(row=row_idx, column=2, sticky="e", padx=(8, 0), pady=(0, 4))
+            self._build_row(parent, "VAE", self._vae_combo, row_idx)
             row_idx += 1
-        self._sampler_combo = self._build_combo(self.sampler_var, [])
-        if samplers:
-            self._sampler_combo["values"] = tuple(samplers)
+
+        self._sampler_combo = self._build_combo(parent, self.sampler_var, [])
+        if self._samplers:
+            self._sampler_combo["values"] = tuple(self._samplers)
         else:
             self._sampler_combo["values"] = tuple(self._names_from_adapter(self._sampler_adapter, "get_sampler_names"))
-        self._build_row("Sampler", self._sampler_combo, row_idx)
-        row_idx += 1
-        self._build_row("Steps", self._build_spin(self.steps_var, from_=1, to=200, increment=1), row_idx)
-        row_idx += 1
-        self._build_row("CFG", self._build_spin(self.cfg_var, from_=0.0, to=30.0, increment=0.5), row_idx)
+        self._build_row(parent, "Sampler", self._sampler_combo, row_idx)
         row_idx += 1
 
-        # Resolution sub-panel
-        self.resolution_panel = ResolutionPanelV2(self)
-        self.resolution_var = self.resolution_panel.preset_var
-        self.resolution_panel.grid(row=row_idx, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        self._build_row(
+            parent,
+            "Steps",
+            self._build_spin(parent, self.steps_var, from_=1, to=200, increment=1),
+            row_idx,
+        )
+        row_idx += 1
+        self._build_row(
+            parent,
+            "CFG",
+            self._build_spin(parent, self.cfg_var, from_=0.0, to=30.0, increment=0.5),
+            row_idx,
+        )
+        row_idx += 1
 
-        self.columnconfigure(1, weight=1)
-        self.columnconfigure(2, weight=1)
+        # Width and height controls share additional columns
+        width_label = ttk.Label(parent, text="Width", style=BODY_LABEL_STYLE)
+        width_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
+        width_spin = self._build_spin(parent, self.width_var, from_=64, to=4096, increment=64)
+        width_spin.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
+
+        height_label = ttk.Label(parent, text="Height", style=BODY_LABEL_STYLE)
+        height_label.grid(row=row_idx, column=2, sticky="w", padx=(8, 8), pady=(0, 4))
+        height_spin = self._build_spin(parent, self.height_var, from_=64, to=4096, increment=64)
+        height_spin.grid(row=row_idx, column=3, sticky="ew", pady=(0, 4))
+        row_idx += 1
+
+        preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
+        preset_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
+        preset_combo = self._build_combo(
+            parent,
+            self.resolution_preset_var,
+            ["512x512", "640x640", "768x768", "832x1216", "896x1152", "1024x1024", "1152x896"],
+        )
+        preset_combo.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
+        preset_combo.bind("<<ComboboxSelected>>", self._on_resolution_preset_selected)
+
+        ratio_label = ttk.Label(parent, text="Ratio", style=BODY_LABEL_STYLE)
+        ratio_label.grid(row=row_idx, column=2, sticky="w", padx=(8, 8), pady=(0, 4))
+        ratio_combo = self._build_combo(
+            parent,
+            self.ratio_var,
+            ["1:1", "4:3", "3:4", "16:9", "9:16", "21:9", "9:21"],
+        )
+        ratio_combo.grid(row=row_idx, column=3, sticky="ew", pady=(0, 4))
+        row_idx += 1
+
+    def _on_resolution_preset_selected(self, event: object = None) -> None:
+        preset = self.resolution_preset_var.get()
+        if preset in ["512x512", "640x640", "768x768", "832x1216", "896x1152", "1024x1024", "1152x896"]:
+            width, height = map(int, preset.split("x"))
+            self.width_var.set(str(width))
+            self.height_var.set(str(height))
 
     def _on_refresh(self) -> None:
         self.refresh_from_adapters()
@@ -124,44 +179,45 @@ class CoreConfigPanelV2(ttk.Frame):
         else:
             variable.set("")
 
-    def _build_row(self, label: str, widget: tk.Widget, row_idx: int) -> None:
-        label_widget = ttk.Label(self, text=label, style="Dark.TLabel")
+    def _build_row(self, parent: ttk.Frame, label: str, widget: tk.Widget, row_idx: int) -> None:
+        label_widget = ttk.Label(parent, text=label, style=BODY_LABEL_STYLE)
         label_widget.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
         widget.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
 
-    def _build_combo(self, variable: tk.StringVar, values: Iterable[str]) -> ttk.Combobox:
+    def _build_combo(self, parent: ttk.Frame, variable: tk.StringVar, values: Iterable[str]) -> ttk.Combobox:
         combo = ttk.Combobox(
-            self,
+            parent,
             textvariable=variable,
             values=tuple(values),
             state="readonly",
-            style="Dark.TCombobox"
+            style="Dark.TCombobox",
         )
         return combo
 
-    def _build_spin(self, variable: tk.StringVar, *, from_: float, to: float, increment: float) -> ttk.Spinbox:
+    def _build_spin(
+        self,
+        parent: ttk.Frame,
+        variable: tk.StringVar,
+        *,
+        from_: float,
+        to: float,
+        increment: float,
+    ) -> ttk.Spinbox:
         spin = ttk.Spinbox(
-            self,
+            parent,
             from_=from_,
             to=to,
             increment=increment,
             textvariable=variable,
-            style="Dark.TEntry"
         )
         return spin
 
     def get_overrides(self) -> dict[str, object]:
         """Return current core config overrides as a dict suitable for GuiOverrides."""
 
-        width, height = self.resolution_panel.get_resolution() if self.resolution_panel else (512, 512)
-        preset = self.resolution_panel.get_preset_label() if self.resolution_panel else ""
-        if preset:
-            try:
-                w_str, h_str = preset.lower().replace(" ", "").split("x", 1)
-                width = int(w_str)
-                height = int(h_str)
-            except Exception:
-                pass
+        width = self._safe_int(self.width_var.get(), 768)
+        height = self._safe_int(self.height_var.get(), 768)
+        preset = self.resolution_preset_var.get().strip()
         return {
             "model": self.model_var.get().strip(),
             "sampler": self.sampler_var.get().strip(),
@@ -170,6 +226,7 @@ class CoreConfigPanelV2(ttk.Frame):
             "resolution_preset": preset,
             "width": width,
             "height": height,
+            "ratio": self.ratio_var.get().strip(),
         }
 
     def apply_from_overrides(self, overrides: dict[str, object]) -> None:
@@ -179,17 +236,21 @@ class CoreConfigPanelV2(ttk.Frame):
         self.sampler_var.set(str(overrides.get("sampler", self.sampler_var.get())))
         self.steps_var.set(str(overrides.get("steps", self.steps_var.get())))
         self.cfg_var.set(str(overrides.get("cfg_scale", self.cfg_var.get())))
+        ratio = overrides.get("ratio")
+        if ratio:
+            self.ratio_var.set(str(ratio))
         width = overrides.get("width")
         height = overrides.get("height")
         preset = overrides.get("resolution_preset")
-        if self.resolution_panel:
-            if preset:
-                self.resolution_panel.apply_preset(str(preset))
-            if width is not None and height is not None:
-                try:
-                    self.resolution_panel.set_resolution(int(float(str(width))), int(float(str(height))))
-                except Exception:
-                    pass
+        if preset:
+            self.resolution_preset_var.set(str(preset))
+            self._on_resolution_preset_selected()
+        if width is not None and height is not None:
+            try:
+                self.width_var.set(str(int(float(str(width)))))
+                self.height_var.set(str(int(float(str(height)))))
+            except Exception:
+                pass
 
     @staticmethod
     def _safe_int(value: object, default: int) -> int:

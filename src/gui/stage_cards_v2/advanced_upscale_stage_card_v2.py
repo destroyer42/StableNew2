@@ -8,6 +8,7 @@ from typing import Any
 
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.validation_result import ValidationResult
+from src.gui.theme_v2 import BODY_LABEL_STYLE
 
 
 class AdvancedUpscaleStageCardV2(BaseStageCardV2):
@@ -27,38 +28,40 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         self.tile_size_var = tk.IntVar(value=0)
         self.face_restore_var = tk.BooleanVar(value=False)
 
-        ttk.Label(parent, text="Upscaler", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(parent, text="Upscaler", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
         ttk.Combobox(
             parent,
             textvariable=self.upscaler_var,
             values=["R-ESRGAN 4x+", "4x-UltraSharp", "Remacri"],
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         ).grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
-        ttk.Label(parent, text="Mode", style="Muted.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(parent, text="Mode", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
         ttk.Combobox(
             parent,
             textvariable=self.mode_var,
             values=["single", "batch"],
             state="readonly",
             width=12,
+            style="Dark.TCombobox",
         ).grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(parent, text="Steps", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))
         tk.Spinbox(parent, from_=1, to=150, increment=1, textvariable=self.steps_var, width=8).grid(
             row=1, column=1, sticky="ew", padx=(0, 8)
         )
-        ttk.Label(parent, text="Denoise", style="Muted.TLabel").grid(row=1, column=2, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Denoise", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
         tk.Spinbox(parent, from_=0.0, to=1.0, increment=0.05, textvariable=self.denoise_var, width=8).grid(
             row=1, column=3, sticky="ew"
         )
 
-        ttk.Label(parent, text="Scale", style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Scale", style=BODY_LABEL_STYLE).grid(row=2, column=0, sticky="w", pady=(6, 2))
         tk.Spinbox(parent, from_=1.0, to=4.0, increment=0.1, textvariable=self.factor_var, width=8).grid(
             row=2, column=1, sticky="ew", padx=(0, 8)
         )
-        ttk.Label(parent, text="Tile size", style="Muted.TLabel").grid(row=2, column=2, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Tile size", style=BODY_LABEL_STYLE).grid(row=2, column=2, sticky="w", pady=(6, 2))
         tk.Spinbox(parent, from_=0, to=4096, increment=16, textvariable=self.tile_size_var, width=8).grid(
             row=2, column=3, sticky="ew"
         )

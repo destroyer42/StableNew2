@@ -42,8 +42,8 @@ def test_pipeline_dropdown_refresh_updates_stage_cards():
 
     app_state.set_resources(resources)
 
-    txt_card = tab.stage_cards_panel.txt2img_card._child
-    img_card = tab.stage_cards_panel.img2img_card._child
+    txt_card = tab.stage_cards_panel.txt2img_card
+    img_card = tab.stage_cards_panel.img2img_card
 
     assert list(txt_card.model_combo["values"]) == resources["models"]
     assert list(txt_card.vae_combo["values"]) == resources["vaes"]

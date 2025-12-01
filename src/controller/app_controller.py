@@ -16,25 +16,39 @@ will be wired in later via a PipelineRunner abstraction.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Callable, Optional
+import os
 import threading
+import time
 
 from src.api.client import SDWebUIClient
 from src.api.webui_resource_service import WebUIResourceService
 from src.api.webui_resources import WebUIResource
 from src.api.webui_process_manager import WebUIProcessManager
 from src.pipeline.last_run_store_v2_5 import LastRunConfigV2_5
+from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.main_window_v2 import MainWindow
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
+from src.config.app_config import is_debug_shutdown_inspector_enabled
 from src.utils import StructuredLogger
-from src.utils.config import ConfigManager
+from src.utils.config import ConfigManager, LoraRuntimeConfig, normalize_lora_strengths
+from src.utils.debug_shutdown_inspector import log_shutdown_state
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
+from src.utils import InMemoryLogHandler
+from src.gui.app_state_v2 import PackJobEntry, AppStateV2
+from src.controller.job_service import JobService
+from src.queue.job_model import Job
+from src.queue.job_queue import JobQueue
+from src.queue.single_node_runner import SingleNodeJobRunner
+from src.queue.job_history_store import JSONLJobHistoryStore
 
 import logging
+import uuid
 logger = logging.getLogger(__name__)
 
 
@@ -65,6 +79,7 @@ class RunConfig:
     steps: int = 30
     cfg_scale: float = 7.5
     randomization_enabled: bool = False
+    max_variants: int = 1
     # Future fields:
     # matrix_config, adetailer_config, video_config, etc.
 
@@ -137,10 +152,8 @@ class AppController:
     def list_embeddings(self) -> list[WebUIResource]:
         return self.resource_service.list_embeddings()
 
-    def get_last_run_config(self) -> LastRunConfigV2_5 | None:
-        if not hasattr(self, "_last_run_store"):
-            from src.pipeline.last_run_store_v2_5 import LastRunStoreV2_5
-        return self._last_run_store.load()
+    def get_gui_log_handler(self) -> Optional[InMemoryLogHandler]:
+        return self.gui_log_handler
     def run_txt2img_once(self, config: dict[str, Any] | None = None) -> None:
         self._append_log("[controller] run_txt2img_once called.")
         if config is None:
@@ -176,7 +189,7 @@ class AppController:
 
     def __init__(
         self,
-        main_window: MainWindow,
+        main_window: MainWindow | None,
         pipeline_runner: Optional[PipelineRunner] = None,
         threaded: bool = True,
         packs_dir: Path | str | None = None,
@@ -185,12 +198,17 @@ class AppController:
         webui_process_manager: WebUIProcessManager | None = None,
         config_manager: ConfigManager | None = None,
         resource_service: WebUIResourceService | None = None,
+        job_service: JobService | None = None,
     ) -> None:
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
         self.state = AppState()
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
+        self._dropdown_loader = DropdownLoader(self._config_manager)
+        self._last_executor_config: dict[str, Any] | None = None
+        self._last_run_snapshot: dict[str, Any] | None = None
+        self._last_run_auto_restored = False
 
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
@@ -206,10 +224,30 @@ class AppController:
         self._cancel_token: Optional[CancelToken] = None
         self._worker_thread: Optional[threading.Thread] = None
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
+        self._job_history_path = Path("runs") / "job_history.json"
+        self.job_service = job_service or self._build_job_service()
+        self._is_shutting_down = False
         self.packs: list[PromptPackInfo] = []
         self._selected_pack_index: Optional[int] = None
 
+        # GUI log handler for LogTracePanelV2
+        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
+        root_logger = logging.getLogger()
+        if root_logger.level > logging.INFO or root_logger.level == logging.NOTSET:
+            root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(self.gui_log_handler)
+
         # Let the GUI wire its callbacks to us
+        if self.main_window is not None:
+            self._attach_to_gui()
+            if hasattr(self.main_window, "connect_controller"):
+                self.main_window.connect_controller(self)
+        self._setup_queue_callbacks()
+
+    def set_main_window(self, main_window: MainWindow) -> None:
+        """Set the main window and wire GUI callbacks."""
+        self.main_window = main_window
+        self.app_state = getattr(main_window, "app_state", None)
         self._attach_to_gui()
         if hasattr(self.main_window, "connect_controller"):
             self.main_window.connect_controller(self)
@@ -241,10 +279,15 @@ class AppController:
         header.help_button.configure(command=self.on_help_clicked)
 
         # Left zone events
-        left.load_pack_button.configure(command=self.on_load_pack)
-        left.edit_pack_button.configure(command=self.on_edit_pack)
-        left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
-        left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
+        if hasattr(left, "load_config_button"):
+            # New V2 _PackLoaderCompat - buttons are already wired in the UI class
+            pass
+        else:
+            # Legacy LeftZone wiring
+            left.load_pack_button.configure(command=self.on_load_pack)
+            left.edit_pack_button.configure(command=self.on_edit_pack)
+            left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
+            left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
 
         # Initial API status (placeholder)
         bottom.api_status_label.configure(text="API: Unknown")
@@ -252,6 +295,81 @@ class AppController:
         # Flush deferred status if any
         if getattr(self, "_pending_status_text", None):
             self._update_status(self._pending_status_text)
+
+    # ------------------------------------------------------------------
+    # Queue & JobService helpers (PR-039B)
+    # ------------------------------------------------------------------
+
+    def _build_job_service(self) -> JobService:
+        self._job_history_path.parent.mkdir(parents=True, exist_ok=True)
+        history_store = JSONLJobHistoryStore(self._job_history_path)
+        job_queue = JobQueue(history_store=history_store)
+        runner = SingleNodeJobRunner(
+            job_queue,
+            run_callable=self._execute_job,
+            poll_interval=0.05,
+        )
+        return JobService(job_queue, runner, history_store)
+
+    def _setup_queue_callbacks(self) -> None:
+        if not self.job_service:
+            return
+        self.job_service.register_callback(JobService.EVENT_QUEUE_UPDATED, self._on_queue_updated)
+        self.job_service.register_callback(JobService.EVENT_QUEUE_STATUS, self._on_queue_status_changed)
+        self.job_service.register_callback(JobService.EVENT_JOB_STARTED, self._on_job_started)
+        self.job_service.register_callback(JobService.EVENT_JOB_FINISHED, self._on_job_finished)
+        self.job_service.register_callback(JobService.EVENT_JOB_FAILED, self._on_job_failed)
+        self.job_service.register_callback(JobService.EVENT_QUEUE_EMPTY, self._on_queue_empty)
+        self._refresh_job_history()
+
+    def _execute_job(self, job: Job) -> dict[str, Any]:
+        self._append_log(f"[queue] Executing job {job.job_id} with payload {job.payload}")
+        return {"job_id": job.job_id, "status": "executed"}
+
+    def _on_queue_updated(self, summaries: list[str]) -> None:
+        if not self.app_state:
+            return
+        self.app_state.set_queue_items(summaries)
+
+    def _on_queue_status_changed(self, status: str) -> None:
+        if not self.app_state:
+            return
+        self.app_state.set_queue_status(status)
+
+    def _on_job_started(self, job: Job) -> None:
+        if not self.app_state:
+            return
+        self.app_state.set_running_job(job.to_dict())
+
+    def _on_job_finished(self, job: Job) -> None:
+        if self.app_state:
+            self.app_state.set_running_job(None)
+        self._refresh_job_history()
+
+    def _on_job_failed(self, job: Job) -> None:
+        if self.app_state:
+            self.app_state.set_running_job(None)
+        self._refresh_job_history()
+
+    def _on_queue_empty(self) -> None:
+        if self.app_state:
+            self.app_state.set_queue_status("idle")
+
+    def refresh_job_history(self, limit: int | None = None) -> None:
+        """Trigger a manual history refresh (exposed to GUI)."""
+        self._refresh_job_history(limit=limit)
+
+    def _refresh_job_history(self, limit: int | None = None) -> None:
+        if not self.app_state or not self.job_service:
+            return
+        store = getattr(self.job_service, "history_store", None)
+        if store is None:
+            return
+        try:
+            entries = store.list_jobs(limit=limit or 20)
+        except Exception:
+            entries = []
+        self.app_state.set_history_items(entries)
 
     def on_open_settings(self) -> None:
         self._append_log("[controller] Opening settings dialog.")
@@ -503,8 +621,10 @@ class AppController:
 
     def _run_pipeline_thread(self, cancel_token: CancelToken) -> None:
         try:
-            pipeline_config = self._build_pipeline_config()
+            pipeline_config = self.build_pipeline_config_v2()
             self._append_log_threadsafe("[controller] Starting pipeline execution.")
+            executor_config = self.pipeline_runner._build_executor_config(pipeline_config)
+            self._cache_last_run_payload(executor_config, pipeline_config)
             self.pipeline_runner.run(pipeline_config, cancel_token, self._append_log_threadsafe)
 
             if cancel_token.is_cancelled():
@@ -525,6 +645,110 @@ class AppController:
             self._set_lifecycle_threadsafe(LifecycleState.ERROR, error=str(exc))
             cancel_token.clear_stop_requirement()
 
+    def _cache_last_run_payload(self, executor_config: dict[str, Any], pipeline_config: PipelineConfig) -> None:
+        if not executor_config:
+            return
+        snapshot = self._run_config_with_lora()
+        payload: dict[str, Any] = {
+            "executor_config": deepcopy(executor_config),
+            "run_config_snapshot": snapshot,
+            "prompt": pipeline_config.prompt,
+            "pack_name": pipeline_config.pack_name,
+            "preset_name": pipeline_config.preset_name,
+        }
+        self._last_executor_config = payload["executor_config"]
+        self._last_run_snapshot = snapshot
+        try:
+            self._config_manager.write_last_run(payload)
+        except Exception:
+            pass
+
+    def get_last_run_config(self) -> dict[str, Any] | None:
+        """Expose the last executor payload captured for the GUI helpers."""
+
+        return self._last_executor_config
+
+    def restore_last_run(self, *, force: bool = False) -> None:
+        """Restore UI settings from disk and the cached payload."""
+
+        if self._last_run_auto_restored and not force:
+            return
+        payload = self._config_manager.load_last_run()
+        if not payload:
+            return
+        executor_config = payload.get("executor_config")
+        if not isinstance(executor_config, dict):
+            return
+        run_snapshot = payload.get("run_config_snapshot")
+        if isinstance(run_snapshot, dict):
+            self._last_run_snapshot = run_snapshot
+        self._last_executor_config = executor_config
+        self._apply_last_run_payload(executor_config, run_snapshot)
+        if not force:
+            self._last_run_auto_restored = True
+
+    def _apply_last_run_payload(
+        self,
+        executor_config: dict[str, Any],
+        run_snapshot: dict[str, Any] | None,
+    ) -> None:
+        stage_panel = self._get_stage_cards_panel()
+        if stage_panel:
+            for card_name in ("txt2img", "img2img", "upscale"):
+                card = getattr(stage_panel, f"{card_name}_card", None)
+                self._load_stage_card(card, executor_config)
+            stage_panel.load_adetailer_config(executor_config.get("adetailer") or {})
+
+        sidebar = self._get_sidebar_panel()
+        pipeline_section = executor_config.get("pipeline") or {}
+        stage_defaults = {
+            "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
+            "img2img": bool(pipeline_section.get("img2img_enabled", True)),
+            "adetailer": bool(pipeline_section.get("adetailer_enabled", False)),
+            "upscale": bool(pipeline_section.get("upscale_enabled", False)),
+        }
+        for stage, enabled in stage_defaults.items():
+            self._set_sidebar_stage_state(stage, enabled)
+        self._refresh_stage_visibility()
+
+        ad_config = executor_config.get("adetailer") or {}
+        ad_enabled = bool(pipeline_section.get("adetailer_enabled") or ad_config.get("enabled"))
+        if self.app_state:
+            self.app_state.set_adetailer_enabled(ad_enabled)
+            snapshot = dict(ad_config)
+            snapshot["enabled"] = ad_enabled
+            self.app_state.set_adetailer_config(snapshot)
+
+        pipeline_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+        if run_snapshot and pipeline_panel and hasattr(pipeline_panel, "apply_run_config"):
+            pipeline_panel.apply_run_config(run_snapshot)
+        if self.app_state and isinstance(run_snapshot, dict):
+            self.app_state.set_run_config(dict(run_snapshot))
+
+    def _refresh_stage_visibility(self) -> None:
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab and hasattr(pipeline_tab, "_handle_sidebar_change"):
+            try:
+                pipeline_tab._handle_sidebar_change()
+            except Exception:
+                pass
+
+    def _set_sidebar_stage_state(self, stage: str, enabled: bool) -> None:
+        sidebar = self._get_sidebar_panel()
+        if not sidebar:
+            return
+        sidebar.set_stage_state(stage, enabled, emit_change=False)
+
+    def _load_stage_card(self, _card: Any | None, executor_config: dict[str, Any]) -> None:
+        if _card is None:
+            return
+        child = getattr(_card, "_child", None)
+        loader = getattr(child, "load_from_config", None)
+        if callable(loader):
+            try:
+                loader(executor_config)
+            except Exception:
+                pass
     def on_stop_clicked(self) -> None:
         """
         Called when the user presses STOP.
@@ -572,6 +796,10 @@ class AppController:
         self._append_log("[controller] Help clicked (stub).")
         # TODO: open docs/README in browser or show help overlay.
 
+    def on_refresh_clicked(self) -> None:
+        self._append_log("[controller] Refresh clicked.")
+        self.refresh_resources_from_webui()
+
     def stop_all_background_work(self) -> None:
         """Best-effort shutdown used by GUI teardown to avoid late Tk calls."""
         try:
@@ -582,6 +810,10 @@ class AppController:
         worker_alive = self._worker_thread is not None and self._worker_thread.is_alive()
         if worker_alive:
             try:
+                self._worker_thread.join(timeout=2.0)
+            except Exception:
+                pass
+            try:
                 self._worker_thread = None
             except Exception:
                 pass
@@ -589,6 +821,138 @@ class AppController:
             self.state.lifecycle = LifecycleState.IDLE
         except Exception:
             pass
+
+    def shutdown_app(self, reason: str | None = None) -> None:
+        """Centralized shutdown path invoked by GUI teardown or main_finally."""
+        if self._is_shutting_down:
+            return
+        self._is_shutting_down = True
+        if self._shutdown_started_at is None:
+            self._shutdown_started_at = time.time()
+            threading.Thread(target=self._shutdown_watchdog, daemon=True).start()
+        label = reason or "shutdown"
+        logger.info("[controller] shutdown_app called (%s)", label)
+
+        try:
+            self._cancel_active_jobs(label)
+        except Exception:
+            logger.exception("Error cancelling active jobs during shutdown")
+
+        try:
+            self.stop_all_background_work()
+        except Exception:
+            logger.exception("Error stopping background work during shutdown")
+
+        try:
+            self._shutdown_learning_hooks()
+        except Exception:
+            logger.exception("Error shutting down learning hooks")
+
+        try:
+            self._shutdown_webui()
+        except Exception:
+            logger.exception("Error shutting down WebUI")
+        try:
+            self._shutdown_job_service()
+        except Exception:
+            logger.exception("Error shutting down job service")
+
+        if is_debug_shutdown_inspector_enabled():
+            try:
+                log_shutdown_state(logger, label)
+            except Exception:
+                logger.exception("Error running shutdown inspector")
+
+        self._shutdown_completed = True
+        try:
+            self._join_worker_thread()
+        except Exception:
+            logger.exception("Error waiting for worker thread during shutdown")
+
+    def _cancel_active_jobs(self, reason: str) -> None:
+        if self._cancel_token is not None:
+            try:
+                self._append_log(f"[shutdown] Cancelling pipeline ({reason}).")
+                self._cancel_token.cancel()
+                self._cancel_token.clear_stop_requirement()
+            except Exception:
+                pass
+        if self.job_service is not None:
+            try:
+                self.job_service.cancel_current()
+            except Exception:
+                logger.exception("Error cancelling job service current job")
+
+    def _join_worker_thread(self) -> None:
+        if self._worker_thread is None:
+            return
+        if self._worker_thread.is_alive():
+            try:
+                self._worker_thread.join(timeout=2.0)
+            except Exception:
+                pass
+        self._worker_thread = None
+
+    def _shutdown_learning_hooks(self) -> None:
+        learning_ctrl = getattr(self, "learning_controller", None)
+        if not learning_ctrl:
+            return
+        for attr in ("shutdown", "stop", "close"):
+            method = getattr(learning_ctrl, attr, None)
+            if callable(method):
+                try:
+                    method()
+                except Exception:
+                    logger.exception("Learning controller %s failed during shutdown", attr)
+                break
+
+    def _shutdown_webui(self) -> None:
+        manager = self.webui_process_manager
+        if not manager:
+            return
+        stop_fn = getattr(manager, "stop_webui", None) or getattr(manager, "shutdown", None) or getattr(manager, "stop", None)
+        if callable(stop_fn):
+            def _stop_and_log() -> None:
+                pid = getattr(manager, "pid", None)
+                logger.info("Calling stop_webui for PID %s", pid)
+                try:
+                    result = stop_fn()
+                    running = manager.is_running()
+                    exit_code = getattr(manager, "_last_exit_code", None)
+                    logger.info(
+                        "WebUI shutdown result: running=%s, last_exit_code=%s, stop_return=%s",
+                        running,
+                        exit_code,
+                        result,
+                    )
+                except Exception:
+                    logger.exception("Error stopping WebUI")
+
+            try:
+                threading.Thread(target=_stop_and_log, daemon=True).start()
+            except Exception:
+                logger.exception("Error stopping WebUI process")
+
+    def _shutdown_job_service(self) -> None:
+        svc = getattr(self, "job_service", None)
+        if not svc:
+            return
+        runner = getattr(svc, "runner", None)
+        if runner and hasattr(runner, "stop"):
+            try:
+                runner.stop()
+            except Exception:
+                logger.exception("Error stopping job runner")
+
+    def _shutdown_watchdog(self) -> None:
+        timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "8"))
+        hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
+        time.sleep(timeout)
+        if not self._shutdown_completed:
+            logger.error("Shutdown watchdog triggered after %.1fs (completed=%s)", timeout, self._shutdown_completed)
+            if hard_exit:
+                logger.error("Hard exit forced due to shutdown hang.")
+                os._exit(1)
 
     # ------------------------------------------------------------------
     # Packs / Presets
@@ -601,8 +965,112 @@ class AppController:
 
     def on_preset_selected(self, preset_name: str) -> None:
         self._append_log(f"[controller] Preset selected: {preset_name}")
-        self.state.current_config.preset_name = preset_name
-        # TODO: load preset JSON, update GUI fields, etc.
+        # selection should not immediately mutate config; wait for action
+
+    def apply_preset_to_run_config(self, preset_config: dict[str, Any], preset_name: str) -> None:
+        """Apply preset configuration to the current run config."""
+        try:
+            # Update AppStateV2 run_config
+            if self.app_state is not None:
+                try:
+                    self.app_state.set_run_config(preset_config)
+                except Exception:
+                    pass
+                else:
+                    self._apply_randomizer_from_config(preset_config)
+            
+            # Extract core config fields from preset and apply to core config panel
+            core_overrides = self._extract_core_overrides_from_preset(preset_config)
+            if core_overrides:
+                self._apply_core_overrides(core_overrides)
+            
+            # Update PipelineConfigPanelV2 if available
+            pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+            if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
+                try:
+                    pipeline_config_panel.apply_run_config(preset_config)
+                except Exception:
+                    pass
+            
+            self._append_log(f"[controller] Applied preset '{preset_name}' to run config")
+            self._apply_adetailer_config_section(preset_config)
+            
+        except Exception as e:
+            self._append_log(f"[controller] Error applying preset '{preset_name}': {e}")
+
+    def _extract_core_overrides_from_preset(self, preset_config: dict[str, Any]) -> dict[str, Any]:
+        """Extract core configuration overrides from preset config."""
+        overrides = {}
+        
+        # Get txt2img config as primary source
+        txt2img_config = preset_config.get("txt2img", {})
+        
+        # Extract model
+        if "model" in txt2img_config and txt2img_config["model"]:
+            overrides["model"] = txt2img_config["model"]
+        
+        # Extract sampler
+        if "sampler_name" in txt2img_config and txt2img_config["sampler_name"]:
+            overrides["sampler"] = txt2img_config["sampler_name"]
+        
+        # Extract steps
+        if "steps" in txt2img_config:
+            try:
+                overrides["steps"] = int(txt2img_config["steps"])
+            except (ValueError, TypeError):
+                pass
+        
+        # Extract cfg_scale
+        if "cfg_scale" in txt2img_config:
+            try:
+                overrides["cfg_scale"] = float(txt2img_config["cfg_scale"])
+            except (ValueError, TypeError):
+                pass
+        
+        # Extract resolution
+        if "width" in txt2img_config and "height" in txt2img_config:
+            try:
+                width = int(txt2img_config["width"])
+                height = int(txt2img_config["height"])
+                overrides["width"] = width
+                overrides["height"] = height
+                # Create a preset label for common resolutions
+                if width == 512 and height == 512:
+                    overrides["resolution_preset"] = "512x512"
+                elif width == 768 and height == 768:
+                    overrides["resolution_preset"] = "768x768"
+                elif width == 1024 and height == 1024:
+                    overrides["resolution_preset"] = "1024x1024"
+                else:
+                    overrides["resolution_preset"] = f"{width}x{height}"
+            except (ValueError, TypeError):
+                pass
+        
+        return overrides
+
+    def _apply_core_overrides(self, overrides: dict[str, Any]) -> None:
+        """Apply core configuration overrides to the core config panel."""
+        try:
+            # Find the core config panel in the sidebar
+            pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+            if pipeline_tab is None:
+                return
+            
+            sidebar_panel = getattr(pipeline_tab, "sidebar", None)
+            if sidebar_panel is None:
+                return
+            
+            core_config_panel = getattr(sidebar_panel, "get_core_config_panel", lambda: None)()
+            if core_config_panel is None:
+                return
+            
+            # Apply the overrides
+            if hasattr(core_config_panel, "apply_from_overrides"):
+                core_config_panel.apply_from_overrides(overrides)
+                self._append_log(f"[controller] Applied core config overrides: {overrides}")
+                
+        except Exception as e:
+            self._append_log(f"[controller] Error applying core config overrides: {e}")
 
     def _on_pack_list_select(self, event) -> None:  # type: ignore[override]
         lb = self.main_window.left_zone.packs_list
@@ -627,12 +1095,19 @@ class AppController:
         pack = self.packs[index]
         self._append_log(f"[controller] Pack selected: {pack.name}")
 
-    def _get_selected_pack(self) -> Optional[PromptPackInfo]:
+    def _find_pack_by_id(self, pack_id: str) -> Optional[PromptPackInfo]:
+        """Find a pack by its ID (name)."""
+        for pack in self.packs:
+            if pack.name == pack_id:
+                return pack
+        return None
+
+    def _get_selected_pack(self) -> PromptPackInfo | None:
         if self._selected_pack_index is None:
             return None
-        if self._selected_pack_index < 0 or self._selected_pack_index >= len(self.packs):
-            return None
-        return self.packs[self._selected_pack_index]
+        if 0 <= self._selected_pack_index < len(self.packs):
+            return self.packs[self._selected_pack_index]
+        return None
 
     def on_load_pack(self) -> None:
         pack = self._get_selected_pack()
@@ -678,11 +1153,24 @@ class AppController:
 
     # --- V2.5 resource discovery wiring ---
     # Duplicate resource list methods removed; use the main definitions above.
+    def get_available_models(self) -> list[str]:
+        resources = getattr(self.state, "resources", {})
+        raw_models = list(resources.get("models") or [])
+        names = [getattr(entry, "name", str(entry)) or str(entry) for entry in raw_models]
+        return names or ["StableNew-XL"]
+
+    def get_available_samplers(self) -> list[str]:
+        resources = getattr(self.state, "resources", {})
+        raw_samplers = list(resources.get("samplers") or [])
+        names = [getattr(entry, "name", str(entry)) or str(entry) for entry in raw_samplers]
+        return names or ["Euler"]
+
     def get_current_config(self) -> dict[str, float | int | str]:
         cfg = self.state.current_config
         return {
             "model": cfg.model_name or self.get_available_models()[0],
             "sampler": cfg.sampler_name or self.get_available_samplers()[0],
+            "width": cfg.width,
             "height": cfg.height,
             "steps": cfg.steps,
             "cfg_scale": cfg.cfg_scale,
@@ -691,6 +1179,7 @@ class AppController:
         mapping = {
             "model": "model_name",
             "sampler": "sampler_name",
+            "width": "width",
             "height": "height",
             "steps": "steps",
             "cfg_scale": "cfg_scale",
@@ -717,12 +1206,21 @@ class AppController:
             setattr(cfg, attr, value)
             self._append_log(f"[controller] Config updated: {field}={value}")
 
+    def build_pipeline_config_v2(self) -> PipelineConfig:
+        """Build the pipeline configuration structure that drives the runner."""
+        return self._build_pipeline_config()
+
     def _build_pipeline_config(self) -> PipelineConfig:
         current = self.get_current_config()
         pack = self._get_selected_pack()
         prompt = self._get_active_prompt_text() or self._resolve_prompt_from_pack(pack) or current.get("prompt", "")
         if not prompt:
             prompt = (pack.name if pack else current.get("preset_name")) or "StableNew GUI Run"
+
+        metadata: dict[str, Any] = {}
+        if self.app_state:
+            metadata["adetailer_enabled"] = bool(self.app_state.adetailer_enabled)
+            metadata["adetailer"] = dict(self.app_state.adetailer_config or {})
 
         return PipelineConfig(
             prompt=prompt,
@@ -734,6 +1232,8 @@ class AppController:
             cfg_scale=float(current["cfg_scale"]),
             pack_name=pack.name if pack else None,
             preset_name=self.state.current_config.preset_name or None,
+            lora_settings=self._lora_settings_payload(),
+            metadata=metadata,
         )
 
     def _resolve_prompt_from_pack(self, pack: PromptPackInfo | None) -> str:
@@ -777,6 +1277,16 @@ class AppController:
     def on_randomization_toggled(self, enabled: bool) -> None:
         self._append_log(f"[controller] Randomization toggled: {enabled}")
         self.state.current_config.randomization_enabled = enabled
+        self._update_run_config_randomizer(enabled=enabled)
+
+    def on_randomizer_max_variants_changed(self, value: int) -> None:
+        try:
+            normalized = max(1, int(value))
+        except (TypeError, ValueError):
+            normalized = 1
+        self._append_log(f"[controller] Randomizer max variants set to {normalized}")
+        self.state.current_config.max_variants = normalized
+        self._update_run_config_randomizer(max_variants=normalized)
 
     def on_matrix_base_prompt_changed(self, text: str) -> None:
         self._append_log("[controller] Matrix base prompt changed (stub).")
@@ -839,21 +1349,439 @@ class AppController:
         resources = self._empty_resource_map()
         for name in resources:
             resources[name] = list(payload.get(name) or [])
+        resources["adetailer_models"] = list(payload.get("adetailer_models") or [])
+        resources["adetailer_detectors"] = list(payload.get("adetailer_detectors") or [])
         return resources
 
     def _update_gui_dropdowns(self) -> None:
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab is None:
             return
-        panel = getattr(pipeline_tab, "stage_cards_panel", None)
-        if panel is None:
+        dropdowns = self._dropdown_loader.load_dropdowns(self, self.app_state)
+        self._dropdown_loader.apply_to_gui(pipeline_tab, dropdowns)
+
+    def _get_stage_cards_panel(self):
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab is None:
+            return None
+        return getattr(pipeline_tab, "stage_cards_panel", None)
+
+    def _get_sidebar_panel(self):
+        return getattr(self.main_window, "sidebar_panel_v2", None)
+
+    # ------------------------------------------------------------------
+    # Pipeline Pack Config & Job Builder (PR-035)
+    # ------------------------------------------------------------------
+
+    def _maybe_set_app_state_lora_strengths(self, config: dict[str, Any]) -> None:
+        if not self.app_state:
             return
-        updater = getattr(panel, "apply_resource_update", None)
-        if callable(updater):
+        strengths = normalize_lora_strengths(config.get("lora_strengths"))
+        self.app_state.set_lora_strengths(strengths)
+
+    def on_stage_toggled(self, stage: str, enabled: bool) -> None:
+        if stage != "adetailer" or not self.app_state:
+            return
+        normalized = bool(enabled)
+        self.app_state.set_adetailer_enabled(normalized)
+        config_snapshot = self._collect_adetailer_panel_config()
+        config_snapshot["enabled"] = normalized
+        self.app_state.set_adetailer_config(config_snapshot)
+
+    def on_adetailer_config_changed(self, config: dict[str, Any]) -> None:
+        if not self.app_state:
+            return
+        snapshot = dict(config or {})
+        snapshot["enabled"] = bool(self.app_state.adetailer_enabled)
+        self.app_state.set_adetailer_config(snapshot)
+
+    def _collect_adetailer_panel_config(self) -> dict[str, Any]:
+        panel = self._get_stage_cards_panel()
+        if panel and hasattr(panel, "collect_adetailer_config"):
             try:
-                updater(self.state.resources)
+                return dict(panel.collect_adetailer_config() or {})
             except Exception:
                 pass
+        if self.app_state:
+            return dict(self.app_state.adetailer_config or {})
+        return {}
+
+    def _apply_adetailer_config_section(self, config: dict[str, Any]) -> None:
+        if not config:
+            pipeline_section = {}
+            ad_config = {}
+        else:
+            pipeline_section = config.get("pipeline") or {}
+            ad_config = config.get("adetailer") or {}
+        enabled = bool(pipeline_section.get("adetailer_enabled") or ad_config.get("enabled"))
+        panel = self._get_stage_cards_panel()
+        if panel and hasattr(panel, "load_adetailer_config"):
+            panel.load_adetailer_config(ad_config)
+        if panel and hasattr(panel, "set_stage_enabled"):
+            panel.set_stage_enabled("adetailer", enabled)
+        sidebar = self._get_sidebar_panel()
+        if sidebar and hasattr(sidebar, "set_stage_state"):
+            sidebar.set_stage_state("adetailer", enabled)
+        if self.app_state:
+            snapshot = dict(ad_config)
+            snapshot["enabled"] = enabled
+            self.app_state.set_adetailer_enabled(enabled)
+            self.app_state.set_adetailer_config(snapshot)
+
+    def _update_run_config_randomizer(self, enabled: bool | None = None, max_variants: int | None = None) -> None:
+        if not self.app_state:
+            return
+        current = dict(self.app_state.run_config or {})
+        updated = False
+        if enabled is not None and current.get("randomization_enabled") != enabled:
+            current["randomization_enabled"] = enabled
+            updated = True
+        if max_variants is not None and current.get("max_variants") != max_variants:
+            current["max_variants"] = max_variants
+            updated = True
+        if updated:
+            self.app_state.set_run_config(current)
+
+    def _apply_randomizer_from_config(self, config: dict[str, Any]) -> None:
+        if not config:
+            return
+        fallback = self.state.current_config
+        random_section = config.get("randomization") or {}
+        enabled = config.get("randomization_enabled")
+        if enabled is None:
+            enabled = random_section.get("enabled", fallback.randomization_enabled)
+        max_variants = config.get("max_variants")
+        if max_variants is None:
+            max_variants = random_section.get("max_variants", fallback.max_variants)
+        try:
+            normalized_max = int(max_variants)
+        except (TypeError, ValueError):
+            normalized_max = fallback.max_variants
+        normalized_max = max(1, normalized_max)
+        normalized_enabled = bool(enabled)
+        fallback.randomization_enabled = normalized_enabled
+        fallback.max_variants = normalized_max
+        self._update_run_config_randomizer(enabled=normalized_enabled, max_variants=normalized_max)
+
+    def _get_panel_randomizer_config(self) -> dict[str, Any] | None:
+        panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+        if panel is None or not hasattr(panel, "get_randomizer_config"):
+            return None
+        try:
+            config = panel.get_randomizer_config()
+        except Exception:
+            return None
+        if not config:
+            return None
+        return config
+
+    def _run_config_with_lora(self) -> dict[str, Any]:
+        base = self.app_state.run_config.copy() if self.app_state else {}
+        if self.app_state and self.app_state.lora_strengths:
+            base["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
+        if "randomization_enabled" not in base:
+            base["randomization_enabled"] = self.state.current_config.randomization_enabled
+        if "max_variants" not in base:
+            base["max_variants"] = self.state.current_config.max_variants
+        return base
+
+    def _lora_settings_payload(self) -> dict[str, dict[str, Any]] | None:
+        if not self.app_state:
+            return None
+        payload = {}
+        for config in self.app_state.lora_strengths:
+            if config.name:
+                payload[config.name] = config.to_dict()
+        return payload or None
+
+    def _build_job_from_draft(self) -> Job | None:
+        if not self.app_state:
+            self._append_log("[controller] Cannot build job - AppState missing.")
+            return None
+        if not self.app_state.job_draft.packs:
+            self._append_log("[controller] Job draft is empty, skipping queue action.")
+            return None
+        job = Job(
+            job_id=str(uuid.uuid4()),
+            pipeline_config=None,
+            payload=self._job_payload_from_draft(),
+            lora_settings=self._lora_settings_payload(),
+        )
+        return job
+
+    def _job_payload_from_draft(self) -> dict[str, Any]:
+        if not self.app_state:
+            return {}
+        packs = [
+            {
+                "pack_id": entry.pack_id,
+                "pack_name": entry.pack_name,
+                "config_snapshot": entry.config_snapshot,
+            }
+            for entry in self.app_state.job_draft.packs
+        ]
+        payload = {"packs": packs, "run_config": self._run_config_with_lora()}
+        return payload
+
+    def get_lora_runtime_settings(self) -> list[dict[str, Any]]:
+        if not self.app_state:
+            return []
+        return [cfg.to_dict() for cfg in self.app_state.lora_strengths]
+
+    def update_lora_runtime_strength(self, lora_name: str, strength: float) -> None:
+        if not self.app_state:
+            return
+        updated: list[LoraRuntimeConfig] = []
+        normalized = float(strength)
+        found = False
+        for cfg in self.app_state.lora_strengths:
+            if cfg.name == lora_name:
+                updated.append(LoraRuntimeConfig(name=cfg.name, strength=normalized, enabled=cfg.enabled))
+                found = True
+            else:
+                updated.append(cfg)
+        if not found:
+            updated.append(LoraRuntimeConfig(name=lora_name, strength=normalized, enabled=True))
+        self.app_state.set_lora_strengths(updated)
+
+    def update_lora_runtime_enabled(self, lora_name: str, enabled: bool) -> None:
+        if not self.app_state:
+            return
+        updated: list[LoraRuntimeConfig] = []
+        normalized = bool(enabled)
+        found = False
+        for cfg in self.app_state.lora_strengths:
+            if cfg.name == lora_name:
+                updated.append(LoraRuntimeConfig(name=cfg.name, strength=cfg.strength, enabled=normalized))
+                found = True
+            else:
+                updated.append(cfg)
+        if not found:
+            updated.append(LoraRuntimeConfig(name=lora_name, enabled=normalized))
+        self.app_state.set_lora_strengths(updated)
+
+
+    def on_pipeline_pack_load_config(self, pack_id: str) -> None:
+        """Load a pack's config into the stage cards."""
+        self._append_log(f"[controller] Loading config for pack: {pack_id}")
+        
+        # Try to load pack config via ConfigManager
+        pack_config = self._config_manager.load_pack_config(pack_id)
+        if pack_config is None:
+            self._append_log(f"[controller] No config found for pack: {pack_id}")
+            return
+        
+        # Apply to run config
+        if self.app_state:
+            self.app_state.set_run_config(pack_config)
+            self._maybe_set_app_state_lora_strengths(pack_config)
+            self._apply_randomizer_from_config(pack_config)
+        
+        # Update stage cards if available
+        pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+        if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
+            try:
+                pipeline_config_panel.apply_run_config(pack_config)
+            except Exception as e:
+                self._append_log(f"[controller] Error applying pack config to stages: {e}")
+        self._apply_adetailer_config_section(pack_config)
+        
+        self._append_log(f"[controller] Loaded config for pack '{pack_id}'")
+
+    def on_pipeline_pack_apply_config(self, pack_ids: list[str]) -> None:
+        """Write current stage config into one or more packs."""
+        self._append_log(f"[controller] Applying config to packs: {pack_ids}")
+        
+        # Get current run config
+        current_config = self._run_config_with_lora()
+        panel_randomizer = self._get_panel_randomizer_config()
+        if panel_randomizer:
+            current_config.update(panel_randomizer)
+        if not current_config:
+            self._append_log("[controller] No current config to apply")
+            return
+        if self.app_state:
+            self.app_state.set_run_config(current_config)
+        
+        # Save to each pack
+        for pack_id in pack_ids:
+            success = self._config_manager.save_pack_config(pack_id, current_config)
+            if success:
+                self._append_log(f"[controller] Applied config to pack '{pack_id}'")
+            else:
+                self._append_log(f"[controller] Failed to apply config to pack '{pack_id}'")
+
+    def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
+        """Add one or more packs to the current job draft."""
+        self._append_log(f"[controller] Adding packs to job: {pack_ids}")
+        
+        entries = []
+        for pack_id in pack_ids:
+            pack = self._find_pack_by_id(pack_id)
+            if pack is None:
+                self._append_log(f"[controller] Pack not found: {pack_id}")
+                continue
+            
+            # Get current run config from app_state
+            run_config = self._run_config_with_lora()
+            
+            # Ensure randomization is included
+            if "randomization_enabled" not in run_config:
+                run_config["randomization_enabled"] = self.state.current_config.randomization_enabled
+            
+            entry = PackJobEntry(
+                pack_id=pack_id,
+                pack_name=pack.name,
+            config_snapshot=run_config
+            )
+            entries.append(entry)
+        
+        if entries and self.app_state:
+            self.app_state.add_packs_to_job_draft(entries)
+            self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
+
+    def on_add_job_to_queue(self) -> None:
+        """Enqueue the current job draft."""
+        job = self._build_job_from_draft()
+        if job is None:
+            return
+        if not self.job_service:
+            return
+        self.job_service.enqueue(job)
+        payload = job.payload if isinstance(job.payload, dict) else {}
+        packs = payload.get("packs", [])
+        pack_count = len(packs) if isinstance(packs, list) else 0
+        self._append_log(f"[controller] Enqueued job {job.job_id} with {pack_count} pack(s)")
+
+    def on_run_job_now(self) -> None:
+        """Enqueue and start the runner immediately."""
+        job = self._build_job_from_draft()
+        if job is None:
+            return
+        if not self.job_service:
+            return
+        self.job_service.run_now(job)
+        self._append_log(f"[controller] Running job {job.job_id} immediately")
+
+    def on_clear_job_draft(self) -> None:
+        """Clear the current job draft entries."""
+        if not self.app_state:
+            return
+        self.app_state.clear_job_draft()
+        self._append_log("[controller] Job draft cleared")
+
+    def on_pause_queue(self) -> None:
+        """Pause queue execution."""
+        if not self.job_service:
+            return
+        self.job_service.pause()
+        self._append_log("[controller] Queue paused")
+
+    def on_resume_queue(self) -> None:
+        """Resume queue execution."""
+        if not self.job_service:
+            return
+        self.job_service.resume()
+        self._append_log("[controller] Queue resumed")
+
+    def on_cancel_current_job(self) -> None:
+        """Cancel the currently running job."""
+        if not self.job_service:
+            return
+        self.job_service.cancel_current()
+        self._append_log("[controller] Cancelled current job")
+
+    def on_pipeline_preset_apply_to_default(self, preset_name: str) -> None:
+        """Apply preset config to the current run config and optionally mark default."""
+        self._append_log(f"[controller] Applying preset '{preset_name}' to default")
+
+        preset_config = self._load_and_apply_preset(preset_name)
+        if preset_config is None:
+            return
+
+        success = self._config_manager.set_default_preset(preset_name)
+        if success:
+            self._append_log(f"[controller] Set '{preset_name}' as default preset")
+        else:
+            self._append_log(f"[controller] Failed to set default preset")
+
+    def _load_and_apply_preset(self, preset_name: str) -> dict[str, Any] | None:
+        preset_config = self._config_manager.load_preset(preset_name)
+        if preset_config is None:
+            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+            return None
+
+        self.apply_preset_to_run_config(preset_config, preset_name)
+        return preset_config
+
+    def on_pipeline_preset_apply_to_packs(self, preset_name: str, pack_ids: list[str]) -> None:
+        """Copy preset values into configs of selected packs."""
+        self._append_log(f"[controller] Applying preset '{preset_name}' to packs: {pack_ids}")
+        
+        preset_config = self._config_manager.load_preset(preset_name)
+        if preset_config is None:
+            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+            return
+        
+        # Apply to each pack
+        for pack_id in pack_ids:
+            success = self._config_manager.save_pack_config(pack_id, preset_config)
+            if success:
+                self._append_log(f"[controller] Applied preset to pack '{pack_id}'")
+            else:
+                self._append_log(f"[controller] Failed to apply preset to pack '{pack_id}'")
+
+    def on_pipeline_preset_load_to_stages(self, preset_name: str) -> None:
+        """Load preset values into stage cards."""
+        self._append_log(f"[controller] Loading preset '{preset_name}' to stages")
+        
+        preset_config = self._config_manager.load_preset(preset_name)
+        if preset_config is None:
+            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+            return
+        
+        # Apply to run config
+        if self.app_state:
+            self.app_state.set_run_config(preset_config)
+            self._apply_randomizer_from_config(preset_config)
+        
+        # Update stage cards
+        pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+        if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
+            try:
+                pipeline_config_panel.apply_run_config(preset_config)
+                self._append_log(f"[controller] Loaded preset '{preset_name}' to stages")
+            except Exception as e:
+                self._append_log(f"[controller] Error loading preset to stages: {e}")
+        self._apply_adetailer_config_section(preset_config)
+
+    def on_pipeline_preset_save_from_stages(self, preset_name: str) -> None:
+        """Save current stage config as a preset."""
+        self._append_log(f"[controller] Saving preset '{preset_name}' from stages")
+        
+        # Get current config
+        current_config = self._run_config_with_lora()
+        if not current_config:
+            self._append_log("[controller] No current config to save")
+            return
+        
+        # Save as preset
+        success = self._config_manager.save_preset(preset_name, current_config)
+        if success:
+            self._append_log(f"[controller] Saved preset '{preset_name}'")
+        else:
+            self._append_log(f"[controller] Failed to save preset '{preset_name}'")
+
+    def on_pipeline_preset_delete(self, preset_name: str) -> None:
+        """Remove an existing preset."""
+        self._append_log(f"[controller] Deleting preset '{preset_name}'")
+        
+        # TODO: Add confirmation dialog if needed
+        success = self._config_manager.delete_preset(preset_name)
+        if success:
+            self._append_log(f"[controller] Deleted preset '{preset_name}'")
+        else:
+            self._append_log(f"[controller] Failed to delete preset '{preset_name}'")
 
 
 # Convenience entrypoint for testing the skeleton standalone

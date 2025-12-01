@@ -5,6 +5,8 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+_DEFAULT_LOG_PATH = Path("logs/file_access_v2_5.log")
+
 
 class FileAccessLogger:
     """
@@ -62,3 +64,12 @@ class FileAccessLogger:
                     f.write(json.dumps(entry) + "\n")
             finally:
                 self._is_writing = False
+
+
+_LOGGER = FileAccessLogger(_DEFAULT_LOG_PATH)
+
+
+def log_file_access(path: Path | str, reason: str, stack: Optional[str] = None) -> None:
+    """Log a file access using the shared logger."""
+
+    _LOGGER.record(Path(path), reason, stack)

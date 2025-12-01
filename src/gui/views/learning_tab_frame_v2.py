@@ -14,6 +14,7 @@ from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
 from src.learning.learning_record import LearningRecordWriter
+from src.gui.theme_v2 import SURFACE_FRAME_STYLE, BODY_LABEL_STYLE, CARD_FRAME_STYLE
 
 class LearningTabFrame(ttk.Frame):
 	"""Learning tab with header and three-column workspace layout."""
@@ -41,13 +42,14 @@ class LearningTabFrame(ttk.Frame):
 		self.rowconfigure(1, weight=1)  # Body
 
 		# Header
-		self.header_frame = ttk.Frame(self, padding=8, style="Panel.TFrame")
+		self.header_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
 		self.header_frame.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
 
 		header_label = ttk.Label(
 			self.header_frame,
 			text="Learning Experiment Workspace",
-			font=("TkDefaultFont", 14, "bold")
+			font=("TkDefaultFont", 14, "bold"),
+			style=BODY_LABEL_STYLE
 		)
 		header_label.pack(side="left", anchor="w")
 		self._learning_enabled_var = tk.BooleanVar(value=self.app_state.learning_enabled if self.app_state else False)
@@ -67,7 +69,7 @@ class LearningTabFrame(ttk.Frame):
 		attach_tooltip(header_label, "Learning mode: review runs, enable adaptive loops.")
 
 		# Body with three columns
-		self.body_frame = ttk.Frame(self, style="Panel.TFrame")
+		self.body_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
 		self.body_frame.grid(row=1, column=0, sticky="nsew", padx=4, pady=(2, 4))
 
 		# Configure body layout
@@ -80,14 +82,14 @@ class LearningTabFrame(ttk.Frame):
 		self.experiment_panel = ExperimentDesignPanel(
 			self.body_frame,
 			learning_controller=self.learning_controller,
-			style="Panel.TFrame"
+			style=CARD_FRAME_STYLE
 		)
 		self.experiment_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
 		# Center panel: Learning Plan Table
 		self.plan_table = LearningPlanTable(
 			self.body_frame,
-			style="Panel.TFrame"
+			style=CARD_FRAME_STYLE
 		)
 		self.plan_table.grid(row=0, column=1, sticky="nsew", padx=2, pady=4)
 
@@ -97,7 +99,7 @@ class LearningTabFrame(ttk.Frame):
 		# Right panel: Learning Review
 		self.review_panel = LearningReviewPanel(
 			self.body_frame,
-			style="Panel.TFrame"
+			style=CARD_FRAME_STYLE
 		)
 		self.review_panel.grid(row=0, column=2, sticky="nsew", padx=(2, 0), pady=4)
 

@@ -1,0 +1,60 @@
+name: Journey Tests (Shutdown / No-Leaks)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 8 * * *"
+
+jobs:
+  shutdown-journey:
+    runs-on: self-hosted
+    env:
+      STABLENEW_SHUTDOWN_LEAK_ATTEMPTS: "3"
+      STABLENEW_AUTO_EXIT_SECONDS: "3"
+      STABLENEW_SHUTDOWN_LEAK_TIMEOUT_BUFFER: "5"
+      STABLENEW_DEBUG_SHUTDOWN: "1"
+    steps:
+      - name: Checkout StableNew
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          if (Test-Path dev-requirements.txt) {
+            pip install -r dev-requirements.txt
+          }
+
+      - name: Run shutdown journey tests
+        shell: pwsh
+        run: |
+          scripts\run_journey_tests.ps1 -Mode shutdown
+
+  full-journey-suite:
+    runs-on: self-hosted
+    env:
+      STABLENEW_DEBUG_SHUTDOWN: "1"
+    steps:
+      - name: Checkout StableNew
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          if (Test-Path dev-requirements.txt) {
+            pip install -r dev-requirements.txt
+          }
+
+      - name: Run full journey suite
+        shell: pwsh
+        run: |
+          scripts\run_journey_tests.ps1 -Mode all

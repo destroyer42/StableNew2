@@ -62,8 +62,8 @@ def log_with_ctx(
 class InMemoryLogHandler(logging.Handler):
     """Logging handler that stores recent log records in memory."""
 
-    def __init__(self, max_entries: int = 500) -> None:
-        super().__init__()
+    def __init__(self, max_entries: int = 500, level: int = logging.NOTSET) -> None:
+        super().__init__(level=level)
         self._max_entries = max_entries
         self._lock = RLock()
         self._entries: Deque[Dict[str, Any]] = deque(maxlen=max_entries)
@@ -92,8 +92,10 @@ class InMemoryLogHandler(logging.Handler):
 
 def attach_gui_log_handler(max_entries: int = 500) -> InMemoryLogHandler:
     """Attach an in-memory log handler to the root logger for GUI mode."""
-    handler = InMemoryLogHandler(max_entries=max_entries)
+    handler = InMemoryLogHandler(max_entries=max_entries, level=logging.INFO)
     root = logging.getLogger()
+    if root.level > logging.INFO or root.level == logging.NOTSET:
+        root.setLevel(logging.INFO)
     root.addHandler(handler)
     return handler
 
