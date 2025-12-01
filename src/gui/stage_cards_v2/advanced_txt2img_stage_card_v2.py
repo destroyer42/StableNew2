@@ -53,6 +53,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=sampler_values,
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         )
         self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
@@ -93,6 +94,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=model_display_names,
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         )
         self.model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(meta, text="VAE", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
@@ -104,6 +106,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=vae_display_names,
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         )
         self.vae_combo.grid(row=0, column=3, sticky="ew")
         # Map display_name to internal name for config
@@ -162,6 +165,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             values=scheduler_values,
             state="readonly",
             width=14,
+            style="Dark.TCombobox",
         )
         self.scheduler_combo.grid(row=1, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(meta, text="Clip skip", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))

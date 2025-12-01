@@ -13,9 +13,11 @@ tests/controller/test_job_history_controller_v2.py
 tests/controller/test_app_controller_shutdown_v2.py
 tests/controller/test_presets_integration_v2.py
 tests/controller/test_adetailer_stage_integration_v2.py
+tests/controller/test_webui_connection_ready_callback_v2.py
 tests/pipeline/test_last_run_store_v2_5.py
 tests/pipeline/test_stage_sequencer_plan_builder.py
 tests/pipeline/test_pipeline_adetailer_config.py
+tests/journey/test_phase1_pipeline_journey_v2.py
 tests/gui_v2/test_gui_v2_layout_skeleton.py
 tests/gui_v2/test_entrypoint_uses_v2_gui.py
 tests/gui_v2/test_theme_v2.py
@@ -25,3 +27,13 @@ tests/gui_v2/test_shutdown_journey_v2.py
 tests/gui_v2/test_pipeline_presets_ui_v2.py
 tests/gui_v2/test_adetailer_stage_card_v2.py
 tests/gui_v2/test_pipeline_adetailer_toggle_v2.py
+tests/tools/test_v2_classify_and_archive.py
+tests/gui_v2/test_main_window_smoke_v2.py
+tests/gui_v2/test_pipeline_tab_wiring_v2.py
+<<<<<<< ours
+tests/gui_v2/test_pipeline_tab_layout_v2.py
+tests/gui_v2/test_stage_cards_layout_v2.py
+=======
+>>>>>>> theirs
+tests/gui_v2/test_zone_map_v2.py
+tests/gui_v2/test_zone_map_card_order_v2.py

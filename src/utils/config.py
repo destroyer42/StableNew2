@@ -13,6 +13,7 @@ DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
 )
 
 logger = logging.getLogger(__name__)
+LAST_RUN_PATH = Path("state/last_run_v2.json")
 
 
 def _normalize_scheduler_name(scheduler: str | None) -> str | None:
@@ -748,3 +749,28 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to clear default preset: {e}")
             return False
+
+    def write_last_run(self, payload: dict[str, Any]) -> None:
+        """Persist the last-run payload so the GUI can restore it later."""
+
+        if not payload:
+            return
+        try:
+            LAST_RUN_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with LAST_RUN_PATH.open("w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
+            logger.info("Last run configuration written to %s", LAST_RUN_PATH)
+        except Exception as exc:
+            logger.warning("Failed to write last run configuration: %s", exc)
+
+    def load_last_run(self) -> dict[str, Any] | None:
+        """Read the previously saved last-run payload."""
+
+        if not LAST_RUN_PATH.exists():
+            return None
+        try:
+            with LAST_RUN_PATH.open("r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception as exc:
+            logger.warning("Failed to load last run configuration: %s", exc)
+            return None

@@ -19,6 +19,8 @@ def _create_root() -> tk.Tk:
         pytest.fail(f"Tkinter unavailable for journey test: {exc}")
 
 
+@pytest.mark.journey
+@pytest.mark.slow
 def test_v2_full_pipeline_journey_runs_once():
     """End-to-end wiring check: Run triggers pipeline with injected runner."""
     root = _create_root()

@@ -18,6 +18,12 @@ import pytest
 from src.pipeline.executor import Pipeline
 from src.utils import StructuredLogger
 
+pytestmark = [
+    pytest.mark.journey,
+    pytest.mark.legacy,
+    pytest.mark.slow,
+]
+
 
 @pytest.fixture
 def mock_client():

@@ -38,6 +38,8 @@ class TestJT05UpscaleStageRun:
             return MagicMock()
 
     @patch('src.api.webui_api.WebUIAPI')
+    @pytest.mark.journey
+    @pytest.mark.slow
     def test_jt05_standalone_upscale_stage(self, mock_webui_api, app_root):
         """Test standalone upscale stage operation with baseline image."""
         # Setup mocks
@@ -87,6 +89,8 @@ class TestJT05UpscaleStageRun:
                 root.destroy()
 
     @patch('src.api.webui_api.WebUIAPI')
+    @pytest.mark.journey
+    @pytest.mark.slow
     def test_jt05_multi_stage_txt2img_upscale_pipeline(self, mock_webui_api, app_root):
         """Test complete txt2img → upscale multi-stage pipeline."""
         # Setup mocks for both stages

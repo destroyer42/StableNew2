@@ -16,21 +16,27 @@ will be wired in later via a PipelineRunner abstraction.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Callable, Optional
+import os
 import threading
+import time
 
 from src.api.client import SDWebUIClient
 from src.api.webui_resource_service import WebUIResourceService
 from src.api.webui_resources import WebUIResource
 from src.api.webui_process_manager import WebUIProcessManager
 from src.pipeline.last_run_store_v2_5 import LastRunConfigV2_5
+from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.main_window_v2 import MainWindow
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
+from src.config.app_config import is_debug_shutdown_inspector_enabled
 from src.utils import StructuredLogger
 from src.utils.config import ConfigManager, LoraRuntimeConfig, normalize_lora_strengths
+from src.utils.debug_shutdown_inspector import log_shutdown_state
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils import InMemoryLogHandler
@@ -199,6 +205,10 @@ class AppController:
         self.state = AppState()
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
+        self._dropdown_loader = DropdownLoader(self._config_manager)
+        self._last_executor_config: dict[str, Any] | None = None
+        self._last_run_snapshot: dict[str, Any] | None = None
+        self._last_run_auto_restored = False
 
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
@@ -611,8 +621,10 @@ class AppController:
 
     def _run_pipeline_thread(self, cancel_token: CancelToken) -> None:
         try:
-            pipeline_config = self._build_pipeline_config()
+            pipeline_config = self.build_pipeline_config_v2()
             self._append_log_threadsafe("[controller] Starting pipeline execution.")
+            executor_config = self.pipeline_runner._build_executor_config(pipeline_config)
+            self._cache_last_run_payload(executor_config, pipeline_config)
             self.pipeline_runner.run(pipeline_config, cancel_token, self._append_log_threadsafe)
 
             if cancel_token.is_cancelled():
@@ -633,6 +645,110 @@ class AppController:
             self._set_lifecycle_threadsafe(LifecycleState.ERROR, error=str(exc))
             cancel_token.clear_stop_requirement()
 
+    def _cache_last_run_payload(self, executor_config: dict[str, Any], pipeline_config: PipelineConfig) -> None:
+        if not executor_config:
+            return
+        snapshot = self._run_config_with_lora()
+        payload: dict[str, Any] = {
+            "executor_config": deepcopy(executor_config),
+            "run_config_snapshot": snapshot,
+            "prompt": pipeline_config.prompt,
+            "pack_name": pipeline_config.pack_name,
+            "preset_name": pipeline_config.preset_name,
+        }
+        self._last_executor_config = payload["executor_config"]
+        self._last_run_snapshot = snapshot
+        try:
+            self._config_manager.write_last_run(payload)
+        except Exception:
+            pass
+
+    def get_last_run_config(self) -> dict[str, Any] | None:
+        """Expose the last executor payload captured for the GUI helpers."""
+
+        return self._last_executor_config
+
+    def restore_last_run(self, *, force: bool = False) -> None:
+        """Restore UI settings from disk and the cached payload."""
+
+        if self._last_run_auto_restored and not force:
+            return
+        payload = self._config_manager.load_last_run()
+        if not payload:
+            return
+        executor_config = payload.get("executor_config")
+        if not isinstance(executor_config, dict):
+            return
+        run_snapshot = payload.get("run_config_snapshot")
+        if isinstance(run_snapshot, dict):
+            self._last_run_snapshot = run_snapshot
+        self._last_executor_config = executor_config
+        self._apply_last_run_payload(executor_config, run_snapshot)
+        if not force:
+            self._last_run_auto_restored = True
+
+    def _apply_last_run_payload(
+        self,
+        executor_config: dict[str, Any],
+        run_snapshot: dict[str, Any] | None,
+    ) -> None:
+        stage_panel = self._get_stage_cards_panel()
+        if stage_panel:
+            for card_name in ("txt2img", "img2img", "upscale"):
+                card = getattr(stage_panel, f"{card_name}_card", None)
+                self._load_stage_card(card, executor_config)
+            stage_panel.load_adetailer_config(executor_config.get("adetailer") or {})
+
+        sidebar = self._get_sidebar_panel()
+        pipeline_section = executor_config.get("pipeline") or {}
+        stage_defaults = {
+            "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
+            "img2img": bool(pipeline_section.get("img2img_enabled", True)),
+            "adetailer": bool(pipeline_section.get("adetailer_enabled", False)),
+            "upscale": bool(pipeline_section.get("upscale_enabled", False)),
+        }
+        for stage, enabled in stage_defaults.items():
+            self._set_sidebar_stage_state(stage, enabled)
+        self._refresh_stage_visibility()
+
+        ad_config = executor_config.get("adetailer") or {}
+        ad_enabled = bool(pipeline_section.get("adetailer_enabled") or ad_config.get("enabled"))
+        if self.app_state:
+            self.app_state.set_adetailer_enabled(ad_enabled)
+            snapshot = dict(ad_config)
+            snapshot["enabled"] = ad_enabled
+            self.app_state.set_adetailer_config(snapshot)
+
+        pipeline_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
+        if run_snapshot and pipeline_panel and hasattr(pipeline_panel, "apply_run_config"):
+            pipeline_panel.apply_run_config(run_snapshot)
+        if self.app_state and isinstance(run_snapshot, dict):
+            self.app_state.set_run_config(dict(run_snapshot))
+
+    def _refresh_stage_visibility(self) -> None:
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab and hasattr(pipeline_tab, "_handle_sidebar_change"):
+            try:
+                pipeline_tab._handle_sidebar_change()
+            except Exception:
+                pass
+
+    def _set_sidebar_stage_state(self, stage: str, enabled: bool) -> None:
+        sidebar = self._get_sidebar_panel()
+        if not sidebar:
+            return
+        sidebar.set_stage_state(stage, enabled, emit_change=False)
+
+    def _load_stage_card(self, _card: Any | None, executor_config: dict[str, Any]) -> None:
+        if _card is None:
+            return
+        child = getattr(_card, "_child", None)
+        loader = getattr(child, "load_from_config", None)
+        if callable(loader):
+            try:
+                loader(executor_config)
+            except Exception:
+                pass
     def on_stop_clicked(self) -> None:
         """
         Called when the user presses STOP.
@@ -694,6 +810,10 @@ class AppController:
         worker_alive = self._worker_thread is not None and self._worker_thread.is_alive()
         if worker_alive:
             try:
+                self._worker_thread.join(timeout=2.0)
+            except Exception:
+                pass
+            try:
                 self._worker_thread = None
             except Exception:
                 pass
@@ -707,6 +827,9 @@ class AppController:
         if self._is_shutting_down:
             return
         self._is_shutting_down = True
+        if self._shutdown_started_at is None:
+            self._shutdown_started_at = time.time()
+            threading.Thread(target=self._shutdown_watchdog, daemon=True).start()
         label = reason or "shutdown"
         logger.info("[controller] shutdown_app called (%s)", label)
 
@@ -729,6 +852,22 @@ class AppController:
             self._shutdown_webui()
         except Exception:
             logger.exception("Error shutting down WebUI")
+        try:
+            self._shutdown_job_service()
+        except Exception:
+            logger.exception("Error shutting down job service")
+
+        if is_debug_shutdown_inspector_enabled():
+            try:
+                log_shutdown_state(logger, label)
+            except Exception:
+                logger.exception("Error running shutdown inspector")
+
+        self._shutdown_completed = True
+        try:
+            self._join_worker_thread()
+        except Exception:
+            logger.exception("Error waiting for worker thread during shutdown")
 
     def _cancel_active_jobs(self, reason: str) -> None:
         if self._cancel_token is not None:
@@ -743,6 +882,16 @@ class AppController:
                 self.job_service.cancel_current()
             except Exception:
                 logger.exception("Error cancelling job service current job")
+
+    def _join_worker_thread(self) -> None:
+        if self._worker_thread is None:
+            return
+        if self._worker_thread.is_alive():
+            try:
+                self._worker_thread.join(timeout=2.0)
+            except Exception:
+                pass
+        self._worker_thread = None
 
     def _shutdown_learning_hooks(self) -> None:
         learning_ctrl = getattr(self, "learning_controller", None)
@@ -763,10 +912,47 @@ class AppController:
             return
         stop_fn = getattr(manager, "stop_webui", None) or getattr(manager, "shutdown", None) or getattr(manager, "stop", None)
         if callable(stop_fn):
+            def _stop_and_log() -> None:
+                pid = getattr(manager, "pid", None)
+                logger.info("Calling stop_webui for PID %s", pid)
+                try:
+                    result = stop_fn()
+                    running = manager.is_running()
+                    exit_code = getattr(manager, "_last_exit_code", None)
+                    logger.info(
+                        "WebUI shutdown result: running=%s, last_exit_code=%s, stop_return=%s",
+                        running,
+                        exit_code,
+                        result,
+                    )
+                except Exception:
+                    logger.exception("Error stopping WebUI")
+
             try:
-                threading.Thread(target=stop_fn, daemon=True).start()
+                threading.Thread(target=_stop_and_log, daemon=True).start()
             except Exception:
-                stop_fn()
+                logger.exception("Error stopping WebUI process")
+
+    def _shutdown_job_service(self) -> None:
+        svc = getattr(self, "job_service", None)
+        if not svc:
+            return
+        runner = getattr(svc, "runner", None)
+        if runner and hasattr(runner, "stop"):
+            try:
+                runner.stop()
+            except Exception:
+                logger.exception("Error stopping job runner")
+
+    def _shutdown_watchdog(self) -> None:
+        timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "8"))
+        hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
+        time.sleep(timeout)
+        if not self._shutdown_completed:
+            logger.error("Shutdown watchdog triggered after %.1fs (completed=%s)", timeout, self._shutdown_completed)
+            if hard_exit:
+                logger.error("Hard exit forced due to shutdown hang.")
+                os._exit(1)
 
     # ------------------------------------------------------------------
     # Packs / Presets
@@ -1020,6 +1206,10 @@ class AppController:
             setattr(cfg, attr, value)
             self._append_log(f"[controller] Config updated: {field}={value}")
 
+    def build_pipeline_config_v2(self) -> PipelineConfig:
+        """Build the pipeline configuration structure that drives the runner."""
+        return self._build_pipeline_config()
+
     def _build_pipeline_config(self) -> PipelineConfig:
         current = self.get_current_config()
         pack = self._get_selected_pack()
@@ -1167,15 +1357,8 @@ class AppController:
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab is None:
             return
-        panel = getattr(pipeline_tab, "stage_cards_panel", None)
-        if panel is None:
-            return
-        updater = getattr(panel, "apply_resource_update", None)
-        if callable(updater):
-            try:
-                updater(self.state.resources)
-            except Exception:
-                pass
+        dropdowns = self._dropdown_loader.load_dropdowns(self, self.app_state)
+        self._dropdown_loader.apply_to_gui(pipeline_tab, dropdowns)
 
     def _get_stage_cards_panel(self):
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)

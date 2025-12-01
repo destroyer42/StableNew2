@@ -1,28 +1,29 @@
-# Renamed from pipeline_tab_frame.py to pipeline_tab_frame_v2.py
-# ...existing code...
-
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
-from src.gui.views.stage_cards_panel import StageCardsPanel
-from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
-from src.gui.scrolling import enable_mousewheel
-from src.gui.tooltip import attach_tooltip
-from src.gui.sidebar_panel_v2 import SidebarPanelV2
-from src.gui.preview_panel_v2 import PreviewPanelV2
+from src.gui import design_system_v2 as design_system
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
-from src.gui.theme_v2 import SURFACE_FRAME_STYLE, CARD_FRAME_STYLE
+from src.gui.preview_panel_v2 import PreviewPanelV2
+from src.gui.scrolling import enable_mousewheel
+from src.gui.sidebar_panel_v2 import SidebarPanelV2
+from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
+from src.gui.tooltip import attach_tooltip
+from src.gui.views.stage_cards_panel import StageCardsPanel
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+from src.gui.zone_map_v2 import get_pipeline_stage_order
 
 
 class PipelineTabFrame(ttk.Frame):
     """Layout scaffold for the Pipeline tab."""
-    # Panel width variables for easy adjustment
-    SIDEBAR_MIN_WIDTH = 320
-    CENTRAL_MIN_WIDTH = 480
+
+    DEFAULT_COLUMN_WIDTH = design_system.Spacing.XL * 40  # ~640
+    MIN_COLUMN_WIDTH = design_system.Spacing.XL * 25  # ~400
+    LOGGING_ROW_MIN_HEIGHT = design_system.Spacing.XL * 10
+    LOGGING_ROW_WEIGHT = 1
 
     def __init__(
         self,
@@ -44,19 +45,17 @@ class PipelineTabFrame(ttk.Frame):
         self.state_manager = getattr(self.pipeline_controller, "state_manager", None)
 
         self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=0, minsize=self.SIDEBAR_MIN_WIDTH)
-        self.columnconfigure(1, weight=1)
-        self.columnconfigure(2, weight=0, minsize=self.SIDEBAR_MIN_WIDTH)
+        for idx in range(3):
+            self.columnconfigure(idx, weight=1, minsize=self.DEFAULT_COLUMN_WIDTH)
 
         self.left_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.left_column.grid(row=0, column=0, sticky="nsew")
         self.left_column.rowconfigure(0, weight=1)
+        self.left_column.rowconfigure(1, weight=0)
         self.left_column.columnconfigure(0, weight=1)
         self.left_scroll = ScrollableFrame(self.left_column, style=CARD_FRAME_STYLE)
         self.left_scroll.grid(row=0, column=0, sticky="nsew")
         self.left_inner = self.left_scroll.inner
-        self.left_inner.update_idletasks()
-
         self.sidebar = SidebarPanelV2(
             self.left_inner,
             controller=self.app_controller or self.pipeline_controller,
@@ -65,21 +64,26 @@ class PipelineTabFrame(ttk.Frame):
             on_change=lambda: self._handle_sidebar_change(),
         )
         self.sidebar.pack(fill="x", pady=(0, 16))
+        self.restore_last_run_button = ttk.Button(
+            self.left_column,
+            text="Restore Last Run",
+            command=self._on_restore_last_run_clicked,
+        )
+        self.restore_last_run_button.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
         self.center_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.center_column.grid(row=0, column=1, sticky="nsew")
         self.center_column.rowconfigure(0, weight=1)
         self.center_column.columnconfigure(0, weight=1)
         self.stage_scroll = ScrollableFrame(self.center_column, style=CARD_FRAME_STYLE)
-        self.stage_cards_frame = self.stage_scroll.inner
         self.stage_scroll.grid(row=0, column=0, sticky="nsew")
-        self.stage_cards_frame.update_idletasks()
+        self.stage_cards_frame = self.stage_scroll.inner
 
         self.right_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.right_column.grid(row=0, column=2, sticky="nsew")
         self.right_column.rowconfigure(0, weight=0)
         self.right_column.rowconfigure(1, weight=1)
-        self.right_column.rowconfigure(2, weight=0)
+        self.right_column.rowconfigure(2, weight=1)
         self.right_column.columnconfigure(0, weight=1)
         queue_controller = self.app_controller or self.pipeline_controller
         self.run_controls = PipelineRunControlsV2(
@@ -104,6 +108,7 @@ class PipelineTabFrame(ttk.Frame):
         )
         self.history_panel.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
 
+
         self.stage_cards_panel = StageCardsPanel(
             self.stage_cards_frame,
             controller=self.pipeline_controller,
@@ -120,6 +125,7 @@ class PipelineTabFrame(ttk.Frame):
                 pass
         self._sync_state_overrides()
         self._handle_sidebar_change()
+
         if self.app_state is not None:
             try:
                 self.app_state.add_resource_listener(self._on_app_state_resources_changed)
@@ -136,8 +142,17 @@ class PipelineTabFrame(ttk.Frame):
             self._on_running_job_changed()
             self._on_queue_status_changed()
             self._on_history_items_changed()
+        controller = self.app_controller or self.pipeline_controller
+        if controller:
+            try:
+                controller.restore_last_run()
+            except Exception:
+                pass
+
         enable_mousewheel(self.left_scroll.inner)
         enable_mousewheel(self.stage_cards_frame)
+        enable_mousewheel(self.preview_panel)
+        enable_mousewheel(self.history_panel)
         attach_tooltip(self.sidebar, "Pipeline controls and prompt packs.")
 
         self.pack_loader_compat = self.sidebar
@@ -148,7 +163,6 @@ class PipelineTabFrame(ttk.Frame):
         self.pack_loader_compat.set_pack_names(pack_names)
 
     def _sync_state_overrides(self) -> None:
-        """Push current stage card values into the pipeline controller state manager."""
         if not self.state_manager:
             return
         prompt_text = ""
@@ -162,7 +176,6 @@ class PipelineTabFrame(ttk.Frame):
         try:
             self.state_manager.pipeline_overrides = overrides
         except Exception:
-            # If the state manager provides a setter, attempt to call it
             setter = getattr(self.state_manager, "set_pipeline_overrides", None)
             if callable(setter):
                 try:
@@ -171,15 +184,11 @@ class PipelineTabFrame(ttk.Frame):
                     pass
 
     def _apply_stage_visibility(self) -> None:
+        stage_order = get_pipeline_stage_order() or ["txt2img", "adetailer", "img2img", "upscale"]
         enabled = self.sidebar.get_enabled_stages() if hasattr(self, "sidebar") else ["txt2img", "img2img", "upscale"]
-        mapping = {
-            "txt2img": self.stage_cards_panel.txt2img_card,
-            "adetailer": self.stage_cards_panel.adetailer_card,
-            "img2img": self.stage_cards_panel.img2img_card,
-            "upscale": self.stage_cards_panel.upscale_card,
-        }
+        mapping = {stage_name: getattr(self.stage_cards_panel, f"{stage_name}_card", None) for stage_name in stage_order}
         ordered_cards = []
-        for stage_name in ["txt2img", "adetailer", "img2img", "upscale"]:
+        for stage_name in stage_order:
             if stage_name in enabled:
                 card = mapping.get(stage_name)
                 if card:
@@ -201,23 +210,26 @@ class PipelineTabFrame(ttk.Frame):
         except Exception:
             pass
 
-    def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None) -> None:
-        panel = getattr(self, "stage_cards_panel", None)
-        if panel is not None:
-            try:
-                panel.apply_resource_update(resources)
-            except Exception:
-                pass
+    def _on_restore_last_run_clicked(self) -> None:
+        controller = self.app_controller or self.pipeline_controller
+        if not controller:
+            return
+        try:
+            controller.restore_last_run(force=True)
+        except Exception:
+            pass
 
-        # Pipeline config panel is now in sidebar, resources handled there
+    def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None = None) -> None:
+        panel = getattr(self, "stage_cards_panel", None)
+        if panel is not None and resources:
+            panel.apply_resource_update(resources)
 
     def _on_job_draft_changed(self) -> None:
-        if self.app_state is None:
+        if self.app_state is None or not hasattr(self, "preview_panel"):
             return
         try:
             job_draft = self.app_state.job_draft
-            if hasattr(self, "preview_panel"):
-                self.preview_panel.update_from_job_draft(job_draft)
+            self.preview_panel.update_from_job_draft(job_draft)
         except Exception:
             pass
 
@@ -252,5 +264,6 @@ class PipelineTabFrame(ttk.Frame):
             self.history_panel._on_history_items_changed()
         except Exception:
             pass
+
 
 PipelineTabFrame = PipelineTabFrame

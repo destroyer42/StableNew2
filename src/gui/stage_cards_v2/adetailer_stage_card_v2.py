@@ -121,6 +121,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             values=list(options),
             textvariable=variable,
             state="readonly",
+            style="Dark.TCombobox",
         )
         combo.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
         return combo
@@ -199,7 +200,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def _configure_combo(self, combo: ttk.Combobox | None, values: list[str], variable: tk.StringVar) -> None:
         if not combo:
             return
-        combo.configure(values=values, state="readonly" if values else "disabled")
+        combo.configure(values=values, state="readonly" if values else "disabled", style="Dark.TCombobox")
         if values:
             current = variable.get()
             if not current or current not in values:

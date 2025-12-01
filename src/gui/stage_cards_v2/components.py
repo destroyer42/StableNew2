@@ -43,13 +43,13 @@ class SamplerSection(ttk.Frame):
         self.cfg_var = tk.StringVar(value="7.0")
 
         ttk.Label(self, text="Sampler", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", padx=(0, 4))
-        ttk.Entry(self, textvariable=self.sampler_var, width=18).grid(row=1, column=1, sticky="ew", padx=(0, 8))
+        ttk.Entry(self, textvariable=self.sampler_var, width=18, style="Dark.TEntry").grid(row=1, column=1, sticky="ew", padx=(0, 8))
 
         ttk.Label(self, text="Steps", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", padx=(0, 4))
-        ttk.Entry(self, textvariable=self.steps_var, width=8).grid(row=1, column=3, sticky="ew")
+        ttk.Entry(self, textvariable=self.steps_var, width=8, style="Dark.TEntry").grid(row=1, column=3, sticky="ew")
 
         ttk.Label(self, text="CFG", style=BODY_LABEL_STYLE).grid(row=2, column=0, sticky="w", padx=(0, 4), pady=(4, 0))
-        ttk.Entry(self, textvariable=self.cfg_var, width=8).grid(row=2, column=1, sticky="ew", pady=(4, 0))
+        ttk.Entry(self, textvariable=self.cfg_var, width=8, style="Dark.TEntry").grid(row=2, column=1, sticky="ew", pady=(4, 0))
 
         for col in range(4):
             self.columnconfigure(col, weight=1 if col in (1, 3) else 0)
@@ -60,7 +60,7 @@ class SeedSection(ttk.Frame):
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=4, **kwargs)
         ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", pady=(0, 2))
         self.seed_var = tk.StringVar(value="0")
-        ttk.Entry(self, textvariable=self.seed_var, width=14).grid(row=1, column=0, sticky="ew")
+        ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry").grid(row=1, column=0, sticky="ew")
         self.randomize_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(self, text="Randomize", variable=self.randomize_var, style=SECONDARY_BUTTON_STYLE).grid(
             row=1, column=1, sticky="w", padx=(8, 0)

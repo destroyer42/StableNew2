@@ -25,6 +25,7 @@ from .model_manager_panel_v2 import ModelManagerPanelV2
 from .output_settings_panel_v2 import OutputSettingsPanelV2
 from .prompt_pack_adapter_v2 import PromptPackAdapterV2, PromptPackSummary
 from .prompt_pack_list_manager import PromptPackListManager
+from src.gui.zone_map_v2 import get_pipeline_stage_order
 
 
 class _SidebarCard(BaseStageCardV2):
@@ -106,7 +107,7 @@ class _SidebarCard(BaseStageCardV2):
                 self._apply_dark_styles(child)
 class SidebarPanelV2(ttk.Frame):
     """Container for sidebar content (core config + negative prompt + packs + pipeline controls)."""
-    _STAGE_ORDER = ["txt2img", "img2img", "adetailer", "upscale"]
+    _STAGE_ORDER = get_pipeline_stage_order() or ["txt2img", "img2img", "adetailer", "upscale"]
     _STAGE_LABELS = {
         "txt2img": "Enable txt2img",
         "img2img": "Enable img2img",

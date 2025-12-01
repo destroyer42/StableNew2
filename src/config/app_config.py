@@ -104,6 +104,34 @@ def set_queue_execution_enabled(enabled: bool) -> None:
     _queue_execution_enabled = bool(enabled)
 
 
+def debug_shutdown_inspector_default() -> bool:
+    """Return whether the shutdown inspector should run (env override)."""
+
+    env_flag = os.environ.get("STABLENEW_DEBUG_SHUTDOWN")
+    if env_flag is None:
+        return False
+    return env_flag.lower() in {"1", "true", "yes", "on"}
+
+
+_debug_shutdown_inspector_enabled: bool | None = None
+
+
+def is_debug_shutdown_inspector_enabled() -> bool:
+    """Return current setting for the shutdown inspector."""
+
+    global _debug_shutdown_inspector_enabled
+    if _debug_shutdown_inspector_enabled is None:
+        _debug_shutdown_inspector_enabled = debug_shutdown_inspector_default()
+    return bool(_debug_shutdown_inspector_enabled)
+
+
+def set_debug_shutdown_inspector_enabled(enabled: bool) -> None:
+    """Override the shutdown inspector flag (module-level only)."""
+
+    global _debug_shutdown_inspector_enabled
+    _debug_shutdown_inspector_enabled = bool(enabled)
+
+
 # --- Core config defaults for GUI V2 -----------------------------------------------------------
 
 def _env_default(name: str, default: str) -> str:

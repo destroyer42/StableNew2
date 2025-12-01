@@ -50,6 +50,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             values=getattr(self.controller, "get_available_samplers", lambda: [])() or ["Euler", "DPM++ 2M"],
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         )
         self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
@@ -100,6 +101,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             values=["none", "keep", "discard", "auto"],
             state="readonly",
             width=12,
+            style="Dark.TCombobox",
         ).grid(row=0, column=3, sticky="ew")
 
         ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))

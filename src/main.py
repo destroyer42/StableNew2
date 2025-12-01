@@ -34,6 +34,8 @@ from .api.webui_process_manager import build_default_webui_process_config
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
 from src.gui.main_window_v2 import MainWindowV2
+from src.utils.graceful_exit import graceful_exit
+from src.utils.single_instance import SingleInstanceLock
 
 # Used by tests and entrypoint contract
 ENTRYPOINT_GUI_CLASS = MainWindowV2
@@ -384,8 +386,8 @@ def main() -> None:
     # Don't bootstrap WebUI synchronously - do it asynchronously after GUI loads
     webui_manager = None
 
-    lock_sock = _acquire_single_instance_lock()
-    if lock_sock is None:
+    single_instance_lock = SingleInstanceLock()
+    if not single_instance_lock.acquire():
         msg = (
             "StableNew is already running.\n\n"
             "Please close the existing window before starting a new one."
@@ -401,20 +403,46 @@ def main() -> None:
 
     if tk is None:
         print("Tkinter is not available; cannot start StableNew GUI.", file=sys.stderr)
+        single_instance_lock.release()
         return
 
-    root, app_state, app_controller, window = build_v2_app(root=tk.Tk(), webui_manager=webui_manager)
-    
-    # Start WebUI connection/bootstrap asynchronously after GUI is shown
-    root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
-    
-    try:
-        root.mainloop()
-    finally:
+    auto_exit_seconds = 0.0
+    auto_exit_env = os.environ.get("STABLENEW_AUTO_EXIT_SECONDS")
+    if auto_exit_env:
         try:
-            app_controller.shutdown_app("main-finally")
+            auto_exit_seconds = float(auto_exit_env)
+        except Exception:
+            auto_exit_seconds = 0.0
+
+    root, app_state, app_controller, window = build_v2_app(root=tk.Tk(), webui_manager=webui_manager)
+    window.set_graceful_exit_handler(
+        lambda reason=None: graceful_exit(
+            app_controller,
+            root,
+            single_instance_lock,
+            logging.getLogger(__name__),
+            window=window,
+            reason=reason,
+        )
+    )
+
+    if auto_exit_seconds > 0:
+        try:
+            window.schedule_auto_exit(auto_exit_seconds)
         except Exception:
             pass
+
+    root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
+
+    try:
+        root.mainloop()
+    except BaseException as exc:
+        logger = logging.getLogger(__name__)
+        logger.exception("Fatal exception in main loop", exc_info=exc)
+        graceful_exit(app_controller, root, single_instance_lock, logger, window=window, reason="fatal-error")
+    finally:
+        if single_instance_lock.is_acquired():
+            single_instance_lock.release()
 
 
 if __name__ == "__main__":

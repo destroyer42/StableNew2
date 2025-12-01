@@ -35,6 +35,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             values=["R-ESRGAN 4x+", "4x-UltraSharp", "Remacri"],
             state="readonly",
             width=18,
+            style="Dark.TCombobox",
         ).grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
         ttk.Label(parent, text="Mode", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
@@ -44,6 +45,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             values=["single", "batch"],
             state="readonly",
             width=12,
+            style="Dark.TCombobox",
         ).grid(row=0, column=3, sticky="ew")
 
         ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))

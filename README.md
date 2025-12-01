@@ -35,6 +35,21 @@ Outputs:
 - `docs/ACTIVE_MODULES.md`
 - `docs/LEGACY_CANDIDATES.md`
 
+## V2 Classification Snapshot
+
+In addition to the inventory tool above, StableNew ships a dedicated V2 classifier that distinguishes V2 modules from legacy V1 artifacts and generates human-readable summaries:
+
+```
+python tools/v2_classify_and_archive.py --json inventory/stable_v2_inventory.json --markdown docs/StableNew_V2_Inventory.md
+```
+
+This outputs:
+
+- `inventory/stable_v2_inventory.json` (categorized lists of V2 / V1 / shared / unknown files)
+- `docs/StableNew_V2_Inventory.md` (markdown table plus subsystem summaries)
+
+You can pass `--archive` (with optional `--dry-run`/`--force`) to move any V1-classified files into the `archive/` folder safely, preserving their original tree structure. Use this when cleaning up truly obsolete V1 artifacts before they confuse the V2 wiring.
+
 ## Contributing
 Follow PR templates under `docs/pr-templates/`.
 Do not modify multiple subsystems in a single PR.

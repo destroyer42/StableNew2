@@ -20,6 +20,7 @@ from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.utils import InMemoryLogHandler
+from src.gui.zone_map_v2 import get_root_zone_config
 
 
 class HeaderZone(ttk.Frame):
@@ -73,7 +74,7 @@ class BottomZone(ttk.Frame):
         self.status_label = getattr(self.status_bar_v2, "status_label", ttk.Label(self, text="Status: Idle"))
 
         log_style_kwargs = {"bg": BACKGROUND_ELEVATED, "fg": TEXT_PRIMARY, "insertbackground": TEXT_PRIMARY}
-        self.log_text = tk.Text(self, height=6, **log_style_kwargs)
+        self.log_text = tk.Text(self, height=10, **log_style_kwargs)
         self.log_text.grid_forget()
 
         # Configure grid weights
@@ -98,6 +99,7 @@ class MainWindowV2:
         self.root = root
         self._disposed = False
         self._close_in_progress = False
+        self._graceful_exit_handler: Callable[[str], None] | None = None
         self.app_state = app_state or AppStateV2()
         self.webui_process_manager = webui_manager
         self.app_controller = app_controller
@@ -116,16 +118,16 @@ class MainWindowV2:
 
         # --- Create and grid all V2 zones ---
         self.header_zone = HeaderZone(self.root)
-        self.header_zone.grid(row=0, column=0, columnspan=3, sticky="nsew")
+        self.header_zone.grid(**get_root_zone_config("header"))
 
         self.center_notebook = ttk.Notebook(self.root)
-        self.center_notebook.grid(row=1, column=0, columnspan=3, sticky="nsew")
+        self.center_notebook.grid(**get_root_zone_config("main"))
 
         self.left_zone = None
         self.right_zone = None
 
         self.bottom_zone = BottomZone(self.root, controller=self.app_controller, app_state=self.app_state)
-        self.bottom_zone.grid(row=2, column=0, columnspan=3, sticky="nsew")
+        self.bottom_zone.grid(**get_root_zone_config("status"))
 
         gui_log_handler = getattr(self, "gui_log_handler", None)
         self.log_trace_panel_v2: LogTracePanelV2 | None = None
@@ -147,9 +149,6 @@ class MainWindowV2:
         self._wire_toolbar_callbacks()
         self._wire_status_bar()
 
-        # Make main content row stretch
-        self.root.rowconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=0)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         try:
             self.root.bind("<Destroy>", self._on_destroy, add="+")
@@ -235,6 +234,11 @@ class MainWindowV2:
             if callable(stop_cb):
                 header.stop_button.configure(command=stop_cb)
 
+    def set_graceful_exit_handler(self, handler: Callable[[str], None] | None) -> None:
+        """Register the handler used for canonical shutdown."""
+
+        self._graceful_exit_handler = handler
+
     def _wire_left_zone_callbacks(self) -> None:
         left = getattr(self, "left_zone", None)
         if left is None:
@@ -286,18 +290,41 @@ class MainWindowV2:
             pass
 
     def _on_close(self) -> None:
-        self.on_app_close()
+        self._trigger_graceful_exit("window-close")
 
     def on_app_close(self) -> None:
+        self._trigger_graceful_exit("window-close")
+
+    def _trigger_graceful_exit(self, reason: str) -> None:
+        handler = getattr(self, "_graceful_exit_handler", None)
+        if handler:
+            try:
+                handler(reason)
+            except Exception:
+                pass
+            return
+        self._perform_legacy_shutdown(reason)
+
+    def _perform_legacy_shutdown(self, reason: str) -> None:
         if self._close_in_progress:
             return
         self._close_in_progress = True
         controller = getattr(self, "app_controller", None)
-        if controller:
+        if getattr(self, "_invoker", None):
             try:
-                controller.shutdown_app("window-close")
+                self._invoker.dispose()
             except Exception:
                 pass
+        if controller:
+            try:
+                controller.shutdown_app(reason)
+            except Exception:
+                pass
+        try:
+            # Exit mainloop promptly to avoid Tk hanging on close.
+            self.root.quit()
+        except Exception:
+            pass
         self.cleanup()
         try:
             self.root.after_idle(self._destroy_root)
@@ -314,13 +341,7 @@ class MainWindowV2:
         if event is not None and getattr(event, "widget", None) not in {None, self.root}:
             return
         if not self._close_in_progress:
-            controller = getattr(self, "app_controller", None)
-            if controller:
-                try:
-                    controller.shutdown_app("destroy")
-                except Exception:
-                    pass
-        self.cleanup()
+            self._trigger_graceful_exit("destroy")
 
     def cleanup(self) -> None:
         """Best-effort shutdown to make Tk teardown safe for tests and runtime."""
@@ -381,6 +402,22 @@ class MainWindowV2:
                 self.status_bar_v2._sync_status_text()
             except Exception:
                 pass
+        except Exception:
+            pass
+
+    def schedule_auto_exit(self, seconds: float) -> None:
+        """Schedule the same close path used by the window-close button."""
+
+        if seconds is None:
+            return
+        try:
+            timeout_ms = int(max(0, float(seconds)) * 1000)
+        except Exception:
+            return
+        if timeout_ms <= 0:
+            return
+        try:
+            self.root.after(timeout_ms, lambda: self._trigger_graceful_exit("auto-exit"))
         except Exception:
             pass
 
