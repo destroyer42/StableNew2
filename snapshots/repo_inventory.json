@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-01T17:59:53",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251201-175946.zip",
-  "file_count": 1203,
-  "total_size_bytes": 10837418,
+  "created_at": "2025-12-02T07:06:49",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251202-070648.zip",
+  "file_count": 1222,
+  "total_size_bytes": 11143239,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -110,9 +110,29 @@
       "mtime_iso": "2025-11-28T14:25:25"
     },
     {
+      "path": "tcltk.zip",
+      "size_bytes": 147855,
+      "mtime_iso": "2025-12-01T23:13:36"
+    },
+    {
+      "path": "test_adetailer_sync.py",
+      "size_bytes": 2541,
+      "mtime_iso": "2025-12-01T20:19:08"
+    },
+    {
+      "path": "test_core_config_controller.py",
+      "size_bytes": 2789,
+      "mtime_iso": "2025-12-01T20:19:08"
+    },
+    {
       "path": "test_pr032.py",
       "size_bytes": 1390,
       "mtime_iso": "2025-11-29T14:43:13"
+    },
+    {
+      "path": "validate_core_config.py",
+      "size_bytes": 1048,
+      "mtime_iso": "2025-12-01T20:19:08"
     },
     {
       "path": "_tmp_test.py",
@@ -473,6 +493,461 @@
       "path": "archive/gui_v1/theme.py",
       "size_bytes": 244,
       "mtime_iso": "2025-11-28T18:47:50"
+    },
+    {
+      "path": "archive/legacy_tests/test_advanced_features.py",
+      "size_bytes": 7896,
+      "mtime_iso": "2025-11-13T16:22:05"
+    },
+    {
+      "path": "archive/legacy_tests/test_advanced_prompt_editor_regressions.py",
+      "size_bytes": 1420,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_aesthetic_detection.py",
+      "size_bytes": 1107,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_aesthetic_integration.py",
+      "size_bytes": 3853,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_api.py",
+      "size_bytes": 4244,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_api_client_backoff.py",
+      "size_bytes": 2232,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_api_status_panel.py",
+      "size_bytes": 1170,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_archive_unused.py",
+      "size_bytes": 14081,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_complete_workflow.py",
+      "size_bytes": 2437,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_config.py",
+      "size_bytes": 2907,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_config_manager_defaults.py",
+      "size_bytes": 769,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_config_panel.py",
+      "size_bytes": 5383,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_controller.py",
+      "size_bytes": 9069,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_default_preset.py",
+      "size_bytes": 5223,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_file_io.py",
+      "size_bytes": 6075,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_global_negative_stage_flags.py",
+      "size_bytes": 3539,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_gui_enhancements.py",
+      "size_bytes": 1721,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_gui_system.py",
+      "size_bytes": 6905,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_gui_visibility.py",
+      "size_bytes": 1337,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_logger.py",
+      "size_bytes": 3787,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_log_panel.py",
+      "size_bytes": 2105,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_matrix_base_prompt_fix.py",
+      "size_bytes": 4767,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_matrix_prompt_mode_examples.py",
+      "size_bytes": 6833,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_new_features.py",
+      "size_bytes": 3753,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_pack_config.py",
+      "size_bytes": 957,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_pipeline_controls_panel.py",
+      "size_bytes": 1156,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_pipeline_journey.py",
+      "size_bytes": 37506,
+      "mtime_iso": "2025-12-01T07:20:14"
+    },
+    {
+      "path": "archive/legacy_tests/test_pipeline_throughput.py",
+      "size_bytes": 1243,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_preferences_manager.py",
+      "size_bytes": 2649,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_prompt_editor.py",
+      "size_bytes": 4983,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_prompt_pack_list_manager.py",
+      "size_bytes": 6033,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_prompt_pack_panel.py",
+      "size_bytes": 1382,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_randomization_pipeline.py",
+      "size_bytes": 3128,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_refiner_compare_mode.py",
+      "size_bytes": 3470,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_refiner_support.py",
+      "size_bytes": 4547,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_refiner_switch_math.py",
+      "size_bytes": 1706,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_stage_chooser.py",
+      "size_bytes": 270,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_state.py",
+      "size_bytes": 6330,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_structured_logger.py",
+      "size_bytes": 6627,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_txt2img_stage.py",
+      "size_bytes": 2693,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_upscale_stage.py",
+      "size_bytes": 7084,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_variant_planner.py",
+      "size_bytes": 2388,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/test_video.py",
+      "size_bytes": 3967,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_advanced_prompt_editor_v2.py",
+      "size_bytes": 1026,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_api_status_panel_webui_states_v2.py",
+      "size_bytes": 948,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_command_bar_v2.py",
+      "size_bytes": 902,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_core_config_panel_v2.py",
+      "size_bytes": 1533,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_layout.py",
+      "size_bytes": 783,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_roundtrip.py",
+      "size_bytes": 1895,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_validation.py",
+      "size_bytes": 1763,
+      "mtime_iso": "2025-12-01T18:22:52"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_ai_settings_button_guarded.py",
+      "size_bytes": 1244,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_mainwindow_split_structure.py",
+      "size_bytes": 669,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_panel_wiring.py",
+      "size_bytes": 853,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_adapter.py",
+      "size_bytes": 1670,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_button_wiring.py",
+      "size_bytes": 920,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_config_roundtrip.py",
+      "size_bytes": 2362,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_txt2img_validation.py",
+      "size_bytes": 3049,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_adapter_integration.py",
+      "size_bytes": 870,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_integration.py",
+      "size_bytes": 2127,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_matrix_ui.py",
+      "size_bytes": 1165,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_matrix_ux.py",
+      "size_bytes": 1121,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_preview_list.py",
+      "size_bytes": 626,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_variant_count_banner.py",
+      "size_bytes": 678,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_variant_count_preview.py",
+      "size_bytes": 878,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_stage_cards_layout.py",
+      "size_bytes": 840,
+      "mtime_iso": "2025-11-30T20:26:11"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_stage_cards_roundtrip.py",
+      "size_bytes": 651,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_startup.py",
+      "size_bytes": 440,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_status_adapter_progress_eta.py",
+      "size_bytes": 1523,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_status_bar_progress_eta.py",
+      "size_bytes": 1405,
+      "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_job_history_panel_v2.py",
+      "size_bytes": 3412,
+      "mtime_iso": "2025-11-22T18:13:44"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_learning_review_dialog.py",
+      "size_bytes": 1314,
+      "mtime_iso": "2025-11-22T14:08:22"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_learning_toggle.py",
+      "size_bytes": 1274,
+      "mtime_iso": "2025-11-22T14:08:22"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_learning_toggle_and_dialog.py",
+      "size_bytes": 1694,
+      "mtime_iso": "2025-11-22T14:08:22"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_main_window_tabs_v2.py",
+      "size_bytes": 725,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_model_manager_panel_v2.py",
+      "size_bytes": 1342,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_negative_prompt_panel_v2.py",
+      "size_bytes": 774,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_output_settings_panel_v2.py",
+      "size_bytes": 935,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_packs_and_presets_left_panel_v2.py",
+      "size_bytes": 2808,
+      "mtime_iso": "2025-11-28T14:25:25"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_prompt_integration_v2.py",
+      "size_bytes": 1336,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_stage_cards_v2.py",
+      "size_bytes": 2557,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_tab_layout_v2.py",
+      "size_bytes": 862,
+      "mtime_iso": "2025-11-30T20:26:11"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_tab_stage_cards.py",
+      "size_bytes": 2124,
+      "mtime_iso": "2025-11-30T20:44:21"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_preview_panel_v2.py",
+      "size_bytes": 997,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_prompt_pack_panel_v2.py",
+      "size_bytes": 1302,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_prompt_pack_to_prompt_roundtrip_v2.py",
+      "size_bytes": 1287,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_resolution_panel_v2.py",
+      "size_bytes": 757,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_run_button_queue_mode_toggle.py",
+      "size_bytes": 512,
+      "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_run_button_queue_smoke.py",
+      "size_bytes": 993,
+      "mtime_iso": "2025-11-22T14:40:24"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_scrollable_pipeline_panel_v2.py",
+      "size_bytes": 1340,
+      "mtime_iso": "2025-11-28T14:35:28"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_stagecard_base_v2.py",
+      "size_bytes": 677,
+      "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "archive/legacy_tests/tests_gui_v2_legacy/test_status_bar_v2_composite.py",
+      "size_bytes": 888,
+      "mtime_iso": "2025-11-23T14:37:55"
     },
     {
       "path": "archive/old_packs_old/Abethkara.json",
@@ -1655,6 +2130,11 @@
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
+      "path": "docs/GUI-Pipeline-Hierarchy-Diagram.txt",
+      "size_bytes": 4781,
+      "mtime_iso": "2025-12-01T22:59:33"
+    },
+    {
       "path": "docs/GUI-V2-DOCS-DIFF-GUIDE.md",
       "size_bytes": 6461,
       "mtime_iso": "2025-11-26T14:31:47"
@@ -1748,6 +2228,11 @@
       "path": "docs/PIPELINE_RULES.md",
       "size_bytes": 2476,
       "mtime_iso": "2025-11-24T19:34:00"
+    },
+    {
+      "path": "docs/PR-067 — Full Journey Suite Skeleton (V2-P1).md",
+      "size_bytes": 12721,
+      "mtime_iso": "2025-12-02T05:41:15"
     },
     {
       "path": "docs/ProjectInstructions.txt",
@@ -1851,8 +2336,8 @@
     },
     {
       "path": "docs/Testing_Journeys_V2-P1.md",
-      "size_bytes": 3166,
-      "mtime_iso": "2025-12-01T07:20:37"
+      "size_bytes": 3307,
+      "mtime_iso": "2025-12-01T19:14:08"
     },
     {
       "path": "docs/Test_Coverage_Report_V2-P1.md",
@@ -2303,6 +2788,46 @@
       "path": "docs/pr_templates/PR-064 — V2 Single-Instance Guard + Hardened _exit(V2-P1).md",
       "size_bytes": 10770,
       "mtime_iso": "2025-12-01T06:16:51"
+    },
+    {
+      "path": "docs/pr_templates/PR-066 — Journey Test Automation (V2-P1).md",
+      "size_bytes": 7865,
+      "mtime_iso": "2025-12-02T06:14:01"
+    },
+    {
+      "path": "docs/pr_templates/PR-068 — Shutdown Diagnostics Log + File Access Trace (V2.5).md",
+      "size_bytes": 12801,
+      "mtime_iso": "2025-12-02T06:14:36"
+    },
+    {
+      "path": "docs/pr_templates/PR-069 — Log-Driven Shutdown Fixes (V2.5).md",
+      "size_bytes": 13388,
+      "mtime_iso": "2025-12-02T05:42:05"
+    },
+    {
+      "path": "docs/pr_templates/PR-071-Pipeline-Execution-Wiring-V2-P1-20251201.md",
+      "size_bytes": 5589,
+      "mtime_iso": "2025-12-02T05:43:56"
+    },
+    {
+      "path": "docs/pr_templates/PR-072-RunPipeline-Facade-V2-P1-20251202.md",
+      "size_bytes": 9389,
+      "mtime_iso": "2025-12-02T06:06:26"
+    },
+    {
+      "path": "docs/pr_templates/PR-073-PipelineTab-Upscale-Compat-V2-P1-20251202.md",
+      "size_bytes": 10423,
+      "mtime_iso": "2025-12-02T06:12:56"
+    },
+    {
+      "path": "docs/pr_templates/PR-074-Upscale-Pipeline-Logic-V2-P1-20251202.md",
+      "size_bytes": 13600,
+      "mtime_iso": "2025-12-02T06:24:10"
+    },
+    {
+      "path": "docs/pr_templates/PR-075-PromptPack-Queue-Execution-V2-P1-20251202.md",
+      "size_bytes": 10636,
+      "mtime_iso": "2025-12-02T06:27:33"
     },
     {
       "path": "docs/pr_templates/PR-B01-PACK-PREVIEW-STABILITY-V2-P1.md",
@@ -3731,8 +4256,8 @@
     },
     {
       "path": "presets/.default_preset",
-      "size_bytes": 27,
-      "mtime_iso": "2025-11-30T18:22:39"
+      "size_bytes": 7,
+      "mtime_iso": "2025-12-02T06:02:39"
     },
     {
       "path": "presets/Beast_Boss_Juggernaut_SDXL.json",
@@ -3741,8 +4266,8 @@
     },
     {
       "path": "presets/default.json",
-      "size_bytes": 497,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 3673,
+      "mtime_iso": "2025-12-02T06:03:03"
     },
     {
       "path": "presets/global_negative.txt",
@@ -3846,8 +4371,13 @@
     },
     {
       "path": "scripts/run_journey_tests.ps1",
-      "size_bytes": 1372,
-      "mtime_iso": "2025-12-01T07:20:23"
+      "size_bytes": 1602,
+      "mtime_iso": "2025-12-01T23:15:33"
+    },
+    {
+      "path": "scripts/run_shutdown_diag.ps1",
+      "size_bytes": 700,
+      "mtime_iso": "2025-12-01T19:14:04"
     },
     {
       "path": "src/app_factory.py",
@@ -3861,8 +4391,8 @@
     },
     {
       "path": "src/main.py",
-      "size_bytes": 18039,
-      "mtime_iso": "2025-12-01T06:19:47"
+      "size_bytes": 18540,
+      "mtime_iso": "2025-12-01T19:13:48"
     },
     {
       "path": "src/__init__.py",
@@ -3886,8 +4416,8 @@
     },
     {
       "path": "src/api/client.py",
-      "size_bytes": 28099,
-      "mtime_iso": "2025-11-28T18:47:13"
+      "size_bytes": 28335,
+      "mtime_iso": "2025-12-02T05:49:59"
     },
     {
       "path": "src/api/healthcheck.py",
@@ -3896,8 +4426,8 @@
     },
     {
       "path": "src/api/webui_api.py",
-      "size_bytes": 631,
-      "mtime_iso": "2025-11-26T20:38:49"
+      "size_bytes": 759,
+      "mtime_iso": "2025-12-02T06:26:39"
     },
     {
       "path": "src/api/webui_process_manager.py",
@@ -3911,8 +4441,8 @@
     },
     {
       "path": "src/api/webui_resource_service.py",
-      "size_bytes": 2688,
-      "mtime_iso": "2025-11-30T17:29:29"
+      "size_bytes": 2739,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "src/api/__init__.py",
@@ -3941,8 +4471,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 74262,
-      "mtime_iso": "2025-11-30T21:57:15"
+      "size_bytes": 93304,
+      "mtime_iso": "2025-12-02T06:54:48"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -3961,8 +4491,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 3321,
-      "mtime_iso": "2025-11-30T14:49:42"
+      "size_bytes": 3905,
+      "mtime_iso": "2025-12-02T06:50:46"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -4021,8 +4551,8 @@
     },
     {
       "path": "src/gui/app_state_v2.py",
-      "size_bytes": 9060,
-      "mtime_iso": "2025-11-30T17:29:40"
+      "size_bytes": 9150,
+      "mtime_iso": "2025-12-02T06:09:41"
     },
     {
       "path": "src/gui/center_panel.py",
@@ -4041,8 +4571,8 @@
     },
     {
       "path": "src/gui/core_config_panel_v2.py",
-      "size_bytes": 10842,
-      "mtime_iso": "2025-11-30T06:40:14"
+      "size_bytes": 12543,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "src/gui/design_system_v2.py",
@@ -4051,8 +4581,8 @@
     },
     {
       "path": "src/gui/dropdown_loader_v2.py",
-      "size_bytes": 2306,
-      "mtime_iso": "2025-11-30T19:36:22"
+      "size_bytes": 2327,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "src/gui/engine_settings_dialog.py",
@@ -4106,8 +4636,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 21162,
-      "mtime_iso": "2025-12-01T06:18:54"
+      "size_bytes": 21604,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -4141,13 +4671,13 @@
     },
     {
       "path": "src/gui/pipeline_panel_v2.py",
-      "size_bytes": 6774,
-      "mtime_iso": "2025-11-27T14:20:07"
+      "size_bytes": 8066,
+      "mtime_iso": "2025-12-02T06:51:55"
     },
     {
       "path": "src/gui/preview_panel_v2.py",
-      "size_bytes": 8797,
-      "mtime_iso": "2025-11-30T15:01:36"
+      "size_bytes": 9162,
+      "mtime_iso": "2025-12-01T21:07:24"
     },
     {
       "path": "src/gui/prompt_pack_adapter_v2.py",
@@ -4191,8 +4721,8 @@
     },
     {
       "path": "src/gui/sidebar_panel_v2.py",
-      "size_bytes": 35486,
-      "mtime_iso": "2025-11-30T19:43:50"
+      "size_bytes": 35684,
+      "mtime_iso": "2025-12-01T20:50:57"
     },
     {
       "path": "src/gui/stage_chooser.py",
@@ -4201,8 +4731,8 @@
     },
     {
       "path": "src/gui/state.py",
-      "size_bytes": 8352,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "size_bytes": 8384,
+      "mtime_iso": "2025-12-01T21:05:23"
     },
     {
       "path": "src/gui/status_bar_v2.py",
@@ -4227,7 +4757,7 @@
     {
       "path": "src/gui/zone_map_v2.py",
       "size_bytes": 1972,
-      "mtime_iso": "2025-11-30T19:42:18"
+      "mtime_iso": "2025-12-02T05:59:39"
     },
     {
       "path": "src/gui/__init__.py",
@@ -4256,8 +4786,8 @@
     },
     {
       "path": "src/gui/panels_v2/pipeline_config_panel_v2.py",
-      "size_bytes": 13159,
-      "mtime_iso": "2025-11-30T13:09:47"
+      "size_bytes": 11606,
+      "mtime_iso": "2025-12-01T20:19:08"
     },
     {
       "path": "src/gui/panels_v2/pipeline_panel_v2.py",
@@ -4266,8 +4796,8 @@
     },
     {
       "path": "src/gui/panels_v2/pipeline_run_controls_v2.py",
-      "size_bytes": 2202,
-      "mtime_iso": "2025-11-30T15:02:01"
+      "size_bytes": 2212,
+      "mtime_iso": "2025-12-02T06:43:00"
     },
     {
       "path": "src/gui/panels_v2/preview_panel_v2.py",
@@ -4296,23 +4826,23 @@
     },
     {
       "path": "src/gui/stage_cards_v2/adetailer_stage_card_v2.py",
-      "size_bytes": 7076,
-      "mtime_iso": "2025-11-30T20:45:02"
+      "size_bytes": 7286,
+      "mtime_iso": "2025-12-02T06:10:14"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py",
-      "size_bytes": 9610,
-      "mtime_iso": "2025-11-30T20:44:45"
+      "size_bytes": 10719,
+      "mtime_iso": "2025-12-01T20:19:08"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py",
-      "size_bytes": 16983,
-      "mtime_iso": "2025-11-30T20:44:40"
+      "size_bytes": 17648,
+      "mtime_iso": "2025-12-02T06:12:57"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py",
-      "size_bytes": 5288,
-      "mtime_iso": "2025-11-30T20:44:57"
+      "size_bytes": 8724,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "src/gui/stage_cards_v2/base_stage_card_v2.py",
@@ -4376,8 +4906,8 @@
     },
     {
       "path": "src/gui/views/pipeline_config_panel.py",
-      "size_bytes": 8308,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "size_bytes": 8617,
+      "mtime_iso": "2025-12-01T21:05:29"
     },
     {
       "path": "src/gui/views/pipeline_tab_frame.py",
@@ -4386,8 +4916,8 @@
     },
     {
       "path": "src/gui/views/pipeline_tab_frame_v2.py",
-      "size_bytes": 10814,
-      "mtime_iso": "2025-11-30T21:22:23"
+      "size_bytes": 13648,
+      "mtime_iso": "2025-12-02T06:20:33"
     },
     {
       "path": "src/gui/views/prompt_tab_frame.py",
@@ -4416,8 +4946,8 @@
     },
     {
       "path": "src/gui/views/stage_cards_panel_v2.py",
-      "size_bytes": 8253,
-      "mtime_iso": "2025-11-30T20:46:01"
+      "size_bytes": 10967,
+      "mtime_iso": "2025-12-01T20:19:08"
     },
     {
       "path": "src/gui/views/__init__.py",
@@ -4571,8 +5101,8 @@
     },
     {
       "path": "src/pipeline/stage_sequencer.py",
-      "size_bytes": 4465,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 4764,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "src/pipeline/variant_planner.py",
@@ -4591,23 +5121,23 @@
     },
     {
       "path": "src/queue/job_history_store.py",
-      "size_bytes": 6051,
-      "mtime_iso": "2025-11-28T18:05:31"
+      "size_bytes": 6974,
+      "mtime_iso": "2025-12-02T06:53:12"
     },
     {
       "path": "src/queue/job_model.py",
-      "size_bytes": 3130,
-      "mtime_iso": "2025-11-30T14:48:15"
+      "size_bytes": 3592,
+      "mtime_iso": "2025-12-02T06:51:08"
     },
     {
       "path": "src/queue/job_queue.py",
-      "size_bytes": 3450,
-      "mtime_iso": "2025-11-30T14:47:58"
+      "size_bytes": 3559,
+      "mtime_iso": "2025-12-02T06:53:03"
     },
     {
       "path": "src/queue/single_node_runner.py",
-      "size_bytes": 3001,
-      "mtime_iso": "2025-11-30T14:48:25"
+      "size_bytes": 3859,
+      "mtime_iso": "2025-12-02T06:42:39"
     },
     {
       "path": "src/queue/__init__.py",
@@ -4686,13 +5216,13 @@
     },
     {
       "path": "src/utils/graceful_exit.py",
-      "size_bytes": 2319,
-      "mtime_iso": "2025-12-01T06:18:18"
+      "size_bytes": 2704,
+      "mtime_iso": "2025-12-02T06:54:44"
     },
     {
       "path": "src/utils/logger.py",
-      "size_bytes": 15704,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "size_bytes": 15847,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "src/utils/preferences.py",
@@ -5011,8 +5541,8 @@
     },
     {
       "path": "tests/controller/test_resource_refresh_v2.py",
-      "size_bytes": 5061,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "size_bytes": 5187,
+      "mtime_iso": "2025-12-01T22:56:57"
     },
     {
       "path": "tests/controller/test_shutdown_inspector_v2.py",
@@ -5140,6 +5670,16 @@
       "mtime_iso": "2025-11-30T13:13:19"
     },
     {
+      "path": "tests/gui_v2/test_pipeline_stage_cards_v2.py",
+      "size_bytes": 848,
+      "mtime_iso": "2025-12-01T21:06:06"
+    },
+    {
+      "path": "tests/gui_v2/test_pipeline_stage_checkbox_order_v2.py",
+      "size_bytes": 759,
+      "mtime_iso": "2025-12-01T21:05:32"
+    },
+    {
       "path": "tests/gui_v2/test_pipeline_tab_layout_v2.py",
       "size_bytes": 1987,
       "mtime_iso": "2025-11-30T21:22:53"
@@ -5148,6 +5688,11 @@
       "path": "tests/gui_v2/test_pipeline_tab_wiring_v2.py",
       "size_bytes": 1028,
       "mtime_iso": "2025-11-30T17:45:28"
+    },
+    {
+      "path": "tests/gui_v2/test_preview_panel_stage_order_v2.py",
+      "size_bytes": 506,
+      "mtime_iso": "2025-12-01T21:07:34"
     },
     {
       "path": "tests/gui_v2/test_scrolling_helper_v2.py",
@@ -5211,38 +5756,38 @@
     },
     {
       "path": "tests/journeys/test_jt01_prompt_pack_authoring.py",
-      "size_bytes": 9707,
-      "mtime_iso": "2025-12-01T07:19:42"
+      "size_bytes": 9982,
+      "mtime_iso": "2025-12-01T23:16:21"
     },
     {
       "path": "tests/journeys/test_jt02_lora_embedding_integration.py",
-      "size_bytes": 8905,
-      "mtime_iso": "2025-12-01T07:19:44"
+      "size_bytes": 9119,
+      "mtime_iso": "2025-12-02T05:50:18"
     },
     {
       "path": "tests/journeys/test_jt03_txt2img_pipeline_run.py",
-      "size_bytes": 13119,
-      "mtime_iso": "2025-12-01T07:19:46"
+      "size_bytes": 13332,
+      "mtime_iso": "2025-12-02T05:50:25"
     },
     {
       "path": "tests/journeys/test_jt04_img2img_adetailer_run.py",
-      "size_bytes": 16076,
-      "mtime_iso": "2025-12-01T07:19:50"
+      "size_bytes": 16286,
+      "mtime_iso": "2025-12-02T05:50:32"
     },
     {
       "path": "tests/journeys/test_jt05_upscale_stage_run.py",
-      "size_bytes": 10104,
-      "mtime_iso": "2025-12-01T07:20:03"
+      "size_bytes": 10706,
+      "mtime_iso": "2025-12-01T23:18:12"
     },
     {
       "path": "tests/journeys/test_shutdown_no_leaks.py",
-      "size_bytes": 1378,
-      "mtime_iso": "2025-12-01T07:19:38"
+      "size_bytes": 1966,
+      "mtime_iso": "2025-12-01T23:11:28"
     },
     {
       "path": "tests/journeys/test_v2_full_pipeline_journey.py",
-      "size_bytes": 2558,
-      "mtime_iso": "2025-12-01T07:20:07"
+      "size_bytes": 2770,
+      "mtime_iso": "2025-12-02T05:50:10"
     },
     {
       "path": "tests/journeys/fakes/fake_pipeline_runner.py",
@@ -5340,459 +5885,9 @@
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "tests/legacy/test_advanced_features.py",
-      "size_bytes": 7896,
-      "mtime_iso": "2025-11-13T16:22:05"
-    },
-    {
-      "path": "tests/legacy/test_advanced_prompt_editor_regressions.py",
-      "size_bytes": 1420,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_aesthetic_detection.py",
-      "size_bytes": 1107,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_aesthetic_integration.py",
-      "size_bytes": 3853,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_api.py",
-      "size_bytes": 4244,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_api_client_backoff.py",
-      "size_bytes": 2232,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_api_status_panel.py",
-      "size_bytes": 1170,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_archive_unused.py",
-      "size_bytes": 14081,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_complete_workflow.py",
-      "size_bytes": 2437,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_config.py",
-      "size_bytes": 2907,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_config_manager_defaults.py",
-      "size_bytes": 769,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_config_panel.py",
-      "size_bytes": 5383,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_controller.py",
-      "size_bytes": 9069,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_default_preset.py",
-      "size_bytes": 5223,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_file_io.py",
-      "size_bytes": 6075,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_global_negative_stage_flags.py",
-      "size_bytes": 3539,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_gui_enhancements.py",
-      "size_bytes": 1721,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_gui_system.py",
-      "size_bytes": 6905,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_gui_visibility.py",
-      "size_bytes": 1337,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_logger.py",
-      "size_bytes": 3787,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_log_panel.py",
-      "size_bytes": 2105,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_matrix_base_prompt_fix.py",
-      "size_bytes": 4767,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_matrix_prompt_mode_examples.py",
-      "size_bytes": 6833,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_new_features.py",
-      "size_bytes": 3753,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_pack_config.py",
-      "size_bytes": 957,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_pipeline_controls_panel.py",
-      "size_bytes": 1156,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_pipeline_journey.py",
-      "size_bytes": 37506,
-      "mtime_iso": "2025-12-01T07:20:14"
-    },
-    {
-      "path": "tests/legacy/test_pipeline_throughput.py",
-      "size_bytes": 1243,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_preferences_manager.py",
-      "size_bytes": 2649,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_prompt_editor.py",
-      "size_bytes": 4983,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_prompt_pack_list_manager.py",
-      "size_bytes": 6033,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_prompt_pack_panel.py",
-      "size_bytes": 1382,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_randomization_pipeline.py",
-      "size_bytes": 3128,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_refiner_compare_mode.py",
-      "size_bytes": 3470,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_refiner_support.py",
-      "size_bytes": 4547,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_refiner_switch_math.py",
-      "size_bytes": 1706,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_stage_chooser.py",
-      "size_bytes": 270,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_state.py",
-      "size_bytes": 6330,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_structured_logger.py",
-      "size_bytes": 6627,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_txt2img_stage.py",
-      "size_bytes": 2693,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_upscale_stage.py",
-      "size_bytes": 7084,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_variant_planner.py",
-      "size_bytes": 2388,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/test_video.py",
-      "size_bytes": 3967,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_advanced_prompt_editor_v2.py",
-      "size_bytes": 1026,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_api_status_panel_webui_states_v2.py",
-      "size_bytes": 948,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_command_bar_v2.py",
-      "size_bytes": 902,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_core_config_panel_v2.py",
-      "size_bytes": 1533,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_layout.py",
-      "size_bytes": 783,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_roundtrip.py",
-      "size_bytes": 1895,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
       "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_validation.py",
-      "size_bytes": 1564,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_ai_settings_button_guarded.py",
-      "size_bytes": 1244,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_mainwindow_split_structure.py",
-      "size_bytes": 669,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_panel_wiring.py",
-      "size_bytes": 853,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_pipeline_adapter.py",
-      "size_bytes": 1670,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_pipeline_button_wiring.py",
-      "size_bytes": 920,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_pipeline_config_roundtrip.py",
-      "size_bytes": 2362,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_pipeline_txt2img_validation.py",
-      "size_bytes": 3049,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_randomizer_adapter_integration.py",
-      "size_bytes": 870,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_randomizer_integration.py",
-      "size_bytes": 2127,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_randomizer_matrix_ui.py",
-      "size_bytes": 1165,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_randomizer_matrix_ux.py",
-      "size_bytes": 1121,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_randomizer_preview_list.py",
-      "size_bytes": 626,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_randomizer_variant_count_banner.py",
-      "size_bytes": 678,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_randomizer_variant_count_preview.py",
-      "size_bytes": 878,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_stage_cards_layout.py",
-      "size_bytes": 840,
-      "mtime_iso": "2025-11-30T20:26:11"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_stage_cards_roundtrip.py",
-      "size_bytes": 651,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_startup.py",
-      "size_bytes": 440,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_status_adapter_progress_eta.py",
-      "size_bytes": 1523,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_status_bar_progress_eta.py",
-      "size_bytes": 1405,
-      "mtime_iso": "2025-11-22T07:25:45"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_job_history_panel_v2.py",
-      "size_bytes": 3412,
-      "mtime_iso": "2025-11-22T18:13:44"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_learning_review_dialog.py",
-      "size_bytes": 1314,
-      "mtime_iso": "2025-11-22T14:08:22"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_learning_toggle.py",
-      "size_bytes": 1274,
-      "mtime_iso": "2025-11-22T14:08:22"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_learning_toggle_and_dialog.py",
-      "size_bytes": 1694,
-      "mtime_iso": "2025-11-22T14:08:22"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_main_window_tabs_v2.py",
-      "size_bytes": 725,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_model_manager_panel_v2.py",
-      "size_bytes": 1342,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_negative_prompt_panel_v2.py",
-      "size_bytes": 774,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_output_settings_panel_v2.py",
-      "size_bytes": 935,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_packs_and_presets_left_panel_v2.py",
-      "size_bytes": 2808,
-      "mtime_iso": "2025-11-28T14:25:25"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_pipeline_prompt_integration_v2.py",
-      "size_bytes": 1336,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_pipeline_stage_cards_v2.py",
-      "size_bytes": 2557,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_pipeline_tab_layout_v2.py",
-      "size_bytes": 862,
-      "mtime_iso": "2025-11-30T20:26:11"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_pipeline_tab_stage_cards.py",
-      "size_bytes": 2124,
-      "mtime_iso": "2025-11-30T20:44:21"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_preview_panel_v2.py",
-      "size_bytes": 997,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_prompt_pack_panel_v2.py",
-      "size_bytes": 1302,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_prompt_pack_to_prompt_roundtrip_v2.py",
-      "size_bytes": 1287,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_resolution_panel_v2.py",
-      "size_bytes": 757,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_run_button_queue_mode_toggle.py",
-      "size_bytes": 512,
-      "mtime_iso": "2025-11-23T14:37:55"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_run_button_queue_smoke.py",
-      "size_bytes": 993,
-      "mtime_iso": "2025-11-22T14:40:24"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_scrollable_pipeline_panel_v2.py",
-      "size_bytes": 1340,
-      "mtime_iso": "2025-11-28T14:35:28"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_stagecard_base_v2.py",
-      "size_bytes": 677,
-      "mtime_iso": "2025-11-26T14:31:47"
-    },
-    {
-      "path": "tests/legacy/tests_gui_v2_legacy/test_status_bar_v2_composite.py",
-      "size_bytes": 888,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "size_bytes": 1763,
+      "mtime_iso": "2025-12-01T20:19:08"
     },
     {
       "path": "tests/pipeline/test_executor_cancellation.py",
@@ -5831,8 +5926,8 @@
     },
     {
       "path": "tests/pipeline/test_stage_sequencer_plan_builder.py",
-      "size_bytes": 2432,
-      "mtime_iso": "2025-11-30T17:09:36"
+      "size_bytes": 4489,
+      "mtime_iso": "2025-12-01T21:04:32"
     },
     {
       "path": "tests/pipeline/test_stage_sequencer_runner_integration.py",

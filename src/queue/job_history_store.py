@@ -10,7 +10,7 @@ import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from src.queue.job_model import Job, JobStatus
 from src.cluster.worker_model import WorkerId
@@ -30,6 +30,7 @@ class JobHistoryEntry:
     completed_at: datetime | None = None
     error_message: str | None = None
     worker_id: WorkerId | None = None
+    result: Dict[str, Any] | None = None
 
     def to_json(self) -> str:
         data = asdict(self)
@@ -57,6 +58,7 @@ class JobHistoryEntry:
             completed_at=_parse_ts(raw.get("completed_at")),
             error_message=raw.get("error_message"),
             worker_id=raw.get("worker_id"),
+            result=raw.get("result"),
         )
 
 
@@ -99,7 +101,12 @@ class JSONLJobHistoryStore(JobHistoryStore):
         self._append(entry)
 
     def record_status_change(
-        self, job_id: str, status: JobStatus, ts: datetime, error: str | None = None
+        self,
+        job_id: str,
+        status: JobStatus,
+        ts: datetime,
+        error: str | None = None,
+        result: Dict[str, Any] | None = None,
     ) -> None:
         current = self.get_job(job_id)
         created_at = current.created_at if current else ts
@@ -119,6 +126,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
             payload_summary=current.payload_summary if current else "",
             error_message=error or (current.error_message if current else None),
             worker_id=current.worker_id if current else None,
+            result=result if result is not None else (current.result if current else None),
         )
         self._append(entry)
 
@@ -158,6 +166,20 @@ class JSONLJobHistoryStore(JobHistoryStore):
         return latest
 
     def _summarize_job(self, job: Job) -> str:
+        result = getattr(job, "result", None) or {}
+        if isinstance(result, dict) and result.get("mode") == "prompt_pack_batch":
+            total = result.get("total_entries", len(result.get("results") or []))
+            first_prompt = ""
+            try:
+                first_entry = (result.get("results") or [])[0]
+                first_prompt = (first_entry.get("prompt") or "").strip()
+            except Exception:
+                first_prompt = ""
+            summary = f"{total} entries"
+            if first_prompt:
+                snippet = first_prompt if len(first_prompt) <= 60 else first_prompt[:60] + "…"
+                summary += f" | {snippet}"
+            return summary
         cfg = getattr(job, "pipeline_config", None)
         if cfg:
             prompt = getattr(cfg, "prompt", "") or ""

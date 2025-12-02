@@ -21,6 +21,11 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 
 def _create_root() -> tk.Tk:
     """Create a real Tk root for journey tests; fail fast if unavailable."""
+    import os
+    # Set Tkinter environment variables for Windows
+    os.environ['TCL_LIBRARY'] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tcl8.6"
+    os.environ['TK_LIBRARY'] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tk8.6"
+    
     try:
         root = tk.Tk()
         root.withdraw()

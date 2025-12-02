@@ -205,3 +205,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             current = variable.get()
             if not current or current not in values:
                 variable.set(values[0])
+
+    def apply_resource_update(self, resources: dict[str, Any] | None) -> None:
+        """Apply WebUI-provided resources to adetailer model/detector dropdowns."""
+        self.apply_webui_resources(resources)

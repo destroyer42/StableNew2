@@ -46,6 +46,7 @@ class AppStateV2:
             "vaes": [],
             "samplers": [],
             "schedulers": [],
+            "upscalers": [],
         }
     )
     queue_items: List[str] = field(default_factory=list)
@@ -156,6 +157,7 @@ class AppStateV2:
             "vaes": list(value.get("vaes") or []),
             "samplers": list(value.get("samplers") or []),
             "schedulers": list(value.get("schedulers") or []),
+            "upscalers": list(value.get("upscalers") or []),
             "adetailer_models": list(value.get("adetailer_models") or []),
             "adetailer_detectors": list(value.get("adetailer_detectors") or []),
         }

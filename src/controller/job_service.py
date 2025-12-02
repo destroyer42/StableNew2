@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Literal
 
 from src.queue.job_model import Job, JobStatus
+from src.gui.pipeline_panel_v2 import format_queue_job_summary
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JobHistoryStore
@@ -42,9 +43,12 @@ class JobService:
 
     def run_now(self, job: Job) -> None:
         self.enqueue(job)
+        try:
+            self.run_next_now()
+        except Exception:
+            pass
         if not self.runner.is_running():
             self.runner.start()
-        self._set_queue_status("running")
 
     def pause(self) -> None:
         self.runner.stop()
@@ -64,6 +68,18 @@ class JobService:
     def list_queue(self) -> list[Job]:
         return self.job_queue.list_jobs()
 
+    def run_next_now(self) -> None:
+        """Synchronously run the next queued job via the runner."""
+        job = self.job_queue.get_next_job()
+        if job is None:
+            return
+        self._set_queue_status("running")
+        try:
+            self.runner.run_once(job)
+        finally:
+            if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
+                self._set_queue_status("idle")
+
     def _handle_runner_status(self, job: Job, status: JobStatus) -> None:
         if status == JobStatus.RUNNING:
             self._emit(self.EVENT_JOB_STARTED, job)
@@ -78,7 +94,8 @@ class JobService:
             self._emit(self.EVENT_QUEUE_EMPTY)
 
     def _emit_queue_updated(self) -> None:
-        summaries = [job.summary() for job in self.job_queue.list_jobs()]
+        jobs = self.job_queue.list_jobs()
+        summaries = [format_queue_job_summary(job) for job in jobs]
         self._emit(self.EVENT_QUEUE_UPDATED, summaries)
 
     def _set_queue_status(self, status: QueueStatus) -> None:

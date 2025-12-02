@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.main import build_v2_app
+from src.app_factory import build_v2_app
 
 
 class TestJT05UpscaleStageRun:
@@ -28,6 +28,11 @@ class TestJT05UpscaleStageRun:
 
     def _create_root(self):
         """Helper to create Tkinter root for testing."""
+        import os
+        # Set Tkinter environment variables for Windows
+        os.environ['TCL_LIBRARY'] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tcl8.6"
+        os.environ['TK_LIBRARY'] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tk8.6"
+        
         try:
             import tkinter as tk
             root = tk.Tk()
@@ -55,28 +60,32 @@ class TestJT05UpscaleStageRun:
         # Initialize app
         root = self._create_root()
         try:
-            app = build_v2_app(root)
+            root, app_state, app_controller, window = build_v2_app(root=root)
+
+            app_state.current_config.model_name = "dummy-model"
+            app_state.current_config.sampler_name = "Euler a"
+            app_state.current_config.steps = 20
 
             # Configure Pipeline tab for standalone upscale
-            app.pipeline_tab.upscale_enabled.set(True)
-            app.pipeline_tab.txt2img_enabled.set(False)
-            app.pipeline_tab.img2img_enabled.set(False)
-            app.pipeline_tab.adetailer_enabled.set(False)
+            window.pipeline_tab.upscale_enabled.set(True)
+            window.pipeline_tab.txt2img_enabled.set(False)
+            window.pipeline_tab.img2img_enabled.set(False)
+            window.pipeline_tab.adetailer_enabled.set(False)
 
             # Set upscale parameters
-            app.pipeline_tab.upscale_factor.set(2.0)
-            app.pipeline_tab.upscale_model.set("UltraSharp")
-            app.pipeline_tab.upscale_tile_size.set(512)
+            window.pipeline_tab.upscale_factor.set(2.0)
+            window.pipeline_tab.upscale_model.set("UltraSharp")
+            window.pipeline_tab.upscale_tile_size.set(512)
 
             # Load input image
-            app.pipeline_tab.input_image_path = str(test_image_path)
+            window.pipeline_tab.input_image_path = str(test_image_path)
 
             # Execute upscale
-            result = app.controller.run_pipeline()
+            result = app_controller.run_pipeline()
 
             # Validate upscale execution
             assert result is not None
-            assert app.pipeline_tab.upscale_enabled.get() is True
+            assert window.pipeline_tab.upscale_enabled.get() is True
 
             # Verify WebUI API was called correctly
             mock_webui_api.return_value.upscale_image.assert_called_once()
@@ -106,26 +115,29 @@ class TestJT05UpscaleStageRun:
         # Initialize app
         root = self._create_root()
         try:
-            app = build_v2_app(root)
+            root, app_state, app_controller, window = build_v2_app(root=root)
+
+            app_state.current_config.model_name = "dummy-model"
+            app_state.current_config.sampler_name = "Euler a"
+            app_state.current_config.steps = 20
 
             # Configure Pipeline tab for multi-stage execution
-            app.pipeline_tab.txt2img_enabled.set(True)
-            app.pipeline_tab.upscale_enabled.set(True)
-            app.pipeline_tab.img2img_enabled.set(False)
-            app.pipeline_tab.adetailer_enabled.set(False)
+            window.pipeline_tab.txt2img_enabled.set(True)
+            window.pipeline_tab.upscale_enabled.set(True)
+            window.pipeline_tab.img2img_enabled.set(False)
+            window.pipeline_tab.adetailer_enabled.set(False)
 
             # Set txt2img parameters
-            app.pipeline_tab.prompt_text.insert(0, "a beautiful landscape")
-            app.pipeline_tab.txt2img_steps.set(20)
-            app.pipeline_tab.txt2img_width.set(512)
-            app.pipeline_tab.txt2img_height.set(512)
+            window.pipeline_tab.prompt_text.insert(0, "a beautiful landscape")
+            window.pipeline_tab.txt2img_width.set(512)
+            window.pipeline_tab.txt2img_height.set(512)
 
             # Set upscale parameters
-            app.pipeline_tab.upscale_factor.set(2.0)
-            app.pipeline_tab.upscale_model.set("ESRGAN")
+            window.pipeline_tab.upscale_factor.set(2.0)
+            window.pipeline_tab.upscale_model.set("ESRGAN")
 
             # Execute full pipeline
-            result = app.controller.run_pipeline()
+            result = app_controller.run_pipeline()
 
             # Validate pipeline execution
             assert result is not None
@@ -161,7 +173,11 @@ class TestJT05UpscaleStageRun:
 
         root = self._create_root()
         try:
-            app = build_v2_app(root)
+            root, app_state, app_controller, window = build_v2_app(root=root)
+
+            app_state.current_config.model_name = "dummy-model"
+            app_state.current_config.sampler_name = "Euler a"
+            app_state.current_config.steps = 20
 
             for factor in test_factors:
                 for model in test_models:
@@ -169,14 +185,14 @@ class TestJT05UpscaleStageRun:
                     mock_webui_api.reset_mock()
 
                     # Configure upscale
-                    app.pipeline_tab.upscale_enabled.set(True)
-                    app.pipeline_tab.txt2img_enabled.set(False)
-                    app.pipeline_tab.upscale_factor.set(factor)
-                    app.pipeline_tab.upscale_model.set(model)
-                    app.pipeline_tab.input_image_path = str(test_image_path)
+                    window.pipeline_tab.upscale_enabled.set(True)
+                    window.pipeline_tab.txt2img_enabled.set(False)
+                    window.pipeline_tab.upscale_factor.set(factor)
+                    window.pipeline_tab.upscale_model.set(model)
+                    window.pipeline_tab.input_image_path = str(test_image_path)
 
                     # Execute
-                    result = app.controller.run_pipeline()
+                    result = app_controller.run_pipeline()
 
                     # Validate
                     assert result is not None
@@ -206,15 +222,19 @@ class TestJT05UpscaleStageRun:
 
         root = self._create_root()
         try:
-            app = build_v2_app(root)
+            root, app_state, app_controller, window = build_v2_app(root=root)
+
+            app_state.current_config.model_name = "dummy-model"
+            app_state.current_config.sampler_name = "Euler a"
+            app_state.current_config.steps = 20
 
             # Configure multi-stage pipeline
-            app.pipeline_tab.txt2img_enabled.set(True)
-            app.pipeline_tab.upscale_enabled.set(True)
-            app.pipeline_tab.prompt_text.insert(0, "original test prompt")
+            window.pipeline_tab.txt2img_enabled.set(True)
+            window.pipeline_tab.upscale_enabled.set(True)
+            window.pipeline_tab.prompt_text.insert(0, "original test prompt")
 
             # Execute pipeline
-            result = app.controller.run_pipeline()
+            result = app_controller.run_pipeline()
 
             # Validate metadata preservation
             assert result is not None
@@ -240,15 +260,15 @@ class TestJT05UpscaleStageRun:
 
         root = self._create_root()
         try:
-            app = build_v2_app(root)
+            root, app_state, app_controller, window = build_v2_app(root=root)
 
             # Configure upscale
-            app.pipeline_tab.upscale_enabled.set(True)
-            app.pipeline_tab.txt2img_enabled.set(False)
-            app.pipeline_tab.input_image_path = str(test_image_path)
+            window.pipeline_tab.upscale_enabled.set(True)
+            window.pipeline_tab.txt2img_enabled.set(False)
+            window.pipeline_tab.input_image_path = str(test_image_path)
 
             # Execute - should handle error gracefully
-            result = app.controller.run_pipeline()
+            result = app_controller.run_pipeline()
 
             # Validate error handling (result should indicate failure but not crash)
             # Exact behavior depends on controller implementation

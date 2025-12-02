@@ -41,7 +41,7 @@ class PipelineRunControlsV2(ttk.Frame):
             buttons_frame,
             text="Run Now",
             style=PRIMARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_run_job_now"),
+            command=lambda: self._invoke_controller("on_run_queue_now_clicked"),
         )
         self.run_now_button.grid(row=0, column=1, sticky="ew", padx=(0, 4))
 

@@ -46,9 +46,7 @@ class JobQueue:
         self._update_status(job_id, JobStatus.RUNNING)
 
     def mark_completed(self, job_id: str, result: dict | None = None) -> None:
-        job = self._update_status(job_id, JobStatus.COMPLETED)
-        if job:
-            job.result = result
+        self._update_status(job_id, JobStatus.COMPLETED, result=result)
 
     def mark_failed(self, job_id: str, error_message: str) -> None:
         job = self._update_status(job_id, JobStatus.FAILED, error_message)
@@ -68,14 +66,22 @@ class JobQueue:
         with self._lock:
             return self._jobs.get(job_id)
 
-    def _update_status(self, job_id: str, status: JobStatus, error_message: str | None = None) -> Job | None:
+    def _update_status(
+        self,
+        job_id: str,
+        status: JobStatus,
+        error_message: str | None = None,
+        result: dict | None = None,
+    ) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return None
             job.mark_status(status, error_message)
+            if result is not None:
+                job.result = result
             ts = job.updated_at
-        self._record_status(job_id, status, ts, error_message)
+        self._record_status(job_id, status, ts, error_message, result=result)
         return job
 
     def _record_submission(self, job: Job) -> None:

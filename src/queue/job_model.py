@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum, Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from src.pipeline.pipeline_runner import PipelineConfig
 from src.cluster.worker_model import WorkerId
@@ -85,3 +85,27 @@ class Job:
         if self.payload:
             return str(self.payload)[:64]
         return self.job_id
+
+
+@dataclass
+class PromptPackEntryResult:
+    pack_id: str
+    pack_name: str
+    variant_index: int | None
+    status: str
+    error: str | None
+    prompt: str
+    negative_prompt: str
+    pipeline_mode: str | None
+    params: Dict[str, Any]
+    outputs: List[Dict[str, Any]]
+    raw_result: Any | None
+
+
+@dataclass
+class PromptPackBatchResult:
+    job_id: str
+    status: str
+    mode: str
+    total_entries: int
+    results: List[PromptPackEntryResult]

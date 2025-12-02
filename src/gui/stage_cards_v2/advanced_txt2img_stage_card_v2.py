@@ -14,6 +14,7 @@ from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 
 class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
     panel_header = "Txt2Img Configuration"
+    NO_VAE_DISPLAY = "No VAE (model default)"
 
     def __init__(self, master: tk.Misc, *, controller: Any = None, theme: Any = None, **kwargs: Any) -> None:
         self.controller = controller
@@ -104,7 +105,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(meta, text="VAE", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
         vae_resources = self.controller.list_vaes() if self.controller and hasattr(self.controller, "list_vaes") else []
-        vae_display_names = [r.display_name for r in vae_resources] if vae_resources else ["default"]
+        vae_display_names = [self.NO_VAE_DISPLAY]
+        if vae_resources:
+            vae_display_names.extend(r.display_name for r in vae_resources)
+        else:
+            vae_display_names.append("default")
         self.vae_combo = ttk.Combobox(
             meta,
             textvariable=self.vae_var,
@@ -117,6 +122,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # Map display_name to internal name for config
         self._model_name_map = {r.display_name: r.name for r in model_resources}
         self._vae_name_map = {r.display_name: r.name for r in vae_resources}
+        self._vae_name_map[self.NO_VAE_DISPLAY] = ""
         def on_model_selected(*_: Any) -> None:
             selected_display = self.model_var.get()
             selected_name = self._model_name_map.get(selected_display, selected_display)
@@ -308,6 +314,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
 
     def _update_vae_options(self, entries: list[Any]) -> None:
         values, mapping = self._normalize_dropdown_entries(entries)
+        if self.NO_VAE_DISPLAY not in values:
+            values.insert(0, self.NO_VAE_DISPLAY)
+        mapping[self.NO_VAE_DISPLAY] = ""
         self._vae_name_map = mapping
         self._set_combo_values(self.vae_combo, self.vae_var, values)
 

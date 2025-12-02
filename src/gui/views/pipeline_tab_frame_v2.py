@@ -12,6 +12,7 @@ from src.gui.scrolling import enable_mousewheel
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
+from src.gui.state import PipelineState
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
@@ -44,6 +45,9 @@ class PipelineTabFrame(ttk.Frame):
         self.theme = theme
         self.state_manager = getattr(self.pipeline_controller, "state_manager", None)
 
+        # Initialize pipeline state and enable variables for test compatibility
+        self.pipeline_state = PipelineState()
+
         self.rowconfigure(0, weight=1)
         for idx in range(3):
             self.columnconfigure(idx, weight=1, minsize=self.DEFAULT_COLUMN_WIDTH)
@@ -70,6 +74,12 @@ class PipelineTabFrame(ttk.Frame):
             command=self._on_restore_last_run_clicked,
         )
         self.restore_last_run_button.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        # Primary prompt entry for journeys and quick pipeline runs
+        self.prompt_text = tk.Entry(self.left_column)
+        self.prompt_text.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        attach_tooltip(self.prompt_text, "Primary text prompt for the active pipeline.")
+        # JT05-friendly attribute for tracking the img2img/upscale input image path
+        self.input_image_path: str = ""
 
         self.center_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.center_column.grid(row=0, column=1, sticky="nsew")
@@ -117,6 +127,52 @@ class PipelineTabFrame(ttk.Frame):
             on_change=lambda: self._sync_state_overrides(),
         )
         self.stage_cards_panel.pack(fill="both", expand=True)
+
+        # Stage toggle vars and upscale proxies (JT05 compatibility)
+        self.txt2img_enabled = tk.BooleanVar(value=True)
+        self.img2img_enabled = tk.BooleanVar(value=False)
+        self.adetailer_enabled = tk.BooleanVar(value=False)
+        self.upscale_enabled = tk.BooleanVar(value=False)
+
+        self.upscale_factor = tk.DoubleVar(value=2.0)
+        self.upscale_model = tk.StringVar()
+        self.upscale_tile_size = tk.IntVar(value=0)
+
+        upscale_card = getattr(self.stage_cards_panel, "upscale_card", None)
+        if upscale_card is not None:
+            try:
+                self.upscale_factor = upscale_card.factor_var
+            except Exception:
+                pass
+            try:
+                self.upscale_model = upscale_card.upscaler_var
+            except Exception:
+                pass
+            try:
+                self.upscale_tile_size = upscale_card.tile_size_var
+            except Exception:
+                pass
+
+        try:
+            self.txt2img_enabled.trace_add(
+                "write",
+                lambda *_: self._on_stage_toggle_var("txt2img", self.txt2img_enabled),
+            )
+            self.img2img_enabled.trace_add(
+                "write",
+                lambda *_: self._on_stage_toggle_var("img2img", self.img2img_enabled),
+            )
+            self.upscale_enabled.trace_add(
+                "write",
+                lambda *_: self._on_stage_toggle_var("upscale", self.upscale_enabled),
+            )
+            self.adetailer_enabled.trace_add(
+                "write",
+                lambda *_: self._on_stage_toggle_var("adetailer", self.adetailer_enabled),
+            )
+        except Exception:
+            pass
+
         listener = getattr(self.pipeline_controller, "on_adetailer_config_changed", None)
         if callable(listener):
             try:
@@ -168,9 +224,15 @@ class PipelineTabFrame(ttk.Frame):
         prompt_text = ""
         try:
             if self.prompt_workspace_state is not None:
-                prompt_text = self.prompt_workspace_state.get_current_prompt_text()
+                prompt_text = self.prompt_workspace_state.get_current_prompt_text() or ""
         except Exception:
             prompt_text = ""
+
+        if not prompt_text and hasattr(self, "prompt_text"):
+            try:
+                prompt_text = self.prompt_text.get() or ""
+            except Exception:
+                pass
 
         overrides = self.stage_cards_panel.to_overrides(prompt_text=prompt_text)
         try:
@@ -182,6 +244,15 @@ class PipelineTabFrame(ttk.Frame):
                     setter(overrides)
                 except Exception:
                     pass
+
+    def _on_stage_toggle_var(self, stage_name: str, var: tk.BooleanVar) -> None:
+        if not hasattr(self, "stage_cards_panel") or self.stage_cards_panel is None:
+            return
+        try:
+            enabled = bool(var.get())
+            self.stage_cards_panel.set_stage_enabled(stage_name, enabled)
+        except Exception:
+            pass
 
     def _apply_stage_visibility(self) -> None:
         stage_order = get_pipeline_stage_order() or ["txt2img", "adetailer", "img2img", "upscale"]

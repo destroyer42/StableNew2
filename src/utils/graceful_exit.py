@@ -25,9 +25,8 @@ def graceful_exit(
     *,
     window=None,
     reason: str | None = None,
-    shutdown_timeout: float = 0.1,
 ) -> NoReturn:
-    """Perform an orderly shutdown and ensure the process exits."""
+    """Perform an orderly shutdown and force the process to exit quickly."""
 
     global _shutdown_committed
     with _shutdown_lock:
@@ -41,7 +40,18 @@ def graceful_exit(
         _shutdown_committed = True
 
     label = reason or "graceful-exit"
+    shutdown_timeout = float(os.environ.get("STABLENEW_SHUTDOWN_TIMEOUT", "2.0"))
     logger.info("[graceful_exit] Initiating (%s)", label)
+
+    if root is not None:
+        try:
+            root.quit()
+        except Exception:
+            pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
 
     if controller is not None:
         try:
@@ -55,15 +65,14 @@ def graceful_exit(
         except Exception:
             logger.exception("graceful_exit: window.cleanup failed")
 
-    if root is not None:
+    deadline = time.time() + shutdown_timeout
+    while time.time() < deadline:
         try:
-            root.quit()
+            if controller is None or getattr(controller, "_shutdown_completed", False):
+                break
         except Exception:
-            pass
-        try:
-            root.destroy()
-        except Exception:
-            pass
+            break
+        time.sleep(0.05)
 
     if single_instance_lock is not None:
         try:
@@ -77,5 +86,5 @@ def graceful_exit(
         except Exception:
             logger.exception("graceful_exit: shutdown inspector failed")
 
-    time.sleep(shutdown_timeout)
+    logger.info("graceful_exit: forcing process exit (timeout=%.1fs)", shutdown_timeout)
     os._exit(0)

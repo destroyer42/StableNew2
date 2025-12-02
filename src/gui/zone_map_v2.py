@@ -26,7 +26,7 @@ ZONE_MAP: dict[str, Any] = {
         "left": {"panel": "sidebar_panel_v2"},
         "center": {
             "panel": "stage_cards_panel_v2",
-            "stages_order": ["txt2img", "adetailer", "img2img", "upscale"],
+            "stages_order": ["txt2img", "img2img", "adetailer", "upscale"],
         },
         "right": {"panel": "preview_panel_v2"},
     },

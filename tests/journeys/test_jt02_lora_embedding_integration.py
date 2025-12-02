@@ -7,6 +7,7 @@ as runtime controls in Pipeline tab.
 
 from __future__ import annotations
 
+import os
 import tempfile
 import tkinter as tk
 from pathlib import Path
@@ -22,6 +23,11 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 def _create_root() -> tk.Tk:
     """Create a real Tk root for journey tests; fail fast if unavailable."""
     try:
+        if "TCL_LIBRARY" not in os.environ:
+            tcl_dir = os.path.join(os.path.dirname(tk.__file__), "tcl", "tcl8.6")
+            if os.path.isdir(tcl_dir):
+                os.environ["TCL_LIBRARY"] = tcl_dir
+
         root = tk.Tk()
         root.withdraw()
         return root

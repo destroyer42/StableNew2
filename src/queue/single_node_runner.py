@@ -72,6 +72,29 @@ class SingleNodeJobRunner:
                 self._current_job = None
         return
 
+    def run_once(self, job: Job) -> dict | None:
+        """Synchronously execute a single job (used by Run Now)."""
+        if job is None:
+            return None
+        self.job_queue.mark_running(job.job_id)
+        self._notify(job, JobStatus.RUNNING)
+        self._current_job = job
+        self._cancel_current.clear()
+        try:
+            if self.run_callable:
+                result = self.run_callable(job)
+            else:
+                result = {}
+            self.job_queue.mark_completed(job.job_id, result=result)
+            self._notify(job, JobStatus.COMPLETED)
+            return result
+        except Exception as exc:  # noqa: BLE001
+            self.job_queue.mark_failed(job.job_id, error_message=str(exc))
+            self._notify(job, JobStatus.FAILED)
+            raise
+        finally:
+            self._current_job = None
+
     def _notify(self, job: Job, status: JobStatus) -> None:
         if self._on_status_change:
             try:

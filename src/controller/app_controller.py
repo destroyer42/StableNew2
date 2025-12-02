@@ -20,12 +20,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 import os
 import threading
 import time
 
 from src.api.client import SDWebUIClient
+from src.api.webui_api import WebUIAPI
 from src.api.webui_resource_service import WebUIResourceService
 from src.api.webui_resources import WebUIResource
 from src.api.webui_process_manager import WebUIProcessManager
@@ -217,6 +218,8 @@ class AppController:
             self._structured_logger = structured_logger or StructuredLogger()
             self.pipeline_runner = PipelineRunner(self._api_client, self._structured_logger)
 
+        self._webui_api: WebUIAPI | None = None
+
         client = getattr(self, "_api_client", None)
         self.resource_service = resource_service or WebUIResourceService(client=client)
         self.state.resources = self._empty_resource_map()
@@ -227,6 +230,8 @@ class AppController:
         self._job_history_path = Path("runs") / "job_history.json"
         self.job_service = job_service or self._build_job_service()
         self._is_shutting_down = False
+        self._shutdown_started_at: float | None = None
+        self._shutdown_completed = False
         self.packs: list[PromptPackInfo] = []
         self._selected_pack_index: Optional[int] = None
 
@@ -323,8 +328,285 @@ class AppController:
         self._refresh_job_history()
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
-        self._append_log(f"[queue] Executing job {job.job_id} with payload {job.payload}")
-        return {"job_id": job.job_id, "status": "executed"}
+        self._append_log(f"[queue] Executing job {job.job_id} with payload {job.payload!r}")
+
+        payload = getattr(job, "payload", None)
+
+        if callable(payload):
+            try:
+                result = payload()
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[queue] Callable payload for job {job.job_id} raised: {exc!r}")
+                raise
+            return {
+                "job_id": job.job_id,
+                "status": "executed",
+                "mode": "callable",
+                "result": result,
+            }
+
+        if not isinstance(payload, dict):
+            return {
+                "job_id": job.job_id,
+                "status": "executed",
+                "mode": "opaque",
+                "payload_type": type(payload).__name__,
+            }
+
+        packs = payload.get("packs") or []
+        run_config = payload.get("run_config") or {}
+
+        if not packs:
+            return {
+                "job_id": job.job_id,
+                "status": "executed",
+                "mode": "prompt_pack_batch",
+                "total_entries": 0,
+                "results": [],
+            }
+
+        results: list[dict[str, Any]] = []
+        for idx, pack in enumerate(packs):
+            pack_id = pack.get("pack_id", "")
+            pack_name = pack.get("pack_name", "")
+            cfg_snapshot = pack.get("config_snapshot") or {}
+            variant_index = pack.get("variant_index") or cfg_snapshot.get("variant_index") or idx
+            try:
+                entry_result = self._execute_pack_entry(
+                    pack_id=pack_id,
+                    pack_name=pack_name,
+                    cfg_snapshot=cfg_snapshot,
+                    run_config=run_config,
+                    variant_index=variant_index,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[queue] Error while executing pack {pack_id or pack_name}: {exc!r}")
+                entry_result = self._build_pack_result(
+                    pack_id=pack_id,
+                    pack_name=pack_name,
+                    variant_index=variant_index,
+                    prompt=cfg_snapshot.get("prompt", ""),
+                    negative_prompt=cfg_snapshot.get("negative_prompt", ""),
+                    params=self._merge_run_params(cfg_snapshot, run_config),
+                    pipeline_mode=None,
+                    run_result=None,
+                    status="error",
+                    error=str(exc),
+                )
+            results.append(entry_result)
+
+        return {
+            "job_id": job.job_id,
+            "status": "executed",
+            "mode": "prompt_pack_batch",
+            "total_entries": len(packs),
+            "results": results,
+        }
+
+    def _execute_pack_entry(
+        self,
+        *,
+        pack_id: str,
+        pack_name: str,
+        cfg_snapshot: dict[str, Any],
+        run_config: dict[str, Any],
+        variant_index: int | None = None,
+    ) -> dict[str, Any]:
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+
+        prompt = self._derive_prompt(cfg_snapshot, run_config)
+        negative_prompt = self._derive_negative_prompt(cfg_snapshot, run_config)
+
+        if pipeline_tab and hasattr(pipeline_tab, "prompt_text"):
+            try:
+                pipeline_tab.prompt_text.delete(0, "end")
+                if prompt:
+                    pipeline_tab.prompt_text.insert(0, prompt)
+            except Exception:
+                pass
+
+        self._apply_pipeline_tab_config(pipeline_tab, cfg_snapshot, run_config)
+
+        params = self._merge_run_params(cfg_snapshot, run_config)
+
+        run_result = self.run_pipeline()
+        pipeline_mode = run_result.get("mode") if isinstance(run_result, dict) else None
+
+        return self._build_pack_result(
+            pack_id=pack_id,
+            pack_name=pack_name,
+            variant_index=variant_index,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            params=params,
+            pipeline_mode=pipeline_mode,
+            run_result=run_result,
+            status="ok",
+        )
+
+    def _build_pack_result(
+        self,
+        *,
+        pack_id: str,
+        pack_name: str,
+        variant_index: int | None,
+        prompt: str,
+        negative_prompt: str,
+        params: dict[str, Any],
+        pipeline_mode: str | None,
+        run_result: dict[str, Any] | None,
+        status: str,
+        error: str | None = None,
+    ) -> dict[str, Any]:
+        outputs = self._collect_outputs(run_result)
+        return {
+            "pack_id": pack_id,
+            "pack_name": pack_name,
+            "variant_index": variant_index,
+            "status": status,
+            "error": error,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "pipeline_mode": pipeline_mode,
+            "params": params,
+            "outputs": outputs,
+            "raw_result": run_result,
+        }
+
+    def _collect_outputs(self, run_result: dict[str, Any] | None) -> list[dict[str, Any]]:
+        outputs: list[dict[str, Any]] = []
+        if not isinstance(run_result, dict):
+            return outputs
+
+        images: list[Any] = []
+
+        def gather(entry: Any) -> None:
+            if isinstance(entry, dict):
+                imgs = entry.get("images")
+                if isinstance(imgs, list):
+                    images.extend(imgs)
+
+        gather(run_result.get("response") or run_result.get("raw") or run_result)
+        for entry in run_result.get("upscaled") or []:
+            gather(entry)
+
+        for idx in range(len(images)):
+            outputs.append({"path": None, "index": idx})
+
+        return outputs
+
+    def _apply_pipeline_tab_config(
+        self,
+        pipeline_tab: Any | None,
+        cfg_snapshot: dict[str, Any],
+        run_config: dict[str, Any],
+    ) -> None:
+        if pipeline_tab is None:
+            return
+
+        def _set_if_has(attr: str, value: Any) -> None:
+            if value is None:
+                return
+            target = getattr(pipeline_tab, attr, None)
+            if target is None:
+                return
+            try:
+                if hasattr(target, "set"):
+                    target.set(value)
+            except Exception:
+                pass
+
+        for key, attr in [
+            ("txt2img_enabled", "txt2img_enabled"),
+            ("img2img_enabled", "img2img_enabled"),
+            ("adetailer_enabled", "adetailer_enabled"),
+            ("upscale_enabled", "upscale_enabled"),
+        ]:
+            _set_if_has(attr, cfg_snapshot.get(key, run_config.get(key)))
+
+        for key, attr in [
+            ("upscale_factor", "upscale_factor"),
+            ("upscale_model", "upscale_model"),
+            ("upscale_tile_size", "upscale_tile_size"),
+        ]:
+            _set_if_has(attr, cfg_snapshot.get(key, run_config.get(key)))
+
+        input_image_path = cfg_snapshot.get("input_image_path") or run_config.get("input_image_path")
+        if input_image_path and hasattr(pipeline_tab, "input_image_path"):
+            try:
+                pipeline_tab.input_image_path = input_image_path
+            except Exception:
+                pass
+
+    def _derive_prompt(self, cfg_snapshot: dict[str, Any], run_config: dict[str, Any]) -> str:
+        return (
+            cfg_snapshot.get("prompt")
+            or cfg_snapshot.get("positive_prompt")
+            or run_config.get("prompt", "")
+        ) or ""
+
+    def _derive_negative_prompt(self, cfg_snapshot: dict[str, Any], run_config: dict[str, Any]) -> str:
+        return (
+            cfg_snapshot.get("negative_prompt") or run_config.get("negative_prompt", "")
+        ) or ""
+
+    def _merge_run_params(self, cfg_snapshot: dict[str, Any], run_config: dict[str, Any]) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        params["model"] = (
+            cfg_snapshot.get("model")
+            or cfg_snapshot.get("model_name")
+            or run_config.get("model")
+            or run_config.get("model_name")
+            or ""
+        )
+        params["sampler"] = (
+            cfg_snapshot.get("sampler")
+            or cfg_snapshot.get("sampler_name")
+            or run_config.get("sampler")
+            or run_config.get("sampler_name")
+            or ""
+        )
+        params["steps"] = self._safe_int(cfg_snapshot.get("steps") or run_config.get("steps"), 0)
+        params["width"] = self._safe_int(cfg_snapshot.get("width") or run_config.get("width"), 512)
+        params["height"] = self._safe_int(cfg_snapshot.get("height") or run_config.get("height"), 512)
+        params["cfg_scale"] = self._safe_float(
+            cfg_snapshot.get("cfg_scale") or run_config.get("cfg_scale"), 7.0
+        )
+        params["seed"] = cfg_snapshot.get("seed") or run_config.get("seed")
+        params["upscale_factor"] = float(
+            cfg_snapshot.get("upscale_factor")
+            or run_config.get("upscale_factor")
+            or 2.0
+        )
+        params["upscale_model"] = (
+            cfg_snapshot.get("upscale_model")
+            or cfg_snapshot.get("upscaler")
+            or run_config.get("upscale_model")
+            or ""
+        )
+        params["upscale_tile_size"] = self._safe_int(
+            cfg_snapshot.get("upscale_tile_size") or run_config.get("upscale_tile_size"), 0
+        )
+        lora_settings = cfg_snapshot.get("lora_strengths") or run_config.get("lora_strengths") or []
+        params["lora"] = [
+            dict(item) if isinstance(item, dict) else item for item in lora_settings
+        ]
+        params["randomization_enabled"] = bool(
+            cfg_snapshot.get("randomization_enabled") or run_config.get("randomization_enabled")
+        )
+        return params
+
+    def _safe_int(self, value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    def _safe_float(self, value: Any, default: float) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return default
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self.app_state:
@@ -564,6 +846,193 @@ class AppController:
     # Run / Stop / Preview
     # ------------------------------------------------------------------
 
+    def run_pipeline(self):
+        """Public, synchronous pipeline entrypoint used by journeys and tests.
+
+        This method:
+        - Validates the current pipeline config.
+        - Builds the PipelineConfig.
+        - Invokes the injected pipeline runner once.
+        - Updates lifecycle state and returns the runner result (if any).
+        """
+        if self.state.lifecycle == LifecycleState.RUNNING:
+            self._append_log("[controller] run_pipeline requested, but pipeline is already running.")
+            return None
+
+        self._append_log("[controller] run_pipeline - gathering config.")
+        is_valid, message = self._validate_pipeline_config()
+        self._set_validation_feedback(is_valid, message)
+        if not is_valid:
+            self._append_log(f"[controller] Pipeline validation failed: {message}")
+            return None
+
+        self._set_lifecycle(LifecycleState.RUNNING)
+        pipeline_config = self.build_pipeline_config_v2()
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+
+        try:
+            self._append_log("[controller] Starting pipeline execution (run_pipeline).")
+            if pipeline_tab is not None:
+                result = self._run_pipeline_from_tab(pipeline_tab, pipeline_config)
+            else:
+                result = self._run_pipeline_via_runner_only(pipeline_config)
+            self._set_lifecycle(LifecycleState.IDLE)
+            return result
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"[controller] Pipeline error in run_pipeline: {exc!r}")
+            self._set_lifecycle(LifecycleState.ERROR, error=str(exc))
+            return None
+
+    def _run_pipeline_from_tab(self, pipeline_tab: Any, pipeline_config: PipelineConfig) -> Any:
+        flags = {
+            "txt2img": self._coerce_bool(getattr(pipeline_tab, "txt2img_enabled", None)),
+            "img2img": self._coerce_bool(getattr(pipeline_tab, "img2img_enabled", None)),
+            "adetailer": self._coerce_bool(getattr(pipeline_tab, "adetailer_enabled", None)),
+            "upscale": self._coerce_bool(getattr(pipeline_tab, "upscale_enabled", None)),
+        }
+        factor, model, tile_size = self._get_pipeline_tab_upscale_params(pipeline_tab)
+        prompt = self._get_pipeline_tab_prompt(pipeline_tab)
+        if flags["upscale"] and not (flags["txt2img"] or flags["img2img"] or flags["adetailer"]):
+            input_image_path = getattr(pipeline_tab, "input_image_path", "") or ""
+            return self._run_standalone_upscale(
+                input_image_path=input_image_path,
+                factor=factor,
+                model=model,
+                tile_size=tile_size,
+                prompt=prompt,
+            )
+
+        if flags["txt2img"] and flags["upscale"]:
+            return self._run_txt2img_then_upscale(
+                prompt=prompt,
+                factor=factor,
+                model=model,
+                tile_size=tile_size,
+            )
+
+        return self._run_pipeline_via_runner_only(pipeline_config)
+
+    def _run_standalone_upscale(
+        self,
+        *,
+        input_image_path: str,
+        factor: float,
+        model: str,
+        tile_size: int,
+        prompt: str,
+    ) -> dict[str, Any]:
+        if not input_image_path:
+            raise ValueError("No input image provided for standalone upscale.")
+        image_path = Path(input_image_path)
+        if not image_path.exists():
+            raise FileNotFoundError(f"Input image not found: {image_path}")
+        api = self._ensure_webui_api()
+        kwargs: dict[str, Any] = {
+            "image": str(image_path),
+            "upscale_factor": factor,
+            "model": model,
+            "tile_size": tile_size,
+            "prompt": prompt,
+        }
+        self._append_log("[controller] Performing standalone upscale via WebUI API.")
+        response = api.upscale_image(**kwargs)
+        return {
+            "mode": "standalone_upscale",
+            "input_image": str(image_path),
+            "factor": factor,
+            "model": model,
+            "tile_size": tile_size,
+            "prompt": prompt,
+            "response": response,
+        }
+
+    def _run_txt2img_then_upscale(
+        self,
+        *,
+        prompt: str,
+        factor: float,
+        model: str,
+        tile_size: int,
+    ) -> dict[str, Any]:
+        api = self._ensure_webui_api()
+        txt_kwargs: dict[str, Any] = {"prompt": prompt or ""}
+        txt_response = api.txt2img(**txt_kwargs)
+        self._append_log("[controller] Completed txt2img stage via WebUI API.")
+        images = txt_response.get("images") or []
+        upscaled_results: list[dict[str, Any]] = []
+        for image in images:
+            upscale_kwargs: dict[str, Any] = {
+                "image": image,
+                "upscale_factor": factor,
+                "model": model,
+                "tile_size": tile_size,
+                "prompt": prompt,
+            }
+            upscaled_results.append(api.upscale_image(**upscale_kwargs))
+        return {
+            "mode": "txt2img_then_upscale",
+            "prompt": prompt,
+            "factor": factor,
+            "model": model,
+            "tile_size": tile_size,
+            "txt2img": txt_response,
+            "upscaled": upscaled_results,
+        }
+
+    def _run_pipeline_via_runner_only(self, pipeline_config: PipelineConfig) -> Any:
+        runner = getattr(self, "pipeline_runner", None)
+        if runner is None:
+            raise RuntimeError("No pipeline runner configured")
+        self._append_log("[controller] Starting pipeline execution (runner).")
+        executor_config = runner._build_executor_config(pipeline_config)
+        self._cache_last_run_payload(executor_config, pipeline_config)
+        return runner.run(pipeline_config, None, self._append_log_threadsafe)
+
+    def _get_pipeline_tab_upscale_params(self, pipeline_tab: Any) -> tuple[float, str, int]:
+        factor_var = getattr(pipeline_tab, "upscale_factor", None)
+        try:
+            factor = float(factor_var.get()) if hasattr(factor_var, "get") else float(factor_var)
+        except Exception:
+            factor = 2.0
+        model_var = getattr(pipeline_tab, "upscale_model", None)
+        model = ""
+        try:
+            model = str(model_var.get()).strip() if hasattr(model_var, "get") else str(model_var or "")
+        except Exception:
+            model = str(model_var or "")
+        tile_var = getattr(pipeline_tab, "upscale_tile_size", None)
+        try:
+            tile = int(tile_var.get()) if hasattr(tile_var, "get") else int(tile_var or 0)
+        except Exception:
+            tile = 0
+        return factor, model, tile
+
+    def _get_pipeline_tab_prompt(self, pipeline_tab: Any) -> str:
+        prompt_attr = getattr(pipeline_tab, "prompt_text", None)
+        if prompt_attr is None:
+            return ""
+        try:
+            if hasattr(prompt_attr, "get"):
+                return str(prompt_attr.get() or "")
+        except Exception:
+            pass
+        return str(prompt_attr or "")
+
+    def _coerce_bool(self, value: Any, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if hasattr(value, "get"):
+            try:
+                return bool(value.get())
+            except Exception:
+                return default
+        return bool(value)
+
+    def _ensure_webui_api(self) -> WebUIAPI:
+        if self._webui_api is None:
+            self._webui_api = WebUIAPI()
+        return self._webui_api
+
     def on_run_clicked(self) -> None:
         """
         Called when the user presses RUN.
@@ -601,8 +1070,8 @@ class AppController:
             )
             self._worker_thread.start()
         else:
-            # Synchronous run (for tests)
-            self._run_pipeline_thread(self._cancel_token)
+            # Synchronous run (for tests and journeys) via public facade
+            self.run_pipeline()
 
     def on_launch_webui_clicked(self) -> None:
         if not self.webui_process_manager:
@@ -863,11 +1332,12 @@ class AppController:
             except Exception:
                 logger.exception("Error running shutdown inspector")
 
-        self._shutdown_completed = True
         try:
             self._join_worker_thread()
         except Exception:
             logger.exception("Error waiting for worker thread during shutdown")
+
+        self._shutdown_completed = True
 
     def _cancel_active_jobs(self, reason: str) -> None:
         if self._cancel_token is not None:
@@ -1311,6 +1781,8 @@ class AppController:
             "samplers": [],
             "schedulers": [],
             "upscalers": [],
+            "adetailer_models": [],
+            "adetailer_detectors": [],
         }
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
@@ -1663,11 +2135,13 @@ class AppController:
         self._append_log(f"[controller] Enqueued job {job.job_id} with {pack_count} pack(s)")
 
     def on_run_job_now(self) -> None:
-        """Enqueue and start the runner immediately."""
+        """Enqueue and execute the next queued job via JobService."""
+        self.on_run_queue_now_clicked()
+
+    def on_run_queue_now_clicked(self) -> None:
+        """Delegate to JobService to execute the next queued job."""
         job = self._build_job_from_draft()
-        if job is None:
-            return
-        if not self.job_service:
+        if job is None or not self.job_service:
             return
         self.job_service.run_now(job)
         self._append_log(f"[controller] Running job {job.job_id} immediately")

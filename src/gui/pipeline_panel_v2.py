@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from . import theme as theme_mod
+from src.queue.job_model import Job
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
 from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
@@ -161,3 +162,22 @@ class PipelinePanelV2(ttk.Frame):
                 self.preview_panel.update_from_controls(self.sidebar)
         except Exception:
             pass
+
+
+def format_queue_job_summary(job: Job) -> str:
+    result = job.result or {}
+    if isinstance(result, dict) and result.get("mode") == "prompt_pack_batch":
+        entries = result.get("results") or []
+        total_entries = result.get("total_entries", len(entries))
+        first_prompt = ""
+        if entries:
+            first_prompt = (entries[0].get("prompt") or "").strip()
+        summary = f"{total_entries} entries"
+        if first_prompt:
+            snippet = first_prompt if len(first_prompt) <= 60 else first_prompt[:60] + "…"
+            summary += f" | {snippet}"
+        return summary
+    return job.summary()
+
+
+__all__ = ["PipelinePanelV2", "format_queue_job_summary"]

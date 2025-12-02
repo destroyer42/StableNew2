@@ -6,7 +6,7 @@
     Wrapper script that configures environment variables (auto-exit, attempts, timeout),
     optionally activates a venv, and runs one or more pytest journeys depending on the
     chosen mode.
->
+#>
 param(
     [ValidateSet("all", "shutdown", "core", "legacy")]
     [string]$Mode = "all",
@@ -20,6 +20,10 @@ $env:STABLENEW_AUTO_EXIT_SECONDS = "$UptimeSeconds"
 $env:STABLENEW_SHUTDOWN_LEAK_TIMEOUT_BUFFER = "$TimeoutBuffer"
 $env:STABLENEW_DEBUG_SHUTDOWN = "1"
 
+# Set Tkinter environment variables for GUI tests
+$env:TCL_LIBRARY = "C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tcl8.6"
+$env:TK_LIBRARY = "C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tk8.6"
+
 # Optional: activate your Python virtualenv for journey tests
 # . "$PSScriptRoot\..\venv\Scripts\Activate.ps1"
 
@@ -32,7 +36,7 @@ function RunCoreJourneys {
 }
 
 function RunLegacyJourney {
-    python -m pytest tests/legacy/test_pipeline_journey.py -q
+    python -m pytest tests/journeys/test_v2_full_pipeline_journey.py -q
 }
 
 switch ($Mode) {

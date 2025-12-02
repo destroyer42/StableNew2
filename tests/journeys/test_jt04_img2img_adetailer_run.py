@@ -6,7 +6,9 @@ transformed using configured parameters without losing prompt context or metadat
 
 from __future__ import annotations
 
+import os
 import tempfile
+import tkinter as tk
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -17,10 +19,14 @@ from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
 
 
-def _create_root():
+def _create_root() -> tk.Tk:
     """Create a real Tk root for journey tests; fail fast if unavailable."""
     try:
-        import tkinter as tk
+        if "TCL_LIBRARY" not in os.environ:
+            tcl_dir = os.path.join(os.path.dirname(tk.__file__), "tcl", "tcl8.6")
+            if os.path.isdir(tcl_dir):
+                os.environ["TCL_LIBRARY"] = tcl_dir
+
         root = tk.Tk()
         root.withdraw()
         return root

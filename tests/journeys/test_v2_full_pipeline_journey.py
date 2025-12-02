@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tkinter as tk
 
 import pytest
@@ -12,6 +13,11 @@ from tests.journeys.fakes.fake_pipeline_runner import FakePipelineRunner
 def _create_root() -> tk.Tk:
     """Create a real Tk root for journey tests; fail fast if unavailable."""
     try:
+        if "TCL_LIBRARY" not in os.environ:
+            tcl_dir = os.path.join(os.path.dirname(tk.__file__), "tcl", "tcl8.6")
+            if os.path.isdir(tcl_dir):
+                os.environ["TCL_LIBRARY"] = tcl_dir
+
         root = tk.Tk()
         root.withdraw()
         return root
@@ -30,6 +36,9 @@ def test_v2_full_pipeline_journey_runs_once():
         pipeline_runner=fake_runner,
         threaded=False,
     )
+    app_state.current_config.model_name = "dummy-model"
+    app_state.current_config.sampler_name = "Euler a"
+    app_state.current_config.steps = 20
 
     try:
         # Preconditions
@@ -66,6 +75,9 @@ def test_v2_full_pipeline_journey_handles_runner_error():
         pipeline_runner=fake_runner,
         threaded=False,
     )
+    app_state.current_config.model_name = "dummy-model"
+    app_state.current_config.sampler_name = "Euler a"
+    app_state.current_config.steps = 20
 
     try:
         app_controller.on_run_clicked()

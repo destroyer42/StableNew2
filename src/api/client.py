@@ -849,3 +849,9 @@ def find_webui_api_port(*args, **kwargs):
     from src.utils import webui_discovery as _wd
 
     return _wd.find_webui_api_port(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compatibility alias for older tests/imports
+# ---------------------------------------------------------------------------
+ApiClient = SDWebUIClient
