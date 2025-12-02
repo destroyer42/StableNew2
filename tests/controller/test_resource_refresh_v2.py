@@ -62,6 +62,9 @@ class DummyResourceService:
             ],
             "samplers": ["Euler a", "DPM++ 2M"],
             "schedulers": ["Normal", "Karras"],
+            "upscalers": [
+                SimpleNamespace(name="upscaler-1", display_name="R-ESRGAN 4x+"),
+            ],
         }
 
     def list_models(self):

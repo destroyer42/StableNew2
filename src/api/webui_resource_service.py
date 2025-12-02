@@ -18,6 +18,7 @@ class WebUIResourceService(BaseWebUIResourceService):
         vaes = self.list_vaes() or []
         samplers = self._normalize_sampler_names(self.client.get_samplers() or [])
         schedulers = list(self.client.get_schedulers() or [])
+        upscalers = self.list_upscalers() or []
         adetailer_models = self.list_adetailer_models()
         adetailer_detectors = self.list_adetailer_detectors()
         return {
@@ -25,6 +26,7 @@ class WebUIResourceService(BaseWebUIResourceService):
             "vaes": vaes,
             "samplers": samplers,
             "schedulers": schedulers,
+            "upscalers": upscalers,
             "adetailer_models": adetailer_models,
             "adetailer_detectors": adetailer_detectors,
         }

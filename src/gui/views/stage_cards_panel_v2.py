@@ -49,6 +49,7 @@ class StageCardsPanel(ttk.Frame):
         self._attach_watchers()
         self._adetailer_listeners: list[Callable[[dict[str, Any]], None]] = []
         self._attach_adetailer_watchers()
+        self._attach_dimension_watchers()
         if self.app_state is not None:
             try:
                 self.app_state.add_resource_listener(self._on_app_state_resources_changed)
@@ -98,6 +99,66 @@ class StageCardsPanel(ttk.Frame):
                 pass
         self._notify_adetailer_listeners()
 
+    def _attach_dimension_watchers(self) -> None:
+        """Attach watchers to update upscale card when txt2img/img2img dimensions change."""
+        upscale_card = getattr(self, "upscale_card", None)
+        if upscale_card is None or not hasattr(upscale_card, "update_input_dimensions"):
+            return
+
+        # Watch txt2img dimensions
+        txt2img_card = getattr(self, "txt2img_card", None)
+        if txt2img_card is not None:
+            watchable = getattr(txt2img_card, "watchable_vars", None)
+            if callable(watchable):
+                for var in watchable() or []:
+                    if hasattr(var, "_name") and var._name in ("width_var", "height_var"):
+                        try:
+                            var.trace_add("write", lambda *_: self._update_upscale_dimensions())
+                        except Exception:
+                            pass
+
+        # Watch img2img dimensions
+        img2img_card = getattr(self, "img2img_card", None)
+        if img2img_card is not None:
+            watchable = getattr(img2img_card, "watchable_vars", None)
+            if callable(watchable):
+                for var in watchable() or []:
+                    if hasattr(var, "_name") and var._name in ("width_var", "height_var"):
+                        try:
+                            var.trace_add("write", lambda *_: self._update_upscale_dimensions())
+                        except Exception:
+                            pass
+
+        # Initial update
+        self._update_upscale_dimensions()
+
+    def _update_upscale_dimensions(self) -> None:
+        """Update the upscale card with current pipeline dimensions."""
+        upscale_card = getattr(self, "upscale_card", None)
+        if upscale_card is None or not hasattr(upscale_card, "update_input_dimensions"):
+            return
+
+        # Get dimensions from txt2img (primary) or img2img
+        width, height = 512, 512  # defaults
+
+        txt2img_card = getattr(self, "txt2img_card", None)
+        if txt2img_card is not None and hasattr(txt2img_card, "width_var") and hasattr(txt2img_card, "height_var"):
+            try:
+                width = int(txt2img_card.width_var.get())
+                height = int(txt2img_card.height_var.get())
+            except Exception:
+                pass
+
+        img2img_card = getattr(self, "img2img_card", None)
+        if img2img_card is not None and hasattr(img2img_card, "width_var") and hasattr(img2img_card, "height_var"):
+            try:
+                width = int(img2img_card.width_var.get())
+                height = int(img2img_card.height_var.get())
+            except Exception:
+                pass
+
+        upscale_card.update_input_dimensions(width, height)
+
     def _notify_adetailer_listeners(self) -> None:
         if not self._adetailer_listeners:
             return
@@ -117,7 +178,6 @@ class StageCardsPanel(ttk.Frame):
             card.grid()
         elif not enabled and currently:
             card.grid_remove()
-        self._apply_stage_visibility()
 
     def to_overrides(self, prompt_text: str | None = None) -> dict[str, Any]:
         overrides: dict[str, Any] = {}

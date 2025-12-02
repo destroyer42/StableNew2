@@ -136,7 +136,7 @@ class SidebarPanelV2(ttk.Frame):
         self._on_apply_pack = on_apply_pack
         self._on_change = on_change
 
-        adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", False))
+        adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", True))
         self.stage_states: dict[str, tk.BooleanVar] = {
             "txt2img": tk.BooleanVar(value=True),
             "img2img": tk.BooleanVar(value=True),
@@ -204,6 +204,7 @@ class SidebarPanelV2(ttk.Frame):
             title="Core Config",
             build_child=lambda parent: CoreConfigPanelV2(
                 parent,
+                controller=self.controller,
                 include_vae=True,
                 include_refresh=True,
                 model_adapter=self.model_adapter,
@@ -744,6 +745,10 @@ class SidebarPanelV2(ttk.Frame):
         
         # Create a frame to hold the pipeline config panel
         frame = ttk.Frame(parent)
+        
+        # Add stages section at the top
+        stages_frame = self._build_stages_section(frame)
+        stages_frame.pack(fill="x", pady=(0, 8))
         
         # Create the pipeline config panel
         self.pipeline_config_panel = PipelineConfigPanel(

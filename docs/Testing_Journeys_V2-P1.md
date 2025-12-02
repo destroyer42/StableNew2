@@ -26,6 +26,12 @@ scripts\run_journey_tests.ps1 -Mode core
 scripts\run_journey_tests.ps1 -Mode all
 ```
 
+For deep diagnostics (shutdown inspector + file-access trace), use the specialized helper:
+
+```powershell
+scripts\run_shutdown_diag.ps1
+```
+
 The script still exposes the journey-specific environment variables (`STABLENEW_SHUTDOWN_LEAK_ATTEMPTS`, `STABLENEW_AUTO_EXIT_SECONDS`, `STABLENEW_SHUTDOWN_LEAK_TIMEOUT_BUFFER`) for fine-grained control. It also sets `STABLENEW_DEBUG_SHUTDOWN=1` automatically.
 
 ## Running in CI (self-hosted Windows runner)

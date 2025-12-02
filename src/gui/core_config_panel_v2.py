@@ -26,6 +26,7 @@ class CoreConfigPanelV2(BaseStageCardV2):
         model_adapter: object | None = None,
         vae_adapter: object | None = None,
         sampler_adapter: object | None = None,
+        controller: object | None = None,
         show_header: bool = True,
         **kwargs: object,
     ) -> None:
@@ -34,6 +35,7 @@ class CoreConfigPanelV2(BaseStageCardV2):
         self._model_adapter = model_adapter
         self._vae_adapter = vae_adapter
         self._sampler_adapter = sampler_adapter
+        self._controller = controller
         self._models = models
         self._vaes = vaes
         self._samplers = samplers
@@ -104,13 +106,15 @@ class CoreConfigPanelV2(BaseStageCardV2):
         # Width and height controls share additional columns
         width_label = ttk.Label(parent, text="Width", style=BODY_LABEL_STYLE)
         width_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
-        width_spin = self._build_spin(parent, self.width_var, from_=64, to=4096, increment=64)
-        width_spin.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
+        width_values = [str(i) for i in range(256, 2049, 128)]
+        width_combo = self._build_combo(parent, self.width_var, width_values)
+        width_combo.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
 
         height_label = ttk.Label(parent, text="Height", style=BODY_LABEL_STYLE)
         height_label.grid(row=row_idx, column=2, sticky="w", padx=(8, 8), pady=(0, 4))
-        height_spin = self._build_spin(parent, self.height_var, from_=64, to=4096, increment=64)
-        height_spin.grid(row=row_idx, column=3, sticky="ew", pady=(0, 4))
+        height_values = [str(i) for i in range(256, 2049, 128)]
+        height_combo = self._build_combo(parent, self.height_var, height_values)
+        height_combo.grid(row=row_idx, column=3, sticky="ew", pady=(0, 4))
         row_idx += 1
 
         preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
@@ -146,24 +150,50 @@ class CoreConfigPanelV2(BaseStageCardV2):
     def refresh_from_adapters(self) -> None:
         """Refresh dropdown values using the configured adapters."""
         try:
-            models = self._names_from_adapter(self._model_adapter, "get_model_names")
-            vaes = self._names_from_adapter(self._vae_adapter, "get_vae_names")
-            samplers = self._names_from_adapter(self._sampler_adapter, "get_sampler_names")
+            models = self._names_from_adapter(self._model_adapter, "get_model_names", "list_models")
+            vaes = self._names_from_adapter(self._vae_adapter, "get_vae_names", "list_vaes")
+            samplers = self._names_from_adapter(self._sampler_adapter, "get_sampler_names", "get_available_samplers")
             self._update_combo(self._model_combo, self.model_var, models)
             self._update_combo(self._vae_combo, self.vae_var, vaes)
             self._update_combo(self._sampler_combo, self.sampler_var, samplers)
-        except Exception:
+        except Exception as e:
             pass
 
-    def _names_from_adapter(self, adapter: object | None, method_name: str) -> list[str]:
+    def _names_from_adapter(self, adapter: object | None, adapter_method_name: str, controller_method_name: str | None = None) -> list[str]:
+        # First try controller methods (preferred for consistency with stage cards)
+        if self._controller is not None and controller_method_name is not None:
+            controller_method = getattr(self._controller, controller_method_name, None)
+            if controller_method is not None and callable(controller_method):
+                try:
+                    result = controller_method()
+                    if result:
+                        # Handle different return types from controller methods
+                        names = []
+                        for item in result:
+                            if hasattr(item, 'display_name') and item.display_name:
+                                # WebUIResource objects (models, vaes)
+                                names.append(str(item.display_name))
+                            elif hasattr(item, 'name') and item.name:
+                                # WebUIResource objects (fallback)
+                                names.append(str(item.name))
+                            else:
+                                # Strings or other objects (samplers)
+                                names.append(str(item))
+                        return [name for name in names if name]
+                except Exception as e:
+                    pass
+        
+        # Fall back to adapter methods
         if adapter is None:
             return []
-        method = getattr(adapter, method_name, None)
+        method = getattr(adapter, adapter_method_name, None)
         if method is None or not callable(method):
             return []
         try:
-            return [str(name) for name in (method() or []) if name]
-        except Exception:
+            result = method()
+            names = [str(name) for name in (result or []) if name]
+            return names
+        except Exception as e:
             return []
 
     def _update_combo(self, combo: ttk.Combobox | None, variable: tk.StringVar, values: Iterable[str]) -> None:

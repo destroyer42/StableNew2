@@ -145,7 +145,16 @@ class PreviewPanelV2(ttk.Frame):
     def update_from_controls(self, sidebar) -> None:
         """Update preview summary from sidebar controls."""
         enabled = getattr(sidebar, "get_enabled_stages", lambda: [])()
-        stages_text = ", ".join([s.title() for s in enabled]) or "-"
+        ordered = ["txt2img", "img2img", "adetailer", "upscale"]
+        enabled_set = set(enabled)
+        canonical = [stage for stage in ordered if stage in enabled_set]
+        stage_labels = {
+            "txt2img": "txt2img",
+            "img2img": "img2img",
+            "adetailer": "ADetailer",
+            "upscale": "upscale",
+        }
+        stages_text = " → ".join(stage_labels[stage] for stage in canonical) or "-"
         self.summary_label.config(text=f"Stages: {stages_text}")
         self.mode_label.config(text=f"Mode: {getattr(sidebar, 'get_run_mode', lambda: '-')()}")
         self.scope_label.config(text=f"Scope: {getattr(sidebar, 'get_run_scope', lambda: '-')()}")

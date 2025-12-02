@@ -371,7 +371,16 @@ def _install_file_access_hooks(logger: 'FileAccessLogger') -> None:
 
 def main() -> None:
     """Main function"""
-    setup_logging("INFO")
+
+    log_file = os.environ.get("STABLENEW_LOG_FILE")
+    debug_shutdown_enabled = os.environ.get("STABLENEW_DEBUG_SHUTDOWN") == "1"
+    if log_file is None and debug_shutdown_enabled:
+        diag_dir = Path("logs") / "gui-shutdown"
+        diag_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        log_file = str(diag_dir / f"gui-shutdown-{timestamp}.log")
+
+    setup_logging("INFO", log_file=log_file)
 
     # Optional V2.5 file-access logging, controlled by env var
     file_access_logger = None
@@ -380,6 +389,7 @@ def main() -> None:
         logs_dir.mkdir(parents=True, exist_ok=True)
         log_path = logs_dir / f"file_access-{int(time.time())}.jsonl"
         file_access_logger = FileAccessLogger(log_path)
+        logging.getLogger(__name__).info("File access tracing enabled at %s", log_path)
         _install_file_access_hooks(file_access_logger)
 
     logging.info("Starting StableNew V2 GUI (MainWindowV2)")

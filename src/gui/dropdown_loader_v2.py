@@ -13,6 +13,7 @@ class DropdownLoader:
         "vaes",
         "samplers",
         "schedulers",
+        "upscalers",
         "adetailer_models",
         "adetailer_detectors",
     )

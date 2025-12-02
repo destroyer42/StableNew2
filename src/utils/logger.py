@@ -431,6 +431,9 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None):
 
     handlers = [logging.StreamHandler()]
     if log_file:
+        # Ensure the log file directory exists
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
 
     logging.basicConfig(

@@ -55,27 +55,32 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
         ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
-        self.steps_spin = tk.Spinbox(
+        # Steps combobox with common values
+        steps_values = ["10", "15", "20", "25", "30", "40", "50", "75", "100"]
+        self.steps_combo = ttk.Combobox(
             self.sampler_section,
-            from_=1,
-            to=200,
-            increment=1,
             textvariable=self.steps_var,
+            values=steps_values,
+            state="readonly",
             width=6,
+            style="Dark.TCombobox",
         )
-        self.steps_spin.grid(row=0, column=3, sticky="ew")
+        self.steps_combo.grid(row=0, column=3, sticky="ew")
 
         ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
-        self.cfg_spin = tk.Spinbox(
+        # CFG slider with fixed range 1.0-30.0
+        from src.gui.enhanced_slider import EnhancedSlider
+        self.cfg_slider = EnhancedSlider(
             self.sampler_section,
             from_=1.0,
             to=30.0,
-            increment=0.1,
-            textvariable=self.cfg_var,
-            format="%.1f",
-            width=6,
+            variable=self.cfg_var,
+            resolution=0.1,
+            width=120,
+            label="",
+            command=self._on_cfg_changed,
         )
-        self.cfg_spin.grid(row=1, column=1, sticky="ew", pady=(6, 0))
+        self.cfg_slider.grid(row=1, column=1, sticky="ew", pady=(6, 0), padx=(0, 8))
         for col in range(4):
             self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
 
@@ -105,13 +110,30 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         ).grid(row=0, column=3, sticky="ew")
 
         ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))
-        tk.Spinbox(meta, from_=64, to=4096, increment=64, textvariable=self.width_var, width=8).grid(
-            row=1, column=1, sticky="ew", padx=(0, 8)
+        # Width combobox with multiples of 128 only
+        width_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
+        self.width_combo = ttk.Combobox(
+            meta,
+            textvariable=self.width_var,
+            values=width_values,
+            state="readonly",
+            width=8,
+            style="Dark.TCombobox",
         )
+        self.width_combo.grid(row=1, column=1, sticky="ew", padx=(0, 8))
+        
         ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
-        tk.Spinbox(meta, from_=64, to=4096, increment=64, textvariable=self.height_var, width=8).grid(
-            row=1, column=3, sticky="ew"
+        # Height combobox with multiples of 128 only  
+        height_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
+        self.height_combo = ttk.Combobox(
+            meta,
+            textvariable=self.height_var,
+            values=height_values,
+            state="readonly",
+            width=8,
+            style="Dark.TCombobox",
         )
+        self.height_combo.grid(row=1, column=3, sticky="ew")
         for col in range(4):
             meta.columnconfigure(col, weight=1 if col in (1, 3) else 0)
 
@@ -134,7 +156,12 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             except Exception:
                 pass
 
-    def set_on_change(self, callback) -> None:
+    def _on_cfg_changed(self, value: float) -> None:
+        """Handle CFG slider changes"""
+        self.cfg_var.set(value)
+        self._notify_change()
+
+    def set_on_change(self, callback: Any) -> None:
         self._on_change = callback
 
     def load_from_section(self, section: dict[str, Any] | None) -> None:

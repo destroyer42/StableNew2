@@ -10,6 +10,8 @@ CI entrypoint:
 from __future__ import annotations
 
 import os
+import time
+from pathlib import Path
 
 import pytest
 
@@ -32,10 +34,22 @@ def test_shutdown_relaunch_leaves_no_processes() -> None:
     )
     timeout_buffer = float(os.environ.get("STABLENEW_SHUTDOWN_LEAK_TIMEOUT_BUFFER", "5"))
 
+    logs_base = Path("logs") / "journeys" / "shutdown"
+    logs_base.mkdir(parents=True, exist_ok=True)
     for _ in range(attempts):
+        timestamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{int(time.time() * 1000) % 1000}"
+        log_file = logs_base / f"shutdown-journey-{timestamp}.log"
+        extra_env = {
+            "STABLENEW_DEBUG_SHUTDOWN": "1",
+            "STABLENEW_LOG_FILE": str(log_file),
+        }
+        if os.environ.get("STABLENEW_FILE_ACCESS_LOG") == "1":
+            extra_env["STABLENEW_FILE_ACCESS_LOG"] = "1"
+
         result = journey_harness.run_app_once(
             auto_exit_seconds=auto_exit_seconds,
             timeout_buffer=timeout_buffer,
+            extra_env=extra_env,
         )
         assert result.returncode == 0, f"Process exited with code {result.returncode}"
         assert_no_stable_new_processes()

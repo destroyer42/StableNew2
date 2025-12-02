@@ -1310,6 +1310,7 @@ class AppController:
             "vaes": [],
             "samplers": [],
             "schedulers": [],
+            "upscalers": [],
         }
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
@@ -1331,10 +1332,10 @@ class AppController:
             except Exception:
                 pass
         self._update_gui_dropdowns()
-        counts = tuple(len(normalized[key]) for key in ("models", "vaes", "samplers", "schedulers"))
+        counts = tuple(len(normalized[key]) for key in ("models", "vaes", "samplers", "schedulers", "upscalers"))
         msg = (
             f"Resource update: {counts[0]} models, {counts[1]} vaes, "
-            f"{counts[2]} samplers, {counts[3]} schedulers"
+            f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
         )
         self._append_log(f"[resources] {msg}")
         logger.info(msg)
@@ -1359,6 +1360,14 @@ class AppController:
             return
         dropdowns = self._dropdown_loader.load_dropdowns(self, self.app_state)
         self._dropdown_loader.apply_to_gui(pipeline_tab, dropdowns)
+        
+        # Also refresh the sidebar's core config panel
+        sidebar = self._get_sidebar_panel()
+        if sidebar and hasattr(sidebar, "refresh_core_config_from_webui"):
+            try:
+                sidebar.refresh_core_config_from_webui()
+            except Exception as e:
+                pass
 
     def _get_stage_cards_panel(self):
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)

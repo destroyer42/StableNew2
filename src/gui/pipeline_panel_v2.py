@@ -8,6 +8,7 @@ from tkinter import ttk
 from . import theme as theme_mod
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
+from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 from src.gui.stage_cards_v2.advanced_upscale_stage_card_v2 import AdvancedUpscaleStageCardV2
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from .widgets.scrollable_frame_v2 import ScrollableFrame
@@ -57,10 +58,14 @@ class PipelinePanelV2(ttk.Frame):
         # Stage cards (parented under scrollable inner frame)
         self.txt2img_card: AdvancedTxt2ImgStageCardV2 = AdvancedTxt2ImgStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
         self.img2img_card: AdvancedImg2ImgStageCardV2 = AdvancedImg2ImgStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
+        self.adetailer_card: ADetailerStageCardV2 = ADetailerStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
         self.upscale_card: AdvancedUpscaleStageCardV2 = AdvancedUpscaleStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
+        self.adetailer_card: ADetailerStageCardV2 = ADetailerStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
 
         self.run_button: ttk.Button | None = None
         self.stop_button: ttk.Button | None = None
+
+        self._apply_stage_visibility()
 
     def get_prompt(self) -> str:
         return self.prompt_text.get("1.0", tk.END).strip()
@@ -131,7 +136,7 @@ class PipelinePanelV2(ttk.Frame):
         return ValidationResult(True, None)
 
     def _apply_stage_visibility(self) -> None:
-        enabled = set(self.sidebar.get_enabled_stages()) if hasattr(self, "sidebar") else {"txt2img", "img2img", "upscale"}
+        enabled = set(self.sidebar.get_enabled_stages()) if getattr(self, "sidebar", None) else {"txt2img", "img2img", "adetailer", "upscale"}
         if "txt2img" in enabled:
             self.txt2img_card.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
         else:
@@ -140,6 +145,10 @@ class PipelinePanelV2(ttk.Frame):
             self.img2img_card.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
         else:
             self.img2img_card.pack_forget()
+        if "adetailer" in enabled:
+            self.adetailer_card.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+        else:
+            self.adetailer_card.pack_forget()
         if "upscale" in enabled:
             self.upscale_card.pack(fill=tk.BOTH, expand=True)
         else:

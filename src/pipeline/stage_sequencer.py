@@ -6,8 +6,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
+import logging
+
 
 StageType = Literal["txt2img", "img2img", "upscale", "adetailer"]
+
+logger = logging.getLogger(__name__)
 
 
 class StageTypeEnum(str, Enum):
@@ -108,17 +112,21 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
         )
         order += 1
 
+    generative_enabled = txt_enabled or img_enabled
     if ad_enabled:
         payload = _stage_payload(config, "adetailer")
-        stages.append(
-            StageExecution(
-                stage_type="adetailer",
-                config=StageConfig(enabled=ad_enabled, payload=payload),
-                order_index=order,
-                requires_input_image=True,
-                produces_output_image=True,
+        if not generative_enabled:
+            logger.warning("ADetailer enabled but no generative stage active; skipping adetailer.")
+        else:
+            stages.append(
+                StageExecution(
+                    stage_type="adetailer",
+                    config=StageConfig(enabled=ad_enabled, payload=payload),
+                    order_index=order,
+                    requires_input_image=True,
+                    produces_output_image=True,
+                )
             )
-        )
         order += 1
 
     if up_enabled:

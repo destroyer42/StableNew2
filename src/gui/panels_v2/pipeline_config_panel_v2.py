@@ -33,9 +33,6 @@ class PipelineConfigPanel(ttk.Frame):
         self.randomizer_enabled_var = tk.BooleanVar(value=False)
         self.max_variants_var = tk.IntVar(value=1)
         self._max_variants_spinbox: ttk.Spinbox | None = None
-        self.txt2img_var = tk.BooleanVar(value=True)
-        self.img2img_var = tk.BooleanVar(value=True)
-        self.upscale_var = tk.BooleanVar(value=True)
 
         self._build_ui()
         self._setup_callbacks()
@@ -67,15 +64,6 @@ class PipelineConfigPanel(ttk.Frame):
         batch_spin.bind("<FocusOut>", lambda _e: self._on_batch_change())
         row += 1
         
-        # Stages
-        ttk.Label(self, text="Stages:", style=BODY_LABEL_STYLE).grid(row=row, column=0, sticky="nw", pady=2)
-        stages_frame = ttk.Frame(self, style=CARD_FRAME_STYLE)
-        stages_frame.grid(row=row, column=1, sticky="w", pady=2)
-        ttk.Checkbutton(stages_frame, text="Enable txt2img", variable=self.txt2img_var, command=self._on_stage_change).pack(anchor="w")
-        ttk.Checkbutton(stages_frame, text="Enable img2img/adetailer", variable=self.img2img_var, command=self._on_stage_change).pack(anchor="w")
-        ttk.Checkbutton(stages_frame, text="Enable upscale", variable=self.upscale_var, command=self._on_stage_change).pack(anchor="w")
-
-        row += 1
         randomizer_label = ttk.Label(self, text="Randomizer:", style=BODY_LABEL_STYLE)
         randomizer_label.grid(row=row, column=0, sticky="w", pady=2)
         randomizer_frame = ttk.Frame(self, style=CARD_FRAME_STYLE)
@@ -120,19 +108,10 @@ class PipelineConfigPanel(ttk.Frame):
 
     def apply_run_config(self, config: dict[str, Any]) -> None:
         """Apply run configuration to the panel."""
-        # Update stage checkboxes based on pipeline config
-        pipeline_config = config.get("pipeline", {})
-        if "txt2img_enabled" in pipeline_config:
-            self.txt2img_var.set(bool(pipeline_config["txt2img_enabled"]))
-        if "img2img_enabled" in pipeline_config:
-            self.img2img_var.set(bool(pipeline_config["img2img_enabled"]))
-        if "upscale_enabled" in pipeline_config:
-            self.upscale_var.set(bool(pipeline_config["upscale_enabled"]))
-        
         # Update other fields if they exist in the config
-        if "loop_count" in pipeline_config:
+        if "loop_count" in config.get("pipeline", {}):
             try:
-                batch_count = int(pipeline_config["loop_count"])
+                batch_count = int(config["pipeline"]["loop_count"])
                 self.batch_var.set(max(1, batch_count))
             except (ValueError, TypeError):
                 pass
@@ -197,10 +176,6 @@ class PipelineConfigPanel(ttk.Frame):
                 self.controller.on_randomizer_max_variants_changed(value)
             except Exception:
                 pass
-        if callable(self._on_change):
-            self._on_change()
-
-    def _on_stage_change(self) -> None:
         if callable(self._on_change):
             self._on_change()
 

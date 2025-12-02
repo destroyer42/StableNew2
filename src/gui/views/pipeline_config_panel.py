@@ -52,9 +52,11 @@ class PipelineConfigPanel(ttk.Frame):
         ttk.Label(self, text="Stages").pack(anchor="w")
         self.txt2img_var = tk.BooleanVar(value=self.pipeline_state.stage_txt2img_enabled)
         self.img2img_var = tk.BooleanVar(value=self.pipeline_state.stage_img2img_enabled)
+        self.adetailer_var = tk.BooleanVar(value=getattr(self.pipeline_state, "stage_adetailer_enabled", True))
         self.upscale_var = tk.BooleanVar(value=self.pipeline_state.stage_upscale_enabled)
         ttk.Checkbutton(self, text="Enable txt2img", variable=self.txt2img_var, command=self._on_stage_change).pack(anchor="w")
-        ttk.Checkbutton(self, text="Enable img2img/adetailer", variable=self.img2img_var, command=self._on_stage_change).pack(anchor="w")
+        ttk.Checkbutton(self, text="Enable img2img", variable=self.img2img_var, command=self._on_stage_change).pack(anchor="w")
+        ttk.Checkbutton(self, text="Enable ADetailer", variable=self.adetailer_var, command=self._on_stage_change).pack(anchor="w")
         ttk.Checkbutton(self, text="Enable upscale", variable=self.upscale_var, command=self._on_stage_change).pack(anchor="w", pady=(0, 6))
 
         self.queue_label_var = tk.StringVar()
@@ -105,6 +107,7 @@ class PipelineConfigPanel(ttk.Frame):
     def _on_stage_change(self) -> None:
         self.pipeline_state.stage_txt2img_enabled = bool(self.txt2img_var.get())
         self.pipeline_state.stage_img2img_enabled = bool(self.img2img_var.get())
+        self.pipeline_state.stage_adetailer_enabled = bool(self.adetailer_var.get())
         self.pipeline_state.stage_upscale_enabled = bool(self.upscale_var.get())
         if callable(self._on_change):
             self._on_change()

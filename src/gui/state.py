@@ -244,6 +244,7 @@ class PipelineState:
     batch_runs: int = 1
     stage_txt2img_enabled: bool = True
     stage_img2img_enabled: bool = True
+    stage_adetailer_enabled: bool = True
     stage_upscale_enabled: bool = True
     pending_jobs: int = 0
     randomizer_mode: str = "off"  # off | sequential | rotate | random

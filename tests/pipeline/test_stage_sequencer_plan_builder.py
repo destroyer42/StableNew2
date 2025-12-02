@@ -64,3 +64,57 @@ def test_plan_builder_excludes_adetailer_by_default():
     cfg = _base_config()
     plan = build_stage_execution_plan(cfg)
     assert all(stage.stage_type != "adetailer" for stage in plan.stages)
+
+
+def test_plan_builder_txt2img_and_adetailer():
+    cfg = _base_config()
+    cfg["pipeline"]["adetailer_enabled"] = True
+    cfg["adetailer"] = {"enabled": True}
+    plan = build_stage_execution_plan(cfg)
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "adetailer"]
+
+
+def test_plan_builder_img2img_and_adetailer():
+    cfg = _base_config()
+    cfg["txt2img"]["enabled"] = False
+    cfg["pipeline"]["txt2img_enabled"] = False
+    cfg["img2img"]["enabled"] = True
+    cfg["pipeline"]["img2img_enabled"] = True
+    cfg["pipeline"]["adetailer_enabled"] = True
+    cfg["adetailer"] = {"enabled": True}
+    plan = build_stage_execution_plan(cfg)
+    assert [s.stage_type for s in plan.stages] == ["img2img", "adetailer"]
+
+
+def test_plan_builder_txt2img_img2img_adetailer():
+    cfg = _base_config()
+    cfg["img2img"]["enabled"] = True
+    cfg["pipeline"]["img2img_enabled"] = True
+    cfg["pipeline"]["adetailer_enabled"] = True
+    cfg["adetailer"] = {"enabled": True}
+    plan = build_stage_execution_plan(cfg)
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "adetailer"]
+
+
+def test_plan_builder_adetailer_and_upscale_sequence():
+    cfg = _base_config()
+    cfg["img2img"]["enabled"] = True
+    cfg["pipeline"]["img2img_enabled"] = True
+    cfg["pipeline"]["adetailer_enabled"] = True
+    cfg["upscale"]["enabled"] = True
+    cfg["pipeline"]["upscale_enabled"] = True
+    cfg["adetailer"] = {"enabled": True}
+    plan = build_stage_execution_plan(cfg)
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "adetailer", "upscale"]
+
+
+def test_plan_builder_adetailer_without_generative_stage_skipped():
+    cfg = _base_config()
+    cfg["txt2img"]["enabled"] = False
+    cfg["pipeline"]["txt2img_enabled"] = False
+    cfg["img2img"]["enabled"] = False
+    cfg["pipeline"]["img2img_enabled"] = False
+    cfg["pipeline"]["adetailer_enabled"] = True
+    cfg["adetailer"] = {"enabled": True}
+    plan = build_stage_execution_plan(cfg)
+    assert all(stage.stage_type != "adetailer" for stage in plan.stages)
