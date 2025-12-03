@@ -99,6 +99,7 @@ class PipelineTabFrame(ttk.Frame):
         self.run_controls = PipelineRunControlsV2(
             self.right_column,
             controller=queue_controller,
+            app_state=self.app_state,
             theme=self.theme,
         )
         self.run_controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
@@ -213,6 +214,8 @@ class PipelineTabFrame(ttk.Frame):
             self._on_running_job_changed()
             self._on_queue_status_changed()
             self._on_history_items_changed()
+            if hasattr(self, "run_controls"):
+                self.run_controls.update_from_app_state(self.app_state)
         controller = self.app_controller or self.pipeline_controller
         if controller:
             try:
@@ -328,20 +331,24 @@ class PipelineTabFrame(ttk.Frame):
             pass
 
     def _on_running_job_changed(self) -> None:
-        if self.app_state is None or not hasattr(self, "preview_panel"):
+        if self.app_state is None:
             return
         try:
             self.preview_panel.update_running_job(self.app_state.running_job)
         except Exception:
             pass
+        if hasattr(self, "run_controls"):
+            self.run_controls.update_from_app_state(self.app_state)
 
     def _on_queue_status_changed(self) -> None:
-        if self.app_state is None or not hasattr(self, "preview_panel"):
+        if self.app_state is None:
             return
         try:
             self.preview_panel.update_queue_status(self.app_state.queue_status)
         except Exception:
             pass
+        if hasattr(self, "run_controls"):
+            self.run_controls.update_from_app_state(self.app_state)
 
     def _on_history_items_changed(self) -> None:
         if self.app_state is None or not hasattr(self, "history_panel"):

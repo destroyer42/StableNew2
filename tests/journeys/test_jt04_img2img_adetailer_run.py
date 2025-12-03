@@ -15,6 +15,7 @@ import pytest
 from src.app_factory import build_v2_app
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
+from tests.journeys.journey_helpers_v2 import get_stage_plan, start_run_and_wait
 from tests.journeys.utils.tk_root_factory import create_root
 
 
@@ -104,17 +105,19 @@ def test_jt04_img2img_adetailer_pipeline_run():
                 }
                 mock_generate.return_value = mock_response
 
-                # Step 7: Execute the img2img pipeline run
                 controller = app_controller
-                run_success = controller.start_run()
-                assert run_success, "img2img pipeline run should start successfully"
+                job_entry = start_run_and_wait(controller, use_run_now=False)
+                assert job_entry.run_mode == "direct"
+                plan = get_stage_plan(controller)
+                assert plan is not None
+                stage_types = [stage.stage_config.stage_type for stage in plan.root_stages]
+                assert "img2img" in stage_types
+                assert "adetailer" in stage_types
+                assert stage_types.index("img2img") < stage_types.index("adetailer")
 
-                # Step 8: Verify run execution and results
-                # Check that the API was called with correct parameters
                 mock_generate.assert_called_once()
-                call_args = mock_generate.call_args[0][0]  # First positional argument
+                call_args = mock_generate.call_args[0][0]
 
-                # Verify img2img parameters were passed correctly
                 assert call_args.prompt == test_prompt
                 assert call_args.negative_prompt == test_negative
                 assert call_args.denoise == 0.45
@@ -232,9 +235,9 @@ def test_jt04_img2img_edge_cases():
 
                         # Execute run - should handle error gracefully
                         controller = app_controller
-                        run_success = controller.start_run()
+                        job_entry = start_run_and_wait(controller, use_run_now=False)
+                        assert job_entry.run_mode == "direct"
 
-                        # Verify error handling
                         call_args = mock_generate.call_args[0][0]
                         assert call_args.base_image_path is None or not Path(call_args.base_image_path).exists()
 
@@ -252,8 +255,8 @@ def test_jt04_img2img_edge_cases():
 
                         # Execute run
                         controller = app_controller
-                        run_success = controller.start_run()
-                        assert run_success
+                        job_entry = start_run_and_wait(controller, use_run_now=False)
+                        assert job_entry.run_mode == "direct"
 
                         # Verify denoise parameter
                         call_args = mock_generate.call_args[0][0]
@@ -342,8 +345,8 @@ def test_jt04_adetailer_integration():
 
                     # Step 6: Execute run with ADetailer
                     controller = app_controller
-                    run_success = controller.start_run()
-                    assert run_success
+                    job_entry = start_run_and_wait(controller, use_run_now=False)
+                    assert job_entry.run_mode == "direct"
 
                     # Step 7: Verify ADetailer parameters were passed correctly
                     call_args = mock_generate.call_args[0][0]

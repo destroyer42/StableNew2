@@ -18,6 +18,7 @@ from src.app_factory import build_v2_app
 from src.controller.app_controller import AppController
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
+from tests.journeys.journey_helpers_v2 import get_stage_plan, start_run_and_wait
 from tests.journeys.utils.tk_root_factory import create_root
 
 
@@ -89,17 +90,15 @@ def test_jt03_txt2img_pipeline_run():
                 }
                 mock_generate.return_value = mock_response
 
-                # Step 7: Execute the pipeline run
                 controller = app_controller
                 assert isinstance(controller, AppController)
 
-                # Start the run
-                run_success = controller.start_run()
-                assert run_success, "Pipeline run should start successfully"
-
-                # Wait for completion (in real scenario, this would be async)
-                # For testing, we simulate completion
-                time.sleep(0.1)  # Brief pause to simulate processing
+                # Step 7: Execute the pipeline run via start_run_v2
+                job_entry = start_run_and_wait(controller, use_run_now=False)
+                assert job_entry.run_mode == "direct"
+                plan = get_stage_plan(controller)
+                assert plan is not None
+                assert any(stage.stage_config.stage_type == "txt2img" for stage in plan.root_stages)
 
                 # Step 8: Verify run completion and results
                 # Check that the API was called with correct parameters

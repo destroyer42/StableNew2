@@ -462,18 +462,18 @@ class PipelineController(_GUIPipelineController):
 
             # Create Job
             from src.queue.job_model import Job, JobPriority
-              run_mode = self._normalize_run_mode(pipeline_state)
-              job = Job(
-                  job_id=str(uuid.uuid4()),
-                  pipeline_config=config,
-                  priority=JobPriority.NORMAL,
-                  lora_settings=planned_job.lora_settings,
-                  randomizer_metadata=planned_job.randomizer_metadata,
-                  run_mode=run_mode,
-              )
-              job.payload = lambda job=job: self._run_job(job)
+            run_mode = self._normalize_run_mode(pipeline_state)
+            job = Job(
+                job_id=str(uuid.uuid4()),
+                pipeline_config=config,
+                priority=JobPriority.NORMAL,
+                lora_settings=planned_job.lora_settings,
+                randomizer_metadata=planned_job.randomizer_metadata,
+                run_mode=run_mode,
+            )
+            job.payload = lambda job=job: self._run_job(job)
 
-              self._job_service.submit_job_with_run_mode(job)
+            self._job_service.submit_job_with_run_mode(job)
 
     def _run_job(self, job: Job) -> dict[str, Any]:
         """Run a single job."""

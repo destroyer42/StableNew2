@@ -9,6 +9,22 @@ from typing import Iterable, Mapping
 
 from src.utils.file_access_log_v2_5_2025_11_26 import log_file_access
 
+LEGACY_MD = Path("docs/LEGACY_CANDIDATES.md")
+
+
+def load_legacy_candidates() -> set[str]:
+    if not LEGACY_MD.exists():
+        return set()
+    candidates = set()
+    for raw in LEGACY_MD.read_text(encoding="utf-8").splitlines():
+        raw = raw.strip()
+        if raw.startswith("- `") and raw.endswith("` (unreachable)"):
+            candidates.add(raw.split("`")[1])
+    return candidates
+
+
+LEGACY_CANDIDATES = load_legacy_candidates()
+
 
 @dataclass
 class ClassificationResult:
@@ -32,24 +48,30 @@ RULES = [
 
 def classify_path(path: Path) -> str:
     rel = path.as_posix()
+    if rel in LEGACY_CANDIDATES:
+        return "v1"
     if rel.startswith("src/gui/stage_cards_v2/"):
         return "v2"
     if rel.startswith("src/gui/views/") and rel.endswith("_v2.py"):
         return "v2"
     if rel.startswith("src/gui/views/") and "_v2" not in rel:
-        return "unknown"
-    if rel.startswith("src/gui") and rel.endswith("_v2.py"):
-        return "v2"
+        return "v1"
     if rel.startswith("src/gui/") and "_v2" not in rel:
         return "v1"
     if rel.startswith("src/controller") or rel.startswith("src/gui/main_window_v2"):
         return "v2"
     if rel.startswith("src/utils") or rel.startswith("src/pipeline") or rel.startswith("src/api") or rel.startswith("docs"):
         return "shared"
-    if rel.startswith("tests/gui_v2") or rel.startswith("tests/journey") or "_v2" in rel:
+    if rel.startswith("tests/gui_v2/") and "legacy" not in rel:
         return "v2"
-    if rel.startswith("tests/archive") or "legacy" in rel or "tests/legacy" in rel:
+    if rel.startswith("tests/") and "legacy" in rel:
         return "v1"
+    if rel.startswith("tests/archive") or "tests_gui_v2_legacy" in rel:
+        return "v1"
+    if rel.startswith("tests/journey") or "_v2" in rel:
+        return "v2"
+    if rel.startswith("tests/"):
+        return "shared"
     return "unknown"
 
 
@@ -153,6 +175,16 @@ def main() -> None:
             print("Archive cancelled.")
 
 
+def _archive_target_for(rel: str, archive_root: Path) -> Path:
+    if rel.startswith("src/gui/"):
+        suffix = rel[len("src/gui/") :]
+        return archive_root / "gui_v1" / suffix
+    if rel.startswith("tests/"):
+        suffix = rel[len("tests/") :]
+        return archive_root / "legacy_tests" / suffix
+    return archive_root / Path(rel)
+
+
 def move_to_archive(root: Path, archive_root: Path, files: list[str], *, dry_run: bool = False) -> None:
     if not files:
         print("No V1 files to archive.")
@@ -161,7 +193,7 @@ def move_to_archive(root: Path, archive_root: Path, files: list[str], *, dry_run
         src = root / rel
         if not src.exists():
             continue
-        target = archive_root / rel
+        target = _archive_target_for(rel, archive_root)
         target.parent.mkdir(parents=True, exist_ok=True)
         print("dry-run:" if dry_run else "moving:", rel, "->", target)
         if not dry_run:

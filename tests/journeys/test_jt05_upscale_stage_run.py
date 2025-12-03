@@ -16,6 +16,8 @@ import pytest
 from src.controller.app_controller import LifecycleState
 from tests.helpers.factories import update_current_config
 from tests.helpers.gui_harness import pipeline_harness
+from tests.journeys.journey_helpers_v2 import get_stage_plan, start_run_and_wait
+from tests.journeys.journey_helpers_v2 import get_stage_plan, start_run_and_wait
 
 
 class TestJT05UpscaleStageRun:
@@ -65,11 +67,12 @@ class TestJT05UpscaleStageRun:
             window.pipeline_tab.upscale_tile_size.set(512)
             window.pipeline_tab.input_image_path = str(test_image_path)
 
-            assert app_controller.state.lifecycle == LifecycleState.IDLE
-            result = app_controller.start_run()
-            assert app_controller.state.lifecycle == LifecycleState.IDLE
+            job_entry = start_run_and_wait(app_controller, use_run_now=True)
+            assert job_entry.run_mode == "queue"
+            plan = get_stage_plan(app_controller)
+            assert plan is not None
+            assert any(stage.stage_config.stage_type == "upscale" for stage in plan.root_stages)
 
-            assert result is not None
             assert window.pipeline_tab.upscale_enabled.get() is True
 
             mock_webui_api.return_value.upscale_image.assert_called_once()
@@ -119,11 +122,14 @@ class TestJT05UpscaleStageRun:
             window.pipeline_tab.upscale_factor.set(2.0)
             window.pipeline_tab.upscale_model.set("ESRGAN")
 
-            assert app_controller.state.lifecycle == LifecycleState.IDLE
-            result = app_controller.start_run()
-            assert app_controller.state.lifecycle == LifecycleState.IDLE
-
-            assert result is not None
+            job_entry = start_run_and_wait(app_controller, use_run_now=False)
+            assert job_entry.run_mode == "direct"
+            plan = get_stage_plan(app_controller)
+            assert plan is not None
+            stage_types = [stage.stage_config.stage_type for stage in plan.root_stages]
+            assert "txt2img" in stage_types
+            assert "upscale" in stage_types
+            assert stage_types.index("txt2img") < stage_types.index("upscale")
 
             assert mock_webui_api.return_value.txt2img.called
             assert mock_webui_api.return_value.upscale_image.called
@@ -170,11 +176,8 @@ class TestJT05UpscaleStageRun:
                     window.pipeline_tab.upscale_model.set(model)
                     window.pipeline_tab.input_image_path = str(test_image_path)
 
-                    assert app_controller.state.lifecycle == LifecycleState.IDLE
-                    result = app_controller.start_run()
-                    assert app_controller.state.lifecycle == LifecycleState.IDLE
-
-                    assert result is not None
+                    job_entry = start_run_and_wait(app_controller, use_run_now=True)
+                    assert job_entry.run_mode == "queue"
                     mock_webui_api.return_value.upscale_image.assert_called_once()
 
                     call_kwargs = mock_webui_api.return_value.upscale_image.call_args[1]
@@ -210,11 +213,8 @@ class TestJT05UpscaleStageRun:
             window.pipeline_tab.upscale_enabled.set(True)
             window.pipeline_tab.prompt_text.insert(0, "original test prompt")
 
-            assert app_controller.state.lifecycle == LifecycleState.IDLE
-            result = app_controller.start_run()
-            assert app_controller.state.lifecycle == LifecycleState.IDLE
-
-            assert result is not None
+            job_entry = start_run_and_wait(app_controller, use_run_now=False)
+            assert job_entry.run_mode == "direct"
 
             upscale_call = mock_webui_api.return_value.upscale_image.call_args
             assert upscale_call is not None
@@ -238,9 +238,7 @@ class TestJT05UpscaleStageRun:
             window.pipeline_tab.txt2img_enabled.set(False)
             window.pipeline_tab.input_image_path = str(test_image_path)
 
-            assert app_controller.state.lifecycle == LifecycleState.IDLE
-            result = app_controller.start_run()
-            assert app_controller.state.lifecycle in {LifecycleState.ERROR, LifecycleState.IDLE}
-
-            assert result is None or result is not None
+            job_entry = start_run_and_wait(app_controller, use_run_now=True)
+            assert job_entry.run_mode == "queue"
+            assert job_entry.status in {LifecycleState.ERROR, LifecycleState.IDLE}
 

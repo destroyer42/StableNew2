@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.v2_classify_and_archive import build_inventory, move_to_archive
+from tools.v2_classify_and_archive import classify_path, build_inventory, move_to_archive
 
 
 @pytest.mark.parametrize(
@@ -53,6 +53,18 @@ def test_move_to_archive(tmp_path: Path):
         assert (tmp_path / rel).exists()
 
     move_to_archive(tmp_path, archive_root, files, dry_run=False)
-    for rel in files:
-        assert not (tmp_path / rel).exists()
-        assert (archive_root / rel).exists()
+    assert not (tmp_path / "src/gui/text_panel.py").exists()
+    assert not (tmp_path / "src/gui/foo/bar.py").exists()
+    assert (archive_root / "gui_v1" / "text_panel.py").exists()
+    assert (archive_root / "gui_v1" / Path("foo/bar.py")).exists()
+
+
+def test_classify_legacy_candidate():
+    rel = "src/gui/main_window.py"
+    result = classify_path(Path(rel))
+    assert result == "v1"
+
+
+def test_classify_tests_gui_legacy():
+    rel = "tests/gui_v2/test_gui_v2_pipeline_button_legacy.py"
+    assert classify_path(Path(rel)) == "v1"

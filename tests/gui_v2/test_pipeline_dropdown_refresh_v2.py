@@ -34,10 +34,11 @@ def test_pipeline_dropdown_refresh_updates_stage_cards():
     tab = PipelineTabFrame(root, app_state=app_state, pipeline_controller=controller)
 
     resources = {
-        "models": ["model1", "model2"],
+        "models": ["SDXL Base", "SDXL Refiner"],
         "vaes": ["vae1"],
         "samplers": ["samplerA"],
         "schedulers": ["schedulerX"],
+        "upscalers": ["Latent", "R-ESRGAN 4x+"],
     }
 
     app_state.set_resources(resources)
@@ -51,5 +52,7 @@ def test_pipeline_dropdown_refresh_updates_stage_cards():
     assert list(txt_card.scheduler_combo["values"]) == resources["schedulers"]
 
     assert list(img_card.sampler_combo["values"]) == resources["samplers"]
+    assert list(txt_card.hires_upscaler_combo["values"]) == resources["upscalers"]
+    assert list(txt_card.refiner_model_combo["values"]) == ["SDXL Refiner"]
 
     root.destroy()

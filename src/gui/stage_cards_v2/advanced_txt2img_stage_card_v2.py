@@ -544,6 +544,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self._update_vae_options(resources.get("vaes") or [])
         self._set_sampler_options(resources.get("samplers") or [])
         self._set_scheduler_options(resources.get("schedulers") or [])
+        self._update_refiner_model_options(resources.get("models") or [])
+        self._update_hires_upscaler_options(resources.get("upscalers") or [])
 
     def _update_model_options(self, entries: list[Any]) -> None:
         values, mapping = self._normalize_dropdown_entries(entries)
@@ -566,6 +568,27 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
     def _set_scheduler_options(self, entries: list[Any]) -> None:
         values = [str(entry).strip() for entry in entries if str(entry).strip()]
         self._set_combo_values(self.scheduler_combo, self.scheduler_var, values)
+
+    def _update_refiner_model_options(self, entries: list[Any]) -> None:
+        values: list[str] = []
+        for entry in entries:
+            name = getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
+            name = str(name).strip()
+            if "refiner" in name.lower():
+                values.append(name)
+        if not values:
+            values = ["SDXL Refinement"]
+        self._set_combo_values(self.refiner_model_combo, self.refiner_model_var, values)
+
+    def _update_hires_upscaler_options(self, entries: list[Any]) -> None:
+        values = [
+            getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
+            for entry in entries
+        ]
+        values = [str(value).strip() for value in values if str(value).strip()]
+        if not values:
+            values = ["Latent", "R-ESRGAN 4x+"]
+        self._set_combo_values(self.hires_upscaler_combo, self.hires_upscaler_var, values)
 
     @staticmethod
     def _normalize_dropdown_entries(entries: list[Any]) -> tuple[list[str], dict[str, str]]:
