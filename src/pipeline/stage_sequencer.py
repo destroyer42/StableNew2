@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Dict, Literal, List, Optional
 
 import logging
 
@@ -22,9 +22,34 @@ class StageTypeEnum(str, Enum):
 
 
 @dataclass(frozen=True)
+class StageMetadata:
+    refiner_enabled: bool = False
+    refiner_model_name: str | None = None
+    refiner_switch_at: float | None = None
+    hires_enabled: bool = False
+    hires_upscale_factor: float | None = None
+    hires_denoise: float | None = None
+    hires_steps: int | None = None
+    stage_flags: Dict[str, bool] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class StageConfig:
     enabled: bool
     payload: dict[str, Any]
+    metadata: StageMetadata
+
+
+@dataclass(frozen=True)
+class StageMetadata:
+    refiner_enabled: bool = False
+    refiner_model_name: str | None = None
+    refiner_switch_at: float | None = None
+    hires_enabled: bool = False
+    hires_upscale_factor: float | None = None
+    hires_denoise: float | None = None
+    hires_steps: int | None = None
+    stage_flags: Dict[str, bool] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -41,7 +66,7 @@ class StageExecution:
 
 @dataclass(frozen=True)
 class StageExecutionPlan:
-    stages: list[StageExecution]
+    stages: List[StageExecution]
     run_id: str | None = None
     one_click_action: str | None = None
 
@@ -84,62 +109,114 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     )
 
     order = 0
+    generation_stages = []
     if txt_enabled:
         payload = _stage_payload(config, "txt2img")
         _require_fields(payload, ["model", "sampler_name", "steps", "cfg_scale"], "txt2img")
-        stages.append(
-            StageExecution(
-                stage_type="txt2img",
-                config=StageConfig(enabled=txt_enabled, payload=payload),
-                order_index=order,
-                requires_input_image=False,
-                produces_output_image=True,
-            )
+        metadata = _build_stage_metadata(config, payload, stage="txt2img")
+        stage = StageExecution(
+            stage_type="txt2img",
+            config=StageConfig(enabled=txt_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=False,
+            produces_output_image=True,
         )
+        stages.append(stage)
+        generation_stages.append(stage)
         order += 1
 
     if img_enabled:
         payload = _stage_payload(config, "img2img")
         _require_fields(payload, ["model", "sampler_name", "steps"], "img2img")
-        stages.append(
-            StageExecution(
-                stage_type="img2img",
-                config=StageConfig(enabled=img_enabled, payload=payload),
-                order_index=order,
-                requires_input_image=True,
-                produces_output_image=True,
-            )
+        metadata = _build_stage_metadata(config, payload, stage="img2img")
+        stage = StageExecution(
+            stage_type="img2img",
+            config=StageConfig(enabled=img_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=True,
+            produces_output_image=True,
         )
+        stages.append(stage)
+        generation_stages.append(stage)
         order += 1
 
-    generative_enabled = txt_enabled or img_enabled
-    if ad_enabled:
-        payload = _stage_payload(config, "adetailer")
-        if not generative_enabled:
-            logger.warning("ADetailer enabled but no generative stage active; skipping adetailer.")
-        else:
-            stages.append(
-                StageExecution(
-                    stage_type="adetailer",
-                    config=StageConfig(enabled=ad_enabled, payload=payload),
-                    order_index=order,
-                    requires_input_image=True,
-                    produces_output_image=True,
-                )
-            )
-        order += 1
+    generative_enabled = bool(generation_stages)
 
     if up_enabled:
         payload = _stage_payload(config, "upscale")
         _require_fields(payload, ["upscaler"], "upscale")
-        stages.append(
-            StageExecution(
-                stage_type="upscale",
-                config=StageConfig(enabled=up_enabled, payload=payload),
-                order_index=order,
-                requires_input_image=True,
-                produces_output_image=True,
-            )
+        metadata = _build_stage_metadata(config, payload, stage="upscale")
+        stage = StageExecution(
+            stage_type="upscale",
+            config=StageConfig(enabled=up_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=not generative_enabled,
+            produces_output_image=True,
         )
+        stages.append(stage)
+        order += 1
 
-    return StageExecutionPlan(stages=stages, run_id=run_id, one_click_action=one_click_action)
+    if ad_enabled:
+        if not generative_enabled and not up_enabled:
+            raise ValueError("ADetailer stage requires a preceding generation or upscale stage.")
+        payload = _stage_payload(config, "adetailer")
+        metadata = _build_stage_metadata(config, payload, stage="adetailer")
+        stage = StageExecution(
+            stage_type="adetailer",
+            config=StageConfig(enabled=ad_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=True,
+            produces_output_image=True,
+        )
+        stages.append(stage)
+        order += 1
+
+    if not stages:
+        raise ValueError("Pipeline has no enabled stages.")
+
+    ordered = _normalize_stage_order(stages)
+    return StageExecutionPlan(stages=ordered, run_id=run_id, one_click_action=one_click_action)
+
+
+def _is_generative_stage(stage: StageExecution) -> bool:
+    return stage.stage_type in {"txt2img", "img2img", "upscale"}
+
+
+def _normalize_stage_order(stages: List[StageExecution]) -> List[StageExecution]:
+    generation = [stage for stage in stages if _is_generative_stage(stage)]
+    adetailers = [stage for stage in stages if stage.stage_type == "adetailer"]
+    if adetailers and not generation:
+        raise ValueError("ADetailer stage requires a preceding generation stage.")
+    if adetailers and stages and stages[-1].stage_type != "adetailer":
+        logger.warning(
+            "ADetailer stage detected before generation/hires stages; auto-moving ADetailer to final position."
+        )
+    if not adetailers:
+        return stages
+    ordered = generation + adetailers
+    if ordered == stages:
+        return stages
+    return ordered
+
+
+def _build_stage_metadata(config: dict[str, Any], payload: dict[str, Any], *, stage: str) -> StageMetadata:
+    pipeline_flags = config.get("pipeline", {}) or {}
+    metadata = StageMetadata(
+        refiner_enabled=payload.get("refiner_enabled", False),
+        refiner_model_name=payload.get("refiner_model_name"),
+        refiner_switch_at=payload.get("refiner_switch_at"),
+        hires_enabled=config.get("hires_fix", {}).get("enabled", False)
+        or payload.get("hires_enabled", False),
+        hires_upscale_factor=config.get("hires_fix", {}).get("upscale_factor")
+        or payload.get("upscale_factor"),
+        hires_denoise=config.get("hires_fix", {}).get("denoise_strength")
+        or payload.get("hires_denoise"),
+        hires_steps=config.get("hires_fix", {}).get("steps"),
+        stage_flags={
+            "txt2img_enabled": pipeline_flags.get("txt2img_enabled", False),
+            "img2img_enabled": pipeline_flags.get("img2img_enabled", False),
+            "upscale_enabled": pipeline_flags.get("upscale_enabled", False),
+            "adetailer_enabled": pipeline_flags.get("adetailer_enabled", False),
+        },
+    )
+    return metadata

@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,8 +21,8 @@ class ToggleToken:
 
 
 class DummyClient:
-    def txt2img(self, _payload):
-        return {"images": ["fake-image-1", "fake-image-2"]}
+    def generate_images(self, *, stage, payload, **kwargs):
+        return SimpleNamespace(ok=True, result={"images": ["fake-image-1", "fake-image-2"]})
 
     def set_model(self, *_args, **_kwargs):
         return None

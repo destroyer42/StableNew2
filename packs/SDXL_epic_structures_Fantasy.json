@@ -1,38 +1,43 @@
 {
   "txt2img": {
     "steps": 34,
-    "cfg_scale": 6.1,
-    "width": 1216,
-    "height": 832,
     "sampler_name": "DPM++ 2M",
     "scheduler": "Karras",
-    "seed": -1,
-    "clip_skip": 2,
-    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
-    "vae": "",
+    "cfg_scale": 6.1,
+    "width": 1024,
+    "height": 1024,
     "negative_prompt": "blurry, bad quality, distorted",
-    "hypernetwork": "None",
-    "hypernetwork_strength": 1.0,
+    "seed": -1,
+    "seed_resize_from_h": -1,
+    "seed_resize_from_w": -1,
     "enable_hr": false,
     "hr_scale": 1.5,
     "hr_upscaler": "Latent",
     "hr_sampler_name": "DPM++ 2M",
+    "hr_second_pass_steps": 12,
+    "hr_resize_x": 0,
+    "hr_resize_y": 0,
     "denoising_strength": 0.27,
-    "hires_steps": 12,
-    "face_restoration_enabled": false,
-    "face_restoration_model": "GFPGAN",
-    "face_restoration_weight": 0.5,
+    "clip_skip": 2,
+    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+    "vae": "",
+    "hypernetwork": "None",
+    "hypernetwork_strength": 1.0,
+    "styles": [],
     "refiner_checkpoint": "None",
     "refiner_switch_at": 0.8,
     "refiner_switch_steps": 0,
-    "hr_second_pass_steps": 12
+    "hires_steps": 12,
+    "face_restoration_enabled": false,
+    "face_restoration_model": "GFPGAN",
+    "face_restoration_weight": 0.5
   },
   "img2img": {
     "steps": 15,
-    "denoising_strength": 0.3,
-    "cfg_scale": 7.0,
     "sampler_name": "Euler a",
     "scheduler": "Normal",
+    "cfg_scale": 7.0,
+    "denoising_strength": 0.3,
     "seed": -1,
     "clip_skip": 2,
     "model": "",
@@ -43,125 +48,208 @@
     "negative_adjust": ""
   },
   "upscale": {
-    "upscaler": "4xUltrasharp_4xUltrasharpV10",
+    "upscaler": "4x-UltraSharpV2",
     "upscaling_resize": 2.0,
     "upscale_mode": "single",
+    "denoising_strength": 0.2,
     "steps": 15,
     "sampler_name": "DPM++ 2M",
     "scheduler": "Karras",
-    "denoising_strength": 0.2,
     "gfpgan_visibility": 0.0,
     "codeformer_visibility": 0.0,
     "codeformer_weight": 0.0
   },
-  "api": {
-    "base_url": "http://127.0.0.1:7860",
-    "timeout": 300
-  },
-  "pipeline": {
-    "txt2img_enabled": true,
-    "img2img_enabled": false,
-    "adetailer_enabled": true,
-    "upscale_enabled": true,
-    "video_enabled": false,
-    "apply_global_negative_txt2img": true,
-    "apply_global_negative_img2img": false,
-    "apply_global_negative_upscale": false,
-    "apply_global_negative_adetailer": false,
-    "loop_type": "pipeline",
-    "loop_count": 3,
-    "pack_mode": "selected",
-    "images_per_prompt": 1,
-    "model_matrix": [],
-    "hypernetworks": [],
-    "variant_mode": "fanout"
-  },
   "adetailer": {
+    "enabled": false,
     "adetailer_enabled": true,
     "adetailer_model": "face_yolov8n.pt",
     "adetailer_confidence": 0.6916666666666667,
     "adetailer_mask_feather": 8,
     "adetailer_sampler": "DPM++ 2M",
-    "adetailer_scheduler": "Karras",
+    "adetailer_scheduler": "inherit",
     "adetailer_steps": 12,
     "adetailer_denoise": 0.25833333333333336,
     "adetailer_cfg": 6.0,
     "adetailer_prompt": "natural skin texture, clear eyes, detailed eyelashes, balanced highlights, subtle film grain, sharp focus",
     "adetailer_negative_prompt": "asymmetrical eyes, glossy skin, melted face, face mush, deformed nose, overexposed highlights"
   },
+  "video": {
+    "fps": 24,
+    "codec": "libx264",
+    "quality": "medium"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
+  },
   "randomization": {
     "enabled": true,
+    "seed": null,
     "prompt_sr": {
-      "enabled": false,
+      "enabled": true,
       "mode": "random",
-      "rules": [],
-      "raw_text": ""
+      "rules": [
+        {
+          "search": "beautiful woman",
+          "replacements": [
+            "beautiful woman",
+            "goddess",
+            "huntress",
+            "sorceress",
+            "angelic figure"
+          ]
+        },
+        {
+          "search": "portrait",
+          "replacements": [
+            "portrait",
+            "close-up",
+            "cinematic portrait",
+            "fashion shot"
+          ]
+        },
+        {
+          "search": "lighting",
+          "replacements": [
+            "soft light",
+            "hard light",
+            "dramatic lighting",
+            "volumetric light"
+          ]
+        },
+        {
+          "search": "scene",
+          "replacements": [
+            "setting",
+            "background",
+            "environment",
+            "location"
+          ]
+        },
+        {
+          "search": "camera",
+          "replacements": [
+            "camera",
+            "lens",
+            "composition",
+            "cinematic angle"
+          ]
+        }
+      ],
+      "raw_text": "beautiful woman => beautiful woman|goddess|huntress|sorceress|angelic figure\nportrait => portrait |close-up|cinematic portrait|fashion shot\nlighting => soft light|hard light|dramatic lighting|volumetric light\nscene => setting|background|environment|location\ncamera => camera|lens|composition|cinematic angle"
     },
     "wildcards": {
-      "enabled": false,
+      "enabled": true,
       "mode": "random",
-      "tokens": [],
-      "raw_text": ""
+      "tokens": [
+        {
+          "token": "__environment__",
+          "values": [
+            "plains",
+            "mountains",
+            "lakeside",
+            "underwater cave"
+          ]
+        },
+        {
+          "token": "__mood__",
+          "values": [
+            "light-hearted",
+            "serious",
+            "playful"
+          ]
+        },
+        {
+          "token": "__lighting__",
+          "values": [
+            "well-lit",
+            "moonlit",
+            "soft-light",
+            "day-light"
+          ]
+        },
+        {
+          "token": "__props__",
+          "values": [
+            "dagger",
+            "staff",
+            "sword",
+            "shuriken",
+            "whip"
+          ]
+        }
+      ],
+      "raw_text": "__environment__:  plains | mountains | lakeside | underwater cave\n__mood__: light-hearted | serious | playful\n__lighting__: well-lit | moonlit | soft-light | day-light\n__props__:  dagger | staff | sword | shuriken | whip"
     },
     "matrix": {
       "enabled": true,
       "mode": "rotate",
-      "prompt_mode": "prepend",
       "limit": 0,
       "slots": [
         {
-          "name": "structure_type",
+          "name": "hair",
           "values": [
-            "fortress castle",
-            "sunken temple",
-            "towering cathedral",
-            "labyrinthine dungeon entrance",
-            "hanging palace"
+            "blonde",
+            "black",
+            "brown",
+            "red",
+            "auburn",
+            "silver"
           ]
         },
         {
-          "name": "material",
+          "name": "clothes",
           "values": [
-            "weathered stone",
-            "black obsidian",
-            "white marble",
-            "ancient brick",
-            "runic crystal"
+            "bikini",
+            "bikini armor",
+            "thong and bralette",
+            "diaphanous robes",
+            "crystal lingerie"
           ]
         },
         {
-          "name": "age",
+          "name": "style",
           "values": [
-            "ancient",
-            "crumbling",
-            "pristine",
-            "overgrown",
-            "partially ruined"
-          ]
-        },
-        {
-          "name": "lighting",
-          "values": [
-            "sunset glow",
-            "stormy skies",
-            "fog-diffused dawn",
-            "moonlit",
-            "torchlit windows"
+            "sexy",
+            "scandalous",
+            "radiant",
+            "mystical",
+            "fierce"
           ]
         },
         {
           "name": "environment",
           "values": [
-            "mountaintop",
-            "cliffside",
-            "deep forest clearing",
-            "riverside",
-            "floating island"
+            "castle hall",
+            "misty forest",
+            "ancient temple",
+            "moonlit beach",
+            "glowing ruins"
+          ]
+        },
+        {
+          "name": "lighting",
+          "values": [
+            "soft glowing light",
+            "torches and shadow",
+            "blue ambient glow",
+            "sunset flare",
+            "moonlight haze"
+          ]
+        },
+        {
+          "name": "camera",
+          "values": [
+            "low-angle 3/4 portrait",
+            "full-body stance",
+            "wide-angle cinematic shot",
+            "overhead looking down angle"
           ]
         }
       ],
-      "raw_text": "# Base: an [[age]] [[material]] [[structure_type]] on a [[environment]] under [[lighting]]\nstructure_type: fortress castle | sunken temple | towering cathedral | labyrinthine dungeon entrance | hanging palace\nmaterial: weathered stone | black obsidian | white marble | ancient brick | runic crystal\nage: ancient | crumbling | pristine | overgrown | partially ruined\nlighting: sunset glow | stormy skies | fog-diffused dawn | moonlit | torchlit windows\nenvironment: mountaintop | cliffside | deep forest clearing | riverside | floating island",
-      "base_prompt": "an [[age]] [[material]] [[structure_type]] on a [[environment]] under [[lighting]]"
+      "raw_text": "# Base: a [[hair]]-haired beautiful woman wearing [[clothes]], looking [[style]] in a [[environment]] under [[lighting]] from a [[camera]] perspective\nhair: blonde | black | brown | red | auburn | silver\nclothes: bikini | bikini armor | thong and bralette | diaphanous robes | crystal lingerie\nstyle: sexy | scandalous | radiant | mystical | fierce\nenvironment: castle hall | misty forest | ancient temple | moonlit beach | glowing ruins\nlighting: soft glowing light | torches and shadow | blue ambient glow | sunset flare | moonlight haze\ncamera: low-angle 3/4 portrait | full-body stance | wide-angle cinematic shot | overhead looking down angle",
+      "prompt_mode": "prepend",
+      "base_prompt": "a [[hair]]-haired beautiful woman wearing [[clothes]], looking [[style]] in a [[environment]] under [[lighting]] from a [[camera]] perspective"
     }
   },
   "aesthetic": {
@@ -176,5 +264,33 @@
     "text": "paradise",
     "text_is_negative": false,
     "fallback_prompt": ""
+  },
+  "pipeline": {
+    "img2img_enabled": false,
+    "upscale_enabled": true,
+    "adetailer_enabled": true,
+    "allow_hr_with_stages": false,
+    "refiner_compare_mode": false,
+    "apply_global_negative_txt2img": true,
+    "apply_global_negative_img2img": false,
+    "apply_global_negative_upscale": false,
+    "apply_global_negative_adetailer": false,
+    "txt2img_enabled": true,
+    "video_enabled": false,
+    "loop_type": "pipeline",
+    "loop_count": 3,
+    "pack_mode": "selected",
+    "images_per_prompt": 1,
+    "model_matrix": [],
+    "hypernetworks": [],
+    "variant_mode": "fanout"
+  },
+  "randomization_enabled": false,
+  "max_variants": 1,
+  "lora_strengths": [],
+  "meta": {
+    "name": "Juggernaut Medieval Heroes Randomizer Aligned",
+    "version": "v1b",
+    "note": "Uses the original hair/clothes/style/environment/lighting/camera matrix from Juggernaut_SDXL_MedievalRealism_Pack_V5_Realistic"
   }
 }

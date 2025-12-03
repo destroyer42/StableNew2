@@ -67,3 +67,18 @@ def test_history_service_cancel_and_retry(tmp_path):
 
     new_id = service.retry_job("done")
     assert new_id == "job-new-1"
+
+
+def test_history_service_records_result(tmp_path):
+    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
+    queue = JobQueue(history_store=store)
+    service = JobHistoryService(queue, store)
+
+    job = Job(job_id="finished", pipeline_config=None, priority=JobPriority.NORMAL)
+    queue.submit(job)
+    queue.mark_running(job.job_id)
+    queue.mark_completed(job.job_id, result={"mode": "test"})
+
+    entry = service.get_job("finished")
+    assert entry is not None
+    assert entry.result == {"mode": "test"}

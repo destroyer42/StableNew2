@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
+from tests.helpers.pipeline_fakes import FakePipeline
 
 
 class MemoryWriter:
@@ -15,23 +16,6 @@ class MemoryWriter:
 
     def write(self, record):
         self.records.append(record)
-
-
-class FakePipeline:
-    def __init__(self, *_args, **_kwargs):
-        self.calls = []
-
-    def run_txt2img_stage(self, prompt, negative_prompt, config, output_dir, image_name):
-        self.calls.append(("txt2img", prompt, output_dir, image_name))
-        return {"path": str(output_dir / f"{image_name}.png")}
-
-    def run_img2img_stage(self, input_image_path, prompt, config, output_dir):
-        self.calls.append(("img2img", prompt, str(input_image_path)))
-        return {"path": str(output_dir / "img2img.png")}
-
-    def run_upscale_stage(self, input_image_path, config, output_dir, image_name):
-        self.calls.append(("upscale", str(input_image_path), image_name))
-        return {"path": str(output_dir / "upscaled.png")}
 
 
 class DummyClient:

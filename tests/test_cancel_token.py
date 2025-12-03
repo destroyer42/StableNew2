@@ -5,6 +5,7 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -12,6 +13,10 @@ import pytest
 from src.gui.state import CancelToken
 from src.pipeline.executor import Pipeline
 from src.utils import StructuredLogger
+
+
+def _success_outcome(images):
+    return SimpleNamespace(ok=True, result={"images": images})
 
 
 class TestCancelTokenIntegration:
@@ -28,7 +33,7 @@ class TestCancelTokenIntegration:
     def mock_client(self):
         """Create mock API client."""
         client = Mock()
-        client.txt2img = Mock(return_value={"images": ["base64_image_data"]})
+        client.generate_images = Mock(return_value=_success_outcome(["base64_image_data"]))
         client.img2img = Mock(return_value={"images": ["base64_image_data"]})
         client.upscale_image = Mock(return_value={"image": "base64_image_data"})
         client.set_model = Mock()
@@ -77,16 +82,15 @@ class TestCancelTokenIntegration:
         config = {"txt2img": {}}
 
         # Cancel after API call
-        def delayed_cancel(*args, **kwargs):
+        def delayed_cancel(stage, payload, **kwargs):
             cancel_token.cancel()
-            return {"images": ["base64_image_data"]}
+            return _success_outcome(["base64_image_data"])
 
-        mock_client.txt2img = Mock(side_effect=delayed_cancel)
-
-        with patch("src.pipeline.executor.save_image_from_base64", return_value=True):
-            results = pipeline.run_txt2img(
-                "test prompt", config, temp_dir, batch_size=1, cancel_token=cancel_token
-            )
+        with patch.object(pipeline, "_generate_images", side_effect=delayed_cancel):
+            with patch("src.pipeline.executor.save_image_from_base64", return_value=True):
+                results = pipeline.run_txt2img(
+                    "test prompt", config, temp_dir, batch_size=1, cancel_token=cancel_token
+                )
 
         # Should return empty list (cancelled after API call)
         assert results == []
@@ -97,7 +101,7 @@ class TestCancelTokenIntegration:
         config = {"txt2img": {}}
 
         # Return multiple images
-        mock_client.txt2img = Mock(return_value={"images": ["image1", "image2", "image3"]})
+        mock_client.generate_images.return_value = _success_outcome(["image1", "image2", "image3"])
 
         save_count = [0]
 
@@ -167,12 +171,11 @@ class TestCancelTokenIntegration:
         config = {"txt2img": {}, "img2img": {}, "upscale": {}}
 
         # Cancel after txt2img
-        def delayed_cancel(*args, **kwargs):
-            result = {"images": ["base64_image_data"]}
+        def delayed_cancel(stage, payload, **kwargs):
             cancel_token.cancel()
-            return result
+            return _success_outcome(["base64_image_data"])
 
-        mock_client.txt2img = Mock(side_effect=delayed_cancel)
+        mock_client.generate_images.side_effect = delayed_cancel
 
         with patch("src.pipeline.executor.save_image_from_base64", return_value=True):
             with patch("src.pipeline.executor.load_image_to_base64", return_value="base64"):
@@ -191,17 +194,19 @@ class TestCancelTokenIntegration:
         config = {"txt2img": {}, "img2img": {}, "upscale": {}}
 
         # Generate multiple txt2img images
-        mock_client.txt2img = Mock(return_value={"images": ["image1", "image2", "image3"]})
-
         img2img_count = [0]
 
-        def img2img_and_cancel(*args, **kwargs):
-            img2img_count[0] += 1
-            if img2img_count[0] == 2:
-                cancel_token.cancel()
-            return {"images": ["cleaned_image"]}
+        def generate_images(stage, payload, **kwargs):
+            if stage == "txt2img":
+                return _success_outcome(["image1", "image2", "image3"])
+            if stage == "img2img":
+                img2img_count[0] += 1
+                if img2img_count[0] == 2:
+                    cancel_token.cancel()
+                return _success_outcome(["cleaned_image"])
+            return _success_outcome([])
 
-        mock_client.img2img = Mock(side_effect=img2img_and_cancel)
+        mock_client.generate_images.side_effect = generate_images
 
         with patch("src.pipeline.executor.save_image_from_base64", return_value=True):
             with patch("src.pipeline.executor.load_image_to_base64", return_value="base64"):
@@ -266,9 +271,5 @@ class TestPipelineEarlyOut:
             with patch("src.pipeline.executor.load_image_to_base64", return_value="base64"):
                 results = pipeline.run_full_pipeline("test", config, cancel_token=cancel_token)
 
-        # txt2img should not be called
-        assert mock_client.txt2img.call_count == 0
-        # img2img should not be called
-        assert mock_client.img2img.call_count == 0
-        # upscale should not be called
-        assert mock_client.upscale_image.call_count == 0
+        # API should not be called
+        assert mock_client.generate_images.call_count == 0

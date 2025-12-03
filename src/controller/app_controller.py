@@ -30,7 +30,12 @@ from src.api.webui_api import WebUIAPI
 from src.api.webui_resource_service import WebUIResourceService
 from src.api.webui_resources import WebUIResource
 from src.api.webui_process_manager import WebUIProcessManager
-from src.pipeline.last_run_store_v2_5 import LastRunConfigV2_5
+from src.pipeline.last_run_store_v2_5 import (
+    LastRunConfigV2_5,
+    LastRunStoreV2_5,
+    current_config_to_last_run,
+    update_current_config_from_last_run,
+)
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.main_window_v2 import MainWindow
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
@@ -42,11 +47,12 @@ from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils import InMemoryLogHandler
 from src.gui.app_state_v2 import PackJobEntry, AppStateV2
-from src.controller.job_service import JobService
+from src.controller.pipeline_controller import PipelineController
 from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JSONLJobHistoryStore
+from src.controller.job_service import JobService
 
 import logging
 import uuid
@@ -81,6 +87,15 @@ class RunConfig:
     cfg_scale: float = 7.5
     randomization_enabled: bool = False
     max_variants: int = 1
+    refiner_enabled: bool = False
+    refiner_model_name: str | None = None
+    refiner_switch_at: float = 0.8
+    hires_enabled: bool = False
+    hires_upscaler_name: str = "Latent"
+    hires_upscale_factor: float = 2.0
+    hires_steps: int | None = None
+    hires_denoise: float = 0.3
+    hires_use_base_model_for_hires: bool = True
     # Future fields:
     # matrix_config, adetailer_config, video_config, etc.
 
@@ -200,6 +215,7 @@ class AppController:
         config_manager: ConfigManager | None = None,
         resource_service: WebUIResourceService | None = None,
         job_service: JobService | None = None,
+        pipeline_controller: PipelineController | None = None,
     ) -> None:
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
@@ -210,9 +226,13 @@ class AppController:
         self._last_executor_config: dict[str, Any] | None = None
         self._last_run_snapshot: dict[str, Any] | None = None
         self._last_run_auto_restored = False
+        self._last_run_store = LastRunStoreV2_5()
 
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
+            # Still set api_client and structured_logger for PipelineController
+            self._api_client = api_client or SDWebUIClient()
+            self._structured_logger = structured_logger or StructuredLogger()
         else:
             self._api_client = api_client or SDWebUIClient()
             self._structured_logger = structured_logger or StructuredLogger()
@@ -235,6 +255,14 @@ class AppController:
         self.packs: list[PromptPackInfo] = []
         self._selected_pack_index: Optional[int] = None
 
+        # Initialize PipelineController for modern pipeline execution (bridge)
+        self.pipeline_controller = pipeline_controller or PipelineController(
+            api_client=self._api_client,
+            structured_logger=self._structured_logger,
+            job_service=self.job_service,
+            pipeline_runner=self.pipeline_runner,
+        )
+
         # GUI log handler for LogTracePanelV2
         self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
         root_logger = logging.getLogger()
@@ -248,6 +276,101 @@ class AppController:
             if hasattr(self.main_window, "connect_controller"):
                 self.main_window.connect_controller(self)
         self._setup_queue_callbacks()
+
+    def run_pipeline_v2_bridge(self) -> bool:
+        """
+        Optional hook into the modern PipelineController path.
+
+        Returns True if a PipelineController was attached and called successfully.
+        """
+        controller = getattr(self, "pipeline_controller", None)
+        if controller is None:
+            return False
+
+        start_fn = getattr(controller, "start_pipeline", None)
+        if not callable(start_fn):
+            return False
+
+        try:
+            start_fn()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"[controller] PipelineController bridge error: {exc!r}")
+            return False
+
+    def start_run_v2(self) -> Any:
+        """
+        Preferred, backward-compatible entrypoint for the V2 pipeline path.
+
+        Tries the PipelineController bridge first; on failure, falls back to legacy start_run().
+        """
+        try:
+            used_bridge = self.run_pipeline_v2_bridge()
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"[controller] start_run_v2 bridge error: {exc!r}")
+            used_bridge = False
+
+        self._ensure_run_mode_default("run")
+
+        if used_bridge:
+            self._append_log("[controller] start_run_v2 used PipelineController bridge.")
+            return None
+
+        self._append_log("[controller] start_run_v2 falling back to legacy start_run().")
+        return self.start_run()
+
+    def _ensure_run_mode_default(self, button_source: str) -> None:
+        pipeline_state = getattr(self.app_state, "pipeline_state", None)
+        if pipeline_state is None:
+            return
+        current = (getattr(pipeline_state, "run_mode", None) or "").strip().lower()
+        if current in {"direct", "queue"}:
+            return
+        if button_source == "run":
+            pipeline_state.run_mode = "direct"
+            self._append_log("[controller] Defaulting run_mode to 'direct' for Run button.")
+        elif button_source == "run_now":
+            pipeline_state.run_mode = "queue"
+            self._append_log("[controller] Defaulting run_mode to 'queue' for Run Now button.")
+
+    def on_run_job_now_v2(self) -> Any:
+        """
+        V2 entrypoint for "Run Now": prefer the queue-backed handler, fall back to start_run_v2().
+        """
+        self._ensure_run_mode_default("run_now")
+        handler_names = ("on_run_job_now", "on_run_queue_now_clicked")
+        for name in handler_names:
+            handler = getattr(self, name, None)
+            if callable(handler):
+                try:
+                    self._append_log(f"[controller] on_run_job_now_v2 using {name}.")
+                    return handler()
+                except Exception as exc:  # noqa: BLE001
+                    self._append_log(f"[controller] on_run_job_now_v2 handler {name} error: {exc!r}")
+                    break
+
+        self._append_log("[controller] on_run_job_now_v2 falling back to start_run_v2.")
+        return self.start_run_v2()
+
+    def on_add_job_to_queue_v2(self) -> None:
+        """Queue-first Add-to-Queue entrypoint; safe no-op if none available."""
+        handler_names = ("on_add_job_to_queue", "on_add_to_queue")
+        for name in handler_names:
+            handler = getattr(self, name, None)
+            if callable(handler):
+                try:
+                    self._append_log(f"[controller] on_add_job_to_queue_v2 using {name}.")
+                    handler()
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    self._append_log(
+                        f"[controller] on_add_job_to_queue_v2 handler {name} error: {exc!r}"
+                    )
+                    return
+
+        self._append_log(
+            "[controller] on_add_job_to_queue_v2: no queue handler available; no-op."
+        )
 
     def set_main_window(self, main_window: MainWindow) -> None:
         """Set the main window and wire GUI callbacks."""
@@ -781,7 +904,7 @@ class AppController:
                 pass
 
     def _validate_pipeline_config(self) -> tuple[bool, str]:
-        cfg = self.state.current_config
+        cfg = self.app_state.current_config if self.app_state else self.state.current_config
         if not cfg.model_name:
             return False, "Please select a model before running the pipeline."
         if not cfg.sampler_name:
@@ -852,14 +975,14 @@ class AppController:
         This method:
         - Validates the current pipeline config.
         - Builds the PipelineConfig.
-        - Invokes the injected pipeline runner once.
-        - Updates lifecycle state and returns the runner result (if any).
+        - Delegates to PipelineController for execution.
+        - Updates lifecycle state and returns the result.
         """
         if self.state.lifecycle == LifecycleState.RUNNING:
             self._append_log("[controller] run_pipeline requested, but pipeline is already running.")
             return None
 
-        self._append_log("[controller] run_pipeline - gathering config.")
+        self._append_log("[controller] run_pipeline - delegating to PipelineController.")
         is_valid, message = self._validate_pipeline_config()
         self._set_validation_feedback(is_valid, message)
         if not is_valid:
@@ -867,21 +990,36 @@ class AppController:
             return None
 
         self._set_lifecycle(LifecycleState.RUNNING)
-        pipeline_config = self.build_pipeline_config_v2()
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-
         try:
-            self._append_log("[controller] Starting pipeline execution (run_pipeline).")
-            if pipeline_tab is not None:
-                result = self._run_pipeline_from_tab(pipeline_tab, pipeline_config)
-            else:
-                result = self._run_pipeline_via_runner_only(pipeline_config)
+            result = self._run_via_pipeline_controller()
             self._set_lifecycle(LifecycleState.IDLE)
             return result
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] Pipeline error in run_pipeline: {exc!r}")
             self._set_lifecycle(LifecycleState.ERROR, error=str(exc))
             return None
+
+    def _run_via_pipeline_controller(self) -> Any:
+        """Delegate pipeline execution to PipelineController for modern V2 stack."""
+        if not hasattr(self, "pipeline_controller") or self.pipeline_controller is None:
+            raise RuntimeError("PipelineController not initialized")
+
+        pipeline_config = self.build_pipeline_config_v2()
+        self._append_log("[controller] Delegating to PipelineController for execution.")
+
+        # Run synchronously via PipelineController
+        result = self.pipeline_controller.run_pipeline(pipeline_config)
+        return result
+
+    def _execute_pipeline_via_runner(self, pipeline_config: PipelineConfig) -> Any:
+        """Execute pipeline using the traditional PipelineRunner approach."""
+        runner = getattr(self, "pipeline_runner", None)
+        if runner is None:
+            raise RuntimeError("No pipeline runner configured")
+        
+        # Run the pipeline synchronously
+        result = runner.run(pipeline_config, self.pipeline_controller.cancel_token, self._append_log_threadsafe)
+        return result
 
     def _run_pipeline_from_tab(self, pipeline_tab: Any, pipeline_config: PipelineConfig) -> Any:
         flags = {
@@ -1073,6 +1211,14 @@ class AppController:
             # Synchronous run (for tests and journeys) via public facade
             self.run_pipeline()
 
+    def start_run(self) -> Any:
+        """Legacy-friendly entrypoint used by older harnesses."""
+        if self.state.lifecycle == LifecycleState.RUNNING:
+            self._append_log("[controller] start_run requested while already running.")
+            return None
+        self._append_log("[controller] start_run invoking run_pipeline.")
+        return self.run_pipeline()
+
     def on_launch_webui_clicked(self) -> None:
         if not self.webui_process_manager:
             return
@@ -1129,6 +1275,12 @@ class AppController:
         self._last_run_snapshot = snapshot
         try:
             self._config_manager.write_last_run(payload)
+            if self.app_state:
+                try:
+                    last_cfg = current_config_to_last_run(self.app_state.current_config)
+                    self._last_run_store.save(last_cfg)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -1142,6 +1294,13 @@ class AppController:
 
         if self._last_run_auto_restored and not force:
             return
+        if self.app_state:
+            try:
+                last_cfg = self._last_run_store.load()
+                if last_cfg is not None:
+                    update_current_config_from_last_run(self.app_state.current_config, last_cfg)
+            except Exception:
+                pass
         payload = self._config_manager.load_last_run()
         if not payload:
             return
@@ -1208,11 +1367,19 @@ class AppController:
             return
         sidebar.set_stage_state(stage, enabled, emit_change=False)
 
+    def _apply_pipeline_stage_flags(self, pipeline_section: dict[str, Any]) -> None:
+        if not pipeline_section:
+            return
+        for stage in ("txt2img", "img2img", "upscale", "adetailer"):
+            key = f"{stage}_enabled"
+            if key in pipeline_section:
+                self._set_sidebar_stage_state(stage, bool(pipeline_section.get(key)))
+        self._refresh_stage_visibility()
+
     def _load_stage_card(self, _card: Any | None, executor_config: dict[str, Any]) -> None:
         if _card is None:
             return
-        child = getattr(_card, "_child", None)
-        loader = getattr(child, "load_from_config", None)
+        loader = getattr(_card, "load_from_config", None)
         if callable(loader):
             try:
                 loader(executor_config)
@@ -1644,6 +1811,15 @@ class AppController:
             "height": cfg.height,
             "steps": cfg.steps,
             "cfg_scale": cfg.cfg_scale,
+            "refiner_enabled": cfg.refiner_enabled,
+            "refiner_model_name": cfg.refiner_model_name,
+            "refiner_switch_at": cfg.refiner_switch_at,
+            "hires_enabled": cfg.hires_enabled,
+            "hires_upscaler_name": cfg.hires_upscaler_name,
+            "hires_upscale_factor": cfg.hires_upscale_factor,
+            "hires_steps": cfg.hires_steps,
+            "hires_denoise": cfg.hires_denoise,
+            "hires_use_base_model_for_hires": cfg.hires_use_base_model_for_hires,
         }
     def update_config(self, **kwargs: float | int | str) -> None:
         mapping = {
@@ -1694,6 +1870,7 @@ class AppController:
 
         return PipelineConfig(
             prompt=prompt,
+            negative_prompt=str(current.get("negative_prompt", "")),
             model=str(current["model"]),
             sampler=str(current["sampler"]),
             width=int(current["width"]),
@@ -1704,6 +1881,17 @@ class AppController:
             preset_name=self.state.current_config.preset_name or None,
             lora_settings=self._lora_settings_payload(),
             metadata=metadata,
+            refiner_enabled=bool(current.get("refiner_enabled")),
+            refiner_model_name=str(current.get("refiner_model_name") or ""),
+            refiner_switch_at=float(current.get("refiner_switch_at") or 0.8),
+            hires_fix={
+                "enabled": bool(current.get("hires_enabled")),
+                "upscaler_name": str(current.get("hires_upscaler_name") or "Latent"),
+                "upscale_factor": float(current.get("hires_upscale_factor") or 2.0),
+                "steps": current.get("hires_steps"),
+                "denoise": float(current.get("hires_denoise") or 0.3),
+                "use_base_model": bool(current.get("hires_use_base_model_for_hires")),
+            },
         )
 
     def _resolve_prompt_from_pack(self, pack: PromptPackInfo | None) -> str:
@@ -2051,6 +2239,8 @@ class AppController:
         if pack_config is None:
             self._append_log(f"[controller] No config found for pack: {pack_id}")
             return
+        pipeline_section = pack_config.get("pipeline") or {}
+        self._apply_pipeline_stage_flags(pipeline_section)
         
         # Apply to run config
         if self.app_state:
@@ -2065,6 +2255,12 @@ class AppController:
                 pipeline_config_panel.apply_run_config(pack_config)
             except Exception as e:
                 self._append_log(f"[controller] Error applying pack config to stages: {e}")
+        stage_panel = self._get_stage_cards_panel()
+        if stage_panel:
+            for card_name in ("txt2img", "img2img", "upscale"):
+                card = getattr(stage_panel, f"{card_name}_card", None)
+                self._load_stage_card(card, pack_config)
+            stage_panel.load_adetailer_config(pack_config.get("adetailer") or {})
         self._apply_adetailer_config_section(pack_config)
         
         self._append_log(f"[controller] Loaded config for pack '{pack_id}'")
@@ -2091,6 +2287,23 @@ class AppController:
                 self._append_log(f"[controller] Applied config to pack '{pack_id}'")
             else:
                 self._append_log(f"[controller] Failed to apply config to pack '{pack_id}'")
+
+    def save_current_pipeline_preset(self, preset_name: str) -> bool:
+        """Persist the current pipeline/stage config as a named preset."""
+        self._append_log(f"[controller] Saving current pipeline config as preset '{preset_name}'")
+        payload = self._run_config_with_lora()
+        panel_randomizer = self._get_panel_randomizer_config()
+        if panel_randomizer:
+            payload.update(panel_randomizer)
+        if not payload:
+            self._append_log("[controller] No current config to save as preset")
+            return False
+        success = self._config_manager.save_preset(preset_name, payload)
+        if success:
+            self._append_log(f"[controller] Preset '{preset_name}' saved")
+        else:
+            self._append_log(f"[controller] Failed to save preset '{preset_name}'")
+        return success
 
     def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
         """Add one or more packs to the current job draft."""

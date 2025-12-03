@@ -1,23 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
-
-
-class FakePipeline:
-    def __init__(self, *_args, **_kwargs):
-        self.calls = []
-
-    def run_txt2img_stage(self, prompt, negative_prompt, config, output_dir, image_name):
-        self.calls.append(("txt2img", prompt, output_dir, image_name))
-        output = Path(output_dir) / f"{image_name}.png"
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text("img")
-        return {"path": str(output)}
+from tests.helpers.pipeline_fakes import FakePipeline
 
 
 class DummyClient:

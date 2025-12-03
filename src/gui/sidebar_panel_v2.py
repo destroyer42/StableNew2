@@ -26,6 +26,7 @@ from .output_settings_panel_v2 import OutputSettingsPanelV2
 from .prompt_pack_adapter_v2 import PromptPackAdapterV2, PromptPackSummary
 from .prompt_pack_list_manager import PromptPackListManager
 from src.gui.zone_map_v2 import get_pipeline_stage_order
+from tkinter import simpledialog
 
 
 class _SidebarCard(BaseStageCardV2):
@@ -117,6 +118,7 @@ class SidebarPanelV2(ttk.Frame):
     CARD_BASE_WIDTH = 240
     CARD_WIDTH = 80
     _MAX_PREVIEW_CHARS = 4000
+    _CREATE_PRESET_LABEL = "Create new preset from stages"
 
     def __init__(
         self,
@@ -160,6 +162,7 @@ class SidebarPanelV2(ttk.Frame):
         self.preset_combo: ttk.Combobox | None = None
         self.preset_menu_button: ttk.Menubutton | None = None
         self.preset_menu: tk.Menu | None = None
+        self._last_valid_preset: str = ""
 
         self.pack_list_manager = PromptPackListManager()
         self.pack_list_names = self.pack_list_manager.get_list_names()
@@ -260,7 +263,56 @@ class SidebarPanelV2(ttk.Frame):
         self.preset_menu_button.config(menu=self.preset_menu)
 
         self._populate_preset_combo()
+        create_button = ttk.Button(
+            frame,
+            text="Create new preset from stages",
+            command=self._create_preset_from_stages,
+            style="Primary.TButton",
+        )
+        create_button.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         return frame
+
+    def _create_preset_from_stages(self) -> None:
+        """Prompt for a name and persist the current stage config as a preset."""
+        self._handle_create_preset_action()
+
+    def _handle_create_preset_action(self) -> None:
+        preset_name = simpledialog.askstring("Create preset", "Preset name:", parent=self)
+        if not preset_name:
+            self._restore_last_selection()
+            return
+        controller = self.controller
+        saved = False
+        if controller and hasattr(controller, "save_current_pipeline_preset"):
+            try:
+                saved = controller.save_current_pipeline_preset(preset_name)
+            except Exception:
+                saved = False
+        if saved:
+            self._populate_preset_combo()
+            self._apply_preset_selection(preset_name)
+        else:
+            self._restore_last_selection()
+
+    def _apply_preset_selection(self, name: str | None) -> None:
+        if name and name in self.preset_names:
+            self.preset_var.set(name)
+            self._last_valid_preset = name
+            self._update_config_source_label(name)
+        else:
+            self.preset_var.set("")
+            self._last_valid_preset = ""
+            self._update_config_source_label(None)
+
+    def _restore_last_selection(self) -> None:
+        if self._last_valid_preset and self._last_valid_preset in self.preset_names:
+            self._apply_preset_selection(self._last_valid_preset)
+        else:
+            self._apply_preset_selection(None)
+
+    def _update_config_source_label(self, preset_name: str | None) -> None:
+        text = f"Preset: {preset_name}" if preset_name else "Defaults"
+        self.config_source_label.config(text=text)
 
     def _build_pack_selector_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
@@ -414,11 +466,13 @@ class SidebarPanelV2(ttk.Frame):
         if not self.preset_combo:
             return
         presets = self.config_manager.list_presets() if hasattr(self.config_manager, "list_presets") else []
-        self.preset_combo.config(values=presets)
+        self.preset_names = presets
+        values = presets + [self._CREATE_PRESET_LABEL]
+        self.preset_combo.config(values=values)
         if presets:
-            self.preset_combo.set(presets[0])
+            self._apply_preset_selection(presets[0])
         else:
-            self.preset_var.set("")
+            self._apply_preset_selection(None)
 
     def _on_pack_load_config(self) -> None:
         if not self.pack_listbox:
@@ -629,13 +683,20 @@ class SidebarPanelV2(ttk.Frame):
 
     def _on_preset_selected(self, event: object = None) -> None:
         selected_preset = self.preset_var.get()
-        # Call controller method to handle preset selection
+        if selected_preset == self._CREATE_PRESET_LABEL:
+            self._handle_create_preset_action()
+            return
+        if not selected_preset:
+            self._apply_preset_selection(None)
+            self.grid_columnconfigure(0, weight=1)
+            return
         if self.controller and hasattr(self.controller, "on_preset_selected"):
             try:
                 self.controller.on_preset_selected(selected_preset)
             except Exception:
                 pass
-        self.config_source_label.config(text=f"Preset: {selected_preset}")
+        self._last_valid_preset = selected_preset
+        self._update_config_source_label(selected_preset)
         self.grid_columnconfigure(0, weight=1)
 
     def _on_preset_apply_to_default(self) -> None:

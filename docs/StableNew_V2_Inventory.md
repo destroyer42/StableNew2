@@ -45,3 +45,7 @@ python tools/v2_classify_and_archive.py --json inventory/stable_v2_inventory.jso
 ```
 
 Add `--archive`/`--dry-run`/`--force` to move the V1 subset into `archive/`.
+
+### Reference
+
+For the V2.5 stage sequencing story (txt2img → refiner/hires → upscale → ADetailer), see [Stage_Sequencing_V2_5_V2-P1.md](Stage_Sequencing_V2_5_V2-P1.md).

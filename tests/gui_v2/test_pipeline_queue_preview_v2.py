@@ -29,6 +29,15 @@ class DummyQueueController:
     def on_clear_job_draft(self) -> None:
         self.calls.append("clear")
 
+    def on_run_queue_now_clicked(self) -> None:
+        self.calls.append("run")
+
+    def start_run(self) -> None:
+        self.calls.append("start_run")
+
+    def on_stop_clicked(self) -> None:
+        self.calls.append("stop")
+
 
 @pytest.mark.gui
 def test_preview_panel_queue_sections_and_controls(tk_root) -> None:
@@ -70,3 +79,13 @@ def test_pipeline_run_controls_invoke_controller_methods(tk_root) -> None:
     controls.clear_draft_button.invoke()
 
     assert controller.calls == ["add", "run", "clear"]
+
+
+def test_pipeline_run_controls_start_and_stop_invoke_shim(tk_root) -> None:
+    controller = DummyQueueController()
+    controls = PipelineRunControlsV2(tk_root, controller=controller)
+
+    controls.run_button.invoke()
+    controls.stop_button.invoke()
+
+    assert controller.calls[-2:] == ["start_run", "stop"]

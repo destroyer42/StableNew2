@@ -1,4 +1,9 @@
-from src.pipeline.last_run_store_v2_5 import LastRunConfigV2_5, LastRunStoreV2_5
+from src.gui.app_state_v2 import CurrentConfig
+from src.pipeline.last_run_store_v2_5 import (
+    LastRunConfigV2_5,
+    LastRunStoreV2_5,
+    current_config_to_last_run,
+)
 import json
 
 def test_save_and_load_roundtrip(tmp_path):
@@ -54,3 +59,12 @@ def test_extra_fields_ignored(tmp_path):
     loaded = store.load()
     assert loaded is not None
     assert not hasattr(loaded, "extra_field")
+
+
+def test_current_config_to_last_run_includes_hires_defaults():
+    cfg = CurrentConfig()
+    last = current_config_to_last_run(cfg)
+    assert last.hires_enabled is False
+    assert last.hires_upscaler_name == "Latent"
+    assert last.hires_upscale_factor == 2.0
+    assert last.hires_use_base_model is True

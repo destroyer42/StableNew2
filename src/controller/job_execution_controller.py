@@ -93,6 +93,9 @@ class JobExecutionController:
     def get_worker_registry(self) -> WorkerRegistry:
         return self._worker_registry
 
+    def get_runner(self) -> SingleNodeJobRunner:
+        return self._runner
+
     def _default_history_store(self) -> JobHistoryStore:
         path = Path(get_job_history_path())
         return JSONLJobHistoryStore(path)

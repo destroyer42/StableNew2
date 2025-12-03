@@ -7,10 +7,8 @@ with correct metadata.
 
 from __future__ import annotations
 
-import os
 import tempfile
 import time
-import tkinter as tk
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -20,21 +18,7 @@ from src.app_factory import build_v2_app
 from src.controller.app_controller import AppController
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
-
-
-def _create_root() -> tk.Tk:
-    """Create a real Tk root for journey tests; fail fast if unavailable."""
-    try:
-        if "TCL_LIBRARY" not in os.environ:
-            tcl_dir = os.path.join(os.path.dirname(tk.__file__), "tcl", "tcl8.6")
-            if os.path.isdir(tcl_dir):
-                os.environ["TCL_LIBRARY"] = tcl_dir
-
-        root = tk.Tk()
-        root.withdraw()
-        return root
-    except tk.TclError as exc:  # pragma: no cover - environment dependent
-        pytest.fail(f"Tkinter unavailable for journey test: {exc}")
+from tests.journeys.utils.tk_root_factory import create_root
 
 
 @pytest.mark.journey
@@ -50,7 +34,7 @@ def test_jt03_txt2img_pipeline_run():
     with tempfile.TemporaryDirectory() as temp_dir:
 
         # Step 1: Launch StableNew (build V2 app)
-        root = _create_root()
+        root = create_root()
         try:
             root, app_state, app_controller, window = build_v2_app(
                 root=root,
@@ -184,7 +168,7 @@ def test_jt03_txt2img_edge_cases():
         with tempfile.TemporaryDirectory() as temp_dir:
 
             # Step 1: Launch StableNew
-            root = _create_root()
+            root = create_root()
             try:
                 root, app_state, app_controller, window = build_v2_app(
                     root=root,
@@ -253,7 +237,7 @@ def test_jt03_txt2img_metadata_accuracy():
     test_negative = "blurry, distorted, low quality"
 
     # Step 1: Launch StableNew
-    root = _create_root()
+    root = create_root()
     try:
         root, app_state, app_controller, window = build_v2_app(
             root=root,

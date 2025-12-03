@@ -14,9 +14,11 @@ from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
 from src.gui.state import CancellationError
-from src.pipeline.executor import Pipeline
+from src.pipeline.executor import Pipeline, PipelineStageError
 from src.pipeline.stage_sequencer import (
+    StageExecution,
     StageExecutionPlan,
+    StageMetadata,
     StageTypeEnum,
     build_stage_execution_plan,
 )
@@ -38,6 +40,7 @@ class PipelineConfig:
     height: int
     steps: int
     cfg_scale: float
+    negative_prompt: str = ""
     pack_name: Optional[str] = None
     preset_name: Optional[str] = None
     variant_configs: Optional[List[dict[str, Any]]] = None
@@ -45,6 +48,10 @@ class PipelineConfig:
     randomizer_plan_size: int = 0
     lora_settings: Optional[Dict[str, dict[str, Any]]] = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    refiner_enabled: bool = False
+    refiner_model_name: str | None = None
+    refiner_switch_at: float = 0.8
+    hires_fix: dict[str, Any] = field(default_factory=dict)
 
 
 class PipelineRunner:
@@ -102,6 +109,25 @@ class PipelineRunner:
         if cancel_token and getattr(cancel_token, "is_cancelled", None) and cancel_token.is_cancelled():
             raise CancellationError(f"Cancelled during {context}")
 
+    def _is_generative_stage_type(self, stage_type: str) -> bool:
+        return stage_type in {
+            StageTypeEnum.TXT2IMG.value,
+            StageTypeEnum.IMG2IMG.value,
+            StageTypeEnum.UPSCALE.value,
+        }
+
+    def _validate_stage_plan(self, plan: StageExecutionPlan) -> None:
+        stages = plan.stages or []
+        if not stages:
+            raise ValueError("Pipeline plan contains no enabled stages.")
+        adetailers = [stage for stage in stages if stage.stage_type == StageTypeEnum.ADETAILER.value]
+        if len(adetailers) > 1:
+            raise ValueError("Multiple ADetailer stages are not supported.")
+        if adetailers and stages[-1].stage_type != StageTypeEnum.ADETAILER.value:
+            raise ValueError("ADetailer stage must be the final stage.")
+        if adetailers and not any(self._is_generative_stage_type(stage.stage_type) for stage in stages):
+            raise ValueError("ADetailer stage requires a preceding generation stage.")
+
     def set_learning_enabled(self, enabled: bool) -> None:
         """Toggle passive learning record emission."""
 
@@ -133,14 +159,19 @@ class PipelineRunner:
             if callable(reset_events):
                 reset_events()
             stage_plan = build_stage_execution_plan(executor_config)
+            self._validate_stage_plan(stage_plan)
             if not stage_plan.stages:
                 raise ValueError("No pipeline stages enabled")
             self._ensure_not_cancelled(cancel_token, "pipeline start")
             run_dir = Path(self._runs_base_dir) / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
 
+            prev_image_path: Path | None = None
+            prompt = config.prompt
+            negative_prompt = getattr(config, "negative_prompt", "") or ""
             for stage in stage_plan.stages:
                 current_stage = StageTypeEnum(stage.stage_type)
+                self._apply_stage_metadata(executor_config, stage)
                 self._ensure_not_cancelled(cancel_token, f"{current_stage.value} start")
                 stage_events.append(
                     {
@@ -151,76 +182,26 @@ class PipelineRunner:
                         "cancelled": False,
                     }
                 )
-                if current_stage == StageTypeEnum.TXT2IMG:
-                    negative = executor_config.get("txt2img", {}).get("negative_prompt", "")
-                    global_neg = getattr(config, "global_negative", None)
-                    if global_neg and global_neg.get("enabled") and global_neg.get("text"):
-                        if negative:
-                            negative = f"{negative}, {global_neg['text']}"
-                        else:
-                            negative = global_neg["text"]
-                    last_image_meta = self._call_stage(
-                        self._pipeline.run_txt2img_stage,
-                        prompt,
-                        negative,
-                        executor_config,
-                        run_dir,
-                        image_name=f"txt2img_{stage.order_index}",
-                        cancel_token=cancel_token,
-                    )
-                elif current_stage == StageTypeEnum.IMG2IMG:
-                    if not last_image_meta or not last_image_meta.get("path"):
-                        raise ValueError("img2img requires input image from previous stage")
-                    negative = executor_config.get("img2img", {}).get("negative_prompt", "")
-                    global_neg = getattr(config, "global_negative", None)
-                    if global_neg and global_neg.get("enabled") and global_neg.get("text"):
-                        if negative:
-                            negative = f"{negative}, {global_neg['text']}"
-                        else:
-                            negative = global_neg["text"]
-                    last_image_meta = self._call_stage(
-                        self._pipeline.run_img2img_stage,
-                        Path(last_image_meta["path"]),
-                        prompt,
-                        negative,
-                        executor_config.get("img2img", {}),
-                        run_dir,
-                        image_name=f"img2img_{stage.order_index}",
-                        cancel_token=cancel_token,
-                    )
-                elif current_stage == StageTypeEnum.UPSCALE:
-                    if not last_image_meta or not last_image_meta.get("path"):
-                        raise ValueError("upscale requires input image from previous stage")
-                    negative = executor_config.get("upscale", {}).get("negative_prompt", "")
-                    global_neg = getattr(config, "global_negative", None)
-                    if global_neg and global_neg.get("enabled") and global_neg.get("text"):
-                        if negative:
-                            negative = f"{negative}, {global_neg['text']}"
-                        else:
-                            negative = global_neg["text"]
-                    last_image_meta = self._call_stage(
-                        self._pipeline.run_upscale_stage,
-                        Path(last_image_meta["path"]),
-                        negative,
-                        executor_config.get("upscale", {}),
-                        run_dir,
-                        image_name=Path(last_image_meta["path"]).stem,
-                        cancel_token=cancel_token,
-                    )
-                elif current_stage == StageTypeEnum.ADETAILER:
-                    if not last_image_meta or not last_image_meta.get("path"):
-                        raise ValueError("adetailer requires input image from previous stage")
-                    adetailer_cfg = dict(executor_config.get("adetailer", {}))
-                    adetailer_cfg.setdefault("pipeline", executor_config.get("pipeline", {}))
-                    last_image_meta = self._call_stage(
-                        self._pipeline.run_adetailer_stage,
-                        Path(last_image_meta["path"]),
-                        adetailer_cfg,
-                        run_dir,
-                        image_name=Path(last_image_meta["path"]).stem,
-                        prompt=prompt,
-                        cancel_token=cancel_token,
-                    )
+                input_image_path = None
+                if last_image_meta and last_image_meta.get("path"):
+                    input_image_path = Path(last_image_meta["path"])
+                payload = self._build_stage_payload(
+                    stage,
+                    config,
+                    executor_config,
+                    prompt,
+                    negative_prompt,
+                    input_image_path,
+                )
+                last_image_meta = self._call_stage(
+                    stage,
+                    payload,
+                    run_dir,
+                    cancel_token,
+                    input_image_path,
+                )
+                if last_image_meta and last_image_meta.get("path"):
+                    prev_image_path = Path(last_image_meta["path"])
                 self._ensure_not_cancelled(cancel_token, f"{current_stage.value} post")
                 stage_events.append(
                     {
@@ -242,6 +223,25 @@ class PipelineRunner:
                     "cancelled": True,
                 }
             )
+        except PipelineStageError as exc:
+            stage_events.append(
+                {
+                    "stage": exc.error.stage or "pipeline",
+                    "phase": "error",
+                    "image_index": 1,
+                    "total_images": 1,
+                    "cancelled": True,
+                    "error_code": exc.error.code.value,
+                    "error_message": exc.error.message,
+                }
+            )
+            log_with_ctx(
+                get_logger(__name__),
+                logging.ERROR,
+                f"Pipeline stage failed: {exc.error.stage} ({exc.error.code}) {exc.error.message}",
+                ctx=LogContext(subsystem="pipeline"),
+            )
+            raise
         finally:
             record = None
 
@@ -283,13 +283,95 @@ class PipelineRunner:
         self._last_run_result = result
         return result
 
-    def _call_stage(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-        """Invoke a stage function, tolerating implementations without cancel_token."""
-        try:
-            return fn(*args, **kwargs)
-        except TypeError:
-            kwargs.pop("cancel_token", None)
-            return fn(*args, **kwargs)
+    def _call_stage(
+        self,
+        stage: StageExecution,
+        payload: dict[str, Any],
+        run_dir: Path,
+        cancel_token: "CancelToken" | None,
+        input_image_path: Path | None,
+    ) -> dict[str, Any] | None:
+        """Execute a stage using the executor helpers and the built payload."""
+
+        stage_type = StageTypeEnum(stage.stage_type)
+        image_name = f"{stage_type.value}_{stage.order_index}"
+        if stage_type == StageTypeEnum.TXT2IMG:
+            return self._pipeline.run_txt2img_stage(
+                payload.get("prompt", ""),
+                payload.get("negative_prompt", ""),
+                payload,
+                run_dir,
+                image_name=image_name,
+                cancel_token=cancel_token,
+            )
+        if stage_type == StageTypeEnum.IMG2IMG:
+            if not input_image_path:
+                raise ValueError("img2img requires input image from previous stage")
+            return self._pipeline.run_img2img_stage(
+                input_image_path,
+                payload.get("prompt", ""),
+                payload,
+                run_dir,
+                image_name=image_name,
+                cancel_token=cancel_token,
+            )
+        if stage_type == StageTypeEnum.UPSCALE:
+            if not input_image_path:
+                raise ValueError("upscale requires input image from previous stage")
+            return self._pipeline.run_upscale_stage(
+                input_image_path,
+                payload,
+                run_dir,
+                image_name=image_name,
+                cancel_token=cancel_token,
+            )
+        if stage_type == StageTypeEnum.ADETAILER:
+            if not input_image_path:
+                raise ValueError("adetailer requires input image from previous stage")
+            return self._pipeline.run_adetailer_stage(
+                input_image_path,
+                payload,
+                run_dir,
+                image_name=image_name,
+                prompt=payload.get("prompt"),
+                cancel_token=cancel_token,
+            )
+        raise ValueError(f"Unsupported stage {stage_type.value}")
+
+    def _apply_stage_metadata(self, executor_config: dict[str, Any], stage: StageExecution) -> None:
+        """Merge stage metadata into the executor config before execution."""
+        if stage.stage_type != StageTypeEnum.TXT2IMG.value:
+            return
+        metadata = stage.config.metadata
+        if not isinstance(metadata, StageMetadata):
+            return
+        txt_cfg = executor_config.setdefault("txt2img", {})
+        txt_cfg["refiner_enabled"] = metadata.refiner_enabled
+        if metadata.refiner_enabled:
+            if metadata.refiner_model_name:
+                txt_cfg["refiner_model_name"] = metadata.refiner_model_name
+            if metadata.refiner_switch_at is not None:
+                try:
+                    txt_cfg["refiner_switch_at"] = float(metadata.refiner_switch_at)
+                except Exception:
+                    pass
+        txt_cfg["enable_hr"] = metadata.hires_enabled
+        if metadata.hires_enabled:
+            if metadata.hires_upscale_factor is not None:
+                try:
+                    txt_cfg["hr_scale"] = float(metadata.hires_upscale_factor)
+                except Exception:
+                    pass
+            if metadata.hires_denoise is not None:
+                try:
+                    txt_cfg["denoising_strength"] = float(metadata.hires_denoise)
+                except Exception:
+                    pass
+            if metadata.hires_steps is not None:
+                try:
+                    txt_cfg["hr_second_pass_steps"] = max(0, int(metadata.hires_steps))
+                except Exception:
+                    pass
 
     def _build_executor_config(self, config: PipelineConfig) -> dict[str, Any]:
         """Prepare the executor configuration dict from PipelineConfig."""
@@ -304,6 +386,9 @@ class PipelineRunner:
         txt2img["steps"] = config.steps
         txt2img["cfg_scale"] = config.cfg_scale
         txt2img.setdefault("enabled", True)
+        txt2img["refiner_enabled"] = config.refiner_enabled
+        txt2img["refiner_model_name"] = config.refiner_model_name or ""
+        txt2img["refiner_switch_at"] = config.refiner_switch_at
 
         img2img = base.setdefault("img2img", {})
         img2img["model"] = config.model
@@ -331,8 +416,70 @@ class PipelineRunner:
             ad_cfg.update(metadata_adetailer)
         ad_cfg["enabled"] = pipeline_flags["adetailer_enabled"]
         ad_cfg["adetailer_enabled"] = pipeline_flags["adetailer_enabled"]
+        base["hires_fix"] = dict(config.hires_fix or {})
 
         return base
+
+    def _build_stage_payload(
+        self,
+        stage: StageExecution,
+        config: PipelineConfig,
+        executor_config: dict[str, Any],
+        prompt: str,
+        negative_prompt: str,
+        input_image_path: Path | None,
+    ) -> dict[str, Any]:
+        """Construct a per-stage payload from the plan metadata."""
+
+        payload = dict(stage.config.payload or {})
+        payload.setdefault("prompt", prompt)
+        payload.setdefault("negative_prompt", negative_prompt)
+
+        payload.setdefault("model", config.model)
+        payload.setdefault("sampler_name", config.sampler)
+        payload.setdefault("scheduler", executor_config.get("txt2img", {}).get("scheduler"))
+        payload.setdefault("steps", config.steps)
+        payload.setdefault("cfg_scale", config.cfg_scale)
+        if config.pack_name:
+            payload.setdefault("pack_name", config.pack_name)
+        if config.preset_name:
+            payload.setdefault("preset_name", config.preset_name)
+
+        payload["stage_type"] = stage.stage_type
+        metadata = stage.config.metadata
+        if isinstance(metadata, dict):
+            metadata = StageMetadata(
+                refiner_enabled=bool(metadata.get("refiner_enabled", False)),
+                refiner_model_name=metadata.get("refiner_model_name"),
+                refiner_switch_at=metadata.get("refiner_switch_at"),
+                hires_enabled=bool(metadata.get("hires_enabled", False)),
+                hires_upscale_factor=metadata.get("hires_upscale_factor"),
+                hires_denoise=metadata.get("hires_denoise"),
+                hires_steps=metadata.get("hires_steps"),
+                stage_flags=metadata.get("stage_flags", {}),
+            )
+        if not isinstance(metadata, StageMetadata):
+            metadata = StageMetadata()
+            payload["refiner_enabled"] = metadata.refiner_enabled
+            payload["refiner_model_name"] = metadata.refiner_model_name
+            if metadata.refiner_switch_at is not None:
+                payload["refiner_switch_at"] = metadata.refiner_switch_at
+            payload["hires_enabled"] = metadata.hires_enabled
+            if metadata.hires_upscale_factor is not None:
+                payload["hires_upscale_factor"] = metadata.hires_upscale_factor
+            if metadata.hires_denoise is not None:
+                payload["hires_denoise"] = metadata.hires_denoise
+            if metadata.hires_steps is not None:
+                payload["hires_steps"] = metadata.hires_steps
+            for flag, value in metadata.stage_flags.items():
+                payload.setdefault(flag, value)
+
+        if input_image_path:
+            encoded = self._pipeline._load_image_base64(input_image_path)
+            if encoded:
+                payload["init_images"] = [encoded]
+                payload["input_image_path"] = str(input_image_path)
+        return payload
 
     def _emit_learning_record(
         self, config: PipelineConfig, run_result: PipelineRunResult

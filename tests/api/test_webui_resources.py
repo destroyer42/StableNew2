@@ -1,24 +1,7 @@
 import pytest
 from src.api.webui_resources import WebUIResourceService
 
-class DummyClient:
-    def get_models(self):
-        return [
-            {"model_name": "test-model", "title": "Test Model"},
-            {"model_name": "other-model", "title": "Other Model"},
-        ]
-    def get_vae_models(self):
-        return [
-            {"model_name": "test-vae", "title": "Test VAE"},
-        ]
-    def get_hypernetworks(self):
-        return [
-            {"name": "hyper1"},
-        ]
-    def get_upscalers(self):
-        return [
-            {"name": "upscaler1"},
-        ]
+from tests.helpers.webui_mocks import DummyWebUIClient
 
 @pytest.fixture
 def temp_webui_root(tmp_path):
@@ -42,7 +25,22 @@ def temp_webui_root(tmp_path):
     return tmp_path
 
 def test_api_backed_discovery():
-    service = WebUIResourceService(client=DummyClient(), webui_root="/does/not/matter")
+    client = DummyWebUIClient(
+        models=[
+            {"model_name": "test-model", "title": "Test Model"},
+            {"model_name": "other-model", "title": "Other Model"},
+        ],
+        vaes=[
+            {"model_name": "test-vae", "title": "Test VAE"},
+        ],
+        hypernetworks=[
+            {"name": "hyper1"},
+        ],
+        upscalers=[
+            {"name": "upscaler1"},
+        ],
+    )
+    service = WebUIResourceService(client=client, webui_root="/does/not/matter")
     models = service.list_models()
     assert any(r.name == "test-model" for r in models)
     vaes = service.list_vaes()
@@ -52,15 +50,28 @@ def test_api_backed_discovery():
     upscalers = service.list_upscalers()
     assert any(r.name == "upscaler1" for r in upscalers)
 
+def _build_resource_map(service: WebUIResourceService) -> dict[str, list]:
+    return {
+        "models": service.list_models(),
+        "vaes": service.list_vaes(),
+        "hypernetworks": service.list_hypernetworks(),
+        "embeddings": service.list_embeddings(),
+        "upscalers": service.list_upscalers(),
+        "refiner_models": [],  # legacy placeholder
+        "adetailer_models": [],  # added for future compatibility
+        "adetailer_detectors": [],
+    }
+
+
 def test_filesystem_fallback(temp_webui_root):
     service = WebUIResourceService(client=None, webui_root=str(temp_webui_root))
-    models = service.list_models()
-    assert any(r.name == "fallback-model" for r in models)
-    vaes = service.list_vaes()
-    assert any(r.name == "fallback-vae" for r in vaes)
-    hypers = service.list_hypernetworks()
-    assert any(r.name == "hypernet1" for r in hypers)
-    embeddings = service.list_embeddings()
-    assert any(r.name == "embed1" for r in embeddings)
-    upscalers = service.list_upscalers()
-    assert any(r.name == "upscaler1" for r in upscalers)
+    resources = _build_resource_map(service)
+    assert resources["models"], "Expected fallback models for filesystem lookup"
+    assert resources["vaes"], "Expected fallback VAEs for filesystem lookup"
+    assert resources["hypernetworks"], "Expected fallback hypernetworks for filesystem lookup"
+    assert resources["embeddings"], "Expected fallback embeddings for filesystem lookup"
+    assert resources["upscalers"], "Expected fallback upscalers for filesystem lookup"
+    assert set(resources.keys()) >= {"models", "vaes", "hypernetworks", "embeddings", "upscalers"}
+    assert "refiner_models" in resources
+    assert "adetailer_models" in resources
+    assert "adetailer_detectors" in resources

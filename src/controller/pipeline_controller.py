@@ -1,7 +1,12 @@
 """Compatibility wrapper that exposes the GUI pipeline controller at src.controller."""
 
+from __future__ import annotations
+
+import uuid
+
 from typing import Callable, Any
 
+from src.controller.job_service import JobService
 from src.gui.controller import PipelineController as _GUIPipelineController
 from src.gui.state import StateManager
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
@@ -23,6 +28,13 @@ from src.utils import StructuredLogger
 
 
 class PipelineController(_GUIPipelineController):
+    def _normalize_run_mode(self, pipeline_state: PipelineState) -> str:
+        mode = getattr(pipeline_state, "run_mode", "") or "queue"
+        mode_lower = str(mode).lower()
+        if mode_lower == "direct":
+            return "direct"
+        return "queue"
+
     def _coerce_overrides(self, overrides: GuiOverrides | dict[str, Any] | None) -> GuiOverrides:
         if isinstance(overrides, GuiOverrides):
             return overrides
@@ -176,6 +188,12 @@ class PipelineController(_GUIPipelineController):
         config_assembler: PipelineConfigAssembler | None = None,
         **kwargs,
     ):
+        # Pop parameters that are not for the parent class
+        api_client = kwargs.pop("api_client", None)
+        job_service = kwargs.pop("job_service", None)
+        structured_logger = kwargs.pop("structured_logger", None)
+        pipeline_runner = kwargs.pop("pipeline_runner", None)
+        
         queue_execution_controller = kwargs.pop("queue_execution_controller", None)
         webui_conn = kwargs.pop("webui_connection_controller", None)
         super().__init__(state_manager or StateManager(), **kwargs)
@@ -192,6 +210,7 @@ class PipelineController(_GUIPipelineController):
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_assembler = config_assembler if config_assembler is not None else PipelineConfigAssembler()
         self._webui_connection = webui_conn if webui_conn is not None else WebUIConnectionController()
+        self._pipeline_runner = pipeline_runner
         if self._queue_execution_controller:
             try:
                 self._queue_execution_controller.observe("pipeline_ctrl", self._on_queue_status)
@@ -199,6 +218,10 @@ class PipelineController(_GUIPipelineController):
                 pass
         self._job_history_service: JobHistoryService | None = None
         self._active_job_id: str | None = None
+        queue = self._job_controller.get_queue()
+        runner = self._job_controller.get_runner()
+        history_store = self._job_controller.get_history_store()
+        self._job_service = job_service if job_service is not None else JobService(queue, runner, history_store)
         self._job_controller.set_status_callback("pipeline", self._on_job_status)
 
     def _get_learning_runner(self):
@@ -439,20 +462,18 @@ class PipelineController(_GUIPipelineController):
 
             # Create Job
             from src.queue.job_model import Job, JobPriority
-            job = Job(
-                job_id="",  # Will be set by queue
-                pipeline_config=config,
-                priority=JobPriority.NORMAL,
-                lora_settings=planned_job.lora_settings,
-                randomizer_metadata=planned_job.randomizer_metadata,
-            )
+              run_mode = self._normalize_run_mode(pipeline_state)
+              job = Job(
+                  job_id=str(uuid.uuid4()),
+                  pipeline_config=config,
+                  priority=JobPriority.NORMAL,
+                  lora_settings=planned_job.lora_settings,
+                  randomizer_metadata=planned_job.randomizer_metadata,
+                  run_mode=run_mode,
+              )
+              job.payload = lambda job=job: self._run_job(job)
 
-            # Submit based on run_mode
-            if pipeline_state.run_mode == "queue":
-                self._job_controller.submit_pipeline_run(lambda: self._run_job(job), priority=job.priority)
-            else:
-                # Direct run
-                self._job_controller.submit_pipeline_run(lambda: self._run_job(job), priority=job.priority)
+              self._job_service.submit_job_with_run_mode(job)
 
     def _run_job(self, job: Job) -> dict[str, Any]:
         """Run a single job."""
@@ -463,6 +484,18 @@ class PipelineController(_GUIPipelineController):
         runner = PipelineRunner(api_client, structured_logger)
         result = runner.run(job.pipeline_config, self.cancel_token)
         return result.to_dict() if hasattr(result, 'to_dict') else {"result": result}
+
+    def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
+        """Run pipeline synchronously and return result."""
+        if self._pipeline_runner is not None:
+            result = self._pipeline_runner.run(config, self.cancel_token)
+        else:
+            api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
+            structured_logger = StructuredLogger()
+            runner = PipelineRunner(api_client, structured_logger)
+            result = runner.run(config, self.cancel_token)
+        self.record_run_result(result)
+        return result
 
     def get_job_history_service(self) -> JobHistoryService | None:
         """Return a JobHistoryService bound to this controller's queue/history."""

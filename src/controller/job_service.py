@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Callable, Literal
 
 from src.queue.job_model import Job, JobStatus
@@ -49,6 +51,15 @@ class JobService:
             pass
         if not self.runner.is_running():
             self.runner.start()
+
+    def submit_job_with_run_mode(self, job: Job) -> None:
+        """Submit a job respecting its configured run_mode."""
+        mode = (job.run_mode or "queue").lower()
+        logging.info("Submitting job %s with run_mode=%s", job.job_id, mode)
+        if mode == "direct":
+            self.run_now(job)
+        else:
+            self.enqueue(job)
 
     def pause(self) -> None:
         self.runner.stop()

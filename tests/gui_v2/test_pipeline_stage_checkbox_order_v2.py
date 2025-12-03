@@ -9,7 +9,10 @@ from src.gui.views.pipeline_config_panel import PipelineConfigPanel
 
 @pytest.mark.gui
 def test_pipeline_config_stage_checkbox_order(monkeypatch) -> None:
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter unavailable: {exc}")
     state = PipelineState()
     panel = PipelineConfigPanel(root, pipeline_state=state)
     panel.pack()

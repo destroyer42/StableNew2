@@ -12,6 +12,7 @@ from src.controller.app_controller import AppController, LifecycleState
 from src.pipeline.pipeline_runner import PipelineConfig
 from src.utils.prompt_packs import PromptPackInfo
 from tests.controller.test_app_controller_config import DummyWindow
+from tests.helpers.factories import make_run_config
 
 
 class RecordingPipelineRunner:
@@ -60,6 +61,15 @@ def test_pipeline_config_assembled_from_controller_state(pack_file):
         packs_dir=pack_file.parent,
         pipeline_runner=runner,
     )
+    controller.app_state.run_config = make_run_config(
+        model="SDXL-Lightning",
+        sampler="DPM++ 2M",
+        overrides={
+            "width": 832,
+            "height": 640,
+            "cfg_scale": 8.9,
+        },
+    )
     controller.on_pack_selected(0)
     controller.update_config(
         model="SDXL-Lightning",
@@ -94,6 +104,7 @@ def test_cancel_triggers_token_and_returns_to_idle(pack_file):
         packs_dir=pack_file.parent,
         pipeline_runner=runner,
     )
+    controller.app_state.run_config = make_run_config()
     controller.on_pack_selected(0)
     controller.on_run_clicked()
 

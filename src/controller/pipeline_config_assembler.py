@@ -99,6 +99,7 @@ class PipelineConfigAssembler:
 
         return PipelineConfig(
             prompt=gui_overrides.get("prompt", merged.get("prompt", "")),
+            negative_prompt=gui_overrides.get("negative_prompt", merged.get("negative_prompt", "")),
             model=selected_model,
             sampler=gui_overrides.get("sampler", merged.get("sampler_name", "")),
             width=int(merged.get("width", 512)),

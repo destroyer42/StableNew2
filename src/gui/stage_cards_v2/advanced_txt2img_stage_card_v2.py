@@ -7,6 +7,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
+from src.gui.app_state_v2 import CurrentConfig
 from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
@@ -224,6 +225,144 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
 
         parent.columnconfigure(0, weight=1)
 
+
+        # --- Refiner & Hires helpers --------------------------------------------
+        self.refiner_enabled_var = tk.BooleanVar(value=False)
+        self.refiner_model_var = tk.StringVar(value="")
+        self.refiner_switch_var = tk.DoubleVar(value=0.8)
+
+        self.hires_enabled_var = tk.BooleanVar(value=False)
+        self.hires_upscaler_var = tk.StringVar(value="Latent")
+        self.hires_factor_var = tk.DoubleVar(value=2.0)
+        self.hires_steps_var = tk.IntVar(value=0)
+        self.hires_denoise_var = tk.DoubleVar(value=0.3)
+        self.hires_use_base_model_var = tk.BooleanVar(value=True)
+
+        self._apply_refiner_hiress_defaults()
+
+        self.refiner_enabled_var.trace_add("write", lambda *_: self._on_refiner_toggle())
+        self.refiner_model_var.trace_add("write", lambda *_: self._on_refiner_model_changed())
+        self.refiner_switch_var.trace_add("write", lambda *_: self._on_refiner_switch_changed())
+
+        refiner_frame = ttk.LabelFrame(parent, text="SDXL Refiner", style=SURFACE_FRAME_STYLE)
+        refiner_frame.grid(row=3, column=0, sticky="ew", pady=(8, 4))
+        refiner_frame.columnconfigure(1, weight=1)
+
+        ttk.Checkbutton(
+            refiner_frame,
+            text="Enable refiner",
+            variable=self.refiner_enabled_var,
+            command=self._on_refiner_toggle,
+            style="Dark.TCheckbutton",
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(refiner_frame, text="Refiner model", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", pady=(4, 0)
+        )
+        self.refiner_model_combo = ttk.Combobox(
+            refiner_frame,
+            textvariable=self.refiner_model_var,
+            values=self._load_refiner_models(),
+            state="readonly",
+            style="Dark.TCombobox",
+        )
+        self.refiner_model_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
+        ttk.Label(refiner_frame, text="Refiner start (%)", style=BODY_LABEL_STYLE).grid(
+            row=2, column=0, sticky="w", pady=(4, 0)
+        )
+        tk.Scale(
+            refiner_frame,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=self.refiner_switch_var,
+            command=lambda value: self._on_refiner_switch_changed(),
+            showvalue=True,
+            length=180,
+            resolution=1,
+        ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
+
+        hires_frame = ttk.LabelFrame(parent, text="Hires fix", style=SURFACE_FRAME_STYLE)
+        hires_frame.grid(row=4, column=0, sticky="ew", pady=(0, 4))
+        hires_frame.columnconfigure(1, weight=1)
+
+        ttk.Checkbutton(
+            hires_frame,
+            text="Enable Hires fix",
+            variable=self.hires_enabled_var,
+            command=self._on_hires_toggle,
+            style="Dark.TCheckbutton",
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(hires_frame, text="Upscaler", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", pady=(4, 0)
+        )
+        upscaler_values = self._load_upscaler_options()
+        self.hires_upscaler_combo = ttk.Combobox(
+            hires_frame,
+            textvariable=self.hires_upscaler_var,
+            values=upscaler_values,
+            state="readonly",
+            style="Dark.TCombobox",
+        )
+        self.hires_upscaler_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
+        ttk.Label(hires_frame, text="Upscale factor", style=BODY_LABEL_STYLE).grid(
+            row=2, column=0, sticky="w", pady=(4, 0)
+        )
+        tk.Spinbox(
+            hires_frame,
+            from_=1.0,
+            to=4.0,
+            increment=0.1,
+            textvariable=self.hires_factor_var,
+            width=8,
+        ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
+        ttk.Label(hires_frame, text="Hires steps", style=BODY_LABEL_STYLE).grid(
+            row=3, column=0, sticky="w", pady=(4, 0)
+        )
+        tk.Spinbox(
+            hires_frame,
+            from_=0,
+            to=200,
+            increment=1,
+            textvariable=self.hires_steps_var,
+            width=8,
+            command=self._on_hires_steps_changed,
+        ).grid(row=3, column=1, sticky="ew", pady=(4, 0))
+        ttk.Label(hires_frame, text="Denoise", style=BODY_LABEL_STYLE).grid(
+            row=4, column=0, sticky="w", pady=(4, 0)
+        )
+        tk.Scale(
+            hires_frame,
+            from_=0.0,
+            to=1.0,
+            orient="horizontal",
+            variable=self.hires_denoise_var,
+            command=lambda value: self._on_hires_denoise_changed(),
+            showvalue=True,
+            length=180,
+            resolution=0.01,
+        ).grid(row=4, column=1, sticky="ew", pady=(4, 0))
+        ttk.Checkbutton(
+            hires_frame,
+            text="Use base model during hires",
+            variable=self.hires_use_base_model_var,
+            command=self._on_hires_use_base_model_changed,
+            style="Dark.TCheckbutton",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        self.hires_upscaler_combo.bind(
+            "<<ComboboxSelected>>", lambda *_: self._on_hires_upscaler_changed()
+        )
+        self.hires_enabled_var.trace_add("write", lambda *_: self._on_hires_toggle())
+        self.hires_upscaler_var.trace_add("write", lambda *_: self._on_hires_upscaler_changed())
+        self.hires_factor_var.trace_add("write", lambda *_: self._on_hires_factor_changed())
+        self.hires_steps_var.trace_add("write", lambda *_: self._on_hires_steps_changed())
+        self.hires_denoise_var.trace_add("write", lambda *_: self._on_hires_denoise_changed())
+        self.hires_use_base_model_var.trace_add(
+            "write", lambda *_: self._on_hires_use_base_model_changed()
+        )
+
+
+
     def set_on_change(self, callback: Any) -> None:
         self._on_change = callback
 
@@ -233,6 +372,105 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 self._on_change()
             except Exception:
                 pass
+
+    def _get_current_config(self) -> CurrentConfig | None:
+        controller = getattr(self, "controller", None)
+        if not controller:
+            return None
+        state = getattr(controller, "state", None)
+        if not state:
+            return None
+        return getattr(state, "current_config", None)
+
+    def _update_current_config(self, **kwargs: object) -> None:
+        cfg = self._get_current_config()
+        if not cfg:
+            return
+        for attr, value in kwargs.items():
+            try:
+                setattr(cfg, attr, value)
+            except Exception:
+                continue
+        self._notify_change()
+
+    def _apply_refiner_hiress_defaults(self) -> None:
+        cfg = self._get_current_config()
+        if not cfg:
+            return
+        self.refiner_enabled_var.set(cfg.refiner_enabled)
+        self.refiner_model_var.set(cfg.refiner_model_name or "")
+        self.refiner_switch_var.set(int((cfg.refiner_switch_at or 0.0) * 100))
+        self.hires_enabled_var.set(cfg.hires_enabled)
+        self.hires_upscaler_var.set(cfg.hires_upscaler_name or "Latent")
+        self.hires_factor_var.set(cfg.hires_upscale_factor or 2.0)
+        self.hires_steps_var.set(cfg.hires_steps or 0)
+        self.hires_denoise_var.set(cfg.hires_denoise or 0.3)
+        self.hires_use_base_model_var.set(cfg.hires_use_base_model_for_hires)
+
+    def _load_refiner_models(self) -> list[str]:
+        models: list[str] = []
+        controller = getattr(self, "controller", None)
+        if controller and hasattr(controller, "list_models"):
+            for entry in controller.list_models():
+                name = getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
+                if "refiner" in (name or "").lower():
+                    models.append(name)
+        return models or ["SDXL Refinement"]
+
+    def _load_upscaler_options(self) -> list[str]:
+        upscalers: list[str] = []
+        controller = getattr(self, "controller", None)
+        if controller and hasattr(controller, "list_upscalers"):
+            for entry in controller.list_upscalers():
+                name = getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
+                if name:
+                    upscalers.append(name)
+        return upscalers or ["Latent", "R-ESRGAN 4x+"]
+
+    def _on_refiner_toggle(self) -> None:
+        self._update_current_config(refiner_enabled=bool(self.refiner_enabled_var.get()))
+
+    def _on_refiner_model_changed(self) -> None:
+        self._update_current_config(refiner_model_name=str(self.refiner_model_var.get() or ""))
+
+    def _on_refiner_switch_changed(self) -> None:
+        try:
+            value = float(self.refiner_switch_var.get()) / 100.0
+        except Exception:
+            value = 0.8
+        self._update_current_config(refiner_switch_at=max(0.0, min(1.0, value)))
+
+    def _on_hires_toggle(self) -> None:
+        self._update_current_config(hires_enabled=bool(self.hires_enabled_var.get()))
+
+    def _on_hires_upscaler_changed(self) -> None:
+        self._update_current_config(hires_upscaler_name=str(self.hires_upscaler_var.get() or "Latent"))
+
+    def _on_hires_factor_changed(self) -> None:
+        try:
+            value = float(self.hires_factor_var.get())
+        except Exception:
+            value = 2.0
+        self._update_current_config(hires_upscale_factor=max(1.0, value))
+
+    def _on_hires_steps_changed(self) -> None:
+        try:
+            value = int(self.hires_steps_var.get())
+        except Exception:
+            value = 0
+        self._update_current_config(hires_steps=value if value > 0 else None)
+
+    def _on_hires_denoise_changed(self) -> None:
+        try:
+            value = float(self.hires_denoise_var.get())
+        except Exception:
+            value = 0.3
+        self._update_current_config(hires_denoise=max(0.0, min(1.0, value)))
+
+    def _on_hires_use_base_model_changed(self) -> None:
+        self._update_current_config(
+            hires_use_base_model_for_hires=bool(self.hires_use_base_model_var.get())
+        )
 
     def _on_cfg_changed(self, value: float) -> None:
         """Handle CFG slider changes"""

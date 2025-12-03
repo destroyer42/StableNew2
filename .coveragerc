@@ -1,0 +1,7 @@
+[run]
+branch = True
+
+[report]
+# Phase 1 coverage target (fail_under kept low to avoid CI breaks post-PR).
+fail_under = 55
+show_missing = True

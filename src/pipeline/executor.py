@@ -23,6 +23,7 @@ from ..utils import (
     load_image_to_base64,
     save_image_from_base64,
 )
+from src.api.types import GenerateError, GenerateErrorCode
 
 
 @lru_cache(maxsize=128)
@@ -32,6 +33,13 @@ def _cached_image_base64(path_str: str) -> str | None:
 
 
 logger = logging.getLogger(__name__)
+
+
+class PipelineStageError(Exception):
+    def __init__(self, error: GenerateError):
+        stage = error.stage or "pipeline"
+        super().__init__(f"{stage} error: {error.message}")
+        self.error = error
 
 
 class Pipeline:
@@ -213,6 +221,25 @@ class Pipeline:
         if extra:
             payload.update(extra)
         self._stage_events.append(payload)
+
+    def _generate_images(self, stage: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Call the shared generate_images API for the requested stage."""
+
+        outcome = self.client.generate_images(stage=stage, payload=payload)
+        if not outcome.ok or outcome.result is None:
+            error = outcome.error or GenerateError(
+                code=GenerateErrorCode.UNKNOWN,
+                message="Generation failed without details",
+                stage=stage,
+            )
+            logger.error(
+                "generate_images failed for %s (%s): %s",
+                stage,
+                error.code,
+                error.message,
+            )
+            raise PipelineStageError(error)
+        return outcome.result
 
     def _log_pipeline_cancellation(self, phase: str, exc: Exception) -> None:
         """Emit a consistent INFO-level log for pipeline cancellations."""
@@ -639,7 +666,7 @@ class Pipeline:
             payload["styles"] = config["styles"]
 
         self._apply_webui_defaults_once()
-        response = self.client.txt2img(payload)
+        response = self._generate_images("txt2img", payload)
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "txt2img post-call")
@@ -751,7 +778,7 @@ class Pipeline:
             payload["styles"] = config["styles"]
 
         self._apply_webui_defaults_once()
-        response = self.client.txt2img(payload)
+        response = self._generate_images("txt2img", payload)
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "txt2img post-call")
@@ -877,7 +904,7 @@ class Pipeline:
 
         payload.update(sampler_config)
 
-        response = self.client.img2img(payload)
+        response = self._generate_images("img2img", payload)
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "img2img post-call")
@@ -1016,7 +1043,7 @@ class Pipeline:
         }
 
         # Call img2img endpoint with ADetailer extension
-        response = self.client.img2img(payload)
+        response = self._generate_images("img2img", payload)
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "adetailer post-call")
@@ -1081,14 +1108,15 @@ class Pipeline:
             except Exception as exc:  # noqa: BLE001 - best-effort clamp
                 logger.debug("ensure_safe_upscale_defaults failed: %s", exc)
 
-        response = self.client.upscale_image(
-            init_image,
-            upscaler=config.get("upscaler", "R-ESRGAN 4x+"),
-            upscaling_resize=config.get("upscaling_resize", 2.0),
-            gfpgan_visibility=config.get("gfpgan_visibility", 0.0),
-            codeformer_visibility=config.get("codeformer_visibility", 0.0),
-            codeformer_weight=config.get("codeformer_weight", 0.5),
-        )
+        payload = {
+            "image_base64": init_image,
+            "upscaler": config.get("upscaler", "R-ESRGAN 4x+"),
+            "upscaling_resize": config.get("upscaling_resize", 2.0),
+            "gfpgan_visibility": config.get("gfpgan_visibility", 0.0),
+            "codeformer_visibility": config.get("codeformer_visibility", 0.0),
+            "codeformer_weight": config.get("codeformer_weight", 0.5),
+        }
+        response = self._generate_images("upscale", payload)
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "upscale stage post-call")
@@ -1991,7 +2019,7 @@ class Pipeline:
 
             # Generate image
             self._apply_webui_defaults_once()
-            response = self.client.txt2img(payload)
+            response = self._generate_images("txt2img", payload)
             if not response or "images" not in response or not response["images"]:
                 logger.error("txt2img failed - no images returned")
                 return None
@@ -2179,7 +2207,7 @@ class Pipeline:
                 pass
 
             # Execute img2img
-            response = self.client.img2img(payload)
+            response = self._generate_images("img2img", payload)
             if not response or "images" not in response or not response["images"]:
                 logger.error("img2img request failed or returned no images")
                 return None
@@ -2356,7 +2384,7 @@ class Pipeline:
                 except Exception:
                     pass
 
-                response = self.client.img2img(payload)
+                response = self._generate_images("img2img", payload)
                 response_key = "images"
                 image_key = 0
             else:
@@ -2392,26 +2420,14 @@ class Pipeline:
 
                 # Prepare payload for metadata regardless of call method
                 payload = {
-                    "image": input_image_b64,
+                    "image_base64": input_image_b64,
+                    "upscaler": upscaler,
                     "upscaling_resize": upscaling_resize,
-                    "upscaler_1": upscaler,
                     "gfpgan_visibility": gfpgan_vis,
                     "codeformer_visibility": codeformer_vis,
                     "codeformer_weight": codeformer_weight,
                 }
-                try:
-                    # Preferred: typed helper with explicit parameters
-                    response = self.client.upscale_image(
-                        input_image_b64,
-                        upscaler,
-                        upscaling_resize,
-                        gfpgan_vis,
-                        codeformer_vis,
-                        codeformer_weight,
-                    )
-                except TypeError:
-                    # Fallback: older dict-based helper
-                    response = getattr(self.client, "upscale", lambda p: None)(payload)
+                response = self._generate_images("upscale", payload)
                 response_key = "image"
                 image_key = None
 

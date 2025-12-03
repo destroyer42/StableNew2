@@ -26,7 +26,8 @@ class Tooltip:
         self._after_id = self.widget.after(self.delay_ms, self._show)
 
     def _show(self) -> None:
-        if self._window or not self.widget.winfo_ismapped():
+        self.widget.update_idletasks()
+        if self._window:
             return
         self._window = tw = tk.Toplevel(self.widget)
         tw.withdraw()
@@ -46,6 +47,14 @@ class Tooltip:
         if self._window:
             self._window.destroy()
             self._window = None
+
+    def show(self) -> None:
+        """Public method invoked by tests to show the tooltip."""
+        self._show()
+
+    def hide(self) -> None:
+        """Public method invoked by tests to hide the tooltip."""
+        self._hide()
 
 
 def attach_tooltip(widget: tk.Widget, text: str, *, delay_ms: int = 500) -> Tooltip:

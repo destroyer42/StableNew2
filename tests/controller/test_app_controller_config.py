@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from src.controller.app_controller import AppController
+from tests.helpers.factories import make_run_config
 
 
 class NoopPipelineRunner:
@@ -128,6 +129,7 @@ def test_controller_config_defaults(tmp_path):
         packs_dir=tmp_path / "packs",
         pipeline_runner=NoopPipelineRunner(),
     )
+    controller.app_state.run_config = make_run_config()
 
     models = controller.get_available_models()
     samplers = controller.get_available_samplers()
@@ -138,6 +140,7 @@ def test_controller_config_defaults(tmp_path):
     assert cfg["width"] == 1024
     assert cfg["steps"] == 30
     assert cfg["cfg_scale"] == 7.5
+    assert controller.app_state.run_config["pipeline"]["txt2img_enabled"]
 
 
 def test_controller_update_config_only_updates_specified_fields(tmp_path):
@@ -148,6 +151,7 @@ def test_controller_update_config_only_updates_specified_fields(tmp_path):
         packs_dir=tmp_path / "packs",
         pipeline_runner=NoopPipelineRunner(),
     )
+    controller.app_state.run_config = make_run_config()
 
     controller.update_config(model="SDXL-Lightning", width=768, cfg_scale=9.0)
     cfg = controller.get_current_config()

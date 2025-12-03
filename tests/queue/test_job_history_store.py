@@ -21,6 +21,7 @@ def test_job_history_records_submission_and_status(tmp_path):
     assert entry.started_at is not None
     assert entry.completed_at is not None
     assert entry.worker_id == "local"
+    assert entry.run_mode == "queue"
 
 
 def test_job_history_filters_by_status(tmp_path):
@@ -39,3 +40,14 @@ def test_job_history_filters_by_status(tmp_path):
 
     assert {e.job_id for e in failed} == {"job-1"}
     assert {e.job_id for e in running} == {"job-2"}
+
+
+def test_job_history_persists_run_mode(tmp_path):
+    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
+    job = Job(job_id="job-direct", pipeline_config=None, priority=JobPriority.NORMAL, run_mode="direct")
+
+    store.record_job_submission(job)
+    store.record_status_change(job.job_id, JobStatus.COMPLETED, datetime.utcnow())
+
+    entry = store.list_jobs()[0]
+    assert entry.run_mode == "direct"

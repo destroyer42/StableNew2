@@ -33,7 +33,7 @@ class PipelineRunControlsV2(ttk.Frame):
             buttons_frame,
             text="Add to Queue",
             style=PRIMARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_add_job_to_queue"),
+            command=lambda: self._invoke_controller("on_add_job_to_queue_v2"),
         )
         self.add_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
 
@@ -41,9 +41,25 @@ class PipelineRunControlsV2(ttk.Frame):
             buttons_frame,
             text="Run Now",
             style=PRIMARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_run_queue_now_clicked"),
+            command=lambda: self._invoke_controller("on_run_job_now_v2"),
         )
         self.run_now_button.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+
+        self.run_button = ttk.Button(
+            buttons_frame,
+            text="Run",
+            style=PRIMARY_BUTTON_STYLE,
+            command=self._on_run_clicked,
+        )
+        self.run_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+        self.stop_button = ttk.Button(
+            buttons_frame,
+            text="Stop",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_stop_clicked,
+        )
+        self.stop_button.grid(row=1, column=2, sticky="ew", pady=(8, 0))
 
         self.clear_draft_button = ttk.Button(
             buttons_frame,
@@ -58,6 +74,28 @@ class PipelineRunControlsV2(ttk.Frame):
         if not controller:
             return
         method = getattr(controller, method_name, None)
+        if callable(method):
+            try:
+                method()
+            except Exception:
+                pass
+
+    def _on_run_clicked(self) -> None:
+        controller = self.controller
+        if not controller:
+            return
+        method = getattr(controller, "start_run_v2", None)
+        if callable(method):
+            try:
+                method()
+            except Exception:
+                pass
+
+    def _on_stop_clicked(self) -> None:
+        controller = self.controller
+        if not controller:
+            return
+        method = getattr(controller, "on_stop_clicked", None)
         if callable(method):
             try:
                 method()

@@ -30,11 +30,13 @@ class JobHistoryEntry:
     completed_at: datetime | None = None
     error_message: str | None = None
     worker_id: WorkerId | None = None
+    run_mode: str = "queue"
     result: Dict[str, Any] | None = None
 
     def to_json(self) -> str:
         data = asdict(self)
         data["status"] = self.status.value
+        data["run_mode"] = self.run_mode
         for key in ("created_at", "started_at", "completed_at"):
             value = data.get(key)
             if isinstance(value, datetime):
@@ -59,6 +61,7 @@ class JobHistoryEntry:
             error_message=raw.get("error_message"),
             worker_id=raw.get("worker_id"),
             result=raw.get("result"),
+            run_mode=raw.get("run_mode", "queue"),
         )
 
 
@@ -69,7 +72,12 @@ class JobHistoryStore:
         raise NotImplementedError
 
     def record_status_change(
-        self, job_id: str, status: JobStatus, ts: datetime, error: str | None = None
+        self,
+        job_id: str,
+        status: JobStatus,
+        ts: datetime,
+        error: str | None = None,
+        result: Dict[str, Any] | None = None,
     ) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
@@ -97,6 +105,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
             status=job.status,
             payload_summary=self._summarize_job(job),
             worker_id=getattr(job, "worker_id", None),
+            run_mode=getattr(job, "run_mode", "queue"),
         )
         self._append(entry)
 
@@ -127,6 +136,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
             error_message=error or (current.error_message if current else None),
             worker_id=current.worker_id if current else None,
             result=result if result is not None else (current.result if current else None),
+            run_mode=current.run_mode if current else "queue",
         )
         self._append(entry)
 

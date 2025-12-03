@@ -17,6 +17,7 @@ import pytest
 
 from src.controller.app_controller import AppController, LifecycleState
 from src.gui.main_window_v2 import MainWindow
+from tests.helpers.factories import make_run_config
 
 
 class FakePipelineRunner:
@@ -69,6 +70,7 @@ def controller(tk_root):
     fake_runner = FakePipelineRunner()
     controller = AppController(window, pipeline_runner=fake_runner, threaded=False)
     controller._test_fake_runner = fake_runner  # type: ignore[attr-defined]
+    controller.app_state.run_config = make_run_config()
     return controller
 
 
@@ -102,6 +104,7 @@ def test_stop_sets_cancel_and_updates_lifecycle(tk_root) -> None:
     window = MainWindow(tk_root)
     fake_runner = FakePipelineRunner(simulate_long_run=True)
     controller = AppController(window, pipeline_runner=fake_runner, threaded=False)
+    controller.app_state.run_config = make_run_config()
 
     assert controller.state.lifecycle == LifecycleState.IDLE
     controller.on_run_clicked()
@@ -119,6 +122,7 @@ def test_pipeline_error_sets_error_state_and_recovers(tk_root) -> None:
     window = MainWindow(tk_root)
     fake_runner = FakePipelineRunner(should_raise=True)
     controller = AppController(window, pipeline_runner=fake_runner, threaded=False)
+    controller.app_state.run_config = make_run_config()
 
     controller.on_run_clicked()
 

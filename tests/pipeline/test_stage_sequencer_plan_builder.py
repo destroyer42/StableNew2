@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from src.pipeline.stage_sequencer import build_stage_execution_plan
@@ -55,9 +57,9 @@ def test_plan_builder_includes_adetailer_before_upscale():
     cfg["upscale"]["enabled"] = True
     cfg["adetailer"] = {"enabled": True}
     plan = build_stage_execution_plan(cfg)
-    assert [s.stage_type for s in plan.stages] == ["txt2img", "adetailer", "upscale"]
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "upscale", "adetailer"]
+    assert plan.stages[1].stage_type == "upscale"
     assert plan.stages[1].requires_input_image is True
-    assert plan.stages[2].order_index == 2
 
 
 def test_plan_builder_excludes_adetailer_by_default():
@@ -105,10 +107,10 @@ def test_plan_builder_adetailer_and_upscale_sequence():
     cfg["pipeline"]["upscale_enabled"] = True
     cfg["adetailer"] = {"enabled": True}
     plan = build_stage_execution_plan(cfg)
-    assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "adetailer", "upscale"]
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "upscale", "adetailer"]
 
 
-def test_plan_builder_adetailer_without_generative_stage_skipped():
+def test_plan_builder_adetailer_without_generative_stage_raises():
     cfg = _base_config()
     cfg["txt2img"]["enabled"] = False
     cfg["pipeline"]["txt2img_enabled"] = False
@@ -116,5 +118,31 @@ def test_plan_builder_adetailer_without_generative_stage_skipped():
     cfg["pipeline"]["img2img_enabled"] = False
     cfg["pipeline"]["adetailer_enabled"] = True
     cfg["adetailer"] = {"enabled": True}
+    with pytest.raises(ValueError):
+        build_stage_execution_plan(cfg)
+
+
+def test_plan_builder_reorders_adetailer_with_warning(caplog):
+    cfg = _base_config()
+    cfg["pipeline"]["adetailer_enabled"] = True
+    cfg["adetailer"] = {"enabled": True}
+    cfg["pipeline"]["upscale_enabled"] = True
+    cfg["upscale"]["enabled"] = True
+    caplog.set_level(logging.WARNING)
     plan = build_stage_execution_plan(cfg)
-    assert all(stage.stage_type != "adetailer" for stage in plan.stages)
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "upscale", "adetailer"]
+    assert "auto-moving ADetailer to final position" in caplog.text
+
+
+def test_plan_builder_carries_hires_metadata():
+    cfg = _base_config()
+    cfg["hires_fix"] = {
+        "enabled": True,
+        "upscale_factor": 1.5,
+        "upscaler_name": "Latent",
+        "steps": 10,
+        "denoise": 0.4,
+    }
+    plan = build_stage_execution_plan(cfg)
+    metadata = plan.stages[0].config.metadata.get("hires_fix", {})
+    assert metadata == cfg["hires_fix"]

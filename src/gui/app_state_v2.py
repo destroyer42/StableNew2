@@ -23,6 +23,34 @@ class JobDraft:
 
 
 @dataclass
+class CurrentConfig:
+    """Lightweight facade for the currently selected run configuration."""
+
+    preset_name: str = ""
+    model_name: str = ""
+    vae_name: str = ""
+    sampler_name: str = ""
+    scheduler_name: str = ""
+    width: int = 512
+    height: int = 512
+    steps: int = 20
+    cfg_scale: float = 7.0
+    batch_size: int = 1
+    seed: int | None = None
+    randomization_enabled: bool = False
+    max_variants: int = 1
+    refiner_enabled: bool = False
+    refiner_model_name: str = ""
+    refiner_switch_at: float = 0.8
+    hires_enabled: bool = False
+    hires_upscaler_name: str = "Latent"
+    hires_upscale_factor: float = 2.0
+    hires_steps: int | None = None
+    hires_denoise: float = 0.3
+    hires_use_base_model_for_hires: bool = True
+
+
+@dataclass
 class AppStateV2:
     """Central GUI-facing state container for the V2 application."""
 
@@ -54,6 +82,7 @@ class AppStateV2:
     queue_status: str = "idle"
     history_items: list[JobHistoryEntry] = field(default_factory=list)
     run_config: Dict[str, Any] = field(default_factory=dict)
+    current_config: CurrentConfig = field(default_factory=CurrentConfig)
     _resource_listeners: List[Callable[[Dict[str, List[Any]]], None]] = field(default_factory=list)
     job_draft: JobDraft = field(default_factory=JobDraft)
     lora_strengths: list[LoraRuntimeConfig] = field(default_factory=list)

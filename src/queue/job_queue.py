@@ -92,10 +92,17 @@ class JobQueue:
         except Exception:
             pass
 
-    def _record_status(self, job_id: str, status: JobStatus, ts: "datetime", error: str | None) -> None:
+    def _record_status(
+        self,
+        job_id: str,
+        status: JobStatus,
+        ts: "datetime",
+        error: str | None,
+        result: dict | None,
+    ) -> None:
         if not self._history_store:
             return
         try:
-            self._history_store.record_status_change(job_id, status, ts, error)
+            self._history_store.record_status_change(job_id, status, ts, error, result=result)
         except Exception:
             pass

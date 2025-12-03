@@ -6,9 +6,7 @@ transformed using configured parameters without losing prompt context or metadat
 
 from __future__ import annotations
 
-import os
 import tempfile
-import tkinter as tk
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -17,21 +15,7 @@ import pytest
 from src.app_factory import build_v2_app
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
-
-
-def _create_root() -> tk.Tk:
-    """Create a real Tk root for journey tests; fail fast if unavailable."""
-    try:
-        if "TCL_LIBRARY" not in os.environ:
-            tcl_dir = os.path.join(os.path.dirname(tk.__file__), "tcl", "tcl8.6")
-            if os.path.isdir(tcl_dir):
-                os.environ["TCL_LIBRARY"] = tcl_dir
-
-        root = tk.Tk()
-        root.withdraw()
-        return root
-    except tk.TclError as exc:  # pragma: no cover - environment dependent
-        pytest.fail(f"Tkinter unavailable for journey test: {exc}")
+from tests.journeys.utils.tk_root_factory import create_root
 
 
 @pytest.mark.journey
@@ -48,7 +32,7 @@ def test_jt04_img2img_adetailer_pipeline_run():
         temp_path = Path(temp_dir)
 
         # Step 1: Launch StableNew (build V2 app)
-        root = _create_root()
+        root = create_root()
         try:
             root, app_state, app_controller, window = build_v2_app(
                 root=root,
@@ -95,7 +79,10 @@ def test_jt04_img2img_adetailer_pipeline_run():
             # Set pipeline state
             pipeline_state.prompt = test_prompt
             pipeline_state.negative_prompt = test_negative
-            pipeline_state.base_image_path = str(base_image_path)
+            pipeline_tab.input_image_path = str(base_image_path)
+            pipeline_tab.txt2img_width.set(512)
+            pipeline_tab.txt2img_height.set(512)
+            pipeline_tab.img2img_strength.set(0.45)
 
             # Step 6: Mock the WebUI API call for img2img + ADetailer
             with patch('src.api.client.ApiClient.generate_images') as mock_generate:
@@ -200,7 +187,7 @@ def test_jt04_img2img_edge_cases():
             temp_path = Path(temp_dir)
 
             # Step 1: Launch StableNew
-            root = _create_root()
+            root = create_root()
             try:
                 root, app_state, app_controller, window = build_v2_app(
                     root=root,
@@ -297,7 +284,7 @@ def test_jt04_adetailer_integration():
         temp_path = Path(temp_dir)
 
         # Step 1: Launch StableNew
-        root = _create_root()
+        root = create_root()
         try:
             root, app_state, app_controller, window = build_v2_app(
                 root=root,

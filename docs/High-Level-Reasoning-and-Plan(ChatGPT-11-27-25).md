@@ -544,3 +544,7 @@ If you want, I can now:
 ✅ Generate a development process map (ASWF-style)
 ✅ Turn your Roadmap into a FigJam diagram
 🟦 Or start the next PR
+
+### Related references
+
+For deep dives into sequencing invariants, refer to [Stage_Sequencing_V2_5_V2-P1.md](Stage_Sequencing_V2_5_V2-P1.md).

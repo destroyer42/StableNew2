@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-02T07:06:49",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251202-070648.zip",
-  "file_count": 1222,
-  "total_size_bytes": 11143239,
+  "created_at": "2025-12-03T05:26:51",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251203-052644.zip",
+  "file_count": 1267,
+  "total_size_bytes": 11388247,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -29,6 +29,11 @@
     ".tmp"
   ],
   "files": [
+    {
+      "path": ".coveragerc",
+      "size_bytes": 142,
+      "mtime_iso": "2025-12-02T21:52:04"
+    },
     {
       "path": ".editorconfig",
       "size_bytes": 481,
@@ -76,13 +81,13 @@
     },
     {
       "path": "pytest.ini",
-      "size_bytes": 96,
-      "mtime_iso": "2025-11-30T21:42:09"
+      "size_bytes": 205,
+      "mtime_iso": "2025-12-02T21:05:24"
     },
     {
       "path": "README.md",
-      "size_bytes": 2615,
-      "mtime_iso": "2025-11-30T19:26:05"
+      "size_bytes": 2645,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "repo_inventory.json",
@@ -96,8 +101,8 @@
     },
     {
       "path": "StableNew.code-workspace",
-      "size_bytes": 60,
-      "mtime_iso": "2025-11-29T11:40:02"
+      "size_bytes": 67,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "StableNew_Roadmap_v2.1.md",
@@ -111,28 +116,28 @@
     },
     {
       "path": "tcltk.zip",
-      "size_bytes": 147855,
-      "mtime_iso": "2025-12-01T23:13:36"
+      "size_bytes": 150504,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "test_adetailer_sync.py",
       "size_bytes": 2541,
-      "mtime_iso": "2025-12-01T20:19:08"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "test_core_config_controller.py",
       "size_bytes": 2789,
-      "mtime_iso": "2025-12-01T20:19:08"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "test_pr032.py",
       "size_bytes": 1390,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "validate_core_config.py",
       "size_bytes": 1048,
-      "mtime_iso": "2025-12-01T20:19:08"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "_tmp_test.py",
@@ -366,8 +371,8 @@
     },
     {
       "path": ".github/workflows/journeys_shutdown.yml",
-      "size_bytes": 1471,
-      "mtime_iso": "2025-12-01T07:20:29"
+      "size_bytes": 1531,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "archive/ARCHIVE_MAP.md",
@@ -446,18 +451,18 @@
     },
     {
       "path": "archive/gui_stage_cards_v1/img2img_stage_card.py",
-      "size_bytes": 157,
-      "mtime_iso": "2025-11-28T18:14:30"
+      "size_bytes": 160,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "archive/gui_stage_cards_v1/txt2img_stage_card.py",
-      "size_bytes": 240,
-      "mtime_iso": "2025-11-28T18:26:14"
+      "size_bytes": 250,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "archive/gui_stage_cards_v1/upscale_stage_card.py",
-      "size_bytes": 240,
-      "mtime_iso": "2025-11-28T18:26:23"
+      "size_bytes": 250,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "archive/gui_v1/app_layout_v2.py",
@@ -497,457 +502,457 @@
     {
       "path": "archive/legacy_tests/test_advanced_features.py",
       "size_bytes": 7896,
-      "mtime_iso": "2025-11-13T16:22:05"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_advanced_prompt_editor_regressions.py",
       "size_bytes": 1420,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_aesthetic_detection.py",
       "size_bytes": 1107,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_aesthetic_integration.py",
       "size_bytes": 3853,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_api.py",
       "size_bytes": 4244,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_api_client_backoff.py",
       "size_bytes": 2232,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_api_status_panel.py",
       "size_bytes": 1170,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_archive_unused.py",
       "size_bytes": 14081,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_complete_workflow.py",
       "size_bytes": 2437,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_config.py",
       "size_bytes": 2907,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_config_manager_defaults.py",
       "size_bytes": 769,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_config_panel.py",
       "size_bytes": 5383,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_controller.py",
       "size_bytes": 9069,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_default_preset.py",
       "size_bytes": 5223,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_file_io.py",
       "size_bytes": 6075,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_global_negative_stage_flags.py",
       "size_bytes": 3539,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_gui_enhancements.py",
       "size_bytes": 1721,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_gui_system.py",
       "size_bytes": 6905,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_gui_visibility.py",
       "size_bytes": 1337,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_logger.py",
       "size_bytes": 3787,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_log_panel.py",
       "size_bytes": 2105,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_matrix_base_prompt_fix.py",
       "size_bytes": 4767,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_matrix_prompt_mode_examples.py",
       "size_bytes": 6833,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_new_features.py",
       "size_bytes": 3753,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_pack_config.py",
       "size_bytes": 957,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_pipeline_controls_panel.py",
       "size_bytes": 1156,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_pipeline_journey.py",
-      "size_bytes": 37506,
-      "mtime_iso": "2025-12-01T07:20:14"
+      "size_bytes": 37519,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_pipeline_throughput.py",
       "size_bytes": 1243,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_preferences_manager.py",
       "size_bytes": 2649,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_prompt_editor.py",
       "size_bytes": 4983,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_prompt_pack_list_manager.py",
       "size_bytes": 6033,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_prompt_pack_panel.py",
       "size_bytes": 1382,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_randomization_pipeline.py",
       "size_bytes": 3128,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_refiner_compare_mode.py",
       "size_bytes": 3470,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_refiner_support.py",
       "size_bytes": 4547,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_refiner_switch_math.py",
       "size_bytes": 1706,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_stage_chooser.py",
       "size_bytes": 270,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_state.py",
       "size_bytes": 6330,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_structured_logger.py",
       "size_bytes": 6627,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_txt2img_stage.py",
       "size_bytes": 2693,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_upscale_stage.py",
       "size_bytes": 7084,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_variant_planner.py",
       "size_bytes": 2388,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/test_video.py",
       "size_bytes": 3967,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_advanced_prompt_editor_v2.py",
       "size_bytes": 1026,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_api_status_panel_webui_states_v2.py",
       "size_bytes": 948,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_command_bar_v2.py",
       "size_bytes": 902,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_core_config_panel_v2.py",
       "size_bytes": 1533,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_layout.py",
       "size_bytes": 783,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_roundtrip.py",
       "size_bytes": 1895,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_validation.py",
       "size_bytes": 1763,
-      "mtime_iso": "2025-12-01T18:22:52"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_ai_settings_button_guarded.py",
       "size_bytes": 1244,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_mainwindow_split_structure.py",
       "size_bytes": 669,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_panel_wiring.py",
       "size_bytes": 853,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_adapter.py",
       "size_bytes": 1670,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_button_wiring.py",
       "size_bytes": 920,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_config_roundtrip.py",
       "size_bytes": 2362,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_pipeline_txt2img_validation.py",
       "size_bytes": 3049,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_adapter_integration.py",
       "size_bytes": 870,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_integration.py",
       "size_bytes": 2127,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_matrix_ui.py",
       "size_bytes": 1165,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_matrix_ux.py",
       "size_bytes": 1121,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_preview_list.py",
       "size_bytes": 626,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_variant_count_banner.py",
       "size_bytes": 678,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_randomizer_variant_count_preview.py",
       "size_bytes": 878,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_stage_cards_layout.py",
       "size_bytes": 840,
-      "mtime_iso": "2025-11-30T20:26:11"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_stage_cards_roundtrip.py",
       "size_bytes": 651,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_startup.py",
       "size_bytes": 440,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_status_adapter_progress_eta.py",
       "size_bytes": 1523,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_gui_v2_status_bar_progress_eta.py",
       "size_bytes": 1405,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_job_history_panel_v2.py",
       "size_bytes": 3412,
-      "mtime_iso": "2025-11-22T18:13:44"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_learning_review_dialog.py",
       "size_bytes": 1314,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_learning_toggle.py",
       "size_bytes": 1274,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_learning_toggle_and_dialog.py",
       "size_bytes": 1694,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_main_window_tabs_v2.py",
       "size_bytes": 725,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_model_manager_panel_v2.py",
       "size_bytes": 1342,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_negative_prompt_panel_v2.py",
       "size_bytes": 774,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_output_settings_panel_v2.py",
       "size_bytes": 935,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_packs_and_presets_left_panel_v2.py",
       "size_bytes": 2808,
-      "mtime_iso": "2025-11-28T14:25:25"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_prompt_integration_v2.py",
       "size_bytes": 1336,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_stage_cards_v2.py",
       "size_bytes": 2557,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_tab_layout_v2.py",
       "size_bytes": 862,
-      "mtime_iso": "2025-11-30T20:26:11"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_pipeline_tab_stage_cards.py",
-      "size_bytes": 2124,
-      "mtime_iso": "2025-11-30T20:44:21"
+      "size_bytes": 2133,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_preview_panel_v2.py",
       "size_bytes": 997,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_prompt_pack_panel_v2.py",
       "size_bytes": 1302,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_prompt_pack_to_prompt_roundtrip_v2.py",
       "size_bytes": 1287,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_resolution_panel_v2.py",
       "size_bytes": 757,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_run_button_queue_mode_toggle.py",
       "size_bytes": 512,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_run_button_queue_smoke.py",
       "size_bytes": 993,
-      "mtime_iso": "2025-11-22T14:40:24"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_scrollable_pipeline_panel_v2.py",
       "size_bytes": 1340,
-      "mtime_iso": "2025-11-28T14:35:28"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_stagecard_base_v2.py",
       "size_bytes": 677,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/legacy_tests/tests_gui_v2_legacy/test_status_bar_v2_composite.py",
       "size_bytes": 888,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "archive/old_packs_old/Abethkara.json",
@@ -2076,8 +2081,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 58307,
-      "mtime_iso": "2025-11-27T20:47:18"
+      "size_bytes": 61093,
+      "mtime_iso": "2025-12-02T21:55:34"
     },
     {
       "path": "data/webui_cache.json",
@@ -2132,7 +2137,7 @@
     {
       "path": "docs/GUI-Pipeline-Hierarchy-Diagram.txt",
       "size_bytes": 4781,
-      "mtime_iso": "2025-12-01T22:59:33"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/GUI-V2-DOCS-DIFF-GUIDE.md",
@@ -2151,13 +2156,13 @@
     },
     {
       "path": "docs/High-Level-Reasoning-and-Plan(ChatGPT-11-27-25).md",
-      "size_bytes": 11767,
-      "mtime_iso": "2025-11-27T22:38:50"
+      "size_bytes": 11905,
+      "mtime_iso": "2025-12-02T21:53:59"
     },
     {
       "path": "docs/HowPipelineTabWorks.txt",
       "size_bytes": 5345,
-      "mtime_iso": "2025-11-29T20:50:44"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/Journey_Test_Plan_2025-11-26_1115.md",
@@ -2187,7 +2192,7 @@
     {
       "path": "docs/Logging_Strategy_V2-P1.md",
       "size_bytes": 4115,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/Lost_Features_From_MainWindow_V2-P1.md",
@@ -2232,7 +2237,7 @@
     {
       "path": "docs/PR-067 — Full Journey Suite Skeleton (V2-P1).md",
       "size_bytes": 12721,
-      "mtime_iso": "2025-12-02T05:41:15"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/ProjectInstructions.txt",
@@ -2245,6 +2250,11 @@
       "mtime_iso": "2025-11-24T19:33:56"
     },
     {
+      "path": "docs/prompt_pack_field_mapping.md",
+      "size_bytes": 4131,
+      "mtime_iso": "2025-12-02T18:47:56"
+    },
+    {
       "path": "docs/RANDOMIZATION_AND_MATRIX_UI_SUMMARY.md",
       "size_bytes": 7159,
       "mtime_iso": "2025-11-22T07:25:45"
@@ -2252,7 +2262,7 @@
     {
       "path": "docs/Randomizer_System_Spec_v2.md",
       "size_bytes": 5352,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/repo_inventory_classified_v2_phase1.json",
@@ -2321,8 +2331,8 @@
     },
     {
       "path": "docs/StableNew_V2_Inventory.md",
-      "size_bytes": 3181,
-      "mtime_iso": "2025-11-30T19:48:16"
+      "size_bytes": 3399,
+      "mtime_iso": "2025-12-02T21:54:26"
     },
     {
       "path": "docs/StableNew_V2_Inventory_V2-P1.md",
@@ -2335,9 +2345,14 @@
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
+      "path": "docs/Stage_Sequencing_V2_5_V2-P1.md",
+      "size_bytes": 8412,
+      "mtime_iso": "2025-12-02T21:53:32"
+    },
+    {
       "path": "docs/Testing_Journeys_V2-P1.md",
-      "size_bytes": 3307,
-      "mtime_iso": "2025-12-01T19:14:08"
+      "size_bytes": 3374,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/Test_Coverage_Report_V2-P1.md",
@@ -2627,7 +2642,7 @@
     {
       "path": "docs/discovery/PIPELINE_CONFIG_LOGGING_PRESETS_ADetailer_DISCOVERY_V2-P1.md",
       "size_bytes": 5013,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/index.yaml",
@@ -2637,202 +2652,307 @@
     {
       "path": "docs/pr_templates/PR-034-PIPELINE-ADetailer-STAGECARD-V2-P1.md",
       "size_bytes": 17055,
-      "mtime_iso": "2025-11-30T12:05:21"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-034-PIPELINE-PRESETS-INTEGRATION-V2-P1.md",
       "size_bytes": 5724,
-      "mtime_iso": "2025-11-29T16:54:45"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-035-PIPELINE-PACK-CONFIG-JOB-BUILDER-V2-P1.md",
       "size_bytes": 11977,
-      "mtime_iso": "2025-11-29T21:17:16"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-036-PIPELINE-TAB-3COLUMN-LAYOUT-V2-P1.md",
       "size_bytes": 7447,
-      "mtime_iso": "2025-11-29T21:18:08"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-037-Pipeline-LoRA-Strengths-V2-P1.md",
       "size_bytes": 7834,
-      "mtime_iso": "2025-11-30T07:56:34"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-037A-Pipeline-LoRA-Strengths-V2-P1.md",
       "size_bytes": 7839,
-      "mtime_iso": "2025-11-30T11:59:17"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-038-Pipeline-Randomizer-Config-V2-P1.md",
       "size_bytes": 7237,
-      "mtime_iso": "2025-11-30T07:57:15"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-038A-Pipeline-Randomizer-Config-V2-P1.md",
       "size_bytes": 7238,
-      "mtime_iso": "2025-11-30T12:00:25"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-039-PIPELINE-QUEUE-INTEGRATION-V2-P1.md",
       "size_bytes": 5682,
-      "mtime_iso": "2025-11-30T11:55:43"
+      "mtime_iso": "2025-12-02T20:07:21"
     },
     {
       "path": "docs/pr_templates/PR-040-JOB-HISTORY-INTEGRATION-V2-P1.md",
       "size_bytes": 3969,
-      "mtime_iso": "2025-11-30T12:02:39"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-041-DESIGN-SYSTEM-THEME-V2-P1.md",
       "size_bytes": 14870,
-      "mtime_iso": "2025-11-30T12:03:48"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-041-THEME-V2-DESIGN-TOKENS-UNIFICATION-V2-P1.md",
       "size_bytes": 12156,
-      "mtime_iso": "2025-11-29T19:37:38"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-041A — Full V2 GUI Design System.md",
       "size_bytes": 11341,
-      "mtime_iso": "2025-11-30T13:24:56"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-042-PHASE1-JOURNEY-TEST-V2-P1.md",
       "size_bytes": 13492,
-      "mtime_iso": "2025-11-30T12:08:33"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-043-RANDOMIZER-ENGINE-CORE-V2-P1.md",
       "size_bytes": 15304,
-      "mtime_iso": "2025-11-30T12:09:27"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-044-RANDOMIZER-GUI-INTEGRATION-V2-P1.md",
       "size_bytes": 15358,
-      "mtime_iso": "2025-11-30T12:10:10"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-046 — Robust App Shutdown (D-08 Implementation, V2-P1).md",
       "size_bytes": 10241,
-      "mtime_iso": "2025-11-30T15:08:50"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-047 — Test Suite for Process Cleanup(V2-P1).md",
       "size_bytes": 7534,
-      "mtime_iso": "2025-11-30T16:54:57"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-048 — V2 Core Classification & Archive System.md",
       "size_bytes": 2943,
-      "mtime_iso": "2025-11-30T19:26:05"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-049 — GUI V2 Dropdowns, Payload Builder, & Last-Run.md",
       "size_bytes": 3059,
-      "mtime_iso": "2025-11-30T19:30:11"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-050 — GUI V2 Scaffold & ZoneMap Fixes.md",
       "size_bytes": 2604,
-      "mtime_iso": "2025-11-30T19:34:40"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-051 — Pipeline Tab Layout & Resizing Fixes (V2-P1).md",
       "size_bytes": 2234,
-      "mtime_iso": "2025-11-30T20:37:26"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-052 — Stage Card Visual Clean- Dark Theme Alignment-V2-P1.md",
       "size_bytes": 2406,
-      "mtime_iso": "2025-11-30T20:37:22"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-053 — Stage Toggle Controls & ADetailer Visibility(V2-P1).md",
       "size_bytes": 2051,
-      "mtime_iso": "2025-11-30T20:39:04"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-054 — Dropdowns & Stage Config Wiring (V2-P1).md",
       "size_bytes": 2108,
-      "mtime_iso": "2025-11-30T20:39:55"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-055 — Output Directory & Filename Template(V2-P1).md",
       "size_bytes": 1681,
-      "mtime_iso": "2025-11-30T20:43:54"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-056 — Run Modes & Payload Integration (V2-P1).md",
       "size_bytes": 1647,
-      "mtime_iso": "2025-11-30T20:44:22"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-061 — Deep Shutdown Instrumentation.md",
       "size_bytes": 2636,
-      "mtime_iso": "2025-11-30T21:54:50"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-062 — Headless Auto-Exit Mode Shutdown Journey(V2-P1).md",
       "size_bytes": 2425,
-      "mtime_iso": "2025-11-30T21:53:44"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-063 — Shutdown Stability Track (Meta-PR) (V2-P1).md",
       "size_bytes": 5678,
-      "mtime_iso": "2025-11-30T21:52:40"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-064 — V2 Single-Instance Guard + Hardened _exit(V2-P1).md",
       "size_bytes": 10770,
-      "mtime_iso": "2025-12-01T06:16:51"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PR-066 — Journey Test Automation (V2-P1).md",
       "size_bytes": 7865,
-      "mtime_iso": "2025-12-02T06:14:01"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/pr_templates/PR-068 — Shutdown Diagnostics Log + File Access Trace (V2.5).md",
       "size_bytes": 12801,
-      "mtime_iso": "2025-12-02T06:14:36"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/pr_templates/PR-069 — Log-Driven Shutdown Fixes (V2.5).md",
       "size_bytes": 13388,
-      "mtime_iso": "2025-12-02T05:42:05"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/pr_templates/PR-071-Pipeline-Execution-Wiring-V2-P1-20251201.md",
       "size_bytes": 5589,
-      "mtime_iso": "2025-12-02T05:43:56"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/pr_templates/PR-072-RunPipeline-Facade-V2-P1-20251202.md",
       "size_bytes": 9389,
-      "mtime_iso": "2025-12-02T06:06:26"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/pr_templates/PR-073-PipelineTab-Upscale-Compat-V2-P1-20251202.md",
       "size_bytes": 10423,
-      "mtime_iso": "2025-12-02T06:12:56"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/pr_templates/PR-074-Upscale-Pipeline-Logic-V2-P1-20251202.md",
       "size_bytes": 13600,
-      "mtime_iso": "2025-12-02T06:24:10"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "docs/pr_templates/PR-075-PromptPack-Queue-Execution-V2-P1-20251202.md",
       "size_bytes": 10636,
-      "mtime_iso": "2025-12-02T06:27:33"
+      "mtime_iso": "2025-12-02T08:04:20"
+    },
+    {
+      "path": "docs/pr_templates/PR-078-Journey-Test-API-Shims-V2-P1-20251202.md",
+      "size_bytes": 15151,
+      "mtime_iso": "2025-12-02T18:22:27"
+    },
+    {
+      "path": "docs/pr_templates/PR-079 – Journey Test Harness Adjustments for V2 Pipeline.md",
+      "size_bytes": 9378,
+      "mtime_iso": "2025-12-02T08:04:20"
+    },
+    {
+      "path": "docs/pr_templates/PR-081A – SDXL Refiner & Hires Fix Config Model.md",
+      "size_bytes": 8185,
+      "mtime_iso": "2025-12-02T20:02:42"
+    },
+    {
+      "path": "docs/pr_templates/PR-081B – Pipeline Tab Controls for Refiner & Hires Fix.md",
+      "size_bytes": 8499,
+      "mtime_iso": "2025-12-02T20:02:00"
+    },
+    {
+      "path": "docs/pr_templates/PR-081C – Pipeline Base → Refiner → Hires → ADetail.md",
+      "size_bytes": 11137,
+      "mtime_iso": "2025-12-02T20:03:47"
+    },
+    {
+      "path": "docs/pr_templates/PR-081D-1 — Executor Cancel-Token Test Alignment.md",
+      "size_bytes": 4063,
+      "mtime_iso": "2025-12-02T20:52:54"
+    },
+    {
+      "path": "docs/pr_templates/PR-081D-3 — WebUI Process & Resource Test Harness Alignment.md",
+      "size_bytes": 4516,
+      "mtime_iso": "2025-12-02T20:53:41"
+    },
+    {
+      "path": "docs/pr_templates/PR-081D-4 — RunConfig Refiner-Hires Fields.md",
+      "size_bytes": 4138,
+      "mtime_iso": "2025-12-02T20:54:43"
+    },
+    {
+      "path": "docs/pr_templates/PR-081D-5 — Journey Harness Glue.md",
+      "size_bytes": 4483,
+      "mtime_iso": "2025-12-02T20:57:03"
+    },
+    {
+      "path": "docs/pr_templates/PR-081D-6 — PipelineRunnerFakePipeline Signature.md",
+      "size_bytes": 3449,
+      "mtime_iso": "2025-12-02T20:55:27"
+    },
+    {
+      "path": "docs/pr_templates/PR-081D-7 — GUI Harness Cleanup Pytest Marker.md",
+      "size_bytes": 3049,
+      "mtime_iso": "2025-12-02T20:56:17"
+    },
+    {
+      "path": "docs/pr_templates/PR-081D–Tests for Refiner-Hires-ADetailer-Sequencing.md",
+      "size_bytes": 6164,
+      "mtime_iso": "2025-12-02T20:04:53"
+    },
+    {
+      "path": "docs/pr_templates/PR-081E - Last-Run Integration for Refiner-Hires.md",
+      "size_bytes": 8633,
+      "mtime_iso": "2025-12-02T20:00:12"
+    },
+    {
+      "path": "docs/pr_templates/PR-082 — Integrating New Test Helpers Across Journey.md",
+      "size_bytes": 4890,
+      "mtime_iso": "2025-12-02T21:09:50"
+    },
+    {
+      "path": "docs/pr_templates/PR-083 - Test Coverage Uplift Plan.md",
+      "size_bytes": 4845,
+      "mtime_iso": "2025-12-02T21:18:17"
+    },
+    {
+      "path": "docs/pr_templates/PR-084 — Docs & Diagrams for V2.5 Stage Sequencing.md",
+      "size_bytes": 5045,
+      "mtime_iso": "2025-12-02T21:21:16"
+    },
+    {
+      "path": "docs/pr_templates/PR-085 – Test Coverage Uplift & Triage Plan (V2.5).md",
+      "size_bytes": 9722,
+      "mtime_iso": "2025-12-02T22:31:18"
+    },
+    {
+      "path": "docs/pr_templates/PR-086 – Core Contract Repair (Implementation, V2.5).md",
+      "size_bytes": 10509,
+      "mtime_iso": "2025-12-02T22:30:54"
+    },
+    {
+      "path": "docs/pr_templates/PR-089 – Stage Plan Metadata & Canonical Ordering (V2.5).md",
+      "size_bytes": 4815,
+      "mtime_iso": "2025-12-02T22:39:04"
+    },
+    {
+      "path": "docs/pr_templates/PR-090 – PipelineRunner Plan Execution.md",
+      "size_bytes": 3454,
+      "mtime_iso": "2025-12-02T22:41:10"
     },
     {
       "path": "docs/pr_templates/PR-B01-PACK-PREVIEW-STABILITY-V2-P1.md",
       "size_bytes": 12585,
-      "mtime_iso": "2025-11-30T11:55:03"
+      "mtime_iso": "2025-12-02T08:03:48"
+    },
+    {
+      "path": "docs/pr_templates/R-081D-2 — JobQueue Runner Status+Result.md",
+      "size_bytes": 3434,
+      "mtime_iso": "2025-12-02T20:52:58"
     },
     {
       "path": "docs/pr_templates/Potential_work/COD-PR-GUI-V2-DROPDOWN-PAYLOAD-LASTRUN-V2_5-001(P1V3)(11-28).md",
@@ -2852,7 +2972,7 @@
     {
       "path": "docs/pr_templates/Potential_work/PR-045-LEARNING-V2-BASELINE-V2-P1.md",
       "size_bytes": 10382,
-      "mtime_iso": "2025-11-30T12:10:57"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/Potential_work/PR-06D_StageCard_Prototype_Cleanup(Optional).md",
@@ -3322,47 +3442,47 @@
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-021-GUI-V2-TABS-THREE-COLUMN-LAYOUT-V2-P1.md",
       "size_bytes": 7111,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-022-CONTROLLER-WEBUI-LIFECYCLE-AUTO-LAUNCH-V2-P1.md",
       "size_bytes": 15400,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-023-GUI-V2-FULLWIDTH-SPINE-AND-PACK-LOADER-V2-P1.md",
       "size_bytes": 15710,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-024-MAIN-WEBUI-LAUNCH-UX-BROWSER-READY-V2-P1.md",
       "size_bytes": 12923,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-026-PIPELINE-DROPDOWNS-WEBUI-RESOURCES-V2-P1.md",
       "size_bytes": 13880,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-026A-webui-statusbar-sync-V2-20251129-0700.md",
       "size_bytes": 8010,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-027A-api-webui_healthcheck-stricter_ready-V2-20251129.md",
       "size_bytes": 14661,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-028-DROPDOWN-REFRESH-V2-P1.md",
       "size_bytes": 5466,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-029-PIPELINE-DROPDOWNS-WEBUI-READY-WIRING-V2-P1.md",
       "size_bytes": 16421,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-02a_Move_GUI_V1_Tests_To_Archive.md",
@@ -3382,27 +3502,27 @@
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-030-DISCOVERY-PIPELINE-CONFIG-LOGGING-PRESETS-AD-V2-P1.md",
       "size_bytes": 11665,
-      "mtime_iso": "2025-11-29T12:09:25"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-031-PIPELINE-CONFIG-LEFTCOLUMN-WIRING-V2-P1.md",
       "size_bytes": 13944,
-      "mtime_iso": "2025-11-29T12:35:48"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-032-BOTTOM-LOGGING-SURFACE-V2-P1.md",
       "size_bytes": 13606,
-      "mtime_iso": "2025-11-29T12:41:49"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-033-PIPELINE-PRESETS-HOOKUP-V2-P1.md",
       "size_bytes": 14788,
-      "mtime_iso": "2025-11-29T12:53:44"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-033A-PIPELINE-LEFT-PANEL-UX-V2-P1.md",
       "size_bytes": 7089,
-      "mtime_iso": "2025-11-29T16:54:17"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-03_Create_V2_App_Spine(24NOV).md",
@@ -3452,7 +3572,7 @@
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-08_V2_Journey_Test_Full_Pipeline.md",
       "size_bytes": 12524,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-3A_Learning_Tab_Scaffold.md",
@@ -3877,17 +3997,17 @@
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-WIRE-00-V2.5-11-26-2025.md",
       "size_bytes": 5158,
-      "mtime_iso": "2025-11-26T19:20:59"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-WIRE-01-V2.5 – “Minimal Happy Path”-11-26-2025-1918.md",
       "size_bytes": 11488,
-      "mtime_iso": "2025-11-26T19:18:44"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR-WIRE-02-V2.5 – Entrypoint Contracts (11-26-2025-1916).md",
       "size_bytes": 10352,
-      "mtime_iso": "2025-11-26T19:17:36"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/PR_C_D_full_templates.zip",
@@ -4105,9 +4225,14 @@
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
+      "path": "docs/tests/PR-085-Test-Coverage-Uplift-Plan-V2_5.md",
+      "size_bytes": 7883,
+      "mtime_iso": "2025-12-02T22:29:01"
+    },
+    {
       "path": "inventory/stable_v2_inventory.json",
       "size_bytes": 434744,
-      "mtime_iso": "2025-11-30T19:24:34"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "lists/Full List.json",
@@ -4166,8 +4291,8 @@
     },
     {
       "path": "packs/SDXL_epic_structures_Fantasy.json",
-      "size_bytes": 5380,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 8773,
+      "mtime_iso": "2025-12-02T18:30:57"
     },
     {
       "path": "packs/SDXL_epic_structures_Fantasy.txt",
@@ -4256,8 +4381,8 @@
     },
     {
       "path": "presets/.default_preset",
-      "size_bytes": 7,
-      "mtime_iso": "2025-12-02T06:02:39"
+      "size_bytes": 47,
+      "mtime_iso": "2025-12-02T18:30:45"
     },
     {
       "path": "presets/Beast_Boss_Juggernaut_SDXL.json",
@@ -4267,7 +4392,7 @@
     {
       "path": "presets/default.json",
       "size_bytes": 3673,
-      "mtime_iso": "2025-12-02T06:03:03"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "presets/global_negative.txt",
@@ -4286,8 +4411,8 @@
     },
     {
       "path": "presets/Juggernaut_MedievalHeroes_RandomizerAligned_v1b.json",
-      "size_bytes": 8325,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 8773,
+      "mtime_iso": "2025-12-02T18:31:25"
     },
     {
       "path": "presets/Landscape_Scenery_Juggernaut_SDXL.json",
@@ -4315,9 +4440,24 @@
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
+      "path": "presets/Portrait_CloseUp_Fashion_SDXL_v1.json",
+      "size_bytes": 3690,
+      "mtime_iso": "2025-12-02T22:05:14"
+    },
+    {
       "path": "presets/Portrait_CloseUp_Juggernaut_SDXL.json",
       "size_bytes": 8133,
       "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "presets/Portrait_FullBody_Fashion_SDXL_v1.json",
+      "size_bytes": 3672,
+      "mtime_iso": "2025-12-02T22:06:19"
+    },
+    {
+      "path": "presets/Portrait_MidShot_Fashion_SDXL_v1.json",
+      "size_bytes": 3695,
+      "mtime_iso": "2025-12-02T22:05:50"
     },
     {
       "path": "presets/randomizedMAX.json",
@@ -4371,18 +4511,18 @@
     },
     {
       "path": "scripts/run_journey_tests.ps1",
-      "size_bytes": 1602,
-      "mtime_iso": "2025-12-01T23:15:33"
+      "size_bytes": 1663,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "scripts/run_shutdown_diag.ps1",
-      "size_bytes": 700,
-      "mtime_iso": "2025-12-01T19:14:04"
+      "size_bytes": 722,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/app_factory.py",
       "size_bytes": 1701,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/cli.py",
@@ -4391,8 +4531,8 @@
     },
     {
       "path": "src/main.py",
-      "size_bytes": 18540,
-      "mtime_iso": "2025-12-01T19:13:48"
+      "size_bytes": 18617,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/__init__.py",
@@ -4416,8 +4556,8 @@
     },
     {
       "path": "src/api/client.py",
-      "size_bytes": 28335,
-      "mtime_iso": "2025-12-02T05:49:59"
+      "size_bytes": 30539,
+      "mtime_iso": "2025-12-02T19:50:31"
     },
     {
       "path": "src/api/healthcheck.py",
@@ -4425,14 +4565,19 @@
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
+      "path": "src/api/types.py",
+      "size_bytes": 1245,
+      "mtime_iso": "2025-12-02T19:49:22"
+    },
+    {
       "path": "src/api/webui_api.py",
-      "size_bytes": 759,
-      "mtime_iso": "2025-12-02T06:26:39"
+      "size_bytes": 784,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/api/webui_process_manager.py",
-      "size_bytes": 12835,
-      "mtime_iso": "2025-11-30T21:28:11"
+      "size_bytes": 12985,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/api/webui_resources.py",
@@ -4441,8 +4586,8 @@
     },
     {
       "path": "src/api/webui_resource_service.py",
-      "size_bytes": 2739,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "size_bytes": 2813,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/api/__init__.py",
@@ -4466,13 +4611,13 @@
     },
     {
       "path": "src/config/app_config.py",
-      "size_bytes": 15721,
-      "mtime_iso": "2025-11-30T21:57:05"
+      "size_bytes": 15754,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 93304,
-      "mtime_iso": "2025-12-02T06:54:48"
+      "size_bytes": 98188,
+      "mtime_iso": "2025-12-02T21:11:29"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -4491,8 +4636,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 3905,
-      "mtime_iso": "2025-12-02T06:50:46"
+      "size_bytes": 4015,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -4551,8 +4696,8 @@
     },
     {
       "path": "src/gui/app_state_v2.py",
-      "size_bytes": 9150,
-      "mtime_iso": "2025-12-02T06:09:41"
+      "size_bytes": 10107,
+      "mtime_iso": "2025-12-02T19:55:19"
     },
     {
       "path": "src/gui/center_panel.py",
@@ -4571,18 +4716,18 @@
     },
     {
       "path": "src/gui/core_config_panel_v2.py",
-      "size_bytes": 12543,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "size_bytes": 12843,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/design_system_v2.py",
-      "size_bytes": 4884,
-      "mtime_iso": "2025-11-30T13:58:14"
+      "size_bytes": 5054,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/dropdown_loader_v2.py",
-      "size_bytes": 2327,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "size_bytes": 2393,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/engine_settings_dialog.py",
@@ -4601,13 +4746,13 @@
     },
     {
       "path": "src/gui/job_history_panel_v2.py",
-      "size_bytes": 6979,
-      "mtime_iso": "2025-11-30T15:18:33"
+      "size_bytes": 7172,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/layout_v2.py",
-      "size_bytes": 518,
-      "mtime_iso": "2025-11-30T19:42:23"
+      "size_bytes": 531,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/learning_review_dialog_v2.py",
@@ -4627,7 +4772,7 @@
     {
       "path": "src/gui/log_trace_panel_v2.py",
       "size_bytes": 4318,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/main_window.py",
@@ -4637,7 +4782,7 @@
     {
       "path": "src/gui/main_window_v2.py",
       "size_bytes": 21604,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -4657,7 +4802,7 @@
     {
       "path": "src/gui/output_settings_panel_v2.py",
       "size_bytes": 3708,
-      "mtime_iso": "2025-11-30T06:40:14"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/pipeline_command_bar_v2.py",
@@ -4671,13 +4816,13 @@
     },
     {
       "path": "src/gui/pipeline_panel_v2.py",
-      "size_bytes": 8066,
-      "mtime_iso": "2025-12-02T06:51:55"
+      "size_bytes": 8120,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/preview_panel_v2.py",
-      "size_bytes": 9162,
-      "mtime_iso": "2025-12-01T21:07:24"
+      "size_bytes": 9376,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/prompt_pack_adapter_v2.py",
@@ -4721,8 +4866,8 @@
     },
     {
       "path": "src/gui/sidebar_panel_v2.py",
-      "size_bytes": 35684,
-      "mtime_iso": "2025-12-01T20:50:57"
+      "size_bytes": 38977,
+      "mtime_iso": "2025-12-02T18:47:31"
     },
     {
       "path": "src/gui/stage_chooser.py",
@@ -4731,13 +4876,13 @@
     },
     {
       "path": "src/gui/state.py",
-      "size_bytes": 8384,
-      "mtime_iso": "2025-12-01T21:05:23"
+      "size_bytes": 8394,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/status_bar_v2.py",
       "size_bytes": 8347,
-      "mtime_iso": "2025-11-30T06:40:14"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/theme.py",
@@ -4746,18 +4891,18 @@
     },
     {
       "path": "src/gui/theme_v2.py",
-      "size_bytes": 5342,
-      "mtime_iso": "2025-11-30T14:00:54"
+      "size_bytes": 5502,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/tooltip.py",
-      "size_bytes": 1919,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "size_bytes": 2133,
+      "mtime_iso": "2025-12-02T21:06:28"
     },
     {
       "path": "src/gui/zone_map_v2.py",
-      "size_bytes": 1972,
-      "mtime_iso": "2025-12-02T05:59:39"
+      "size_bytes": 2040,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/__init__.py",
@@ -4781,13 +4926,13 @@
     },
     {
       "path": "src/gui/panels_v2/layout_manager_v2.py",
-      "size_bytes": 2780,
-      "mtime_iso": "2025-11-30T16:34:45"
+      "size_bytes": 2784,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/panels_v2/pipeline_config_panel_v2.py",
-      "size_bytes": 11606,
-      "mtime_iso": "2025-12-01T20:19:08"
+      "size_bytes": 11880,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/panels_v2/pipeline_panel_v2.py",
@@ -4796,8 +4941,8 @@
     },
     {
       "path": "src/gui/panels_v2/pipeline_run_controls_v2.py",
-      "size_bytes": 2212,
-      "mtime_iso": "2025-12-02T06:43:00"
+      "size_bytes": 3397,
+      "mtime_iso": "2025-12-02T21:13:54"
     },
     {
       "path": "src/gui/panels_v2/preview_panel_v2.py",
@@ -4822,37 +4967,37 @@
     {
       "path": "src/gui/panels_v2/__init__.py",
       "size_bytes": 599,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/stage_cards_v2/adetailer_stage_card_v2.py",
-      "size_bytes": 7286,
-      "mtime_iso": "2025-12-02T06:10:14"
+      "size_bytes": 7497,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py",
       "size_bytes": 10719,
-      "mtime_iso": "2025-12-01T20:19:08"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py",
-      "size_bytes": 17648,
-      "mtime_iso": "2025-12-02T06:12:57"
+      "size_bytes": 27608,
+      "mtime_iso": "2025-12-02T20:03:08"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py",
       "size_bytes": 8724,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/stage_cards_v2/base_stage_card_v2.py",
-      "size_bytes": 3131,
-      "mtime_iso": "2025-11-30T13:57:09"
+      "size_bytes": 3141,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/stage_cards_v2/components.py",
-      "size_bytes": 3330,
-      "mtime_iso": "2025-11-30T20:44:34"
+      "size_bytes": 3334,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/stage_cards_v2/validation_result.py",
@@ -4902,12 +5047,12 @@
     {
       "path": "src/gui/views/learning_tab_frame_v2.py",
       "size_bytes": 5061,
-      "mtime_iso": "2025-11-30T06:40:14"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/views/pipeline_config_panel.py",
       "size_bytes": 8617,
-      "mtime_iso": "2025-12-01T21:05:29"
+      "mtime_iso": "2025-12-02T21:05:50"
     },
     {
       "path": "src/gui/views/pipeline_tab_frame.py",
@@ -4916,8 +5061,8 @@
     },
     {
       "path": "src/gui/views/pipeline_tab_frame_v2.py",
-      "size_bytes": 13648,
-      "mtime_iso": "2025-12-02T06:20:33"
+      "size_bytes": 15191,
+      "mtime_iso": "2025-12-02T21:13:07"
     },
     {
       "path": "src/gui/views/prompt_tab_frame.py",
@@ -4927,7 +5072,7 @@
     {
       "path": "src/gui/views/prompt_tab_frame_v2.py",
       "size_bytes": 11749,
-      "mtime_iso": "2025-11-29T20:51:36"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/views/run_control_bar.py",
@@ -4941,18 +5086,18 @@
     },
     {
       "path": "src/gui/views/stage_cards_panel.py",
-      "size_bytes": 130,
-      "mtime_iso": "2025-11-30T17:24:31"
+      "size_bytes": 135,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/views/stage_cards_panel_v2.py",
-      "size_bytes": 10967,
-      "mtime_iso": "2025-12-01T20:19:08"
+      "size_bytes": 11233,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/gui/views/__init__.py",
       "size_bytes": 230,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui/widgets/matrix_helper_widget.py",
@@ -4976,8 +5121,8 @@
     },
     {
       "path": "src/gui_v2/adapters/randomizer_adapter.py",
-      "size_bytes": 430,
-      "mtime_iso": "2025-11-28T18:07:45"
+      "size_bytes": 434,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/gui_v2/adapters/randomizer_adapter_v2.py",
@@ -5076,18 +5221,18 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 108375,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "size_bytes": 109067,
+      "mtime_iso": "2025-12-02T19:52:57"
     },
     {
       "path": "src/pipeline/last_run_store_v2_5.py",
-      "size_bytes": 1780,
-      "mtime_iso": "2025-11-27T19:37:28"
+      "size_bytes": 4041,
+      "mtime_iso": "2025-12-02T19:57:29"
     },
     {
       "path": "src/pipeline/pipeline_runner.py",
-      "size_bytes": 17284,
-      "mtime_iso": "2025-11-30T17:20:50"
+      "size_bytes": 21630,
+      "mtime_iso": "2025-12-02T20:28:07"
     },
     {
       "path": "src/pipeline/randomizer_v2.py",
@@ -5101,8 +5246,8 @@
     },
     {
       "path": "src/pipeline/stage_sequencer.py",
-      "size_bytes": 4764,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "size_bytes": 8020,
+      "mtime_iso": "2025-12-02T22:39:39"
     },
     {
       "path": "src/pipeline/variant_planner.py",
@@ -5121,23 +5266,23 @@
     },
     {
       "path": "src/queue/job_history_store.py",
-      "size_bytes": 6974,
-      "mtime_iso": "2025-12-02T06:53:12"
+      "size_bytes": 7115,
+      "mtime_iso": "2025-12-02T20:51:56"
     },
     {
       "path": "src/queue/job_model.py",
-      "size_bytes": 3592,
-      "mtime_iso": "2025-12-02T06:51:08"
+      "size_bytes": 3646,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/queue/job_queue.py",
-      "size_bytes": 3559,
-      "mtime_iso": "2025-12-02T06:53:03"
+      "size_bytes": 3674,
+      "mtime_iso": "2025-12-02T20:52:03"
     },
     {
       "path": "src/queue/single_node_runner.py",
-      "size_bytes": 3859,
-      "mtime_iso": "2025-12-02T06:42:39"
+      "size_bytes": 3942,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/queue/__init__.py",
@@ -5146,13 +5291,13 @@
     },
     {
       "path": "src/randomizer/randomizer_engine_v2.py",
-      "size_bytes": 4067,
-      "mtime_iso": "2025-11-30T18:06:16"
+      "size_bytes": 4198,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/randomizer/__init__.py",
-      "size_bytes": 327,
-      "mtime_iso": "2025-11-30T18:06:01"
+      "size_bytes": 341,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/services/config_service.py",
@@ -5196,18 +5341,18 @@
     },
     {
       "path": "src/utils/config.py",
-      "size_bytes": 28508,
-      "mtime_iso": "2025-11-30T19:36:45"
+      "size_bytes": 29309,
+      "mtime_iso": "2025-12-02T19:56:50"
     },
     {
       "path": "src/utils/debug_shutdown_inspector.py",
-      "size_bytes": 1730,
-      "mtime_iso": "2025-11-30T21:56:35"
+      "size_bytes": 1789,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/utils/file_access_log_v2_5_2025_11_26.py",
-      "size_bytes": 2221,
-      "mtime_iso": "2025-11-30T20:47:46"
+      "size_bytes": 2232,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/utils/file_io.py",
@@ -5216,13 +5361,13 @@
     },
     {
       "path": "src/utils/graceful_exit.py",
-      "size_bytes": 2704,
-      "mtime_iso": "2025-12-02T06:54:44"
+      "size_bytes": 2794,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/utils/logger.py",
       "size_bytes": 15847,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "src/utils/preferences.py",
@@ -5246,8 +5391,8 @@
     },
     {
       "path": "src/utils/single_instance.py",
-      "size_bytes": 1383,
-      "mtime_iso": "2025-12-01T06:18:04"
+      "size_bytes": 1432,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "src/utils/state.py",
@@ -5287,7 +5432,7 @@
     {
       "path": "tests/phase1_test_suite.txt",
       "size_bytes": 1728,
-      "mtime_iso": "2025-11-30T20:49:34"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/StableNewV2 — Test Runner Plan.md",
@@ -5301,8 +5446,8 @@
     },
     {
       "path": "tests/test_cancel_token.py",
-      "size_bytes": 10633,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 10712,
+      "mtime_iso": "2025-12-02T20:50:05"
     },
     {
       "path": "tests/test_config_passthrough.py",
@@ -5340,6 +5485,11 @@
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
+      "path": "tests/api/test_client_generate_images.py",
+      "size_bytes": 1072,
+      "mtime_iso": "2025-12-02T19:51:41"
+    },
+    {
       "path": "tests/api/test_healthcheck_v2.py",
       "size_bytes": 2256,
       "mtime_iso": "2025-11-29T11:22:13"
@@ -5351,23 +5501,23 @@
     },
     {
       "path": "tests/api/test_webui_process_manager.py",
-      "size_bytes": 4149,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "size_bytes": 3806,
+      "mtime_iso": "2025-12-02T21:50:01"
     },
     {
       "path": "tests/api/test_webui_process_manager_shutdown_v2.py",
-      "size_bytes": 1965,
-      "mtime_iso": "2025-11-30T16:17:50"
+      "size_bytes": 2041,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/api/test_webui_resources.py",
-      "size_bytes": 2528,
-      "mtime_iso": "2025-11-27T19:37:28"
+      "size_bytes": 3161,
+      "mtime_iso": "2025-12-02T21:32:05"
     },
     {
       "path": "tests/api/test_webui_resources_adetailer_v2.py",
-      "size_bytes": 906,
-      "mtime_iso": "2025-11-30T17:30:56"
+      "size_bytes": 938,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/app/test_bootstrap_webui_autostart.py",
@@ -5386,18 +5536,18 @@
     },
     {
       "path": "tests/controller/test_adetailer_stage_integration_v2.py",
-      "size_bytes": 3523,
-      "mtime_iso": "2025-11-30T17:23:01"
+      "size_bytes": 3627,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_app_controller_config.py",
-      "size_bytes": 3929,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 4139,
+      "mtime_iso": "2025-12-02T21:42:13"
     },
     {
       "path": "tests/controller/test_app_controller_lora_runtime.py",
-      "size_bytes": 3356,
-      "mtime_iso": "2025-11-30T13:02:09"
+      "size_bytes": 3447,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_app_controller_packs.py",
@@ -5406,13 +5556,13 @@
     },
     {
       "path": "tests/controller/test_app_controller_pipeline_flow_pr0.py",
-      "size_bytes": 4658,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 4863,
+      "mtime_iso": "2025-12-02T21:42:20"
     },
     {
       "path": "tests/controller/test_app_controller_pipeline_integration.py",
-      "size_bytes": 3335,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 3656,
+      "mtime_iso": "2025-12-02T21:42:25"
     },
     {
       "path": "tests/controller/test_app_controller_settings_v2.py",
@@ -5421,8 +5571,13 @@
     },
     {
       "path": "tests/controller/test_app_controller_shutdown_v2.py",
-      "size_bytes": 2177,
-      "mtime_iso": "2025-11-30T16:17:58"
+      "size_bytes": 2250,
+      "mtime_iso": "2025-12-02T08:03:48"
+    },
+    {
+      "path": "tests/controller/test_app_controller_start_run_shim.py",
+      "size_bytes": 1339,
+      "mtime_iso": "2025-12-02T21:11:39"
     },
     {
       "path": "tests/controller/test_cluster_controller.py",
@@ -5446,23 +5601,23 @@
     },
     {
       "path": "tests/controller/test_job_history_controller_v2.py",
-      "size_bytes": 2377,
-      "mtime_iso": "2025-11-30T15:18:56"
+      "size_bytes": 2451,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_job_history_service.py",
-      "size_bytes": 2501,
-      "mtime_iso": "2025-11-22T18:13:44"
+      "size_bytes": 3019,
+      "mtime_iso": "2025-12-02T21:52:25"
     },
     {
       "path": "tests/controller/test_job_queue_integration_v2.py",
-      "size_bytes": 3345,
-      "mtime_iso": "2025-11-30T15:05:49"
+      "size_bytes": 3452,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_job_service_unit.py",
-      "size_bytes": 3880,
-      "mtime_iso": "2025-11-30T14:49:05"
+      "size_bytes": 4013,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_learning_execution_controller_gui_contract.py",
@@ -5516,13 +5671,13 @@
     },
     {
       "path": "tests/controller/test_pipeline_randomizer_config_v2.py",
-      "size_bytes": 3409,
-      "mtime_iso": "2025-11-30T13:10:09"
+      "size_bytes": 3501,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_presets_integration_v2.py",
-      "size_bytes": 1849,
-      "mtime_iso": "2025-11-30T16:48:22"
+      "size_bytes": 1911,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_profile_integration.py",
@@ -5536,18 +5691,18 @@
     },
     {
       "path": "tests/controller/test_resource_refresh_adetailer_v2.py",
-      "size_bytes": 1626,
-      "mtime_iso": "2025-11-30T17:30:39"
+      "size_bytes": 1673,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_resource_refresh_v2.py",
       "size_bytes": 5187,
-      "mtime_iso": "2025-12-01T22:56:57"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "tests/controller/test_shutdown_inspector_v2.py",
-      "size_bytes": 1132,
-      "mtime_iso": "2025-11-30T21:56:52"
+      "size_bytes": 1162,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_stage_sequencer_controller_integration.py",
@@ -5566,8 +5721,8 @@
     },
     {
       "path": "tests/controller/test_webui_connection_ready_callback_v2.py",
-      "size_bytes": 775,
-      "mtime_iso": "2025-11-30T17:45:34"
+      "size_bytes": 801,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/controller/test_webui_lifecycle_ux_v2.py",
@@ -5576,13 +5731,13 @@
     },
     {
       "path": "tests/gui_v2/conftest.py",
-      "size_bytes": 7360,
-      "mtime_iso": "2025-11-30T17:17:45"
+      "size_bytes": 7370,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_adetailer_stage_card_v2.py",
-      "size_bytes": 1692,
-      "mtime_iso": "2025-11-30T17:30:44"
+      "size_bytes": 1741,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_core_config_webui_resources_v2.py",
@@ -5602,7 +5757,7 @@
     {
       "path": "tests/gui_v2/test_gui_logging_integration.py",
       "size_bytes": 1028,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_gui_v2_layout_skeleton.py",
@@ -5616,83 +5771,83 @@
     },
     {
       "path": "tests/gui_v2/test_job_history_panel_v2.py",
-      "size_bytes": 1683,
-      "mtime_iso": "2025-11-30T15:19:04"
+      "size_bytes": 1745,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_log_trace_panel_v2.py",
       "size_bytes": 800,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_main_window_smoke_v2.py",
-      "size_bytes": 975,
-      "mtime_iso": "2025-11-30T17:45:24"
+      "size_bytes": 542,
+      "mtime_iso": "2025-12-02T21:34:38"
     },
     {
       "path": "tests/gui_v2/test_pipeline_adetailer_toggle_v2.py",
-      "size_bytes": 2548,
-      "mtime_iso": "2025-11-30T17:25:46"
+      "size_bytes": 2637,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_config_panel_lora_runtime.py",
-      "size_bytes": 1710,
-      "mtime_iso": "2025-11-30T13:02:13"
+      "size_bytes": 1761,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_dropdown_refresh_v2.py",
-      "size_bytes": 1498,
-      "mtime_iso": "2025-11-30T20:44:13"
+      "size_bytes": 1504,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_left_column_config_v2.py",
       "size_bytes": 1986,
-      "mtime_iso": "2025-11-29T19:34:54"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_pack_selector_job_actions_v2.py",
       "size_bytes": 4822,
-      "mtime_iso": "2025-11-30T06:40:14"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_presets_ui_v2.py",
-      "size_bytes": 1044,
-      "mtime_iso": "2025-11-30T16:48:12"
+      "size_bytes": 1079,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_queue_preview_v2.py",
-      "size_bytes": 2269,
-      "mtime_iso": "2025-11-30T15:02:30"
+      "size_bytes": 2870,
+      "mtime_iso": "2025-12-02T21:14:21"
     },
     {
       "path": "tests/gui_v2/test_pipeline_randomizer_panel_v2.py",
-      "size_bytes": 1753,
-      "mtime_iso": "2025-11-30T13:13:19"
+      "size_bytes": 1807,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_stage_cards_v2.py",
-      "size_bytes": 848,
-      "mtime_iso": "2025-12-01T21:06:06"
+      "size_bytes": 874,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "tests/gui_v2/test_pipeline_stage_checkbox_order_v2.py",
-      "size_bytes": 759,
-      "mtime_iso": "2025-12-01T21:05:32"
+      "size_bytes": 876,
+      "mtime_iso": "2025-12-02T21:06:07"
     },
     {
       "path": "tests/gui_v2/test_pipeline_tab_layout_v2.py",
-      "size_bytes": 1987,
-      "mtime_iso": "2025-11-30T21:22:53"
+      "size_bytes": 1993,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_pipeline_tab_wiring_v2.py",
-      "size_bytes": 1028,
-      "mtime_iso": "2025-11-30T17:45:28"
+      "size_bytes": 629,
+      "mtime_iso": "2025-12-02T21:34:47"
     },
     {
       "path": "tests/gui_v2/test_preview_panel_stage_order_v2.py",
-      "size_bytes": 506,
-      "mtime_iso": "2025-12-01T21:07:34"
+      "size_bytes": 523,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "tests/gui_v2/test_scrolling_helper_v2.py",
@@ -5701,23 +5856,28 @@
     },
     {
       "path": "tests/gui_v2/test_shutdown_journey_v2.py",
-      "size_bytes": 680,
-      "mtime_iso": "2025-11-30T16:18:05"
+      "size_bytes": 708,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_sidebar_pack_preview_v2.py",
-      "size_bytes": 5254,
-      "mtime_iso": "2025-11-30T14:01:41"
+      "size_bytes": 5402,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_sidebar_presets_v2.py",
       "size_bytes": 2957,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_stage_cards_layout_v2.py",
-      "size_bytes": 497,
-      "mtime_iso": "2025-11-30T20:45:37"
+      "size_bytes": 611,
+      "mtime_iso": "2025-12-02T21:34:51"
+    },
+    {
+      "path": "tests/gui_v2/test_status_bar_v2.py",
+      "size_bytes": 1131,
+      "mtime_iso": "2025-12-02T21:52:21"
     },
     {
       "path": "tests/gui_v2/test_status_bar_webui_controls_v2.py",
@@ -5727,22 +5887,52 @@
     {
       "path": "tests/gui_v2/test_theme_v2.py",
       "size_bytes": 1026,
-      "mtime_iso": "2025-11-30T06:40:14"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_tooltip_helper_v2.py",
-      "size_bytes": 607,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "size_bytes": 652,
+      "mtime_iso": "2025-12-02T21:06:18"
     },
     {
       "path": "tests/gui_v2/test_zone_map_card_order_v2.py",
-      "size_bytes": 602,
-      "mtime_iso": "2025-11-30T19:44:01"
+      "size_bytes": 615,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/gui_v2/test_zone_map_v2.py",
-      "size_bytes": 438,
-      "mtime_iso": "2025-11-30T19:43:56"
+      "size_bytes": 450,
+      "mtime_iso": "2025-12-02T08:03:48"
+    },
+    {
+      "path": "tests/helpers/factories.py",
+      "size_bytes": 1913,
+      "mtime_iso": "2025-12-02T21:42:08"
+    },
+    {
+      "path": "tests/helpers/gui_harness.py",
+      "size_bytes": 1224,
+      "mtime_iso": "2025-12-02T21:31:46"
+    },
+    {
+      "path": "tests/helpers/gui_harness_v2.py",
+      "size_bytes": 1094,
+      "mtime_iso": "2025-12-02T21:34:34"
+    },
+    {
+      "path": "tests/helpers/pipeline_fakes.py",
+      "size_bytes": 3133,
+      "mtime_iso": "2025-12-02T21:49:17"
+    },
+    {
+      "path": "tests/helpers/webui_mocks.py",
+      "size_bytes": 1942,
+      "mtime_iso": "2025-12-02T21:31:54"
+    },
+    {
+      "path": "tests/helpers/__init__.py",
+      "size_bytes": 214,
+      "mtime_iso": "2025-12-02T21:34:54"
     },
     {
       "path": "tests/integration/__init__.py",
@@ -5751,48 +5941,63 @@
     },
     {
       "path": "tests/journey/test_phase1_pipeline_journey_v2.py",
-      "size_bytes": 2791,
-      "mtime_iso": "2025-11-30T20:44:17"
+      "size_bytes": 2868,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/journeys/test_jt01_prompt_pack_authoring.py",
       "size_bytes": 9982,
-      "mtime_iso": "2025-12-01T23:16:21"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "tests/journeys/test_jt02_lora_embedding_integration.py",
-      "size_bytes": 9119,
-      "mtime_iso": "2025-12-02T05:50:18"
+      "size_bytes": 9142,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "tests/journeys/test_jt03_txt2img_pipeline_run.py",
-      "size_bytes": 13332,
-      "mtime_iso": "2025-12-02T05:50:25"
+      "size_bytes": 12822,
+      "mtime_iso": "2025-12-02T19:18:55"
     },
     {
       "path": "tests/journeys/test_jt04_img2img_adetailer_run.py",
-      "size_bytes": 16286,
-      "mtime_iso": "2025-12-02T05:50:32"
+      "size_bytes": 15924,
+      "mtime_iso": "2025-12-02T21:16:44"
     },
     {
       "path": "tests/journeys/test_jt05_upscale_stage_run.py",
-      "size_bytes": 10706,
-      "mtime_iso": "2025-12-01T23:18:12"
+      "size_bytes": 9995,
+      "mtime_iso": "2025-12-02T21:32:53"
     },
     {
       "path": "tests/journeys/test_shutdown_no_leaks.py",
-      "size_bytes": 1966,
-      "mtime_iso": "2025-12-01T23:11:28"
+      "size_bytes": 2023,
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "tests/journeys/test_v2_full_pipeline_journey.py",
-      "size_bytes": 2770,
-      "mtime_iso": "2025-12-02T05:50:10"
+      "size_bytes": 3101,
+      "mtime_iso": "2025-12-02T08:04:20"
+    },
+    {
+      "path": "tests/journeys/__init__.py",
+      "size_bytes": 71,
+      "mtime_iso": "2025-12-02T19:18:24"
     },
     {
       "path": "tests/journeys/fakes/fake_pipeline_runner.py",
       "size_bytes": 817,
       "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "tests/journeys/utils/tk_root_factory.py",
+      "size_bytes": 1778,
+      "mtime_iso": "2025-12-02T19:18:32"
+    },
+    {
+      "path": "tests/journeys/utils/__init__.py",
+      "size_bytes": 52,
+      "mtime_iso": "2025-12-02T19:18:27"
     },
     {
       "path": "tests/learning/test_learning_adapter_stub.py",
@@ -5816,8 +6021,8 @@
     },
     {
       "path": "tests/learning/test_learning_hooks_pipeline_runner.py",
-      "size_bytes": 3040,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "size_bytes": 2318,
+      "mtime_iso": "2025-12-02T21:49:28"
     },
     {
       "path": "tests/learning/test_learning_plan_factory.py",
@@ -5887,32 +6092,37 @@
     {
       "path": "tests/legacy/tests_gui_v2_legacy/test_gui_v2_advanced_stage_cards_validation.py",
       "size_bytes": 1763,
-      "mtime_iso": "2025-12-01T20:19:08"
+      "mtime_iso": "2025-12-02T08:04:20"
     },
     {
       "path": "tests/pipeline/test_executor_cancellation.py",
-      "size_bytes": 2791,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 2881,
+      "mtime_iso": "2025-12-02T20:50:10"
+    },
+    {
+      "path": "tests/pipeline/test_executor_generate_errors.py",
+      "size_bytes": 1001,
+      "mtime_iso": "2025-12-02T19:51:51"
     },
     {
       "path": "tests/pipeline/test_last_run_store_v2_5.py",
-      "size_bytes": 1694,
-      "mtime_iso": "2025-11-27T19:37:28"
+      "size_bytes": 2086,
+      "mtime_iso": "2025-12-02T19:57:58"
     },
     {
       "path": "tests/pipeline/test_pipeline_adetailer_config.py",
-      "size_bytes": 2114,
-      "mtime_iso": "2025-11-30T17:30:26"
+      "size_bytes": 2186,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/pipeline/test_pipeline_io_contracts.py",
-      "size_bytes": 2853,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "size_bytes": 2129,
+      "mtime_iso": "2025-12-02T21:28:32"
     },
     {
       "path": "tests/pipeline/test_pipeline_learning_hooks.py",
-      "size_bytes": 2581,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "size_bytes": 2138,
+      "mtime_iso": "2025-12-02T21:49:39"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_cancel_token.py",
@@ -5920,19 +6130,29 @@
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
+      "path": "tests/pipeline/test_pipeline_runner_sdxl_refiner_hires.py",
+      "size_bytes": 4163,
+      "mtime_iso": "2025-12-02T20:28:23"
+    },
+    {
       "path": "tests/pipeline/test_pipeline_runner_variants.py",
-      "size_bytes": 1998,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 1274,
+      "mtime_iso": "2025-12-02T21:28:24"
+    },
+    {
+      "path": "tests/pipeline/test_stage_plan_builder_v2_5.py",
+      "size_bytes": 3050,
+      "mtime_iso": "2025-12-02T22:39:52"
     },
     {
       "path": "tests/pipeline/test_stage_sequencer_plan_builder.py",
-      "size_bytes": 4489,
-      "mtime_iso": "2025-12-01T21:04:32"
+      "size_bytes": 5395,
+      "mtime_iso": "2025-12-02T20:28:47"
     },
     {
       "path": "tests/pipeline/test_stage_sequencer_runner_integration.py",
-      "size_bytes": 4800,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 3644,
+      "mtime_iso": "2025-12-02T21:28:53"
     },
     {
       "path": "tests/pipeline/test_upscale_hang_diag.py",
@@ -5965,14 +6185,19 @@
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
+      "path": "tests/queue/test_single_node_runner.py",
+      "size_bytes": 2183,
+      "mtime_iso": "2025-12-02T21:52:30"
+    },
+    {
       "path": "tests/queue/test_single_node_runner_loopback.py",
       "size_bytes": 1004,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
       "path": "tests/randomizer/test_randomizer_engine_v2.py",
-      "size_bytes": 2557,
-      "mtime_iso": "2025-11-30T18:06:39"
+      "size_bytes": 2644,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/safety/test_advanced_stage_cards_import_safety.py",
@@ -6016,18 +6241,18 @@
     },
     {
       "path": "tests/tools/test_v2_classify_and_archive.py",
-      "size_bytes": 1843,
-      "mtime_iso": "2025-11-30T19:26:39"
+      "size_bytes": 1901,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/utils/test_config_presets_v2.py",
       "size_bytes": 3420,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/utils/test_file_access_logger_v2_5.py",
-      "size_bytes": 704,
-      "mtime_iso": "2025-11-30T19:49:59"
+      "size_bytes": 726,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/utils/test_inmemory_log_handler.py",
@@ -6037,7 +6262,7 @@
     {
       "path": "tests/utils/test_logger_integration.py",
       "size_bytes": 1992,
-      "mtime_iso": "2025-11-29T14:43:13"
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tests/utils/test_lora_embedding_parser.py",
@@ -6121,8 +6346,8 @@
     },
     {
       "path": "tools/v2_classify_and_archive.py",
-      "size_bytes": 5539,
-      "mtime_iso": "2025-11-30T19:49:53"
+      "size_bytes": 5713,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tools/__init__.py",
@@ -6131,13 +6356,13 @@
     },
     {
       "path": "tools/test_helpers/journey_harness.py",
-      "size_bytes": 1974,
-      "mtime_iso": "2025-12-01T07:19:27"
+      "size_bytes": 2043,
+      "mtime_iso": "2025-12-02T08:03:48"
     },
     {
       "path": "tools/test_helpers/process_inspection.py",
-      "size_bytes": 2549,
-      "mtime_iso": "2025-11-30T21:51:01"
+      "size_bytes": 2630,
+      "mtime_iso": "2025-12-02T08:03:48"
     }
   ]
 }

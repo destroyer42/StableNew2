@@ -127,6 +127,21 @@ class PipelineTabFrame(ttk.Frame):
             on_change=lambda: self._sync_state_overrides(),
         )
         self.stage_cards_panel.pack(fill="both", expand=True)
+        txt2img_card = getattr(self.stage_cards_panel, "txt2img_card", None)
+        img2img_card = getattr(self.stage_cards_panel, "img2img_card", None)
+        upscale_card = getattr(self.stage_cards_panel, "upscale_card", None)
+
+        self.txt2img_width = getattr(txt2img_card, "width_var", tk.IntVar(value=512))
+        self.txt2img_height = getattr(txt2img_card, "height_var", tk.IntVar(value=512))
+        self.txt2img_steps = getattr(txt2img_card, "steps_var", tk.IntVar(value=20))
+        self.txt2img_cfg_scale = getattr(txt2img_card, "cfg_var", tk.DoubleVar(value=7.0))
+        self.img2img_width = getattr(img2img_card, "width_var", tk.IntVar(value=512))
+        self.img2img_height = getattr(img2img_card, "height_var", tk.IntVar(value=512))
+        self.img2img_strength = getattr(img2img_card, "denoise_var", tk.DoubleVar(value=0.3))
+        self.upscale_scale = getattr(upscale_card, "factor_var", tk.DoubleVar(value=2.0))
+        self.upscale_steps = getattr(upscale_card, "steps_var", tk.IntVar(value=20))
+        self.upscale_tile_size = getattr(upscale_card, "tile_size_var", tk.IntVar(value=0))
+        self.upscale_denoise = getattr(upscale_card, "denoise_var", tk.DoubleVar(value=0.35))
 
         # Stage toggle vars and upscale proxies (JT05 compatibility)
         self.txt2img_enabled = tk.BooleanVar(value=True)

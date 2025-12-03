@@ -4,25 +4,11 @@ from unittest import mock
 import pytest
 
 from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager, WebUIStartupError
-
-
-class _DummyProcess:
-    def __init__(self):
-        self.terminated = False
-        # Add dummy stdout/stderr streams to avoid AttributeError in manager.start()
-        import io
-        self.stdout = io.BytesIO(b'')
-        self.stderr = io.BytesIO(b'')
-
-    def poll(self):
-        return None
-
-    def terminate(self):
-        self.terminated = True
+from tests.helpers.webui_mocks import DummyProcess
 
 
 def test_start_invokes_subprocess_with_config(monkeypatch):
-    dummy = _DummyProcess()
+    dummy = DummyProcess()
     popen_mock = mock.Mock(return_value=dummy)
     monkeypatch.setattr("subprocess.Popen", popen_mock)
 
@@ -49,7 +35,7 @@ def test_start_raises_structured_error(monkeypatch):
 
 
 def test_stop_handles_already_exited_process(monkeypatch):
-    dummy = _DummyProcess()
+    dummy = DummyProcess()
     dummy.poll = types.MethodType(lambda self: 1, dummy)
     popen_mock = mock.Mock(return_value=dummy)
     monkeypatch.setattr("subprocess.Popen", popen_mock)
@@ -65,7 +51,7 @@ def test_stop_handles_already_exited_process(monkeypatch):
 def test_ensure_running_reuses_running_process(monkeypatch):
     cfg = WebUIProcessConfig(command=["python", "webui.py"])
     manager = WebUIProcessManager(cfg)
-    manager._process = _DummyProcess()
+    manager._process = DummyProcess()
     check_calls = []
     manager.check_health = lambda: check_calls.append(True) or True
     start_mock = mock.Mock()
@@ -79,7 +65,7 @@ def test_ensure_running_reuses_running_process(monkeypatch):
 def test_ensure_running_restarts_when_unhealthy(monkeypatch):
     cfg = WebUIProcessConfig(command=["python", "webui.py"])
     manager = WebUIProcessManager(cfg)
-    manager._process = _DummyProcess()
+    manager._process = DummyProcess()
 
     call_count = {"n": 0}
 
@@ -104,7 +90,7 @@ def test_ensure_running_checks_health_after_start(monkeypatch):
     manager = WebUIProcessManager(cfg)
     manager._process = None
 
-    dummy = _DummyProcess()
+    dummy = DummyProcess()
 
     def fake_start():
         manager._process = dummy

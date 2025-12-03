@@ -11,6 +11,7 @@ from typing import Any
 import requests
 
 from src.api.healthcheck import wait_for_webui_ready
+from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome, GenerateResult
 from src.utils import get_logger, LogContext, log_with_ctx
 
 logger = get_logger(__name__)
@@ -522,6 +523,56 @@ class SDWebUIClient:
         restoration_info = f" + {', '.join(face_restoration_used)}" if face_restoration_used else ""
         logger.info(f"Upscale completed successfully with {upscaler}{restoration_info}")
         return data
+
+    def _normalize_response_to_result(
+        self, stage: str, response: dict[str, Any] | None, timings: dict[str, float] | None
+    ) -> GenerateResult | None:
+        if response is None:
+            return None
+        info = response.get("info")
+        if isinstance(info, str):
+            try:
+                info = json.loads(info)
+            except Exception:
+                info = {}
+        if not isinstance(info, dict):
+            info = {}
+        images = response.get("images")
+        if not isinstance(images, list):
+            images = []
+        return GenerateResult(images=images, info=info, stage=stage, timings=timings)
+
+    def _generate_error_outcome(self, stage: str, message: str, code: GenerateErrorCode) -> GenerateOutcome:
+        return GenerateOutcome(
+            error=GenerateError(code=code, message=message, stage=stage),
+        )
+
+    def generate_images(
+        self,
+        *,
+        stage: str,
+        payload: dict[str, Any],
+        timings: dict[str, float] | None = None,
+    ) -> GenerateOutcome:
+        stage_normalized = (stage or "txt2img").lower()
+        try:
+            if stage_normalized == "txt2img":
+                response = self.txt2img(payload)
+            elif stage_normalized == "img2img":
+                response = self.img2img(payload)
+            elif stage_normalized in {"upscale", "upscale_image"}:
+                response = self.upscale(payload)
+            else:
+                raise ValueError(f"Unsupported stage: {stage}")
+
+            result = self._normalize_response_to_result(stage_normalized, response, timings)
+            if result is None:
+                return self._generate_error_outcome(stage_normalized, "WebUI returned no data", GenerateErrorCode.UNKNOWN)
+            return GenerateOutcome(result=result)
+        except requests.RequestException as exc:
+            return self._generate_error_outcome(stage_normalized, str(exc), GenerateErrorCode.CONNECTION)
+        except Exception as exc:
+            return self._generate_error_outcome(stage_normalized, str(exc), GenerateErrorCode.UNKNOWN)
 
     def get_models(self) -> list[dict[str, Any]]:
         """

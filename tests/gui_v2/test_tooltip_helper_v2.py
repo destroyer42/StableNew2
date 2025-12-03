@@ -15,6 +15,9 @@ def test_tooltip_helper_shows_and_hides():
     label.pack()
     tooltip = attach_tooltip(label, "Helpful info", delay_ms=10)
 
+    root.update_idletasks()
+    root.deiconify()
+
     tooltip._show()
     assert tooltip._window is not None
     assert isinstance(tooltip._window, tk.Toplevel)

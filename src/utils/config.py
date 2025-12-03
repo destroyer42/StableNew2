@@ -251,6 +251,8 @@ class ConfigManager:
                 "refiner_checkpoint": "",
                 "refiner_switch_at": 0.8,  # ratio 0-1 used by WebUI
                 "refiner_switch_steps": 0,  # optional: absolute step number within base pass; 0=unused
+                "refiner_enabled": False,
+                "refiner_model_name": "",
             },
             "img2img": {
                 "steps": 15,
@@ -344,6 +346,14 @@ class ConfigManager:
                 "apply_global_negative_img2img": True,
                 "apply_global_negative_upscale": True,
                 "apply_global_negative_adetailer": True,
+            },
+            "hires_fix": {
+                "enabled": False,
+                "upscaler_name": "Latent",
+                "upscale_factor": 2.0,
+                "steps": 0,
+                "denoise": 0.3,
+                "use_base_model": True,
             },
             "randomization_enabled": False,
             "max_variants": 1,
@@ -467,6 +477,13 @@ class ConfigManager:
             logger.error(f"Failed to save pack overrides: {e}")
             return False
 
+    def _pack_config_path(self, pack_name: str) -> Path:
+        """
+        Return the expected config file path for a prompt pack.
+        """
+        pack_stem = Path(pack_name).stem
+        return Path("packs") / f"{pack_stem}.json"
+
     def get_pack_config(self, pack_name: str) -> dict[str, Any]:
         """
         Get individual pack configuration from its .json file.
@@ -477,11 +494,8 @@ class ConfigManager:
         Returns:
             Pack configuration or empty dict if not found
         """
-        from pathlib import Path
 
-        # Convert pack_name to config filename (heroes.txt -> heroes.json)
-        pack_stem = Path(pack_name).stem
-        config_path = Path("packs") / f"{pack_stem}.json"
+        config_path = self._pack_config_path(pack_name)
 
         if not config_path.exists():
             return {}
@@ -495,6 +509,16 @@ class ConfigManager:
             logger.error(f"Failed to load pack config '{pack_name}': {e}")
             return {}
 
+    def load_pack_config(self, pack_name: str) -> dict[str, Any] | None:
+        """
+        Load and normalize a pack configuration, filling defaults where fields are missing.
+        """
+        config_path = self._pack_config_path(pack_name)
+        if not config_path.exists():
+            return None
+        raw = self.get_pack_config(pack_name)
+        return self._merge_config_with_defaults(raw)
+
     def save_pack_config(self, pack_name: str, config: dict[str, Any]) -> bool:
         """
         Save individual pack configuration to its .json file.
@@ -506,12 +530,10 @@ class ConfigManager:
         Returns:
             True if successful
         """
-        from pathlib import Path
 
         try:
             # Convert pack_name to config filename (heroes.txt -> heroes.json)
-            pack_stem = Path(pack_name).stem
-            config_path = Path("packs") / f"{pack_stem}.json"
+            config_path = self._pack_config_path(pack_name)
 
             # Ensure packs directory exists
             config_path.parent.mkdir(exist_ok=True)

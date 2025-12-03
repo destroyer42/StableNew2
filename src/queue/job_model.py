@@ -49,6 +49,7 @@ class Job:
     result: Optional[Dict[str, Any]] = None
     payload: Any | None = None
     worker_id: WorkerId | None = None
+    run_mode: str = "queue"
 
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
         self.status = status
@@ -75,6 +76,7 @@ class Job:
             "result": self.result,
             "pipeline_config": self.pipeline_config.__dict__ if self.pipeline_config is not None else None,
             "worker_id": self.worker_id,
+            "run_mode": self.run_mode,
         }
 
     def summary(self) -> str:
