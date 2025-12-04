@@ -104,6 +104,15 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         "Dark.TCheckbutton",
         background=[("active", BACKGROUND_ELEVATED)],
         foreground=[("disabled", TEXT_MUTED)],
+        indicatorcolor=[
+            ("selected", ACCENT_GOLD),
+            ("alternate", ACCENT_GOLD),
+            ("!selected", TEXT_MUTED),
+        ],
+        indicatorbackground=[
+            ("selected", BACKGROUND_ELEVATED),
+            ("!selected", BACKGROUND_ELEVATED),
+        ],
     )
 
     style.configure(

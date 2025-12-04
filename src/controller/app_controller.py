@@ -283,6 +283,9 @@ class AppController:
             pipeline_runner=self.pipeline_runner,
         )
 
+        # Wire GUI overrides into PipelineController so config assembler can access GUI state
+        self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline
+
         # GUI log handler for LogTracePanelV2
         self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
         root_logger = logging.getLogger()
@@ -1950,6 +1953,32 @@ class AppController:
 
             setattr(cfg, attr, value)
             self._append_log(f"[controller] Config updated: {field}={value}")
+
+    def _get_gui_overrides_for_pipeline(self) -> dict[str, Any]:
+        """Return GUI state as a dict for the PipelineController's config assembler.
+
+        This method is wired to PipelineController.get_gui_overrides to bridge
+        the GUI state (via get_current_config) to the assembler's input format.
+        """
+        current = self.get_current_config()
+        pack = self._get_selected_pack()
+        prompt = self._get_active_prompt_text() or self._resolve_prompt_from_pack(pack) or ""
+        if not prompt:
+            prompt = (pack.name if pack else current.get("preset_name")) or "StableNew GUI Run"
+
+        return {
+            "prompt": prompt,
+            "negative_prompt": getattr(self.state.current_config, "negative_prompt", "") or "",
+            "model": current.get("model", ""),
+            "model_name": current.get("model", ""),
+            "vae_name": getattr(self.state.current_config, "vae_name", "") or "",
+            "sampler": current.get("sampler", ""),
+            "width": current.get("width", 512),
+            "height": current.get("height", 512),
+            "steps": current.get("steps", 20),
+            "cfg_scale": current.get("cfg_scale", 7.0),
+            "batch_size": 1,
+        }
 
     def build_pipeline_config_v2(self) -> PipelineConfig:
         """Build the pipeline configuration structure that drives the runner."""

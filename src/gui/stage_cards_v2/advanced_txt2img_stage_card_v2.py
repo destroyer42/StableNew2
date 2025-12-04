@@ -35,6 +35,12 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.height_var = tk.IntVar(value=512)
         self.clip_skip_var = tk.IntVar(value=2)
 
+        self._refiner_model_name_map: dict[str, str] = {}
+        self._refiner_model_values: list[str] = []
+        model_resources = self.controller.list_models() if self.controller and hasattr(self.controller, "list_models") else []
+        refiner_values = self._load_refiner_models(model_resources)
+        self._apply_refiner_hiress_defaults()
+
         # Sampler/steps/cfg
         self.sampler_section = SamplerSection(parent)
         self.sampler_section.grid(row=0, column=0, sticky="ew", pady=(0, 8))
@@ -93,7 +99,6 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         meta.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(meta, text="Model", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
-        model_resources = self.controller.list_models() if self.controller and hasattr(self.controller, "list_models") else []
         model_display_names = [r.display_name for r in model_resources] if model_resources else ["sd_xl_base_1.0", "sd15"]
         self.model_combo = ttk.Combobox(
             meta,
@@ -269,11 +274,12 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.refiner_model_combo = ttk.Combobox(
             refiner_frame,
             textvariable=self.refiner_model_var,
-            values=self._load_refiner_models(),
+            values=refiner_values,
             state="readonly",
             style="Dark.TCombobox",
         )
         self.refiner_model_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
+        self._set_combo_values(self.refiner_model_combo, self.refiner_model_var, refiner_values)
         ttk.Label(refiner_frame, text="Refiner start (%)", style="Dark.TLabel").grid(
             row=2, column=0, sticky="w", pady=(4, 0)
         )
@@ -407,7 +413,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         if not cfg:
             return
         self.refiner_enabled_var.set(cfg.refiner_enabled)
-        self.refiner_model_var.set(cfg.refiner_model_name or "")
+        display_name = self._find_refiner_display_name(cfg.refiner_model_name)
+        if display_name:
+            self.refiner_model_var.set(display_name)
+        else:
+            self.refiner_model_var.set(cfg.refiner_model_name or "")
         self.refiner_switch_var.set(int((cfg.refiner_switch_at or 0.0) * 100))
         self.hires_enabled_var.set(cfg.hires_enabled)
         self.hires_upscaler_var.set(cfg.hires_upscaler_name or "Latent")
@@ -416,15 +426,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.hires_denoise_var.set(cfg.hires_denoise or 0.3)
         self.hires_use_base_model_var.set(cfg.hires_use_base_model_for_hires)
 
-    def _load_refiner_models(self) -> list[str]:
-        models: list[str] = []
-        controller = getattr(self, "controller", None)
-        if controller and hasattr(controller, "list_models"):
-            for entry in controller.list_models():
-                name = getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
-                if "refiner" in (name or "").lower():
-                    models.append(name)
-        return models or ["SDXL Refinement"]
+    def _load_refiner_models(self, entries: list[Any] | None = None) -> list[str]:
+        values, mapping = self._compute_refiner_model_choices(entries)
+        self._refiner_model_name_map = mapping
+        self._refiner_model_values = values
+        return values
 
     def _load_upscaler_options(self) -> list[str]:
         upscalers: list[str] = []
@@ -440,7 +446,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self._update_current_config(refiner_enabled=bool(self.refiner_enabled_var.get()))
 
     def _on_refiner_model_changed(self) -> None:
-        self._update_current_config(refiner_model_name=str(self.refiner_model_var.get() or ""))
+        selected_display = str(self.refiner_model_var.get() or "").strip()
+        selected_name = self._refiner_model_name_map.get(selected_display, selected_display)
+        self._update_current_config(refiner_model_name=selected_name)
 
     def _on_refiner_switch_changed(self) -> None:
         try:
@@ -579,15 +587,28 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self._set_combo_values(self.scheduler_combo, self.scheduler_var, values)
 
     def _update_refiner_model_options(self, entries: list[Any]) -> None:
-        values: list[str] = []
-        for entry in entries:
-            name = getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
-            name = str(name).strip()
-            if "refiner" in name.lower():
-                values.append(name)
-        if not values:
-            values = ["SDXL Refinement"]
+        values = self._load_refiner_models(entries)
         self._set_combo_values(self.refiner_model_combo, self.refiner_model_var, values)
+
+    def _compute_refiner_model_choices(self, entries: list[Any] | None = None) -> tuple[list[str], dict[str, str]]:
+        resolved = entries
+        if resolved is None:
+            controller = getattr(self, "controller", None)
+            resolved = controller.list_models() if controller and hasattr(controller, "list_models") else []
+        values, mapping = self._normalize_dropdown_entries(resolved)
+        if not values:
+            fallback = "SDXL Refinement"
+            values = [fallback]
+            mapping = {fallback: fallback}
+        return values, mapping
+
+    def _find_refiner_display_name(self, model_name: str | None) -> str | None:
+        if not model_name:
+            return None
+        for display, internal in self._refiner_model_name_map.items():
+            if internal == model_name:
+                return display
+        return None
 
     def _update_hires_upscaler_options(self, entries: list[Any]) -> None:
         values = [

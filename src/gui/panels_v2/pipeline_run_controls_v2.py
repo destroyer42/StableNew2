@@ -80,35 +80,56 @@ class PipelineRunControlsV2(ttk.Frame):
     def _invoke_controller(self, method_name: str) -> None:
         controller = self.controller
         if not controller:
+            print(f"[PipelineRunControlsV2] No controller for {method_name}")
             return
         method = getattr(controller, method_name, None)
         if callable(method):
             try:
+                print(f"[PipelineRunControlsV2] Calling {method_name}")
                 method()
-            except Exception:
-                pass
+                print(f"[PipelineRunControlsV2] {method_name} completed")
+            except Exception as exc:
+                print(f"[PipelineRunControlsV2] {method_name} error: {exc!r}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"[PipelineRunControlsV2] {method_name} not found on controller")
 
     def _on_run_clicked(self) -> None:
         controller = self.controller
         if not controller:
+            print("[PipelineRunControlsV2] No controller for start_run_v2")
             return
         method = getattr(controller, "start_run_v2", None)
         if callable(method):
             try:
+                print("[PipelineRunControlsV2] Calling start_run_v2")
                 method()
-            except Exception:
-                pass
+                print("[PipelineRunControlsV2] start_run_v2 completed")
+            except Exception as exc:
+                print(f"[PipelineRunControlsV2] start_run_v2 error: {exc!r}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[PipelineRunControlsV2] start_run_v2 not found on controller")
 
     def _on_stop_clicked(self) -> None:
         controller = self.controller
         if not controller:
+            print("[PipelineRunControlsV2] No controller for on_stop_clicked")
             return
         method = getattr(controller, "on_stop_clicked", None)
         if callable(method):
             try:
+                print("[PipelineRunControlsV2] Calling on_stop_clicked")
                 method()
-            except Exception:
-                pass
+                print("[PipelineRunControlsV2] on_stop_clicked completed")
+            except Exception as exc:
+                print(f"[PipelineRunControlsV2] on_stop_clicked error: {exc!r}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[PipelineRunControlsV2] on_stop_clicked not found on controller")
 
     def update_from_app_state(self, app_state: Any | None) -> None:
         """Refresh UI to reflect run mode and queue/running state."""

@@ -17,6 +17,8 @@ import pytest
 
 from src.controller.job_service import JobService
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunResult
+from src.pipeline.payload_builder import build_sdxl_payload
+from src.pipeline.stage_sequencer import StageSequencer
 from src.pipeline.run_config import PromptSource, RunConfig
 from src.queue.job_history_store import (
     JSONLJobHistoryStore,
@@ -640,3 +642,44 @@ class TestJobHistoryFromRunConfig:
         assert entry.prompt_source == "pack"
         assert entry.prompt_pack_id == "my-pack-456"
         assert entry.prompt_keys == ["prompt1", "prompt2"]
+
+
+def test_pipeline_payload_includes_refiner_and_hires_config() -> None:
+    """Ensure the canonical payload receives refiner/hires selections from the config."""
+    pipeline_config = {
+        "txt2img": {
+            "model": "test-model",
+            "sampler_name": "Euler a",
+            "steps": 20,
+            "cfg_scale": 8.5,
+            "refiner_enabled": True,
+            "refiner_model_name": "test-refiner",
+            "refiner_switch_at": 0.25,
+        },
+        "hires_fix": {
+            "enabled": True,
+            "upscaler_name": "Latent 2x",
+            "upscale_factor": 2.3,
+            "denoise": 0.6,
+            "steps": 5,
+        },
+    }
+
+    plan = StageSequencer().build_plan(pipeline_config)
+    assert plan.stages, "Pipeline plan should contain at least one stage"
+    stage = plan.stages[0]
+    payload = build_sdxl_payload(stage)
+
+    assert payload["refiner_enabled"] is True
+    assert payload["refiner_model_name"] == "test-refiner"
+    assert payload["refiner_switch_step"] == pytest.approx(0.25)
+
+    assert payload["hires_fix"] is True
+    assert payload["enable_hr"] is True
+    assert payload["hires_upscaler_name"] == "Latent 2x"
+    assert payload["hr_upscaler"] == "Latent 2x"
+    assert payload["hires_denoise_strength"] == pytest.approx(0.6)
+    assert payload["denoising_strength"] == pytest.approx(0.6)
+    assert payload["hires_scale"] == pytest.approx(2.3)
+    assert payload["hr_scale"] == pytest.approx(2.3)
+    assert payload["hr_second_pass_steps"] == 5

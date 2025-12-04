@@ -1,4 +1,11 @@
-"""Compatibility wrapper that exposes the GUI pipeline controller at src.controller."""
+"""Compatibility wrapper that exposes the GUI pipeline controller at src.controller.
+
+PipelineController – V2 Run Path (summary)
+
+GUI Run buttons → AppController._start_run_v2 → PipelineController.start_pipeline
+→ JobService / SingleNodeJobRunner → PipelineController._run_pipeline_job
+→ run_pipeline (PipelineRunner-backed) → Executor/API → images in output_dir.
+"""
 
 from __future__ import annotations
 
@@ -104,26 +111,40 @@ class PipelineController(_GUIPipelineController):
         return GuiOverrides()
 
     def _extract_state_overrides(self) -> GuiOverrides:
+        import logging
+        logger = logging.getLogger(__name__)
+        
         extractor = getattr(self.state_manager, "get_pipeline_overrides", None)
         if callable(extractor):
             try:
-                return self._coerce_overrides(extractor())
+                result = extractor()
+                # Only use if it contains actual data
+                if result and isinstance(result, dict):
+                    logger.info("_extract_state_overrides: using get_pipeline_overrides(), result=%s", result)
+                    return self._coerce_overrides(result)
             except Exception:
                 pass
 
         if hasattr(self.state_manager, "pipeline_overrides"):
-            try:
-                return self._coerce_overrides(getattr(self.state_manager, "pipeline_overrides"))
-            except Exception:
-                pass
+            overrides = getattr(self.state_manager, "pipeline_overrides")
+            # Only use pipeline_overrides if it contains actual data
+            if overrides and isinstance(overrides, dict):
+                try:
+                    logger.info("_extract_state_overrides: using pipeline_overrides attr, value=%s", overrides)
+                    return self._coerce_overrides(overrides)
+                except Exception:
+                    pass
 
         fallback = getattr(self, "get_gui_overrides", None)
         if callable(fallback):
             try:
-                return self._coerce_overrides(fallback())
-            except Exception:
-                pass
+                result = fallback()
+                logger.info("_extract_state_overrides: using get_gui_overrides() fallback, result=%s", result)
+                return self._coerce_overrides(result)
+            except Exception as e:
+                logger.error("_extract_state_overrides: get_gui_overrides() failed: %s", e)
 
+        logger.warning("_extract_state_overrides: returning empty GuiOverrides()")
         return GuiOverrides()
 
     def get_webui_connection_state(self):
@@ -565,6 +586,18 @@ class PipelineController(_GUIPipelineController):
 
     def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
         """Run pipeline synchronously and return result."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(
+            "run_pipeline called with config: prompt=%r, model=%r, sampler=%r, steps=%s, cfg_scale=%s, width=%s, height=%s",
+            config.prompt[:50] if config.prompt else "(empty)",
+            config.model,
+            config.sampler,
+            config.steps,
+            config.cfg_scale,
+            config.width,
+            config.height,
+        )
         if self._pipeline_runner is not None:
             result = self._pipeline_runner.run(config, self.cancel_token)
         else:

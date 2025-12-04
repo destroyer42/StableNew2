@@ -239,7 +239,14 @@ class Pipeline:
                 error.message,
             )
             raise PipelineStageError(error)
-        return outcome.result
+        # Convert GenerateResult to dict for compatibility with existing code
+        result = outcome.result
+        return {
+            "images": result.images,
+            "info": result.info,
+            "stage": result.stage,
+            "timings": result.timings,
+        }
 
     def _log_pipeline_cancellation(self, phase: str, exc: Exception) -> None:
         """Emit a consistent INFO-level log for pipeline cancellations."""
@@ -1855,8 +1862,12 @@ class Pipeline:
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Build txt2img payload
-            txt2img_config = config.get("txt2img", {})
+            # Build txt2img payload - config may have txt2img sub-dict OR be flat
+            # Support both formats for compatibility
+            txt2img_config = config.get("txt2img", None)
+            if txt2img_config is None:
+                # Flat payload format from PipelineRunner._build_stage_payload
+                txt2img_config = config
 
             # Optionally apply global NSFW prevention to negative prompt based on stage flag
             apply_global = config.get("pipeline", {}).get("apply_global_negative_txt2img", True)

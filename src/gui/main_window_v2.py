@@ -186,6 +186,18 @@ class MainWindowV2:
                     core_config_panel._controller = controller
             except Exception:
                 pass
+        # Update run_controls with the controller
+        if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "run_controls"):
+            try:
+                self.pipeline_tab.run_controls.controller = controller
+            except Exception:
+                pass
+        # Update preview_panel with the controller
+        if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "preview_panel"):
+            try:
+                self.pipeline_tab.preview_panel.controller = controller
+            except Exception:
+                pass
 
     def update_pack_list(self, packs: list[str]) -> None:
         left = getattr(self, "left_zone", None)

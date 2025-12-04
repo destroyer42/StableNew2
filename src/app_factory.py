@@ -44,9 +44,9 @@ def build_v2_app(
         root=root,
         app_state=app_state,
         webui_manager=webui_manager,
-        app_controller=None,
+        app_controller=app_controller,
         packs_controller=None,
-        pipeline_controller=None,
+        pipeline_controller=app_controller.pipeline_controller,
         gui_log_handler=app_controller.get_gui_log_handler(),
     )
 

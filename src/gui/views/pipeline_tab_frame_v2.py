@@ -239,6 +239,9 @@ class PipelineTabFrame(ttk.Frame):
     def _sync_state_overrides(self) -> None:
         if not self.state_manager:
             return
+        # Guard against early callback before stage_cards_panel is assigned
+        if not hasattr(self, "stage_cards_panel") or self.stage_cards_panel is None:
+            return
         prompt_text = ""
         try:
             if self.prompt_workspace_state is not None:

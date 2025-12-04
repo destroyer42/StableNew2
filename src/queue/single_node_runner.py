@@ -5,12 +5,15 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Callable, Optional
 
 from src.queue.job_model import JobStatus, Job
 from src.queue.job_queue import JobQueue
+
+logger = logging.getLogger(__name__)
 
 
 class SingleNodeJobRunner:
@@ -66,6 +69,7 @@ class SingleNodeJobRunner:
                 self.job_queue.mark_completed(job.job_id, result=result)
                 self._notify(job, JobStatus.COMPLETED)
             except Exception as exc:  # noqa: BLE001
+                logger.error("Job %s failed with error: %s", job.job_id, exc, exc_info=True)
                 self.job_queue.mark_failed(job.job_id, error_message=str(exc))
                 self._notify(job, JobStatus.FAILED)
             finally:
@@ -89,6 +93,7 @@ class SingleNodeJobRunner:
             self._notify(job, JobStatus.COMPLETED)
             return result
         except Exception as exc:  # noqa: BLE001
+            logger.error("Job %s failed with error: %s", job.job_id, exc, exc_info=True)
             self.job_queue.mark_failed(job.job_id, error_message=str(exc))
             self._notify(job, JobStatus.FAILED)
             raise
