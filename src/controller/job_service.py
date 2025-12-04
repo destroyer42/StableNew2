@@ -57,9 +57,33 @@ class JobService:
         mode = (job.run_mode or "queue").lower()
         logging.info("Submitting job %s with run_mode=%s", job.job_id, mode)
         if mode == "direct":
-            self.run_now(job)
+            self.submit_direct(job)
         else:
-            self.enqueue(job)
+            self.submit_queued(job)
+
+    def submit_direct(self, job: Job) -> dict | None:
+        """Execute a job synchronously (bypasses queue for 'Run Now' semantics).
+        
+        PR-106: Explicit API for direct execution path.
+        """
+        logging.info("Direct execution of job %s", job.job_id)
+        self.job_queue.submit(job)
+        self._emit_queue_updated()
+        try:
+            result = self.runner.run_once(job)
+            return result
+        except Exception:
+            raise
+
+    def submit_queued(self, job: Job) -> None:
+        """Submit a job to the queue for background execution.
+        
+        PR-106: Explicit API for queued execution path.
+        """
+        logging.info("Queuing job %s for background execution", job.job_id)
+        self.enqueue(job)
+        if not self.runner.is_running():
+            self.runner.start()
 
     def pause(self) -> None:
         self.runner.stop()

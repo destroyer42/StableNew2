@@ -12,7 +12,7 @@ from src.gui.state import StateManager
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.queue_execution_controller import QueueExecutionController
-from src.queue.job_model import JobStatus, Job
+from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
 from src.gui.state import GUIState
@@ -34,6 +34,49 @@ class PipelineController(_GUIPipelineController):
         if mode_lower == "direct":
             return "direct"
         return "queue"
+
+    def _build_job(
+        self,
+        config: PipelineConfig,
+        *,
+        run_mode: str = "queue",
+        source: str = "gui",
+        prompt_source: str = "manual",
+        prompt_pack_id: str | None = None,
+        lora_settings: dict | None = None,
+        randomizer_metadata: dict | None = None,
+        learning_enabled: bool = False,
+    ) -> Job:
+        """Build a Job with full metadata for provenance tracking (PR-106)."""
+        # Create config snapshot for auditing
+        config_snapshot: dict[str, Any] = {}
+        if config is not None:
+            try:
+                config_snapshot = {
+                    "prompt": getattr(config, "prompt", ""),
+                    "model": getattr(config, "model", "") or getattr(config, "model_name", ""),
+                    "steps": getattr(config, "steps", None),
+                    "cfg_scale": getattr(config, "cfg_scale", None),
+                    "width": getattr(config, "width", None),
+                    "height": getattr(config, "height", None),
+                    "sampler": getattr(config, "sampler", None),
+                }
+            except Exception:
+                config_snapshot = {}
+
+        return Job(
+            job_id=str(uuid.uuid4()),
+            pipeline_config=config,
+            priority=JobPriority.NORMAL,
+            run_mode=run_mode,
+            source=source,
+            prompt_source=prompt_source,
+            prompt_pack_id=prompt_pack_id,
+            config_snapshot=config_snapshot,
+            lora_settings=lora_settings,
+            randomizer_metadata=randomizer_metadata,
+            learning_enabled=learning_enabled,
+        )
 
     def _coerce_overrides(self, overrides: GuiOverrides | dict[str, Any] | None) -> GuiOverrides:
         if isinstance(overrides, GuiOverrides):
@@ -218,6 +261,8 @@ class PipelineController(_GUIPipelineController):
                 pass
         self._job_history_service: JobHistoryService | None = None
         self._active_job_id: str | None = None
+        self._last_run_config: dict[str, Any] | None = None
+        self._last_run_config: dict[str, Any] | None = None
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
         history_store = self._job_controller.get_history_store()
@@ -298,6 +343,9 @@ class PipelineController(_GUIPipelineController):
 
         return self._last_stage_execution_plan
 
+    def get_last_run_config_for_tests(self) -> dict[str, Any] | None:
+        return self._last_run_config
+
     def get_last_stage_events_for_tests(self) -> list[dict] | None:
         """Return last emitted stage events."""
 
@@ -310,6 +358,7 @@ class PipelineController(_GUIPipelineController):
         *,
         on_complete: Callable[[dict[Any, Any]], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> bool:
         """Submit a pipeline job using assembler-enforced config."""
         if not self.state_manager.can_run():
@@ -323,6 +372,15 @@ class PipelineController(_GUIPipelineController):
                 except Exception:
                     pass
                 return False
+
+        if run_config is not None:
+            self._last_run_config = run_config
+            requested_mode = (run_config.get("run_mode") or "").strip().lower()
+            try:
+                if requested_mode in {"direct", "queue"}:
+                    self.state_manager.pipeline_state.run_mode = requested_mode
+            except Exception:
+                pass
 
         try:
             config = self._build_pipeline_config_from_state()
@@ -366,20 +424,40 @@ class PipelineController(_GUIPipelineController):
         *,
         pipeline_func: Callable[[], dict[Any, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Run a pipeline job using the assembled config or a compatibility callable."""
+        """Run a pipeline job using the assembled config or a compatibility callable.
 
+        Priority:
+        1. Legacy `run_full_pipeline` hook (if provided).
+        2. Explicit `pipeline_func` callable (tests/compat).
+        3. Default: use this controller's `run_pipeline` (PipelineRunner-backed).
+        """
+
+        # 1) Legacy compatibility hook (used by older harnesses/tests)
         runner = getattr(self, "run_full_pipeline", None)
         if callable(runner):
             maybe_result = runner(config)
             if isinstance(maybe_result, dict):
                 return maybe_result
 
+        # 2) Explicit pipeline callable (primarily for tests)
         if pipeline_func:
             maybe_result = pipeline_func()
             if isinstance(maybe_result, dict):
                 return maybe_result
 
-        return {}
+        # 3) Default path: run via PipelineRunner through this controller
+        try:
+            run_result = self.run_pipeline(config)
+        except Exception as exc:  # noqa: BLE001
+            # Surface error in a structured way so JobQueue/GUI can display it.
+            return {"error": str(exc)}
+
+        # Normalize result into a dict payload for JobQueue/history.
+        if hasattr(run_result, "to_dict"):
+            return {"result": run_result.to_dict()}
+        if isinstance(run_result, dict):
+            return run_result
+        return {"result": run_result}
 
     def stop_pipeline(self) -> bool:
         """Cancel the active job."""

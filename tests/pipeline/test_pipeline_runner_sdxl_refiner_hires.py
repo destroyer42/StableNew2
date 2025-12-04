@@ -29,7 +29,8 @@ class RecordingPipeline:
         self.stage_events: list[dict[str, object]] = []
 
     def run_txt2img_stage(self, prompt, negative_prompt, config, output_dir, image_name, cancel_token=None):
-        self.calls.append(("txt2img", dict(config.get("txt2img", {}))))
+        # config is the stage payload, not a nested config dict
+        self.calls.append(("txt2img", dict(config)))
         return {"path": str(Path(output_dir) / f"{image_name}.png")}
 
     def run_img2img_stage(self, input_image_path, prompt, config, output_dir, cancel_token=None):

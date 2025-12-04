@@ -15,13 +15,16 @@ from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
 from src.gui.state import CancellationError
 from src.pipeline.executor import Pipeline, PipelineStageError
+from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.stage_sequencer import (
     StageExecution,
     StageExecutionPlan,
     StageMetadata,
+    StageSequencer,
     StageTypeEnum,
     build_stage_execution_plan,
 )
+from src.pipeline.stage_models import InvalidStagePlanError
 from src.utils import StructuredLogger, get_logger, LogContext, log_with_ctx
 from src.utils.config import ConfigManager
 
@@ -94,6 +97,7 @@ class PipelineRunner:
         on_learning_record: Optional[Callable[[LearningRecord], None]] = None,
         runs_base_dir: str | None = None,
         learning_enabled: bool = False,
+        sequencer: StageSequencer | None = None,
     ) -> None:
         self._api_client = api_client
         self._structured_logger = structured_logger
@@ -104,6 +108,7 @@ class PipelineRunner:
         self._last_run_result: PipelineRunResult | None = None
         self._runs_base_dir = runs_base_dir or "runs"
         self._learning_enabled = bool(learning_enabled)
+        self._sequencer = sequencer or StageSequencer()
 
     def _ensure_not_cancelled(self, cancel_token: "CancelToken" | None, context: str) -> None:
         if cancel_token and getattr(cancel_token, "is_cancelled", None) and cancel_token.is_cancelled():
@@ -312,7 +317,7 @@ class PipelineRunner:
                 payload.get("prompt", ""),
                 payload,
                 run_dir,
-                image_name=image_name,
+                image_name,
                 cancel_token=cancel_token,
             )
         if stage_type == StageTypeEnum.UPSCALE:
@@ -429,23 +434,44 @@ class PipelineRunner:
         negative_prompt: str,
         input_image_path: Path | None,
     ) -> dict[str, Any]:
-        """Construct a per-stage payload from the plan metadata."""
+        """Construct a per-stage payload from the plan metadata.
 
-        payload = dict(stage.config.payload or {})
-        payload.setdefault("prompt", prompt)
-        payload.setdefault("negative_prompt", negative_prompt)
+        Uses the canonical build_sdxl_payload() builder and then applies
+        runner-specific augmentations (prompt, model, input images).
+        """
+        # Build last_image_meta for chaining if we have an input image
+        last_image_meta: dict[str, Any] | None = None
+        if input_image_path:
+            encoded = self._pipeline._load_image_base64(input_image_path)
+            if encoded:
+                last_image_meta = {
+                    "images": [encoded],
+                    "path": str(input_image_path),
+                }
 
-        payload.setdefault("model", config.model)
-        payload.setdefault("sampler_name", config.sampler)
+        # Use canonical payload builder for refiner/hires/upscaler consistency
+        payload = build_sdxl_payload(stage, last_image_meta)  # type: ignore[arg-type]
+
+        # Apply runner-specific overrides
+        payload["prompt"] = prompt
+        payload["negative_prompt"] = negative_prompt
+        payload["model"] = config.model
+        payload["sd_model"] = config.model
+        payload["sampler_name"] = config.sampler
         payload.setdefault("scheduler", executor_config.get("txt2img", {}).get("scheduler"))
-        payload.setdefault("steps", config.steps)
-        payload.setdefault("cfg_scale", config.cfg_scale)
+        payload["steps"] = config.steps
+        payload["cfg_scale"] = config.cfg_scale
+        payload["width"] = config.width
+        payload["height"] = config.height
+
         if config.pack_name:
-            payload.setdefault("pack_name", config.pack_name)
+            payload["pack_name"] = config.pack_name
         if config.preset_name:
-            payload.setdefault("preset_name", config.preset_name)
+            payload["preset_name"] = config.preset_name
 
         payload["stage_type"] = stage.stage_type
+
+        # Preserve stage flags from metadata for backward compatibility
         metadata = stage.config.metadata
         if isinstance(metadata, dict):
             metadata = StageMetadata(
@@ -454,31 +480,19 @@ class PipelineRunner:
                 refiner_switch_at=metadata.get("refiner_switch_at"),
                 hires_enabled=bool(metadata.get("hires_enabled", False)),
                 hires_upscale_factor=metadata.get("hires_upscale_factor"),
+                hires_upscaler_name=metadata.get("hires_upscaler_name"),
                 hires_denoise=metadata.get("hires_denoise"),
                 hires_steps=metadata.get("hires_steps"),
                 stage_flags=metadata.get("stage_flags", {}),
             )
-        if not isinstance(metadata, StageMetadata):
-            metadata = StageMetadata()
-            payload["refiner_enabled"] = metadata.refiner_enabled
-            payload["refiner_model_name"] = metadata.refiner_model_name
-            if metadata.refiner_switch_at is not None:
-                payload["refiner_switch_at"] = metadata.refiner_switch_at
-            payload["hires_enabled"] = metadata.hires_enabled
-            if metadata.hires_upscale_factor is not None:
-                payload["hires_upscale_factor"] = metadata.hires_upscale_factor
-            if metadata.hires_denoise is not None:
-                payload["hires_denoise"] = metadata.hires_denoise
-            if metadata.hires_steps is not None:
-                payload["hires_steps"] = metadata.hires_steps
+        if isinstance(metadata, StageMetadata):
             for flag, value in metadata.stage_flags.items():
                 payload.setdefault(flag, value)
 
+        # Set input image path for logging/tracking
         if input_image_path:
-            encoded = self._pipeline._load_image_base64(input_image_path)
-            if encoded:
-                payload["init_images"] = [encoded]
-                payload["input_image_path"] = str(input_image_path)
+            payload["input_image_path"] = str(input_image_path)
+
         return payload
 
     def _emit_learning_record(

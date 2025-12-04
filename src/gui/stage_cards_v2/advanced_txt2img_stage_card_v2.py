@@ -181,7 +181,15 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         )
         self.scheduler_combo.grid(row=1, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(meta, text="Clip skip", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
-        self.clip_skip_spin = tk.Spinbox(meta, from_=1, to=8, increment=1, textvariable=self.clip_skip_var, width=6)
+        self.clip_skip_spin = ttk.Spinbox(
+            meta,
+            from_=1,
+            to=8,
+            increment=1,
+            textvariable=self.clip_skip_var,
+            width=6,
+            style="Dark.TSpinbox",
+        )
         self.clip_skip_spin.grid(row=1, column=3, sticky="ew")
 
         ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(row=2, column=0, sticky="w", pady=(6, 2))
@@ -255,7 +263,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             command=self._on_refiner_toggle,
             style="Dark.TCheckbutton",
         ).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(refiner_frame, text="Refiner model", style=BODY_LABEL_STYLE).grid(
+        ttk.Label(refiner_frame, text="Refiner model", style="Dark.TLabel").grid(
             row=1, column=0, sticky="w", pady=(4, 0)
         )
         self.refiner_model_combo = ttk.Combobox(
@@ -266,19 +274,19 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.refiner_model_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(refiner_frame, text="Refiner start (%)", style=BODY_LABEL_STYLE).grid(
+        ttk.Label(refiner_frame, text="Refiner start (%)", style="Dark.TLabel").grid(
             row=2, column=0, sticky="w", pady=(4, 0)
         )
-        tk.Scale(
+        ttk.Scale(
             refiner_frame,
             from_=0,
             to=100,
             orient="horizontal",
             variable=self.refiner_switch_var,
             command=lambda value: self._on_refiner_switch_changed(),
-            showvalue=True,
             length=180,
-            resolution=1,
+            style="Dark.Horizontal.TScale",
+            takefocus=False,
         ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
 
         hires_frame = ttk.LabelFrame(parent, text="Hires fix", style=SURFACE_FRAME_STYLE)
@@ -292,7 +300,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             command=self._on_hires_toggle,
             style="Dark.TCheckbutton",
         ).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(hires_frame, text="Upscaler", style=BODY_LABEL_STYLE).grid(
+        ttk.Label(hires_frame, text="Upscaler", style="Dark.TLabel").grid(
             row=1, column=0, sticky="w", pady=(4, 0)
         )
         upscaler_values = self._load_upscaler_options()
@@ -304,7 +312,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.hires_upscaler_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(hires_frame, text="Upscale factor", style=BODY_LABEL_STYLE).grid(
+        ttk.Label(hires_frame, text="Upscale factor", style="Dark.TLabel").grid(
             row=2, column=0, sticky="w", pady=(4, 0)
         )
         tk.Spinbox(
@@ -315,10 +323,10 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             textvariable=self.hires_factor_var,
             width=8,
         ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(hires_frame, text="Hires steps", style=BODY_LABEL_STYLE).grid(
+        ttk.Label(hires_frame, text="Hires steps", style="Dark.TLabel").grid(
             row=3, column=0, sticky="w", pady=(4, 0)
         )
-        tk.Spinbox(
+        ttk.Spinbox(
             hires_frame,
             from_=0,
             to=200,
@@ -326,20 +334,21 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             textvariable=self.hires_steps_var,
             width=8,
             command=self._on_hires_steps_changed,
+            style="Dark.TSpinbox",
         ).grid(row=3, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(hires_frame, text="Denoise", style=BODY_LABEL_STYLE).grid(
+        ttk.Label(hires_frame, text="Denoise", style="Dark.TLabel").grid(
             row=4, column=0, sticky="w", pady=(4, 0)
         )
-        tk.Scale(
+        ttk.Scale(
             hires_frame,
             from_=0.0,
             to=1.0,
             orient="horizontal",
             variable=self.hires_denoise_var,
             command=lambda value: self._on_hires_denoise_changed(),
-            showvalue=True,
             length=180,
-            resolution=0.01,
+            style="Dark.Horizontal.TScale",
+            takefocus=False,
         ).grid(row=4, column=1, sticky="ew", pady=(4, 0))
         ttk.Checkbutton(
             hires_frame,

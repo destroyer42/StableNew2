@@ -1,7 +1,54 @@
 # Subsystem: Learning
 # Role: Declares model and LoRA profile descriptors for learning runs.
 
-"""ModelProfile and LoraProfile sidecar dataclasses and helpers."""
+"""Model Profiles & Style-Aware Defaults (V2-P1)
+
+This module defines the data structures and helpers used to represent
+**ModelProfiles** – structured sidecar "priors" that StableNewV2 uses to
+bootstrap good pipeline defaults for a given base model.
+
+ModelProfiles are consumed by:
+- The controller / app state when constructing a fresh PipelineConfig.
+- The Learning System as a baseline config to vary in controlled experiments.
+- Future analytics and recommendation layers.
+(See Learning_System_Spec_v2 for the full design.)
+
+Core Concepts
+
+1. ModelProfile
+   A ModelProfile describes recommended settings for a single base model
+   (e.g., SDXL base, RealisticVision, WD1.5, AnythingV5).  In addition to
+   presets and sampler/scheduler recommendations, V2-P1 introduces refiner
+   and hires-fix defaults:
+
+   - default_refiner_id: Optional[str]
+       Logical identifier for the recommended refiner (per docs/model_defaults_v2/V2-P1.md §2.1).
+   - default_hires_upscaler_id: Optional[str]
+       Logical identifier for the hires upscaler (per docs/model_defaults_v2/V2-P1.md §2.2).
+   - default_hires_denoise: Optional[float]
+       Suggested hires denoise strength within the ranges described in §3.3.
+   - style_profile_id: Optional[str]
+       Optional link to a StyleProfile like "sdxl_realism" or "anime".
+
+   These fields are priors only; they are used only when there is no last-run
+   or preset override for a pipeline run.
+
+2. Precedence
+   Defaults from ModelProfiles follow this order:
+   1. Last-run config
+   2. User preset
+   3. ModelProfile/style defaults
+   4. Engine fallback
+
+3. Learning & Randomizer Integration
+   Learning treats ModelProfile defaults as the baseline and may sweep hires
+   denoise nearby. Randomizer does not change refiner/hires by default.
+
+Implementation guidance:
+- Canonical IDs live in docs/model_defaults_v2/V2-P1.md.
+- ModelProfiles may leave these fields None to fall back to existing behavior.
+- Keep this module GUI-free.
+"""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -39,6 +86,22 @@ class ModelProfile:
     tags: List[str]
     recommended_presets: List[ModelPreset]
     learning_summary: Dict[str, Any] = field(default_factory=dict)
+    default_refiner_id: Optional[str] = None
+    default_hires_upscaler_id: Optional[str] = None
+    default_hires_denoise: Optional[float] = None
+    style_profile_id: Optional[str] = None
+
+
+# ModelProfile refiner/hires defaults (V2-P1):
+#   default_refiner_id: Optional[str]
+#       Canonical refiner ID (see docs/model_defaults_v2/V2-P1.md §2.1).
+#   default_hires_upscaler_id: Optional[str]
+#       Canonical hires upscaler ID (see docs/model_defaults_v2/V2-P1.md §2.2).
+#   default_hires_denoise: Optional[float]
+#       Recommended hires denoise strength (see §3.3 for ranges).
+#   style_profile_id: Optional[str]
+#       Link to a style profile (e.g., "sdxl_realism", "anime").
+    style_profile_id: Optional[str] = None
 
 @dataclass
 class LoraRecommendedWeight:
@@ -140,3 +203,63 @@ def suggest_preset_for(model_profile: Optional[ModelProfile], lora_profiles: Seq
         source=chosen.source,
         preset_id=chosen.id,
     )
+
+
+STYLE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "sdxl_realism": {
+        "default_refiner_id": "sdxl_refiner_default",
+        "default_hires_upscaler_id": "Latent",
+        "default_hires_denoise": 0.25,
+    },
+    "sdxl_portrait": {
+        "default_refiner_id": "sdxl_portrait_refiner",
+        "default_hires_upscaler_id": "ESRGAN_4x",
+        "default_hires_denoise": 0.2,
+    },
+    "sdxl_stylized": {
+        "default_refiner_id": "sdxl_stylized_refiner",
+        "default_hires_upscaler_id": "4x-UltraSharp",
+        "default_hires_denoise": 0.35,
+    },
+    "sd15_realism": {
+        "default_refiner_id": "sd15_refiner_default",
+        "default_hires_upscaler_id": "Latent",
+        "default_hires_denoise": 0.3,
+    },
+    "anime": {
+        "default_refiner_id": "anime_refiner",
+        "default_hires_upscaler_id": "4x-UltraSharp",
+        "default_hires_denoise": 0.4,
+    },
+}
+
+
+def get_profile_defaults(profile: ModelProfile) -> dict[str, Any]:
+    for style_id, defaults in STYLE_DEFAULTS.items():
+        if style_id in profile.tags or style_id == profile.base_type:
+            return defaults
+    return {}
+
+
+def infer_style_id_for_model(model_name: str | None) -> str | None:
+    if not model_name:
+        return None
+    normalized = model_name.lower()
+    if "anime" in normalized or "wd" in normalized or "waifu" in normalized:
+        return "anime"
+    if "sdxl" in normalized:
+        if "portrait" in normalized or "face" in normalized:
+            return "sdxl_portrait"
+        if "stylized" in normalized or "stylize" in normalized:
+            return "sdxl_stylized"
+        return "sdxl_realism"
+    if "sd15" in normalized or "stable-diffusion-v1" in normalized or "v1-5" in normalized:
+        return "sd15_realism"
+    return None
+
+
+def get_model_profile_defaults_for_model(model_name: str | None) -> dict[str, Any]:
+    style_id = infer_style_id_for_model(model_name)
+    if not style_id:
+        return {}
+    return STYLE_DEFAULTS.get(style_id, {})

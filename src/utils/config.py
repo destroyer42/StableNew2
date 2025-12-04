@@ -421,6 +421,25 @@ class ConfigManager:
 
         return merged
 
+    def _ensure_refiner_hires_fields(self, config: dict[str, Any]) -> None:
+        txt2img = config.setdefault("txt2img", {})
+        hires = config.setdefault("hires_fix", {})
+        defaults = {
+            "refiner_enabled": False,
+            "refiner_model_name": "",
+            "refiner_switch_at": 0.8,
+            "hires_enabled": False,
+            "hires_upscaler_name": "Latent",
+            "hires_upscale_factor": 2.0,
+            "hires_steps": 0,
+            "hires_denoise": 0.3,
+            "hires_use_base_model": True,
+        }
+        for key in ("refiner_enabled", "refiner_model_name", "refiner_switch_at"):
+            txt2img.setdefault(key, defaults[key])
+        for key in ("hires_enabled", "hires_upscaler_name", "hires_upscale_factor", "hires_steps", "hires_denoise", "hires_use_base_model"):
+            hires.setdefault(key, defaults[key])
+
     def get_pack_overrides(self, pack_name: str) -> dict[str, Any]:
         """
         Get pack-specific configuration overrides.
@@ -691,7 +710,9 @@ class ConfigManager:
 
     def _merge_config_with_defaults(self, config: dict[str, Any] | None) -> dict[str, Any]:
         base = self.get_default_config()
-        return self._deep_merge_dicts(base, config or {})
+        merged = self._deep_merge_dicts(base, config or {})
+        self._ensure_refiner_hires_fields(merged)
+        return merged
 
     def _deep_merge_dicts(self, base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
         merged = deepcopy(base)

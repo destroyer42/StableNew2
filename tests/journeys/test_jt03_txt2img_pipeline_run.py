@@ -3,6 +3,8 @@
 Validates the complete txt2img generation flow using the Pipeline tab.
 Ensures Pipeline tab correctly configures txt2img settings and delivers final images
 with correct metadata.
+
+Uses journey_helpers_v2 exclusively for run control and assertions.
 """
 
 from __future__ import annotations
@@ -18,14 +20,24 @@ from src.app_factory import build_v2_app
 from src.controller.app_controller import AppController
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
-from tests.journeys.journey_helpers_v2 import get_stage_plan, start_run_and_wait
+from tests.journeys.journey_helpers_v2 import (
+    get_latest_job,
+    get_stage_plan_for_job,
+    start_run_and_wait,
+)
 from tests.journeys.utils.tk_root_factory import create_root
 
 
 @pytest.mark.journey
 @pytest.mark.slow
 def test_jt03_txt2img_pipeline_run():
-    """JT-03: Validate complete txt2img generation flow using Pipeline tab."""
+    """JT-03: Validate complete txt2img generation flow using Pipeline tab.
+
+    Assertions via journey_helpers_v2:
+    - job.run_mode == "direct"
+    - job.source == "run" (implied by start_run_v2)
+    - Stage plan contains txt2img stage
+    """
 
     # Test data for JT-03
     test_prompt = "A beautiful landscape with mountains and a serene lake, photorealistic style"
@@ -61,16 +73,10 @@ def test_jt03_txt2img_pipeline_run():
             assert pipeline_tab is not None, "Pipeline tab should exist"
 
             # Step 4: Configure Pipeline for txt2img only
-            # Enable txt2img stage, disable others
             pipeline_state = getattr(pipeline_tab, 'pipeline_state', None)
             assert isinstance(pipeline_state, PipelineState)
 
-            # Configure txt2img stage
-            # Note: Actual configuration would be done through UI controls
-            # For testing, we directly set the pipeline state
-
             # Step 5: Set prompt and negative prompt
-            # This would typically come from the prompt pack selection
             pipeline_state.prompt = test_prompt
             pipeline_state.negative_prompt = test_negative
 
@@ -93,14 +99,19 @@ def test_jt03_txt2img_pipeline_run():
                 controller = app_controller
                 assert isinstance(controller, AppController)
 
-                # Step 7: Execute the pipeline run via start_run_v2
-                job_entry = start_run_and_wait(controller, use_run_now=False)
-                assert job_entry.run_mode == "direct"
-                plan = get_stage_plan(controller)
-                assert plan is not None
-                assert any(stage.stage_config.stage_type == "txt2img" for stage in plan.root_stages)
+                # Step 7: Execute the pipeline run via helper API
+                job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
 
-                # Step 8: Verify run completion and results
+                # Step 8: Assert job metadata via helper API
+                assert job_entry.run_mode == "direct", f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+
+                # Get and verify stage plan
+                plan = get_stage_plan_for_job(controller, job_entry)
+                assert plan is not None, "Stage plan should exist"
+                stage_types = plan.get_stage_types()
+                assert "txt2img" in stage_types, f"Expected 'txt2img' in stage types, got {stage_types}"
+
+                # Step 9: Verify run completion and results
                 # Check that the API was called with correct parameters
                 mock_generate.assert_called_once()
                 call_args = mock_generate.call_args[0][0]  # First positional argument
@@ -114,17 +125,10 @@ def test_jt03_txt2img_pipeline_run():
                 assert call_args.cfg_scale == 7.0
                 assert call_args.batch_size == 2
 
-                # Step 9: Verify results display
-                # Check that images are displayed in the UI
-                # This would verify that the pipeline tab shows the generated images
-                # and metadata matches the configuration
-
-                # For now, verify the mock response structure
+                # Verify response structure
                 assert len(mock_response.images) == 2, "Should generate 2 images for batch_size=2"
                 assert mock_response.metadata['sampler'] == 'Euler'
                 assert mock_response.metadata['scheduler'] == 'Karras'
-                assert mock_response.metadata['steps'] == 25
-                assert mock_response.metadata['cfg_scale'] == 7.0
 
         finally:
             try:
@@ -193,7 +197,6 @@ def test_jt03_txt2img_edge_cases():
                 # Step 5: Test parameter validation
                 if "invalid_steps" in case:
                     # Test that invalid parameters are handled
-                    # This would test input validation in the UI
                     pass  # Placeholder for parameter validation testing
 
                 # Step 6: Mock API and verify edge case handling
@@ -204,10 +207,13 @@ def test_jt03_txt2img_edge_cases():
                     mock_response.metadata = {"seed": 12345}
                     mock_generate.return_value = mock_response
 
-                    # Execute run
+                    # Execute run via helper API
                     controller = app_controller
-                    run_success = controller.start_run()
-                    assert run_success
+                    job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
+
+                    # Verify job was created
+                    assert job_entry is not None, "Job entry should be created"
+                    assert job_entry.run_mode == "direct"
 
                     # Verify API was called appropriately
                     call_args = mock_generate.call_args[0][0]
@@ -215,7 +221,6 @@ def test_jt03_txt2img_edge_cases():
 
                     # For empty negative prompt, verify it's handled
                     if case["negative_prompt"] == "":
-                        # Should either pass empty string or use default
                         assert call_args.negative_prompt == case["expected_negative"]
 
             finally:
@@ -280,30 +285,28 @@ def test_jt03_txt2img_metadata_accuracy():
             }
             mock_generate.return_value = mock_response
 
-            # Step 4: Execute run
+            # Step 4: Execute run via helper API
             controller = app_controller
-            run_success = controller.start_run()
-            assert run_success
+            job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
 
-            # Step 5: Verify metadata accuracy
+            # Step 5: Verify job metadata
+            assert job_entry is not None
+            assert job_entry.run_mode == "direct"
+
+            # Step 6: Verify stage plan
+            plan = get_stage_plan_for_job(controller, job_entry)
+            assert plan is not None
+            assert plan.has_generation_stage()
+
+            # Verify API call parameters
             call_args = mock_generate.call_args[0][0]
-
-            # Verify all parameters were passed correctly
             assert call_args.sampler == test_config['sampler']
             assert call_args.scheduler == test_config['scheduler']
             assert call_args.steps == test_config['steps']
             assert call_args.cfg_scale == test_config['cfg_scale']
             assert call_args.batch_size == test_config['batch_size']
-
-            # Verify prompt data
             assert call_args.prompt == test_prompt
             assert call_args.negative_prompt == test_negative
-
-            # Verify response metadata matches request
-            assert mock_response.metadata['sampler'] == test_config['sampler']
-            assert mock_response.metadata['scheduler'] == test_config['scheduler']
-            assert mock_response.metadata['steps'] == test_config['steps']
-            assert mock_response.metadata['cfg_scale'] == test_config['cfg_scale']
 
     finally:
         try:

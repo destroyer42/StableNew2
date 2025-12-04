@@ -2,6 +2,8 @@
 
 Validates img2img and ADetailer workflows, ensuring a base image is properly
 transformed using configured parameters without losing prompt context or metadata.
+
+Uses journey_helpers_v2 exclusively for run control and assertions.
 """
 
 from __future__ import annotations
@@ -15,14 +17,25 @@ import pytest
 from src.app_factory import build_v2_app
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
-from tests.journeys.journey_helpers_v2 import get_stage_plan, start_run_and_wait
+from tests.journeys.journey_helpers_v2 import (
+    get_latest_job,
+    get_stage_plan_for_job,
+    start_run_and_wait,
+)
 from tests.journeys.utils.tk_root_factory import create_root
 
 
 @pytest.mark.journey
 @pytest.mark.slow
 def test_jt04_img2img_adetailer_pipeline_run():
-    """JT-04: Validate img2img and ADetailer pipeline transformation."""
+    """JT-04: Validate img2img and ADetailer pipeline transformation.
+
+    Assertions via journey_helpers_v2:
+    - job.run_mode == "direct"
+    - job.source == "run" (implied by start_run_v2)
+    - Stage plan contains img2img and adetailer stages
+    - Stage ordering: img2img before adetailer
+    """
 
     # Test data for JT-04
     test_prompt = "A beautiful landscape transformed with artistic style"
@@ -55,10 +68,7 @@ def test_jt04_img2img_adetailer_pipeline_run():
             assert loaded_pack.slots[0].text == test_prompt
 
             # Step 3: Create or simulate a base image (from JT-03 or test image)
-            # For testing, we'll create a mock base image file
             base_image_path = temp_path / "base_test_image.png"
-            # In a real scenario, this would be output from JT-03
-            # For now, we'll just ensure the path exists for the mock
             base_image_path.touch()  # Create empty file as placeholder
 
             # Step 4: Access Pipeline tab
@@ -68,14 +78,6 @@ def test_jt04_img2img_adetailer_pipeline_run():
             # Step 5: Configure Pipeline for img2img + ADetailer
             pipeline_state = getattr(pipeline_tab, 'pipeline_state', None)
             assert isinstance(pipeline_state, PipelineState)
-
-            # Configure img2img stage
-            # Note: Actual configuration would be done through UI controls
-            # For testing, we directly set the pipeline state
-
-            # Configure ADetailer
-            # Note: ADetailer configuration would be done through UI controls
-            # For testing, we simulate the configuration
 
             # Set pipeline state
             pipeline_state.prompt = test_prompt
@@ -106,15 +108,29 @@ def test_jt04_img2img_adetailer_pipeline_run():
                 mock_generate.return_value = mock_response
 
                 controller = app_controller
-                job_entry = start_run_and_wait(controller, use_run_now=False)
-                assert job_entry.run_mode == "direct"
-                plan = get_stage_plan(controller)
-                assert plan is not None
-                stage_types = [stage.stage_config.stage_type for stage in plan.root_stages]
-                assert "img2img" in stage_types
-                assert "adetailer" in stage_types
-                assert stage_types.index("img2img") < stage_types.index("adetailer")
 
+                # Step 7: Execute run via helper API
+                job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
+
+                # Step 8: Assert job metadata
+                assert job_entry.run_mode == "direct", f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+
+                # Step 9: Get and verify stage plan
+                plan = get_stage_plan_for_job(controller, job_entry)
+                assert plan is not None, "Stage plan should exist"
+
+                stage_types = plan.get_stage_types()
+                assert "img2img" in stage_types, f"Expected 'img2img' in stage types, got {stage_types}"
+                assert "adetailer" in stage_types, f"Expected 'adetailer' in stage types, got {stage_types}"
+
+                # Verify stage ordering: img2img before adetailer
+                img2img_idx = stage_types.index("img2img")
+                adetailer_idx = stage_types.index("adetailer")
+                assert img2img_idx < adetailer_idx, (
+                    f"img2img (index {img2img_idx}) should come before adetailer (index {adetailer_idx})"
+                )
+
+                # Step 10: Verify API call parameters
                 mock_generate.assert_called_once()
                 call_args = mock_generate.call_args[0][0]
 
@@ -128,14 +144,9 @@ def test_jt04_img2img_adetailer_pipeline_run():
                 assert call_args.cfg_scale == 7.0
 
                 # Verify ADetailer parameters (if supported in API call)
-                # Note: ADetailer might be handled separately or as part of the pipeline
                 if hasattr(call_args, 'adetailer_enabled'):
                     assert call_args.adetailer_enabled is True
                     assert call_args.adetailer_model == 'face_yolov8n.pt'
-
-                # Step 9: Verify results display
-                # Check that transformed image is displayed in the UI
-                # and metadata matches the configuration
 
                 # Verify response metadata
                 assert mock_response.metadata['stage'] == 'img2img'
@@ -233,9 +244,9 @@ def test_jt04_img2img_edge_cases():
                         mock_response.error = "Base image not found"
                         mock_generate.return_value = mock_response
 
-                        # Execute run - should handle error gracefully
+                        # Execute run via helper API - should handle error gracefully
                         controller = app_controller
-                        job_entry = start_run_and_wait(controller, use_run_now=False)
+                        job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
                         assert job_entry.run_mode == "direct"
 
                         call_args = mock_generate.call_args[0][0]
@@ -253,9 +264,9 @@ def test_jt04_img2img_edge_cases():
                         }
                         mock_generate.return_value = mock_response
 
-                        # Execute run
+                        # Execute run via helper API
                         controller = app_controller
-                        job_entry = start_run_and_wait(controller, use_run_now=False)
+                        job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
                         assert job_entry.run_mode == "direct"
 
                         # Verify denoise parameter
@@ -343,12 +354,18 @@ def test_jt04_adetailer_integration():
                     }
                     mock_generate.return_value = mock_response
 
-                    # Step 6: Execute run with ADetailer
+                    # Step 6: Execute run via helper API
                     controller = app_controller
-                    job_entry = start_run_and_wait(controller, use_run_now=False)
+                    job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
                     assert job_entry.run_mode == "direct"
 
-                    # Step 7: Verify ADetailer parameters were passed correctly
+                    # Step 7: Verify stage plan includes adetailer
+                    plan = get_stage_plan_for_job(controller, job_entry)
+                    if plan is not None:
+                        stage_types = plan.get_stage_types()
+                        assert "adetailer" in stage_types or "img2img" in stage_types
+
+                    # Step 8: Verify ADetailer parameters were passed correctly
                     call_args = mock_generate.call_args[0][0]
 
                     # Verify base parameters

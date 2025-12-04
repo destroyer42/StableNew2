@@ -155,3 +155,44 @@ class PipelineRunControlsV2(ttk.Frame):
             self.stop_button.configure(state="normal" if is_running else "disabled")
         except Exception:
             pass
+
+    def refresh_states(self) -> None:
+        """Refresh button enable/disable states based on AppStateV2 run flags.
+
+        Rules (PR-111):
+        - Run Now: disabled during direct run
+        - Run: disabled when queue paused OR direct run in progress
+        - Add to Queue: disabled when no pack selected OR queue paused
+        - Stop: enabled only when run in progress
+        - Clear Draft: always enabled
+        """
+        app_state = self.app_state
+        if app_state is None:
+            return
+
+        is_run_in_progress = getattr(app_state, "is_run_in_progress", False)
+        is_direct_run = getattr(app_state, "is_direct_run_in_progress", False)
+        is_queue_paused = getattr(app_state, "is_queue_paused", False)
+        current_pack = getattr(app_state, "current_pack", None)
+        has_pack = bool(current_pack)
+
+        try:
+            # Run Now: disabled during direct run
+            run_now_disabled = is_direct_run
+            self.run_now_button.configure(state="disabled" if run_now_disabled else "normal")
+
+            # Run: disabled when queue paused OR direct run in progress
+            run_disabled = is_queue_paused or is_direct_run
+            self.run_button.configure(state="disabled" if run_disabled else "normal")
+
+            # Add to Queue: disabled when no pack selected OR queue paused
+            add_disabled = (not has_pack) or is_queue_paused
+            self.add_button.configure(state="disabled" if add_disabled else "normal")
+
+            # Stop: enabled only when run in progress
+            self.stop_button.configure(state="normal" if is_run_in_progress else "disabled")
+
+            # Clear Draft: always enabled
+            self.clear_draft_button.configure(state="normal")
+        except Exception:
+            pass

@@ -34,11 +34,11 @@ class FakePipeline:
         self,
         input_image: Any,
         prompt: str,
-        negative_prompt: str,
         config: dict[str, Any],
         output_dir: Path,
-        *,
         image_name: str | None = None,
+        *,
+        full_config: dict[str, Any] | None = None,
         cancel_token: Any | None = None,
         **_kwargs: Any,
     ) -> dict[str, Any]:
@@ -89,3 +89,7 @@ class FakePipeline:
 
     def get_stage_events(self) -> list[dict[str, Any]]:
         return list(self.stage_events)
+
+    def _load_image_base64(self, path: Any) -> str:
+        """Return a fake base64-encoded image string."""
+        return "base64_encoded_fake_image"

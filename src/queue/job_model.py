@@ -50,6 +50,11 @@ class Job:
     payload: Any | None = None
     worker_id: WorkerId | None = None
     run_mode: str = "queue"
+    # PR-106: Metadata fields for provenance tracking
+    source: str = "unknown"
+    prompt_source: str = "manual"
+    prompt_pack_id: Optional[str] = None
+    config_snapshot: Optional[Dict[str, Any]] = None
 
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
         self.status = status
@@ -77,6 +82,10 @@ class Job:
             "pipeline_config": self.pipeline_config.__dict__ if self.pipeline_config is not None else None,
             "worker_id": self.worker_id,
             "run_mode": self.run_mode,
+            "source": self.source,
+            "prompt_source": self.prompt_source,
+            "prompt_pack_id": self.prompt_pack_id,
+            "config_snapshot": self.config_snapshot,
         }
 
     def summary(self) -> str:

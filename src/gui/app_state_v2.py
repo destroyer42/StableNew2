@@ -91,6 +91,13 @@ class AppStateV2:
     adetailer_enabled: bool = False
     adetailer_config: dict[str, Any] = field(default_factory=dict)
 
+    # PR-111: Run Controls UX state flags
+    is_run_in_progress: bool = False
+    is_direct_run_in_progress: bool = False
+    is_queue_paused: bool = False
+    last_run_job_id: Optional[str] = None
+    last_error_message: Optional[str] = None
+
     def set_invoker(self, invoker: GuiInvoker) -> None:
         """Set an invoker used to marshal notifications onto the GUI thread."""
         self._invoker = invoker
@@ -275,3 +282,29 @@ class AppStateV2:
     def clear_job_draft(self) -> None:
         self.job_draft.packs.clear()
         self._notify("job_draft")
+
+    # PR-111: Run Controls UX state setters
+    def set_is_run_in_progress(self, value: bool) -> None:
+        if self.is_run_in_progress != value:
+            self.is_run_in_progress = value
+            self._notify("is_run_in_progress")
+
+    def set_is_direct_run_in_progress(self, value: bool) -> None:
+        if self.is_direct_run_in_progress != value:
+            self.is_direct_run_in_progress = value
+            self._notify("is_direct_run_in_progress")
+
+    def set_is_queue_paused(self, value: bool) -> None:
+        if self.is_queue_paused != value:
+            self.is_queue_paused = value
+            self._notify("is_queue_paused")
+
+    def set_last_run_job_id(self, value: Optional[str]) -> None:
+        if self.last_run_job_id != value:
+            self.last_run_job_id = value
+            self._notify("last_run_job_id")
+
+    def set_last_error_message(self, value: Optional[str]) -> None:
+        if self.last_error_message != value:
+            self.last_error_message = value
+            self._notify("last_error_message")

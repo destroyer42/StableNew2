@@ -223,3 +223,60 @@ These are **future PRs**; the v2 spec only ensures that records and structures a
 - Tests for LearningRunner stub behavior and pipeline hooks.
 - Tests that ensure LearningRecords are written atomically and never corrupt on failure.
 - Future tests for the Learning Run GUI (once implemented) using the GUI V2 harness.
+#### 2.4.1 ModelProfile & StyleProfile Schema for Defaults (V2-P1)
+
+In V2-P1, ModelProfiles are extended to encode **refiner and hires-fix defaults**
+so StableNew can start each model from a sane, opinionated baseline without hardcoding
+values in GUI code or controller wiring.
+
+##### ModelProfile default fields
+
+At minimum, each ModelProfile MAY provide:
+
+- `default_refiner_id: Optional[str]`  
+  Logical ID of the recommended refiner (see `docs/model_defaults_v2/V2-P1.md §2.1`; e.g.,
+  `sdxl_refiner_official`, `realvisxl_refiner`, `wd15_refiner`).
+
+- `default_hires_upscaler_id: Optional[str]`  
+  Logical ID of the hires-fix upscaler (see §2.2; e.g., `swinir_4x`, `4x_ultrasharp`, `4x_animesharp`).
+
+- `default_hires_denoise: Optional[float]`  
+  Suggested hires denoise strength; ranges used for Learning sweeps/UI hints:
+  * 0.20–0.40 for realism  
+  * 0.20–0.35 for portrait realism  
+  * 0.30–0.50 for stylized / semi-real  
+  * 0.35–0.60 for anime
+
+- `style_profile_id: Optional[str]`  
+  Optional link to a StyleProfile (see `docs/model_defaults_v2/V2-P1.md`), such as
+  `sdxl_realism`, `sdxl_portrait_realism`, `sdxl_stylized`, `sd15_realism`, or `anime`.
+
+These fields are **soft defaults**: they are applied only when there is no last-run or explicit
+preset override for the current base model/pack.
+
+##### Precedence (ModelProfiles vs Last-Run vs Presets)
+
+When constructing a new `PipelineConfig` for a model:
+
+1. If a **last-run config** exists for the current context, its refiner/hires values take precedence.
+2. Else, if a **user preset** is explicitly loaded, the preset values win.
+3. Else, if a **ModelProfile** (optionally with `style_profile_id`) defines defaults, apply them.
+4. Else, fall back to engine defaults (e.g., refiner disabled, base upscaler, conservative denoise).
+
+ModelProfiles therefore provide a first-good guess but never override explicit user or historical intent.
+
+##### Learning & Randomizer Considerations
+
+- **Learning** treats these ModelProfile defaults as the baseline configuration when designing experiments
+  (especially when sweeping hires denoise around `default_hires_denoise`). LearningRecords still capture
+  the actual values used per run.
+- **Randomizer** does **not** randomize `refiner_id` or `hires_upscaler_id` by default. Those keys belong to the
+  base configuration defined by ModelProfiles + Learning, while Randomizer focuses on creative axes
+  (prompt matrices, LoRAs, style toggles, CFG/steps, etc.).
+
+Together, the rules above ensure:
+
+* Defaults are defined once (ModelProfiles + StyleProfiles).  
+* Pipeline tab only displays and edits those defaults.  
+* Learning can later adjust defaults without touching GUI logic.  
+* Randomizer remains a controlled, secondary exploration layer.

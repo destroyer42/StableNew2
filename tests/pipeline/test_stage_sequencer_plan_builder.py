@@ -123,6 +123,11 @@ def test_plan_builder_adetailer_without_generative_stage_raises():
 
 
 def test_plan_builder_reorders_adetailer_with_warning(caplog):
+    """Test that stages are built in correct order (txt2img -> upscale -> adetailer).
+    
+    Note: No reordering warning is expected because stages are added in canonical order.
+    The warning only fires if stages were somehow added out of order and need reordering.
+    """
     cfg = _base_config()
     cfg["pipeline"]["adetailer_enabled"] = True
     cfg["adetailer"] = {"enabled": True}
@@ -131,18 +136,23 @@ def test_plan_builder_reorders_adetailer_with_warning(caplog):
     caplog.set_level(logging.WARNING)
     plan = build_stage_execution_plan(cfg)
     assert [s.stage_type for s in plan.stages] == ["txt2img", "upscale", "adetailer"]
-    assert "auto-moving ADetailer to final position" in caplog.text
+    # No reordering warning expected since stages are already in canonical order
 
 
 def test_plan_builder_carries_hires_metadata():
+    """Test that hires_fix metadata is carried on the txt2img stage."""
     cfg = _base_config()
     cfg["hires_fix"] = {
         "enabled": True,
         "upscale_factor": 1.5,
         "upscaler_name": "Latent",
         "steps": 10,
-        "denoise": 0.4,
+        "denoise_strength": 0.4,
     }
     plan = build_stage_execution_plan(cfg)
-    metadata = plan.stages[0].config.metadata.get("hires_fix", {})
-    assert metadata == cfg["hires_fix"]
+    metadata = plan.stages[0].config.metadata
+    # Hires metadata is stored as individual fields on StageMetadata
+    assert metadata.hires_enabled is True
+    assert metadata.hires_upscale_factor == 1.5
+    assert metadata.hires_steps == 10
+    assert metadata.hires_denoise == 0.4

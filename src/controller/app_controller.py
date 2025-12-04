@@ -20,7 +20,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypedDict
 import os
 import threading
 import time
@@ -47,6 +47,7 @@ from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils import InMemoryLogHandler
 from src.gui.app_state_v2 import PackJobEntry, AppStateV2
+from src.learning.model_profiles import get_model_profile_defaults_for_model
 from src.controller.pipeline_controller import PipelineController
 from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
@@ -64,6 +65,25 @@ class LifecycleState(Enum):
     RUNNING = auto()
     STOPPING = auto()
     ERROR = auto()
+
+
+class RunMode(str, Enum):
+    DIRECT = "direct"
+    QUEUE = "queue"
+
+
+class RunSource(str, Enum):
+    RUN_BUTTON = "run"
+    RUN_NOW_BUTTON = "run_now"
+    ADD_TO_QUEUE_BUTTON = "add_to_queue"
+
+
+class RunConfigDict(TypedDict, total=False):
+    run_mode: str
+    source: str
+    prompt_source: str
+    prompt_pack_id: str
+    pipeline_state_snapshot: dict[str, Any]
 
 
 @dataclass
@@ -304,20 +324,8 @@ class AppController:
 
         Tries the PipelineController bridge first; on failure, falls back to legacy start_run().
         """
-        try:
-            used_bridge = self.run_pipeline_v2_bridge()
-        except Exception as exc:  # noqa: BLE001
-            self._append_log(f"[controller] start_run_v2 bridge error: {exc!r}")
-            used_bridge = False
-
         self._ensure_run_mode_default("run")
-
-        if used_bridge:
-            self._append_log("[controller] start_run_v2 used PipelineController bridge.")
-            return None
-
-        self._append_log("[controller] start_run_v2 falling back to legacy start_run().")
-        return self.start_run()
+        return self._start_run_v2(RunMode.DIRECT, RunSource.RUN_BUTTON)
 
     def _ensure_run_mode_default(self, button_source: str) -> None:
         pipeline_state = getattr(self.app_state, "pipeline_state", None)
@@ -332,6 +340,65 @@ class AppController:
         elif button_source == "run_now":
             pipeline_state.run_mode = "queue"
             self._append_log("[controller] Defaulting run_mode to 'queue' for Run Now button.")
+        elif button_source == "add_to_queue":
+            pipeline_state.run_mode = "queue"
+            self._append_log("[controller] Defaulting run_mode to 'queue' for Add to Queue button.")
+
+    def _build_run_config(self, mode: RunMode, source: RunSource) -> RunConfigDict:
+        cfg: RunConfigDict = {"run_mode": mode.value, "source": source.value}
+        prompt_source = "manual"
+        prompt_pack_id = ""
+        job_draft = getattr(self.app_state, "job_draft", None)
+        if job_draft is not None:
+            pack_id = getattr(job_draft, "pack_id", "") or ""
+            if pack_id:
+                prompt_source = "pack"
+                prompt_pack_id = pack_id
+        cfg["prompt_source"] = prompt_source
+        if prompt_pack_id:
+            cfg["prompt_pack_id"] = prompt_pack_id
+        pipeline_state = getattr(self.app_state, "pipeline_state", None)
+        if pipeline_state is not None:
+            snapshot = {
+                "run_mode": getattr(pipeline_state, "run_mode", None),
+                "stage_txt2img_enabled": getattr(pipeline_state, "stage_txt2img_enabled", None),
+                "stage_img2img_enabled": getattr(pipeline_state, "stage_img2img_enabled", None),
+                "stage_upscale_enabled": getattr(pipeline_state, "stage_upscale_enabled", None),
+                "stage_adetailer_enabled": getattr(pipeline_state, "stage_adetailer_enabled", None),
+            }
+            cfg["pipeline_state_snapshot"] = snapshot
+        return cfg
+
+    def _start_run_v2(self, mode: RunMode, source: RunSource) -> Any:
+        pipeline_state = getattr(self.app_state, "pipeline_state", None)
+        if pipeline_state is not None:
+            try:
+                pipeline_state.run_mode = mode.value
+            except Exception:
+                pass
+        run_config = self._build_run_config(mode, source)
+        controller = getattr(self, "pipeline_controller", None)
+        if controller is not None:
+            start_fn = getattr(controller, "start_pipeline", None)
+            if callable(start_fn):
+                try:
+                    self._append_log(
+                        f"[controller] _start_run_v2 via PipelineController.start_pipeline "
+                        f"(mode={mode.value}, source={source.value})"
+                    )
+                    return start_fn(run_config=run_config)
+                except TypeError:
+                    self._append_log(
+                        "[controller] PipelineController.start_pipeline does not accept run_config; calling without it."
+                    )
+                    return start_fn()
+                except Exception as exc:  # noqa: BLE001
+                    self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
+        self._append_log("[controller] _start_run_v2 falling back to legacy start_run().")
+        legacy = getattr(self, "start_run", None)
+        if callable(legacy):
+            return legacy()
+        return None
 
     def on_run_job_now_v2(self) -> Any:
         """
@@ -349,8 +416,8 @@ class AppController:
                     self._append_log(f"[controller] on_run_job_now_v2 handler {name} error: {exc!r}")
                     break
 
-        self._append_log("[controller] on_run_job_now_v2 falling back to start_run_v2.")
-        return self.start_run_v2()
+        self._ensure_run_mode_default("run_now")
+        return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
 
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint; safe no-op if none available."""
@@ -368,9 +435,8 @@ class AppController:
                     )
                     return
 
-        self._append_log(
-            "[controller] on_add_job_to_queue_v2: no queue handler available; no-op."
-        )
+        self._ensure_run_mode_default("add_to_queue")
+        self._start_run_v2(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
 
     def set_main_window(self, main_window: MainWindow) -> None:
         """Set the main window and wire GUI callbacks."""
@@ -1303,6 +1369,7 @@ class AppController:
                 pass
         payload = self._config_manager.load_last_run()
         if not payload:
+            self._apply_model_profile_defaults(self.state.current_config.model_name or None)
             return
         executor_config = payload.get("executor_config")
         if not isinstance(executor_config, dict):
@@ -1352,6 +1419,38 @@ class AppController:
             pipeline_panel.apply_run_config(run_snapshot)
         if self.app_state and isinstance(run_snapshot, dict):
             self.app_state.set_run_config(dict(run_snapshot))
+
+    def _apply_model_profile_defaults(self, model_name: str | None) -> None:
+        defaults = get_model_profile_defaults_for_model(model_name)
+        if not defaults:
+            return
+        configs: list[Any] = []
+        state_config = getattr(self.state, "current_config", None)
+        if state_config is not None:
+            configs.append(state_config)
+        if self.app_state is not None:
+            configs.append(self.app_state.current_config)
+        for cfg in configs:
+            self._set_profile_default(cfg, "refiner_model_name", defaults.get("default_refiner_id"), "")
+            self._set_profile_default(cfg, "refiner_switch_at", defaults.get("default_refiner_switch_at"), None)
+            self._set_profile_default(cfg, "hires_upscaler_name", defaults.get("default_hires_upscaler_id"), "Latent")
+            self._set_profile_default(cfg, "hires_denoise", defaults.get("default_hires_denoise"), 0.3)
+            # Keep hires_enabled False unless user explicitly toggles it.
+
+    @staticmethod
+    def _set_profile_default(
+        cfg: Any,
+        attr: str,
+        value: Any,
+        baseline: Any,
+    ) -> None:
+        if value is None:
+            return
+        current = getattr(cfg, attr, None)
+        if current:
+            if current != baseline or value == baseline:
+                return
+        setattr(cfg, attr, value)
 
     def _refresh_stage_visibility(self) -> None:
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
@@ -1914,6 +2013,7 @@ class AppController:
     def on_model_selected(self, model_name: str) -> None:
         self._append_log(f"[controller] Model selected: {model_name}")
         self.state.current_config.model_name = model_name
+        self._apply_model_profile_defaults(model_name)
 
     def on_vae_selected(self, vae_name: str) -> None:
         self._append_log(f"[controller] VAE selected: {vae_name}")

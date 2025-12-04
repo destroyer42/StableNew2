@@ -10,10 +10,13 @@ import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from src.queue.job_model import Job, JobStatus
 from src.cluster.worker_model import WorkerId
+
+if TYPE_CHECKING:
+    from src.pipeline.run_config import RunConfig
 
 
 def _utcnow() -> datetime:
@@ -32,11 +35,18 @@ class JobHistoryEntry:
     worker_id: WorkerId | None = None
     run_mode: str = "queue"
     result: Dict[str, Any] | None = None
+    # PR-112: Prompt origin tracking
+    prompt_source: str = "manual"  # "manual" | "pack"
+    prompt_pack_id: str | None = None
+    prompt_keys: List[str] | None = None
 
     def to_json(self) -> str:
         data = asdict(self)
         data["status"] = self.status.value
         data["run_mode"] = self.run_mode
+        data["prompt_source"] = self.prompt_source
+        data["prompt_pack_id"] = self.prompt_pack_id
+        data["prompt_keys"] = self.prompt_keys
         for key in ("created_at", "started_at", "completed_at"):
             value = data.get(key)
             if isinstance(value, datetime):
@@ -62,7 +72,45 @@ class JobHistoryEntry:
             worker_id=raw.get("worker_id"),
             result=raw.get("result"),
             run_mode=raw.get("run_mode", "queue"),
+            prompt_source=raw.get("prompt_source", "manual"),
+            prompt_pack_id=raw.get("prompt_pack_id"),
+            prompt_keys=raw.get("prompt_keys"),
         )
+
+
+def job_history_entry_from_run_config(
+    job_id: str,
+    run_config: "RunConfig",
+    *,
+    status: JobStatus = JobStatus.QUEUED,
+    payload_summary: str = "",
+    created_at: datetime | None = None,
+    **extra: Any,
+) -> JobHistoryEntry:
+    """Create a JobHistoryEntry from a RunConfig.
+
+    Args:
+        job_id: Unique identifier for the job.
+        run_config: The RunConfig containing prompt source info.
+        status: Initial job status.
+        payload_summary: Summary text for the job.
+        created_at: Creation timestamp (defaults to now).
+        **extra: Additional fields to set on the entry.
+
+    Returns:
+        A JobHistoryEntry with prompt origin fields populated.
+    """
+    return JobHistoryEntry(
+        job_id=job_id,
+        created_at=created_at or _utcnow(),
+        status=status,
+        payload_summary=payload_summary,
+        run_mode=run_config.run_mode,
+        prompt_source=run_config.prompt_source.value if hasattr(run_config.prompt_source, "value") else str(run_config.prompt_source),
+        prompt_pack_id=run_config.prompt_pack_id,
+        prompt_keys=list(run_config.prompt_keys) if run_config.prompt_keys else None,
+        **extra,
+    )
 
 
 class JobHistoryStore:

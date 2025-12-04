@@ -61,6 +61,83 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map("TEntry", fieldbackground=[("disabled", BACKGROUND_ELEVATED)])
 
+    style.configure(
+        "Dark.TCombobox",
+        fieldbackground=BACKGROUND_ELEVATED,
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        arrowcolor=design_system.Colors.TEXT_PRIMARY,
+    )
+    style.map(
+        "Dark.TCombobox",
+        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+        background=[("readonly", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+    style.configure(
+        "Dark.TCombobox.Listbox",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        selectbackground=design_system.Colors.PRIMARY_ACCENT,
+        selectforeground=design_system.Colors.TEXT_PRIMARY,
+    )
+
+    style.configure(
+        "Dark.TSpinbox",
+        fieldbackground=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+    )
+    style.map(
+        "Dark.TSpinbox",
+        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+    )
+
+    style.configure(
+        "Dark.TCheckbutton",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+    )
+    style.map(
+        "Dark.TCheckbutton",
+        background=[("active", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+
+    style.configure(
+        "Dark.TLabel",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+    )
+
+    style.configure(
+        "Dark.Horizontal.TScale",
+        troughcolor=BACKGROUND_ELEVATED,
+        background=BACKGROUND_DARK,
+        bordercolor=BORDER_SUBTLE,
+    )
+    style.configure(
+        "Dark.Vertical.TScale",
+        troughcolor=BACKGROUND_ELEVATED,
+        background=BACKGROUND_DARK,
+        bordercolor=BORDER_SUBTLE,
+    )
+
+    style.configure(
+        "Dark.TButton",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        focusthickness=1,
+    )
+    style.map(
+        "Dark.TButton",
+        background=[("active", BACKGROUND_DARK)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+
 
 def _configure_treeview_styles(style: ttk.Style) -> None:
     style.configure(
