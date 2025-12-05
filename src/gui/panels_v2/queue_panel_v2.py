@@ -11,7 +11,7 @@ from src.gui.theme_v2 import (
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
-from src.pipeline.job_models_v2 import QueueJobV2
+from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2
 
 
 class QueuePanelV2(ttk.Frame):
@@ -235,6 +235,35 @@ class QueuePanelV2(ttk.Frame):
                     self._select_index(new_idx)
 
         self._update_button_states()
+
+    def set_normalized_jobs(self, jobs: list[NormalizedJobRecord]) -> None:
+        """Update the job list from NormalizedJobRecord objects.
+
+        Converts each NormalizedJobRecord to QueueJobV2 and displays.
+        This provides a bridge from JobBuilderV2 output to the queue display.
+
+        Args:
+            jobs: List of NormalizedJobRecord instances from JobBuilderV2.
+        """
+        queue_jobs: list[QueueJobV2] = []
+        for record in jobs:
+            # Convert NormalizedJobRecord to QueueJobV2
+            snapshot = record.to_queue_snapshot() if hasattr(record, "to_queue_snapshot") else {}
+            queue_job = QueueJobV2.create(
+                config_snapshot=snapshot,
+                metadata={
+                    "variant_index": record.variant_index,
+                    "variant_total": record.variant_total,
+                    "batch_index": record.batch_index,
+                    "batch_total": record.batch_total,
+                },
+            )
+            # Use the original job_id if available
+            if hasattr(record, "job_id"):
+                queue_job.job_id = record.job_id
+            queue_jobs.append(queue_job)
+
+        self.update_jobs(queue_jobs)
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update panel from app state."""

@@ -25,6 +25,24 @@ class JobStatusV2(str, Enum):
 
 
 @dataclass
+class JobUiSummary:
+    """Display-friendly summary of a job for UI panels.
+
+    This is the canonical summary for Preview/Queue panels to consume.
+    All fields are simple display strings or counts, no config objects.
+    """
+    job_id: str
+    model: str
+    prompt_short: str
+    seed_display: str
+    variant_label: str  # e.g., "" or "[v1/3]"
+    batch_label: str    # e.g., "" or "[b2/5]"
+    stages_summary: str  # e.g., "txt2img → upscale"
+    output_dir: str
+    total_summary: str  # e.g., "model | seed=12345 [v1/3]"
+
+
+@dataclass
 class BatchSettings:
     """Settings for batch expansion in job building.
 
@@ -104,6 +122,72 @@ class NormalizedJobRecord:
             batch_info = f" [b{self.batch_index + 1}/{self.batch_total}]"
 
         return f"{model} | seed={seed_str}{variant_info}{batch_info}"
+
+    def to_ui_summary(self) -> JobUiSummary:
+        """Convert to a JobUiSummary for UI panel display.
+
+        Extracts display-friendly strings from config and job metadata.
+        """
+        config = self.config
+
+        # Extract model and prompt from config
+        if isinstance(config, dict):
+            model = config.get("model", config.get("model_name", "unknown"))
+            prompt_full = config.get("prompt", "")
+            stages = config.get("stages", [])
+        else:
+            model = getattr(config, "model", "") or getattr(config, "model_name", "unknown")
+            prompt_full = getattr(config, "prompt", "") or ""
+            stages = getattr(config, "stages", [])
+
+        # Truncate prompt for display
+        prompt_short = prompt_full[:40]
+        if len(prompt_full) > 40:
+            prompt_short += "..."
+
+        # Seed display
+        seed_display = str(self.seed) if self.seed is not None else "?"
+
+        # Variant and batch labels
+        variant_label = ""
+        if self.variant_total > 1:
+            variant_label = f"[v{self.variant_index + 1}/{self.variant_total}]"
+
+        batch_label = ""
+        if self.batch_total > 1:
+            batch_label = f"[b{self.batch_index + 1}/{self.batch_total}]"
+
+        # Stages summary
+        if stages:
+            stage_labels = {
+                "txt2img": "txt2img",
+                "img2img": "img2img",
+                "adetailer": "ADetailer",
+                "upscale": "upscale",
+            }
+            stage_parts = [stage_labels.get(s, s) for s in stages]
+            stages_summary = " → ".join(stage_parts)
+        else:
+            stages_summary = "txt2img"
+
+        # Total summary
+        total_summary = f"{model} | seed={seed_display}"
+        if variant_label:
+            total_summary += f" {variant_label}"
+        if batch_label:
+            total_summary += f" {batch_label}"
+
+        return JobUiSummary(
+            job_id=self.job_id,
+            model=model or "unknown",
+            prompt_short=prompt_short,
+            seed_display=seed_display,
+            variant_label=variant_label,
+            batch_label=batch_label,
+            stages_summary=stages_summary,
+            output_dir=self.path_output_dir,
+            total_summary=total_summary,
+        )
 
     def to_queue_snapshot(self) -> dict[str, Any]:
         """Convert to a dict snapshot suitable for queue Job.config_snapshot.
@@ -264,4 +348,5 @@ __all__ = [
     "BatchSettings",
     "OutputSettings",
     "NormalizedJobRecord",
+    "JobUiSummary",
 ]

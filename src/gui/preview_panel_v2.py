@@ -117,6 +117,79 @@ class PreviewPanelV2(ttk.Frame):
         self.current_image_label.config(text="No image")
         self.metadata_text.delete(1.0, tk.END)
 
+    def set_jobs(self, jobs: list[Any]) -> None:
+        """Update preview from a list of NormalizedJobRecord objects.
+
+        Args:
+            jobs: List of NormalizedJobRecord instances from JobBuilderV2.
+                  Each job is expected to have a to_ui_summary() method.
+        """
+        if not jobs:
+            self.summary_label.config(text="Jobs: 0")
+            self.mode_label.config(text="")
+            self.scope_label.config(text="")
+            self.jobs_label.config(text="")
+            self._update_queue_items_from_jobs([])
+            return
+
+        # Get summaries for display
+        summaries = []
+        for job in jobs:
+            if hasattr(job, "to_ui_summary"):
+                summaries.append(job.to_ui_summary())
+
+        total_jobs = len(jobs)
+
+        # Count unique variants and batches
+        variant_totals = {getattr(s, "variant_label", "") for s in summaries if getattr(s, "variant_label", "")}
+        batch_totals = {getattr(s, "batch_label", "") for s in summaries if getattr(s, "batch_label", "")}
+
+        # Update summary labels
+        self.summary_label.config(text=f"Jobs: {total_jobs}")
+
+        # Stages from first job (typically all jobs have same stages)
+        if summaries:
+            stages = getattr(summaries[0], "stages_summary", "txt2img")
+            self.mode_label.config(text=f"Stages: {stages}")
+        else:
+            self.mode_label.config(text="Stages: -")
+
+        # Variant/batch info
+        variant_info = f"{len(variant_totals)} variants" if len(variant_totals) > 1 else ""
+        batch_info = f"{len(batch_totals)} batches" if len(batch_totals) > 1 else ""
+        scope_parts = [p for p in [variant_info, batch_info] if p]
+        self.scope_label.config(text=", ".join(scope_parts) if scope_parts else "Single run")
+
+        # Models in use
+        models = {getattr(s, "model", "unknown") for s in summaries}
+        if len(models) == 1:
+            self.jobs_label.config(text=f"Model: {list(models)[0]}")
+        else:
+            self.jobs_label.config(text=f"Models: {len(models)} different")
+
+        # Update queue items display
+        self._update_queue_items_from_jobs(jobs)
+
+    def _update_queue_items_from_jobs(self, jobs: list[Any]) -> None:
+        """Update queue items text from NormalizedJobRecord list."""
+        if not jobs:
+            lines = ["No pending jobs."]
+        else:
+            lines = []
+            for job in jobs[:10]:  # Show first 10
+                if hasattr(job, "to_ui_summary"):
+                    summary = job.to_ui_summary()
+                    lines.append(getattr(summary, "total_summary", str(job)))
+                else:
+                    lines.append(str(job))
+            if len(jobs) > 10:
+                lines.append(f"... and {len(jobs) - 10} more")
+
+        self.queue_items_text.config(state=tk.NORMAL)
+        self.queue_items_text.delete(1.0, tk.END)
+        self.queue_items_text.insert(tk.END, "\n".join(lines))
+        self.queue_items_text.config(state=tk.DISABLED)
+
     def update_from_job_draft(self, job_draft: Any) -> None:
         """Update preview summary from job draft."""
         packs = getattr(job_draft, "packs", [])
