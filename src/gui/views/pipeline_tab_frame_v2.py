@@ -12,9 +12,9 @@ from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.scrolling import enable_mousewheel
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
+from src.gui.state import PipelineState
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
-from src.gui.state import PipelineState
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
@@ -37,7 +37,7 @@ class PipelineTabFrame(ttk.Frame):
         app_controller: Any = None,
         pipeline_controller: Any = None,
         theme: Any = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
         self.prompt_workspace_state = prompt_workspace_state

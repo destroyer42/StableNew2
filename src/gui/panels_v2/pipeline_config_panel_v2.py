@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Any, Callable
+from typing import Any
 
 from src.gui.state import PipelineState
-from src.gui.theme_v2 import CARD_FRAME_STYLE, BODY_LABEL_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE
+
 
 class PipelineConfigPanel(ttk.Frame):
     """Left-column pipeline config scaffold bound to AppController/AppStateV2."""
@@ -14,7 +17,7 @@ class PipelineConfigPanel(ttk.Frame):
         self.controller = controller
         self.app_state = app_state
         self._on_change = on_change
-        self._lora_controls: dict[str, tuple[ttk.Checkbutton, ttk.Scale]] = {}
+        self._lora_controls: dict[str, tuple[tk.BooleanVar, ttk.Scale]] = {}
         # Legacy validation label - removed for cleaner UI
         # self._validation_message_var = tk.StringVar(value="")
         # self._validation_label = ttk.Label(
@@ -228,21 +231,29 @@ class PipelineConfigPanel(ttk.Frame):
             controls = ttk.Frame(frame)
             controls.pack(fill="x", pady=(2, 0))
             var = tk.DoubleVar(value=strength)
+
+            def make_strength_command(lora_name: str) -> Callable[[str], None]:
+                return lambda value: self._on_lora_strength_change(lora_name, value)
+
             scale = ttk.Scale(
                 controls,
                 from_=0.0,
                 to=2.0,
                 variable=var,
                 orient="horizontal",
-                command=lambda value, lora=name: self._on_lora_strength_change(lora, value),
+                command=make_strength_command(name),
             )
             scale.pack(side="left", fill="x", expand=True, padx=(0, 4))
             check_var = tk.BooleanVar(value=enabled)
+
+            def make_enabled_command(lora_name: str, bool_var: tk.BooleanVar) -> Callable[[], None]:
+                return lambda: self._on_lora_enabled_change(lora_name, bool_var.get())
+
             chk = ttk.Checkbutton(
                 controls,
                 text="Enabled",
                 variable=check_var,
-                command=lambda lora=name, var=check_var: self._on_lora_enabled_change(lora, var.get()),
+                command=make_enabled_command(name, check_var),
             )
             chk.pack(side="right")
             self._lora_controls[name] = (check_var, scale)
@@ -250,7 +261,8 @@ class PipelineConfigPanel(ttk.Frame):
     def _get_lora_settings(self) -> list[dict[str, Any]]:
         if self.controller and hasattr(self.controller, "get_lora_runtime_settings"):
             try:
-                return self.controller.get_lora_runtime_settings()
+                result = self.controller.get_lora_runtime_settings()
+                return list(result) if result else []
             except Exception:
                 return []
         return []

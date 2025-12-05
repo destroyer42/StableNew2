@@ -38,8 +38,8 @@ class PipelineRunControlsV2(ttk.Frame):
         controller: Any | None = None,
         app_state: Any | None = None,
         theme: Any | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state

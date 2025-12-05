@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
+from typing import Any
 
 from src.gui.theme_v2 import SURFACE_FRAME_STYLE, STATUS_LABEL_STYLE, STATUS_STRONG_LABEL_STYLE, PADDING_SM
 from .api_status_panel import APIStatusPanel, resolve_webui_state_display
@@ -13,7 +15,15 @@ from src.controller.webui_connection_controller import WebUIConnectionController
 class StatusBarV2(ttk.Frame):
     """Status/ETA/progress container."""
 
-    def __init__(self, master: tk.Misc, *, controller=None, theme=None, app_state=None, **kwargs) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        controller: Any = None,
+        theme: Any = None,
+        app_state: Any = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=PADDING_SM, **kwargs)
         self.controller = controller
         self.theme = theme
@@ -63,9 +73,13 @@ class StatusBarV2(ttk.Frame):
         self._retry_button = self.webui_panel.retry_button
         if self.controller:
             if hasattr(self.controller, "on_launch_webui_clicked"):
-                self.webui_panel.set_launch_callback(self.controller.on_launch_webui_clicked)
+                self.webui_panel.set_launch_callback(  # type: ignore[no-untyped-call]
+                    self.controller.on_launch_webui_clicked
+                )
             if hasattr(self.controller, "on_retry_webui_clicked"):
-                self.webui_panel.set_retry_callback(self.controller.on_retry_webui_clicked)
+                self.webui_panel.set_retry_callback(  # type: ignore[no-untyped-call]
+                    self.controller.on_retry_webui_clicked
+                )
         if app_state is not None:
             try:
                 app_state.subscribe("status_text", self._sync_status_text)
@@ -138,17 +152,17 @@ class StatusBarV2(ttk.Frame):
         self._has_validation_error = False
         self.set_idle()
 
-    def set_webui_launch_callback(self, callback) -> None:
+    def set_webui_launch_callback(self, callback: Callable[[], None] | None) -> None:
         if getattr(self, "webui_panel", None):
             try:
-                self.webui_panel.set_launch_callback(callback)
+                self.webui_panel.set_launch_callback(callback)  # type: ignore[no-untyped-call]
             except Exception:
                 pass
 
-    def set_webui_retry_callback(self, callback) -> None:
+    def set_webui_retry_callback(self, callback: Callable[[], None] | None) -> None:
         if getattr(self, "webui_panel", None):
             try:
-                self.webui_panel.set_retry_callback(callback)
+                self.webui_panel.set_retry_callback(callback)  # type: ignore[no-untyped-call]
             except Exception:
                 pass
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tkinter as tk
-from tkinter import ttk
-from typing import Callable
+from collections.abc import Callable
+from pathlib import Path
+from tkinter import simpledialog, ttk
+from typing import Any
 
 from src.gui.scrolling import enable_mousewheel
+from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import (
     ACCENT_GOLD,
     ASWF_DARK_GREY,
@@ -16,17 +18,14 @@ from src.gui.theme_v2 import (
     MUTED_LABEL_STYLE,
     TEXT_PRIMARY,
 )
-from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
+from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.utils.file_io import read_prompt_pack
 
 from .core_config_panel_v2 import CoreConfigPanelV2
 from .model_list_adapter_v2 import ModelListAdapterV2
-from .model_manager_panel_v2 import ModelManagerPanelV2
 from .output_settings_panel_v2 import OutputSettingsPanelV2
 from .prompt_pack_adapter_v2 import PromptPackAdapterV2, PromptPackSummary
 from .prompt_pack_list_manager import PromptPackListManager
-from src.gui.zone_map_v2 import get_pipeline_stage_order
-from tkinter import simpledialog
 
 
 class _SidebarCard(BaseStageCardV2):
@@ -39,7 +38,7 @@ class _SidebarCard(BaseStageCardV2):
         *,
         build_child: Callable[[ttk.Frame], ttk.Frame],
         collapsible: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         self._build_child = build_child
         self._collapsible = collapsible
@@ -129,7 +128,7 @@ class SidebarPanelV2(ttk.Frame):
         prompt_pack_adapter: PromptPackAdapterV2 | None = None,
         on_apply_pack: Callable[[str, PromptPackSummary | None], None] | None = None,
         on_change: Callable[[], None] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(master, style=CARD_FRAME_STYLE, padding=8, **kwargs)
         self.controller = controller
@@ -369,7 +368,10 @@ class SidebarPanelV2(ttk.Frame):
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.pack_listbox.config(yscrollcommand=scrollbar.set)
         enable_mousewheel(self.pack_listbox)
-        self.pack_listbox.bind("<<ListboxSelect>>", lambda event=None: self._on_pack_selection_changed())
+        self.pack_listbox.bind(
+            "<<ListboxSelect>>",
+            lambda event: self._on_pack_selection_changed(),
+        )
         self.packs_list = self.pack_listbox
 
         self._preview_frame = ttk.Frame(frame)
@@ -477,7 +479,7 @@ class SidebarPanelV2(ttk.Frame):
     def _on_pack_load_config(self) -> None:
         if not self.pack_listbox:
             return
-        selection = self.pack_listbox.curselection()
+        selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if len(selection) != 1:
             return
         pack_id = self._current_pack_names[selection[0]] if selection[0] < len(self._current_pack_names) else None
@@ -493,7 +495,7 @@ class SidebarPanelV2(ttk.Frame):
     def _on_pack_apply_config(self) -> None:
         if not self.pack_listbox:
             return
-        selection = self.pack_listbox.curselection()
+        selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if not selection:
             return
         pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
@@ -507,7 +509,7 @@ class SidebarPanelV2(ttk.Frame):
     def _on_add_to_job(self) -> None:
         if not self.pack_listbox:
             return
-        selection = self.pack_listbox.curselection()
+        selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if not selection:
             return
         pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
@@ -521,7 +523,7 @@ class SidebarPanelV2(ttk.Frame):
     def _toggle_pack_preview(self) -> None:
         if not self.preview_toggle_button or not self.pack_listbox:
             return
-        selection = self.pack_listbox.curselection()
+        selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if len(selection) != 1:
             return
         if self._preview_visible:
@@ -621,9 +623,8 @@ class SidebarPanelV2(ttk.Frame):
     def _update_pack_actions_state(self) -> None:
         if not self.pack_listbox:
             return
-        selection = self.pack_listbox.curselection()
+        selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         single = len(selection) == 1
-        has_any = len(selection) > 0
         if self.load_config_button:
             self.load_config_button.config(state=tk.NORMAL if single else tk.DISABLED)
         if self.apply_config_button:
@@ -644,7 +645,7 @@ class SidebarPanelV2(ttk.Frame):
         if len(self._current_pack_names) == 0 or not self.pack_listbox:
             return None
         summary_name = None
-        selection = self.pack_listbox.curselection()
+        selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if len(selection) != 1:
             return None
         idx = selection[0]
@@ -661,7 +662,7 @@ class SidebarPanelV2(ttk.Frame):
         if not self.prompt_pack_adapter:
             return
         self._load_prompt_summaries()
-        self.pack_list_manager.refresh()
+        self.pack_list_manager.refresh()  # type: ignore[no-untyped-call]
         self._set_pack_list_values(self.pack_list_manager.get_list_names())
         self._populate_packs_for_selected_list()
 
@@ -714,7 +715,7 @@ class SidebarPanelV2(ttk.Frame):
         preset_name = self.preset_var.get()
         if not preset_name or not self.pack_listbox:
             return
-        selection = self.pack_listbox.curselection()
+        selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
         controller = self.controller
         if controller and hasattr(controller, "on_pipeline_preset_apply_to_packs"):
@@ -760,12 +761,18 @@ class SidebarPanelV2(ttk.Frame):
         frame = ttk.Frame(parent)
         for idx, stage in enumerate(self._STAGE_ORDER):
             var = self.stage_states.get(stage)
+            if var is None:
+                continue
             label = self._STAGE_LABELS.get(stage, stage.title())
+
+            def make_toggle_command(stage_name: str) -> Callable[[], None]:
+                return lambda: self._on_stage_toggle(stage_name)
+
             cb = ttk.Checkbutton(
                 frame,
                 text=label,
                 variable=var,
-                command=lambda stage_name=stage: self._on_stage_toggle(stage_name),
+                command=make_toggle_command(stage),
                 style="Dark.TCheckbutton",
             )
             cb.grid(row=idx, column=0, sticky="w", pady=2)

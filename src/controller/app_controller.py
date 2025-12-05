@@ -284,7 +284,7 @@ class AppController:
         )
 
         # Wire GUI overrides into PipelineController so config assembler can access GUI state
-        self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline
+        self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
 
         # GUI log handler for LogTracePanelV2
         self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
@@ -459,6 +459,8 @@ class AppController:
 
     def _attach_to_gui(self) -> None:
         mw = self.main_window
+        if mw is None:
+            return
         missing = [name for name in ("header_zone", "left_zone", "bottom_zone") if not hasattr(mw, name)]
         if missing:
             print(f"AppController._attach_to_gui: main_window missing zones {missing}; deferring wiring")
@@ -479,15 +481,20 @@ class AppController:
         if hasattr(left, "load_config_button"):
             # New V2 _PackLoaderCompat - buttons are already wired in the UI class
             pass
-        else:
+        elif left is not None:
             # Legacy LeftZone wiring
-            left.load_pack_button.configure(command=self.on_load_pack)
-            left.edit_pack_button.configure(command=self.on_edit_pack)
-            left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
-            left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
+            if hasattr(left, "load_pack_button"):
+                left.load_pack_button.configure(command=self.on_load_pack)
+            if hasattr(left, "edit_pack_button"):
+                left.edit_pack_button.configure(command=self.on_edit_pack)
+            if hasattr(left, "packs_list"):
+                left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
+            if hasattr(left, "preset_combo"):
+                left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
 
         # Initial API status (placeholder)
-        bottom.api_status_label.configure(text="API: Unknown")
+        if bottom is not None and hasattr(bottom, "api_status_label"):
+            bottom.api_status_label.configure(text="API: Unknown")
 
         # Flush deferred status if any
         if getattr(self, "_pending_status_text", None):
@@ -840,7 +847,7 @@ class AppController:
         queue = getattr(self.job_service, "queue", None)
         if queue and hasattr(queue, "move_up"):
             try:
-                return queue.move_up(job_id)
+                return bool(queue.move_up(job_id))
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_up_v2 error: {exc!r}")
         return False
@@ -852,7 +859,7 @@ class AppController:
         queue = getattr(self.job_service, "queue", None)
         if queue and hasattr(queue, "move_down"):
             try:
-                return queue.move_down(job_id)
+                return bool(queue.move_down(job_id))
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_down_v2 error: {exc!r}")
         return False
@@ -876,7 +883,7 @@ class AppController:
         queue = getattr(self.job_service, "queue", None)
         if queue and hasattr(queue, "clear"):
             try:
-                return queue.clear()
+                return int(queue.clear())
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_clear_v2 error: {exc!r}")
         return 0
@@ -1037,7 +1044,8 @@ class AppController:
             self._set_lifecycle(new_state, error)
             return
 
-        self.main_window.after(0, lambda: self._set_lifecycle(new_state, error))
+        if self.main_window is not None:
+            self.main_window.after(0, lambda: self._set_lifecycle(new_state, error))
 
     def _update_status(self, text: str) -> None:
         """Update status bar text if the bottom zone is ready; otherwise cache it."""
@@ -1136,13 +1144,14 @@ class AppController:
             self._append_log(text)
             return
 
-        self.main_window.after(0, lambda: self._append_log(text))
+        if self.main_window is not None:
+            self.main_window.after(0, lambda: self._append_log(text))
 
     # ------------------------------------------------------------------
     # Run / Stop / Preview
     # ------------------------------------------------------------------
 
-    def run_pipeline(self):
+    def run_pipeline(self) -> Any:
         """Public, synchronous pipeline entrypoint used by journeys and tests.
 
         This method:
@@ -1630,10 +1639,6 @@ class AppController:
     # Settings / Help
     # ------------------------------------------------------------------
 
-    def on_open_settings(self) -> None:
-        self._append_log("[controller] Settings clicked (stub).")
-        # TODO: open a settings dialog or config editor.
-
     def on_help_clicked(self) -> None:
         self._append_log("[controller] Help clicked (stub).")
         # TODO: open docs/README in browser or show help overlay.
@@ -1650,7 +1655,7 @@ class AppController:
         except Exception:
             pass
         worker_alive = self._worker_thread is not None and self._worker_thread.is_alive()
-        if worker_alive:
+        if worker_alive and self._worker_thread is not None:
             try:
                 self._worker_thread.join(timeout=2.0)
             except Exception:
@@ -1801,8 +1806,15 @@ class AppController:
     # Packs / Presets
     # ------------------------------------------------------------------
 
-    def _on_preset_combo_select(self, event) -> None:  # type: ignore[override]
-        combo = self.main_window.left_zone.preset_combo
+    def _on_preset_combo_select(self, event: Any) -> None:
+        if self.main_window is None:
+            return
+        left_zone = getattr(self.main_window, "left_zone", None)
+        if left_zone is None:
+            return
+        combo = getattr(left_zone, "preset_combo", None)
+        if combo is None:
+            return
         new_preset = combo.get()
         self.on_preset_selected(new_preset)
 
@@ -1915,9 +1927,14 @@ class AppController:
         except Exception as e:
             self._append_log(f"[controller] Error applying core config overrides: {e}")
 
-    def _on_pack_list_select(self, event) -> None:  # type: ignore[override]
-        lb = self.main_window.left_zone.packs_list
-        if not lb.curselection():
+    def _on_pack_list_select(self, event: Any) -> None:
+        if self.main_window is None:
+            return
+        left_zone = getattr(self.main_window, "left_zone", None)
+        if left_zone is None:
+            return
+        lb = getattr(left_zone, "packs_list", None)
+        if lb is None or not lb.curselection():
             return
         index = lb.curselection()[0]
         self.on_pack_selected(int(index))
@@ -1926,7 +1943,8 @@ class AppController:
         """Discover packs and push them to the GUI."""
         self.packs = discover_packs(self._packs_dir)
         pack_names = [pack.name for pack in self.packs]
-        self.main_window.update_pack_list(pack_names)
+        if self.main_window is not None and hasattr(self.main_window, "update_pack_list"):
+            self.main_window.update_pack_list(pack_names)
         self._selected_pack_index = None
         self._append_log(f"[controller] Loaded {len(pack_names)} pack(s).")
 
@@ -2262,13 +2280,13 @@ class AppController:
             except Exception as e:
                 pass
 
-    def _get_stage_cards_panel(self):
+    def _get_stage_cards_panel(self) -> Any:
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab is None:
             return None
         return getattr(pipeline_tab, "stage_cards_panel", None)
 
-    def _get_sidebar_panel(self):
+    def _get_sidebar_panel(self) -> Any:
         return getattr(self.main_window, "sidebar_panel_v2", None)
 
     # ------------------------------------------------------------------

@@ -11,6 +11,12 @@ from src.utils.config import LoraRuntimeConfig
 if TYPE_CHECKING:  # pragma: no cover
     from src.gui.prompt_workspace_state import PromptWorkspaceState
 
+logger = logging.getLogger(__name__)
+
+# Type aliases for listeners
+Listener = Callable[[], None]
+ResourceListener = Callable[[Dict[str, List[Any]]], None]
+
 @dataclass
 class PackJobEntry:
     pack_id: str

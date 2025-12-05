@@ -31,8 +31,8 @@ class QueuePanelV2(ttk.Frame):
         *,
         controller: Any | None = None,
         app_state: Any | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state
@@ -120,15 +120,15 @@ class QueuePanelV2(ttk.Frame):
         # Initial button state
         self._update_button_states()
 
-    def _on_selection_changed(self, event: tk.Event | None = None) -> None:
+    def _on_selection_changed(self, event: tk.Event[tk.Listbox] | None = None) -> None:
         """Handle selection change in the listbox."""
         self._update_button_states()
 
     def _get_selected_index(self) -> int | None:
         """Get the currently selected index, or None if nothing selected."""
-        selection = self.job_listbox.curselection()
+        selection = self.job_listbox.curselection()  # type: ignore[no-untyped-call]
         if selection:
-            return selection[0]
+            return int(selection[0])
         return None
 
     def _get_selected_job(self) -> QueueJobV2 | None:
@@ -145,11 +145,11 @@ class QueuePanelV2(ttk.Frame):
         has_jobs = len(self._jobs) > 0
 
         # Move up: enabled if selection is not first
-        can_move_up = has_selection and idx > 0
+        can_move_up = has_selection and idx is not None and idx > 0
         self.move_up_button.state(["!disabled"] if can_move_up else ["disabled"])
 
         # Move down: enabled if selection is not last
-        can_move_down = has_selection and idx < len(self._jobs) - 1
+        can_move_down = has_selection and idx is not None and idx < len(self._jobs) - 1
         self.move_down_button.state(["!disabled"] if can_move_down else ["disabled"])
 
         # Remove: enabled if something is selected

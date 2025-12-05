@@ -360,7 +360,7 @@ class RandomizerPanelV2(ttk.Frame):
             except Exception:
                 pass
 
-    def _on_max_variants_change(self, *_args) -> None:
+    def _on_max_variants_change(self, *_args: object) -> None:
         """Handle max variants spinbox change."""
         value = self._parse_positive_int(self.max_variants_var.get(), default=8)
         value = max(1, min(value, DEFAULT_MAX_VARIANTS))
@@ -374,14 +374,14 @@ class RandomizerPanelV2(ttk.Frame):
 
         self._refresh_plan_and_stats()
 
-    def _on_fanout_change(self, *_args) -> None:
+    def _on_fanout_change(self, *_args: object) -> None:
         """Handle fanout spinbox change."""
         value = self._parse_positive_int(self.fanout_var.get(), default=1)
         value = max(1, min(value, 99))
         self.fanout_var.set(str(value))
         self._refresh_plan_and_stats()
 
-    def _on_seed_settings_changed(self, *_args) -> None:
+    def _on_seed_settings_changed(self, *_args: object) -> None:
         """Handle seed mode or base seed change."""
         mode = (self.seed_mode_var.get() or "none").lower()
         if mode in ("fixed", "per_variant"):
@@ -401,7 +401,7 @@ class RandomizerPanelV2(ttk.Frame):
             except Exception:
                 pass
 
-    def _handle_var_change(self, *_args) -> None:
+    def _handle_var_change(self, *_args: object) -> None:
         """Generic handler for any control variable change."""
         self._refresh_plan_and_stats()
         if self._change_callback:
@@ -518,9 +518,9 @@ class RandomizerPanelV2(ttk.Frame):
         """Get the current base config from the controller if available."""
         try:
             if self._controller and hasattr(self._controller, "get_current_config"):
-                return getattr(self._controller, "get_current_config")() or {}
+                return self._controller.get_current_config() or {}
             if self._controller and hasattr(self._controller, "current_config"):
-                return getattr(self._controller, "current_config") or {}
+                return self._controller.current_config or {}
         except Exception:
             pass
         return {}

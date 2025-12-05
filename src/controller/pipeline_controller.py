@@ -1,5 +1,5 @@
-"""Compatibility wrapper that exposes the GUI pipeline controller at src.controller."""
-"""
+"""Compatibility wrapper that exposes the GUI pipeline controller at src.controller.
+
 PipelineController – V2 Run Path (summary)
 
 GUI Run buttons → AppController._start_run_v2 → PipelineController.start_pipeline

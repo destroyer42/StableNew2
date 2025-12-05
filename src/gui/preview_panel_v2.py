@@ -30,7 +30,7 @@ class PreviewPanelV2(ttk.Frame):
         controller: Any | None = None,
         app_state: Any | None = None,
         theme: Any | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=PADDING_MD, **kwargs)
         self.controller = controller
@@ -106,7 +106,7 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.cancel_button.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-    def set_current_image(self, image_path: str, metadata: dict) -> None:
+    def set_current_image(self, image_path: str, metadata: dict[str, Any]) -> None:
         """Set the current image and metadata."""
         self.current_image_label.config(text=f"Image: {image_path}")
         self.metadata_text.delete(1.0, tk.END)
@@ -117,7 +117,7 @@ class PreviewPanelV2(ttk.Frame):
         self.current_image_label.config(text="No image")
         self.metadata_text.delete(1.0, tk.END)
 
-    def update_from_job_draft(self, job_draft) -> None:
+    def update_from_job_draft(self, job_draft: Any) -> None:
         """Update preview summary from job draft."""
         packs = getattr(job_draft, "packs", [])
         if not packs:
@@ -142,9 +142,9 @@ class PreviewPanelV2(ttk.Frame):
 
         self.jobs_label.config(text="")
 
-    def update_from_controls(self, sidebar) -> None:
+    def update_from_controls(self, sidebar: Any) -> None:
         """Update preview summary from sidebar controls."""
-        enabled = getattr(sidebar, "get_enabled_stages", lambda: [])()
+        enabled: list[str] = getattr(sidebar, "get_enabled_stages", lambda: [])()  # noqa: E501
         ordered = ["txt2img", "img2img", "adetailer", "upscale"]
         enabled_set = set(enabled)
         canonical = [stage for stage in ordered if stage in enabled_set]

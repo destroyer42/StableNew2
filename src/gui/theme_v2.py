@@ -196,8 +196,10 @@ def apply_theme(root: tk.Tk | tk.Toplevel) -> ttk.Style:
 class Theme:
     def apply_ttk_styles(self, root_or_style: tk.Tk | ttk.Style) -> None:
         try:
-            style = root_or_style
-            if not isinstance(style, ttk.Style):
+            style: ttk.Style
+            if isinstance(root_or_style, ttk.Style):
+                style = root_or_style
+            else:
                 style = ttk.Style(master=root_or_style)
             design_system.apply_design_system(style)
         except Exception:
