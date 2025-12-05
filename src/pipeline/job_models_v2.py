@@ -105,6 +105,62 @@ class NormalizedJobRecord:
 
         return f"{model} | seed={seed_str}{variant_info}{batch_info}"
 
+    def to_queue_snapshot(self) -> dict[str, Any]:
+        """Convert to a dict snapshot suitable for queue Job.config_snapshot.
+
+        This produces a complete, serializable representation of the job
+        for queue/history persistence.
+        """
+        config = self.config
+
+        # Extract common fields from config (dict or object)
+        if isinstance(config, dict):
+            prompt = config.get("prompt", "")
+            negative_prompt = config.get("negative_prompt", "")
+            model = config.get("model", config.get("model_name", ""))
+            steps = config.get("steps")
+            cfg_scale = config.get("cfg_scale")
+            width = config.get("width")
+            height = config.get("height")
+            sampler = config.get("sampler", config.get("sampler_name", ""))
+            vae = config.get("vae", config.get("vae_name", ""))
+        else:
+            prompt = getattr(config, "prompt", "")
+            negative_prompt = getattr(config, "negative_prompt", "")
+            model = getattr(config, "model", "") or getattr(config, "model_name", "")
+            steps = getattr(config, "steps", None)
+            cfg_scale = getattr(config, "cfg_scale", None)
+            width = getattr(config, "width", None)
+            height = getattr(config, "height", None)
+            sampler = getattr(config, "sampler", "") or getattr(config, "sampler_name", "")
+            vae = getattr(config, "vae", "") or getattr(config, "vae_name", "")
+
+        snapshot: dict[str, Any] = {
+            "job_id": self.job_id,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "model": model,
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "width": width,
+            "height": height,
+            "sampler": sampler,
+            "vae": vae,
+            "seed": self.seed,
+            "output_dir": self.path_output_dir,
+            "filename_template": self.filename_template,
+            "variant_index": self.variant_index,
+            "variant_total": self.variant_total,
+            "batch_index": self.batch_index,
+            "batch_total": self.batch_total,
+            "created_ts": self.created_ts,
+        }
+
+        if self.randomizer_summary:
+            snapshot["randomizer_summary"] = self.randomizer_summary
+
+        return snapshot
+
 
 # ---------------------------------------------------------------------------
 # Queue Job V2 (existing)

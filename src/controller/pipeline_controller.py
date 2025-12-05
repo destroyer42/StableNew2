@@ -9,6 +9,7 @@ GUI Run buttons → AppController._start_run_v2 → PipelineController.start_pip
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from typing import Callable, Any
@@ -22,6 +23,8 @@ from src.controller.queue_execution_controller import QueueExecutionController
 from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
+from src.pipeline.job_builder_v2 import JobBuilderV2
+from src.pipeline.job_models_v2 import NormalizedJobRecord, BatchSettings, OutputSettings
 from src.gui.state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 from src.config import app_config
@@ -32,6 +35,9 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.state import PipelineState
 from src.api.client import SDWebUIClient
 from src.utils import StructuredLogger
+
+# Logger for this module
+_logger = logging.getLogger(__name__)
 
 
 class PipelineController(_GUIPipelineController):
@@ -174,6 +180,241 @@ class PipelineController(_GUIPipelineController):
             randomizer_metadata=randomizer_metadata,
         )
 
+    # -------------------------------------------------------------------------
+    # V2 Job Building via JobBuilderV2 (PR-204C)
+    # -------------------------------------------------------------------------
+
+    def _build_normalized_jobs_from_state(
+        self,
+        base_config: PipelineConfig | None = None,
+    ) -> list[NormalizedJobRecord]:
+        """Build fully-normalized jobs from current GUI/AppState.
+
+        This is the single entrypoint for V2 job construction.
+        All run entrypoints should call this helper.
+
+        Args:
+            base_config: Optional pre-built PipelineConfig.
+                If None, builds from current state.
+
+        Returns:
+            List of NormalizedJobRecord instances ready for queue/preview.
+        """
+        # Build base config if not provided
+        if base_config is None:
+            try:
+                base_config = self._build_pipeline_config_from_state()
+            except Exception as exc:
+                _logger.warning("Failed to build pipeline config: %s", exc)
+                return []
+
+        # Extract randomization plan from state if available
+        randomization_plan = None
+        try:
+            rand_meta = self._extract_metadata("randomizer_metadata")
+            if rand_meta and rand_meta.get("enabled"):
+                from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
+                seed_mode_str = rand_meta.get("seed_mode", "FIXED")
+                try:
+                    seed_mode = RandomizationSeedMode[seed_mode_str.upper()]
+                except (KeyError, AttributeError):
+                    seed_mode = RandomizationSeedMode.FIXED
+
+                randomization_plan = RandomizationPlanV2(
+                    enabled=True,
+                    model_choices=rand_meta.get("model_choices", []),
+                    sampler_choices=rand_meta.get("sampler_choices", []),
+                    cfg_scale_values=rand_meta.get("cfg_scale_values", []),
+                    steps_values=rand_meta.get("steps_values", []),
+                    seed_mode=seed_mode,
+                    base_seed=rand_meta.get("base_seed"),
+                    max_variants=rand_meta.get("max_variants", 0),
+                )
+        except Exception as exc:
+            _logger.debug("Could not extract randomization plan: %s", exc)
+
+        # Extract batch settings from state
+        batch_settings = BatchSettings()
+        try:
+            overrides = self._extract_state_overrides()
+            batch_size = getattr(overrides, "batch_size", 1) or 1
+            batch_runs = getattr(self.state_manager, "batch_runs", 1) or 1
+            batch_settings = BatchSettings(batch_size=batch_size, batch_runs=batch_runs)
+        except Exception as exc:
+            _logger.debug("Could not extract batch settings: %s", exc)
+
+        # Extract output settings from state
+        output_settings = OutputSettings()
+        try:
+            overrides = self._extract_state_overrides()
+            output_dir = getattr(overrides, "output_dir", "") or "output"
+            filename_pattern = getattr(overrides, "filename_pattern", "") or "{seed}"
+            output_settings = OutputSettings(
+                base_output_dir=output_dir,
+                filename_template=filename_pattern,
+            )
+        except Exception as exc:
+            _logger.debug("Could not extract output settings: %s", exc)
+
+        # Build jobs via JobBuilderV2
+        try:
+            jobs = self._job_builder.build_jobs(
+                base_config=base_config,
+                randomization_plan=randomization_plan,
+                batch_settings=batch_settings,
+                output_settings=output_settings,
+            )
+        except Exception as exc:
+            _logger.warning("JobBuilderV2 failed to build jobs: %s", exc)
+            return []
+
+        if not jobs:
+            _logger.warning("JobBuilderV2 returned no jobs for current state")
+
+        return jobs
+
+    def _to_queue_job(
+        self,
+        record: NormalizedJobRecord,
+        *,
+        run_mode: str = "queue",
+        source: str = "gui",
+        prompt_source: str = "manual",
+        prompt_pack_id: str | None = None,
+    ) -> Job:
+        """Convert a NormalizedJobRecord into the Job model used by JobService.
+
+        This adapter preserves all metadata from the normalized record
+        while producing a Job compatible with the existing queue system.
+        """
+        # Get config snapshot from normalized record
+        config_snapshot = record.to_queue_snapshot()
+
+        # Extract pipeline_config from record.config if it's the right type
+        pipeline_config = None
+        if isinstance(record.config, PipelineConfig):
+            pipeline_config = record.config
+        elif hasattr(record.config, "__dict__"):
+            # Try to construct PipelineConfig from dict-like object
+            try:
+                pipeline_config = record.config
+            except Exception:
+                pass
+
+        # Build randomizer metadata from record
+        randomizer_metadata = record.randomizer_summary
+
+        return Job(
+            job_id=record.job_id,
+            pipeline_config=pipeline_config,
+            priority=JobPriority.NORMAL,
+            run_mode=run_mode,
+            source=source,
+            prompt_source=prompt_source,
+            prompt_pack_id=prompt_pack_id,
+            config_snapshot=config_snapshot,
+            randomizer_metadata=randomizer_metadata,
+            variant_index=record.variant_index,
+            variant_total=record.variant_total,
+            learning_enabled=self._learning_enabled,
+        )
+
+    def start_pipeline_v2(
+        self,
+        *,
+        run_mode: str | None = None,
+        source: str = "gui",
+        prompt_source: str = "manual",
+        prompt_pack_id: str | None = None,
+        on_complete: Callable[[dict[Any, Any]], None] | None = None,
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> bool:
+        """Start pipeline using V2 job building via JobBuilderV2.
+
+        This is the new V2 run entrypoint that:
+        1. Builds normalized jobs via JobBuilderV2
+        2. Converts them to queue Jobs
+        3. Submits via JobService respecting run_mode
+
+        Args:
+            run_mode: Force "direct" or "queue". If None, uses state.
+            source: Job source for provenance (e.g., "gui", "api").
+            prompt_source: Prompt source type (e.g., "manual", "pack").
+            prompt_pack_id: Optional prompt pack ID if using packs.
+            on_complete: Callback on successful completion.
+            on_error: Callback on error.
+
+        Returns:
+            True if jobs were submitted, False otherwise.
+        """
+        if not self.state_manager.can_run():
+            return False
+
+        # Check WebUI connection
+        if hasattr(self, "_webui_connection"):
+            state = self._webui_connection.ensure_connected(autostart=True)
+            if state is not None and state is not WebUIConnectionState.READY:
+                try:
+                    self.state_manager.transition_to(GUIState.ERROR)
+                except Exception:
+                    pass
+                return False
+
+        # Resolve run mode
+        if run_mode is None:
+            try:
+                pipeline_state = getattr(self.state_manager, "pipeline_state", None)
+                if pipeline_state:
+                    run_mode = self._normalize_run_mode(pipeline_state)
+                else:
+                    run_mode = "queue"
+            except Exception:
+                run_mode = "queue"
+
+        # Build normalized jobs
+        try:
+            normalized_jobs = self._build_normalized_jobs_from_state()
+        except Exception as exc:
+            _logger.error("Failed to build normalized jobs: %s", exc)
+            if on_error:
+                on_error(exc)
+            return False
+
+        if not normalized_jobs:
+            _logger.warning("No jobs to submit")
+            return False
+
+        # Convert and submit each job
+        submitted_count = 0
+        for record in normalized_jobs:
+            try:
+                job = self._to_queue_job(
+                    record,
+                    run_mode=run_mode,
+                    source=source,
+                    prompt_source=prompt_source,
+                    prompt_pack_id=prompt_pack_id,
+                )
+                # Attach payload for execution
+                job.payload = lambda j=job: self._run_job(j)
+
+                self._job_service.submit_job_with_run_mode(job)
+                submitted_count += 1
+            except Exception as exc:
+                _logger.error("Failed to submit job %s: %s", record.job_id, exc)
+                if on_error:
+                    on_error(exc)
+
+        if submitted_count > 0:
+            try:
+                self.state_manager.transition_to(GUIState.RUNNING)
+            except Exception:
+                pass
+            _logger.info("Submitted %d jobs via V2 pipeline", submitted_count)
+            return True
+
+        return False
+
     def build_pipeline_config_with_profiles(
         self,
         base_model_name: str,
@@ -242,6 +483,7 @@ class PipelineController(_GUIPipelineController):
         learning_record_writer: LearningRecordWriter | None = None,
         on_learning_record: Callable[[LearningRecord], None] | None = None,
         config_assembler: PipelineConfigAssembler | None = None,
+        job_builder: JobBuilderV2 | None = None,
         **kwargs,
     ):
         # Pop parameters that are not for the parent class
@@ -265,6 +507,7 @@ class PipelineController(_GUIPipelineController):
         self._queue_execution_controller: QueueExecutionController | None = queue_execution_controller or QueueExecutionController(job_controller=self._job_controller)
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_assembler = config_assembler if config_assembler is not None else PipelineConfigAssembler()
+        self._job_builder = job_builder if job_builder is not None else JobBuilderV2()
         self._webui_connection = webui_conn if webui_conn is not None else WebUIConnectionController()
         self._pipeline_runner = pipeline_runner
         if self._queue_execution_controller:
@@ -274,7 +517,6 @@ class PipelineController(_GUIPipelineController):
                 pass
         self._job_history_service: JobHistoryService | None = None
         self._active_job_id: str | None = None
-        self._last_run_config: dict[str, Any] | None = None
         self._last_run_config: dict[str, Any] | None = None
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
