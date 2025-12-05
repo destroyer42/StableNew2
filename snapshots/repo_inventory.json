@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-03T23:13:01",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251203-231300.zip",
-  "file_count": 1301,
-  "total_size_bytes": 12245590,
+  "created_at": "2025-12-04T21:48:01",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251204-214759.zip",
+  "file_count": 1311,
+  "total_size_bytes": 12739883,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -2081,8 +2081,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 133892,
-      "mtime_iso": "2025-12-03T23:04:08"
+      "size_bytes": 165922,
+      "mtime_iso": "2025-12-04T21:15:26"
     },
     {
       "path": "data/webui_cache.json",
@@ -2105,14 +2105,19 @@
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
+      "path": "docs/ARCHITECTURE_v2.5.md",
+      "size_bytes": 9394,
+      "mtime_iso": "2025-12-04T18:20:37"
+    },
+    {
       "path": "docs/ARCHITECTURE_v2.md",
       "size_bytes": 10709,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/ARCHITECTURE_v2_COMBINED.md",
-      "size_bytes": 13508,
-      "mtime_iso": "2025-11-24T19:33:20"
+      "path": "docs/ChatGPT-WhyNoPipeline.md",
+      "size_bytes": 267231,
+      "mtime_iso": "2025-12-04T05:12:41"
     },
     {
       "path": "docs/Cluster_Compute_Vision_v2.md",
@@ -2133,6 +2138,11 @@
       "path": "docs/Future_Learning_Roadmap_2025-11-26_1115.md",
       "size_bytes": 2261,
       "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "docs/Gui Wishlist.md",
+      "size_bytes": 4886,
+      "mtime_iso": "2025-12-04T21:08:50"
     },
     {
       "path": "docs/GUI-Pipeline-Hierarchy-Diagram.txt",
@@ -2168,6 +2178,11 @@
       "path": "docs/Journey_Test_Plan_2025-11-26_1115.md",
       "size_bytes": 4245,
       "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "docs/KNOWN_PITFALLS_QUEUE_TESTING.md",
+      "size_bytes": 1416,
+      "mtime_iso": "2025-12-04T05:48:50"
     },
     {
       "path": "docs/LAUNCHERS.md",
@@ -2273,6 +2288,11 @@
       "path": "docs/ROLLING_SUMMARY_FINAL.md",
       "size_bytes": 11531,
       "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "docs/Run Pipeline Path (V2) – Architecture Notes.md",
+      "size_bytes": 12490,
+      "mtime_iso": "2025-12-04T06:59:07"
     },
     {
       "path": "docs/StabeNewV2-SUPER-CurrentProjectInstructions.md",
@@ -2660,6 +2680,11 @@
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
+      "path": "docs/pr_templates/PR-0114 — Pipeline Run Controls → Queue-Runner.md",
+      "size_bytes": 13302,
+      "mtime_iso": "2025-12-04T06:09:59"
+    },
+    {
       "path": "docs/pr_templates/PR-034-PIPELINE-ADetailer-STAGECARD-V2-P1.md",
       "size_bytes": 17055,
       "mtime_iso": "2025-12-02T08:03:48"
@@ -2736,8 +2761,8 @@
     },
     {
       "path": "docs/pr_templates/PR-044-RANDOMIZER-GUI-INTEGRATION-V2-P1.md",
-      "size_bytes": 15358,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "size_bytes": 15339,
+      "mtime_iso": "2025-12-04T20:45:51"
     },
     {
       "path": "docs/pr_templates/PR-046 — Robust App Shutdown (D-08 Implementation, V2-P1).md",
@@ -3103,6 +3128,11 @@
       "path": "docs/pr_templates/PR Doc Resources/ExamplePR-CTRL-LC-001_gui_example PR.md",
       "size_bytes": 14434,
       "mtime_iso": "2025-11-29T11:22:13"
+    },
+    {
+      "path": "docs/pr_templates/PR Doc Resources/PR-114-StreamOfThought.md",
+      "size_bytes": 115084,
+      "mtime_iso": "2025-12-04T05:56:03"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/CLASSIFY-FUTURE-SUBSYSTEMS-003_V2-P1.md",
@@ -4306,8 +4336,8 @@
     },
     {
       "path": "packs/SDXL_angelic_warriors_Fantasy.json",
-      "size_bytes": 586,
-      "mtime_iso": "2025-11-26T16:13:37"
+      "size_bytes": 7199,
+      "mtime_iso": "2025-12-04T07:41:06"
     },
     {
       "path": "packs/SDXL_angelic_warriors_Fantasy.txt",
@@ -4336,8 +4366,8 @@
     },
     {
       "path": "packs/SDXL_beautiful_women_Realistic.json",
-      "size_bytes": 5883,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 4874,
+      "mtime_iso": "2025-12-04T06:18:44"
     },
     {
       "path": "packs/SDXL_beautiful_women_Realistic.txt",
@@ -4581,8 +4611,8 @@
     },
     {
       "path": "src/app_factory.py",
-      "size_bytes": 1701,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "size_bytes": 1741,
+      "mtime_iso": "2025-12-04T08:25:49"
     },
     {
       "path": "src/cli.py",
@@ -4676,8 +4706,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 108214,
-      "mtime_iso": "2025-12-03T21:05:27"
+      "size_bytes": 109850,
+      "mtime_iso": "2025-12-04T08:25:49"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -4696,8 +4726,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 5268,
-      "mtime_iso": "2025-12-03T21:25:18"
+      "size_bytes": 5559,
+      "mtime_iso": "2025-12-04T21:25:38"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -4711,8 +4741,8 @@
     },
     {
       "path": "src/controller/pipeline_controller.py",
-      "size_bytes": 24342,
-      "mtime_iso": "2025-12-03T21:25:18"
+      "size_bytes": 25924,
+      "mtime_iso": "2025-12-04T20:56:17"
     },
     {
       "path": "src/controller/queue_execution_controller.py",
@@ -4841,8 +4871,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 21604,
-      "mtime_iso": "2025-12-02T08:04:20"
+      "size_bytes": 22175,
+      "mtime_iso": "2025-12-04T08:25:49"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -4911,8 +4941,8 @@
     },
     {
       "path": "src/gui/randomizer_panel_v2.py",
-      "size_bytes": 14678,
-      "mtime_iso": "2025-11-28T18:47:50"
+      "size_bytes": 26659,
+      "mtime_iso": "2025-12-04T21:41:24"
     },
     {
       "path": "src/gui/resolution_panel_v2.py",
@@ -4951,8 +4981,8 @@
     },
     {
       "path": "src/gui/theme_v2.py",
-      "size_bytes": 7733,
-      "mtime_iso": "2025-12-03T21:46:14"
+      "size_bytes": 8023,
+      "mtime_iso": "2025-12-04T06:50:05"
     },
     {
       "path": "src/gui/tooltip.py",
@@ -5001,8 +5031,8 @@
     },
     {
       "path": "src/gui/panels_v2/pipeline_run_controls_v2.py",
-      "size_bytes": 7560,
-      "mtime_iso": "2025-12-03T22:30:25"
+      "size_bytes": 8931,
+      "mtime_iso": "2025-12-04T08:25:49"
     },
     {
       "path": "src/gui/panels_v2/preview_panel_v2.py",
@@ -5041,8 +5071,8 @@
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py",
-      "size_bytes": 29204,
-      "mtime_iso": "2025-12-03T21:56:38"
+      "size_bytes": 30144,
+      "mtime_iso": "2025-12-04T06:51:30"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py",
@@ -5121,8 +5151,8 @@
     },
     {
       "path": "src/gui/views/pipeline_tab_frame_v2.py",
-      "size_bytes": 15469,
-      "mtime_iso": "2025-12-03T07:08:40"
+      "size_bytes": 15704,
+      "mtime_iso": "2025-12-04T08:25:49"
     },
     {
       "path": "src/gui/views/prompt_tab_frame.py",
@@ -5141,8 +5171,8 @@
     },
     {
       "path": "src/gui/views/run_control_bar_v2.py",
-      "size_bytes": 7239,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "size_bytes": 8042,
+      "mtime_iso": "2025-12-04T21:24:59"
     },
     {
       "path": "src/gui/views/stage_cards_panel.py",
@@ -5281,8 +5311,8 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 109067,
-      "mtime_iso": "2025-12-03T07:04:55"
+      "size_bytes": 109588,
+      "mtime_iso": "2025-12-04T08:25:49"
     },
     {
       "path": "src/pipeline/last_run_store_v2_5.py",
@@ -5296,18 +5326,18 @@
     },
     {
       "path": "src/pipeline/pipeline_runner.py",
-      "size_bytes": 22775,
-      "mtime_iso": "2025-12-03T21:56:38"
+      "size_bytes": 23742,
+      "mtime_iso": "2025-12-04T20:53:37"
     },
     {
       "path": "src/pipeline/randomizer_v2.py",
-      "size_bytes": 974,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "size_bytes": 5943,
+      "mtime_iso": "2025-12-04T21:24:16"
     },
     {
       "path": "src/pipeline/run_config.py",
       "size_bytes": 1313,
-      "mtime_iso": "2025-12-03T22:30:26"
+      "mtime_iso": "2025-12-04T06:14:47"
     },
     {
       "path": "src/pipeline/run_plan.py",
@@ -5342,12 +5372,12 @@
     {
       "path": "src/queue/job_history_store.py",
       "size_bytes": 9182,
-      "mtime_iso": "2025-12-03T22:31:55"
+      "mtime_iso": "2025-12-04T06:14:47"
     },
     {
       "path": "src/queue/job_model.py",
-      "size_bytes": 4122,
-      "mtime_iso": "2025-12-03T21:25:18"
+      "size_bytes": 4360,
+      "mtime_iso": "2025-12-04T21:23:38"
     },
     {
       "path": "src/queue/job_queue.py",
@@ -5356,8 +5386,8 @@
     },
     {
       "path": "src/queue/single_node_runner.py",
-      "size_bytes": 3942,
-      "mtime_iso": "2025-12-02T08:04:20"
+      "size_bytes": 4182,
+      "mtime_iso": "2025-12-04T08:25:49"
     },
     {
       "path": "src/queue/__init__.py",
@@ -5457,7 +5487,7 @@
     {
       "path": "src/utils/prompt_packs.py",
       "size_bytes": 4085,
-      "mtime_iso": "2025-12-03T22:30:58"
+      "mtime_iso": "2025-12-04T06:14:47"
     },
     {
       "path": "src/utils/randomizer.py",
@@ -5785,6 +5815,11 @@
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
+      "path": "tests/controller/test_pipeline_randomizer_integration_v2.py",
+      "size_bytes": 4524,
+      "mtime_iso": "2025-12-04T21:26:28"
+    },
+    {
       "path": "tests/controller/test_presets_integration_v2.py",
       "size_bytes": 1911,
       "mtime_iso": "2025-12-02T08:03:48"
@@ -5936,8 +5971,8 @@
     },
     {
       "path": "tests/gui_v2/test_pipeline_randomizer_panel_v2.py",
-      "size_bytes": 1807,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "size_bytes": 8948,
+      "mtime_iso": "2025-12-04T21:42:12"
     },
     {
       "path": "tests/gui_v2/test_pipeline_run_controls_v2_add_to_queue_button.py",
@@ -5983,6 +6018,11 @@
       "path": "tests/gui_v2/test_run_controls_states.py",
       "size_bytes": 9781,
       "mtime_iso": "2025-12-03T22:30:25"
+    },
+    {
+      "path": "tests/gui_v2/test_run_control_bar_randomizer_summary_v2.py",
+      "size_bytes": 2005,
+      "mtime_iso": "2025-12-04T21:27:08"
     },
     {
       "path": "tests/gui_v2/test_scrolling_helper_v2.py",
@@ -6070,9 +6110,14 @@
       "mtime_iso": "2025-12-02T21:34:54"
     },
     {
+      "path": "tests/integration/KNOWN_PITFALLS_QUEUE_TESTING.md",
+      "size_bytes": 1416,
+      "mtime_iso": "2025-12-04T05:49:49"
+    },
+    {
       "path": "tests/integration/test_end_to_end_pipeline_v2.py",
-      "size_bytes": 21489,
-      "mtime_iso": "2025-12-03T23:05:08"
+      "size_bytes": 23114,
+      "mtime_iso": "2025-12-04T06:55:37"
     },
     {
       "path": "tests/integration/__init__.py",
@@ -6292,7 +6337,7 @@
     {
       "path": "tests/pipeline/test_run_config_prompt_source.py",
       "size_bytes": 6169,
-      "mtime_iso": "2025-12-03T22:33:09"
+      "mtime_iso": "2025-12-04T06:14:47"
     },
     {
       "path": "tests/pipeline/test_run_modes.py",
@@ -6348,6 +6393,11 @@
       "path": "tests/queue/test_job_queue_basic.py",
       "size_bytes": 1403,
       "mtime_iso": "2025-11-22T14:08:22"
+    },
+    {
+      "path": "tests/queue/test_job_variant_metadata_v2.py",
+      "size_bytes": 2997,
+      "mtime_iso": "2025-12-04T21:29:46"
     },
     {
       "path": "tests/queue/test_single_node_runner.py",
@@ -6447,7 +6497,7 @@
     {
       "path": "tests/utils/test_prompt_packs.py",
       "size_bytes": 3895,
-      "mtime_iso": "2025-12-03T22:32:30"
+      "mtime_iso": "2025-12-04T06:14:47"
     },
     {
       "path": "tests/utils/test_prompt_randomizer.py",

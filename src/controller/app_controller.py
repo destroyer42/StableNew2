@@ -829,6 +829,110 @@ class AppController:
         if self.app_state:
             self.app_state.set_queue_status("idle")
 
+    # ------------------------------------------------------------------
+    # PR-203: Queue Manipulation APIs
+    # ------------------------------------------------------------------
+
+    def on_queue_move_up_v2(self, job_id: str) -> bool:
+        """Move a job up in the queue."""
+        if not self.job_service:
+            return False
+        queue = getattr(self.job_service, "queue", None)
+        if queue and hasattr(queue, "move_up"):
+            try:
+                return queue.move_up(job_id)
+            except Exception as exc:
+                self._append_log(f"[controller] on_queue_move_up_v2 error: {exc!r}")
+        return False
+
+    def on_queue_move_down_v2(self, job_id: str) -> bool:
+        """Move a job down in the queue."""
+        if not self.job_service:
+            return False
+        queue = getattr(self.job_service, "queue", None)
+        if queue and hasattr(queue, "move_down"):
+            try:
+                return queue.move_down(job_id)
+            except Exception as exc:
+                self._append_log(f"[controller] on_queue_move_down_v2 error: {exc!r}")
+        return False
+
+    def on_queue_remove_job_v2(self, job_id: str) -> bool:
+        """Remove a job from the queue."""
+        if not self.job_service:
+            return False
+        queue = getattr(self.job_service, "queue", None)
+        if queue and hasattr(queue, "remove"):
+            try:
+                return queue.remove(job_id) is not None
+            except Exception as exc:
+                self._append_log(f"[controller] on_queue_remove_job_v2 error: {exc!r}")
+        return False
+
+    def on_queue_clear_v2(self) -> int:
+        """Clear all jobs from the queue."""
+        if not self.job_service:
+            return 0
+        queue = getattr(self.job_service, "queue", None)
+        if queue and hasattr(queue, "clear"):
+            try:
+                return queue.clear()
+            except Exception as exc:
+                self._append_log(f"[controller] on_queue_clear_v2 error: {exc!r}")
+        return 0
+
+    def on_pause_queue_v2(self) -> None:
+        """Pause queue processing."""
+        if self.app_state:
+            self.app_state.set_is_queue_paused(True)
+        if self.job_service:
+            queue = getattr(self.job_service, "queue", None)
+            if queue and hasattr(queue, "pause"):
+                queue.pause()
+
+    def on_resume_queue_v2(self) -> None:
+        """Resume queue processing."""
+        if self.app_state:
+            self.app_state.set_is_queue_paused(False)
+        if self.job_service:
+            queue = getattr(self.job_service, "queue", None)
+            if queue and hasattr(queue, "resume"):
+                queue.resume()
+
+    def on_set_auto_run_v2(self, enabled: bool) -> None:
+        """Set auto-run queue enabled/disabled."""
+        if self.app_state:
+            self.app_state.set_auto_run_queue(enabled)
+        if self.job_service:
+            queue = getattr(self.job_service, "queue", None)
+            if queue and hasattr(queue, "auto_run_enabled"):
+                queue.auto_run_enabled = enabled
+
+    def on_pause_job_v2(self) -> None:
+        """Pause the currently running job."""
+        if self.job_service:
+            queue = getattr(self.job_service, "queue", None)
+            if queue and hasattr(queue, "pause_running_job"):
+                queue.pause_running_job()
+
+    def on_resume_job_v2(self) -> None:
+        """Resume the paused running job."""
+        if self.job_service:
+            queue = getattr(self.job_service, "queue", None)
+            if queue and hasattr(queue, "resume_running_job"):
+                queue.resume_running_job()
+
+    def on_cancel_job_v2(self) -> None:
+        """Cancel the currently running job."""
+        if self.job_service:
+            queue = getattr(self.job_service, "queue", None)
+            if queue and hasattr(queue, "cancel_running_job"):
+                queue.cancel_running_job()
+            # Also trigger the cancel token if available
+            cancel_token = getattr(self, "_cancel_token", None)
+            if cancel_token and hasattr(cancel_token, "cancel"):
+                cancel_token.cancel()
+
     def refresh_job_history(self, limit: int | None = None) -> None:
         """Trigger a manual history refresh (exposed to GUI)."""
         self._refresh_job_history(limit=limit)

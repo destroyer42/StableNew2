@@ -98,6 +98,9 @@ class AppStateV2:
     last_run_job_id: Optional[str] = None
     last_error_message: Optional[str] = None
 
+    # PR-203: Auto-run queue flag
+    auto_run_queue: bool = False
+
     def set_invoker(self, invoker: GuiInvoker) -> None:
         """Set an invoker used to marshal notifications onto the GUI thread."""
         self._invoker = invoker
@@ -298,6 +301,12 @@ class AppStateV2:
         if self.is_queue_paused != value:
             self.is_queue_paused = value
             self._notify("is_queue_paused")
+
+    def set_auto_run_queue(self, value: bool) -> None:
+        """PR-203: Set auto-run queue flag."""
+        if self.auto_run_queue != value:
+            self.auto_run_queue = value
+            self._notify("auto_run_queue")
 
     def set_last_run_job_id(self, value: Optional[str]) -> None:
         if self.last_run_job_id != value:

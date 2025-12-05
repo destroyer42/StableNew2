@@ -8,7 +8,7 @@ from typing import Any
 
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.app_state_v2 import CurrentConfig
-from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
+from src.gui.stage_cards_v2.components import LabeledSlider, SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 
@@ -39,7 +39,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self._refiner_model_values: list[str] = []
         model_resources = self.controller.list_models() if self.controller and hasattr(self.controller, "list_models") else []
         refiner_values = self._load_refiner_models(model_resources)
-        self._apply_refiner_hiress_defaults()
+        # Note: _apply_refiner_hiress_defaults() is called later after refiner/hires vars are defined
 
         # Sampler/steps/cfg
         self.sampler_section = SamplerSection(parent)
@@ -280,20 +280,19 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         )
         self.refiner_model_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
         self._set_combo_values(self.refiner_model_combo, self.refiner_model_var, refiner_values)
-        ttk.Label(refiner_frame, text="Refiner start (%)", style="Dark.TLabel").grid(
+        ttk.Label(refiner_frame, text="Refiner start", style="Dark.TLabel").grid(
             row=2, column=0, sticky="w", pady=(4, 0)
         )
-        ttk.Scale(
+        self._refiner_slider = LabeledSlider(
             refiner_frame,
+            variable=self.refiner_switch_var,
             from_=0,
             to=100,
-            orient="horizontal",
-            variable=self.refiner_switch_var,
-            command=lambda value: self._on_refiner_switch_changed(),
+            show_percent=True,
             length=180,
-            style="Dark.Horizontal.TScale",
-            takefocus=False,
-        ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
+            command=lambda value: self._on_refiner_switch_changed(),
+        )
+        self._refiner_slider.grid(row=2, column=1, sticky="ew", pady=(4, 0))
 
         hires_frame = ttk.LabelFrame(parent, text="Hires fix", style=SURFACE_FRAME_STYLE)
         hires_frame.grid(row=4, column=0, sticky="ew", pady=(0, 4))
@@ -321,13 +320,14 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         ttk.Label(hires_frame, text="Upscale factor", style="Dark.TLabel").grid(
             row=2, column=0, sticky="w", pady=(4, 0)
         )
-        tk.Spinbox(
+        ttk.Spinbox(
             hires_frame,
             from_=1.0,
             to=4.0,
             increment=0.1,
             textvariable=self.hires_factor_var,
             width=8,
+            style="Dark.TSpinbox",
         ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
         ttk.Label(hires_frame, text="Hires steps", style="Dark.TLabel").grid(
             row=3, column=0, sticky="w", pady=(4, 0)
@@ -345,17 +345,16 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         ttk.Label(hires_frame, text="Denoise", style="Dark.TLabel").grid(
             row=4, column=0, sticky="w", pady=(4, 0)
         )
-        ttk.Scale(
+        self._hires_denoise_slider = LabeledSlider(
             hires_frame,
+            variable=self.hires_denoise_var,
             from_=0.0,
             to=1.0,
-            orient="horizontal",
-            variable=self.hires_denoise_var,
-            command=lambda value: self._on_hires_denoise_changed(),
+            label_format="{:.2f}",
             length=180,
-            style="Dark.Horizontal.TScale",
-            takefocus=False,
-        ).grid(row=4, column=1, sticky="ew", pady=(4, 0))
+            command=lambda value: self._on_hires_denoise_changed(),
+        )
+        self._hires_denoise_slider.grid(row=4, column=1, sticky="ew", pady=(4, 0))
         ttk.Checkbutton(
             hires_frame,
             text="Use base model during hires",

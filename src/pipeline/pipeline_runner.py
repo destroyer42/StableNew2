@@ -106,7 +106,7 @@ class PipelineRunner:
         self._learning_record_writer = learning_record_writer
         self._learning_record_callback = on_learning_record
         self._last_run_result: PipelineRunResult | None = None
-        self._runs_base_dir = runs_base_dir or "runs"
+        self._runs_base_dir = runs_base_dir or "output"
         self._learning_enabled = bool(learning_enabled)
         self._sequencer = sequencer or StageSequencer()
 
@@ -168,8 +168,18 @@ class PipelineRunner:
             if not stage_plan.stages:
                 raise ValueError("No pipeline stages enabled")
             self._ensure_not_cancelled(cancel_token, "pipeline start")
-            run_dir = Path(self._runs_base_dir) / run_id
+            
+            # Use pack output dir from config metadata if provided, otherwise fallback
+            pack_output_dir = (config.metadata or {}).get("_pack_output_dir")
+            if pack_output_dir:
+                run_dir = Path(pack_output_dir)
+            else:
+                run_dir = Path(self._runs_base_dir) / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Get prompt index for image naming
+            prompt_index = (config.metadata or {}).get("_prompt_index", 1)
+            job_date = (config.metadata or {}).get("_job_date", "")
 
             prev_image_path: Path | None = None
             prompt = config.prompt
@@ -204,6 +214,8 @@ class PipelineRunner:
                     run_dir,
                     cancel_token,
                     input_image_path,
+                    prompt_index=prompt_index,
+                    job_date=job_date,
                 )
                 if last_image_meta and last_image_meta.get("path"):
                     prev_image_path = Path(last_image_meta["path"])
@@ -295,11 +307,22 @@ class PipelineRunner:
         run_dir: Path,
         cancel_token: "CancelToken" | None,
         input_image_path: Path | None,
+        prompt_index: int = 1,
+        job_date: str = "",
     ) -> dict[str, Any] | None:
-        """Execute a stage using the executor helpers and the built payload."""
+        """Execute a stage using the executor helpers and the built payload.
+        
+        Image naming convention: {stage_type}_{prompt_index:02d}_{date}.png
+        Example: txt2img_01_2024-12-04.png
+        """
 
         stage_type = StageTypeEnum(stage.stage_type)
-        image_name = f"{stage_type.value}_{stage.order_index}"
+        # New naming: stage_promptIndex_date (e.g., txt2img_01_2024-12-04)
+        if job_date:
+            image_name = f"{stage_type.value}_{prompt_index:02d}_{job_date}"
+        else:
+            image_name = f"{stage_type.value}_{prompt_index:02d}"
+        
         if stage_type == StageTypeEnum.TXT2IMG:
             return self._pipeline.run_txt2img_stage(
                 payload.get("prompt", ""),

@@ -114,7 +114,33 @@ class TestAppStateV2RunStateFields:
 
 
 # ---------------------------------------------------------------------------
+# PR-203: Auto-run queue flag tests
+# ---------------------------------------------------------------------------
+
+
+class TestAppStateV2AutoRunQueue:
+    """Tests for PR-203 auto_run_queue field."""
+
+    def test_auto_run_queue_default_false(self) -> None:
+        state = AppStateV2()
+        assert state.auto_run_queue is False
+
+    def test_set_auto_run_queue_true(self) -> None:
+        state = AppStateV2()
+        state.set_auto_run_queue(True)
+        assert state.auto_run_queue is True
+
+    def test_set_auto_run_queue_notifies_listener(self) -> None:
+        state = AppStateV2()
+        notifications = []
+        state.subscribe("auto_run_queue", lambda: notifications.append("notified"))
+        state.set_auto_run_queue(True)
+        assert notifications == ["notified"]
+
+
+# ---------------------------------------------------------------------------
 # PipelineRunControlsV2.refresh_states() Button State Tests
+# PR-203: Updated for simplified controls (no run_button, run_now_button, stop_button)
 # ---------------------------------------------------------------------------
 
 
@@ -126,85 +152,36 @@ class MockAppState:
     is_direct_run_in_progress: bool = False
     is_queue_paused: bool = False
     current_pack: str | None = None
+    auto_run_queue: bool = False
+    running_job: dict | None = None
+    queue_items: list = None
+
+    def __post_init__(self):
+        if self.queue_items is None:
+            self.queue_items = []
 
 
 @pytest.mark.gui
 class TestPipelineRunControlsRefreshStates:
-    """Tests for refresh_states() button enable/disable logic."""
+    """Tests for refresh_states() button enable/disable logic (PR-203 simplified version)."""
 
-    def test_all_buttons_enabled_when_idle_with_pack(self, tk_root: tk.Tk) -> None:
-        """When idle with a pack selected, Run/Run Now/Add to Queue enabled, Stop disabled."""
+    def test_add_button_enabled_with_pack(self, tk_root: tk.Tk) -> None:
+        """PR-203: Add to Queue button enabled when pack is selected."""
         app_state = MockAppState(current_pack="test_pack")
         controls = PipelineRunControlsV2(tk_root, app_state=app_state)
 
         controls.refresh_states()
 
-        assert str(controls.run_button.cget("state")) == "normal"
-        assert str(controls.run_now_button.cget("state")) == "normal"
-        assert str(controls.add_button.cget("state")) == "normal"
-        assert str(controls.stop_button.cget("state")) == "disabled"
+        assert "disabled" not in controls.add_button.state()
 
-    def test_run_now_disabled_during_direct_run(self, tk_root: tk.Tk) -> None:
-        """Run Now button disabled when direct run is in progress."""
-        app_state = MockAppState(
-            is_run_in_progress=True,
-            is_direct_run_in_progress=True,
-            current_pack="test_pack",
-        )
-        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
-
-        controls.refresh_states()
-
-        assert str(controls.run_now_button.cget("state")) == "disabled"
-
-    def test_run_disabled_during_direct_run(self, tk_root: tk.Tk) -> None:
-        """Run button disabled when direct run is in progress."""
-        app_state = MockAppState(
-            is_run_in_progress=True,
-            is_direct_run_in_progress=True,
-            current_pack="test_pack",
-        )
-        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
-
-        controls.refresh_states()
-
-        assert str(controls.run_button.cget("state")) == "disabled"
-
-    def test_run_disabled_when_queue_paused(self, tk_root: tk.Tk) -> None:
-        """Run button disabled when queue is paused."""
-        app_state = MockAppState(is_queue_paused=True, current_pack="test_pack")
-        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
-
-        controls.refresh_states()
-
-        assert str(controls.run_button.cget("state")) == "disabled"
-
-    def test_add_to_queue_disabled_without_pack(self, tk_root: tk.Tk) -> None:
-        """Add to Queue button disabled when no pack is selected."""
+    def test_add_button_disabled_without_pack(self, tk_root: tk.Tk) -> None:
+        """PR-203: Add to Queue button disabled when no pack is selected."""
         app_state = MockAppState(current_pack=None)
         controls = PipelineRunControlsV2(tk_root, app_state=app_state)
 
         controls.refresh_states()
 
-        assert str(controls.add_button.cget("state")) == "disabled"
-
-    def test_add_to_queue_disabled_when_queue_paused(self, tk_root: tk.Tk) -> None:
-        """Add to Queue button disabled when queue is paused."""
-        app_state = MockAppState(is_queue_paused=True, current_pack="test_pack")
-        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
-
-        controls.refresh_states()
-
-        assert str(controls.add_button.cget("state")) == "disabled"
-
-    def test_stop_enabled_during_run(self, tk_root: tk.Tk) -> None:
-        """Stop button enabled when run is in progress."""
-        app_state = MockAppState(is_run_in_progress=True, current_pack="test_pack")
-        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
-
-        controls.refresh_states()
-
-        assert str(controls.stop_button.cget("state")) == "normal"
+        assert "disabled" in controls.add_button.state()
 
     def test_clear_draft_always_enabled(self, tk_root: tk.Tk) -> None:
         """Clear Draft button always enabled regardless of state."""
@@ -217,7 +194,7 @@ class TestPipelineRunControlsRefreshStates:
 
         controls.refresh_states()
 
-        assert str(controls.clear_draft_button.cget("state")) == "normal"
+        assert "disabled" not in controls.clear_draft_button.state()
 
     def test_refresh_states_handles_none_app_state(self, tk_root: tk.Tk) -> None:
         """refresh_states() handles None app_state gracefully."""
@@ -234,15 +211,53 @@ class TestPipelineRunControlsRefreshStates:
         # Should not raise, uses getattr defaults
         controls.refresh_states()
 
-    def test_queue_run_allows_run_now(self, tk_root: tk.Tk) -> None:
-        """During queue (non-direct) run, Run Now stays enabled."""
-        app_state = MockAppState(
-            is_run_in_progress=True,
-            is_direct_run_in_progress=False,  # Queue run, not direct
-            current_pack="test_pack",
-        )
+    def test_pause_resume_button_shows_pause_when_not_paused(self, tk_root: tk.Tk) -> None:
+        """PR-203: Pause/Resume button shows 'Pause Queue' when not paused."""
+        app_state = MockAppState(is_queue_paused=False)
         controls = PipelineRunControlsV2(tk_root, app_state=app_state)
 
         controls.refresh_states()
 
-        assert str(controls.run_now_button.cget("state")) == "normal"
+        button_text = controls.pause_resume_button.cget("text")
+        assert "Pause" in button_text
+
+    def test_pause_resume_button_shows_resume_when_paused(self, tk_root: tk.Tk) -> None:
+        """PR-203: Pause/Resume button shows 'Resume Queue' when paused."""
+        app_state = MockAppState(is_queue_paused=True)
+        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
+
+        controls.refresh_states()
+
+        button_text = controls.pause_resume_button.cget("text")
+        assert "Resume" in button_text
+
+    def test_status_shows_idle_when_empty(self, tk_root: tk.Tk) -> None:
+        """PR-203: Status label shows 'Idle' when queue is empty."""
+        app_state = MockAppState(queue_items=[])
+        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
+
+        controls.refresh_states()
+
+        status_text = controls.status_label.cget("text")
+        assert "Idle" in status_text
+
+    def test_status_shows_pending_count(self, tk_root: tk.Tk) -> None:
+        """PR-203: Status label shows pending job count."""
+        app_state = MockAppState(queue_items=["job1", "job2", "job3"])
+        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
+
+        controls.refresh_states()
+
+        status_text = controls.status_label.cget("text")
+        assert "3" in status_text
+
+    def test_status_shows_running_when_job_active(self, tk_root: tk.Tk) -> None:
+        """PR-203: Status label shows 'Running' when a job is active."""
+        app_state = MockAppState(running_job={"job_id": "test123"})
+        controls = PipelineRunControlsV2(tk_root, app_state=app_state)
+
+        controls.refresh_states()
+
+        status_text = controls.status_label.cget("text")
+        assert "Running" in status_text
+

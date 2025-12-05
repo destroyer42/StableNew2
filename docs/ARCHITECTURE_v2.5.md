@@ -1,382 +1,527 @@
-# StableNew Architecture v2  
-_Layered, Testable, Cluster-Aware Design_
+ARCHITECTURE_v2.5.md
+Canonical Architecture Specification for StableNew V2.5
 
-This document supersedes **ARCHITECTURE_v2_Translation_Plan.md** and becomes the authoritative architecture reference for V2.
+This document supersedes all previous V2 architectural documents and is the authoritative source of truth.
 
----
+1. Overview
 
-## 1. High-Level Overview
+StableNew V2.5 uses a strict layered architecture separating:
 
-StableNew v2 is organized into **strict layers**:
+GUI Layer (Tk/Ttk V2 UI)
 
-- **GUI Layer (V2)** – Tk/Ttk based UI (StableNewGUI, V2 panels & stage cards, status bar).
-- **Controller Layer** – AppController / PipelineController: lifecycle, CancelToken, config assembly, learning hooks.
-- **Pipeline Layer** – PipelineRunner, PipelineConfig, stage executor logic.
-- **Randomizer & Learning Layer** – pure-function utilities for variant planning and learning plans/records.
-- **Cluster & IO Layer (future)** – job queue, worker registry, schedulers, persistence.
-- **API Layer** – SD WebUI client and related HTTP/JSON integration.
-- **Logging Layer** – StructuredLogger and atomic IO writers.
+Controller Layer (AppController, PipelineController)
 
-Data flows strictly **downward**, while events and progress propagate **upward** via callbacks/events.
+Pipeline Layer (PipelineRunner, stage execution plan, executor wrappers)
 
-### 1.1 Top-Level Package Layout
+Learning & Randomizer Layer
 
-To support this layered design, the codebase is organized into these top-level packages:
+Queue / Job Execution Layer (SingleNodeJobRunner, JobExecutionController, JobService)
 
-- `src/gui/`  
-  Tkinter GUI: windows, panels, widgets, dialogs.
+API Layer (Stable Diffusion WebUI Client)
 
-- `src/controller/`  
-  Application and pipeline controllers (no Tk imports).
+Utilities Layer (logging, config, IO, shared helpers)
 
-- `src/pipeline/`  
-  Core pipeline runner and building blocks (stateless, testable).
+Goals
 
-- `src/api/`  
-  Stable Diffusion WebUI HTTP client and related helpers.
+Fully testable pipeline logic, independent of GUI
 
-- `src/learning/`  
-  Learning v2: plan/execution/record data models, builders, writers, runners.
+Deterministic config → plan → executor flow
 
-- `src/utils/`  
-  Logging, file I/O, config, and other shared utilities.
+Expandable to multi-node cluster execution
 
-- `tests/`  
-  Mirrors the above structure (`tests/gui/`, `tests/pipeline/`, etc.).
+Clean separation of orchestration vs execution
 
-### 1.2 Dependency Direction (Clean Architecture)
+Clear run-mode semantics (direct, queued)
 
-Allowed dependency directions (lower → higher):
+First-class support for Learning Records and Randomizer Variants
 
-- `utils` → (no upward deps)
-- `api` → `utils`
-- `pipeline` → `api`, `utils`
-- `learning` → `pipeline`, `utils`
-- `controller` → `pipeline`, `learning`, `api`, `utils`
-- `gui` → `controller`, `utils` (but **not** `pipeline` or `api` directly)
+2. Dependency Direction
 
-**Forbidden patterns:**
+StableNew enforces Clean Architecture rules:
 
-- GUI importing `src/pipeline/*` directly.
-- GUI importing `requests` or other HTTP clients directly.
-- Controllers importing `gui`.
-- Circular imports (e.g., controller ↔ gui ↔ pipeline).
+utils → api → pipeline → learning → controller → gui
 
-If existing legacy code violates these rules, new work should move it toward this model.
 
----
+Allowed:
 
-## 2. GUI Layer (V2)
+Higher layers may depend on lower layers
 
-### 2.1 StableNewGUI
+Lower layers must not depend on higher layers
 
-Responsibilities:
+Forbidden:
 
-- Construct the **V2 layout**:
-  - SidebarPanelV2
-  - PipelinePanelV2 (with per-stage cards)
-  - RandomizerPanelV2
-  - PreviewPanelV2
-  - StatusBarV2
-- Wire user interactions (Run, Stop, select packs, toggle stages).
-- Display progress, ETA, and error messages via StatusBarV2.
-- Surface learning and randomization options without exposing low-level details (e.g., no raw JSON in the UI).
+GUI importing pipeline or api
 
-Must NOT:
+Controllers importing GUI
 
-- Execute pipeline stages directly.
-- Make direct HTTP calls to SD WebUI.
-- Write files except via controlled save dialogs (and even then, using helpers).
+Direct executor calls from GUI
 
-### 2.2 Panels and Stage Cards
+Circular imports between controller ↔ pipeline
 
-- **PipelinePanelV2**
-  - Hosts stage cards:
-    - Txt2ImgStageCard
-    - Img2ImgStageCard
-    - UpscaleStageCard
-    - (Future: ADetailerStageCard, RefinerStageCard, VideoStageCard).
-  - Defines `load_from_config()` / `to_config_dict()` helpers for each card.
-  - Cooperates with StableNewGUI to produce an effective **pipeline config delta**.
+3. GUI Layer (V2)
 
-- **RandomizerPanelV2**
-  - Provides UX for:
-    - Variant mode (off / sequential / rotate / random).
-    - Matrix fields (e.g., styles, LoRAs, embeddings).
-    - Fanout (images per variant).
-  - Shows a live **“Total variants”** label.
+The V2 GUI is a pure presentation layer.
 
-- **StatusBarV2**
-  - Handles:
-    - Status text (Idle / Running / Error / Completed).
-    - Progress bar (0–100%).
-    - ETA display.
-  - Responds to controller callbacks to keep UI and pipeline lifecycle aligned.
+Responsibilities
 
----
+Draws UI components (tabs, panels, stage cards)
 
-## 3. Controller Layer
+Captures user input (pipeline options, variants, run commands)
 
-### 3.1 AppController / PipelineController
+Delegates everything operational to AppController
 
-Responsibilities:
+Displays:
 
-- Own the **CancelToken**, lifecycle (IDLE, RUNNING, STOPPING, ERROR), and worker threads.
-- Validate GUI and configuration inputs before launching a run.
-- Compose **PipelineConfig** from:
-  - Default config (ConfigManager).
-  - GUI overrides (PipelinePanelV2 stage cards).
-  - Randomizer-selected variant config (via RandomizerAdapter).
-- Invoke  
-  `PipelineRunner.run(config, cancel_token, log_fn, optional_learning_hooks)`.
-- Bridge **Learning**:
-  - Provide the LearningRunner/adapter stubs and later production integrations.
-  - Ensure LearningRecords can be produced without GUI coupling.
+Status bar
 
-Must NOT:
+Progress / ETA
 
-- Contain Tk/Ttk code.
-- Make assumptions about specific SD models; all such details belong in config or API layers.
+Images & output previews
 
-### 3.2 Lifecycle and Cancellation
+Learning indicators
 
-- Controller transitions:
-  - IDLE → RUNNING when a valid config is launched.
-  - RUNNING → IDLE when pipeline completes successfully.
-  - RUNNING → ERROR on fatal pipeline errors.
-  - RUNNING → STOPPING / IDLE when CancelToken is triggered.
+No pipeline execution, no HTTP calls
 
-- CancelToken checked:
-  - Between stages (txt2img, img2img, adetailer, upscale).
-  - Within long-running loops when possible (e.g., streaming progress from SD WebUI).
+Notable Components
 
----
+PipelineTabFrame V2
+Hosts Txt2Img, Img2Img, Upscale, Refiner, Hires, ADetailer stage cards.
 
-## 4. Pipeline Layer
+RandomizerPanelV2
+Configures variant matrices and calculates total run count.
 
-### 4.1 PipelineConfig
+PreviewPanelV2
+Displays images and run summaries.
 
-- Encapsulates configuration for all stages:
-  - txt2img fields (model, VAE, sampler, scheduler, CFG, steps, width, height, etc.).
-  - img2img fields (denoising strength, source image, etc.).
-  - upscale fields (upscaler, resize factor, tiling parameters).
-  - adetailer/refiner fields where applicable.
-  - Learning, randomizer, and metadata (e.g., run id, prompt pack id).
+StatusBarV2
+Shows pipeline state transitions and job progress.
 
-### 4.2 PipelineRunner
+4. Controller Layer
 
-Responsibilities:
+The controller layer is the orchestration brain.
+It is where GUI → pipeline wiring takes place.
 
-- Execute stages in order, based on PipelineConfig and enabled flags.
-- Invoke **SD WebUI client** with appropriate payloads per stage.
-- Aggregate results (images, logs) and forward progress information back to controller.
-- Emit **LearningRecords** if a learning writer/callback is configured.
+4.1 AppController
+Responsibilities
 
-Must:
+Primary entry point for run commands
 
-- Respect CancelToken between and during stages where practical.
-- Emit structured logs and stage boundaries.
+Builds run_config metadata:
 
----
+run_mode ("direct" or "queue")
 
-## 5. Randomizer & Learning Layer
+source (Run / Run Now / AddToQueue)
 
-### 5.1 Randomizer
+prompt source / pack id
+
+Calls:
+
+PipelineController.start_pipeline(run_config)
+
+Must NOT
+
+Execute pipeline logic
+
+Call API or executor functions
+
+Interact with Tk directly
+
+4.2 PipelineController
+
+This is the central orchestration engine for V2.5.
+
+Responsibilities
+
+Validate pipeline state
+
+Build PipelineConfig using PipelineConfigAssembler
+
+Construct jobs with full metadata (PR-106)
+
+Submit jobs through:
+
+Direct mode: job_service.submit_direct(job)
+
+Queue mode: job_service.submit_queued(job)
+
+Track:
+
+_active_job_id
+
+_last_run_config
+
+_last_run_result
+
+Stage events, execution plans
+
+Route job execution to PipelineRunner
+
+Key Methods
+
+start_pipeline(run_config=...)
+→ decides direct vs queued job execution
+
+_run_pipeline_job(config)
+→ the job payload executed by the runner
+
+run_pipeline(config)
+→ calls PipelineRunner.run(...)
+
+Hooks:
+
+LearningRecord callbacks
+
+Structured logging
+
+StageExecutionPlan capture (preview, tests)
+
+5. Run Pipeline Path (V2.5)
+Canonical sequence
+
+This reflects PR-0114 and is now the official reference.
+
+5.1 Full Flow Diagram
+GUI Run Button
+     ↓
+AppController._start_run_v2()
+     ↓
+PipelineController.start_pipeline(run_config)
+     ↓
+PipelineConfigAssembler.build_from_gui_input()
+     ↓
+PipelineController._build_job()
+     ↓
+┌─────────────── Run Mode ────────────────┐
+│ if direct → job_service.submit_direct   │
+│ if queue  → job_service.submit_queued   │
+└──────────────────────────────────────────┘
+     ↓
+JobExecutionController / QueueExecutionController
+     ↓
+SingleNodeJobRunner
+     ↓
+PipelineController._run_pipeline_job(job)
+     ↓
+PipelineController.run_pipeline(config)
+     ↓
+PipelineRunner.run(config)
+     ↓
+Executor → SD WebUI HTTP API
+     ↓
+Results (images, metadata, events)
+     ↓
+PipelineController.record_run_result(...)
+     ↓
+GUI updates (StatusBar, Preview, Last Run)
+
+6. Pipeline Layer
+6.1 PipelineConfig
+
+Typed configuration container
+
+Holds parameters for:
+
+txt2img
+
+img2img
+
+upscalers
+
+ADetailer
+
+Refiners
+
+Hires fix
+
+Includes:
+
+metadata (run id, prompt pack id, timestamps)
+
+learning-specific metadata
+
+randomizer metadata
+
+6.2 PipelineRunner
+
+Core responsibilities:
+
+Compute StageExecutionPlan based on PipelineConfig
+
+For each stage:
+
+Build executor payload
+
+Call executor/SD WebUI client
+
+Aggregate outputs
+
+Emit:
+
+structured logs
+
+stage events
+
+learning events
+
+Return a PipelineRunResult (or dict)
+
+Guarantees
+
+Deterministic execution for given config
+
+Graceful cancellation
+
+Backpressure handling when using queue mode
+
+7. Queue / Job Execution Layer
+
+This layer enables:
+
+direct runs
+
+queued runs
+
+future cluster execution
+
+7.1 JobExecutionController
+
+Owns:
+
+JobQueue
+
+SingleNodeJobRunner
+
+JobHistoryStore
+
+Provides:
+
+submit_pipeline_run(callable)
+
+cancellation
+
+job status callbacks (RUNNING, COMPLETED, FAILED)
+
+7.2 SingleNodeJobRunner
+
+Background thread loop:
+
+Pull next job
+
+Mark RUNNING
+
+Call job payload (→ PipelineController._run_pipeline_job)
+
+Mark COMPLETED / FAILED
+
+Supports:
+
+synchronous run_once(job)
+
+cancellation flag
+
+Runs only one job at a time (V2.5), but scalable to multi-worker nodes.
+
+7.3 JobService
+
+Unified façade used by the PipelineController.
+
+Methods
+
+submit_direct(job)
+
+Synchronously executes job via run_once()
+
+submit_queued(job)
+
+Enqueues job
+
+Ensures runner thread is started
+
+Provides UI/Callback events for:
+
+Job started
+
+Job finished
+
+Job failed
+
+Queue updated
+
+8. Randomizer Layer
+
+Pure functions for:
+
+matrix expansion
+
+sequential / rotate / random modes
+
+deterministic variant planning
+
+Used in:
+
+preview panel
+
+pipeline config assembly
+
+Learning runs (future)
+
+Never interacts with GUI or API.
+9. Learning Layer (V2)
 
 Components:
 
-- `src/utils/randomizer.py`
-  - Matrix parsing and expansion.
-  - Modes: off, sequential, rotate, random.
-  - Pure functions for planning and applying variants.
+LearningPlan
 
-- `src/gui_v2/randomizer_adapter.py`
-  - Converts GUI panel options into randomizer inputs.
-  - Computes variant counts for display.
-  - Builds variant plans and **per-variant config overlays**.
-  - Guarantees preview/pipeline parity.
+LearningRunner
 
-Design Principles:
+LearningRecord
 
-- No GUI imports from randomizer core.
-- Deterministic behavior for a given seed/config.
-- Extensive tests for matrix semantics and fanout.
+LearningRecordWriter
 
-### 5.2 Learning System
+Integrated via:
 
-Components:
+PipelineRunner learning callbacks
 
-- **LearningPlan / LearningRunStep / LearningRunResult** – describe a learning run (e.g., “vary steps from 15 to 45”).
-- **LearningRunner** – orchestrates planned runs, tracks progress, collects per-variant metadata.
-- **LearningFeedback** – transforms user ratings into normalized signals.
-- **LearningRecord** – atomic record of a single run (config + outputs + ratings + context).
-- **LearningRecordWriter** – safe writer for learning records (JSONL, atomic file updates).
+PipelineController run lifecycle hooks
 
-Integration Points:
+Design Requirements
 
-- PipelineRunner accepts learning hooks so that any pipeline run (interactive or batch) can yield a LearningRecord.
-- Controller provides an opt-in learning runner and will later expose user-triggered Learning Runs via GUI V2.
-- Future external LLMs can ingest LearningRecords to propose new presets.
+Never impede interactive runs
 
----
+Logging and record writing must be atomic
 
-## 6. Cluster & IO Layer (Vision Aligned with C3)
+All record formats must remain backward compatible
 
-Although not fully implemented yet, the architecture reserves a dedicated layer for cluster features.
+10. API Layer
 
-### 6.1 Job Model
+The Stable Diffusion WebUI Client:
 
-- A **Job** is defined as:
-  - A prompt pack / prompt.
-  - A fully specified PipelineConfig (possibly with multiple variants from the randomizer).
-  - Metadata: learning enabled? randomizer used? one-off run vs batch.
-  - Priority and deadlines (e.g., interactive vs overnight).
+Sends HTTP txt2img, img2img, upscale, refiner, hires, adetailer requests
 
-### 6.2 Queue Manager
+Implements:
 
-- Central in-memory (later persistent) queue.
-- Responsible for:
-  - Accepting jobs from GUI/CLI.
-  - Assigning jobs to worker nodes based on capabilities and load.
-  - Tracking job state (queued, running, completed, failed).
+retries
 
-### 6.3 Worker Agents
+timeouts
 
-- Lightweight processes running on LAN nodes:
-  - Expose capabilities: GPU count, VRAM, baseline throughput.
-  - Register with queue manager and request work.
-  - Execute jobs using SD WebUI or equivalent backends on that node.
-  - Report logs, outputs, and basic metrics back.
+structured error handling
 
-### 6.4 Scheduler (C3)
+Must be fully mockable for tests
 
-- **Capability + load aware**:
-  - Heavier jobs prefer higher-VRAM / more capable nodes.
-  - Multiple jobs can be pipelined across nodes if capacity allows.
-- Interacts with Learning & Randomizer:
-  - Large learning or randomization batches can be partitioned across nodes.
-  - Interactive jobs can remain on the “local” machine to reduce latency.
+No GUI dependencies
 
----
+11. Logging Layer
+StructuredLogger
 
-## 7. API Layer
+Writes log JSONL and manifest files atomically
 
-- **SD WebUI client** encapsulates:
-  - Base URL, auth (if any), and endpoints for txt2img, img2img, upscale, etc.
-  - Retry/backoff and error handling.
-- Must be fully mockable for tests.
-- GUI must not directly call this client; it always goes through controller/pipeline.
+Emits:
 
----
+pipeline start
 
-## 8. Logging & IO
+stage events
 
-- **StructuredLogger** is the single writer of manifests and structured logs.
-- LearningRecordWriter is the single writer of learning records.
-- All writes are **atomic** (write-temp-then-rename).
-- Paths and directory layouts are centrally configured (no scattering literals).
+errors
 
----
+completion metadata
 
-## 9. Testing and Safety Expectations
+LearningRecordWriter
 
-- Every non-trivial module should have unit tests.
-- GUI V2 tests:
-  - Layout skeleton.
-  - Button wiring.
-  - Config roundtrips.
-  - StatusBarV2 progress & ETA.
-  - Randomizer interaction.
-- Learning tests:
-  - Plan building, runner hooks, record serialization.
-- Cluster tests (when implemented):
-  - Queue behavior, worker registration, basic scheduling decisions (dry-run).
+Writes JSONL learning records atomically (temp → rename)
 
-- Safety tests:
-  - Ensure `utils/randomizer` imports never drag Tk/GUI.
-  - Ensure Codex or other agents cannot silently modify forbidden modules (enforced via guard tests and scripts).
+12. Testing Expectations
 
----
+V2.5 architecture requires comprehensive tests in:
 
-## 10. Migration and Extension Rules
+Pipeline tests
 
-- New work should target V2 modules only (V1 is legacy).
-- When in doubt:
-  - Put presentation in GUI.
-  - Put lifecycle in controller.
-  - Put execution in pipeline.
-  - Put configuration transforms/randomization/learning in pure utils/learning modules.
-- Keep changes small and well-scoped; back them with tests before touching core behavior.
+StageExecutionPlan correctness
 
----
+PipelineRunner’s integration through mocked executors
 
-## 11. Pipeline Execution Flow (Happy Path)
+run → direct mode → queue mode parity
 
-1. User configures pipeline in the GUI (prompt pack, sampler, steps, upscale, adetailer, etc.).
-2. GUI builds a **pipeline config object** or uses controller helpers to assemble one.
-3. `PipelineController` receives that config and calls a headless runner:
-   - e.g.,  
-     `pipeline_runner.run_full_pipeline(pipeline_config, logger=..., callbacks=...)`
-4. `pipeline_runner`:
-   - Calls into `src.api.client` to hit A1111 endpoints (txt2img, img2img, upscalers).
-   - Applies tiling, safety checks, max image sizes.
-   - Emits structured progress / events.
-5. Outputs (images, metadata, logs) are returned to the controller.
-6. Controller:
-   - Updates GUI progress / status via callbacks.
-   - Optionally invokes the learning subsystem to record a `LearningRecord`.
+Controller tests
 
----
+start_pipeline behavior
 
-## 12. Learning v2 Execution Flow (Headless)
+job construction
 
-1. A **LearningPlan** describes:
-   - Stages, each with config variants (e.g., sampler variants, CFG sweeps).
-   - Optional conditions (stop early on failure, etc.).
-2. A **LearningExecutionRunner** runs those plans using injected pipeline callables.
-3. For each execution:
-   - A **LearningRecordBuilder** builds a `LearningRecord`.
-   - A **LearningRecordWriter** appends to a JSONL file atomically.
-4. Controllers can query the **last execution result** and records.
+run mode selection
 
-Learning is **opt-in** and must never destabilize interactive runs.
+last-run restore
 
----
+Queue tests
 
-## 13. Where to Put New Code
+Job lifecycle transitions
 
-- New GUI widgets → `src/gui/`
-- New coordination / orchestration logic → `src/controller/`
-- New pipeline “stages” (e.g., a new enhancement pass) → `src/pipeline/`
-- New SD API endpoints / options → `src/api/client.py` (or submodules)
-- New learning metrics / outputs → `src/learning/`
-- New cross-cutting helpers → `src/utils/` (only if genuinely shared)
+Runner loop correctness
 
-If you’re unsure where something belongs, fall back to:
+Direct vs queued semantics
 
-- Data + transformation logic → `pipeline` or `learning`
-- IO/HTTP → `api`
-- User interaction → `gui`
-- Glue/orchestration → `controller`
+GUI tests
 
----
+wiring only (no pipeline execution)
 
-## 14. Notes For AI Assistants
+correct delegation to controllers
 
-When refactoring or extending the system:
+13. Migration & Extension Rules
 
-- Preserve the **layer boundaries**:
-  - No Tk imports outside `src/gui/`.
-  - No direct HTTP calls from `src/gui/`.
-- Respect the **dependency direction** in §1.2.
-- Prefer **data classes / config objects** over untyped dicts.
-- Avoid making **breaking changes** to public APIs without updating:
-  - Tests
-  - Relevant docs in `docs/`
-  - Any learning or cluster integration that depends on those APIs
+When adding features:
 
-When in doubt, propose changes in terms of:
+Put code in correct layers:
 
-- Which layer you’re modifying
-- Which interfaces are affected
-- What tests will validate behavior
+GUI-only → /src/gui/
+
+Orchestration → /src/controller/
+
+Execution logic → /src/pipeline/
+
+SD WebUI interactions → /src/api/
+
+Learning logic → /src/learning/
+
+Shared helpers → /src/utils/
+
+Hard rule: GUI must never call pipeline or API directly.
+
+14. Official Pipeline Execution Specification (V2.5)
+
+This replaces all older run-path documentation.
+
+1. Run event originates in GUI
+2. AppController builds run_config
+3. PipelineController builds PipelineConfig
+4. PipelineController creates Job
+5. JobService executes job (direct or queue)
+6. Job payload calls _run_pipeline_job
+7. _run_pipeline_job → run_pipeline
+8. run_pipeline → PipelineRunner.run
+9. PipelineRunner executes StageExecutionPlan
+10. Executor builds payloads and calls SD WebUI
+11. PipelineRunner aggregates results
+12. Controller records results and updates GUI
+
+This is the canonical flow for StableNew.
+
+15. Notes for AI Assistants
+
+Do not modify executor or pipeline core without test coverage.
+
+Do not break stage sequencing or config assembly.
+
+Do not add logic to GUI other than appearance & events.
+
+When modifying controllers:
+
+preserve run_mode behavior
+
+ensure queue and direct paths remain correct
+
+keep start_pipeline the single entry point
+
+Avoid introducing cross-layer dependencies.
+
+Always reference this document before implementing PRs.
+
+End of Document

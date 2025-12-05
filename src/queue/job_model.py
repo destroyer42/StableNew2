@@ -55,6 +55,9 @@ class Job:
     prompt_source: str = "manual"
     prompt_pack_id: Optional[str] = None
     config_snapshot: Optional[Dict[str, Any]] = None
+    # PR-044: Variant metadata for randomizer tracking
+    variant_index: Optional[int] = None
+    variant_total: Optional[int] = None
 
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
         self.status = status
@@ -86,6 +89,8 @@ class Job:
             "prompt_source": self.prompt_source,
             "prompt_pack_id": self.prompt_pack_id,
             "config_snapshot": self.config_snapshot,
+            "variant_index": self.variant_index,
+            "variant_total": self.variant_total,
         }
 
     def summary(self) -> str:

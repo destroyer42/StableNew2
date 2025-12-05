@@ -69,7 +69,7 @@ Are mapped to a RandomizationPlanV2 object stored in AppStateV2.
 
 Integrate RandomizerEngineV2 into job creation
 
-When user clicks “Add to Job / Add to Queue / Run Now”:
+When user clicks “Add to Job ”:
 
 The controller gathers:
 
@@ -79,7 +79,7 @@ RandomizationPlanV2 (from AppStateV2).
 
 Calls generate_run_config_variants(base_config, plan, rng_seed=...).
 
-Creates one Job per variant and adds them to the queue (or current job bundle).
+Creates one prompt per variant and adds them to the preview (or current job bundle).
 
 Update Job Preview panel
 

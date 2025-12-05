@@ -2,9 +2,79 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from typing import Callable, Optional
 
 from src.gui import theme_v2
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE, SECONDARY_BUTTON_STYLE
+
+
+class LabeledSlider(ttk.Frame):
+    """A slider with an attached numeric value label that updates as the slider moves."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        variable: tk.DoubleVar,
+        from_: float = 0.0,
+        to: float = 1.0,
+        label_format: str = "{:.2f}",
+        show_percent: bool = False,
+        length: int = 180,
+        command: Optional[Callable[[float], None]] = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(master, style=SURFACE_FRAME_STYLE, **kwargs)
+        self._variable = variable
+        self._label_format = label_format
+        self._show_percent = show_percent
+        self._external_command = command
+
+        self._scale = ttk.Scale(
+            self,
+            from_=from_,
+            to=to,
+            orient="horizontal",
+            variable=variable,
+            command=self._on_scale_change,
+            length=length,
+            style="Dark.Horizontal.TScale",
+            takefocus=False,
+        )
+        self._scale.pack(side="left", fill="x", expand=True)
+
+        self._value_label = ttk.Label(
+            self,
+            text=self._format_value(variable.get()),
+            style="Dark.TLabel",
+            width=6,
+            anchor="e",
+        )
+        self._value_label.pack(side="left", padx=(4, 0))
+
+        # Trace to update label when variable changes externally
+        variable.trace_add("write", self._on_variable_changed)
+
+    def _format_value(self, value: float) -> str:
+        if self._show_percent:
+            return f"{int(value)}%"
+        return self._label_format.format(value)
+
+    def _on_scale_change(self, value: str) -> None:
+        try:
+            val = float(value)
+        except ValueError:
+            val = 0.0
+        self._value_label.config(text=self._format_value(val))
+        if self._external_command:
+            self._external_command(val)
+
+    def _on_variable_changed(self, *_args) -> None:
+        try:
+            val = float(self._variable.get())
+        except (ValueError, tk.TclError):
+            val = 0.0
+        self._value_label.config(text=self._format_value(val))
 
 
 class PromptSection(ttk.Frame):
@@ -68,4 +138,4 @@ class SeedSection(ttk.Frame):
         self.columnconfigure(0, weight=1)
 
 
-__all__ = ["PromptSection", "SamplerSection", "SeedSection"]
+__all__ = ["LabeledSlider", "PromptSection", "SamplerSection", "SeedSection"]

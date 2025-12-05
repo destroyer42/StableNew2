@@ -817,3 +817,65 @@ class ConfigManager:
         except Exception as exc:
             logger.warning("Failed to load last run configuration: %s", exc)
             return None
+
+
+# PR-203: Queue state persistence
+QUEUE_STATE_PATH = Path("state/queue_state_v2.json")
+
+
+def save_queue_state(queue_data: dict[str, Any]) -> bool:
+    """
+    Save the queue state to disk for persistence across sessions.
+    
+    Args:
+        queue_data: Serialized queue state from JobQueueV2.serialize()
+        
+    Returns:
+        True if saved successfully
+    """
+    if not queue_data:
+        return False
+    try:
+        QUEUE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with QUEUE_STATE_PATH.open("w", encoding="utf-8") as fh:
+            json.dump(queue_data, fh, indent=2, ensure_ascii=False)
+        logger.info("Queue state saved to %s", QUEUE_STATE_PATH)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to save queue state: %s", exc)
+        return False
+
+
+def load_queue_state() -> dict[str, Any] | None:
+    """
+    Load the queue state from disk.
+    
+    Returns:
+        Serialized queue state to pass to JobQueueV2.restore(), or None if no state exists
+    """
+    if not QUEUE_STATE_PATH.exists():
+        return None
+    try:
+        with QUEUE_STATE_PATH.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        logger.info("Queue state loaded from %s", QUEUE_STATE_PATH)
+        return data
+    except Exception as exc:
+        logger.warning("Failed to load queue state: %s", exc)
+        return None
+
+
+def clear_queue_state() -> bool:
+    """
+    Delete the saved queue state file.
+    
+    Returns:
+        True if cleared successfully
+    """
+    try:
+        QUEUE_STATE_PATH.unlink(missing_ok=True)
+        logger.info("Queue state cleared")
+        return True
+    except Exception as exc:
+        logger.warning("Failed to clear queue state: %s", exc)
+        return False

@@ -1,4 +1,8 @@
-"""Mini panel for pipeline queue/run controls in the V2 layout."""
+"""Mini panel for pipeline queue/run controls in the V2 layout.
+
+PR-203: Simplified controls - everything goes through the queue.
+No more Mode: Direct/Queue confusion.
+"""
 
 from __future__ import annotations
 
@@ -15,205 +19,186 @@ from src.gui.theme_v2 import (
 
 
 class PipelineRunControlsV2(ttk.Frame):
-    """Queue/run controls displayed next to the preview panel."""
+    """
+    Simplified queue/run controls for V2.
+    
+    All jobs go through the queue - no direct mode.
+    
+    Controls:
+    - Add to Queue: Add current config as a job
+    - Clear Draft: Reset the current configuration
+    - Auto-run: Checkbox to automatically run next job when queue has items
+    - Pause/Resume: Toggle queue processing
+    """
 
-    def __init__(self, master: tk.Misc, *, controller: Any | None = None, app_state: Any | None = None, theme: Any | None = None, **kwargs):
-        super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(0, 0, 0, 0), **kwargs)
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        controller: Any | None = None,
+        app_state: Any | None = None,
+        theme: Any | None = None,
+        **kwargs,
+    ):
+        super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state
         self.theme = theme
-        self._current_run_mode = "direct"
-        self._is_running = False
+        self._is_queue_paused = False
+        self._auto_run_enabled = False
 
+        # Title
         title = ttk.Label(self, text="Run Controls", style=STATUS_STRONG_LABEL_STYLE)
-        title.grid(row=0, column=0, sticky="w", pady=(0, 4))
+        title.pack(fill="x", pady=(0, 8))
 
-        self.mode_label = ttk.Label(self, text="Mode: Direct", style=STATUS_STRONG_LABEL_STYLE)
-        self.mode_label.grid(row=1, column=0, sticky="w")
-
+        # Main action buttons row
         buttons_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
-        buttons_frame.grid(row=2, column=0, sticky="ew", pady=(4, 0))
-        buttons_frame.columnconfigure((0, 1, 2), weight=1)
+        buttons_frame.pack(fill="x", pady=(0, 8))
+        buttons_frame.columnconfigure((0, 1), weight=1)
 
         self.add_button = ttk.Button(
             buttons_frame,
             text="Add to Queue",
-            style=SECONDARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_add_job_to_queue_v2"),
+            style=PRIMARY_BUTTON_STYLE,
+            command=self._on_add_to_queue,
         )
         self.add_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-
-        self.run_now_button = ttk.Button(
-            buttons_frame,
-            text="Run Now",
-            style=SECONDARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_run_job_now_v2"),
-        )
-        self.run_now_button.grid(row=0, column=1, sticky="ew", padx=(0, 4))
-
-        self.run_button = ttk.Button(
-            buttons_frame,
-            text="Run",
-            style=PRIMARY_BUTTON_STYLE,
-            command=self._on_run_clicked,
-        )
-        self.run_button.grid(row=0, column=2, sticky="ew")
-
-        self.stop_button = ttk.Button(
-            buttons_frame,
-            text="Stop",
-            style=SECONDARY_BUTTON_STYLE,
-            command=self._on_stop_clicked,
-        )
-        self.stop_button.grid(row=1, column=2, sticky="ew", pady=(8, 0))
 
         self.clear_draft_button = ttk.Button(
             buttons_frame,
             text="Clear Draft",
             style=SECONDARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_clear_job_draft"),
+            command=self._on_clear_draft,
         )
-        self.clear_draft_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.clear_draft_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        # Options row
+        options_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
+        options_frame.pack(fill="x", pady=(0, 8))
+
+        self.auto_run_var = tk.BooleanVar(value=False)
+        self.auto_run_check = ttk.Checkbutton(
+            options_frame,
+            text="Auto-run queue",
+            variable=self.auto_run_var,
+            command=self._on_auto_run_changed,
+        )
+        self.auto_run_check.pack(side="left")
+
+        # Pause/Resume toggle
+        self.pause_resume_button = ttk.Button(
+            options_frame,
+            text="Pause Queue",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_pause_resume,
+            width=12,
+        )
+        self.pause_resume_button.pack(side="right")
+
+        # Status label
+        self.status_label = ttk.Label(self, text="Queue: Idle")
+        self.status_label.pack(fill="x", pady=(4, 0))
 
         self.update_from_app_state(self.app_state)
 
-    def _invoke_controller(self, method_name: str) -> None:
+    def _invoke_controller(self, method_name: str, *args: Any) -> Any:
+        """Safely invoke a controller method."""
         controller = self.controller
         if not controller:
             print(f"[PipelineRunControlsV2] No controller for {method_name}")
-            return
+            return None
         method = getattr(controller, method_name, None)
         if callable(method):
             try:
-                print(f"[PipelineRunControlsV2] Calling {method_name}")
-                method()
-                print(f"[PipelineRunControlsV2] {method_name} completed")
+                return method(*args)
             except Exception as exc:
                 print(f"[PipelineRunControlsV2] {method_name} error: {exc!r}")
                 import traceback
                 traceback.print_exc()
         else:
             print(f"[PipelineRunControlsV2] {method_name} not found on controller")
+        return None
 
-    def _on_run_clicked(self) -> None:
-        controller = self.controller
-        if not controller:
-            print("[PipelineRunControlsV2] No controller for start_run_v2")
-            return
-        method = getattr(controller, "start_run_v2", None)
-        if callable(method):
-            try:
-                print("[PipelineRunControlsV2] Calling start_run_v2")
-                method()
-                print("[PipelineRunControlsV2] start_run_v2 completed")
-            except Exception as exc:
-                print(f"[PipelineRunControlsV2] start_run_v2 error: {exc!r}")
-                import traceback
-                traceback.print_exc()
+    def _on_add_to_queue(self) -> None:
+        """Add current configuration to the queue."""
+        self._invoke_controller("on_add_job_to_queue_v2")
+
+    def _on_clear_draft(self) -> None:
+        """Clear the current draft configuration."""
+        self._invoke_controller("on_clear_job_draft")
+
+    def _on_auto_run_changed(self) -> None:
+        """Handle auto-run checkbox change."""
+        enabled = self.auto_run_var.get()
+        self._auto_run_enabled = enabled
+        self._invoke_controller("on_set_auto_run_v2", enabled)
+
+    def _on_pause_resume(self) -> None:
+        """Toggle queue pause state."""
+        if self._is_queue_paused:
+            self._invoke_controller("on_resume_queue_v2")
         else:
-            print("[PipelineRunControlsV2] start_run_v2 not found on controller")
+            self._invoke_controller("on_pause_queue_v2")
 
-    def _on_stop_clicked(self) -> None:
-        controller = self.controller
-        if not controller:
-            print("[PipelineRunControlsV2] No controller for on_stop_clicked")
-            return
-        method = getattr(controller, "on_stop_clicked", None)
-        if callable(method):
-            try:
-                print("[PipelineRunControlsV2] Calling on_stop_clicked")
-                method()
-                print("[PipelineRunControlsV2] on_stop_clicked completed")
-            except Exception as exc:
-                print(f"[PipelineRunControlsV2] on_stop_clicked error: {exc!r}")
-                import traceback
-                traceback.print_exc()
-        else:
-            print("[PipelineRunControlsV2] on_stop_clicked not found on controller")
-
-    def update_from_app_state(self, app_state: Any | None) -> None:
-        """Refresh UI to reflect run mode and queue/running state."""
+    def update_from_app_state(self, app_state: Any | None = None) -> None:
+        """Refresh UI to reflect queue state."""
+        if app_state is None:
+            app_state = self.app_state
         if app_state is None:
             return
 
-        pipeline_state = getattr(app_state, "pipeline_state", None)
-        run_mode = (getattr(pipeline_state, "run_mode", None) or "direct").strip().lower() if pipeline_state else "direct"
-        if run_mode not in {"direct", "queue"}:
-            run_mode = "direct"
-        queue_status = getattr(app_state, "queue_status", "idle")
+        # Queue pause state
+        is_paused = getattr(app_state, "is_queue_paused", False)
+        self._is_queue_paused = is_paused
+
+        # Auto-run state
+        auto_run = getattr(app_state, "auto_run_queue", False)
+        self._auto_run_enabled = auto_run
+        self.auto_run_var.set(auto_run)
+
+        # Running state
         running_job = getattr(app_state, "running_job", None)
-        self._current_run_mode = run_mode
-        self._is_running = bool(running_job) or queue_status in ("running", "busy")
+        queue_items = getattr(app_state, "queue_items", [])
+        queue_count = len(queue_items) if queue_items else 0
 
-        self._apply_run_mode_to_ui()
-        self._apply_running_state_to_ui()
+        # Update pause/resume button
+        self.pause_resume_button.configure(
+            text="Resume Queue" if is_paused else "Pause Queue"
+        )
 
-    def _apply_run_mode_to_ui(self) -> None:
-        mode = self._current_run_mode
-        try:
-            self.mode_label.configure(text=f"Mode: {'Direct' if mode == 'direct' else 'Queue'}")
-        except Exception:
-            pass
+        # Update status label
+        if running_job:
+            status_text = "Queue: Running job..."
+        elif is_paused:
+            status_text = f"Queue: Paused ({queue_count} pending)"
+        elif queue_count > 0:
+            status_text = f"Queue: {queue_count} job{'s' if queue_count != 1 else ''} pending"
+        else:
+            status_text = "Queue: Idle"
+        self.status_label.configure(text=status_text)
 
-        try:
-            if mode == "direct":
-                self.run_button.configure(style=PRIMARY_BUTTON_STYLE)
-                self.run_now_button.configure(style=SECONDARY_BUTTON_STYLE)
-                self.add_button.configure(style=SECONDARY_BUTTON_STYLE)
-            else:
-                self.run_button.configure(style=SECONDARY_BUTTON_STYLE)
-                self.run_now_button.configure(style=PRIMARY_BUTTON_STYLE)
-                self.add_button.configure(style=PRIMARY_BUTTON_STYLE)
-        except Exception:
-            pass
+        # Button states
+        self._apply_button_states(app_state)
 
-    def _apply_running_state_to_ui(self) -> None:
-        is_running = self._is_running
-        try:
-            self.run_button.configure(state="disabled" if is_running else "normal")
-            self.run_now_button.configure(state="disabled" if is_running else "normal")
-            self.add_button.configure(state="normal")
-            self.stop_button.configure(state="normal" if is_running else "disabled")
-        except Exception:
-            pass
-
-    def refresh_states(self) -> None:
-        """Refresh button enable/disable states based on AppStateV2 run flags.
-
-        Rules (PR-111):
-        - Run Now: disabled during direct run
-        - Run: disabled when queue paused OR direct run in progress
-        - Add to Queue: disabled when no pack selected OR queue paused
-        - Stop: enabled only when run in progress
-        - Clear Draft: always enabled
-        """
-        app_state = self.app_state
-        if app_state is None:
-            return
-
-        is_run_in_progress = getattr(app_state, "is_run_in_progress", False)
-        is_direct_run = getattr(app_state, "is_direct_run_in_progress", False)
-        is_queue_paused = getattr(app_state, "is_queue_paused", False)
+    def _apply_button_states(self, app_state: Any) -> None:
+        """Update button enabled/disabled states."""
+        is_paused = getattr(app_state, "is_queue_paused", False)
         current_pack = getattr(app_state, "current_pack", None)
         has_pack = bool(current_pack)
 
-        try:
-            # Run Now: disabled during direct run
-            run_now_disabled = is_direct_run
-            self.run_now_button.configure(state="disabled" if run_now_disabled else "normal")
+        # Add to Queue: disabled when no pack selected
+        add_disabled = not has_pack
+        self.add_button.state(["disabled"] if add_disabled else ["!disabled"])
 
-            # Run: disabled when queue paused OR direct run in progress
-            run_disabled = is_queue_paused or is_direct_run
-            self.run_button.configure(state="disabled" if run_disabled else "normal")
+        # Clear Draft: always enabled
+        self.clear_draft_button.state(["!disabled"])
 
-            # Add to Queue: disabled when no pack selected OR queue paused
-            add_disabled = (not has_pack) or is_queue_paused
-            self.add_button.configure(state="disabled" if add_disabled else "normal")
+        # Pause/Resume: always enabled
+        self.pause_resume_button.state(["!disabled"])
 
-            # Stop: enabled only when run in progress
-            self.stop_button.configure(state="normal" if is_run_in_progress else "disabled")
+    def refresh_states(self) -> None:
+        """Refresh button states from current app state."""
+        self.update_from_app_state(self.app_state)
 
-            # Clear Draft: always enabled
-            self.clear_draft_button.configure(state="normal")
-        except Exception:
-            pass
+
+__all__ = ["PipelineRunControlsV2"]

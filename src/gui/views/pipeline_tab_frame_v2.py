@@ -7,6 +7,8 @@ from typing import Any
 from src.gui import design_system_v2 as design_system
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
+from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.scrolling import enable_mousewheel
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
@@ -91,33 +93,57 @@ class PipelineTabFrame(ttk.Frame):
 
         self.right_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.right_column.grid(row=0, column=2, sticky="nsew")
-        self.right_column.rowconfigure(0, weight=0)
-        self.right_column.rowconfigure(1, weight=1)
-        self.right_column.rowconfigure(2, weight=1)
+        # PR-203: Reordered layout - Preview first, then Run Controls, Queue, Running Job, History
+        self.right_column.rowconfigure(0, weight=1)  # Preview (expandable)
+        self.right_column.rowconfigure(1, weight=0)  # Run Controls (fixed)
+        self.right_column.rowconfigure(2, weight=0)  # Queue Panel (fixed)
+        self.right_column.rowconfigure(3, weight=0)  # Running Job (fixed)
+        self.right_column.rowconfigure(4, weight=1)  # History (expandable)
         self.right_column.columnconfigure(0, weight=1)
         queue_controller = self.app_controller or self.pipeline_controller
-        self.run_controls = PipelineRunControlsV2(
-            self.right_column,
-            controller=queue_controller,
-            app_state=self.app_state,
-            theme=self.theme,
-        )
-        self.run_controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+
+        # Row 0: Preview Panel (top, expandable)
         self.preview_panel = PreviewPanelV2(
             self.right_column,
             controller=queue_controller,
             app_state=self.app_state,
             theme=self.theme,
         )
-        self.preview_panel.grid(row=1, column=0, sticky="nsew")
+        self.preview_panel.grid(row=0, column=0, sticky="nsew")
 
+        # Row 1: Run Controls
+        self.run_controls = PipelineRunControlsV2(
+            self.right_column,
+            controller=queue_controller,
+            app_state=self.app_state,
+            theme=self.theme,
+        )
+        self.run_controls.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+
+        # Row 2: Queue Panel
+        self.queue_panel = QueuePanelV2(
+            self.right_column,
+            controller=queue_controller,
+            app_state=self.app_state,
+        )
+        self.queue_panel.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+
+        # Row 3: Running Job Panel
+        self.running_job_panel = RunningJobPanelV2(
+            self.right_column,
+            controller=queue_controller,
+            app_state=self.app_state,
+        )
+        self.running_job_panel.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+
+        # Row 4: History Panel (bottom, expandable)
         self.history_panel = JobHistoryPanelV2(
             self.right_column,
             controller=queue_controller,
             app_state=self.app_state,
             theme=self.theme,
         )
-        self.history_panel.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
+        self.history_panel.grid(row=4, column=0, sticky="nsew", pady=(8, 0))
 
 
         self.stage_cards_panel = StageCardsPanel(
@@ -326,10 +352,23 @@ class PipelineTabFrame(ttk.Frame):
             pass
 
     def _on_queue_items_changed(self) -> None:
-        if self.app_state is None or not hasattr(self, "preview_panel"):
+        if self.app_state is None:
             return
         try:
-            self.preview_panel.update_queue_items(self.app_state.queue_items)
+            if hasattr(self, "preview_panel"):
+                self.preview_panel.update_queue_items(self.app_state.queue_items)
+        except Exception:
+            pass
+        # PR-203: Update the new queue panel
+        try:
+            if hasattr(self, "queue_panel"):
+                self.queue_panel.update_from_app_state(self.app_state)
+        except Exception:
+            pass
+        # Also update run controls to show queue count
+        try:
+            if hasattr(self, "run_controls"):
+                self.run_controls.update_from_app_state(self.app_state)
         except Exception:
             pass
 
@@ -337,7 +376,14 @@ class PipelineTabFrame(ttk.Frame):
         if self.app_state is None:
             return
         try:
-            self.preview_panel.update_running_job(self.app_state.running_job)
+            if hasattr(self, "preview_panel"):
+                self.preview_panel.update_running_job(self.app_state.running_job)
+        except Exception:
+            pass
+        # PR-203: Update the new running job panel
+        try:
+            if hasattr(self, "running_job_panel"):
+                self.running_job_panel.update_from_app_state(self.app_state)
         except Exception:
             pass
         if hasattr(self, "run_controls"):

@@ -9,7 +9,7 @@ from typing import Callable
 
 from src.gui.state import PipelineState
 from src.gui.views.stage_cards_panel import StageCardsPanel
-from src.pipeline.randomizer_v2 import build_prompt_variants
+from src.pipeline.randomizer_v2 import build_prompt_variants, get_variant_count
 from src.pipeline.run_plan import PlannedJob, RunPlan
 
 
@@ -119,13 +119,22 @@ class RunControlBar(ttk.Frame):
         stages_text = ", ".join(enabled) if enabled else "none"
         scope_text = getattr(self.state, "run_scope", "full")
         mode_text = self.state.run_mode
+        
+        # PR-044: Show randomizer status
+        rand_mode = getattr(self.state, "randomizer_mode", "off")
+        rand_text = "ON" if rand_mode != "off" else "OFF"
+        
         plan = self._build_run_plan()
         self.summary_var.set(
-            f"Stages: {stages_text} | Scope: {scope_text} | Mode: {mode_text} | Jobs: {plan.total_jobs} | Images: {plan.total_images}"
+            f"Stages: {stages_text} | Scope: {scope_text} | Mode: {mode_text} | "
+            f"Randomizer: {rand_text} | Jobs: {plan.total_jobs} | Images: {plan.total_images}"
         )
 
     def _build_run_plan(self) -> RunPlan:
-        """Build a lightweight run plan for summary purposes (no execution)."""
+        """Build a lightweight run plan for summary purposes (no execution).
+        
+        PR-044: Uses get_variant_count for engine-aligned variant estimation.
+        """
         enabled_stages: list[str] = []
         if self.state.stage_txt2img_enabled:
             enabled_stages.append("txt2img")
@@ -144,14 +153,27 @@ class RunControlBar(ttk.Frame):
             prompt_text = ""
             metadata = None
 
+        # PR-044: Use engine-driven variant count
+        rand_mode = getattr(self.state, "randomizer_mode", "off")
+        max_variants = getattr(self.state, "max_variants", 1)
+        variant_count = get_variant_count(
+            mode=rand_mode,
+            max_variants=max_variants,
+            config=None,  # Lightweight call without full config
+        )
+        
+        # Still use build_prompt_variants for prompt text (legacy compat)
         variants = build_prompt_variants(
             prompt_text=prompt_text,
             metadata=metadata,
-            mode=getattr(self.state, "randomizer_mode", "off"),
-            max_variants=getattr(self.state, "max_variants", 1),
+            mode=rand_mode,
+            max_variants=variant_count,
         )
+        
         jobs: list[PlannedJob] = []
         batch_runs = max(1, getattr(self.state, "batch_runs", 1))
+        variant_total = len(variants)
+        
         for batch_idx in range(batch_runs):
             for variant_id, variant_prompt in enumerate(variants):
                 for stage in enabled_stages:

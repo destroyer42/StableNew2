@@ -55,30 +55,62 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         ).grid(row=0, column=3, sticky="ew")
 
         ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))
-        tk.Spinbox(parent, from_=1, to=150, increment=1, textvariable=self.steps_var, width=8).grid(
-            row=1, column=1, sticky="ew", padx=(0, 8)
-        )
+        ttk.Spinbox(
+            parent,
+            from_=1,
+            to=150,
+            increment=1,
+            textvariable=self.steps_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(parent, text="Denoise", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
-        tk.Spinbox(parent, from_=0.0, to=1.0, increment=0.05, textvariable=self.denoise_var, width=8).grid(
-            row=1, column=3, sticky="ew"
-        )
+        ttk.Spinbox(
+            parent,
+            from_=0.0,
+            to=1.0,
+            increment=0.05,
+            textvariable=self.denoise_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=3, sticky="ew")
 
         ttk.Label(parent, text="Scale", style=BODY_LABEL_STYLE).grid(row=2, column=0, sticky="w", pady=(6, 2))
-        tk.Spinbox(parent, from_=1.0, to=4.0, increment=0.1, textvariable=self.factor_var, width=8).grid(
-            row=2, column=1, sticky="ew", padx=(0, 8)
+        self._scale_spinbox = ttk.Spinbox(
+            parent,
+            from_=1.0,
+            to=4.0,
+            increment=0.1,
+            textvariable=self.factor_var,
+            width=8,
+            style="Dark.TSpinbox",
         )
+        self._scale_spinbox.grid(row=2, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(parent, text="Tile size", style=BODY_LABEL_STYLE).grid(row=2, column=2, sticky="w", pady=(6, 2))
-        tk.Spinbox(parent, from_=0, to=4096, increment=16, textvariable=self.tile_size_var, width=8).grid(
-            row=2, column=3, sticky="ew"
-        )
+        ttk.Spinbox(
+            parent,
+            from_=0,
+            to=4096,
+            increment=16,
+            textvariable=self.tile_size_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=2, column=3, sticky="ew")
 
-        ttk.Checkbutton(parent, text="Face restore", variable=self.face_restore_var).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0)
-        )
+        ttk.Checkbutton(
+            parent,
+            text="Face restore",
+            variable=self.face_restore_var,
+            style="Dark.TCheckbutton",
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         # Final dimensions display
         ttk.Label(parent, text="Final size", style=BODY_LABEL_STYLE).grid(row=4, column=0, sticky="w", pady=(6, 2))
-        self.final_dimensions_label = ttk.Label(parent, text="1024x1024", style=BODY_LABEL_STYLE, foreground="#888888")
+        self.final_dimensions_label = ttk.Label(
+            parent,
+            text=self._compute_final_size_text(),
+            style="Dark.TLabel",
+        )
         self.final_dimensions_label.grid(row=4, column=1, columnspan=3, sticky="w", pady=(6, 2))
 
         for col in range(4):
@@ -179,14 +211,22 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         """Update final dimensions when upscale factor changes."""
         self._update_final_dimensions_display()
 
+    def _compute_final_size_text(self) -> str:
+        """Compute the final size text based on current input dimensions and factor."""
+        try:
+            factor = float(self.factor_var.get())
+            if self.current_input_width <= 0 or self.current_input_height <= 0:
+                return "— x —"
+            final_width = int(self.current_input_width * factor)
+            final_height = int(self.current_input_height * factor)
+            if final_width <= 0 or final_height <= 0:
+                return "— x —"
+            return f"{final_width}x{final_height}"
+        except Exception:
+            return "— x —"
+
     def _update_final_dimensions_display(self) -> None:
         """Update the final dimensions label based on current input and factor."""
         if self.final_dimensions_label is None:
             return
-        try:
-            factor = float(self.factor_var.get())
-            final_width = int(self.current_input_width * factor)
-            final_height = int(self.current_input_height * factor)
-            self.final_dimensions_label.config(text=f"{final_width}x{final_height}")
-        except Exception:
-            self.final_dimensions_label.config(text="???x???")
+        self.final_dimensions_label.config(text=self._compute_final_size_text())

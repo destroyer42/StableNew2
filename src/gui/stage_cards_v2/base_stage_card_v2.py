@@ -64,18 +64,40 @@ class BaseStageCardV2(ttk.Frame):
         self._build_body(body)
 
     def _build_validation_area(self) -> None:
-        val_frame = ttk.Frame(self, style=CARD_FRAME_STYLE)
-        val_frame.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
-        self.validation_label = ttk.Label(val_frame, text="", style=MUTED_LABEL_STYLE)
+        """Build validation area but keep it hidden when empty."""
+        self._validation_frame = ttk.Frame(self, style=CARD_FRAME_STYLE)
+        # Don't grid it initially - only show when there's content
+        self.validation_label = ttk.Label(
+            self._validation_frame, text="", style=MUTED_LABEL_STYLE
+        )
         self.validation_label.pack(side="left")
+        # Initially hidden since no validation messages
+        self._validation_visible = False
+
+    def _show_validation_frame(self) -> None:
+        """Show the validation frame if it has content."""
+        if not self._validation_visible:
+            self._validation_frame.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
+            self._validation_visible = True
+
+    def _hide_validation_frame(self) -> None:
+        """Hide the validation frame when empty."""
+        if self._validation_visible:
+            self._validation_frame.grid_remove()
+            self._validation_visible = False
 
     # --- Hooks for subclasses -------------------------------------------------
     def _build_body(self, parent: ttk.Frame) -> None:
         raise NotImplementedError
 
     def show_validation_result(self, result: ValidationResult) -> None:
-        message = result.message or ""
-        self.validation_label.config(text=message)
+        if result.is_empty():
+            self.validation_label.config(text="")
+            self._hide_validation_frame()
+        else:
+            message = result.message or ""
+            self.validation_label.config(text=message)
+            self._show_validation_frame()
 
     def load_from_config(self, cfg: dict[str, object]) -> None:
         """Optional config loader for subclasses."""

@@ -59,7 +59,15 @@ class PipelineConfigPanel(ttk.Frame):
         
         # Batch Runs
         ttk.Label(self, text="Batch Runs:", style=BODY_LABEL_STYLE).grid(row=row, column=0, sticky="w", pady=2)
-        batch_spin = ttk.Spinbox(self, from_=1, to=999, textvariable=self.batch_var, width=6, command=self._on_batch_change)
+        batch_spin = ttk.Spinbox(
+            self,
+            from_=1,
+            to=999,
+            textvariable=self.batch_var,
+            width=6,
+            command=self._on_batch_change,
+            style="Dark.TSpinbox",
+        )
         batch_spin.grid(row=row, column=1, sticky="w", pady=2)
         batch_spin.bind("<FocusOut>", lambda _e: self._on_batch_change())
         row += 1
@@ -83,6 +91,7 @@ class PipelineConfigPanel(ttk.Frame):
             textvariable=self.max_variants_var,
             width=6,
             command=self._on_max_variants_change,
+            style="Dark.TSpinbox",
         )
         max_spin.pack(side="left", padx=(8, 0))
         max_spin.bind("<FocusOut>", lambda _e: self._on_max_variants_change())

@@ -43,11 +43,12 @@ def build_randomizer_plan(
 
     working_base = deepcopy(base_config or {})
     fanout = _extract_fanout(options or {})
-    normalized_options = _options_to_pipeline_section(options or {}, fanout)
+    normalized_options = _normalize_options(options or {}, fanout)
 
-    if normalized_options:
+    pipeline_section = _options_to_pipeline_section(normalized_options, fanout)
+    if pipeline_section:
         pipeline_cfg = deepcopy(working_base.get("pipeline") or {})
-        pipeline_cfg.update(normalized_options)
+        pipeline_cfg.update(pipeline_section)
         working_base["pipeline"] = pipeline_cfg
 
     plan = build_variant_plan(working_base)
@@ -87,18 +88,64 @@ def compute_variant_stats(base_config: dict | None, options: dict | None, *, thr
     elif total >= max(1, threshold // 2):
         band = RiskBand.MEDIUM
     explanation = f"{matrix_combos} combos x fanout {fanout} = {total}"
+
+    # Extract seed info from normalized options
+    opts = result.options or {}
+    seed_mode = opts.get("seed_mode", "none")
+    base_seed = opts.get("base_seed")
+
     return {
         "matrix_combos": matrix_combos,
         "fanout": fanout,
         "total_variants": total,
         "risk_band": band,
         "explanation": explanation,
+        "seed_mode": seed_mode,
+        "base_seed": base_seed,
     }
 
 
 def preview_variants(base_config: dict | None, options: dict | None, *, limit: int = 5) -> list[dict]:
     result = build_randomizer_plan(base_config, options)
     return result.configs[:limit]
+
+
+def _normalize_options(options: dict, fanout: int) -> dict:
+    """Normalize options dict including seed settings."""
+    normalized: Dict[str, Any] = {}
+
+    # Copy core options
+    if options.get("randomization_enabled") is not None:
+        normalized["randomization_enabled"] = bool(options.get("randomization_enabled"))
+    if options.get("max_variants") is not None:
+        normalized["max_variants"] = options.get("max_variants")
+    if options.get("variant_mode"):
+        normalized["variant_mode"] = str(options.get("variant_mode")).strip().lower()
+    if options.get("variant_fanout") or options.get("fanout"):
+        normalized["variant_fanout"] = fanout
+
+    # Normalize seed settings
+    seed_mode = (options.get("seed_mode") or "none").lower()
+    if seed_mode not in ("none", "fixed", "per_variant"):
+        seed_mode = "none"
+    normalized["seed_mode"] = seed_mode
+
+    base_seed = options.get("base_seed")
+    if isinstance(base_seed, str) and base_seed.strip().isdigit():
+        base_seed = int(base_seed.strip())
+    elif not isinstance(base_seed, int):
+        base_seed = None
+    normalized["base_seed"] = base_seed
+
+    # Copy matrix-related options
+    if options.get("model_matrix"):
+        normalized["model_matrix"] = options.get("model_matrix")
+    if options.get("hypernetworks"):
+        normalized["hypernetworks"] = options.get("hypernetworks")
+    if options.get("matrix"):
+        normalized["matrix"] = options.get("matrix")
+
+    return normalized
 
 
 def _options_to_pipeline_section(options: dict, fanout: int) -> dict:

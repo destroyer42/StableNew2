@@ -85,6 +85,14 @@ class JobService:
         if not self.runner.is_running():
             self.runner.start()
 
+    def submit_jobs(self, jobs: list[Job]) -> None:
+        """Submit multiple jobs respecting each job's configured run_mode.
+        
+        PR-044: Batch submission for randomizer variant jobs.
+        """
+        for job in jobs:
+            self.submit_job_with_run_mode(job)
+
     def pause(self) -> None:
         self.runner.stop()
         self._set_queue_status("paused")
