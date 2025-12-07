@@ -8,6 +8,7 @@ import pytest
 
 from src.controller.app_controller import AppController
 from tests.helpers.factories import make_run_config
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class NoopPipelineRunner:
@@ -128,6 +129,7 @@ def test_controller_config_defaults(tmp_path):
         threaded=False,
         packs_dir=tmp_path / "packs",
         pipeline_runner=NoopPipelineRunner(),
+        job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
     )
     controller.app_state.run_config = make_run_config()
 
@@ -150,6 +152,7 @@ def test_controller_update_config_only_updates_specified_fields(tmp_path):
         threaded=False,
         packs_dir=tmp_path / "packs",
         pipeline_runner=NoopPipelineRunner(),
+        job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
     )
     controller.app_state.run_config = make_run_config()
 

@@ -339,9 +339,16 @@ class QueuePanelV2(ttk.Frame):
             return
 
         # Get queue items from app state
-        queue_items = getattr(app_state, "queue_items", None)
-        if queue_items is not None:
-            self.update_jobs(queue_items)
+        queue_jobs = getattr(app_state, "queue_jobs", None)
+        if queue_jobs:
+            self.update_jobs(queue_jobs)
+        else:
+            queue_items = getattr(app_state, "queue_items", None)
+            if queue_items is not None:
+                placeholders = [
+                    QueueJobV2.create({"prompt": str(item)}) for item in queue_items
+                ]
+                self.update_jobs(placeholders)
 
         # Update queue control states
         is_paused = getattr(app_state, "is_queue_paused", False)

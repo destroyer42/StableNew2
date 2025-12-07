@@ -260,7 +260,8 @@ class PreviewPanelV2(ttk.Frame):
         if app_state is None:
             app_state = self.app_state
         job_draft = getattr(app_state, "job_draft", None)
-        self._update_action_states(job_draft)
+        preview_jobs = getattr(app_state, "preview_jobs", None)
+        self._update_action_states(job_draft, preview_jobs)
 
     def _render_summary(self, summary: JobUiSummary | None, total: int) -> None:
         if summary is None:
@@ -333,13 +334,18 @@ class PreviewPanelV2(ttk.Frame):
         """Show the logging view via controller helper."""
         self._invoke_controller("show_log_trace_panel")
 
-    def _update_action_states(self, job_draft: Any | None) -> None:
+    def _update_action_states(
+        self,
+        job_draft: Any | None,
+        preview_jobs: list["NormalizedJobRecord"] | None = None,
+    ) -> None:
         """Enable/disable action buttons based on draft content."""
         has_draft = False
         if job_draft is not None:
             packs = getattr(job_draft, "packs", [])
             has_draft = bool(packs)
-        state = ["!disabled"] if has_draft else ["disabled"]
+        has_preview = bool(preview_jobs)
+        state = ["!disabled"] if has_draft or has_preview else ["disabled"]
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)
 

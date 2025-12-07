@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.controller.app_controller import AppController
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class DummyPipelineController:
@@ -17,6 +18,9 @@ class DummyPipelineController:
 
 
 def _build_controller(**kwargs) -> AppController:
+    # PR-0114C-Ty: Default to stubbed job_service to prevent real execution
+    if "job_service" not in kwargs:
+        kwargs["job_service"] = make_stubbed_job_service()
     return AppController(
         main_window=None,
         pipeline_runner=None,
@@ -25,7 +29,6 @@ def _build_controller(**kwargs) -> AppController:
         webui_process_manager=None,
         config_manager=None,
         resource_service=None,
-        job_service=None,
         **kwargs,
     )
 

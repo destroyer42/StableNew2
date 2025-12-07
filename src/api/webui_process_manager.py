@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.utils import get_logger, LogContext, log_with_ctx
+from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 
 
 class WebUIStartupError(RuntimeError):
@@ -138,6 +139,7 @@ class WebUIProcessManager:
             ctx=ctx,
             extra_fields={"command": self._config.command, "working_dir": self._config.working_dir},
         )
+        run_session_id = build_run_session_id()
 
         try:
             self._process = subprocess.Popen(
@@ -150,6 +152,13 @@ class WebUIProcessManager:
             )
             self._pid = self._process.pid
             self._start_time = time.time()
+            launch_msg = format_launch_message(
+                run_session_id=run_session_id,
+                pid=self._pid,
+                command=self._config.command,
+                cwd=self._config.working_dir,
+            )
+            logger.info(launch_msg)
             # Log process output in background
             import threading
             import logging

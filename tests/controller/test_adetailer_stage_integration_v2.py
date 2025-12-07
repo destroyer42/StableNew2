@@ -5,6 +5,7 @@ from typing import Any
 
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class DummyPipelineRunner:
@@ -48,7 +49,12 @@ class FakeSidebarPanel:
 
 
 def _build_controller(panel: FakeStageCardsPanel | None = None, sidebar: FakeSidebarPanel | None = None) -> AppController:
-    controller = AppController(None, threaded=False, pipeline_runner=DummyPipelineRunner())
+    controller = AppController(
+        None,
+        threaded=False,
+        pipeline_runner=DummyPipelineRunner(),
+        job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
+    )
     controller.app_state = AppStateV2()
     mw = SimpleNamespace()
     mw.pipeline_tab = SimpleNamespace(stage_cards_panel=panel)

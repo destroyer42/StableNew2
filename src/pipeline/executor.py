@@ -19,11 +19,15 @@ from ..gui.state import CancelToken, CancellationError
 from ..utils import (
     ConfigManager,
     StructuredLogger,
+    LogContext,
     build_sampler_scheduler_payload,
     load_image_to_base64,
+    log_with_ctx,
     save_image_from_base64,
 )
 from src.api.types import GenerateError, GenerateErrorCode
+from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
+from src.utils.error_envelope_v2 import wrap_exception
 
 
 @lru_cache(maxsize=128)
@@ -238,7 +242,21 @@ class Pipeline:
                 error.code,
                 error.message,
             )
-            raise PipelineStageError(error)
+            exc = PipelineStageError(error)
+            envelope = wrap_exception(
+                exc,
+                subsystem="executor",
+                stage=stage,
+                context={"error_code": error.code.value},
+            )
+            log_with_ctx(
+                logger,
+                logging.ERROR,
+                f"generate_images failed for {stage} ({error.code}): {error.message}",
+                ctx=LogContext(subsystem="executor"),
+                extra_fields={"error_envelope": serialize_envelope(envelope)},
+            )
+            raise exc
         # Convert GenerateResult to dict for compatibility with existing code
         result = outcome.result
         return {

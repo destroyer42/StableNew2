@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from src.gui.gui_invoker import GuiInvoker
+from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2
 from src.queue.job_history_store import JobHistoryEntry
 from src.utils.config import LoraRuntimeConfig
 
@@ -88,13 +89,15 @@ class AppStateV2:
         }
     )
     queue_items: List[str] = field(default_factory=list)
-    running_job: dict[str, Any] | None = None
+    queue_jobs: List[QueueJobV2] = field(default_factory=list)
+    running_job: QueueJobV2 | None = None
     queue_status: str = "idle"
     history_items: list[JobHistoryEntry] = field(default_factory=list)
     run_config: Dict[str, Any] = field(default_factory=dict)
     current_config: CurrentConfig = field(default_factory=CurrentConfig)
     _resource_listeners: List[Callable[[Dict[str, List[Any]]], None]] = field(default_factory=list)
     job_draft: JobDraft = field(default_factory=JobDraft)
+    preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
     lora_strengths: list[LoraRuntimeConfig] = field(default_factory=list)
     adetailer_models: list[str] = field(default_factory=list)
     adetailer_detectors: list[str] = field(default_factory=list)
@@ -272,13 +275,19 @@ class AppStateV2:
     def set_queue_items(self, items: list[str] | None) -> None:
         if items is None:
             return
-        if self.queue_items != items:
-            self.queue_items = list(items)
-            self._notify("queue_items")
+        self.queue_items = list(items)
+        self._notify("queue_items")
 
-    def set_running_job(self, job: dict[str, Any] | None) -> None:
+    def set_queue_jobs(self, jobs: list[QueueJobV2] | None) -> None:
+        if jobs is None:
+            jobs = []
+        if self.queue_jobs != jobs:
+            self.queue_jobs = list(jobs)
+            self._notify("queue_jobs")
+
+    def set_running_job(self, job: QueueJobV2 | None) -> None:
         if self.running_job != job:
-            self.running_job = dict(job) if job else None
+            self.running_job = job
             self._notify("running_job")
 
     def set_queue_status(self, status: str) -> None:
@@ -307,6 +316,13 @@ class AppStateV2:
     def clear_job_draft(self) -> None:
         self.job_draft.packs.clear()
         self._notify("job_draft")
+
+    def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
+        if jobs is None:
+            jobs = []
+        if self.preview_jobs != jobs:
+            self.preview_jobs = list(jobs)
+            self._notify("preview_jobs")
 
     # PR-111: Run Controls UX state setters
     def set_is_run_in_progress(self, value: bool) -> None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
@@ -21,6 +21,7 @@ class JobViewModel:
     is_active: bool
     last_error: str | None = None
     worker_id: str | None = None
+    result: Dict[str, Any] | None = None
 
 
 class JobHistoryService:
@@ -139,6 +140,7 @@ class JobHistoryService:
             is_active=is_active,
             last_error=job.error_message,
             worker_id=getattr(job, "worker_id", None),
+            result=job.result,
         )
 
     def _from_history(self, entry: JobHistoryEntry) -> JobViewModel:
@@ -152,6 +154,7 @@ class JobHistoryService:
             is_active=False,
             last_error=entry.error_message,
             worker_id=entry.worker_id,
+            result=entry.result,
         )
 
     def _summarize(self, job: Job) -> str:
@@ -193,3 +196,60 @@ class JobHistoryService:
             prompt_pack_id=getattr(job, "prompt_pack_id", None),
             prompt_keys=prompt_keys,
         )
+
+
+class NullHistoryService(JobHistoryService):
+    """No-op history service for tests that don't care about history.
+
+    PR-0114C-T(x): This class provides a safe, no-op implementation of
+    JobHistoryService for test fixtures that:
+    - Don't need to verify history recording.
+    - Want to avoid real disk I/O or store dependencies.
+    - Need a lightweight history stub for controller/GUI tests.
+
+    Production code should never use this. It is strictly for test fixtures.
+    """
+
+    def __init__(self) -> None:
+        """Initialize without queue or history store dependencies."""
+        # Don't call super().__init__ - we don't need real dependencies
+        self._queue = None
+        self._history = None
+        self._job_controller = None
+        self._callbacks: list[Callable[[JobHistoryEntry], None]] = []
+
+    def register_callback(self, callback: Callable[[JobHistoryEntry], None]) -> None:
+        """Register callback (stored but never invoked)."""
+        self._callbacks.append(callback)
+
+    def _on_history_update(self, entry: JobHistoryEntry) -> None:
+        """No-op history update handler."""
+        pass
+
+    def record(self, job: Job, *, result: dict | None = None) -> None:
+        """No-op record for completed jobs."""
+        pass
+
+    def record_failure(self, job: Job, error: str | None = None) -> None:
+        """No-op record for failed jobs."""
+        pass
+
+    def list_active_jobs(self) -> List[JobViewModel]:
+        """Return empty list - no active jobs tracked."""
+        return []
+
+    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> List[JobViewModel]:
+        """Return empty list - no history tracked."""
+        return []
+
+    def get_job(self, job_id: str) -> Optional[JobViewModel]:
+        """Return None - no jobs tracked."""
+        return None
+
+    def cancel_job(self, job_id: str) -> bool:
+        """Return False - cancellation not supported."""
+        return False
+
+    def retry_job(self, job_id: str) -> Optional[str]:
+        """Return None - retry not supported."""
+        return None

@@ -90,3 +90,62 @@ def _mock_webui_discovery(monkeypatch):
 def tmp_path(tmp_path_factory):
     """Provide a temporary directory for tests"""
     return tmp_path_factory.mktemp("test_data")
+
+
+# ---------------------------------------------------------------------------
+# PR-0114C-Ty: DI fixtures for JobService/Runner/History
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def stubbed_job_service():
+    """Create a JobService with StubRunner and NullHistoryService.
+
+    PR-0114C-Ty: Use this fixture in tests that should not execute real
+    pipelines or hit SD/WebUI resources.
+    """
+    from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
+    return make_stubbed_job_service()
+
+
+@pytest.fixture
+def stubbed_job_service_with_queue():
+    """Create a JobService with stubs and return all components.
+
+    PR-0114C-Ty: Returns (service, queue, history) for tests that need
+    to inspect queue or history state.
+    """
+    from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service_with_queue
+    return make_stubbed_job_service_with_queue()
+
+
+@pytest.fixture
+def build_v2_app_with_stubs(stubbed_job_service):
+    """Factory fixture to build V2 app with stubbed JobService.
+
+    PR-0114C-Ty: Use this in GUI tests to avoid real pipeline execution.
+
+    Usage:
+        def test_something(build_v2_app_with_stubs):
+            root, app_state, controller, window = build_v2_app_with_stubs()
+            # Test GUI behavior without real execution
+    """
+    from src.app_factory import build_v2_app
+
+    created_roots = []
+
+    def _factory(**kwargs):
+        # Default to stubbed job_service unless explicitly overridden
+        if "job_service" not in kwargs:
+            kwargs["job_service"] = stubbed_job_service
+        result = build_v2_app(**kwargs)
+        created_roots.append(result[0])  # Track root for cleanup
+        return result
+
+    yield _factory
+
+    # Cleanup all created roots
+    for root in created_roots:
+        try:
+            root.destroy()
+        except Exception:
+            pass

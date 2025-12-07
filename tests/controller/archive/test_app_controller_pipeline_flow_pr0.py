@@ -8,6 +8,8 @@ They assume the presence of:
 - src.controller.pipeline_runner.PipelineRunner (Protocol-like)
 """
 
+#ARCHIVE
+# Legacy pipeline flow PR0 test archived after Phase 6 changes.
 from __future__ import annotations
 
 import tkinter as tk
@@ -128,5 +130,6 @@ def test_pipeline_error_sets_error_state_and_recovers(tk_root) -> None:
 
     assert controller.state.lifecycle in {LifecycleState.ERROR, LifecycleState.IDLE}
     assert controller.state.last_error is not None
+    assert controller._last_error_envelope is not None
     log = _get_log_text(controller)
     assert "Pipeline error" in log or "error" in log.lower()

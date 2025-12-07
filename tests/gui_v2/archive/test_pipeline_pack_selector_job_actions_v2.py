@@ -1,3 +1,5 @@
+#ARCHIVE
+# Legacy test for Pipeline pack selector actions before Phase 6 diagnostics refactor.
 from __future__ import annotations
 
 import pytest

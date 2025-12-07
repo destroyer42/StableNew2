@@ -20,10 +20,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypedDict
+from typing import Any, Callable, Dict, List, Mapping, Optional, TypedDict
 import os
+import sys
 import threading
 import time
+import traceback
 
 from src.api.client import SDWebUIClient
 from src.api.webui_api import WebUIAPI
@@ -38,14 +40,28 @@ from src.pipeline.last_run_store_v2_5 import (
 )
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.main_window_v2 import MainWindow
+from src.gui.views.error_modal_v2 import ErrorModalV2
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
-from src.config.app_config import is_debug_shutdown_inspector_enabled
-from src.utils import StructuredLogger
+from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
+from src.utils import (
+    InMemoryLogHandler,
+    LogContext,
+    StructuredLogger,
+    attach_jsonl_log_handler,
+    log_with_ctx,
+)
+from src.utils.queue_helpers_v2 import job_to_queue_job
+from src.utils.diagnostics_bundle_v2 import build_crash_bundle
+from src.utils.error_envelope_v2 import (
+    get_attached_envelope,
+    serialize_envelope,
+    UnifiedErrorEnvelope,
+    wrap_exception,
+)
 from src.utils.config import ConfigManager, LoraRuntimeConfig, normalize_lora_strengths
 from src.utils.debug_shutdown_inspector import log_shutdown_state
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
-from src.utils import InMemoryLogHandler
 from src.gui.app_state_v2 import PackJobEntry, AppStateV2
 from src.learning.model_profiles import get_model_profile_defaults_for_model
 from src.controller.pipeline_controller import PipelineController
@@ -253,6 +269,7 @@ class AppController:
         self._last_run_snapshot: dict[str, Any] | None = None
         self._last_run_auto_restored = False
         self._last_run_store = LastRunStoreV2_5()
+        self._last_run_config: RunConfigDict | None = None
 
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
@@ -275,6 +292,14 @@ class AppController:
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
         self._job_history_path = Path("runs") / "job_history.json"
         self.job_service = job_service or self._build_job_service()
+        self._last_diagnostics_bundle: Path | None = None
+        self._last_diagnostics_bundle_reason: str | None = None
+        self._diagnostics_lock = threading.Lock()
+        self._last_error_envelope: UnifiedErrorEnvelope | None = None
+        self._error_modal: ErrorModalV2 | None = None
+        self._original_excepthook = sys.excepthook
+        self._original_threading_excepthook = getattr(threading, "excepthook", None)
+        self._original_tk_report_callback_exception: Callable[..., Any] | None = None
         self._is_shutting_down = False
         self._shutdown_started_at: float | None = None
         self._shutdown_completed = False
@@ -298,6 +323,8 @@ class AppController:
         if root_logger.level > logging.INFO or root_logger.level == logging.NOTSET:
             root_logger.setLevel(logging.INFO)
         root_logger.addHandler(self.gui_log_handler)
+        json_config = get_jsonl_log_config()
+        self.json_log_handler = attach_jsonl_log_handler(json_config, level=logging.INFO)
 
         # Let the GUI wire its callbacks to us
         if self.main_window is not None:
@@ -305,6 +332,7 @@ class AppController:
             if hasattr(self.main_window, "connect_controller"):
                 self.main_window.connect_controller(self)
         self._setup_queue_callbacks()
+        self._setup_diagnostics_hooks()
 
     def run_pipeline_v2_bridge(self) -> bool:
         """
@@ -422,6 +450,7 @@ class AppController:
             except Exception:
                 pass
         run_config = self._build_run_config(mode, source)
+        self._last_run_config = dict(run_config)
         controller = getattr(self, "pipeline_controller", None)
         if controller is not None:
             start_fn = getattr(controller, "start_pipeline", None)
@@ -466,6 +495,9 @@ class AppController:
 
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint; safe no-op if none available."""
+        self._ensure_run_mode_default("add_to_queue")
+        run_config = self._build_run_config(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
+        self._last_run_config = dict(run_config)
         pipeline_ctrl = getattr(self, "pipeline_controller", None)
         if pipeline_ctrl and hasattr(pipeline_ctrl, "submit_preview_jobs_to_queue"):
             try:
@@ -559,21 +591,30 @@ class AppController:
     # Queue & JobService helpers (PR-039B)
     # ------------------------------------------------------------------
 
+    def _single_node_runner_factory(
+        self,
+        job_queue: JobQueue,
+        run_callable: Callable[[Job], dict] | None,
+    ) -> SingleNodeJobRunner:
+        """Factory that produces the SingleNodeJobRunner used by JobService."""
+
+        return SingleNodeJobRunner(
+            job_queue,
+            run_callable=run_callable or self._execute_job,
+            poll_interval=0.05,
+        )
+
     def _build_job_service(self) -> JobService:
         self._job_history_path.parent.mkdir(parents=True, exist_ok=True)
         history_store = JSONLJobHistoryStore(self._job_history_path)
         job_queue = JobQueue(history_store=history_store)
-        runner = SingleNodeJobRunner(
-            job_queue,
-            run_callable=self._execute_job,
-            poll_interval=0.05,
-        )
         history_service = JobHistoryService(job_queue, history_store)
         return JobService(
             job_queue,
-            runner,
-            history_store,
+            runner_factory=self._single_node_runner_factory,
+            history_store=history_store,
             history_service=history_service,
+            run_callable=self._execute_job,
         )
 
     def _setup_queue_callbacks(self) -> None:
@@ -588,6 +629,24 @@ class AppController:
         self._refresh_job_history()
         # PR-GUI-F3: Load persisted queue state on startup
         self._load_queue_state()
+
+    def _setup_diagnostics_hooks(self) -> None:
+        if not self.job_service:
+            return
+        try:
+            sys.excepthook = self._handle_uncaught_exception
+        except Exception:
+            pass
+        if hasattr(threading, "excepthook"):
+            self._original_threading_excepthook = threading.excepthook
+            threading.excepthook = self._handle_thread_exception
+        root = getattr(self.main_window, "root", None)
+        if root and hasattr(root, "report_callback_exception"):
+            self._original_tk_report_callback_exception = root.report_callback_exception
+            root.report_callback_exception = self._handle_tk_exception
+        self.job_service.register_callback(
+            JobService.EVENT_WATCHDOG_VIOLATION, self._on_watchdog_violation_event
+        )
 
     # ------------------------------------------------------------------
     # PR-GUI-F3: Queue persistence helpers
@@ -916,7 +975,7 @@ class AppController:
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self.app_state:
             return
-        self.app_state.set_queue_items(summaries)
+        self._refresh_app_state_queue()
 
     def _on_queue_status_changed(self, status: str) -> None:
         if not self.app_state:
@@ -926,7 +985,7 @@ class AppController:
     def _on_job_started(self, job: Job) -> None:
         if not self.app_state:
             return
-        self.app_state.set_running_job(job.to_dict())
+        self._set_running_job(job)
 
     def _on_job_finished(self, job: Job) -> None:
         if self.app_state:
@@ -937,10 +996,60 @@ class AppController:
         if self.app_state:
             self.app_state.set_running_job(None)
         self._refresh_job_history()
+        try:
+            self._handle_structured_job_failure(job)
+        except Exception:
+            pass
 
     def _on_queue_empty(self) -> None:
         if self.app_state:
             self.app_state.set_queue_status("idle")
+
+    def _handle_structured_job_failure(self, job: Job) -> None:
+        if job is None:
+            return
+        envelope = getattr(job, "error_envelope", None)
+        if envelope is None:
+            return
+        envelope.context.setdefault("run_mode", job.run_mode)
+        envelope.context.setdefault("source", job.source)
+        self._last_error_envelope = envelope
+        self._log_structured_error(envelope, f"Job {job.job_id} failed")
+        self.state.last_error = envelope.message
+        if self.app_state:
+            try:
+                self.app_state.set_last_error(envelope.message)
+            except Exception:
+                pass
+        self._append_log(f"[ERROR] job={job.job_id} {envelope.message}")
+        self._show_structured_error_modal(envelope)
+
+    def _refresh_app_state_queue(self) -> None:
+        if not self.app_state or not self.job_service:
+            return
+        jobs = self._list_service_jobs()
+        queue_jobs = [job_to_queue_job(job) for job in jobs]
+        summaries = [queue_job.get_display_summary() for queue_job in queue_jobs]
+        self.app_state.set_queue_items(summaries)
+        self.app_state.set_queue_jobs(queue_jobs)
+
+    def _list_service_jobs(self) -> list[Job]:
+        queue = getattr(self.job_service, "queue", None)
+        if queue and hasattr(queue, "list_jobs"):
+            try:
+                return list(queue.list_jobs())
+            except Exception:
+                return []
+        return []
+
+    def _set_running_job(self, job: Job | None) -> None:
+        if not self.app_state:
+            return
+        if job is None:
+            self.app_state.set_running_job(None)
+            return
+        queue_job = job_to_queue_job(job)
+        self.app_state.set_running_job(queue_job)
 
     # ------------------------------------------------------------------
     # PR-203: Queue Manipulation APIs
@@ -1043,9 +1152,7 @@ class AppController:
     def on_cancel_job_v2(self) -> None:
         """Cancel the currently running job."""
         if self.job_service:
-            queue = getattr(self.job_service, "queue", None)
-            if queue and hasattr(queue, "cancel_running_job"):
-                queue.cancel_running_job()
+            self.job_service.cancel_current()
             # Also trigger the cancel token if available
             cancel_token = getattr(self, "_cancel_token", None)
             if cancel_token and hasattr(cancel_token, "cancel"):
@@ -1054,10 +1161,11 @@ class AppController:
 
     def on_cancel_job_and_return_v2(self) -> None:
         """Cancel the running job and return it to the bottom of the queue.
-        
+
         PR-GUI-F3: Allows user to cancel a job but keep it for retry later.
         """
         if self.job_service:
+            self.job_service.cancel_current()
             queue = getattr(self.job_service, "queue", None)
             if queue and hasattr(queue, "cancel_running_job"):
                 queue.cancel_running_job(return_to_queue=True)
@@ -1288,6 +1396,117 @@ class AppController:
         if self.main_window is not None:
             self.main_window.after(0, lambda: self._append_log(text))
 
+    def generate_diagnostics_bundle_manual(self) -> None:
+        """Expose a manual trigger for diagnostics bundles."""
+        self._generate_diagnostics_bundle("manual_request")
+
+    def _generate_diagnostics_bundle(
+        self, reason: str, *, extra_context: Mapping[str, Any] | None = None
+    ) -> Path | None:
+        if not self.gui_log_handler or not self.job_service:
+            return None
+        context = dict(extra_context) if extra_context else None
+        if self._last_error_envelope:
+            context = dict(context or {})
+            context.setdefault("error_envelope", serialize_envelope(self._last_error_envelope))
+        with self._diagnostics_lock:
+            path = build_crash_bundle(
+                reason=reason,
+                log_handler=self.gui_log_handler,
+                job_service=self.job_service,
+                extra_context=context,
+            )
+            if path:
+                self._last_diagnostics_bundle = path
+                self._last_diagnostics_bundle_reason = reason
+                self._append_log(f"[DIAG] Saved diagnostics bundle: {path}")
+            return path
+
+    def _capture_error_envelope(
+        self, exc: Exception, *, subsystem: str = "controller"
+    ) -> UnifiedErrorEnvelope:
+        envelope = get_attached_envelope(exc)
+        if envelope is None:
+            envelope = wrap_exception(exc, subsystem=subsystem)
+        self._last_error_envelope = envelope
+        return envelope
+
+    def _log_structured_error(
+        self, envelope: UnifiedErrorEnvelope, message: str
+    ) -> None:
+        log_with_ctx(
+            logger,
+            logging.ERROR,
+            message,
+            ctx=LogContext(subsystem=envelope.subsystem or "controller"),
+            extra_fields={"error_envelope": serialize_envelope(envelope)},
+        )
+
+    def _show_structured_error_modal(self, envelope: UnifiedErrorEnvelope) -> None:
+        if self.main_window is None:
+            return
+        if self._error_modal and getattr(self._error_modal, "winfo_exists", lambda: False)():
+            try:
+                self._error_modal.lift()
+            except Exception:
+                pass
+            return
+        try:
+            self._error_modal = ErrorModalV2(
+                self.main_window,
+                envelope=envelope,
+                on_close=self._clear_error_modal,
+            )
+        except Exception:
+            logger.exception("Failed to show structured error modal")
+
+    def _clear_error_modal(self) -> None:
+        self._error_modal = None
+
+    def _handle_uncaught_exception(self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback) -> None:
+        tb = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        self._generate_diagnostics_bundle(
+            "uncaught_exception",
+            extra_context={"exception": str(exc_value), "traceback": tb},
+        )
+        if self._original_excepthook:
+            self._original_excepthook(exc_type, exc_value, exc_traceback)
+
+    def _handle_thread_exception(self, args: threading.ExceptHookArgs) -> None:
+        tb = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+        context = {"thread": getattr(args.thread, "name", None), "traceback": tb}
+        self._generate_diagnostics_bundle("thread_exception", extra_context=context)
+        if self._original_threading_excepthook:
+            self._original_threading_excepthook(args)
+
+    def _handle_tk_exception(self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback) -> None:
+        tb = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        self._generate_diagnostics_bundle(
+            "tk_exception",
+            extra_context={"exception": str(exc_value), "traceback": tb},
+        )
+        if callable(self._original_tk_report_callback_exception):
+            try:
+                self._original_tk_report_callback_exception(exc_type, exc_value, exc_traceback)
+            except Exception:
+                pass
+
+    def _on_watchdog_violation_event(
+        self, job_id: str, envelope: UnifiedErrorEnvelope
+    ) -> None:
+        reason = envelope.context.get("watchdog_reason", envelope.error_type)
+        self._generate_diagnostics_bundle(
+            f"watchdog_{reason.lower()}",
+            extra_context={"job_id": job_id, "envelope": serialize_envelope(envelope)},
+        )
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        snapshot = self.job_service.get_diagnostics_snapshot() if self.job_service else {}
+        data = dict(snapshot)
+        data["last_bundle"] = str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
+        data["last_bundle_reason"] = self._last_diagnostics_bundle_reason
+        return data
+
     def show_log_trace_panel(self) -> None:
         """Expose helper that expands the LogTracePanelV2 if present."""
         trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
@@ -1322,14 +1541,18 @@ class AppController:
             self._append_log(f"[controller] Pipeline validation failed: {message}")
             return None
 
+        self._last_error_envelope = None
         self._set_lifecycle(LifecycleState.RUNNING)
         try:
             result = self._run_via_pipeline_controller()
             self._set_lifecycle(LifecycleState.IDLE)
             return result
         except Exception as exc:  # noqa: BLE001
+            envelope = self._capture_error_envelope(exc, subsystem="controller")
+            self._log_structured_error(envelope, "Pipeline error in run_pipeline")
             self._append_log(f"[controller] Pipeline error in run_pipeline: {exc!r}")
             self._set_lifecycle(LifecycleState.ERROR, error=str(exc))
+            self._show_structured_error_modal(envelope)
             return None
 
     def _run_via_pipeline_controller(self) -> Any:
@@ -1771,6 +1994,8 @@ class AppController:
             self._cancel_token.clear_stop_requirement()
 
         worker_alive = self._worker_thread is not None and self._worker_thread.is_alive()
+        if self.job_service is not None:
+            self.job_service.cancel_current()
         if not worker_alive:
             self._set_lifecycle(LifecycleState.IDLE)
         # In threaded mode, lifecycle will transition to IDLE in _run_pipeline_thread

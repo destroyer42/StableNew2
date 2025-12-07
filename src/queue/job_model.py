@@ -7,11 +7,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import IntEnum, Enum
+from enum import Enum, IntEnum
 from typing import Any, Dict, List, Optional
+
+import time
 
 from src.pipeline.pipeline_runner import PipelineConfig
 from src.cluster.worker_model import WorkerId
+from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
 
 
 class JobPriority(IntEnum):
@@ -26,6 +29,23 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+@dataclass
+class RetryAttempt:
+    stage: str
+    attempt_index: int
+    max_attempts: int
+    reason: str
+    timestamp: float = field(default_factory=time.time)
+
+
+@dataclass
+class JobExecutionMetadata:
+    """Metadata used to track external processes spawned for a job."""
+
+    external_pids: list[int] = field(default_factory=list)
+    retry_attempts: list[RetryAttempt] = field(default_factory=list)
 
 
 def _utcnow() -> datetime:
@@ -46,6 +66,7 @@ class Job:
     randomizer_metadata: Optional[Dict[str, Any]] = None
     lora_settings: Optional[Dict[str, Dict[str, Any]]] = None
     error_message: Optional[str] = None
+    error_envelope: UnifiedErrorEnvelope | None = None
     result: Optional[Dict[str, Any]] = None
     payload: Any | None = None
     worker_id: WorkerId | None = None
@@ -58,6 +79,7 @@ class Job:
     # PR-044: Variant metadata for randomizer tracking
     variant_index: Optional[int] = None
     variant_total: Optional[int] = None
+    execution_metadata: JobExecutionMetadata = field(default_factory=JobExecutionMetadata)
 
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
         self.status = status
@@ -91,6 +113,7 @@ class Job:
             "config_snapshot": self.config_snapshot,
             "variant_index": self.variant_index,
             "variant_total": self.variant_total,
+            "error_envelope": serialize_envelope(self.error_envelope),
         }
 
     def summary(self) -> str:

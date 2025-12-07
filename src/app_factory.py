@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TYPE_CHECKING
 
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
@@ -9,6 +9,9 @@ from src.gui.main_window_v2 import MainWindowV2
 from src.api.webui_process_manager import WebUIProcessManager
 from src.utils.config import ConfigManager
 from src.utils import attach_gui_log_handler
+
+if TYPE_CHECKING:
+    from src.controller.job_service import JobService
 
 
 def build_v2_app(
@@ -18,9 +21,23 @@ def build_v2_app(
     webui_manager: WebUIProcessManager | None = None,
     threaded: bool = False,
     config_manager: ConfigManager | None = None,
+    job_service: "JobService | None" = None,
 ) -> Tuple[tk.Tk, AppStateV2, AppController, MainWindowV2]:
     """
     Build the V2 application stack with injectable runner for tests.
+
+    PR-0114C-Ty: Added job_service parameter for DI in tests.
+    Tests can pass a JobService with StubRunner/NullHistoryService to avoid
+    real pipeline execution.
+
+    Args:
+        root: Optional Tk root window.
+        pipeline_runner: Optional pipeline runner (usually None for tests).
+        webui_manager: Optional WebUI process manager.
+        threaded: Whether to use threaded mode.
+        config_manager: Optional config manager.
+        job_service: Optional JobService. If None, AppController creates a real one.
+            Tests should pass a stubbed JobService to avoid real execution.
 
     Returns (root, app_state, app_controller, window).
     """
@@ -38,6 +55,7 @@ def build_v2_app(
         threaded=threaded,
         webui_process_manager=webui_manager,
         config_manager=config_manager,
+        job_service=job_service,  # PR-0114C-Ty: DI for tests
     )
 
     window = MainWindowV2(

@@ -7,6 +7,7 @@ import pytest
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
+from src.queue.job_model import Job, JobStatus
 
 
 class FakeJobService:
@@ -23,6 +24,8 @@ class FakeJobService:
         self.resume_calls = 0
         self.cancel_calls = 0
         self.last_job = None
+        self._jobs: list[Job] = []
+        self.queue = self
 
     def register_callback(self, event: str, callback: callable) -> None:
         self._listeners.setdefault(event, []).append(callback)
@@ -47,6 +50,12 @@ class FakeJobService:
     def emit(self, event: str, *args) -> None:
         for callback in self._listeners.get(event, []):
             callback(*args)
+
+    def list_jobs(self) -> list[Job]:
+        return list(self._jobs)
+
+    def set_jobs(self, jobs: list[Job]) -> None:
+        self._jobs = list(jobs)
 
 
 def _build_controller() -> Tuple[AppController, FakeJobService]:
@@ -74,8 +83,12 @@ def test_on_add_job_to_queue_enqueues_and_updates_state() -> None:
     assert fake_service.enqueue_calls == 1
     assert fake_service.last_job is not None
 
+    job = Job(job_id="job-alpha", pipeline_config=None)
+    job.status = JobStatus.QUEUED
+    fake_service.set_jobs([job])
     fake_service.emit(FakeJobService.EVENT_QUEUE_UPDATED, ["job-summary"])
-    assert controller.app_state.queue_items == ["job-summary"]
+    assert controller.app_state.queue_jobs
+    assert controller.app_state.queue_jobs[0].job_id == "job-alpha"
 
 
 def test_on_run_job_now_sets_running_status() -> None:

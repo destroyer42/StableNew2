@@ -1,3 +1,5 @@
+#ARCHIVE
+# Legacy randomizer panel contract test moved after Phase 6.
 from __future__ import annotations
 
 import tkinter as tk

@@ -50,6 +50,9 @@ class FakeQueue:
     ) -> None:
         self._status_callbacks.append(callback)
 
+    def get_job(self, job_id: str) -> Job | None:
+        return next((job for job in self.jobs if job.job_id == job_id), None)
+
 
 class FakeRunner:
     def __init__(self) -> None:

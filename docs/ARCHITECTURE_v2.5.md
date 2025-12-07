@@ -379,9 +379,10 @@ Prevents inconsistent executions
 Guarantees reproducibility for Learning/Cluster phases
 
  8. Queue & Execution Layer
-  Queue Model (JobService + JobQueueV2)
+- Queue Model (JobService + JobQueueV2)
     - JobService now forwards completed and failed job signals to JobHistoryService so the history store consistently records metadata and emits completion events.
- - JobService now subscribes to queue status transitions and re-emits `job_started`, `job_finished`, and `job_failed` events so GUI panels and the history subsystem can react to deterministic lifecycle updates.
+- JobService now subscribes to queue status transitions and re-emits `job_started`, `job_finished`, and `job_failed` events so GUI panels and the history subsystem can react to deterministic lifecycle updates.
+- Controllers (AppController, PipelineController, API surfaces) must submit every normalized job through JobService so _execute_job runs via the configured `runner_factory`. That DI path enforces the canonical flow: NormalizedJobRecord → JobService → JobQueue → SingleNodeJobRunner (with `_execute_job` as `run_callable`) before touching WebUI, which keeps queue-first semantics intact.
 Add jobs
 
 Remove jobs

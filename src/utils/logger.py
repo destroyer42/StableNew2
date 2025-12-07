@@ -1,13 +1,15 @@
 """Logging utilities with structured JSON output"""
 
+import copy
 import csv
 import json
 import logging
 from collections import deque
 from dataclasses import dataclass
-from threading import RLock
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from threading import RLock
 from typing import Any, Deque, Dict, Iterable, Mapping, Optional
 
 
@@ -38,6 +40,74 @@ class LogContext:
         return data
 
 
+@dataclass(frozen=True)
+class JsonlFileLogConfig:
+    """Configuration for JSONL log sinking."""
+
+    enabled: bool = True
+    path: Path | None = None
+    max_bytes: int = 10_000_000
+    backup_count: int = 5
+
+
+class JsonlFileHandler(RotatingFileHandler):
+    """Handler that writes one JSON payload per line with optional rotation."""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        level: int = logging.INFO,
+        max_bytes: int = 0,
+        backup_count: int = 0,
+    ) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        super().__init__(
+            filename=str(path),
+            mode="a",
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        self.setLevel(level)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        payload = getattr(record, "json_payload", None)
+        if payload is None:
+            payload = {"message": record.getMessage()}
+        try:
+            json_line = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+        except Exception:
+            json_line = json.dumps({"message": record.getMessage()}, ensure_ascii=False)
+        record = copy.copy(record)
+        record.msg = json_line
+        record.args = ()
+        super().emit(record)
+
+
+def attach_jsonl_log_handler(
+    config: JsonlFileLogConfig | None = None,
+    *,
+    level: int = logging.INFO,
+) -> JsonlFileHandler | None:
+    """Attach a JSONL rotating log handler to the root logger."""
+
+    cfg = config or JsonlFileLogConfig(path=Path("logs") / "stablenew.log.jsonl")
+    if not cfg.enabled or cfg.path is None:
+        return None
+    handler = JsonlFileHandler(
+        cfg.path,
+        level=level,
+        max_bytes=cfg.max_bytes,
+        backup_count=cfg.backup_count,
+    )
+    root = logging.getLogger()
+    if root.level > level or root.level == logging.NOTSET:
+        root.setLevel(level)
+    root.addHandler(handler)
+    return handler
+
+
 def log_with_ctx(
     logger: logging.Logger,
     level: int,
@@ -52,11 +122,19 @@ def log_with_ctx(
         payload.update(ctx.to_dict())
     if extra_fields:
         payload.update(extra_fields)
+    json_payload: Dict[str, Any] = {"message": message}
+    json_payload.update(payload)
 
     if payload:
-        logger.log(level, "%s | %s", message, json.dumps(payload, sort_keys=True))
+        logger.log(
+            level,
+            "%s | %s",
+            message,
+            json.dumps(payload, sort_keys=True, ensure_ascii=False),
+            extra={"json_payload": json_payload},
+        )
     else:
-        logger.log(level, "%s", message)
+        logger.log(level, "%s", message, extra={"json_payload": json_payload})
 
 
 class InMemoryLogHandler(logging.Handler):
@@ -80,6 +158,9 @@ class InMemoryLogHandler(logging.Handler):
             "message": msg,
             "created": record.created,
         }
+        payload = getattr(record, "json_payload", None)
+        if payload is not None:
+            entry["payload"] = payload
 
         with self._lock:
             self._entries.append(entry)

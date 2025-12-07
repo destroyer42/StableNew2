@@ -6,13 +6,20 @@ import json
 import logging
 import random
 import time
-from typing import Any
+from typing import Any, Callable
 
 import requests
 
 from src.api.healthcheck import wait_for_webui_ready
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome, GenerateResult
 from src.utils import get_logger, LogContext, log_with_ctx
+from src.utils.retry_policy_v2 import (
+    IMG2IMG_RETRY_POLICY,
+    RetryPolicy,
+    STAGE_RETRY_POLICY,
+    TXT2IMG_RETRY_POLICY,
+    UPSCALE_RETRY_POLICY,
+)
 
 logger = get_logger(__name__)
 
@@ -30,6 +37,7 @@ class SDWebUIClient:
         backoff_factor: float = 1.0,
         max_backoff: float = 30.0,
         jitter: float = 0.5,
+        retry_callback: Callable[[str, int, int, str], None] | None = None,
     ):
         """
         Initialize the SD WebUI API client.
@@ -51,6 +59,7 @@ class SDWebUIClient:
         self._option_keys = None
         self.samplers: list[dict[str, Any]] = []
         self.upscalers: list[dict[str, Any]] = []
+        self._retry_callback = retry_callback
 
     def check_connection(self, timeout: float | None = None) -> bool:
         """
@@ -83,19 +92,36 @@ class SDWebUIClient:
 
         time.sleep(duration)
 
-    def _calculate_backoff(self, attempt: int, backoff_factor: float | None = None) -> float:
+    def apply_retry_policy(self, policy: RetryPolicy) -> None:
+        """Configure base retry parameters from a policy."""
+
+        self.max_retries = max(1, policy.max_attempts)
+        self.backoff_factor = max(0.0, policy.base_delay_sec)
+        self.max_backoff = max(0.0, policy.max_delay_sec)
+        self.jitter = max(0.0, policy.jitter_frac)
+
+    def _calculate_backoff(
+        self,
+        attempt: int,
+        *,
+        backoff_factor: float | None = None,
+        max_backoff: float | None = None,
+        jitter: float | None = None,
+    ) -> float:
         """Calculate the backoff delay for a retry attempt."""
 
         base = self.backoff_factor if backoff_factor is None else max(0.0, backoff_factor)
+        max_delay = self.max_backoff if max_backoff is None else max(0.0, max_backoff)
+        jitter_frac = self.jitter if jitter is None else max(0.0, jitter)
         if base <= 0:
             return 0.0
 
         delay = base * (2**attempt)
-        if self.max_backoff > 0:
-            delay = min(delay, self.max_backoff)
+        if max_delay > 0:
+            delay = min(delay, max_delay)
 
-        if self.jitter > 0 and delay > 0:
-            delay += random.uniform(0, self.jitter)
+        if jitter_frac > 0 and delay > 0:
+            delay += random.uniform(0, jitter_frac)
 
         return delay
 
@@ -107,52 +133,84 @@ class SDWebUIClient:
         timeout: float | None = None,
         max_retries: int | None = None,
         backoff_factor: float | None = None,
+        stage: str | None = None,
+        policy: RetryPolicy | None = None,
+        ctx: LogContext | None = None,
         **kwargs: Any,
     ) -> requests.Response | None:
         """Perform an HTTP request with retry/backoff handling."""
 
-        retries = max_retries if max_retries is not None else self.max_retries
+        stage_key = (stage or "").lower() or None
+        selected_policy = policy or (STAGE_RETRY_POLICY.get(stage_key) if stage_key else None)
+        retries = max_retries if max_retries is not None else (selected_policy.max_attempts if selected_policy else self.max_retries)
         retries = max(1, retries)
         timeout_value = self.timeout if timeout is None else timeout
+        base_delay = backoff_factor if backoff_factor is not None else (
+            selected_policy.base_delay_sec if selected_policy else self.backoff_factor
+        )
+        max_delay = selected_policy.max_delay_sec if selected_policy else self.max_backoff
+        jitter_frac = selected_policy.jitter_frac if selected_policy else self.jitter
         url = f"{self.base_url}{endpoint}"
         last_exception: Exception | None = None
 
-        ctx = LogContext(subsystem="api")
+        context = ctx or LogContext(subsystem="api")
+        if stage_key and not context.stage:
+            context.stage = stage_key
+
         for attempt in range(retries):
             try:
                 response = requests.request(method.upper(), url, timeout=timeout_value, **kwargs)
                 try:
                     response.raise_for_status()
                 except requests.HTTPError as http_exc:
-                    # Log method, URL, status code, and truncated response text
-                    status_code = getattr(response, 'status_code', None)
-                    resp_text = getattr(response, 'text', None)
+                    status_code = getattr(response, "status_code", None)
+                    resp_text = getattr(response, "text", None)
+                    truncated_text = None
                     if resp_text:
                         truncated_text = resp_text[:4000] + ("..." if len(resp_text) > 4000 else "")
-                    else:
-                        truncated_text = None
                     log_with_ctx(
                         logger,
                         logging.WARNING,
                         f"HTTPError {method.upper()} {url} status={status_code}: {http_exc}",
-                        ctx=ctx,
+                        ctx=context,
                         extra_fields={"response_text": truncated_text},
                     )
                     raise
                 return response
             except Exception as exc:  # noqa: BLE001 - broad to ensure retries
                 last_exception = exc
+                attempt_index = attempt + 1
                 log_with_ctx(
                     logger,
                     logging.WARNING,
-                    f"Request {method.upper()} {url} attempt {attempt + 1}/{retries} failed",
-                    ctx=ctx,
-                    extra_fields={"error": str(exc)},
+                    f"Request {method.upper()} {url} attempt {attempt_index}/{retries} failed",
+                    ctx=context,
+                    extra_fields={
+                        "error": str(exc),
+                        "stage": stage_key,
+                        "attempt": attempt_index,
+                        "max_attempts": retries,
+                    },
                 )
+                if self._retry_callback:
+                    try:
+                        self._retry_callback(
+                            stage=stage_key or stage or "api",
+                            attempt_index=attempt_index,
+                            max_attempts=retries,
+                            reason=type(exc).__name__,
+                        )
+                    except Exception:
+                        logger.debug("Retry callback failed", exc_info=True)
                 if attempt >= retries - 1:
                     break
 
-                delay = self._calculate_backoff(attempt, backoff_factor)
+                delay = self._calculate_backoff(
+                    attempt,
+                    backoff_factor=base_delay,
+                    max_backoff=max_delay,
+                    jitter=jitter_frac,
+                )
                 if delay > 0:
                     self._sleep(delay)
 
@@ -161,8 +219,12 @@ class SDWebUIClient:
                 logger,
                 logging.ERROR,
                 f"Request {method.upper()} {url} failed after {retries} attempts",
-                ctx=ctx,
-                extra_fields={"error": str(last_exception)},
+                ctx=context,
+                extra_fields={
+                    "error": str(last_exception),
+                    "stage": stage_key,
+                    "attempts": retries,
+                },
             )
 
         return None
@@ -342,6 +404,8 @@ class SDWebUIClient:
             "post",
             "/sdapi/v1/txt2img",
             json=payload,
+            stage="txt2img",
+            policy=TXT2IMG_RETRY_POLICY,
         )
 
         if response is None:
@@ -399,6 +463,8 @@ class SDWebUIClient:
             "post",
             "/sdapi/v1/img2img",
             json=payload,
+            stage="img2img",
+            policy=IMG2IMG_RETRY_POLICY,
         )
 
         if response is None:
@@ -452,6 +518,8 @@ class SDWebUIClient:
             "post",
             "/sdapi/v1/extra-single-image",
             json=payload,
+            stage="upscale",
+            policy=UPSCALE_RETRY_POLICY,
         )
 
         if response is None:
@@ -502,6 +570,8 @@ class SDWebUIClient:
             "post",
             "/sdapi/v1/extra-single-image",
             json=payload,
+            stage="upscale",
+            policy=UPSCALE_RETRY_POLICY,
         )
 
         if response is None:

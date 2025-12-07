@@ -197,6 +197,7 @@ class SidebarPanelV2(ttk.Frame):
             build_child=lambda parent: self._build_pack_selector_section(parent),
             collapsible=True,
         )
+        self.pack_panel = self.pack_selector_card
         self.pack_selector_card.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
 
         self.model_adapter = ModelListAdapterV2(lambda: getattr(self.controller, "client", None))
@@ -257,6 +258,7 @@ class SidebarPanelV2(ttk.Frame):
 
         self.preset_menu_button = ttk.Menubutton(combo_frame, text="Actions", direction="below")
         self.preset_menu_button.grid(row=0, column=1, padx=(4, 0))
+        self.preset_dropdown = self.preset_menu_button
         self.preset_menu = tk.Menu(self.preset_menu_button, tearoff=0)
         self.preset_menu.add_command(label="Apply to Default", command=self._on_preset_apply_to_default)
         self.preset_menu.add_command(label="Apply to Selected Packs", command=self._on_preset_apply_to_packs)

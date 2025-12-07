@@ -13,6 +13,7 @@ from src.pipeline.pipeline_runner import PipelineConfig
 from src.utils.prompt_packs import PromptPackInfo
 from tests.controller.test_app_controller_config import DummyWindow
 from tests.helpers.factories import make_run_config
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class RecordingPipelineRunner:
@@ -60,6 +61,7 @@ def test_pipeline_config_assembled_from_controller_state(pack_file):
         threaded=False,
         packs_dir=pack_file.parent,
         pipeline_runner=runner,
+        job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
     )
     controller.app_state.run_config = make_run_config(
         model="SDXL-Lightning",
@@ -103,6 +105,7 @@ def test_cancel_triggers_token_and_returns_to_idle(pack_file):
         threaded=True,
         packs_dir=pack_file.parent,
         pipeline_runner=runner,
+        job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
     )
     controller.app_state.run_config = make_run_config()
     controller.on_pack_selected(0)

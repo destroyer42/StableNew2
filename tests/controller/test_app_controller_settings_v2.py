@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from src.controller.app_controller import AppController
 from src.utils.config import ConfigManager
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class DummyButton:
@@ -64,7 +65,13 @@ class DummyMainWindow:
 def test_app_controller_settings_saved(tmp_path: Path) -> None:
     config_manager = ConfigManager(tmp_path / "presets")
     window = DummyMainWindow()
-    controller = AppController(window, threaded=False, packs_dir=tmp_path, config_manager=config_manager)
+    controller = AppController(
+        window,
+        threaded=False,
+        packs_dir=tmp_path,
+        config_manager=config_manager,
+        job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
+    )
 
     controller.on_settings_saved({"webui_base_url": "http://localhost:1234", "output_dir": "test/output"})
 

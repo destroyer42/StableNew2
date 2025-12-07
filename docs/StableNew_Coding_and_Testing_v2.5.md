@@ -221,6 +221,7 @@ Controllers must:
 - Update Preview/Queue panels with normalized jobs
 - Enforce run-mode semantics (direct vs queue)
 - Never embed pipeline logic directly
+- Controller tests should rely on JobService's runner DI (e.g., `stub_runner_factory` returning `StubRunner`) so the canonical run path is exercised without launching real pipelines (`tests/controller/test_core_run_path_v2.py` demonstrates this pattern).
 
 ### 6.2 Patterns
 
@@ -270,7 +271,66 @@ They must NOT:
   - PreviewPanel and QueuePanel update correctly given normalized jobs.
 - Prefer small, focused tests over giant UI flows.
 
+### 7.4 Process Leak Investigation (Phase 0)
+
+- `Ctrl+Alt+P` now shows a diagnostic log for the process inspector that enumerates Python processes whose `cwd`, `cmdline`, or StableNew-specific environment markers match the repo. The results are rendered in the UI log panel and the log trace handler so they can be paired with Task Manager/Process Explorer snapshots.
+- `[PROC]` log lines are emitted whenever legacy launch pathways spawn new Python processes (e.g., WebUI startup helpers). Each line includes `run_session`, PID, the quoted command line, and the launch working directory so it is easy to correlate with OS-level observations.
+- The inspector and logging hooks are purely observability-focused in Phase 0: nothing automatically kills processes or polls in the background. Use them to capture suspicious runs, note the `run_session` IDs, and feed those findings into later phases that will safely terminate stray trees.
+
+### 7.5 Job-Bound Process Cleanup (Phase 1)
+
+- `JobExecutionMetadata.external_pids` is now part of the queue/job model, and `JobService` exposes `register_external_process` plus `cleanup_external_processes` so every job can cleanly terminate its tracked PID tree via `psutil`.
+- GUI Stop actions call `JobService.cancel_current()` (and the new `cancel_job` helper when needed) so the queue/runner path owns cancellation and cleanup instead of ad-hoc pipeline tokens or task-manager kills.
+- Process cleanup automatically runs once a job reaches a terminal state (completed, failed, cancelled), and the new controller/GUI tests exercise this path so future phases can build additional watchdogs with confidence.
+- GUI cancel controls (`Cancel Job`, `Cancel & Return`) now go through `JobService.cancel_current()` before touching the queue, ensuring the same cleanup work runs even when the job is requeued for later retry; the `cancel_current` helper locates the running job via the queue state rather than relying on the runner's private `current_job`.
+
 ---
+
+### 7.6 Phase 2 Memory Hygiene: Child Script I/O
+
+- `scripts/a1111_batch_run.py` introduces a lightweight `BatchRunClient` that always uses `with open(...)` and `with Image.open(...)` blocks, explicitly closes the backing `BytesIO` buffer, and runs `gc.collect()` on a configurable cadence so no large objects linger between iterations.
+- `scripts/a1111_upscale_folder.py` reuses that client to execute a folder of image assets while honoring `max_images` and keeping the workload deterministic; every call is routed through the client so the same I/O discipline applies to legacy helper scripts before they send payloads to the WebUI API.
+- The new script-level tests (`tests/scripts/test_batch_run_memory_hygiene.py`, `tests/scripts/test_upscale_memory_hygiene.py`) mock the session/post behavior, assert that buffers are closed and garbage-collected, and confirm the helper only touches the requested image subset so downstream runs stay bounded.
+
+### 7.7 Phase 3 Watchdog & Resource Caps
+
+- `WatchdogConfig` (see `src/config/app_config.py`) exposes configurable caps via `STABLENEW_WATCHDOG_*` env vars and defaults: periodic sampling (`interval_sec`), `max_process_memory_mb`, `max_job_runtime_sec`, and `max_process_idle_sec`.
+- `JobService` now instantiates `JobWatchdog` threads (`src/utils/watchdog_v2.py`) once a job enters `RUNNING`; each watchdog inspects the job’s `execution_metadata.external_pids`, measures RSS/idle/runtime, and fires `[WATCHDOG]` log lines plus `cancel_job(...)` when a threshold is exceeded (any cleanup still flows through Phase 1’s process metadata hooks).
+- The watchdog log prefix is visible in the GUI log panel so developers can pair `job=<id> reason=MEMORY|IDLE|TIMEOUT` entries with OS-level observations; the watchdog thread always stops when a job reaches a terminal state to avoid leaked helpers.
+- Tests `tests/utils/test_watchdog_v2.py` and `tests/controller/test_job_service_watchdog.py` validate both the standalone watchdog logic and the JobService wiring that cancels jobs on violation while still cleaning up tracked processes.
+
+### 7.8 Phase 4 OS-Level Containment
+
+- StableNew now builds an OS-level `ProcessContainer` (job object on Windows, cgroup v2 on Linux) for every job that registers external PIDs; see `src/utils/process_container_v2.py`, `src/utils/win_jobobject.py`, and `src/utils/cgroup_v2.py`.
+- Caps such as `STABLENEW_PROCESS_CONTAINER_MEMORY_MB`, `STABLENEW_PROCESS_CONTAINER_CPU_PERCENT`, and `STABLENEW_PROCESS_CONTAINER_MAX_PROCESSES` complement Phase 3’s watchdogs by configuring container-level memory/cpu/pids limits via `ProcessContainerConfig` (see `src/config/app_config.py`).
+- `JobService` adds each registered PID to the container, runs Python-level cleanup first, and always calls `container.kill_all()` + `container.teardown()` when a job reaches a terminal state so an OS-level kill is guaranteed even if psutil fails; `[CONTAINER]` log lines (`PROCESS_CONTAINER_LOG_PREFIX`) make container events easy to correlate with OS-level observations.
+- If the OS or environment cannot build the native container (e.g., missing privileges), the loader falls back to a `NullProcessContainer` but still logs the failure so diagnostics point back to the missing OS boundary.
+
+### 7.9 Phase 5 Diagnostics Dashboard & Crash Reporting
+
+- The new `DiagnosticsDashboardV2` panel (located under the Pipeline tab’s history card) consumes `JobService.get_diagnostics_snapshot()` and `system_info_v2` to show live job metadata, watchdog/cleanup events, OS container status, and StableNew-like process summaries without allowing any mutations.
+- Manual crash/dump bundles are built via `src/utils/diagnostics_bundle_v2.build_crash_bundle()` and are wired to the LogTracePanel’s “Crash Bundle” button plus the `AppController.generate_diagnostics_bundle_manual()` helper so users can capture a consistent record on demand.
+- The same bundling helper also fires when unexpected exceptions propagate through `sys.excepthook`, Tk’s `report_callback_exception`, worker-thread hooks, or `JobService.EVENT_WATCHDOG_VIOLATION`, so every failure includes logs, job metadata, process enumerations, and anonymized system info in `reports/diagnostics/`.
+
+### 7.10 Phase 6 Unified Error Model & Exception Taxonomy
+
+- `src/utils/error_envelope_v2.py` and `src/utils/exceptions_v2.py` now provide a shared `UnifiedErrorEnvelope`, `wrap_exception`, and taxonomy (`PipelineError`, `WebUIError`, `WatchdogViolationError`, `ResourceLimitError`, etc.) so every failure carries `error_type`, `subsystem`, `severity`, `stage`, `remediation`, and contextual metadata.
+- The pipeline runner, executor, JobService, watchdog, and PipelineController wrap and re-log exceptions through `wrap_exception`/`log_with_ctx`, store `Job.error_envelope`, and expose the serialized envelope via diagnostics snapshots so downstream tooling has consistent, machine-readable failure records.
+- LogTracePanelV2 highlights structured error lines, and AppController now surfaces `ErrorModalV2` plus crash-bundle context whenever runs fail, giving users remediation tips, stack traces, the current envelope snapshot, and a direct way to open `reports/diagnostics/`.
+- Diagnostics bundles sanitize local paths, include `[DIAG]` log notifications, and surface the last bundle's filename in the dashboard so support engineers can pair GUI logs with zipped evidence without exposing user-sensitive paths.
+
+### 7.12 Phase 8 Unified Logging & Telemetry Harmonization
+
+- `src/utils/logger.py` now attaches JSON payload metadata to every `log_with_ctx` call, exposes `JsonlFileHandler`/`JsonlFileLogConfig`, and lets consumers enable `attach_jsonl_log_handler` so `logs/stablenew.log.jsonl` holds per-line JSON suitable for crash bundles or offline analysis.
+- `AppController` wires `attach_jsonl_log_handler` through `get_jsonl_log_config`, making the same JSONL stream available to diagnostics bundles without touching pipeline or controller logic.
+- `LogTracePanelV2` gained subsystem/job filters, payload-aware summaries, and the ability to highlight `job_id`, `subsystem`, and `stage` so GUI logs become easier to scan and diagnose across V7/V8 telemetry layers.
+- Crash bundles and diagnosis zips now copy the active JSONL file (plus rotations) straight into `logs/` inside the archive, letting support engineers correlate GUI output with log lines without needing bespoke parsing scripts.
+### 7.11 Phase 7 Retry Semantics & Recovery
+
+- `src/utils/retry_policy_v2.py` introduces stage-aware policies (txt2img, img2img, upscale) so the WebUI client knows how many retry attempts to make, which backoff strategy to use, and how much jitter to add before each retry.
+- `SDWebUIClient._perform_request` now accepts an optional `stage`/`policy`, logs every failed attempt with a `LogContext`, and fires a configurable `retry_callback` so downstream services can persist retry metadata.
+- `JobService.record_retry_attempt` stores each attempt inside `JobExecutionMetadata.retry_attempts`, and the runner path (`SingleNodeJobRunner._ensure_job_envelope`) attaches those events to the resulting `UnifiedErrorEnvelope.retry_info` so dashboards, crash bundles, and GUI error modals reveal retry history.
+- Tests `tests/api/test_webui_retry_policy_v2.py` and `tests/controller/test_job_retry_metadata_v2.py` guarantee the policy application and metadata plumbing work without touching the pipeline core, keeping the new behavior isolated.
 
 ============================================================
 # 8. Queue & Runner Testing Standards

@@ -27,6 +27,7 @@ from src.pipeline.stage_sequencer import (
 from src.pipeline.stage_models import InvalidStagePlanError
 from src.utils import StructuredLogger, get_logger, LogContext, log_with_ctx
 from src.utils.config import ConfigManager
+from src.utils.error_envelope_v2 import get_attached_envelope, serialize_envelope, wrap_exception
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.controller.app_controller import CancelToken
@@ -252,13 +253,37 @@ class PipelineRunner:
                     "error_message": exc.error.message,
                 }
             )
+            if get_attached_envelope(exc) is None:
+                wrap_exception(
+                    exc,
+                    subsystem="pipeline",
+                    stage=exc.error.stage or (current_stage.value if current_stage else "pipeline"),
+                    context={"error_code": exc.error.code.value},
+                )
+            envelope = get_attached_envelope(exc)
             log_with_ctx(
                 get_logger(__name__),
                 logging.ERROR,
                 f"Pipeline stage failed: {exc.error.stage} ({exc.error.code}) {exc.error.message}",
                 ctx=LogContext(subsystem="pipeline"),
+                extra_fields={"error_envelope": serialize_envelope(envelope)},
             )
             raise
+        except Exception as exc:  # pragma: no cover - best effort logging
+            if get_attached_envelope(exc) is None:
+                wrap_exception(
+                    exc,
+                    subsystem="pipeline",
+                    stage=current_stage.value if current_stage else None,
+                )
+            envelope = get_attached_envelope(exc)
+            log_with_ctx(
+                get_logger(__name__),
+                logging.ERROR,
+                f"Pipeline runner failed during {current_stage.value if current_stage else 'pipeline setup'}: {exc}",
+                ctx=LogContext(subsystem="pipeline"),
+                extra_fields={"error_envelope": serialize_envelope(envelope)},
+            )
         finally:
             record = None
 

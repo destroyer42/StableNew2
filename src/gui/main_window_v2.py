@@ -137,7 +137,12 @@ class MainWindowV2:
         gui_log_handler = getattr(self, "gui_log_handler", None)
         self.log_trace_panel_v2: LogTracePanelV2 | None = None
         if self.gui_log_handler is not None:
-            self.log_trace_panel_v2 = LogTracePanelV2(self.bottom_zone, log_handler=self.gui_log_handler)
+            bundle_cmd = getattr(self.app_controller, "generate_diagnostics_bundle_manual", None)
+            self.log_trace_panel_v2 = LogTracePanelV2(
+                self.bottom_zone,
+                log_handler=self.gui_log_handler,
+                on_generate_bundle=bundle_cmd,
+            )
             self.log_trace_panel_v2.grid(row=0, column=0, sticky="nsew")
 
         # --- Attach panels to zones ---

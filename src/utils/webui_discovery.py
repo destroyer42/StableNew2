@@ -80,6 +80,7 @@ import time
 from pathlib import Path
 
 import requests
+from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 
 logger = logging.getLogger(__name__)
 
@@ -180,8 +181,16 @@ def launch_webui_safely(webui_path: Path, timeout: int = 60) -> bool:
         if sys.platform.startswith("win"):
             creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 
+        run_session_id = build_run_session_id()
         logger.info("Launching WebUI via %s (cwd=%s)", cmd, cwd)
-        subprocess.Popen(cmd, cwd=cwd, creationflags=creationflags)
+        process = subprocess.Popen(cmd, cwd=cwd, creationflags=creationflags)
+        launch_msg = format_launch_message(
+            run_session_id=run_session_id,
+            pid=getattr(process, "pid", None),
+            command=cmd,
+            cwd=cwd,
+        )
+        logger.info(launch_msg)
 
         # Give the launcher a brief head start; readiness is probed elsewhere.
         time.sleep(min(max(timeout, 1), 5))

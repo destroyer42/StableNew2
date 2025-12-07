@@ -15,6 +15,9 @@ __all__ = [
     "log_with_ctx",
     "InMemoryLogHandler",
     "attach_gui_log_handler",
+    "JsonlFileHandler",
+    "JsonlFileLogConfig",
+    "attach_jsonl_log_handler",
     "PreferencesManager",
     "save_image_from_base64",
     "load_image_to_base64",
@@ -51,6 +54,9 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "log_with_ctx": ("src.utils.logger", "log_with_ctx"),
     "InMemoryLogHandler": ("src.utils.logger", "InMemoryLogHandler"),
     "attach_gui_log_handler": ("src.utils.logger", "attach_gui_log_handler"),
+    "JsonlFileHandler": ("src.utils.logger", "JsonlFileHandler"),
+    "JsonlFileLogConfig": ("src.utils.logger", "JsonlFileLogConfig"),
+    "attach_jsonl_log_handler": ("src.utils.logger", "attach_jsonl_log_handler"),
 }
 
 

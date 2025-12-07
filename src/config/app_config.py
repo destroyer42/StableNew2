@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from src.utils.watchdog_v2 import WatchdogConfig
+from src.utils.process_container_v2 import ProcessContainerConfig
 
 _learning_enabled: bool | None = None
 _job_history_path: str | None = None
@@ -28,6 +33,117 @@ _webui_health_retry_interval: float | None = None
 _webui_health_total_timeout: float | None = None
 STABLENEW_WEBUI_ROOT=""
 STABLENEW_WEBUI_COMMAND=""
+
+
+_watchdog_config: WatchdogConfig | None = None
+_process_container_config: ProcessContainerConfig | None = None
+_jsonl_log_config: "JsonlFileLogConfig" | None = None
+
+
+def _bool_env_flag(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _float_env(name: str, default: float | None) -> float | None:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def watchdog_config_default() -> WatchdogConfig:
+    interval = _float_env("STABLENEW_WATCHDOG_INTERVAL_SEC", 5.0)
+    memory_limit = _float_env("STABLENEW_WATCHDOG_MAX_PROCESS_MEMORY_MB", 4096.0)
+    return WatchdogConfig(
+        enabled=_bool_env_flag("STABLENEW_WATCHDOG_ENABLED", True),
+        interval_sec=float(interval if interval is not None else 5.0),
+        max_process_memory_mb=float(memory_limit if memory_limit is not None else 4096.0),
+        max_job_runtime_sec=_float_env("STABLENEW_WATCHDOG_MAX_JOB_RUNTIME_SEC", None),
+        max_process_idle_sec=_float_env("STABLENEW_WATCHDOG_MAX_PROCESS_IDLE_SEC", None),
+    )
+
+
+def get_watchdog_config() -> WatchdogConfig:
+    global _watchdog_config
+    if _watchdog_config is None:
+        _watchdog_config = watchdog_config_default()
+    return _watchdog_config
+
+
+def set_watchdog_config(config: WatchdogConfig) -> None:
+    global _watchdog_config
+    _watchdog_config = config
+
+
+def process_container_config_default() -> ProcessContainerConfig:
+    return ProcessContainerConfig(
+        enabled=_bool_env_flag("STABLENEW_PROCESS_CONTAINER_ENABLED", True),
+        memory_limit_mb=_float_env("STABLENEW_PROCESS_CONTAINER_MEMORY_MB", None),
+        cpu_limit_percent=_float_env("STABLENEW_PROCESS_CONTAINER_CPU_PERCENT", None),
+        max_processes=_float_env("STABLENEW_PROCESS_CONTAINER_MAX_PROCESSES", None),
+    )
+
+
+def get_process_container_config() -> ProcessContainerConfig:
+    global _process_container_config
+    if _process_container_config is None:
+        _process_container_config = process_container_config_default()
+    return _process_container_config
+
+
+def set_process_container_config(config: ProcessContainerConfig) -> None:
+    global _process_container_config
+    _process_container_config = config
+
+
+def _int_env(name: str, default: int | None) -> int | None:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+@dataclass(frozen=True)
+class JsonlFileLogConfig:
+    enabled: bool = True
+    path: Path | None = None
+    max_bytes: int = 10_000_000
+    backup_count: int = 5
+
+
+def jsonl_log_config_default() -> JsonlFileLogConfig:
+    env_flag = os.environ.get("STABLENEW_JSONL_LOG_ENABLED")
+    enabled = True if env_flag is None else env_flag.lower() in {"1", "true", "yes", "on"}
+    path_str = os.environ.get(
+        "STABLENEW_JSONL_LOG_PATH", os.path.join("logs", "stablenew.log.jsonl")
+    )
+    return JsonlFileLogConfig(
+        enabled=enabled,
+        path=Path(path_str) if path_str else Path("logs") / "stablenew.log.jsonl",
+        max_bytes=_int_env("STABLENEW_JSONL_LOG_MAX_BYTES", 10_000_000) or 10_000_000,
+        backup_count=_int_env("STABLENEW_JSONL_LOG_BACKUP_COUNT", 5) or 5,
+    )
+
+
+def get_jsonl_log_config() -> JsonlFileLogConfig:
+    global _jsonl_log_config
+    if _jsonl_log_config is None:
+        _jsonl_log_config = jsonl_log_config_default()
+    return _jsonl_log_config
+
+
+def set_jsonl_log_config(config: JsonlFileLogConfig) -> None:
+    global _jsonl_log_config
+    _jsonl_log_config = config
 
 def learning_enabled_default() -> bool:
     """Return default for learning toggle (opt-in by default)."""

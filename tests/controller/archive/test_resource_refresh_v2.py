@@ -1,3 +1,5 @@
+#ARCHIVE
+# Legacy resource refresh expectations archived after Phase 6 diagnostics transition.
 from types import SimpleNamespace
 from unittest import mock
 

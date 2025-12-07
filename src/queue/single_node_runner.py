@@ -8,12 +8,30 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from dataclasses import asdict
 from typing import Callable, Optional
 
 from src.queue.job_model import JobStatus, Job
 from src.queue.job_queue import JobQueue
+from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_job_envelope(job: Job | None, exc: Exception) -> None:
+    envelope = get_attached_envelope(exc)
+    if envelope is None:
+        envelope = wrap_exception(
+            exc,
+            subsystem="queue",
+            job_id=job.job_id if job else None,
+        )
+    if job is not None:
+        job.error_envelope = envelope
+        if job.execution_metadata.retry_attempts:
+            envelope.retry_info = {
+                "attempts": [asdict(attempt) for attempt in job.execution_metadata.retry_attempts]
+            }
 
 
 class SingleNodeJobRunner:
@@ -70,6 +88,7 @@ class SingleNodeJobRunner:
                 self._notify(job, JobStatus.COMPLETED)
             except Exception as exc:  # noqa: BLE001
                 logger.error("Job %s failed with error: %s", job.job_id, exc, exc_info=True)
+                _ensure_job_envelope(job, exc)
                 self.job_queue.mark_failed(job.job_id, error_message=str(exc))
                 self._notify(job, JobStatus.FAILED)
             finally:
@@ -94,6 +113,7 @@ class SingleNodeJobRunner:
             return result
         except Exception as exc:  # noqa: BLE001
             logger.error("Job %s failed with error: %s", job.job_id, exc, exc_info=True)
+            _ensure_job_envelope(job, exc)
             self.job_queue.mark_failed(job.job_id, error_message=str(exc))
             self._notify(job, JobStatus.FAILED)
             raise

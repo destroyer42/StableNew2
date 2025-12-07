@@ -1,3 +1,5 @@
+#ARCHIVE
+# Legacy preview panel stage order test archived after Phase 6 changes.
 from __future__ import annotations
 
 import tkinter as tk

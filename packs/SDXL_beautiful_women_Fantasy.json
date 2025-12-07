@@ -1,38 +1,45 @@
 {
   "txt2img": {
     "steps": 34,
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
     "cfg_scale": 6.1,
     "width": 1024,
     "height": 1024,
-    "sampler_name": "DPM++ 2M",
-    "scheduler": "Karras",
-    "seed": -1,
-    "clip_skip": 2,
-    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
-    "vae": "",
     "negative_prompt": "blurry, bad quality, distorted",
-    "hypernetwork": "None",
-    "hypernetwork_strength": 1.0,
+    "seed": -1,
+    "seed_resize_from_h": -1,
+    "seed_resize_from_w": -1,
     "enable_hr": false,
     "hr_scale": 1.5,
     "hr_upscaler": "Latent",
     "hr_sampler_name": "DPM++ 2M",
+    "hr_second_pass_steps": 12,
+    "hr_resize_x": 0,
+    "hr_resize_y": 0,
     "denoising_strength": 0.27,
-    "hires_steps": 12,
-    "face_restoration_enabled": false,
-    "face_restoration_model": "GFPGAN",
-    "face_restoration_weight": 0.5,
+    "clip_skip": 2,
+    "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+    "vae": "",
+    "hypernetwork": "None",
+    "hypernetwork_strength": 1.0,
+    "styles": [],
     "refiner_checkpoint": "None",
     "refiner_switch_at": 0.8,
     "refiner_switch_steps": 0,
-    "hr_second_pass_steps": 12
+    "refiner_enabled": false,
+    "refiner_model_name": "",
+    "hires_steps": 12,
+    "face_restoration_enabled": false,
+    "face_restoration_model": "GFPGAN",
+    "face_restoration_weight": 0.5
   },
   "img2img": {
     "steps": 15,
-    "denoising_strength": 0.3,
-    "cfg_scale": 7.0,
     "sampler_name": "Euler a",
     "scheduler": "Normal",
+    "cfg_scale": 7.0,
+    "denoising_strength": 0.3,
     "seed": -1,
     "clip_skip": 2,
     "model": "",
@@ -43,40 +50,19 @@
     "negative_adjust": ""
   },
   "upscale": {
-    "upscaler": "R-ESRGAN 4x+",
+    "upscaler": "4xUltrasharp_4xUltrasharpV10",
     "upscaling_resize": 2.0,
     "upscale_mode": "single",
+    "denoising_strength": 0.2,
     "steps": 15,
     "sampler_name": "DPM++ 2M",
     "scheduler": "Karras",
-    "denoising_strength": 0.2,
     "gfpgan_visibility": 0.0,
     "codeformer_visibility": 0.0,
     "codeformer_weight": 0.0
   },
-  "api": {
-    "base_url": "http://127.0.0.1:7860",
-    "timeout": 300
-  },
-  "pipeline": {
-    "txt2img_enabled": true,
-    "img2img_enabled": false,
-    "adetailer_enabled": true,
-    "upscale_enabled": true,
-    "video_enabled": false,
-    "apply_global_negative_txt2img": true,
-    "apply_global_negative_img2img": false,
-    "apply_global_negative_upscale": false,
-    "apply_global_negative_adetailer": false,
-    "loop_type": "pipeline",
-    "loop_count": 3,
-    "pack_mode": "selected",
-    "images_per_prompt": 1,
-    "model_matrix": [],
-    "hypernetworks": [],
-    "variant_mode": "fanout"
-  },
   "adetailer": {
+    "enabled": false,
     "adetailer_enabled": true,
     "adetailer_model": "face_yolov8n.pt",
     "adetailer_confidence": 0.6916666666666667,
@@ -87,10 +73,21 @@
     "adetailer_denoise": 0.25833333333333336,
     "adetailer_cfg": 6.0,
     "adetailer_prompt": "natural skin texture, clear eyes, detailed eyelashes, balanced highlights, subtle film grain, sharp focus",
-    "adetailer_negative_prompt": "asymmetrical eyes, glossy skin, melted face, face mush, deformed nose, overexposed highlights"
+    "adetailer_negative_prompt": "asymmetrical eyes, glossy skin, melted face, face mush, deformed nose, overexposed highlights",
+    "scheduler": "Karras"
+  },
+  "video": {
+    "fps": 24,
+    "codec": "libx264",
+    "quality": "medium"
+  },
+  "api": {
+    "base_url": "http://127.0.0.1:7860",
+    "timeout": 300
   },
   "randomization": {
     "enabled": true,
+    "seed": null,
     "prompt_sr": {
       "enabled": false,
       "mode": "random",
@@ -106,7 +103,6 @@
     "matrix": {
       "enabled": true,
       "mode": "rotate",
-      "prompt_mode": "prepend",
       "limit": 0,
       "slots": [
         {
@@ -123,20 +119,22 @@
         {
           "name": "clothes",
           "values": [
+            "only a top",
+            "only a bottom",
             "bikini armor",
-            "tightly stretched t-shirt with generous underboob",
-            "ornate plate bikini armor",
+            "tightly stretched thin t-shirt with generous underboob",
+            "ornate plate thong armor",
             "T-string thong and micro-kini",
-            "almost nothing"
+            "nothing"
           ]
         },
         {
           "name": "pose",
           "values": [
-            "downward dog yoga pose",
+            "sitting down legs spread eagled",
             "spread eagled pose",
-            "wide stance grabbing chest",
-            "bending over at waist looking over shoulder",
+            "pulling knees up to chest with knees wide",
+            "bending over at waist spreading butt cheeks",
             "normal stance with arched lower back and hands clasped behind head"
           ]
         },
@@ -170,7 +168,8 @@
           ]
         }
       ],
-      "raw_text": "# Base: a [[hair]]-haired large-breasted athletic beautiful woman wearing [[clothes]], in a [[pose]] in a [[environment]] under [[lighting]] from a [[camera]] perspective\nhair: blonde | black | brown | red | auburn | silver\nclothes: bikini armor | tightly stretched t-shirt with generous underboob | ornate plate bikini armor | T-string thong and micro-kini | almost nothing\npose: downward dog yoga pose | spread eagled pose | wide stance grabbing chest | bending over at waist looking over shoulder | normal stance with arched lower back and hands clasped behind head\nenvironment: castle hall | misty forest | ancient ruins | mountain pass | stormy battlements\nlighting: soft glowing light | golden hour backlight | dramatic rim light | moonlit ambience | torchlit shadows\ncamera: low-angle 3/4 portrait | full-body stance | wide-angle cinematic shot | overhead looking down angle",
+      "raw_text": "# Base: a [[hair]]-haired large-breasted athletic beautiful woman wearing [[clothes]], in a [[pose]] in a [[environment]] under [[lighting]] from a [[camera]] perspective\nhair: blonde | black | brown | red | auburn | silver\nclothes: only a top | only a bottom | bikini armor | tightly stretched thin t-shirt with generous underboob | ornate plate thong armor | T-string thong and micro-kini | nothing\npose: sitting down legs spread eagled | spread eagled pose | pulling knees up to chest with knees wide | bending over at waist spreading butt cheeks | normal stance with arched lower back and hands clasped behind head\nenvironment: castle hall | misty forest | ancient ruins | mountain pass | stormy battlements\nlighting: soft glowing light | golden hour backlight | dramatic rim light | moonlit ambience | torchlit shadows\ncamera: low-angle 3/4 portrait | full-body stance | wide-angle cinematic shot | overhead looking down angle",
+      "prompt_mode": "prepend",
       "base_prompt": "a [[hair]]-haired large-breasted athletic beautiful woman wearing [[clothes]], in a [[pose]] in a [[environment]] under [[lighting]] from a [[camera]] perspective"
     }
   },
@@ -186,5 +185,42 @@
     "text": "paradise",
     "text_is_negative": false,
     "fallback_prompt": ""
-  }
+  },
+  "pipeline": {
+    "img2img_enabled": false,
+    "upscale_enabled": true,
+    "adetailer_enabled": true,
+    "allow_hr_with_stages": false,
+    "refiner_compare_mode": false,
+    "apply_global_negative_txt2img": true,
+    "apply_global_negative_img2img": false,
+    "apply_global_negative_upscale": false,
+    "apply_global_negative_adetailer": false,
+    "txt2img_enabled": true,
+    "video_enabled": false,
+    "loop_type": "pipeline",
+    "loop_count": 3,
+    "pack_mode": "selected",
+    "images_per_prompt": 1,
+    "model_matrix": [],
+    "hypernetworks": [],
+    "variant_mode": "fanout"
+  },
+  "hires_fix": {
+    "enabled": false,
+    "upscaler_name": "Latent",
+    "upscale_factor": 2.0,
+    "steps": 0,
+    "denoise": 0.3,
+    "use_base_model": true,
+    "hires_enabled": false,
+    "hires_upscaler_name": "Latent",
+    "hires_upscale_factor": 2.0,
+    "hires_steps": 0,
+    "hires_denoise": 0.3,
+    "hires_use_base_model": true
+  },
+  "randomization_enabled": false,
+  "max_variants": 1,
+  "lora_strengths": []
 }

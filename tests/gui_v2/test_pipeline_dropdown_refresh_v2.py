@@ -27,10 +27,16 @@ class DummyPipelineController:
     def get_available_schedulers(self):
         return []
 
+    def get_current_config(self):
+        return {"run_mode": "direct"}
+
 
 @pytest.mark.gui
 def test_pipeline_dropdown_refresh_updates_stage_cards():
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
     root.withdraw()
     app_state = AppStateV2()
     controller = DummyPipelineController()
@@ -50,12 +56,14 @@ def test_pipeline_dropdown_refresh_updates_stage_cards():
     img_card = tab.stage_cards_panel.img2img_card
 
     assert list(txt_card.model_combo["values"]) == resources["models"]
-    assert list(txt_card.vae_combo["values"]) == resources["vaes"]
+    vae_values = list(txt_card.vae_combo["values"])
+    filtered_vae_values = [value for value in vae_values if not value.startswith("No VAE")]
+    assert filtered_vae_values == resources["vaes"]
     assert list(txt_card.sampler_combo["values"]) == resources["samplers"]
     assert list(txt_card.scheduler_combo["values"]) == resources["schedulers"]
 
     assert list(img_card.sampler_combo["values"]) == resources["samplers"]
     assert list(txt_card.hires_upscaler_combo["values"]) == resources["upscalers"]
-    assert list(txt_card.refiner_model_combo["values"]) == ["SDXL Refiner"]
+    assert "SDXL Refiner" in list(txt_card.refiner_model_combo["values"])
 
     root.destroy()

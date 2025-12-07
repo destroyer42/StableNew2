@@ -24,7 +24,13 @@ from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
 from src.pipeline.job_builder_v2 import JobBuilderV2
-from src.pipeline.job_models_v2 import NormalizedJobRecord, BatchSettings, OutputSettings
+from src.pipeline.job_models_v2 import (
+    JobStatusV2,
+    NormalizedJobRecord,
+    BatchSettings,
+    OutputSettings,
+    QueueJobV2,
+)
 from src.gui.state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 from src.config import app_config
@@ -34,7 +40,13 @@ from src.controller.pipeline_config_assembler import PipelineConfigAssembler, Gu
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.state import PipelineState
 from src.api.client import SDWebUIClient
-from src.utils import StructuredLogger
+from src.utils import LogContext, StructuredLogger, log_with_ctx
+from src.utils.error_envelope_v2 import (
+    get_attached_envelope,
+    serialize_envelope,
+    wrap_exception,
+)
+from src.utils.queue_helpers_v2 import job_to_queue_job
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
@@ -526,6 +538,7 @@ class PipelineController(_GUIPipelineController):
         self._job_history_service: JobHistoryService | None = None
         self._active_job_id: str | None = None
         self._last_run_config: dict[str, Any] | None = None
+        self._app_state: Any | None = None
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
         history_store = self._job_controller.get_history_store()
@@ -536,6 +549,7 @@ class PipelineController(_GUIPipelineController):
             else JobService(queue, runner, history_store, history_service=history_service)
         )
         self._job_controller.set_status_callback("pipeline", self._on_job_status)
+        self._setup_queue_callbacks()
 
     def _get_learning_runner(self):
         if self._learning_runner is None:
@@ -717,8 +731,16 @@ class PipelineController(_GUIPipelineController):
         try:
             run_result = self.run_pipeline(config)
         except Exception as exc:  # noqa: BLE001
-            # Surface error in a structured way so JobQueue/GUI can display it.
-            return {"error": str(exc)}
+            envelope = get_attached_envelope(exc)
+            if envelope is None:
+                envelope = wrap_exception(
+                    exc,
+                    subsystem="pipeline_controller",
+                )
+            return {
+                "error": str(exc),
+                "error_envelope": serialize_envelope(envelope),
+            }
 
         # Normalize result into a dict payload for JobQueue/history.
         if hasattr(run_result, "to_dict"):
@@ -787,6 +809,194 @@ class PipelineController(_GUIPipelineController):
             except Exception:
                 pass
 
+    def bind_app_state(self, app_state: Any | None) -> None:
+        """Bind an AppStateV2 instance for updating GUI data."""
+        self._app_state = app_state
+        self._refresh_app_state_queue()
+        try:
+            preview_jobs = self.get_preview_jobs()
+            if hasattr(app_state, "set_preview_jobs"):
+                app_state.set_preview_jobs(preview_jobs)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------ 
+    # Queue wiring for AppState integration
+    # ------------------------------------------------------------------
+
+    def _setup_queue_callbacks(self) -> None:
+        if not self._job_service:
+            return
+        self._job_service.register_callback(JobService.EVENT_QUEUE_UPDATED, self._on_queue_updated)
+        self._job_service.register_callback(JobService.EVENT_QUEUE_STATUS, self._on_queue_status_changed)
+        self._job_service.register_callback(JobService.EVENT_JOB_STARTED, self._on_job_started)
+        self._job_service.register_callback(JobService.EVENT_JOB_FINISHED, self._on_job_finished)
+        self._job_service.register_callback(JobService.EVENT_JOB_FAILED, self._on_job_failed)
+        self._job_service.register_callback(JobService.EVENT_QUEUE_EMPTY, self._on_queue_empty)
+
+    def _on_queue_updated(self, summaries: list[str]) -> None:
+        if not self._app_state:
+            return
+        self._refresh_app_state_queue()
+
+    def _on_queue_status_changed(self, status: str) -> None:
+        if not self._app_state:
+            return
+        self._app_state.set_queue_status(status)
+
+    def _on_job_started(self, job: Job) -> None:
+        self._set_running_job(job)
+
+    def _on_job_finished(self, job: Job) -> None:
+        self._set_running_job(None)
+
+    def _on_job_failed(self, job: Job) -> None:
+        self._set_running_job(None)
+
+    def _on_queue_empty(self) -> None:
+        if self._app_state:
+            self._app_state.set_queue_status("idle")
+
+    def _refresh_app_state_queue(self) -> None:
+        if not self._app_state or not self._job_service:
+            return
+        jobs = self._list_service_jobs()
+        queue_jobs = [job_to_queue_job(job) for job in jobs]
+        summaries = [queue_job.get_display_summary() for queue_job in queue_jobs]
+        self._app_state.set_queue_items(summaries)
+        setter = getattr(self._app_state, "set_queue_jobs", None)
+        if callable(setter):
+            try:
+                setter(queue_jobs)
+            except Exception:
+                pass
+
+    def _list_service_jobs(self) -> list[Job]:
+        queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "list_jobs"):
+            try:
+                return list(queue.list_jobs())
+            except Exception:
+                return []
+        return []
+
+    def _set_running_job(self, job: Job | None) -> None:
+        if not self._app_state:
+            return
+        if job is None:
+            self._app_state.set_running_job(None)
+            return
+        self._app_state.set_running_job(job_to_queue_job(job))
+
+    # ------------------------------------------------------------------
+    # GUI callbacks for preview + job controls
+    # ------------------------------------------------------------------
+
+    def on_add_job_to_queue_v2(self) -> None:
+        records = self.get_preview_jobs()
+        if not records:
+            return
+        if self._app_state and hasattr(self._app_state, "set_preview_jobs"):
+            try:
+                self._app_state.set_preview_jobs(records)
+            except Exception:
+                pass
+        self.submit_preview_jobs_to_queue()
+
+    def on_clear_job_draft(self) -> None:
+        if not self._app_state:
+            return
+        clear_fn = getattr(self._app_state, "clear_job_draft", None)
+        if callable(clear_fn):
+            try:
+                clear_fn()
+            except Exception:
+                pass
+        preview_setter = getattr(self._app_state, "set_preview_jobs", None)
+        if callable(preview_setter):
+            try:
+                preview_setter([])
+            except Exception:
+                pass
+
+    def on_queue_move_up_v2(self, job_id: str) -> bool:
+        queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "move_up"):
+            try:
+                return bool(queue.move_up(job_id))
+            except Exception:
+                _logger.exception("on_queue_move_up_v2 failed", exc_info=True)
+        return False
+
+    def on_queue_move_down_v2(self, job_id: str) -> bool:
+        queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "move_down"):
+            try:
+                return bool(queue.move_down(job_id))
+            except Exception:
+                _logger.exception("on_queue_move_down_v2 failed", exc_info=True)
+        return False
+
+    def on_queue_remove_job_v2(self, job_id: str) -> None:
+        queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "remove"):
+            try:
+                queue.remove(job_id)
+            except Exception:
+                _logger.exception("on_queue_remove_job_v2 failed", exc_info=True)
+
+    def on_queue_clear_v2(self) -> None:
+        queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "clear"):
+            try:
+                queue.clear()
+            except Exception:
+                _logger.exception("on_queue_clear_v2 failed", exc_info=True)
+
+    def on_set_auto_run_v2(self, enabled: bool) -> None:
+        if not self._app_state:
+            return
+        self._app_state.set_auto_run_queue(bool(enabled))
+
+    def on_pause_queue_v2(self) -> None:
+        if not self._job_service:
+            return
+        self._job_service.pause()
+        if self._app_state:
+            self._app_state.set_is_queue_paused(True)
+
+    def on_resume_queue_v2(self) -> None:
+        if not self._job_service:
+            return
+        self._job_service.resume()
+        if self._app_state:
+            self._app_state.set_is_queue_paused(False)
+
+    def on_queue_send_job_v2(self) -> None:
+        if not self._job_service:
+            return
+        self._job_service.run_next_now()
+
+    def on_pause_job_v2(self) -> None:
+        self.on_pause_queue_v2()
+
+    def on_resume_job_v2(self) -> None:
+        self.on_resume_queue_v2()
+
+    def on_cancel_job_v2(self) -> None:
+        if not self._job_service:
+            return
+        self._job_service.cancel_current()
+
+    def on_cancel_job_and_return_v2(self) -> None:
+        if not self._job_service:
+            return
+        job = self._job_service.cancel_current()
+        if job:
+            job.status = JobStatus.QUEUED
+            job.error_message = None
+            self._job_service.enqueue(job)
+
     def submit_run_plan(
         self,
         run_plan: RunPlan,
@@ -825,11 +1035,62 @@ class PipelineController(_GUIPipelineController):
         """Run a single job."""
         if not job.pipeline_config:
             return {"error": "No pipeline config"}
-        api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
+        job_id = job.job_id
+        stage = self._infer_job_stage(job)
+        ctx = LogContext(job_id=job_id, subsystem="pipeline", stage=stage)
+        def _retry_callback(stage: str | None, attempt_index: int, max_attempts: int, reason: str) -> None:
+            if not self._job_service:
+                return
+            try:
+                self._job_service.record_retry_attempt(job_id, stage, attempt_index, max_attempts, reason)
+            except Exception:
+                pass
+        api_client = SDWebUIClient(
+            base_url="http://127.0.0.1:7860",
+            retry_callback=_retry_callback,
+        )
         structured_logger = StructuredLogger()
         runner = PipelineRunner(api_client, structured_logger)
-        result = runner.run(job.pipeline_config, self.cancel_token)
-        return result.to_dict() if hasattr(result, 'to_dict') else {"result": result}
+        try:
+            result = runner.run(job.pipeline_config, self.cancel_token)
+            return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
+        except Exception as exc:  # noqa: BLE001
+            envelope = get_attached_envelope(exc)
+            if envelope is None:
+                envelope = wrap_exception(
+                    exc,
+                    subsystem="pipeline",
+                    job_id=job_id,
+                    stage=stage,
+                    user_message="Pipeline execution failed for this job.",
+                    context={
+                        "run_mode": job.run_mode,
+                        "source": job.source,
+                    },
+                )
+            log_with_ctx(
+                _logger,
+                logging.ERROR,
+                f"Pipeline job {job_id} failed: {envelope.user_message}",
+                ctx=ctx,
+                extra_fields={
+                    "error_type": envelope.error_type,
+                    "run_mode": job.run_mode,
+                    "source": job.source,
+                },
+            )
+            raise
+
+    def _infer_job_stage(self, job: Job) -> str | None:
+        config = job.pipeline_config
+        stage = None
+        if config is not None:
+            stage = getattr(config, "stage", None) or getattr(config, "stage_name", None)
+        if stage is None and isinstance(job.config_snapshot, dict):
+            stage = job.config_snapshot.get("stage") or job.config_snapshot.get("stage_name")
+        if stage:
+            return str(stage).lower()
+        return None
 
     def submit_preview_jobs_to_queue(
         self,
@@ -883,3 +1144,11 @@ class PipelineController(_GUIPipelineController):
             except Exception:
                 pass
         return self._job_history_service
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        if self._job_service is None:
+            return {}
+        try:
+            return self._job_service.get_diagnostics_snapshot()
+        except Exception:
+            return {}

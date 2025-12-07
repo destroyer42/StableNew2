@@ -7,6 +7,7 @@ import tkinter as tk
 
 from src.controller.app_controller import AppController, LifecycleState
 from src.gui.main_window_v2 import MainWindow
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 @pytest.fixture
@@ -23,7 +24,12 @@ def tk_root():
 @pytest.fixture
 def controller(tk_root):
     window = MainWindow(tk_root)
-    controller = AppController(window, pipeline_runner=None, threaded=False)
+    controller = AppController(
+        window,
+        pipeline_runner=None,
+        threaded=False,
+        job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
+    )
     return controller
 
 

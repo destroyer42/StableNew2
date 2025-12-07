@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from tkinter import ttk
 from typing import Any
@@ -13,10 +14,14 @@ from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.state import PipelineState
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
+from src.gui.views.diagnostics_dashboard_v2 import DiagnosticsDashboardV2
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineTabFrame(ttk.Frame):
@@ -48,6 +53,11 @@ class PipelineTabFrame(ttk.Frame):
 
         # Initialize pipeline state and enable variables for test compatibility
         self.pipeline_state = PipelineState()
+        if self.pipeline_controller and self.app_state:
+            try:
+                self.pipeline_controller.bind_app_state(self.app_state)
+            except Exception:
+                pass
 
         self.rowconfigure(0, weight=1)
         for idx in range(3):
@@ -146,6 +156,17 @@ class PipelineTabFrame(ttk.Frame):
             theme=self.theme,
         )
         self.history_panel.grid(row=0, column=0, sticky="nsew")
+
+        self.right_scroll.inner.rowconfigure(4, weight=0)
+        diagnostics_card = _create_card(self.right_scroll.inner)
+        diagnostics_card.grid(row=4, column=0, sticky="ew", padx=(0, 12), pady=(0, 0))
+        diagnostics_card.rowconfigure(0, weight=1)
+        self.diagnostics_dashboard = DiagnosticsDashboardV2(
+            diagnostics_card,
+            controller=queue_controller,
+            app_state=self.app_state,
+        )
+        self.diagnostics_dashboard.grid(row=0, column=0, sticky="nsew")
 
 
         self.stage_cards_panel = StageCardsPanel(
@@ -261,6 +282,7 @@ class PipelineTabFrame(ttk.Frame):
         # PR-GUI-D: Ensure minimum window width on first show
         self._width_ensured = False
         self.bind("<Map>", self._on_first_map)
+        self._bind_process_inspector_shortcut()
 
     # -------------------------------------------------------------------------
     # PR-GUI-D: Minimum Window Width
@@ -360,6 +382,39 @@ class PipelineTabFrame(ttk.Frame):
             if card not in ordered_cards:
                 card.grid_remove()
 
+    def _bind_process_inspector_shortcut(self) -> None:
+        """Register the hidden Ctrl+Alt+P shortcut for the diagnostic helper."""
+        try:
+            self.bind_all("<Control-Alt-P>", self._on_process_inspector_shortcut, add="+")
+        except Exception:
+            pass
+
+    def _on_process_inspector_shortcut(self, event: tk.Event | None = None) -> None:
+        """Invoke the process-inspection helper when the shortcut fires."""
+        self._run_process_inspector()
+
+    def _run_process_inspector(self) -> None:
+        processes = list(iter_stablenew_like_processes())
+        if not processes:
+            self._log_process_inspector_message(
+                "[PROC] inspector: no StableNew-like python processes found."
+            )
+            return
+        for proc in processes:
+            self._log_process_inspector_message(format_process_brief(proc))
+
+    def _log_process_inspector_message(self, message: str) -> None:
+        """Write the given message to the GUI log panel and trace handler."""
+        controller = self.app_controller
+        if controller is not None:
+            append = getattr(controller, "_append_log", None)
+            if callable(append):
+                try:
+                    append(message)
+                except Exception:
+                    pass
+        logger.info(message)
+
     def _handle_sidebar_change(self) -> None:
         self._apply_stage_visibility()
         if hasattr(self, "preview_panel"):
@@ -402,6 +457,12 @@ class PipelineTabFrame(ttk.Frame):
             return False
         try:
             self.preview_panel.set_jobs(records)
+            if self.app_state and hasattr(self.app_state, "set_preview_jobs"):
+                try:
+                    self.app_state.set_preview_jobs(records)
+                except Exception:
+                    pass
+            self.preview_panel.update_from_app_state(self.app_state)
             return True
         except Exception:
             return False

@@ -1,5 +1,7 @@
 """Tests for PreviewPanelV2.set_jobs() with NormalizedJobRecord."""
 
+#ARCHIVE
+# Legacy normalized jobs tests moved to archive after Phase 6 refresh.
 from __future__ import annotations
 
 import tkinter as tk

@@ -36,5 +36,9 @@ GUI V2 → AppController → PipelineController → JobService → Runner → We
 ## 8. Summary Checklist
 Avoid races, stale job objects, sleeps, mixed drivers, and direct runner calls.
 
+- Watchdog threads introduced in Phase 3 may cancel long-running jobs when resource caps fire; queue tests should expect cancellations triggered by `[WATCHDOG]` log entries rather than assuming a manual stop hook.
+- Phase 4 OS-level containers may force-kill job children via `[CONTAINER]` log notifications; queue tests should allow brief `[CONTAINER] job=… kill_all invoked` spikes when jobs finish or when OS-level limits fire, but the queue status should still settle to a terminal state.
+- Phase 5 adds the diagnostics dashboard and `[DIAG]` reports; queue tests should tolerate silent log interactions when the controller generates bundled diagnostics (manual button, watchdog violations, or exception hooks) without assuming they mutate queue state.
+
 ## Recommended Location
 docs/testing/KNOWN_PITFALLS_QUEUE_TESTING.md

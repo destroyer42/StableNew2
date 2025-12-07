@@ -33,12 +33,12 @@ from .api.webui_process_manager import WebUIProcessManager
 from .api.webui_process_manager import build_default_webui_process_config
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
-from src.gui.main_window_v2 import MainWindowV2
+from src.gui import main_window
 from src.utils.graceful_exit import graceful_exit
 from src.utils.single_instance import SingleInstanceLock
 
 # Used by tests and entrypoint contract
-ENTRYPOINT_GUI_CLASS = MainWindowV2
+ENTRYPOINT_GUI_CLASS = main_window.StableNewGUI
 
 # --- Thin wrapper for healthcheck ---
 def wait_for_webui_ready(
@@ -60,7 +60,7 @@ def wait_for_webui_ready(
         timeout=timeout,
         poll_interval=poll_interval,
     )
-ENTRYPOINT_GUI_CLASS = MainWindowV2
+ENTRYPOINT_GUI_CLASS = main_window.StableNewGUI
 
 # --- Thin wrapper for healthcheck ---
 
