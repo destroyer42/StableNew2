@@ -18,17 +18,6 @@ class PipelineConfigPanel(ttk.Frame):
         self.app_state = app_state
         self._on_change = on_change
         self._lora_controls: dict[str, tuple[tk.BooleanVar, ttk.Scale]] = {}
-        # Legacy validation label - removed for cleaner UI
-        # self._validation_message_var = tk.StringVar(value="")
-        # self._validation_label = ttk.Label(
-        #     self,
-        #     textvariable=self._validation_message_var,
-        #     background="#3A3A3A",
-        #     foreground="#FFD700",
-        #     anchor="w",
-        #     padding=(4, 2),
-        # )
-        # self._validation_label.pack(fill="x", pady=(0, 8))
 
         # Initialize with defaults
         self.run_mode_var = tk.StringVar(value="direct")
@@ -58,16 +47,15 @@ class PipelineConfigPanel(ttk.Frame):
         mode_frame.grid(row=row, column=1, sticky="ew", pady=2)
         ttk.Radiobutton(mode_frame, text="Direct", value="direct", variable=self.run_mode_var, command=self._on_mode_change).pack(side="left")
         ttk.Radiobutton(mode_frame, text="Queue", value="queue", variable=self.run_mode_var, command=self._on_mode_change).pack(side="left", padx=(6, 0))
-        row += 1
         
         # Batch Runs
-        ttk.Label(self, text="Batch Runs:", style=BODY_LABEL_STYLE).grid(row=row, column=0, sticky="w", pady=2)
+        ttk.Label(self, text="Batch Runs:", style=BODY_LABEL_STYLE).grid(row=row, column=3, sticky="w", pady=2)
         batch_spin = ttk.Spinbox(
             self,
             from_=1,
-            to=999,
+            to=20,
             textvariable=self.batch_var,
-            width=6,
+            width=4,
             command=self._on_batch_change,
             style="Dark.TSpinbox",
         )
@@ -107,10 +95,6 @@ class PipelineConfigPanel(ttk.Frame):
         self._lora_container.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         row += 1
         self._refresh_lora_controls()
-        
-        # Legacy queue status label - removed for cleaner UI
-        # self.queue_label_var = tk.StringVar()
-        # ttk.Label(self, textvariable=self.queue_label_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
     def _setup_callbacks(self) -> None:
         """Setup callbacks for config changes."""
@@ -148,19 +132,8 @@ class PipelineConfigPanel(ttk.Frame):
         pass
 
     def set_validation_message(self, message: str) -> None:
-        # Legacy method - validation label removed for cleaner UI
+        """Legacy method stub - validation label removed (PR-GUI-D)."""
         pass
-        # if not message:
-        #     self._validation_message_var.set("")
-        #     return
-        # self._validation_message_var.set(message)
-        # self._refresh_queue_label()
-
-    def _refresh_queue_label(self) -> None:
-        # Legacy method - queue label removed for cleaner UI
-        pass
-        # TODO: Connect to actual queue state when available
-        # self.queue_label_var.set("Pending jobs: 0")
 
     def _on_mode_change(self) -> None:
         if callable(self._on_change):

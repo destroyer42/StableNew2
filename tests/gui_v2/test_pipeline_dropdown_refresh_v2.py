@@ -6,6 +6,9 @@ from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 
 
 class DummyPipelineController:
+    def __init__(self):
+        self.state_manager = None
+
     def list_models(self):
         return []
 

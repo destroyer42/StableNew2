@@ -4,6 +4,9 @@ import tkinter as tk
 
 import pytest
 
+# PR-GUI-F1: PipelineRunControlsV2 no longer has run_now_button - queue-only model
+pytestmark = pytest.mark.skip(reason="PR-GUI-F1: run_now_button removed from PipelineRunControlsV2")
+
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 
 

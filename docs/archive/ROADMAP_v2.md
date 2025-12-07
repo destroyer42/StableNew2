@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by docs/Roadmap_v2.5.md (canonical)
+
 ## GUI V2 Roadmap Notes
 
 - AppLayoutV2 now owns panel composition for StableNewGUI, enabling further V2 UX work without expanding main_window.py.

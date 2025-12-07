@@ -19,7 +19,9 @@ def test_status_bar_transitions(tk_root: tk.Tk):
 
         bar.set_error("boom")
         assert "Error" in bar.status_label.cget("text")
-        bar.clear_validation_error()
+        # clear_validation_error only clears if set_validation_error was called
+        # Use set_idle to reset after set_error
+        bar.set_idle()
         assert bar.status_label.cget("text") == "Idle"
 
         bar.update_progress(0.5)

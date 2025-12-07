@@ -12,6 +12,7 @@ class FakeQueue:
     def __init__(self) -> None:
         self.jobs: list[Job] = []
         self.running = []
+        self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
 
     def submit(self, job: Job) -> None:
         self.jobs.append(job)
@@ -34,9 +35,20 @@ class FakeQueue:
         self._update_status(job_id, JobStatus.CANCELLED)
 
     def _update_status(self, job_id: str, status: JobStatus) -> None:
+        updated: Job | None = None
         for job in self.jobs:
             if job.job_id == job_id:
                 job.status = status
+                updated = job
+                break
+        if updated:
+            for callback in self._status_callbacks:
+                callback(updated, status)
+
+    def register_status_callback(
+        self, callback: Callable[[Job, JobStatus], None]
+    ) -> None:
+        self._status_callbacks.append(callback)
 
 
 class FakeRunner:
@@ -131,3 +143,39 @@ def test_cancel_current_triggers_failed_event(service: JobService) -> None:
     service.runner.current_job = job
     service.cancel_current()
     assert failures
+
+
+def test_job_service_emits_started_and_finished(service: JobService) -> None:
+    events: list[tuple[str, str]] = []
+
+    service.register_callback(
+        JobService.EVENT_JOB_STARTED,
+        lambda job: events.append(("started", job.job_id)),
+    )
+    service.register_callback(
+        JobService.EVENT_JOB_FINISHED,
+        lambda job: events.append(("finished", job.job_id)),
+    )
+
+    job = make_job("start-finish")
+    service.enqueue(job)
+    service.queue.mark_running(job.job_id)
+    service.queue.mark_completed(job.job_id)
+
+    assert events == [("started", "start-finish"), ("finished", "start-finish")]
+
+
+def test_job_service_emits_failed_event_on_queue_failure(service: JobService) -> None:
+    failures: List[str] = []
+
+    service.register_callback(
+        JobService.EVENT_JOB_FAILED,
+        lambda job: failures.append(job.job_id),
+    )
+
+    job = make_job("queue-fail")
+    service.enqueue(job)
+    service.queue.mark_running(job.job_id)
+    service.queue.mark_failed(job.job_id, "uh-oh")
+
+    assert failures == ["queue-fail"]

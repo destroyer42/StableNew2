@@ -217,6 +217,15 @@ class RandomizerPanelV2(ttk.Frame):
         self._preview_list.column("idx", width=30, anchor=tk.W)
         self._preview_list.column("summary", width=450, anchor=tk.W)
         self._preview_list.pack(fill=tk.BOTH, expand=True)
+        preview_bg = getattr(theme, "VALIDATION_NORMAL_BG", theme_mod.VALIDATION_NORMAL_BG)
+        preview_fg = getattr(theme, "VALIDATION_NORMAL_FG", theme_mod.VALIDATION_NORMAL_FG)
+        preview_accent = getattr(theme, "ACCENT_GOLD", theme_mod.ACCENT_GOLD)
+        self._preview_list.configure(
+            background=preview_bg,
+            foreground=preview_fg,
+            selectbackground=preview_accent,
+            selectforeground=getattr(theme, "TEXT_PRIMARY", theme_mod.TEXT_PRIMARY),
+        )
 
         self.body.columnconfigure(0, weight=0)
         self.body.columnconfigure(1, weight=0)

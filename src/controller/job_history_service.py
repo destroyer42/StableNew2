@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, Callable
+from typing import Any, Callable, List, Optional
 
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
@@ -35,6 +35,35 @@ class JobHistoryService:
         self._queue = queue
         self._history = history_store
         self._job_controller = job_controller
+        self._callbacks: list[Callable[[JobHistoryEntry], None]] = []
+        try:
+            self._history.register_callback(self._on_history_update)
+        except Exception:
+            pass
+
+    def register_callback(self, callback: Callable[[JobHistoryEntry], None]) -> None:
+        self._callbacks.append(callback)
+
+    def _on_history_update(self, entry: JobHistoryEntry) -> None:
+        for callback in list(self._callbacks):
+            try:
+                callback(entry)
+            except Exception:
+                continue
+
+    def record(self, job: Job, *, result: dict | None = None) -> None:
+        try:
+            entry = self._build_entry(job, status=JobStatus.COMPLETED, result=result)
+            self._history.save_entry(entry)
+        except Exception:
+            pass
+
+    def record_failure(self, job: Job, error: str | None = None) -> None:
+        try:
+            entry = self._build_entry(job, status=JobStatus.FAILED, error=error)
+            self._history.save_entry(entry)
+        except Exception:
+            pass
 
     def list_active_jobs(self) -> List[JobViewModel]:
         active_statuses = {JobStatus.QUEUED, JobStatus.RUNNING}
@@ -135,3 +164,32 @@ class JobHistoryService:
         if callable(payload):
             return "callable payload"
         return str(payload)[:80]
+
+    def _build_entry(
+        self,
+        job: Job,
+        *,
+        status: JobStatus,
+        result: dict | None = None,
+        error: str | None = None,
+    ) -> JobHistoryEntry:
+        prompt_keys = None
+        snapshot = getattr(job, "config_snapshot", None) or {}
+        raw_keys = snapshot.get("prompt_keys")
+        if isinstance(raw_keys, list):
+            prompt_keys = raw_keys
+        return JobHistoryEntry(
+            job_id=job.job_id,
+            created_at=job.created_at,
+            status=status,
+            payload_summary=self._summarize(job),
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            error_message=error or job.error_message,
+            worker_id=getattr(job, "worker_id", None),
+            run_mode=getattr(job, "run_mode", "queue"),
+            result=result if result is not None else job.result,
+            prompt_source=getattr(job, "prompt_source", "manual"),
+            prompt_pack_id=getattr(job, "prompt_pack_id", None),
+            prompt_keys=prompt_keys,
+        )

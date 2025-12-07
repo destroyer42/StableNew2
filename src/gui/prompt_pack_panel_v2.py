@@ -7,6 +7,13 @@ from tkinter import ttk
 from typing import Callable, Iterable
 
 from . import theme as theme_mod
+from src.gui.theme_v2 import (
+    ACCENT_GOLD,
+    apply_validation_colors,
+    BORDER_SUBTLE,
+    VALIDATION_NORMAL_BG,
+    VALIDATION_NORMAL_FG,
+)
 from .prompt_pack_adapter_v2 import PromptPackSummary
 
 
@@ -50,17 +57,21 @@ class PromptPackPanelV2(ttk.Frame):
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+        bg_color = getattr(theme, "VALIDATION_NORMAL_BG", VALIDATION_NORMAL_BG)
+        fg_color = getattr(theme, "VALIDATION_NORMAL_FG", VALIDATION_NORMAL_FG)
+        border_color = getattr(theme, "BORDER_SUBTLE", BORDER_SUBTLE)
+        accent_color = getattr(theme, "ACCENT_GOLD", ACCENT_GOLD)
         self.listbox = tk.Listbox(
             list_frame,
             height=8,
             relief="flat",
             borderwidth=0,
-            background=getattr(theme, "COLOR_SURFACE_ALT", theme_mod.COLOR_SURFACE_ALT),
-            foreground=getattr(theme, "COLOR_TEXT", theme_mod.COLOR_TEXT),
+            background=bg_color,
+            foreground=fg_color,
             highlightthickness=1,
-            highlightcolor=getattr(theme, "COLOR_BORDER_SUBTLE", theme_mod.COLOR_BORDER_SUBTLE),
-            highlightbackground=getattr(theme, "COLOR_BORDER_SUBTLE", theme_mod.COLOR_BORDER_SUBTLE),
-            selectbackground=getattr(theme, "COLOR_ACCENT", theme_mod.COLOR_ACCENT),
+            highlightcolor=border_color,
+            highlightbackground=border_color,
+            selectbackground=accent_color,
             selectforeground=getattr(theme, "ASWF_BLACK", theme_mod.ASWF_BLACK),
             activestyle="none",
             yscrollcommand=scrollbar.set,
@@ -74,6 +85,7 @@ class PromptPackPanelV2(ttk.Frame):
         self.description_var = tk.StringVar(value="Select a pack to preview its prompt")
         self.meta_label = ttk.Label(meta_frame, textvariable=self.description_var, wraplength=260)
         self.meta_label.pack(anchor=tk.W)
+        apply_validation_colors(self.meta_label, "normal")
 
         self.apply_button = ttk.Button(self, text="Apply to Prompt", command=self._on_apply_clicked)
         self.apply_button.pack(anchor=tk.E, pady=(theme_mod.PADDING_SM, 0))

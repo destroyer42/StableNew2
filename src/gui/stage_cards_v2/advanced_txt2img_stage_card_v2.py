@@ -250,6 +250,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.hires_steps_var = tk.IntVar(value=0)
         self.hires_denoise_var = tk.DoubleVar(value=0.3)
         self.hires_use_base_model_var = tk.BooleanVar(value=True)
+        self.hires_model_var = tk.StringVar(value="")  # PR-GUI-E: Hires model override
 
         self._apply_refiner_hiress_defaults()
 
@@ -257,9 +258,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.refiner_model_var.trace_add("write", lambda *_: self._on_refiner_model_changed())
         self.refiner_switch_var.trace_add("write", lambda *_: self._on_refiner_switch_changed())
 
+        # --- Refiner Frame with collapsible options (PR-GUI-E) ---
         refiner_frame = ttk.LabelFrame(parent, text="SDXL Refiner", style=SURFACE_FRAME_STYLE)
         refiner_frame.grid(row=3, column=0, sticky="ew", pady=(8, 4))
         refiner_frame.columnconfigure(1, weight=1)
+        self._refiner_frame = refiner_frame
 
         ttk.Checkbutton(
             refiner_frame,
@@ -268,23 +271,29 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             command=self._on_refiner_toggle,
             style="Dark.TCheckbutton",
         ).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(refiner_frame, text="Refiner model", style="Dark.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(4, 0)
+
+        # PR-GUI-E: Container frame for refiner options (hidden when disabled)
+        self._refiner_options_frame = ttk.Frame(refiner_frame, style=SURFACE_FRAME_STYLE)
+        self._refiner_options_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self._refiner_options_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(self._refiner_options_frame, text="Refiner model", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(4, 0)
         )
         self.refiner_model_combo = ttk.Combobox(
-            refiner_frame,
+            self._refiner_options_frame,
             textvariable=self.refiner_model_var,
             values=refiner_values,
             state="readonly",
             style="Dark.TCombobox",
         )
-        self.refiner_model_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
+        self.refiner_model_combo.grid(row=0, column=1, sticky="ew", pady=(4, 0))
         self._set_combo_values(self.refiner_model_combo, self.refiner_model_var, refiner_values)
-        ttk.Label(refiner_frame, text="Refiner start", style="Dark.TLabel").grid(
-            row=2, column=0, sticky="w", pady=(4, 0)
+        ttk.Label(self._refiner_options_frame, text="Refiner start", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(4, 0)
         )
         self._refiner_slider = LabeledSlider(
-            refiner_frame,
+            self._refiner_options_frame,
             variable=self.refiner_switch_var,
             from_=0,
             to=100,
@@ -292,11 +301,13 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             length=180,
             command=lambda value: self._on_refiner_switch_changed(),
         )
-        self._refiner_slider.grid(row=2, column=1, sticky="ew", pady=(4, 0))
+        self._refiner_slider.grid(row=1, column=1, sticky="ew", pady=(4, 0))
 
+        # --- Hires Frame with collapsible options (PR-GUI-E) ---
         hires_frame = ttk.LabelFrame(parent, text="Hires fix", style=SURFACE_FRAME_STYLE)
         hires_frame.grid(row=4, column=0, sticky="ew", pady=(0, 4))
         hires_frame.columnconfigure(1, weight=1)
+        self._hires_frame = hires_frame
 
         ttk.Checkbutton(
             hires_frame,
@@ -305,23 +316,45 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             command=self._on_hires_toggle,
             style="Dark.TCheckbutton",
         ).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(hires_frame, text="Upscaler", style="Dark.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(4, 0)
+
+        # PR-GUI-E: Container frame for hires options (hidden when disabled)
+        self._hires_options_frame = ttk.Frame(hires_frame, style=SURFACE_FRAME_STYLE)
+        self._hires_options_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self._hires_options_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(self._hires_options_frame, text="Upscaler", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(4, 0)
         )
         upscaler_values = self._load_upscaler_options()
         self.hires_upscaler_combo = ttk.Combobox(
-            hires_frame,
+            self._hires_options_frame,
             textvariable=self.hires_upscaler_var,
             values=upscaler_values,
             state="readonly",
             style="Dark.TCombobox",
         )
-        self.hires_upscaler_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(hires_frame, text="Upscale factor", style="Dark.TLabel").grid(
+        self.hires_upscaler_combo.grid(row=0, column=1, sticky="ew", pady=(4, 0))
+
+        # PR-GUI-E: Hires model selector
+        ttk.Label(self._hires_options_frame, text="Hires model", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(4, 0)
+        )
+        hires_model_values = self._build_hires_model_values()
+        self._hires_model_combo = ttk.Combobox(
+            self._hires_options_frame,
+            textvariable=self.hires_model_var,
+            values=hires_model_values,
+            state="readonly",
+            style="Dark.TCombobox",
+        )
+        self._hires_model_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
+        self.hires_model_var.trace_add("write", lambda *_: self._on_hires_model_changed())
+
+        ttk.Label(self._hires_options_frame, text="Upscale factor", style="Dark.TLabel").grid(
             row=2, column=0, sticky="w", pady=(4, 0)
         )
         ttk.Spinbox(
-            hires_frame,
+            self._hires_options_frame,
             from_=1.0,
             to=4.0,
             increment=0.1,
@@ -329,11 +362,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(hires_frame, text="Hires steps", style="Dark.TLabel").grid(
+        ttk.Label(self._hires_options_frame, text="Hires steps", style="Dark.TLabel").grid(
             row=3, column=0, sticky="w", pady=(4, 0)
         )
         ttk.Spinbox(
-            hires_frame,
+            self._hires_options_frame,
             from_=0,
             to=200,
             increment=1,
@@ -342,11 +375,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             command=self._on_hires_steps_changed,
             style="Dark.TSpinbox",
         ).grid(row=3, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(hires_frame, text="Denoise", style="Dark.TLabel").grid(
+        ttk.Label(self._hires_options_frame, text="Denoise", style="Dark.TLabel").grid(
             row=4, column=0, sticky="w", pady=(4, 0)
         )
         self._hires_denoise_slider = LabeledSlider(
-            hires_frame,
+            self._hires_options_frame,
             variable=self.hires_denoise_var,
             from_=0.0,
             to=1.0,
@@ -356,7 +389,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         )
         self._hires_denoise_slider.grid(row=4, column=1, sticky="ew", pady=(4, 0))
         ttk.Checkbutton(
-            hires_frame,
+            self._hires_options_frame,
             text="Use base model during hires",
             variable=self.hires_use_base_model_var,
             command=self._on_hires_use_base_model_changed,
@@ -375,6 +408,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             "write", lambda *_: self._on_hires_use_base_model_changed()
         )
 
+        # PR-GUI-E: Set initial visibility (in case no config is loaded)
+        self._update_refiner_visibility()
+        self._update_hires_visibility()
 
 
     def set_on_change(self, callback: Any) -> None:
@@ -425,6 +461,19 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.hires_denoise_var.set(cfg.hires_denoise or 0.3)
         self.hires_use_base_model_var.set(cfg.hires_use_base_model_for_hires)
 
+        # PR-GUI-E: Set hires model override if present
+        hires_model_override = getattr(cfg, "hires_model_override", None)
+        if hires_model_override:
+            # Find display name for the override model
+            display = next((d for d, n in self._model_name_map.items() if n == hires_model_override), hires_model_override)
+            self.hires_model_var.set(display)
+        else:
+            self.hires_model_var.set(self.USE_BASE_MODEL_LABEL)
+
+        # PR-GUI-E: Update visibility based on initial enabled state
+        self._update_refiner_visibility()
+        self._update_hires_visibility()
+
     def _load_refiner_models(self, entries: list[Any] | None = None) -> list[str]:
         values, mapping = self._compute_refiner_model_choices(entries)
         self._refiner_model_name_map = mapping
@@ -441,8 +490,55 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                     upscalers.append(name)
         return upscalers or ["Latent", "R-ESRGAN 4x+"]
 
+    # PR-GUI-E: Hires model values builder
+    USE_BASE_MODEL_LABEL = "Use base model"
+
+    def _build_hires_model_values(self) -> list[str]:
+        """Build list of models for hires selector, with 'Use base model' as default."""
+        values = [self.USE_BASE_MODEL_LABEL]
+        controller = getattr(self, "controller", None)
+        if controller and hasattr(controller, "list_models"):
+            for entry in controller.list_models():
+                name = getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
+                if name:
+                    values.append(name)
+        return values
+
+    def _on_hires_model_changed(self) -> None:
+        """Handle hires model selector change (PR-GUI-E)."""
+        selected = self.hires_model_var.get()
+        if selected == self.USE_BASE_MODEL_LABEL or not selected:
+            # No override - use base model
+            self._update_current_config(hires_model_override=None)
+        else:
+            # User selected a specific model
+            model_name = self._model_name_map.get(selected, selected)
+            self._update_current_config(hires_model_override=model_name)
+
+    # PR-GUI-E: Visibility toggle helpers
+    def _update_refiner_visibility(self) -> None:
+        """Show/hide refiner options based on enable checkbox."""
+        if not hasattr(self, "_refiner_options_frame"):
+            return
+        enabled = bool(self.refiner_enabled_var.get())
+        if enabled:
+            self._refiner_options_frame.grid()
+        else:
+            self._refiner_options_frame.grid_remove()
+
+    def _update_hires_visibility(self) -> None:
+        """Show/hide hires options based on enable checkbox."""
+        if not hasattr(self, "_hires_options_frame"):
+            return
+        enabled = bool(self.hires_enabled_var.get())
+        if enabled:
+            self._hires_options_frame.grid()
+        else:
+            self._hires_options_frame.grid_remove()
+
     def _on_refiner_toggle(self) -> None:
         self._update_current_config(refiner_enabled=bool(self.refiner_enabled_var.get()))
+        self._update_refiner_visibility()  # PR-GUI-E
 
     def _on_refiner_model_changed(self) -> None:
         selected_display = str(self.refiner_model_var.get() or "").strip()
@@ -458,6 +554,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
 
     def _on_hires_toggle(self) -> None:
         self._update_current_config(hires_enabled=bool(self.hires_enabled_var.get()))
+        self._update_hires_visibility()  # PR-GUI-E
 
     def _on_hires_upscaler_changed(self) -> None:
         self._update_current_config(hires_upscaler_name=str(self.hires_upscaler_var.get() or "Latent"))

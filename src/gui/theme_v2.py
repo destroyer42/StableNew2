@@ -24,6 +24,14 @@ ASWF_LIGHT_GREY = "#4A4950"
 ASWF_GOLD = ACCENT_GOLD
 ASWF_ERROR_RED = "#FF4D4F"
 ASWF_OK_GREEN = "#52C41A"
+EXPANDER_ICON_COLLAPSED = "▸"
+EXPANDER_ICON_EXPANDED = "▾"
+VALIDATION_NORMAL_BG = BACKGROUND_ELEVATED
+VALIDATION_NORMAL_FG = TEXT_PRIMARY
+VALIDATION_WARN_BG = ASWF_GOLD
+VALIDATION_WARN_FG = TEXT_PRIMARY
+VALIDATION_ERROR_BG = ASWF_ERROR_RED
+VALIDATION_ERROR_FG = TEXT_PRIMARY
 
 CARD_FRAME_STYLE = design_system.CARD_FRAME
 SURFACE_FRAME_STYLE = design_system.SECTION_FRAME
@@ -38,6 +46,15 @@ GHOST_BUTTON_STYLE = design_system.GHOST_BUTTON
 def _configure_global_colors(root: tk.Tk | tk.Toplevel) -> None:
     try:
         root.configure(bg=BACKGROUND_DARK)
+    except Exception:
+        pass
+
+    # Configure dark-mode for Combobox popup listbox (Tk option database)
+    try:
+        root.option_add("*TCombobox*Listbox.background", BACKGROUND_ELEVATED)
+        root.option_add("*TCombobox*Listbox.foreground", TEXT_PRIMARY)
+        root.option_add("*TCombobox*Listbox.selectBackground", ACCENT_GOLD)
+        root.option_add("*TCombobox*Listbox.selectForeground", TEXT_PRIMARY)
     except Exception:
         pass
 
@@ -61,6 +78,20 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map("TEntry", fieldbackground=[("disabled", BACKGROUND_ELEVATED)])
 
+    # Explicit Dark.TEntry style for consistent dark-mode entries
+    style.configure(
+        "Dark.TEntry",
+        fieldbackground=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        insertcolor=design_system.Colors.TEXT_PRIMARY,
+    )
+    style.map(
+        "Dark.TEntry",
+        fieldbackground=[("disabled", BACKGROUND_DARK), ("readonly", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+
     style.configure(
         "Dark.TCombobox",
         fieldbackground=BACKGROUND_ELEVATED,
@@ -75,6 +106,7 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         background=[("readonly", BACKGROUND_ELEVATED)],
         foreground=[("disabled", TEXT_MUTED)],
     )
+    # Combobox popup listbox styling (note: actual popup styling requires tk option_add)
     style.configure(
         "Dark.TCombobox.Listbox",
         background=BACKGROUND_ELEVATED,
@@ -147,6 +179,16 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         foreground=[("disabled", TEXT_MUTED)],
     )
 
+    # Slider value label style for numeric displays next to sliders
+    style.configure(
+        "SliderValue.TLabel",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        font=(design_system.Typography.FAMILY, design_system.Typography.SM),
+        anchor="e",
+        width=6,
+    )
+
 
 def _configure_treeview_styles(style: ttk.Style) -> None:
     style.configure(
@@ -168,6 +210,32 @@ def _configure_statusbar_styles(style: ttk.Style) -> None:
 
 def _configure_progress_styles(style: ttk.Style) -> None:
     style.configure("Horizontal.TProgressbar", troughcolor=BACKGROUND_ELEVATED, background=design_system.Colors.PRIMARY_ACCENT)
+
+
+VALIDATION_STATE_PALETTE: dict[str, dict[str, str]] = {
+    "normal": {"background": VALIDATION_NORMAL_BG, "foreground": VALIDATION_NORMAL_FG},
+    "warn": {"background": VALIDATION_WARN_BG, "foreground": VALIDATION_WARN_FG},
+    "error": {"background": VALIDATION_ERROR_BG, "foreground": VALIDATION_ERROR_FG},
+}
+
+
+def get_validation_palette(state: str = "normal") -> dict[str, str]:
+    """Return the canonical colors used for a validation state."""
+    return VALIDATION_STATE_PALETTE.get(state, VALIDATION_STATE_PALETTE["normal"]).copy()
+
+
+def apply_validation_colors(widget: tk.Widget, state: str = "normal") -> None:
+    """Apply validation-themed colors to the provided widget if possible."""
+    palette = get_validation_palette(state)
+    colors: dict[str, str] = {}
+    colors["background"] = palette["background"]
+    colors["foreground"] = palette["foreground"]
+    if isinstance(widget, (tk.Entry, tk.Text, tk.Listbox, tk.Label)):
+        colors["insertbackground"] = palette["foreground"]
+    try:
+        widget.configure(**colors)
+    except Exception:
+        pass
 
 
 def init_theme(root: tk.Tk | tk.Toplevel) -> ttk.Style:
@@ -234,6 +302,14 @@ __all__ = [
     "GHOST_BUTTON_STYLE",
     "STATUS_LABEL_STYLE",
     "STATUS_STRONG_LABEL_STYLE",
+    "SLIDER_VALUE_LABEL_STYLE",
+    "DARK_ENTRY_STYLE",
+    "DARK_COMBOBOX_STYLE",
+    "DARK_SPINBOX_STYLE",
+    "DARK_CHECKBUTTON_STYLE",
+    "DARK_LABEL_STYLE",
+    "DARK_SCALE_STYLE",
+    "DARK_BUTTON_STYLE",
     "PADDING_MD",
     "PADDING_SM",
     "ASWF_BLACK",
@@ -243,6 +319,24 @@ __all__ = [
     "ASWF_GOLD",
     "ASWF_ERROR_RED",
     "ASWF_OK_GREEN",
+    "VALIDATION_NORMAL_BG",
+    "VALIDATION_NORMAL_FG",
+    "VALIDATION_WARN_BG",
+    "VALIDATION_WARN_FG",
+    "VALIDATION_ERROR_BG",
+    "VALIDATION_ERROR_FG",
+    "EXPANDER_ICON_COLLAPSED",
+    "EXPANDER_ICON_EXPANDED",
+    "get_validation_palette",
+    "apply_validation_colors",
 ]
 STATUS_LABEL_STYLE = "Status.TLabel"
 STATUS_STRONG_LABEL_STYLE = "StatusStrong.TLabel"
+SLIDER_VALUE_LABEL_STYLE = "SliderValue.TLabel"
+DARK_ENTRY_STYLE = "Dark.TEntry"
+DARK_COMBOBOX_STYLE = "Dark.TCombobox"
+DARK_SPINBOX_STYLE = "Dark.TSpinbox"
+DARK_CHECKBUTTON_STYLE = "Dark.TCheckbutton"
+DARK_LABEL_STYLE = "Dark.TLabel"
+DARK_SCALE_STYLE = "Dark.Horizontal.TScale"
+DARK_BUTTON_STYLE = "Dark.TButton"

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import heapq
 from threading import Lock
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, TYPE_CHECKING
 
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_history_store import JobHistoryStore
@@ -25,6 +25,7 @@ class JobQueue:
         self._counter = 0
         self._lock = Lock()
         self._history_store = history_store
+        self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
 
     def submit(self, job: Job) -> None:
         with self._lock:
@@ -82,6 +83,7 @@ class JobQueue:
                 job.result = result
             ts = job.updated_at
         self._record_status(job_id, status, ts, error_message, result=result)
+        self._notify_status(job, status)
         return job
 
     def _record_submission(self, job: Job) -> None:
@@ -106,3 +108,138 @@ class JobQueue:
             self._history_store.record_status_change(job_id, status, ts, error, result=result)
         except Exception:
             pass
+
+    def register_status_callback(
+        self, callback: Callable[[Job, JobStatus], None]
+    ) -> None:
+        """Allow observers to react to job status changes."""
+        self._status_callbacks.append(callback)
+
+    def _notify_status(self, job: Job, status: JobStatus) -> None:
+        """Notify registered callbacks about status transitions."""
+        for callback in list(self._status_callbacks):
+            try:
+                callback(job, status)
+            except Exception:
+                continue
+
+    # ------------------------------------------------------------------
+    # PR-GUI-F2: Queue Manipulation Methods
+    # ------------------------------------------------------------------
+
+    def move_up(self, job_id: str) -> bool:
+        """Move a queued job up one position (higher priority).
+        
+        Args:
+            job_id: The ID of the job to move.
+            
+        Returns:
+            True if the job was moved, False if not found or already at top.
+        """
+        with self._lock:
+            # Find queued jobs in order
+            queued = self._get_ordered_queued_jobs()
+            for i, (priority, counter, jid) in enumerate(queued):
+                if jid == job_id:
+                    if i == 0:
+                        return False  # Already at top
+                    # Swap priorities with the job above
+                    prev_priority, prev_counter, prev_jid = queued[i - 1]
+                    # Adjust internal queue entries
+                    self._swap_queue_positions(job_id, prev_jid, priority, prev_priority)
+                    return True
+            return False
+
+    def move_down(self, job_id: str) -> bool:
+        """Move a queued job down one position (lower priority).
+        
+        Args:
+            job_id: The ID of the job to move.
+            
+        Returns:
+            True if the job was moved, False if not found or already at bottom.
+        """
+        with self._lock:
+            queued = self._get_ordered_queued_jobs()
+            for i, (priority, counter, jid) in enumerate(queued):
+                if jid == job_id:
+                    if i == len(queued) - 1:
+                        return False  # Already at bottom
+                    # Swap priorities with the job below
+                    next_priority, next_counter, next_jid = queued[i + 1]
+                    self._swap_queue_positions(job_id, next_jid, priority, next_priority)
+                    return True
+            return False
+
+    def remove(self, job_id: str) -> Job | None:
+        """Remove a job from the queue.
+        
+        Args:
+            job_id: The ID of the job to remove.
+            
+        Returns:
+            The removed Job, or None if not found.
+        """
+        with self._lock:
+            job = self._jobs.pop(job_id, None)
+            if job:
+                # Remove from heap by marking as cancelled
+                job.status = JobStatus.CANCELLED
+                # Rebuild queue without this job
+                self._queue = [
+                    (p, c, jid) for (p, c, jid) in self._queue if jid != job_id
+                ]
+                heapq.heapify(self._queue)
+            return job
+
+    def clear(self) -> int:
+        """Clear all queued jobs (not running or completed).
+        
+        Returns:
+            The number of jobs removed.
+        """
+        with self._lock:
+            # Find all queued jobs
+            queued_ids = [
+                jid for jid, job in self._jobs.items()
+                if job.status == JobStatus.QUEUED
+            ]
+            count = len(queued_ids)
+            # Remove from jobs dict
+            for jid in queued_ids:
+                self._jobs.pop(jid, None)
+            # Rebuild queue without queued jobs
+            self._queue = [
+                (p, c, jid) for (p, c, jid) in self._queue
+                if jid not in queued_ids
+            ]
+            heapq.heapify(self._queue)
+            return count
+
+    def _get_ordered_queued_jobs(self) -> list[tuple[int, int, str]]:
+        """Get queued jobs in priority order (internal, must hold lock)."""
+        queued = []
+        for priority, counter, jid in self._queue:
+            job = self._jobs.get(jid)
+            if job and job.status == JobStatus.QUEUED:
+                queued.append((priority, counter, jid))
+        # Sort by priority (higher first), then by counter (lower first)
+        queued.sort(key=lambda x: (x[0], x[1]))
+        return queued
+
+    def _swap_queue_positions(
+        self, job_id1: str, job_id2: str, priority1: int, priority2: int
+    ) -> None:
+        """Swap queue positions between two jobs (internal, must hold lock)."""
+        # We swap by adjusting counter values since priority might be the same
+        new_queue = []
+        for priority, counter, jid in self._queue:
+            if jid == job_id1:
+                # Give it the other job's counter (position)
+                new_queue.append((priority2, counter, jid))
+            elif jid == job_id2:
+                new_queue.append((priority1, counter, jid))
+            else:
+                new_queue.append((priority, counter, jid))
+        self._queue = new_queue
+        heapq.heapify(self._queue)

@@ -12,7 +12,6 @@ from typing import Any
 
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
-    PRIMARY_BUTTON_STYLE,
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
@@ -25,10 +24,8 @@ class PipelineRunControlsV2(ttk.Frame):
     All jobs go through the queue - no direct mode.
     
     Controls:
-    - Add to Queue: Add current config as a job
-    - Clear Draft: Reset the current configuration
-    - Auto-run: Checkbox to automatically run next job when queue has items
-    - Pause/Resume: Toggle queue processing
+    - Auto-run queue: checkbox to run next job automatically
+    - Pause/Resume: toggle queue processing
     """
 
     def __init__(
@@ -50,27 +47,6 @@ class PipelineRunControlsV2(ttk.Frame):
         # Title
         title = ttk.Label(self, text="Run Controls", style=STATUS_STRONG_LABEL_STYLE)
         title.pack(fill="x", pady=(0, 8))
-
-        # Main action buttons row
-        buttons_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
-        buttons_frame.pack(fill="x", pady=(0, 8))
-        buttons_frame.columnconfigure((0, 1), weight=1)
-
-        self.add_button = ttk.Button(
-            buttons_frame,
-            text="Add to Queue",
-            style=PRIMARY_BUTTON_STYLE,
-            command=self._on_add_to_queue,
-        )
-        self.add_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-
-        self.clear_draft_button = ttk.Button(
-            buttons_frame,
-            text="Clear Draft",
-            style=SECONDARY_BUTTON_STYLE,
-            command=self._on_clear_draft,
-        )
-        self.clear_draft_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         # Options row
         options_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -118,14 +94,6 @@ class PipelineRunControlsV2(ttk.Frame):
         else:
             print(f"[PipelineRunControlsV2] {method_name} not found on controller")
         return None
-
-    def _on_add_to_queue(self) -> None:
-        """Add current configuration to the queue."""
-        self._invoke_controller("on_add_job_to_queue_v2")
-
-    def _on_clear_draft(self) -> None:
-        """Clear the current draft configuration."""
-        self._invoke_controller("on_clear_job_draft")
 
     def _on_auto_run_changed(self) -> None:
         """Handle auto-run checkbox change."""
@@ -176,25 +144,6 @@ class PipelineRunControlsV2(ttk.Frame):
         else:
             status_text = "Queue: Idle"
         self.status_label.configure(text=status_text)
-
-        # Button states
-        self._apply_button_states(app_state)
-
-    def _apply_button_states(self, app_state: Any) -> None:
-        """Update button enabled/disabled states."""
-        is_paused = getattr(app_state, "is_queue_paused", False)
-        current_pack = getattr(app_state, "current_pack", None)
-        has_pack = bool(current_pack)
-
-        # Add to Queue: disabled when no pack selected
-        add_disabled = not has_pack
-        self.add_button.state(["disabled"] if add_disabled else ["!disabled"])
-
-        # Clear Draft: always enabled
-        self.clear_draft_button.state(["!disabled"])
-
-        # Pause/Resume: always enabled
-        self.pause_resume_button.state(["!disabled"])
 
     def refresh_states(self) -> None:
         """Refresh button states from current app state."""

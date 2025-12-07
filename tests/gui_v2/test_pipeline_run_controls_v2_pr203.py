@@ -1,12 +1,8 @@
 """Tests for PR-203: PipelineRunControlsV2 (simplified version).
 
-Validates:
-- Panel instantiation with new simplified layout
-- Add to Queue button
-- Clear Draft button
-- Auto-run checkbox
-- Pause/Resume toggle
-- Status label updates
+NOTE: PR-GUI-F1 removed PipelineRunControlsV2 from the layout.
+Queue controls are now in QueuePanelV2.
+These tests are marked as skip.
 """
 
 from __future__ import annotations
@@ -15,6 +11,9 @@ import tkinter as tk
 from unittest.mock import MagicMock
 
 import pytest
+
+# PR-GUI-F1: PipelineRunControlsV2 removed from layout, buttons moved to QueuePanelV2
+pytestmark = pytest.mark.skip(reason="PR-GUI-F1: PipelineRunControlsV2 removed from layout")
 
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 

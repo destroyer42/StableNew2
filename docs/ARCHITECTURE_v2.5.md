@@ -1,527 +1,550 @@
-ARCHITECTURE_v2.5.md
-Canonical Architecture Specification for StableNew V2.5
+#CANONICAL
+# StableNew Architecture (v2.5)
 
-This document supersedes all previous V2 architectural documents and is the authoritative source of truth.
+---
 
-1. Overview
+# Executive Summary (8–10 lines)
 
-StableNew V2.5 uses a strict layered architecture separating:
+StableNew v2.5 provides a unified, predictable, testable pipeline from GUI → Controller → Pipeline Merging → Job Normalization → Queue → Runner → WebUI.  
+The architecture eliminates legacy inconsistencies (V1 MainWindow, old job model, V1 runner) and replaces them with modular, well-typed components.  
+The heart of the system is the **ConfigMergerV2 → JobBuilderV2 → NormalizedJobRecord** path, enabling consistent job construction regardless of GUI state or randomization.  
+All pipeline execution flows through the **Queue-first architecture**, where JobService mediates job state, ordering, execution, and lifecycle.  
+This document defines: subsystem responsibilities, data model definitions, execution flow, stage ordering, error handling, and deprecated concepts.  
+It also includes a TLDR section for agents/users, detailed diagrams (Mermaid + ASCII), and reconciliation notes from earlier architecture versions.  
 
-GUI Layer (Tk/Ttk V2 UI)
+---
 
-Controller Layer (AppController, PipelineController)
+# PR-Relevant Facts (Quick Reference)
 
-Pipeline Layer (PipelineRunner, stage execution plan, executor wrappers)
+- **Only this document** defines the authoritative StableNew architecture.  
+- Canonical pipeline construction path:  
+  **RunConfigV2 → ConfigMergerV2 → JobBuilderV2 → NormalizedJobRecord → JobService/Queue → Runner → WebUI**  
+- Canonical stage order:  
+  **txt2img → img2img → refiner → hires → upscale → adetailer**  
+- GUI V2 is panelized; MainWindow V1 architecture is deprecated.  
+- Queue-first model: *all executions* flow through JobService except explicit direct mode.  
+- Randomizer operates **before job normalization**, never inside the runner.  
+- All override behavior must use **StageOverridesBundle** + **ConfigMergerV2 rules**.  
+- Agents should ignore any document not marked `#CANONICAL`.  
 
-Learning & Randomizer Layer
+---
 
-Queue / Job Execution Layer (SingleNodeJobRunner, JobExecutionController, JobService)
+# ============================================================
+# 0. BLUF / TLDR — Concise Architecture Summary (Option C Layer)
+# ============================================================
 
-API Layer (Stable Diffusion WebUI Client)
+This section serves as a *top-of-file quick scan* for humans and LLMs.  
+It is intentionally concise and represents the distilled structure of StableNew.
 
-Utilities Layer (logging, config, IO, shared helpers)
+---
 
-Goals
+## **0.1 High-Level System Overview**
 
-Fully testable pipeline logic, independent of GUI
+StableNew consists of four major layers:
 
-Deterministic config → plan → executor flow
+1. **GUI (V2 Panels + AppStateV2)**  
+   - User manipulates pipeline configs, prompt packs, randomizer controls, output settings, and queue.
 
-Expandable to multi-node cluster execution
+2. **Controller Layer (PipelineControllerV2 + AppController)**  
+   - Central coordinator.  
+   - Collects GUI state and transforms it into complete pipeline instructions.
 
-Clean separation of orchestration vs execution
+3. **Pipeline Builder Layer**  
+   - `ConfigMergerV2`: merges pack configs + stage overrides.  
+   - `JobBuilderV2`: expands variants, seeds, batches, and produces *NormalizedJobRecord* objects.
 
-Clear run-mode semantics (direct, queued)
+4. **Execution Layer**  
+   - `JobService` + `JobQueueV2` manage ordering, auto-run, state transitions.  
+   - Runner executes jobs (SingleNodeJobRunner or remote/WebUI).
 
-First-class support for Learning Records and Randomizer Variants
+Everything feeds into the **NormalizedJobRecord**, the canonical representation of a job.
 
-2. Dependency Direction
+---
 
-StableNew enforces Clean Architecture rules:
+## **0.2 TLDR Pipeline Flow Diagram (Mermaid)**
 
-utils → api → pipeline → learning → controller → gui
+```mermaid
+flowchart TD
+    GUI[GUI Panels (Pipeline Tab)]
+    AS[AppStateV2]
+    PC[PipelineControllerV2]
+    CM[ConfigMergerV2]
+    JB[JobBuilderV2]
+    NJR[NormalizedJobRecord]
+    JS[JobService / Queue]
+    RN[Runner]
+    WU[WebUI]
 
+    GUI --> AS --> PC
+    PC --> CM --> JB --> NJR --> JS --> RN --> WU
+ASCII fallback:
+markdown
+Copy code
+GUI → AppState → PipelineController
+      ↓
+  ConfigMergerV2 → JobBuilderV2 → NormalizedJobRecord → JobService/Queue → Runner → WebUI
+0.3 TLDR Stage Ordering
+StableNew guarantees the following pipeline ordering:
 
-Allowed:
+txt2img
 
-Higher layers may depend on lower layers
+img2img (optional)
 
-Lower layers must not depend on higher layers
+refiner (optional)
 
-Forbidden:
+hires fix (optional)
 
-GUI importing pipeline or api
+upscale (optional)
 
-Controllers importing GUI
+adetailer (optional)
 
-Direct executor calls from GUI
+No PRs, GUI features, or randomization behaviors may alter this ordering.
 
-Circular imports between controller ↔ pipeline
+0.4 TLDR Job Normalization
+A job is only valid after it is normalized:
+nginx
+Copy code
+Raw GUI State → Merged Config → Expanded Variants → NormalizedJobRecord
+NormalizedJobRecord includes:
 
-3. GUI Layer (V2)
+Final merged and expanded pipeline config
 
-The V2 GUI is a pure presentation layer.
+Fully resolved seed
 
-Responsibilities
+Batch index and variant index
 
-Draws UI components (tabs, panels, stage cards)
+Output settings
 
-Captures user input (pipeline options, variants, run commands)
+Timestamps
 
-Delegates everything operational to AppController
+PR-ready config_snapshot
 
-Displays:
+This ensures consistency between GUI preview, queue view, and executed pipeline.
 
-Status bar
+0.5 TLDR Queue Model
+All pipeline execution passes through:
 
-Progress / ETA
+nginx
+Copy code
+JobService → JobQueueV2 → Runner
+Queue is responsible for:
 
-Images & output previews
+Ordering
 
-Learning indicators
+Adding/removing jobs
 
-No pipeline execution, no HTTP calls
+(Planned) persistence
 
-Notable Components
+Auto-start
 
-PipelineTabFrame V2
-Hosts Txt2Img, Img2Img, Upscale, Refiner, Hires, ADetailer stage cards.
+Pause/resume
 
-RandomizerPanelV2
-Configures variant matrices and calculates total run count.
+The GUI simply visualizes queue state; it does not implement queue behavior.
+
+0.6 TLDR Randomizer Placement
+RandomizerEngineV2 executes before normalization:
+
+nginx
+Copy code
+MergedConfig → RandomizationPlanV2 → VariantConfigs → JobBuilderV2 normalization
+Randomizer never operates inside:
+
+Runner
+
+JobService
+
+WebUI
+
+0.7 TLDR Glossary (Short)
+Concept	Meaning
+RunConfigV2	Base pipeline config before merging or expansion
+StageOverridesBundle	Set of user-chosen override flags + override values
+ConfigMergerV2	Merges pack config + overrides into merged pipeline config
+JobBuilderV2	Performs variant expansion, batch expansion, seed handling
+NormalizedJobRecord	Final job definition used by queue & execution
+JobService	Manager of job lifecycle, queue state, execution triggers
+RandomizationPlanV2	Structured plan controlling config-level randomization
+
+=================================================================
+1. Full Canonical Architecture (Option A — Detailed Specification)
+=================================================================
+This is the authoritative section for PRs, designs, and agent reasoning.
+
+1. High-Level System Overview
+StableNew v2.5 is designed around modular, isolated subsystems:
+
+GUI Layer controls UI and state presentation.
+
+Controller Layer mediates between GUI and pipeline.
+
+Pipeline Builder Layer ensures deterministic job construction.
+
+Execution Layer handles queuing and running jobs.
+
+External Systems (WebUI, model servers, storage) perform the underlying image generation.
+
+Primary design principles:
+
+Determinism
+
+Immutability of normalized jobs
+
+Testability
+
+Strict subsystem boundaries
+
+Canonical flow enforced by architecture
+
+2. GUI Architecture (V2 Panels + AppState)
+StableNew V2 GUI is panel-based, contrasting sharply with V1’s monolithic MainWindow.
+
+Components:
+Pipeline Tab Panels
+
+CoreConfigPanel
+
+Stage-specific panels (Refiner, Hires, Upscale, ADetailer)
+
+RandomizerPanel
+
+Output/Filename configuration
+
+Prompt Pack selection + preview
 
 PreviewPanelV2
-Displays images and run summaries.
 
-StatusBarV2
-Shows pipeline state transitions and job progress.
+QueuePanelV2
 
-4. Controller Layer
+RunControlsPanelV2
 
-The controller layer is the orchestration brain.
-It is where GUI → pipeline wiring takes place.
+AppStateV2
+Stores:
 
-4.1 AppController
-Responsibilities
+Current selections
 
-Primary entry point for run commands
+Override bundles
 
-Builds run_config metadata:
+RandomizationPlanV2
 
-run_mode ("direct" or "queue")
+Output settings
 
-source (Run / Run Now / AddToQueue)
+Draft job list
 
-prompt source / pack id
+Queue view models
 
-Calls:
+GUI must not perform pipeline, merging, or job construction logic.
 
-PipelineController.start_pipeline(run_config)
+The Pipeline tab arranges the three primary columns (pack/config sidebar, stage cards, preview/queue + running job) so that each column is rooted inside a single `ScrollableFrame`, keeping column-level scrollbars and consistent card stacking. `MainWindowV2` applies default geometry/minimum-width constants so that all three columns are visible on launch without horizontal clipping.
 
-Must NOT
+3. Controller Architecture
+3.1 PipelineControllerV2
+Central responsibilities:
 
-Execute pipeline logic
+Read all relevant GUI state
 
-Call API or executor functions
+Construct merged configs via ConfigMergerV2
 
-Interact with Tk directly
+Build job lists via JobBuilderV2
 
-4.2 PipelineController
+Submit jobs to JobService in the correct mode (queue/direct)
 
-This is the central orchestration engine for V2.5.
+Forward normalized jobs to PreviewPanelV2
 
-Responsibilities
+Enforce stage ordering rules
 
-Validate pipeline state
+Coordinate Restore Last Run behavior
 
-Build PipelineConfig using PipelineConfigAssembler
+Dispatch UI updates on state changes
 
-Construct jobs with full metadata (PR-106)
+PipelineController is stateless except for the connection to AppStateV2.
 
-Submit jobs through:
+4. Pipeline Construction Layer
+The pipeline builder layer ensures that job construction is:
 
-Direct mode: job_service.submit_direct(job)
+Deterministic
 
-Queue mode: job_service.submit_queued(job)
+Testable
 
-Track:
+Independent of GUI
 
-_active_job_id
+Fully normalized
 
-_last_run_config
+It includes two components: ConfigMergerV2 and JobBuilderV2.
 
-_last_run_result
+5. ConfigMergerV2 — Override & Merge Logic
+Inputs:
+Prompt Pack config
 
-Stage events, execution plans
+StageOverridesBundle (GUI-derived)
 
-Route job execution to PipelineRunner
+Outputs:
+A MergedRunConfig representing the final configuration for a single variant before randomization/seeding.
 
-Key Methods
+Rules:
+Overrides apply only when override flag is TRUE.
 
-start_pipeline(run_config=...)
-→ decides direct vs queued job execution
+Disabled stages remain disabled, even if pack config enables them.
 
-_run_pipeline_job(config)
-→ the job payload executed by the runner
+Nested configs (refiner, hires, adetailer) merge field-by-field.
 
-run_pipeline(config)
-→ calls PipelineRunner.run(...)
+No mutation of pack config or overrides.
 
-Hooks:
+Returns deep copies for safety.
 
-LearningRecord callbacks
+Mermaid Diagram
+mermaid
+Copy code
+flowchart LR
+    PackCfg[Pack Config]
+    Overrides[StageOverridesBundle]
+    Merger[ConfigMergerV2]
+    MergedCfg[MergedRunConfig]
 
-Structured logging
+    PackCfg --> Merger
+    Overrides --> Merger
+    Merger --> MergedCfg
+ASCII:
 
-StageExecutionPlan capture (preview, tests)
+vbnet
+Copy code
+PackConfig + Overrides → ConfigMergerV2 → MergedRunConfig
+6. JobBuilderV2 — Variant, Batch, and Seed Expansion
+JobBuilderV2 translates merged configs into a set of normalized jobs.
 
-5. Run Pipeline Path (V2.5)
-Canonical sequence
+Responsibilities:
+Apply RandomizationPlanV2 → produce variant configs
 
-This reflects PR-0114 and is now the official reference.
+Expand batch runs
 
-5.1 Full Flow Diagram
-GUI Run Button
-     ↓
-AppController._start_run_v2()
-     ↓
-PipelineController.start_pipeline(run_config)
-     ↓
-PipelineConfigAssembler.build_from_gui_input()
-     ↓
-PipelineController._build_job()
-     ↓
-┌─────────────── Run Mode ────────────────┐
-│ if direct → job_service.submit_direct   │
-│ if queue  → job_service.submit_queued   │
-└──────────────────────────────────────────┘
-     ↓
-JobExecutionController / QueueExecutionController
-     ↓
-SingleNodeJobRunner
-     ↓
-PipelineController._run_pipeline_job(job)
-     ↓
-PipelineController.run_pipeline(config)
-     ↓
-PipelineRunner.run(config)
-     ↓
-Executor → SD WebUI HTTP API
-     ↓
-Results (images, metadata, events)
-     ↓
-PipelineController.record_run_result(...)
-     ↓
-GUI updates (StatusBar, Preview, Last Run)
+Calculate deterministic seeds (none / fixed / per-variant)
 
-6. Pipeline Layer
-6.1 PipelineConfig
+Assign variant_index, batch_index
 
-Typed configuration container
+Attach OutputSettings
 
-Holds parameters for:
+Produce NormalizedJobRecord objects
+
+Mermaid Diagram
+mermaid
+Copy code
+flowchart TD
+    MR[ MergedRunConfig ]
+    RP[ RandomizationPlanV2 ]
+    JB[ JobBuilderV2 ]
+    VCFG[ Variant Configs ]
+    NJR[ NormalizedJobRecord List ]
+
+    MR --> JB
+    RP --> JB
+    JB --> VCFG --> NJR
+ASCII:
+
+css
+Copy code
+MergedConfig + RandomizationPlan → JobBuilderV2 → [NormalizedJobRecord...]
+7. NormalizedJobRecord (Canonical Job Model)
+Represents exactly what will run.
+No GUI artifacts. No optional fields missing.
+
+Fields include:
+job_id
+
+full pipeline config
+
+seed
+
+variant index / total
+
+batch index / total
+
+output directory
+
+filename template
+
+config_snapshot
+
+timestamp
+
+human-readable summary (JobUiSummary)
+
+Why normalization is essential:
+Eliminates GUI ambiguity
+
+Ensures queue and preview are identical
+
+Enables persistence
+
+Prevents inconsistent executions
+
+Guarantees reproducibility for Learning/Cluster phases
+
+ 8. Queue & Execution Layer
+  Queue Model (JobService + JobQueueV2)
+    - JobService now forwards completed and failed job signals to JobHistoryService so the history store consistently records metadata and emits completion events.
+ - JobService now subscribes to queue status transitions and re-emits `job_started`, `job_finished`, and `job_failed` events so GUI panels and the history subsystem can react to deterministic lifecycle updates.
+Add jobs
+
+Remove jobs
+
+Reorder jobs
+
+Auto-run
+
+Pause/resume
+
+Track running job
+
+(Planned) persist queue across restarts
+
+Runner
+Default runner: SingleNodeJobRunner
+
+Responsibilities:
+
+Execute pipeline stages in canonical order
+
+Report progress & errors
+
+Save images to output dir
+
+Handle cancellation
+
+Execution Mermaid Diagram
+mermaid
+Copy code
+flowchart LR
+    NJR[NormalizedJobRecord]
+    JS[JobService]
+    Q[JobQueueV2]
+    RN[Runner]
+    IMG[Generated Images]
+
+    NJR --> JS --> Q --> RN --> IMG
+ASCII:
+
+nginx
+Copy code
+NormalizedJobRecord → JobService → Queue → Runner → Output Images
+9. Stage Ordering Rules
+Canonical order (mandatory):
 
 txt2img
 
 img2img
 
-upscalers
+refiner
 
-ADetailer
+hires
 
-Refiners
+upscale
 
-Hires fix
+adetailer
 
-Includes:
+The runner must:
 
-metadata (run id, prompt pack id, timestamps)
+Skip disabled stages
 
-learning-specific metadata
+Pass outputs sequentially
 
-randomizer metadata
+Preserve metadata between stages
 
-6.2 PipelineRunner
+10. Randomizer Integration Point
+Randomizer runs before JobBuilderV2:
 
-Core responsibilities:
+nginx
+Copy code
+MergedConfig → RandomizationPlanV2 → VariantConfigs → Normalization
+Randomizer modifies the configuration, not:
 
-Compute StageExecutionPlan based on PipelineConfig
+seeds (except seed mode)
 
-For each stage:
+prompts
 
-Build executor payload
+files
 
-Call executor/SD WebUI client
+queue order
 
-Aggregate outputs
+11. Output Model
+StableNew uses:
 
-Emit:
+OutputSettings
 
-structured logs
+Filename templates with tokens
 
-stage events
+Output directories per job
 
-learning events
+JobBuilderV2 attaches OutputSettings to NormalizedJobRecord.
 
-Return a PipelineRunResult (or dict)
+Runner writes results accordingly.
 
-Guarantees
+12. Error Handling & Cancellation
+Jobs may fail at:
 
-Deterministic execution for given config
+Merge stage
 
-Graceful cancellation
+JobBuilder
 
-Backpressure handling when using queue mode
+Queue entry
 
-7. Queue / Job Execution Layer
+Runner execution
 
-This layer enables:
+Failures must:
 
-direct runs
+Mark job as failed
 
-queued runs
+Never crash GUI
 
-future cluster execution
+Be visible in queue view
 
-7.1 JobExecutionController
+Produce a log entry visible in the Details panel
 
-Owns:
+============================================================
+13. Deprecated Concepts and Why They Changed
+============================================================
+#ARCHIVED
+(This section is for historical context only. Agents must ignore.)
 
-JobQueue
+13.1 V1 Job Model
+Unstructured
 
-SingleNodeJobRunner
+Not normalized
 
-JobHistoryStore
+GUI-modified configs mid-run
 
-Provides:
+No reproducibility
 
-submit_pipeline_run(callable)
+Replaced entirely by NormalizedJobRecord
 
-cancellation
+13.2 MainWindow V1 Architecture
+~7,380 lines, monolithic
 
-job status callbacks (RUNNING, COMPLETED, FAILED)
+Not testable
 
-7.2 SingleNodeJobRunner
+UI tightly coupled to pipeline logic
 
-Background thread loop:
+Replaced by modular panel-based GUI V2
 
-Pull next job
+13.3 Legacy Runner / Execution Path
+Old flow:
 
-Mark RUNNING
+nginx
+Copy code
+GUI → Executor → Direct WebUI Calls
+Issues:
 
-Call job payload (→ PipelineController._run_pipeline_job)
+No queue
 
-Mark COMPLETED / FAILED
+No job metadata
 
-Supports:
+Hard to cancel jobs
 
-synchronous run_once(job)
+No variant/batch tracking
 
-cancellation flag
+No randomizer support
 
-Runs only one job at a time (V2.5), but scalable to multi-worker nodes.
+Replaced by:
 
-7.3 JobService
-
-Unified façade used by the PipelineController.
-
-Methods
-
-submit_direct(job)
-
-Synchronously executes job via run_once()
-
-submit_queued(job)
-
-Enqueues job
-
-Ensures runner thread is started
-
-Provides UI/Callback events for:
-
-Job started
-
-Job finished
-
-Job failed
-
-Queue updated
-
-8. Randomizer Layer
-
-Pure functions for:
-
-matrix expansion
-
-sequential / rotate / random modes
-
-deterministic variant planning
-
-Used in:
-
-preview panel
-
-pipeline config assembly
-
-Learning runs (future)
-
-Never interacts with GUI or API.
-9. Learning Layer (V2)
-
-Components:
-
-LearningPlan
-
-LearningRunner
-
-LearningRecord
-
-LearningRecordWriter
-
-Integrated via:
-
-PipelineRunner learning callbacks
-
-PipelineController run lifecycle hooks
-
-Design Requirements
-
-Never impede interactive runs
-
-Logging and record writing must be atomic
-
-All record formats must remain backward compatible
-
-10. API Layer
-
-The Stable Diffusion WebUI Client:
-
-Sends HTTP txt2img, img2img, upscale, refiner, hires, adetailer requests
-
-Implements:
-
-retries
-
-timeouts
-
-structured error handling
-
-Must be fully mockable for tests
-
-No GUI dependencies
-
-11. Logging Layer
-StructuredLogger
-
-Writes log JSONL and manifest files atomically
-
-Emits:
-
-pipeline start
-
-stage events
-
-errors
-
-completion metadata
-
-LearningRecordWriter
-
-Writes JSONL learning records atomically (temp → rename)
-
-12. Testing Expectations
-
-V2.5 architecture requires comprehensive tests in:
-
-Pipeline tests
-
-StageExecutionPlan correctness
-
-PipelineRunner’s integration through mocked executors
-
-run → direct mode → queue mode parity
-
-Controller tests
-
-start_pipeline behavior
-
-job construction
-
-run mode selection
-
-last-run restore
-
-Queue tests
-
-Job lifecycle transitions
-
-Runner loop correctness
-
-Direct vs queued semantics
-
-GUI tests
-
-wiring only (no pipeline execution)
-
-correct delegation to controllers
-
-13. Migration & Extension Rules
-
-When adding features:
-
-Put code in correct layers:
-
-GUI-only → /src/gui/
-
-Orchestration → /src/controller/
-
-Execution logic → /src/pipeline/
-
-SD WebUI interactions → /src/api/
-
-Learning logic → /src/learning/
-
-Shared helpers → /src/utils/
-
-Hard rule: GUI must never call pipeline or API directly.
-
-14. Official Pipeline Execution Specification (V2.5)
-
-This replaces all older run-path documentation.
-
-1. Run event originates in GUI
-2. AppController builds run_config
-3. PipelineController builds PipelineConfig
-4. PipelineController creates Job
-5. JobService executes job (direct or queue)
-6. Job payload calls _run_pipeline_job
-7. _run_pipeline_job → run_pipeline
-8. run_pipeline → PipelineRunner.run
-9. PipelineRunner executes StageExecutionPlan
-10. Executor builds payloads and calls SD WebUI
-11. PipelineRunner aggregates results
-12. Controller records results and updates GUI
-
-This is the canonical flow for StableNew.
-
-15. Notes for AI Assistants
-
-Do not modify executor or pipeline core without test coverage.
-
-Do not break stage sequencing or config assembly.
-
-Do not add logic to GUI other than appearance & events.
-
-When modifying controllers:
-
-preserve run_mode behavior
-
-ensure queue and direct paths remain correct
-
-keep start_pipeline the single entry point
-
-Avoid introducing cross-layer dependencies.
-
-Always reference this document before implementing PRs.
-
-End of Document
+nginx
+Copy code
+NormalizedJobRecord → JobService → Queue → Runner → WebUI
+End of ARCHITECTURE_v2.5.md

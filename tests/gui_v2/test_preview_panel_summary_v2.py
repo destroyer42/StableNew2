@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 import pytest
 
+from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_models_v2 import JobUiSummary
 
 
@@ -146,3 +147,27 @@ class TestPreviewPanelSummary:
         preview_panel.set_job_summaries([summary])
 
         assert "Learning metadata" in preview_panel.learning_metadata_label.cget("text")
+
+    def test_update_from_job_draft_builds_summary(self, preview_panel):
+        entry = PackJobEntry(
+            pack_id="pack-1",
+            pack_name="Pack one",
+            config_snapshot={
+                "model": "pack-model",
+                "sampler": "Euler a",
+                "steps": 25,
+                "cfg_scale": 7.5,
+                "seed": 12345,
+                "output_dir": "output",
+            },
+            prompt_text="Testing prompt",
+            negative_prompt_text="bad stuff",
+            stage_flags={"txt2img": True, "adetailer": True, "upscale": False, "refiner": False, "hires": False},
+            randomizer_metadata={"enabled": False, "max_variants": 1},
+        )
+        job_draft = type("JD", (), {"packs": [entry]})()
+        preview_panel.update_from_job_draft(job_draft)
+
+        assert "Job: 1" in preview_panel.job_count_label.cget("text")
+        assert "Testing prompt" in preview_panel.prompt_text.get("1.0", "end")
+        assert preview_panel.add_to_queue_button.instate(["!disabled"])

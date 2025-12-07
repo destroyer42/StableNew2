@@ -53,6 +53,7 @@ from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JSONLJobHistoryStore
+from src.controller.job_history_service import JobHistoryService
 from src.controller.job_service import JobService
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
@@ -377,6 +378,42 @@ class AppController:
             cfg["pipeline_state_snapshot"] = snapshot
         return cfg
 
+    def _build_stage_flags(self) -> dict[str, bool]:
+        defaults = {"txt2img": True, "img2img": False, "adetailer": True, "upscale": False}
+        stage_flags: dict[str, bool] = dict(defaults)
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab is not None:
+            for stage in ("txt2img", "img2img", "adetailer", "upscale"):
+                value = getattr(pipeline_tab, f"{stage}_enabled", None)
+                if hasattr(value, "get"):
+                    try:
+                        stage_flags[stage] = bool(value.get())
+                        continue
+                    except Exception:
+                        pass
+                if isinstance(value, bool):
+                    stage_flags[stage] = value
+        # Include derived refiner/hires flags based on current config
+        stage_flags.setdefault("refiner", bool(self.state.current_config.refiner_enabled))
+        stage_flags.setdefault("hires", bool(self.state.current_config.hires_enabled))
+        return stage_flags
+
+    def _build_randomizer_metadata(self) -> dict[str, Any]:
+        return {
+            "enabled": bool(self.state.current_config.randomization_enabled),
+            "max_variants": max(1, int(self.state.current_config.max_variants or 1)),
+        }
+
+    def _read_pack_prompts(self, pack: PromptPackInfo) -> tuple[str, str]:
+        try:
+            prompts = read_prompt_pack(pack.path)
+        except Exception:
+            prompts = []
+        if not prompts:
+            return "", ""
+        first = prompts[0]
+        return first.get("positive", "").strip(), first.get("negative", "").strip()
+
     def _start_run_v2(self, mode: RunMode, source: RunSource) -> Any:
         pipeline_state = getattr(self.app_state, "pipeline_state", None)
         if pipeline_state is not None:
@@ -429,6 +466,19 @@ class AppController:
 
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint; safe no-op if none available."""
+        pipeline_ctrl = getattr(self, "pipeline_controller", None)
+        if pipeline_ctrl and hasattr(pipeline_ctrl, "submit_preview_jobs_to_queue"):
+            try:
+                count = pipeline_ctrl.submit_preview_jobs_to_queue(
+                    source="gui",
+                    prompt_source="pack",
+                )
+                if count > 0:
+                    self._append_log(f"[controller] Submitted {count} job(s) from preview to queue")
+                    return
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[controller] submit_preview_jobs_to_queue error: {exc!r}")
+
         handler_names = ("on_add_job_to_queue", "on_add_to_queue")
         for name in handler_names:
             handler = getattr(self, name, None)
@@ -518,7 +568,13 @@ class AppController:
             run_callable=self._execute_job,
             poll_interval=0.05,
         )
-        return JobService(job_queue, runner, history_store)
+        history_service = JobHistoryService(job_queue, history_store)
+        return JobService(
+            job_queue,
+            runner,
+            history_store,
+            history_service=history_service,
+        )
 
     def _setup_queue_callbacks(self) -> None:
         if not self.job_service:
@@ -1610,7 +1666,7 @@ class AppController:
         stage_defaults = {
             "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
             "img2img": bool(pipeline_section.get("img2img_enabled", True)),
-            "adetailer": bool(pipeline_section.get("adetailer_enabled", False)),
+            "adetailer": bool(pipeline_section.get("adetailer_enabled", True)),
             "upscale": bool(pipeline_section.get("upscale_enabled", False)),
         }
         for stage, enabled in stage_defaults.items():
@@ -2656,6 +2712,8 @@ class AppController:
         self._append_log(f"[controller] Adding packs to job: {pack_ids}")
         
         entries = []
+        stage_flags = self._build_stage_flags()
+        randomizer_metadata = self._build_randomizer_metadata()
         for pack_id in pack_ids:
             pack = self._find_pack_by_id(pack_id)
             if pack is None:
@@ -2668,11 +2726,15 @@ class AppController:
             # Ensure randomization is included
             if "randomization_enabled" not in run_config:
                 run_config["randomization_enabled"] = self.state.current_config.randomization_enabled
-            
+            prompt_text, negative_prompt_text = self._read_pack_prompts(pack)
             entry = PackJobEntry(
                 pack_id=pack_id,
                 pack_name=pack.name,
-            config_snapshot=run_config
+                config_snapshot=run_config,
+                prompt_text=prompt_text,
+                negative_prompt_text=negative_prompt_text,
+                stage_flags=dict(stage_flags),
+                randomizer_metadata=randomizer_metadata,
             )
             entries.append(entry)
         

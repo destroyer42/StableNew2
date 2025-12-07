@@ -10,45 +10,56 @@ from src.gui.theme_v2 import HEADING_LABEL_STYLE
 
 
 class OutputSettingsPanelV2(ttk.Frame):
-    """Expose output directory/profile, filename pattern, batch size, image format, seed mode."""
+    """Expose output directory/profile, filename pattern, batch size, image format, seed mode.
+    
+    When embed_mode=True, widgets are built directly into the master frame
+    without creating additional frame structure.
+    """
 
     FORMATS = ("png", "jpg", "webp")
     SEED_MODES = ("fixed", "increment", "random")
 
-    def __init__(self, master: tk.Misc) -> None:
-        super().__init__(master, style="Panel.TFrame", padding=8)
-        ttk.Label(self, text="Output Settings", style=HEADING_LABEL_STYLE).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+    def __init__(self, master: tk.Misc, *, embed_mode: bool = False) -> None:
+        super().__init__(master, style="Panel.TFrame", padding=0 if embed_mode else 8)
+        self._embed_mode = embed_mode
+        self._build_widgets(self)
 
+    def _build_widgets(self, parent: tk.Misc) -> None:
+        """Build all widgets into the specified parent frame."""
+        ttk.Label(parent, text="", style=HEADING_LABEL_STYLE).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
         self.output_dir_var = tk.StringVar(value=app_config.output_dir_default())
         self.filename_pattern_var = tk.StringVar(value=app_config.filename_pattern_default())
         self.image_format_var = tk.StringVar(value=app_config.image_format_default())
         self.batch_size_var = tk.StringVar(value=str(app_config.batch_size_default()))
         self.seed_mode_var = tk.StringVar(value=app_config.seed_mode_default())
 
-        self._build_row("Output Dir", ttk.Entry(self, textvariable=self.output_dir_var), 1)
-        self._build_row("Filename", ttk.Entry(self, textvariable=self.filename_pattern_var), 2)
+        self._build_row(parent, "Output Dir", ttk.Entry(parent, textvariable=self.output_dir_var), 1, 0)
+        self._build_row(parent, "Filename", ttk.Entry(parent, textvariable=self.filename_pattern_var), 2, 0)
         self._build_row(
+            parent,
             "Format",
-            ttk.Combobox(self, textvariable=self.image_format_var, values=self.FORMATS, state="readonly", width=8),
-            3
+            ttk.Combobox(parent, textvariable=self.image_format_var, values=self.FORMATS, state="readonly", width=8),
+            3, 0
         )
         self._build_row(
+            parent,
             "Batch Size",
-            ttk.Spinbox(self, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6),
-            4
+            ttk.Spinbox(parent, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6),
+            3, 2
         )
         self._build_row(
+            parent,
             "Seed Mode",
-            ttk.Combobox(self, textvariable=self.seed_mode_var, values=self.SEED_MODES, state="readonly", width=10),
-            5
+            ttk.Combobox(parent, textvariable=self.seed_mode_var, values=self.SEED_MODES, state="readonly", width=10),
+            3, 4
         )
 
-        self.columnconfigure(1, weight=1)
+        parent.columnconfigure(1, weight=1)
 
-    def _build_row(self, label: str, widget: tk.Widget, row_idx: int) -> None:
-        label_widget = ttk.Label(self, text=label, style="TLabel")
-        label_widget.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
-        widget.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
+    def _build_row(self, parent: tk.Misc, label: str, widget: tk.Widget, row_idx: int, col_idx: int) -> None:
+        label_widget = ttk.Label(parent, text=label, style="TLabel")
+        label_widget.grid(row=row_idx, column=col_idx, sticky="w", padx=(0, 8), pady=(0, 4))
+        widget.grid(row=row_idx, column=col_idx + 1, sticky="ew", pady=(0, 4))
 
     def get_output_overrides(self) -> dict[str, object]:
         return {

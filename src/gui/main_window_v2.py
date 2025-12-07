@@ -83,6 +83,12 @@ class BottomZone(ttk.Frame):
         self.columnconfigure(0, weight=1)
 
 
+DEFAULT_MAIN_WINDOW_WIDTH = int(PipelineTabFrame.DEFAULT_COLUMN_WIDTH * 3.1)
+DEFAULT_MAIN_WINDOW_HEIGHT = int(900 * 1.5)
+MIN_MAIN_WINDOW_WIDTH = DEFAULT_MAIN_WINDOW_WIDTH
+MIN_MAIN_WINDOW_HEIGHT = int(740 * 1.5)
+
+
 class MainWindowV2:
     """Minimal V2 spine used by legacy controllers and new app entrypoint."""
 
@@ -110,8 +116,7 @@ class MainWindowV2:
         self.app_state.set_invoker(self._invoker)
 
         self.root.title("StableNew V2 (Spine)")
-        self.root.geometry("1400x850")
-        self.root.minsize(1024, 700)
+        self._ensure_window_geometry()
 
         apply_theme(self.root)
         configure_root_grid(self.root)
@@ -198,6 +203,22 @@ class MainWindowV2:
                 self.pipeline_tab.preview_panel.controller = controller
             except Exception:
                 pass
+
+    def _ensure_window_geometry(self) -> None:
+        """Apply default geometry/minimums so the three-column layout is visible."""
+        try:
+            geom = self.root.geometry()
+            width_str, rest = geom.split("x", 1)
+            width = int(width_str)
+            height_str = rest.split("+", 1)[0]
+            height = int(height_str)
+        except Exception:
+            width = 0
+            height = 0
+
+        if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
+            self.root.geometry(f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}")
+        self.root.minsize(MIN_MAIN_WINDOW_WIDTH, MIN_MAIN_WINDOW_HEIGHT)
 
     def update_pack_list(self, packs: list[str]) -> None:
         left = getattr(self, "left_zone", None)

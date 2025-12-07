@@ -6,6 +6,7 @@ import logging
 
 from typing import Any, Callable, Literal
 
+from src.controller.job_history_service import JobHistoryService
 from src.queue.job_model import Job, JobStatus
 from src.gui.pipeline_panel_v2 import format_queue_job_summary
 from src.queue.job_queue import JobQueue
@@ -28,13 +29,25 @@ class JobService:
         job_queue: JobQueue,
         runner: SingleNodeJobRunner,
         history_store: JobHistoryStore | None = None,
+        history_service: JobHistoryService | None = None,
     ) -> None:
         self.job_queue = job_queue
         self.runner = runner
         self.history_store = history_store
+        self._history_service = history_service
+        if self._history_service is None and history_store is not None:
+            try:
+                self._history_service = JobHistoryService(job_queue, history_store)
+            except Exception:
+                self._history_service = None
         self._listeners: dict[str, list[Callable[..., None]]] = {}
         self._queue_status: QueueStatus = "idle"
-        self.runner._on_status_change = self._handle_runner_status
+        self.job_queue.register_status_callback(self._handle_job_status_change)
+
+    @property
+    def queue(self) -> JobQueue:
+        """Alias for job_queue for controller compatibility."""
+        return self.job_queue
 
     def register_callback(self, event: str, callback: Callable[..., None]) -> None:
         self._listeners.setdefault(event, []).append(callback)
@@ -123,18 +136,30 @@ class JobService:
             if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
                 self._set_queue_status("idle")
 
-    def _handle_runner_status(self, job: Job, status: JobStatus) -> None:
+    def _handle_job_status_change(self, job: Job, status: JobStatus) -> None:
         if status == JobStatus.RUNNING:
             self._emit(self.EVENT_JOB_STARTED, job)
         elif status == JobStatus.COMPLETED:
             self._emit(self.EVENT_JOB_FINISHED, job)
-        elif status == JobStatus.CANCELLED:
+            self._record_job_history(job, status)
+        elif status in {JobStatus.CANCELLED, JobStatus.FAILED}:
             self._emit(self.EVENT_JOB_FAILED, job)
-        elif status == JobStatus.FAILED:
-            self._emit(self.EVENT_JOB_FAILED, job)
+            if status == JobStatus.FAILED:
+                self._record_job_history(job, status)
         self._emit_queue_updated()
         if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
             self._emit(self.EVENT_QUEUE_EMPTY)
+
+    def _record_job_history(self, job: Job, status: JobStatus) -> None:
+        if not self._history_service:
+            return
+        try:
+            if status == JobStatus.COMPLETED:
+                self._history_service.record(job, result=job.result)
+            elif status == JobStatus.FAILED:
+                self._history_service.record_failure(job, error=job.error_message)
+        except Exception:
+            logging.debug("Failed to record job history for %s", job.job_id, exc_info=True)
 
     def _emit_queue_updated(self) -> None:
         jobs = self.job_queue.list_jobs()

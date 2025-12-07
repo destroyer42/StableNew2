@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by docs/ARCHITECTURE_v2.5.md (canonical)
+
 # StableNew Architecture v2  
 _Layered, Testable, Cluster‑Aware Design_
 

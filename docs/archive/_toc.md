@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by docs/DOCS_INDEX_v2.5.md (canonical)
+
 # StableNew Documentation
 
 ## Table of Contents

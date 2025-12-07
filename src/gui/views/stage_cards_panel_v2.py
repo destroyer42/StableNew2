@@ -31,10 +31,37 @@ class StageCardsPanel(ttk.Frame):
         self._stage_order = get_pipeline_stage_order() or ["txt2img", "adetailer", "img2img", "upscale"]
         self.stage_order: list[str] = []
         self._stage_builders: dict[str, Callable[[tk.Misc], ttk.Frame]] = {
-            "txt2img": lambda parent: AdvancedTxt2ImgStageCardV2(parent, controller=controller, theme=theme),
-            "img2img": lambda parent: AdvancedImg2ImgStageCardV2(parent, controller=controller, theme=theme),
-            "adetailer": lambda parent: ADetailerStageCardV2(parent, theme=theme),
-            "upscale": lambda parent: AdvancedUpscaleStageCardV2(parent, controller=controller, theme=theme),
+            "txt2img": lambda parent: AdvancedTxt2ImgStageCardV2(
+                parent,
+                controller=controller,
+                theme=theme,
+                app_state=self.app_state,
+                collapsible=True,
+                collapse_key="card_txt2img",
+            ),
+            "img2img": lambda parent: AdvancedImg2ImgStageCardV2(
+                parent,
+                controller=controller,
+                theme=theme,
+                app_state=self.app_state,
+                collapsible=True,
+                collapse_key="card_img2img",
+            ),
+            "adetailer": lambda parent: ADetailerStageCardV2(
+                parent,
+                theme=theme,
+                app_state=self.app_state,
+                collapsible=True,
+                collapse_key="card_adetailer",
+            ),
+            "upscale": lambda parent: AdvancedUpscaleStageCardV2(
+                parent,
+                controller=controller,
+                theme=theme,
+                app_state=self.app_state,
+                collapsible=True,
+                collapse_key="card_upscale",
+            ),
         }
         self._stage_cards: dict[str, ttk.Frame] = {}
         for stage_name in self._stage_order:
@@ -105,29 +132,37 @@ class StageCardsPanel(ttk.Frame):
         if upscale_card is None or not hasattr(upscale_card, "update_input_dimensions"):
             return
 
-        # Watch txt2img dimensions
+        # PR-GUI-E: Simplified watcher attachment - directly watch width/height vars
         txt2img_card = getattr(self, "txt2img_card", None)
         if txt2img_card is not None:
-            watchable = getattr(txt2img_card, "watchable_vars", None)
-            if callable(watchable):
-                for var in watchable() or []:
-                    if hasattr(var, "_name") and var._name in ("width_var", "height_var"):
-                        try:
-                            var.trace_add("write", lambda *_: self._update_upscale_dimensions())
-                        except Exception:
-                            pass
+            width_var = getattr(txt2img_card, "width_var", None)
+            height_var = getattr(txt2img_card, "height_var", None)
+            if width_var is not None:
+                try:
+                    width_var.trace_add("write", lambda *_: self._update_upscale_dimensions())
+                except Exception:
+                    pass
+            if height_var is not None:
+                try:
+                    height_var.trace_add("write", lambda *_: self._update_upscale_dimensions())
+                except Exception:
+                    pass
 
         # Watch img2img dimensions
         img2img_card = getattr(self, "img2img_card", None)
         if img2img_card is not None:
-            watchable = getattr(img2img_card, "watchable_vars", None)
-            if callable(watchable):
-                for var in watchable() or []:
-                    if hasattr(var, "_name") and var._name in ("width_var", "height_var"):
-                        try:
-                            var.trace_add("write", lambda *_: self._update_upscale_dimensions())
-                        except Exception:
-                            pass
+            width_var = getattr(img2img_card, "width_var", None)
+            height_var = getattr(img2img_card, "height_var", None)
+            if width_var is not None:
+                try:
+                    width_var.trace_add("write", lambda *_: self._update_upscale_dimensions())
+                except Exception:
+                    pass
+            if height_var is not None:
+                try:
+                    height_var.trace_add("write", lambda *_: self._update_upscale_dimensions())
+                except Exception:
+                    pass
 
         # Initial update
         self._update_upscale_dimensions()

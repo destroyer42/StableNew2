@@ -162,6 +162,7 @@ class MockAppState:
 
 
 @pytest.mark.gui
+@pytest.mark.skip(reason="PR-GUI-F1: PipelineRunControlsV2 buttons removed, controls moved to QueuePanelV2")
 class TestPipelineRunControlsRefreshStates:
     """Tests for refresh_states() button enable/disable logic (PR-203 simplified version)."""
 

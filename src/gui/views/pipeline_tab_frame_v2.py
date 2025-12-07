@@ -90,7 +90,7 @@ class PipelineTabFrame(ttk.Frame):
         self.center_column.rowconfigure(0, weight=1)
         self.center_column.columnconfigure(0, weight=1)
         self.stage_scroll = ScrollableFrame(self.center_column, style=CARD_FRAME_STYLE)
-        self.stage_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, design_system.Spacing.MD))
+        self.stage_scroll.grid(row=0, column=0, sticky="nsew")
         self.stage_cards_frame = self.stage_scroll.inner
 
         self.right_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
@@ -100,13 +100,13 @@ class PipelineTabFrame(ttk.Frame):
         queue_controller = self.app_controller or self.pipeline_controller
 
         self.right_scroll = ScrollableFrame(self.right_column, style=CARD_FRAME_STYLE)
-        self.right_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, design_system.Spacing.MD))
+        self.right_scroll.grid(row=0, column=0, sticky="nsew")
         self.right_scroll.inner.columnconfigure(0, weight=1)
         self.right_scroll.inner.rowconfigure(0, weight=1)
         self.right_scroll.inner.rowconfigure(3, weight=1)  # History row gets weight
 
         preview_card = _create_card(self.right_scroll.inner)
-        preview_card.grid(row=0, column=0, sticky="nsew", pady=(0, 8))
+        preview_card.grid(row=0, column=0, sticky="nsew", padx=(0, 12), pady=(0, 8))
         preview_card.rowconfigure(0, weight=1)
         self.preview_panel = PreviewPanelV2(
             preview_card,
@@ -119,7 +119,7 @@ class PipelineTabFrame(ttk.Frame):
         # PR-GUI-F1: Run Controls panel removed - controls moved to QueuePanelV2
 
         queue_card = _create_card(self.right_scroll.inner)
-        queue_card.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        queue_card.grid(row=1, column=0, sticky="ew", padx=(0, 12),pady=(0, 8))
         self.queue_panel = QueuePanelV2(
             queue_card,
             controller=queue_controller,
@@ -128,7 +128,7 @@ class PipelineTabFrame(ttk.Frame):
         self.queue_panel.grid(row=0, column=0, sticky="ew")
 
         running_job_card = _create_card(self.right_scroll.inner)
-        running_job_card.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        running_job_card.grid(row=2, column=0, sticky="ew", padx=(0, 12),pady=(0, 8))
         self.running_job_panel = RunningJobPanelV2(
             running_job_card,
             controller=queue_controller,
@@ -137,7 +137,7 @@ class PipelineTabFrame(ttk.Frame):
         self.running_job_panel.grid(row=0, column=0, sticky="ew")
 
         history_card = _create_card(self.right_scroll.inner)
-        history_card.grid(row=3, column=0, sticky="nsew", pady=(0, 0))
+        history_card.grid(row=3, column=0, sticky="nsew", padx=(0, 12),pady=(0, 0))
         history_card.rowconfigure(0, weight=1)
         self.history_panel = JobHistoryPanelV2(
             history_card,
@@ -176,7 +176,7 @@ class PipelineTabFrame(ttk.Frame):
         # Stage toggle vars and upscale proxies (JT05 compatibility)
         self.txt2img_enabled = tk.BooleanVar(value=True)
         self.img2img_enabled = tk.BooleanVar(value=False)
-        self.adetailer_enabled = tk.BooleanVar(value=False)
+        self.adetailer_enabled = tk.BooleanVar(value=True)
         self.upscale_enabled = tk.BooleanVar(value=False)
 
         self.upscale_factor = tk.DoubleVar(value=2.0)

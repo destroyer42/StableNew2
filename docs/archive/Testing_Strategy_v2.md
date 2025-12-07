@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by docs/StableNew_Coding_and_Testing_v2.5.md (canonical)
+
 # Testing Strategy v2  
 
 ---

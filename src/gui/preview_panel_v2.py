@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
-from src.pipeline.job_models_v2 import JobUiSummary
+from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord
 from src.gui.design_system_v2 import DANGER_BUTTON
 from src.gui.theme_v2 import (
     BACKGROUND_ELEVATED,
@@ -164,17 +164,9 @@ class PreviewPanelV2(ttk.Frame):
             self._update_action_states(job_draft)
             return
 
-        self.job_count_label.config(text=f"Job Draft: {len(packs)} pack(s)")
-        pack_names = [entry.pack_name for entry in packs]
-        summary_text = f"Draft: {len(packs)} pack(s)\n{', '.join(pack_names[:3])}"
-        if len(pack_names) > 3:
-            summary_text += f" (+{len(pack_names) - 3} more)"
-        self._set_text_widget(self.prompt_text, summary_text)
-        self._set_text_widget(self.negative_prompt_text, "")
-        self.stage_summary_label.config(text="Stages: -")
-        self.stage_flags_label.config(text=self._format_flags(False, False, False))
-        self.randomizer_label.config(text="Randomizer: OFF")
-        self.learning_metadata_label.config(text="Learning metadata: N/A")
+        entry = packs[0]
+        summary = self._summary_from_pack_entry(entry)
+        self._render_summary(summary, len(packs))
         self._update_action_states(job_draft)
 
     def update_from_controls(self, sidebar: Any) -> None:
@@ -188,9 +180,81 @@ class PreviewPanelV2(ttk.Frame):
             "adetailer": "ADetailer",
             "upscale": "upscale",
         }
-        stages_text = " ƒ+' ".join(stage_labels[stage] for stage in canonical) or "-"
+        stages_text = " + ".join(stage_labels[stage] for stage in canonical) or "-"
         self.stage_summary_label.config(text=f"Stages: {stages_text}")
 
+    def _summary_from_pack_entry(self, entry: Any) -> JobUiSummary:
+        config = entry.config_snapshot or {}
+        prompt_text = entry.prompt_text or str(config.get("prompt") or "")
+        negative = entry.negative_prompt_text or str(config.get("negative_prompt", "") or "")
+        sampler = str(config.get("sampler") or config.get("sampler_name") or "")
+        steps = self._coerce_int(config.get("steps"))
+        cfg_scale = self._coerce_float(config.get("cfg_scale"))
+
+        model = str(config.get("model") or config.get("model_name") or entry.pack_name or "unknown") or "unknown"
+        seed = config.get("seed")
+        seed_display = str(seed) if seed is not None else "?"
+        stage_flags = entry.stage_flags or {}
+        stages = []
+        stage_labels = {
+            "txt2img": "txt2img",
+            "img2img": "img2img",
+            "adetailer": "ADetailer",
+            "upscale": "upscale",
+        }
+        for stage, label in stage_labels.items():
+            if stage_flags.get(stage):
+                stages.append(label)
+        if not stages:
+            stages.append("txt2img")
+        stages_summary = " + ".join(stages)
+
+        randomizer_summary = NormalizedJobRecord._format_randomizer_summary(entry.randomizer_metadata)
+
+        has_refiner = bool(stage_flags.get("refiner") or config.get("refiner_enabled"))
+        has_hires = bool(stage_flags.get("hires") or config.get("hires_enabled"))
+        has_upscale = bool(stage_flags.get("upscale") or config.get("upscale_enabled"))
+        output_dir = str(config.get("output_dir") or config.get("path_output_dir") or "output")
+
+        return JobUiSummary(
+            job_id=entry.pack_id,
+            model=model,
+            prompt_short=self._truncate_text(prompt_text, limit=120),
+            negative_prompt_short=self._truncate_text(negative, limit=120) if negative else None,
+            sampler=sampler,
+            steps=steps,
+            cfg_scale=cfg_scale,
+            seed_display=seed_display,
+            variant_label="",
+            batch_label="",
+            stages_summary=stages_summary,
+            randomizer_summary=randomizer_summary,
+            has_refiner=has_refiner,
+            has_hires=has_hires,
+            has_upscale=has_upscale,
+            output_dir=output_dir,
+            total_summary=f"{model} | seed={seed_display}",
+        )
+
+    @staticmethod
+    def _truncate_text(value: str, limit: int) -> str:
+        if not value:
+            return ""
+        return value if len(value) <= limit else value[:limit] + "..."
+
+    @staticmethod
+    def _coerce_int(value: Any) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _coerce_float(value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update action button availability based on app_state."""
         if app_state is None:

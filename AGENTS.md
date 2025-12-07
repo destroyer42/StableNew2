@@ -1,248 +1,385 @@
-# StableNew – Agent Instructions (V2/V2.5 Enforcement)
+AGENTS.md — StableNew v2.5 LLM Governance File
 
-AGENTS.md (Codex + Copilot Edition — Streamlined & Safe)
+#CANONICAL
+(This document governs ChatGPT, Copilot Chat, and all LLM agents interacting with the repo.)
 
-Version: V2-P1
-Purpose: Provide Codex/Copilot a clear, lightweight, reliable contract so they can implement PRs quickly without hallucination or repo damage.
+Executive Summary (8–10 lines)
 
-1. Mission of Each Agent
-Codex (Primary Implementer)
+This file defines how AI agents must behave when generating code, analyzing architecture, or producing PRs for the StableNew project.
+Agents must follow the canonical documentation set (Architecture_v2.5, Governance_v2.5, Roadmap_v2.5, etc.) and must never reference archived docs.
+Agents must not guess or infer architecture — they must request snapshots when file contents or structure are unclear.
+Subsystem boundaries (GUI → Controller → Pipeline → Queue → Runner) are strictly enforced to prevent drift and regression.
+All PRs must follow the project’s PR template, include required tests, and respect risk tier classifications.
+This file ensures AI-generated contributions remain deterministic, safe, maintainable, and consistent with StableNew’s long-term design.
 
-Applies PR instructions exactly as given.
+PR-Relevant Facts (Quick Reference)
 
-Produces surgical diffs only within the files explicitly allowed.
+Canonical docs = *-v2.5.md + #CANONICAL header.
 
-Ensures tests remain green.
+Archived docs = #ARCHIVED → must be ignored completely.
 
-Never adds new behavior unless the PR explicitly calls for it.
+AI agents must request latest repo snapshot + repo_inventory.json before producing code.
 
-Never “fills in gaps” creatively—only the PR spec is law.
+Every PR must include tests and follow the official structure.
 
-GitHub Copilot (Inline Support)
+No agent may modify pipeline execution, stage order, or queue semantics without explicit approval.
 
-Assists with local function bodies, small refactors, formatting, and pattern completion.
+Agents must strictly honor subsystem boundaries.
 
-Must not introduce cross-file changes or new modules.
+============================================================
 
-Adheres strictly to file boundaries and patterns set by Codex PR specs.
+1. Purpose of AGENTS.md
 
-2. Always Start from the PR Spec
+============================================================
 
-Every PR you implement will be produced by ChatGPT using the new workflow. That means:
+This document provides:
 
-All architecture decisions, filenames, subsystem scopes, allowed/forbidden files, and tests to satisfy are pre-defined.
+A unified rule set for ChatGPT, Copilot Chat, and any automated agents.
 
-You DO NOT need to infer missing information.
+A consistent interpretation of canonical documentation.
 
-You DO NOT need to explore the repo outside the allowed files.
+Safeguards to prevent structural or architectural drift.
 
-Your input = Only the PR that the user attaches.
-Your output = A minimal diff implementing that PR, nothing more.
+Guardrails for code generation, refactoring, and PR assistance.
 
-3. Golden Rules for Implementation
-Rule 1 — Stay inside Allowed Files
+A stable baseline for all future LLM-based development.
 
-Modify only the files listed under Files to Modify in the PR.
+It must be consulted before producing any code or PR.
 
-If the PR says:
+============================================================
 
-Files to Modify:
-- src/gui/views/pipeline_tab_frame.py
-- src/gui/stage_cards_v2/base_stage_card_v2.py
+2. Canonical Documentation Rule
 
+============================================================
 
-Then do not edit any other file—even if it looks “helpful.”
+AI agents may only rely on the following documents in the /docs directory:
 
-Rule 2 — Never Touch Forbidden Files
+Canonical Documents (Authoritative)
 
-Forbidden files (partial list; PRs may extend):
+DOCS_INDEX_v2.5.md
 
-src/gui/main_window_v2.py
-src/gui/theme_v2.py
-src/main.py
-src/pipeline/executor.py
-src/pipeline/pipeline_runner.py
+ARCHITECTURE_v2.5.md
 
+Governance_v2.5.md
 
-These files define core wiring, theming, lifecycle, or execution behavior and are too fragile for unscoped edits.
+Roadmap_v2.5.md
 
-Rule 3 — Minimal, Surgical Diffs
+StableNew_Agent_Instructions_v2.5.md
 
-Do exactly the following:
+StableNew_Coding_and_Testing_v2.5.md
 
-Implement the specific functionality described
+Randomizer_Spec_v2.5.md
 
-Update specific methods (not entire classes)
+Learning_System_Spec_v2.5.md
 
-Preserve existing structure and style
+Cluster_Compute_Spec_v2.5.md
 
-Do NOT rename, reorder, delete, or reorganize code unless the PR explicitly says so
+Agents must ignore:
 
-Do NOT introduce new modules, new classes, or new patterns unless explicitly requested
+Any document starting with #ARCHIVED
 
-Rule 4 — Follow the Snapshot
+Any document in docs/archive/
 
-All work is evaluated relative to the snapshot ZIP + repo_inventory.json the PR specifies.
+Any pre-v2.5 documentation
 
-If a PR says:
+Any automatically generated docs not marked canonical
 
-Baseline Snapshot:
-StableNew-snapshot-2025-11-28-2345.zip
+If a user quotes or references legacy material, the agent must reinterpret it using the canonical v2.5 constraints.
 
+============================================================
 
-Assume that is the source of truth.
-Do not reinterpret old behavior or guess what code should exist.
+3. Snapshot Discipline
 
-Rule 5 — Never Re-Architect
+============================================================
 
-Architecture is established and locked:
+Before modifying or generating code:
 
-GUI → Controller → Pipeline → API → WebUI
-(; )
+Agents must ask for the latest repo snapshot + repo_inventory.json when unsure.
 
-Codex/Copilot must not change this ordering or connect layers directly.
+Agents must not rely on memory of past versions.
 
-4. How to Interpret the Repo (No Guesswork Required)
+Agents must not hallucinate file locations or contents.
 
-You do NOT need to understand the entire repo.
-You only need the following truths:
+If uncertain:
 
-4.1 Active Modules List is Authoritative
+“Please upload the latest snapshot and repo_inventory.json so I can reference the correct file structure.”
 
-If a file is listed in ACTIVE_MODULES.md, it is valid.
-If not, ignore it.
-()
+============================================================
 
-4.2 GUI V2 Layout is Fixed
+4. Subsystem Boundaries (Strict Enforcement)
 
-Prompt Tab = authoring
-Pipeline Tab = execution
-Learning Tab = experiments
-()
+============================================================
 
-Codex must not restructure tab layouts or relocate responsibilities.
+AI agents must understand and respect the StableNew v2.5 architecture:
 
-4.3 Roadmap is Already Decided
+4.1 GUI Layer
 
-Codex does NOT interpret or modify overall direction.
-Everything is planned already:
+Creates widgets, panels, callbacks.
 
-GUI → Pipeline wiring
+May read/write AppState.
 
-Learning system
+Must not run pipeline or queue logic.
 
-Queue + Cluster vision
-(, , )
+Must not construct jobs or variants.
 
-5. Execution Sequence for Every PR
+4.2 Controller Layer
 
-When implementing a PR:
+Orchestrates actions: build jobs, submit queue, update preview.
 
-Step A — Load the PR
+Must call ConfigMergerV2 → JobBuilderV2 → JobService.
 
-Read every section, especially:
+Must not embed merging or pipeline logic.
 
-Allowed Files
+4.3 Pipeline Layer
 
-Forbidden Files
+Pure logic: config merging, randomizer, job building.
 
-Step-by-step Implementation
+No GUI imports.
 
-Required Tests
+No queue imports.
 
-Step B — Apply the Steps Exactly
+No mutation of global state.
 
-Only implement what the PR says.
-Do not add features or “improve” anything not in scope.
+4.4 Queue Layer
 
-Step C — Keep Diffs Minimal
+State machine for job execution.
 
-For each file:
+Manages pending/running/completed jobs.
 
-Add the methods or lines requested
+Must not alter run configs or build jobs.
 
-Do not modify surrounding context
+4.5 Runner Layer
 
-Do not clean up formatting elsewhere
+Executes the pipeline deterministically in canonical stage order.
 
-Step D — Run Only the Listed Tests
+No randomization, no config mutation.
 
-The PR will list tests Codex must ensure pass.
-These are the only tests you need to consider for correctness.
+Must not change job identity or metadata.
 
-Step E — Stop if Anything Seems Undefined
+Violating any boundary requires AI to refuse the request.
 
-If something needed for implementation is not in the PR:
+============================================================
 
-Stop
+5. PR Requirements for AI Agents
 
-Request clarification
-(You NEVER guess.)
+============================================================
 
-6. Special Behavior Rules for Codex/Copilot
-6.1 Codex Must Not Invent APIs
+Every PR MUST include:
 
-If a function or method is not explicitly described in the PR, do not create it.
+Title
 
-6.2 Copilot Must Not Modify Cross-File References
+Summary
 
-Inline suggestions must not:
+Problem statement
 
-Create new imports
+Intent / rationale
 
-Change class names
+Allowed files
 
-Introduce new modules
+Forbidden files
 
-6.3 Always Preserve the V2 Contracts
+Step-by-step implementation
 
-Examples:
+Required tests
 
-Stage cards follow existing BaseStageCard patterns
+Acceptance criteria
 
-Controller remains single source of truth
+Rollback plan
 
-PipelineConfig structure remains stable
+Risk Tier assignment
 
-LearningRecord JSONL format must not change
-(, )
+Agents must NEVER:
 
-7. Failure Handling
+Mix refactors + feature changes in the same PR.
 
-If Codex encounters:
+Produce PRs that cross subsystem boundaries.
 
-Missing symbols
+Modify test behavior without explicit justification.
 
-Unknown imports
+============================================================
 
-Functions that don’t exist
+6. Coding Standards for AI Agents
 
-It must NOT create new systems.
-Instead:
+============================================================
 
-STOP — request the file or clarification.
+AI-generated code must follow:
 
+@dataclass usage for structured data.
 
-This prevents hallucinated classes (a major source of repo corruption historically).
+Purity rules (no side effects).
 
-8. Summary to Codex/Copilot
+Immutability principles for configs.
 
-You are not designing StableNew.
-You are implementing very small, surgical changes inside a fully defined architecture using PR specs that are provided to you.
+Deterministic behavior across executions.
 
-Your responsibilities:
+Clear naming conventions.
 
-Follow PR specs exactly
+No floating logic between layers.
 
-Modify only allowed files
+Only documented APIs may be used.
 
-Keep diffs tiny
+Agents must ensure:
 
-Ensure tests stay green
+Pipeline logic is pure and isolated.
 
-Stop and ask if anything is unclear
+Controller logic invokes correct helpers.
 
-Your job is not invention.
-Your job is precision.
+GUI logic never mutates configs beyond AppState.
 
-END OF AGENTS.md
+============================================================
+
+7. Testing Standards
+
+============================================================
+
+AI agents MUST create tests when modifying logic:
+
+Unit Tests
+
+For RandomizerEngineV2
+
+For ConfigMergerV2
+
+For JobBuilderV2
+
+For NormalizedJobRecord conversions
+
+Integration Tests
+
+For PipelineControllerV2
+
+For JobService interactions
+
+GUI Tests (Behavior)
+
+On Randomizer panel
+
+On Preview panel
+
+On Queue panel
+
+Principles
+
+Write failing tests first
+
+Cover edge cases
+
+Maintain existing behavior unless spec updates
+
+============================================================
+
+8. When AI Must Ask for Clarification
+
+============================================================
+
+AI must pause and request clarification when:
+
+Requested behavior contradicts canonical docs.
+
+File structure is missing or ambiguous.
+
+Snapshot is unavailable.
+
+Request touches executor/runner internals.
+
+User proposes breaking subsystem boundaries.
+
+AI must respond:
+
+“This request conflicts with canonical architecture/governance.
+Please clarify or adjust the design.”
+
+============================================================
+
+9. Forbidden Actions for AI Agents
+
+============================================================
+
+Agents must never:
+
+Invent new modules or APIs without user approval.
+
+Change the job lifecycle.
+
+Add or remove pipeline stages.
+
+Modify stage ordering.
+
+Embed business logic in GUI components.
+
+Override seeds or randomizer logic.
+
+Alter queue or runner semantics.
+
+Modify canonical docs without updating DOCS_INDEX_v2.5.md.
+
+Use archived documentation.
+
+============================================================
+
+10. Drift Detection and Self-Check
+
+============================================================
+
+Before producing any answer, the AI must verify:
+
+Am I using ONLY canonical v2.5 docs?
+
+Am I respecting subsystem boundaries?
+
+Am I avoiding hallucinated file paths or structures?
+
+Should I request a snapshot?
+
+Does the PR include tests?
+
+Did I follow the StableNew PR template?
+
+Am I accidentally modifying stage ordering or pipeline semantics?
+
+If any answer is no, the agent must NOT produce the code.
+
+============================================================
+
+11. Versioning & Documentation Rules
+
+============================================================
+
+Canonical docs must end with v2.5.md.
+
+Any architecture or governance changes must update:
+
+DOCS_INDEX_v2.5.md
+
+The corresponding subsystem spec
+
+AI must not introduce undocumented behaviors.
+
+============================================================
+
+12. Escalation Protocol (Unsafe Request Handling)
+
+============================================================
+
+When user requests:
+
+Runner internal modification
+
+Queue algorithm changes
+
+Pipeline semantics alteration
+
+Multi-subsystem refactor
+
+Behavior contradicting specs
+
+AI must reply:
+
+“This request is unsafe or violates canonical architecture.
+Here is why, and here are compliant alternatives…”
+
+No exceptions.
+
+End of AGENTS.md
+
+#CANONICAL

@@ -529,7 +529,12 @@ class PipelineController(_GUIPipelineController):
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
         history_store = self._job_controller.get_history_store()
-        self._job_service = job_service if job_service is not None else JobService(queue, runner, history_store)
+        history_service = self.get_job_history_service()
+        self._job_service = (
+            job_service
+            if job_service is not None
+            else JobService(queue, runner, history_store, history_service=history_service)
+        )
         self._job_controller.set_status_callback("pipeline", self._on_job_status)
 
     def _get_learning_runner(self):
@@ -825,6 +830,35 @@ class PipelineController(_GUIPipelineController):
         runner = PipelineRunner(api_client, structured_logger)
         result = runner.run(job.pipeline_config, self.cancel_token)
         return result.to_dict() if hasattr(result, 'to_dict') else {"result": result}
+
+    def submit_preview_jobs_to_queue(
+        self,
+        *,
+        source: str = "gui",
+        prompt_source: str = "pack",
+    ) -> int:
+        """Submit preview jobs as queue jobs using NormalizedJobRecord data."""
+        normalized_jobs = self.get_preview_jobs()
+        if not normalized_jobs:
+            return 0
+
+        submitted = 0
+        for record in normalized_jobs:
+            prompt_pack_id = None
+            config = record.config
+            if isinstance(config, dict):
+                prompt_pack_id = config.get("prompt_pack_id")
+            job = self._to_queue_job(
+                record,
+                run_mode="queue",
+                source=source,
+                prompt_source=prompt_source,
+                prompt_pack_id=prompt_pack_id,
+            )
+            job.payload = lambda j=job: self._run_job(j)
+            self._job_service.submit_job_with_run_mode(job)
+            submitted += 1
+        return submitted
 
     def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
         """Run pipeline synchronously and return result."""

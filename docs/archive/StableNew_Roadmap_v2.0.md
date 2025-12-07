@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by docs/Roadmap_v2.5.md (canonical)
+
 # StableNew Roadmap v2.0  
 _Status: Draft – V2 Strategic Baseline_
 

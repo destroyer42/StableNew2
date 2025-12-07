@@ -38,10 +38,22 @@ class RunningJobPanelV2(ttk.Frame):
         self.controller = controller
         self.app_state = app_state
         self._current_job: QueueJobV2 | None = None
+        self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
 
-        # Title
-        title = ttk.Label(self, text="Running Job", style=STATUS_STRONG_LABEL_STYLE)
-        title.pack(fill="x", pady=(0, 8))
+        # Title with queue origin indicator
+        title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
+        title_frame.pack(fill="x", pady=(0, 8))
+
+        title = ttk.Label(title_frame, text="Running Job", style=STATUS_STRONG_LABEL_STYLE)
+        title.pack(side="left")
+
+        # PR-GUI-F2: Show which queue position this job came from
+        self.queue_origin_label = ttk.Label(
+            title_frame,
+            text="",
+            style=STATUS_STRONG_LABEL_STYLE,
+        )
+        self.queue_origin_label.pack(side="left", padx=(8, 0))
 
         # Job info label
         self.job_info_label = ttk.Label(
@@ -84,25 +96,35 @@ class RunningJobPanelV2(ttk.Frame):
         # Control buttons
         button_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         button_frame.pack(fill="x")
-        button_frame.columnconfigure((0, 1), weight=1)
+        button_frame.columnconfigure((0, 1, 2), weight=1)
 
         self.pause_resume_button = ttk.Button(
             button_frame,
             text="Pause",
             style=SECONDARY_BUTTON_STYLE,
             command=self._on_pause_resume,
-            width=10,
+            width=8,
         )
-        self.pause_resume_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.pause_resume_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
 
         self.cancel_button = ttk.Button(
             button_frame,
             text="Cancel",
             style=SECONDARY_BUTTON_STYLE,
             command=self._on_cancel,
-            width=10,
+            width=8,
         )
-        self.cancel_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.cancel_button.grid(row=0, column=1, sticky="ew", padx=(2, 2))
+
+        # PR-GUI-F3: Cancel + Return to Queue button
+        self.cancel_return_button = ttk.Button(
+            button_frame,
+            text="Cancel→Queue",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_cancel_and_return,
+            width=11,
+        )
+        self.cancel_return_button.grid(row=0, column=2, sticky="ew", padx=(2, 0))
 
         # Initial state
         self._update_display()
@@ -133,13 +155,21 @@ class RunningJobPanelV2(ttk.Frame):
             self.progress_label.configure(text="0%")
             self.status_label.configure(text="Status: Idle")
             self.eta_label.configure(text="")
+            self.queue_origin_label.configure(text="")  # PR-GUI-F2
             self.pause_resume_button.configure(text="Pause")
             self.pause_resume_button.state(["disabled"])
             self.cancel_button.state(["disabled"])
+            self.cancel_return_button.state(["disabled"])
             return
 
         # Job info
         self.job_info_label.configure(text=job.get_display_summary())
+
+        # PR-GUI-F2: Queue origin display
+        if self._queue_origin is not None:
+            self.queue_origin_label.configure(text=f"(from #{self._queue_origin})")
+        else:
+            self.queue_origin_label.configure(text="")
 
         # Progress
         progress_pct = int(job.progress * 100)
@@ -165,6 +195,7 @@ class RunningJobPanelV2(ttk.Frame):
 
         self.pause_resume_button.state(["!disabled"] if can_control else ["disabled"])
         self.cancel_button.state(["!disabled"] if can_control else ["disabled"])
+        self.cancel_return_button.state(["!disabled"] if can_control else ["disabled"])
 
     def _on_pause_resume(self) -> None:
         """Handle pause/resume button click."""
@@ -190,9 +221,31 @@ class RunningJobPanelV2(ttk.Frame):
         if callable(method):
             method()
 
-    def update_job(self, job: QueueJobV2 | None) -> None:
-        """Update the panel with a new job or None."""
+    def _on_cancel_and_return(self) -> None:
+        """Handle cancel + return to queue button click.
+        
+        PR-GUI-F3: Cancels the running job and puts it back at the
+        bottom of the queue for later retry.
+        """
+        if not self.controller:
+            return
+
+        method = getattr(self.controller, "on_cancel_job_and_return_v2", None)
+        if callable(method):
+            method()
+
+    def update_job(self, job: QueueJobV2 | None, queue_origin: int | None = None) -> None:
+        """Update the panel with a new job or None.
+        
+        PR-GUI-F2: Now accepts queue_origin to show which queue position
+        the running job came from.
+        
+        Args:
+            job: The running job, or None if no job is running.
+            queue_origin: 1-based queue position the job came from, or None.
+        """
         self._current_job = job
+        self._queue_origin = queue_origin
         self._update_display()
 
     def update_progress(self, progress: float, eta_seconds: float | None = None) -> None:

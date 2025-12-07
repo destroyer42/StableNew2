@@ -5,7 +5,7 @@ from tkinter import ttk
 from typing import Callable, Optional
 
 from src.gui import theme_v2
-from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE, SECONDARY_BUTTON_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE, SECONDARY_BUTTON_STYLE, SLIDER_VALUE_LABEL_STYLE
 
 
 class LabeledSlider(ttk.Frame):
@@ -46,7 +46,7 @@ class LabeledSlider(ttk.Frame):
         self._value_label = ttk.Label(
             self,
             text=self._format_value(variable.get()),
-            style="Dark.TLabel",
+            style=SLIDER_VALUE_LABEL_STYLE,
             width=6,
             anchor="e",
         )

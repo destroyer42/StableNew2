@@ -1,3 +1,6 @@
+#ARCHIVED
+> Historical smoke test notes.
+
 # Post-Merge Smoke Test – SAFE + RAND + THEME PRs
 
 Covers the combined impact of:

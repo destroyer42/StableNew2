@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by CHANGELOG.md in repository root
+
 ## Unreleased
 
 - Refactored StableNewGUI layout wiring into AppLayoutV2 helper while preserving V2 panel structure and behavior.

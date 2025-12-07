@@ -22,6 +22,10 @@ class PackJobEntry:
     pack_id: str
     pack_name: str
     config_snapshot: dict[str, Any]  # includes randomization-related fields
+    prompt_text: str | None = None
+    negative_prompt_text: str | None = None
+    stage_flags: dict[str, bool] = field(default_factory=dict)
+    randomizer_metadata: dict[str, Any] | None = None
 
 @dataclass
 class JobDraft:
@@ -96,6 +100,7 @@ class AppStateV2:
     adetailer_detectors: list[str] = field(default_factory=list)
     adetailer_enabled: bool = False
     adetailer_config: dict[str, Any] = field(default_factory=dict)
+    collapse_states: dict[str, bool] = field(default_factory=dict)
 
     # PR-111: Run Controls UX state flags
     is_run_in_progress: bool = False
@@ -233,6 +238,17 @@ class AppStateV2:
         if self.adetailer_config != normalized:
             self.adetailer_config = normalized
             self._notify("adetailer_config")
+
+    def get_collapse_state(self, key: str) -> bool | None:
+        """Return the stored collapse state for the given key."""
+        return self.collapse_states.get(key)
+
+    def set_collapse_state(self, key: str, is_open: bool) -> None:
+        """Persist the open/closed state of a collapsible card."""
+        normalized = bool(is_open)
+        if self.collapse_states.get(key) == normalized:
+            return
+        self.collapse_states[key] = normalized
 
     def set_adetailer_resources(
         self,

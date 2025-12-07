@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Iterable, Dict, List
+from typing import Dict, Iterable, List
 
 from src.utils import InMemoryLogHandler
 
@@ -18,6 +18,7 @@ class LogTracePanelV2(ttk.Frame):
         self._expanded = tk.BooleanVar(value=False)
         self._level_filter = tk.StringVar(value="ALL")
         self._auto_scroll = tk.BooleanVar(value=True)
+        self._last_body_height = 0
 
         header = ttk.Frame(self)
         header.pack(side=tk.TOP, fill=tk.X)
@@ -41,7 +42,6 @@ class LogTracePanelV2(ttk.Frame):
         self._level_combo.pack(side=tk.LEFT)
         self._level_combo.bind("<<ComboboxSelected>>", lambda *_: self.refresh())
 
-        # Auto-scroll toggle
         self._scroll_check = ttk.Checkbutton(
             header,
             text="Auto-scroll",
@@ -66,23 +66,62 @@ class LogTracePanelV2(ttk.Frame):
 
         self.refresh()
         self._schedule_refresh()
+        self._set_expanded(True, initial=True)
+
+    def _set_expanded(self, expanded: bool, *, initial: bool = False) -> None:
+        if expanded == self._expanded.get():
+            return
+        if expanded:
+            self._body.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+            self._toggle_btn.config(text="Details ▲")
+            self._body.update_idletasks()
+            body_height = max(self._body.winfo_reqheight(), 0)
+            self._last_body_height = body_height
+            if not initial and body_height:
+                self._adjust_window_height(body_height)
+            if not initial:
+                self.refresh()
+        else:
+            self._body.pack_forget()
+            self._toggle_btn.config(text="Details ▼")
+            if not initial and self._last_body_height:
+                self._adjust_window_height(-self._last_body_height)
+        self._expanded.set(expanded)
+
+    def _adjust_window_height(self, delta: int) -> None:
+        if delta == 0:
+            return
+        toplevel = self.winfo_toplevel()
+        if toplevel is None:
+            return
+        toplevel.update_idletasks()
+        geom = toplevel.geometry()
+        if not geom:
+            return
+        parts = geom.split("+")
+        size = parts[0]
+        extra = parts[1:]
+        if "x" not in size:
+            return
+        width_str, height_str = size.split("x", 1)
+        try:
+            width = int(width_str)
+            height = int(height_str)
+        except ValueError:
+            return
+        new_height = max(200, height + delta)
+        new_geom = f"{width}x{new_height}"
+        if extra:
+            new_geom += "".join(f"+{part}" for part in extra)
+        toplevel.geometry(new_geom)
 
     def _on_toggle(self) -> None:
-        if self._expanded.get():
-            self._expanded.set(False)
-            self._toggle_btn.config(text="Details ▼")
-            self._body.pack_forget()
-        else:
-            self._expanded.set(True)
-            self._toggle_btn.config(text="Details ▲")
-            self._body.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-            self.refresh()
+        self._set_expanded(not self._expanded.get())
 
     def refresh(self) -> None:
         entries = list(self._log_handler.get_entries())
         filtered = self._apply_filter(entries)
 
-        # Save current scroll position
         current_yview = self._log_text.yview()
 
         self._log_text.config(state=tk.NORMAL)
@@ -91,12 +130,9 @@ class LogTracePanelV2(ttk.Frame):
             self._log_text.insert(tk.END, f"[{entry['level']}] {entry['message']}\n")
         self._log_text.config(state=tk.DISABLED)
 
-        # Handle scrolling based on auto-scroll setting
         if self._auto_scroll.get():
-            # Auto-scroll enabled: always go to bottom
             self._log_text.see(tk.END)
         else:
-            # Auto-scroll disabled: restore previous position
             self._log_text.yview_moveto(current_yview[0])
 
     def _apply_filter(self, entries: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
@@ -123,5 +159,4 @@ class LogTracePanelV2(ttk.Frame):
 
     def show(self) -> None:
         """Ensure the log panel is expanded."""
-        if not self._expanded.get():
-            self._on_toggle()
+        self._set_expanded(True)

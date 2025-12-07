@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by docs/ARCHITECTURE_v2.5.md (canonical)
+
 # Migration Notes: GUI V1 → GUI V2 and Architecture V2
 
 ---

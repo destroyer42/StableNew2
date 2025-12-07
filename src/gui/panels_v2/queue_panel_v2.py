@@ -7,9 +7,13 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import (
+    ACCENT_GOLD,
+    ASWF_ERROR_RED,
     SECONDARY_BUTTON_STYLE,
+    STATUS_LABEL_STYLE,
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
+    TEXT_PRIMARY,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2
 
@@ -37,6 +41,9 @@ class QueuePanelV2(ttk.Frame):
         self.controller = controller
         self.app_state = app_state
         self._jobs: list[QueueJobV2] = []
+        self._is_queue_paused = False
+        self._auto_run_enabled = False
+        self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
 
         # Title row
         title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -47,6 +54,47 @@ class QueuePanelV2(ttk.Frame):
 
         self.count_label = ttk.Label(title_frame, text="(0 jobs)", style=STATUS_STRONG_LABEL_STYLE)
         self.count_label.pack(side="left", padx=(8, 0))
+
+        # PR-GUI-F1: Queue controls (pause, auto-run, status) live here
+        # These were moved from PipelineRunControlsV2 for unified queue management
+        controls_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
+        controls_frame.pack(fill="x", pady=(0, 4))
+
+        self.auto_run_var = tk.BooleanVar(value=False)
+        self.auto_run_check = ttk.Checkbutton(
+            controls_frame,
+            text="Auto-run queue",
+            variable=self.auto_run_var,
+            command=self._on_auto_run_changed,
+            style="Dark.TCheckbutton",
+        )
+        self.auto_run_check.pack(side="left")
+
+        self.pause_resume_button = ttk.Button(
+            controls_frame,
+            text="Pause Queue",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_pause_resume,
+            width=12,
+        )
+        self.pause_resume_button.pack(side="right")
+
+        # PR-GUI-F3: Send Job button - dispatches top job from queue manually
+        self.send_job_button = ttk.Button(
+            controls_frame,
+            text="Send Job",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_send_job,
+            width=10,
+        )
+        self.send_job_button.pack(side="right", padx=(0, 4))
+        # Queue status label with dark-mode styling
+        self.queue_status_label = ttk.Label(
+            self,
+            text="Queue: Idle",
+            style=STATUS_LABEL_STYLE,
+        )
+        self.queue_status_label.pack(anchor="w", pady=(0, 4))
 
         # Job listbox with scrollbar
         list_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -158,6 +206,12 @@ class QueuePanelV2(ttk.Frame):
         # Clear: enabled if there are any jobs
         self.clear_button.state(["!disabled"] if has_jobs else ["disabled"])
 
+        # PR-GUI-F3: Send Job - enabled if queue has jobs and not currently running a job
+        # Also respects pause state (controller handles actual pause blocking)
+        running_job = getattr(self.app_state, "running_job", None) if self.app_state else None
+        can_send = has_jobs and running_job is None
+        self.send_job_button.state(["!disabled"] if can_send else ["disabled"])
+
     def _on_move_up(self) -> None:
         """Move the selected job up in the queue."""
         job = self._get_selected_job()
@@ -206,7 +260,10 @@ class QueuePanelV2(ttk.Frame):
         self._update_button_states()
 
     def update_jobs(self, jobs: list[QueueJobV2]) -> None:
-        """Update the job list display."""
+        """Update the job list display.
+        
+        PR-GUI-F2: Displays order numbers and highlights the running job.
+        """
         # Remember selection
         old_selection = self._get_selected_index()
         old_job_id = self._jobs[old_selection].job_id if old_selection is not None and old_selection < len(self._jobs) else None
@@ -214,8 +271,17 @@ class QueuePanelV2(ttk.Frame):
         self._jobs = list(jobs)
         self.job_listbox.delete(0, tk.END)
 
-        for job in self._jobs:
-            display_text = job.get_display_summary()
+        for i, job in enumerate(self._jobs):
+            # PR-GUI-F2: Add 1-based order number prefix
+            order_num = i + 1
+            base_summary = job.get_display_summary()
+            
+            # PR-GUI-F2: Mark running job with indicator
+            if self._running_job_id and job.job_id == self._running_job_id:
+                display_text = f"#{order_num} ▶ {base_summary}"
+            else:
+                display_text = f"#{order_num}  {base_summary}"
+            
             self.job_listbox.insert(tk.END, display_text)
 
         # Update count label
@@ -276,6 +342,134 @@ class QueuePanelV2(ttk.Frame):
         queue_items = getattr(app_state, "queue_items", None)
         if queue_items is not None:
             self.update_jobs(queue_items)
+
+        # Update queue control states
+        is_paused = getattr(app_state, "is_queue_paused", False)
+        self._is_queue_paused = is_paused
+
+        auto_run = getattr(app_state, "auto_run_queue", False)
+        self._auto_run_enabled = auto_run
+        self.auto_run_var.set(auto_run)
+
+        running_job = getattr(app_state, "running_job", None)
+        queue_count = len(self._jobs)
+
+        # Update pause/resume button
+        self.pause_resume_button.configure(
+            text="Resume Queue" if is_paused else "Pause Queue"
+        )
+
+        # Update status label
+        self._update_queue_status_display(is_paused, running_job, queue_count)
+
+    # ------------------------------------------------------------------
+    # Queue control callbacks (PR-GUI-F1: moved from PipelineRunControlsV2)
+    # ------------------------------------------------------------------
+
+    def _invoke_controller(self, method_name: str, *args: Any) -> Any:
+        """Safely invoke a controller method."""
+        controller = self.controller
+        if not controller:
+            return None
+        method = getattr(controller, method_name, None)
+        if callable(method):
+            try:
+                return method(*args)
+            except Exception:
+                pass
+        return None
+
+    def _on_auto_run_changed(self) -> None:
+        """Handle auto-run checkbox change."""
+        enabled = self.auto_run_var.get()
+        self._auto_run_enabled = enabled
+        self._invoke_controller("on_set_auto_run_v2", enabled)
+
+    def _on_pause_resume(self) -> None:
+        """Toggle queue pause state."""
+        if self._is_queue_paused:
+            self._invoke_controller("on_resume_queue_v2")
+        else:
+            self._invoke_controller("on_pause_queue_v2")
+
+    def _on_send_job(self) -> None:
+        """Handle Send Job button click.
+        
+        PR-GUI-F3: Dispatches the top job from the queue immediately.
+        Respects pause state (JobService handles this).
+        """
+        self._invoke_controller("on_queue_send_job_v2")
+
+    def _update_queue_status_display(
+        self, is_paused: bool, running_job: Any | None, queue_count: int
+    ) -> None:
+        """Update the queue status label text and color."""
+        if running_job:
+            status_text = "Queue: Running job..."
+            color = ACCENT_GOLD
+        elif is_paused:
+            status_text = f"Queue: Paused ({queue_count} pending)"
+            color = ASWF_ERROR_RED
+        elif queue_count > 0:
+            status_text = f"Queue: {queue_count} job{'s' if queue_count != 1 else ''} pending"
+            color = TEXT_PRIMARY
+        else:
+            status_text = "Queue: Idle"
+            color = TEXT_PRIMARY
+        self.queue_status_label.configure(text=status_text, foreground=color)
+
+    def update_queue_status(self, status: str | None) -> None:
+        """Update the queue status from a status string.
+        
+        This provides an API compatible with the old PreviewPanelV2.update_queue_status().
+        """
+        normalized = (status or "idle").lower()
+        if normalized == "running":
+            color = ACCENT_GOLD
+        elif normalized == "paused":
+            color = ASWF_ERROR_RED
+        else:
+            color = TEXT_PRIMARY
+        self.queue_status_label.configure(
+            text=f"Queue: {normalized.title()}",
+            foreground=color,
+        )
+
+    def refresh_states(self) -> None:
+        """Refresh control states from current app state."""
+        self.update_from_app_state(self.app_state)
+
+    # ------------------------------------------------------------------
+    # PR-GUI-F2: Running Job Integration
+    # ------------------------------------------------------------------
+
+    def set_running_job(self, job: QueueJobV2 | None) -> None:
+        """Set the currently running job for highlighting in the queue list.
+        
+        PR-GUI-F2: When a job is running, its entry in the queue list
+        is visually distinguished with a ▶ indicator.
+        
+        Args:
+            job: The running QueueJobV2, or None if no job is running.
+        """
+        new_id = job.job_id if job else None
+        if new_id != self._running_job_id:
+            self._running_job_id = new_id
+            # Refresh the display to show/hide the running indicator
+            self.update_jobs(self._jobs)
+
+    def get_running_job_queue_position(self) -> int | None:
+        """Get the 1-based queue position of the running job, if present.
+        
+        PR-GUI-F2: Returns the order number of the running job in the queue,
+        or None if the running job is not in the queue list.
+        """
+        if not self._running_job_id:
+            return None
+        for i, job in enumerate(self._jobs):
+            if job.job_id == self._running_job_id:
+                return i + 1  # 1-based
+        return None
 
 
 __all__ = ["QueuePanelV2"]

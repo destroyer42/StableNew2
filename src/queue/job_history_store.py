@@ -10,7 +10,7 @@ import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from src.queue.job_model import Job, JobStatus
 from src.cluster.worker_model import WorkerId
@@ -137,6 +137,12 @@ class JobHistoryStore:
     def get_job(self, job_id: str) -> Optional[JobHistoryEntry]:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def save_entry(self, entry: JobHistoryEntry) -> None:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def register_callback(self, callback: Callable[[JobHistoryEntry], None]) -> None:
+        raise NotImplementedError
+
 
 class JSONLJobHistoryStore(JobHistoryStore):
     """Append-only JSONL-backed job history."""
@@ -145,6 +151,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
         self._path = Path(path)
         self._lock = threading.Lock()
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._callbacks: list[Callable[[JobHistoryEntry], None]] = []
 
     def record_job_submission(self, job: Job) -> None:
         entry = JobHistoryEntry(
@@ -205,6 +212,20 @@ class JSONLJobHistoryStore(JobHistoryStore):
         with self._lock:
             with self._path.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
+        self._emit(entry)
+
+    def save_entry(self, entry: JobHistoryEntry) -> None:
+        self._append(entry)
+
+    def register_callback(self, callback: Callable[[JobHistoryEntry], None]) -> None:
+        self._callbacks.append(callback)
+
+    def _emit(self, entry: JobHistoryEntry) -> None:
+        for callback in list(self._callbacks):
+            try:
+                callback(entry)
+            except Exception:
+                continue
 
     def _load_latest_by_job(self) -> dict[str, JobHistoryEntry]:
         with self._lock:

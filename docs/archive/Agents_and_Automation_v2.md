@@ -1,3 +1,6 @@
+#ARCHIVED
+> Superseded by docs/LLM_Governance_Patch_v2.5.md and AGENTS.md (canonical)
+
 # Agents and Automation v2  
 _ChatGPT Architect · Codex Implementer · Tester_
 

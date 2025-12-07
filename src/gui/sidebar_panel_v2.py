@@ -148,11 +148,11 @@ class SidebarPanelV2(ttk.Frame):
         self.run_scope_var = tk.StringVar(value="full")
 
         self.columnconfigure(0, weight=1)
-        for i in range(6):
-            self.rowconfigure(i, weight=1 if i >= 2 else 0)
+        # PR-GUI-H: Now 5 rows (0-4) after removing standalone config_source_label
+        for i in range(5):
+            self.rowconfigure(i, weight=1 if i >= 1 else 0)
 
-        self.config_source_label = ttk.Label(self, text="Defaults", style=BODY_LABEL_STYLE)
-        self.config_source_label.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        # PR-GUI-H: config_source_label moved into Pipeline Presets panel
 
         from src.utils.config import ConfigManager
         self.config_manager = ConfigManager()
@@ -162,6 +162,7 @@ class SidebarPanelV2(ttk.Frame):
         self.preset_menu_button: ttk.Menubutton | None = None
         self.preset_menu: tk.Menu | None = None
         self._last_valid_preset: str = ""
+        self.config_source_label: ttk.Label | None = None
 
         self.pack_list_manager = PromptPackListManager()
         self.pack_list_names = self.pack_list_manager.get_list_names()
@@ -188,7 +189,7 @@ class SidebarPanelV2(ttk.Frame):
             title="Pipeline Presets",
             build_child=lambda parent: self._build_preset_actions_section(parent),
         )
-        self.preset_card.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.preset_card.grid(row=0, column=0, sticky="ew", padx=8, pady=(0, 4))
 
         self.pack_selector_card = _SidebarCard(
             self,
@@ -196,11 +197,12 @@ class SidebarPanelV2(ttk.Frame):
             build_child=lambda parent: self._build_pack_selector_section(parent),
             collapsible=True,
         )
-        self.pack_selector_card.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.pack_selector_card.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
 
         self.model_adapter = ModelListAdapterV2(lambda: getattr(self.controller, "client", None))
         self.sampler_adapter = self.model_adapter
 
+        # PR-GUI-H: Use embed_mode=True to build widgets directly into card body_frame
         self.core_config_card = _SidebarCard(
             self,
             title="Core Config",
@@ -213,25 +215,27 @@ class SidebarPanelV2(ttk.Frame):
                 vae_adapter=self.model_adapter,
                 sampler_adapter=self.sampler_adapter,
                 show_header=False,
+                embed_mode=True,
             ),
             collapsible=True,
         )
         self.core_config_panel = self.core_config_card.child
-        self.core_config_card.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.core_config_card.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 4))
 
         self.pipeline_config_card = _SidebarCard(
             self,
             title="Pipeline Config",
             build_child=lambda parent: self._build_pipeline_config_section(parent),
         )
-        self.pipeline_config_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.pipeline_config_card.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 4))
 
+        # PR-GUI-H: Use embed_mode=True to build widgets directly into card body_frame
         self.output_settings_card = _SidebarCard(
             self,
             title="Output Settings",
-            build_child=lambda parent: OutputSettingsPanelV2(parent),
+            build_child=lambda parent: OutputSettingsPanelV2(parent, embed_mode=True),
         )
-        self.output_settings_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.output_settings_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
 
 
     def _build_preset_actions_section(self, parent: ttk.Frame) -> ttk.Frame:
@@ -261,14 +265,24 @@ class SidebarPanelV2(ttk.Frame):
         self.preset_menu.add_command(label="Delete", command=self._on_preset_delete)
         self.preset_menu_button.config(menu=self.preset_menu)
 
-        self._populate_preset_combo()
+        # PR-GUI-H: Bottom row with smaller create button and config source label
+        bottom_row = ttk.Frame(frame)
+        bottom_row.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        bottom_row.columnconfigure(1, weight=1)
+
         create_button = ttk.Button(
-            frame,
-            text="Create new preset from stages",
+            bottom_row,
+            text="+ New",
+            width=8,
             command=self._create_preset_from_stages,
             style="Primary.TButton",
         )
-        create_button.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        create_button.grid(row=0, column=0, sticky="w")
+
+        self.config_source_label = ttk.Label(
+            bottom_row, text="Defaults", style=MUTED_LABEL_STYLE
+        )
+        self.config_source_label.grid(row=0, column=1, sticky="e", padx=(8, 0))
         return frame
 
     def _create_preset_from_stages(self) -> None:
@@ -311,14 +325,29 @@ class SidebarPanelV2(ttk.Frame):
 
     def _update_config_source_label(self, preset_name: str | None) -> None:
         text = f"Preset: {preset_name}" if preset_name else "Defaults"
-        self.config_source_label.config(text=text)
+        if self.config_source_label:
+            self.config_source_label.config(text=text)
 
     def _build_pack_selector_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
 
+        # PR-GUI-H: Add prompt text and restore button (moved from actions_card in pipeline_tab_frame)
+        prompt_row = ttk.Frame(frame)
+        prompt_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        prompt_row.columnconfigure(0, weight=1)
+        self.prompt_text = tk.Entry(prompt_row)
+        self.prompt_text.grid(row=0, column=0, sticky="ew")
+        self.restore_last_run_button = ttk.Button(
+            prompt_row,
+            text="Restore",
+            width=8,
+            command=self._on_restore_last_run,
+        )
+        self.restore_last_run_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
+
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        btn_frame.grid(row=1, column=0, sticky="ew", pady=(0, 4))
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
         btn_frame.columnconfigure(2, weight=1)
@@ -333,7 +362,7 @@ class SidebarPanelV2(ttk.Frame):
         self.preview_toggle_button.grid(row=0, column=3, sticky="ew")
 
         list_frame = ttk.Frame(frame)
-        list_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
+        list_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
         list_frame.columnconfigure(0, weight=1)
         self.pack_list_combo = ttk.Combobox(
             list_frame,
@@ -375,7 +404,7 @@ class SidebarPanelV2(ttk.Frame):
         self.packs_list = self.pack_listbox
 
         self._preview_frame = ttk.Frame(frame)
-        self._preview_frame.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        self._preview_frame.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         self._preview_frame.columnconfigure(0, weight=1)
         preview_label = ttk.Label(self._preview_frame, text="Prompt Preview", style=BODY_LABEL_STYLE)
         preview_label.grid(row=0, column=0, sticky="w")
@@ -400,7 +429,7 @@ class SidebarPanelV2(ttk.Frame):
         self._preview_current_path: Path | None = None
 
         global_frame = ttk.Frame(frame)
-        global_frame.grid(row=3, column=0, sticky="ew")
+        global_frame.grid(row=4, column=0, sticky="ew")
         enable_cb = ttk.Checkbutton(
             global_frame,
             text="Enable Global Negative",
@@ -475,6 +504,15 @@ class SidebarPanelV2(ttk.Frame):
             self._apply_preset_selection(presets[0])
         else:
             self._apply_preset_selection(None)
+
+    def _on_restore_last_run(self) -> None:
+        """Handle restore last run button click - delegates to controller."""
+        controller = self.controller
+        if controller and hasattr(controller, "restore_last_run"):
+            try:
+                controller.restore_last_run()
+            except Exception:
+                pass
 
     def _on_pack_load_config(self) -> None:
         if not self.pack_listbox:
