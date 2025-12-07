@@ -54,6 +54,11 @@ from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JSONLJobHistoryStore
 from src.controller.job_service import JobService
+from src.services.queue_store_v2 import (
+    QueueSnapshotV1,
+    load_queue_snapshot,
+    save_queue_snapshot,
+)
 
 import logging
 import uuid
@@ -525,6 +530,51 @@ class AppController:
         self.job_service.register_callback(JobService.EVENT_JOB_FAILED, self._on_job_failed)
         self.job_service.register_callback(JobService.EVENT_QUEUE_EMPTY, self._on_queue_empty)
         self._refresh_job_history()
+        # PR-GUI-F3: Load persisted queue state on startup
+        self._load_queue_state()
+
+    # ------------------------------------------------------------------
+    # PR-GUI-F3: Queue persistence helpers
+    # ------------------------------------------------------------------
+
+    def _load_queue_state(self) -> None:
+        """Load persisted queue state on startup.
+        
+        PR-GUI-F3: Restores queue jobs and control flags from disk.
+        """
+        snapshot = load_queue_snapshot()
+        if snapshot is None:
+            return
+
+        # Restore auto_run and paused flags to AppState
+        if self.app_state:
+            self.app_state.set_auto_run_queue(snapshot.auto_run_enabled)
+            self.app_state.set_is_queue_paused(snapshot.paused)
+
+        # Note: We can't easily restore jobs to the V1 JobQueue since it uses
+        # a different job model. This is a limitation of the current architecture.
+        # The V1 queue doesn't persist job payloads - they're typically callables.
+        # For PR-GUI-F3, we'll at least restore the flags.
+        logger.info(
+            f"Restored queue state: auto_run={snapshot.auto_run_enabled}, "
+            f"paused={snapshot.paused}, {len(snapshot.jobs)} jobs (jobs not restored in V1 queue)"
+        )
+
+    def _save_queue_state(self) -> None:
+        """Save current queue state for persistence.
+        
+        PR-GUI-F3: Persists queue control flags to disk.
+        Note: V1 JobQueue jobs contain callables and can't be serialized.
+        """
+        auto_run = getattr(self.app_state, "auto_run_queue", False) if self.app_state else False
+        paused = getattr(self.app_state, "is_queue_paused", False) if self.app_state else False
+
+        snapshot = QueueSnapshotV1(
+            jobs=[],  # V1 queue jobs can't be serialized (contain callables)
+            auto_run_enabled=auto_run,
+            paused=paused,
+        )
+        save_queue_snapshot(snapshot)
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
         self._append_log(f"[queue] Executing job {job.job_id} with payload {job.payload!r}")
@@ -883,7 +933,9 @@ class AppController:
         queue = getattr(self.job_service, "queue", None)
         if queue and hasattr(queue, "clear"):
             try:
-                return int(queue.clear())
+                result = int(queue.clear())
+                self._save_queue_state()
+                return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_clear_v2 error: {exc!r}")
         return 0
@@ -896,6 +948,7 @@ class AppController:
             queue = getattr(self.job_service, "queue", None)
             if queue and hasattr(queue, "pause"):
                 queue.pause()
+        self._save_queue_state()
 
     def on_resume_queue_v2(self) -> None:
         """Resume queue processing."""
@@ -905,6 +958,7 @@ class AppController:
             queue = getattr(self.job_service, "queue", None)
             if queue and hasattr(queue, "resume"):
                 queue.resume()
+        self._save_queue_state()
 
     def on_set_auto_run_v2(self, enabled: bool) -> None:
         """Set auto-run queue enabled/disabled."""
@@ -914,6 +968,7 @@ class AppController:
             queue = getattr(self.job_service, "queue", None)
             if queue and hasattr(queue, "auto_run_enabled"):
                 queue.auto_run_enabled = enabled
+        self._save_queue_state()
 
     def on_pause_job_v2(self) -> None:
         """Pause the currently running job."""
@@ -939,6 +994,36 @@ class AppController:
             cancel_token = getattr(self, "_cancel_token", None)
             if cancel_token and hasattr(cancel_token, "cancel"):
                 cancel_token.cancel()
+        self._save_queue_state()
+
+    def on_cancel_job_and_return_v2(self) -> None:
+        """Cancel the running job and return it to the bottom of the queue.
+        
+        PR-GUI-F3: Allows user to cancel a job but keep it for retry later.
+        """
+        if self.job_service:
+            queue = getattr(self.job_service, "queue", None)
+            if queue and hasattr(queue, "cancel_running_job"):
+                queue.cancel_running_job(return_to_queue=True)
+            # Also trigger the cancel token if available
+            cancel_token = getattr(self, "_cancel_token", None)
+            if cancel_token and hasattr(cancel_token, "cancel"):
+                cancel_token.cancel()
+        self._save_queue_state()
+
+    def on_queue_send_job_v2(self) -> None:
+        """Manually dispatch the next job from the queue.
+        
+        PR-GUI-F3: Send Job button - dispatches top of queue immediately.
+        Respects pause state (if paused, does nothing).
+        """
+        if not self.job_service:
+            return
+        queue = getattr(self.job_service, "queue", None)
+        if queue and hasattr(queue, "start_next_job"):
+            # Only dispatch if not paused
+            if not getattr(queue, "is_paused", False):
+                queue.start_next_job()
 
     def refresh_job_history(self, limit: int | None = None) -> None:
         """Trigger a manual history refresh (exposed to GUI)."""
@@ -1146,6 +1231,16 @@ class AppController:
 
         if self.main_window is not None:
             self.main_window.after(0, lambda: self._append_log(text))
+
+    def show_log_trace_panel(self) -> None:
+        """Expose helper that expands the LogTracePanelV2 if present."""
+        trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
+        if trace_panel is None:
+            return
+        try:
+            trace_panel.show()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Run / Stop / Preview

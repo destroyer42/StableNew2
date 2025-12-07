@@ -6,18 +6,18 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from src.pipeline.job_models_v2 import JobUiSummary
+from src.gui.design_system_v2 import DANGER_BUTTON
 from src.gui.theme_v2 import (
-    ACCENT_GOLD,
-    ASWF_ERROR_RED,
     BACKGROUND_ELEVATED,
     PADDING_MD,
+    PRIMARY_BUTTON_STYLE,
     SECONDARY_BUTTON_STYLE,
     STATUS_LABEL_STYLE,
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
-from .widgets.scrollable_frame_v2 import ScrollableFrame
 
 
 class PreviewPanelV2(ttk.Frame):
@@ -36,252 +36,258 @@ class PreviewPanelV2(ttk.Frame):
         self.controller = controller
         self.app_state = app_state
         self.theme = theme
+        self._job_summaries: list[JobUiSummary] = []
 
-        self.header_label = ttk.Label(self, text="Preview", style=STATUS_STRONG_LABEL_STYLE)
-        self.header_label.pack(anchor=tk.W, pady=(0, 4))
+        header_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
+        header_frame.pack(fill="x", pady=(0, 4))
 
-        self._scroll = ScrollableFrame(self, style=SURFACE_FRAME_STYLE)
-        self._scroll.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self.body = ttk.Frame(self._scroll.inner, style=SURFACE_FRAME_STYLE)
+        self.header_label = ttk.Label(header_frame, text="Preview", style=STATUS_STRONG_LABEL_STYLE)
+        self.header_label.pack(side=tk.LEFT)
+
+        self.details_button = ttk.Button(
+            header_frame,
+            text="Details",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_details_clicked,
+        )
+        self.details_button.pack(side=tk.RIGHT)
+
+        self.body = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         self.body.pack(fill=tk.BOTH, expand=True)
 
-        self.summary_label = ttk.Label(self.body, text="Stages: -", style=STATUS_LABEL_STYLE)
-        self.summary_label.pack(anchor="w", pady=(0, 4))
-        self.mode_label = ttk.Label(self.body, text="Mode: -", style=STATUS_LABEL_STYLE)
-        self.mode_label.pack(anchor="w", pady=(0, 4))
-        self.scope_label = ttk.Label(self.body, text="Scope: -", style=STATUS_LABEL_STYLE)
-        self.scope_label.pack(anchor="w", pady=(0, 4))
-        self.jobs_label = ttk.Label(self.body, text="Jobs: -", style=STATUS_LABEL_STYLE)
-        self.jobs_label.pack(anchor="w", pady=(0, 4))
-        self.current_image_label = ttk.Label(self.body, text="No image", style=STATUS_LABEL_STYLE)
-        self.current_image_label.pack(anchor="w", pady=(4, 2))
-        self.metadata_text = tk.Text(self.body, height=5, wrap="word", bg=BACKGROUND_ELEVATED, fg=TEXT_PRIMARY, relief="flat")
-        self.metadata_text.pack(fill=tk.X)
+        self.job_count_label = ttk.Label(self.body, text="No job selected", style=STATUS_LABEL_STYLE)
+        self.job_count_label.pack(anchor=tk.W, pady=(0, 4))
 
-        self.queue_header = ttk.Label(self.body, text="Queue", style=STATUS_STRONG_LABEL_STYLE)
-        self.queue_header.pack(anchor="w", pady=(8, 2))
-        self.queue_status_label = ttk.Label(self.body, text="Queue Status: Idle", style=STATUS_LABEL_STYLE)
-        self.queue_status_label.pack(anchor="w", pady=(0, 2))
-        self.queue_items_text = tk.Text(
+        self.prompt_label = ttk.Label(self.body, text="Prompt (+)", style=STATUS_LABEL_STYLE)
+        self.prompt_label.pack(anchor=tk.W)
+        self.prompt_text = tk.Text(
             self.body,
-            height=4,
+            height=3,
             wrap="word",
             bg=BACKGROUND_ELEVATED,
             fg=TEXT_PRIMARY,
             relief="flat",
-            padx=4,
-            pady=2,
+            state="disabled",
         )
-        self.queue_items_text.pack(fill=tk.BOTH, pady=(0, 4))
-        self.queue_items_text.config(state=tk.DISABLED)
-        self.running_job_label = ttk.Label(self.body, text="Running Job: None", style=STATUS_LABEL_STYLE)
-        self.running_job_label.pack(anchor="w", pady=(0, 2))
-        self.running_job_status_label = ttk.Label(self.body, text="Status: Idle", style=STATUS_LABEL_STYLE)
-        self.running_job_status_label.pack(anchor="w")
+        self.prompt_text.pack(fill=tk.X, pady=(0, 4))
 
-        self.queue_controls_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
-        self.queue_controls_frame.pack(fill=tk.X, pady=(8, 0))
-
-        self.pause_button = ttk.Button(
-            self.queue_controls_frame,
-            text="Pause Queue",
-            style=SECONDARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_pause_queue"),
+        self.negative_prompt_label = ttk.Label(self.body, text="Prompt (–)", style=STATUS_LABEL_STYLE)
+        self.negative_prompt_label.pack(anchor=tk.W)
+        self.negative_prompt_text = tk.Text(
+            self.body,
+            height=2,
+            wrap="word",
+            bg=BACKGROUND_ELEVATED,
+            fg=TEXT_PRIMARY,
+            relief="flat",
+            state="disabled",
         )
-        self.pause_button.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 4))
+        self.negative_prompt_text.pack(fill=tk.X, pady=(0, 8))
 
-        self.resume_button = ttk.Button(
-            self.queue_controls_frame,
-            text="Resume Queue",
-            style=SECONDARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_resume_queue"),
+        settings_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
+        settings_frame.pack(fill=tk.X, pady=(0, 4))
+        settings_frame.columnconfigure(0, weight=1)
+        settings_frame.columnconfigure(1, weight=1)
+
+        self.model_label = ttk.Label(settings_frame, text="Model: -", style=STATUS_LABEL_STYLE)
+        self.model_label.grid(row=0, column=0, sticky="w", padx=(0, 4))
+        self.sampler_label = ttk.Label(settings_frame, text="Sampler: -", style=STATUS_LABEL_STYLE)
+        self.sampler_label.grid(row=0, column=1, sticky="w")
+        self.steps_label = ttk.Label(settings_frame, text="Steps: -", style=STATUS_LABEL_STYLE)
+        self.steps_label.grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(4, 0))
+        self.cfg_label = ttk.Label(settings_frame, text="CFG: -", style=STATUS_LABEL_STYLE)
+        self.cfg_label.grid(row=1, column=1, sticky="w", pady=(4, 0))
+        self.seed_label = ttk.Label(settings_frame, text="Seed: -", style=STATUS_LABEL_STYLE)
+        self.seed_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        self.stage_summary_label = ttk.Label(self.body, text="Stages: -", style=STATUS_LABEL_STYLE)
+        self.stage_summary_label.pack(anchor=tk.W, pady=(4, 0))
+
+        self.stage_flags_label = ttk.Label(
+            self.body,
+            text=self._format_flags(refiner=False, hires=False, upscale=False),
+            style=STATUS_LABEL_STYLE,
         )
-        self.resume_button.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 4))
+        self.stage_flags_label.pack(anchor=tk.W, pady=(0, 4))
 
-        self.cancel_button = ttk.Button(
-            self.queue_controls_frame,
-            text="Cancel Active",
-            style=SECONDARY_BUTTON_STYLE,
-            command=lambda: self._invoke_controller("on_cancel_current_job"),
+        self.randomizer_label = ttk.Label(self.body, text="Randomizer: OFF", style=STATUS_LABEL_STYLE)
+        self.randomizer_label.pack(anchor=tk.W, pady=(0, 4))
+
+        self.learning_metadata_label = ttk.Label(
+            self.body,
+            text="Learning metadata: N/A",
+            style=STATUS_LABEL_STYLE,
         )
-        self.cancel_button.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        self.learning_metadata_label.pack(anchor=tk.W)
 
-    def set_current_image(self, image_path: str, metadata: dict[str, Any]) -> None:
-        """Set the current image and metadata."""
-        self.current_image_label.config(text=f"Image: {image_path}")
-        self.metadata_text.delete(1.0, tk.END)
-        self.metadata_text.insert(tk.END, str(metadata))
+        self.actions_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
+        self.actions_frame.pack(fill=tk.X, pady=(12, 0))
+        self.actions_frame.columnconfigure((0, 1), weight=1)
 
-    def clear(self) -> None:
-        """Clear the current image and metadata."""
-        self.current_image_label.config(text="No image")
-        self.metadata_text.delete(1.0, tk.END)
+        self.add_to_queue_button = ttk.Button(
+            self.actions_frame,
+            text="Add to Queue",
+            style=PRIMARY_BUTTON_STYLE,
+            command=self._on_add_to_queue,
+        )
+        self.add_to_queue_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+
+        self.clear_draft_button = ttk.Button(
+            self.actions_frame,
+            text="Clear Draft",
+            style=DANGER_BUTTON,
+            command=self._on_clear_draft,
+        )
+        self.clear_draft_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        self._update_action_states(None)
 
     def set_jobs(self, jobs: list[Any]) -> None:
-        """Update preview from a list of NormalizedJobRecord objects.
-
-        Args:
-            jobs: List of NormalizedJobRecord instances from JobBuilderV2.
-                  Each job is expected to have a to_ui_summary() method.
-        """
-        if not jobs:
-            self.summary_label.config(text="Jobs: 0")
-            self.mode_label.config(text="")
-            self.scope_label.config(text="")
-            self.jobs_label.config(text="")
-            self._update_queue_items_from_jobs([])
-            return
-
-        # Get summaries for display
-        summaries = []
+        """Update preview from a list of NormalizedJobRecord objects."""
+        summaries: list[JobUiSummary] = []
         for job in jobs:
             if hasattr(job, "to_ui_summary"):
                 summaries.append(job.to_ui_summary())
+        self.set_job_summaries(summaries)
 
-        total_jobs = len(jobs)
-
-        # Count unique variants and batches
-        variant_totals = {getattr(s, "variant_label", "") for s in summaries if getattr(s, "variant_label", "")}
-        batch_totals = {getattr(s, "batch_label", "") for s in summaries if getattr(s, "batch_label", "")}
-
-        # Update summary labels
-        self.summary_label.config(text=f"Jobs: {total_jobs}")
-
-        # Stages from first job (typically all jobs have same stages)
-        if summaries:
-            stages = getattr(summaries[0], "stages_summary", "txt2img")
-            self.mode_label.config(text=f"Stages: {stages}")
-        else:
-            self.mode_label.config(text="Stages: -")
-
-        # Variant/batch info
-        variant_info = f"{len(variant_totals)} variants" if len(variant_totals) > 1 else ""
-        batch_info = f"{len(batch_totals)} batches" if len(batch_totals) > 1 else ""
-        scope_parts = [p for p in [variant_info, batch_info] if p]
-        self.scope_label.config(text=", ".join(scope_parts) if scope_parts else "Single run")
-
-        # Models in use
-        models = {getattr(s, "model", "unknown") for s in summaries}
-        if len(models) == 1:
-            self.jobs_label.config(text=f"Model: {list(models)[0]}")
-        else:
-            self.jobs_label.config(text=f"Models: {len(models)} different")
-
-        # Update queue items display
-        self._update_queue_items_from_jobs(jobs)
-
-    def _update_queue_items_from_jobs(self, jobs: list[Any]) -> None:
-        """Update queue items text from NormalizedJobRecord list."""
-        if not jobs:
-            lines = ["No pending jobs."]
-        else:
-            lines = []
-            for job in jobs[:10]:  # Show first 10
-                if hasattr(job, "to_ui_summary"):
-                    summary = job.to_ui_summary()
-                    lines.append(getattr(summary, "total_summary", str(job)))
-                else:
-                    lines.append(str(job))
-            if len(jobs) > 10:
-                lines.append(f"... and {len(jobs) - 10} more")
-
-        self.queue_items_text.config(state=tk.NORMAL)
-        self.queue_items_text.delete(1.0, tk.END)
-        self.queue_items_text.insert(tk.END, "\n".join(lines))
-        self.queue_items_text.config(state=tk.DISABLED)
+    def set_job_summaries(self, summaries: list[JobUiSummary]) -> None:
+        """Render one or more JobUiSummary entries."""
+        self._job_summaries = list(summaries)
+        first_summary = summaries[0] if summaries else None
+        self._render_summary(first_summary, len(summaries))
 
     def update_from_job_draft(self, job_draft: Any) -> None:
         """Update preview summary from job draft."""
         packs = getattr(job_draft, "packs", [])
         if not packs:
-            self.summary_label.config(text="Job Draft: Empty")
-            self.mode_label.config(text="")
-            self.scope_label.config(text="")
-            self.jobs_label.config(text="")
+            self._render_summary(None, 0)
+            self._update_action_states(job_draft)
             return
 
+        self.job_count_label.config(text=f"Job Draft: {len(packs)} pack(s)")
         pack_names = [entry.pack_name for entry in packs]
-        summary_text = f"Job Draft: {len(packs)} pack(s)"
-        self.summary_label.config(text=summary_text)
-
-        names = ", ".join(pack_names[:3])
+        summary_text = f"Draft: {len(packs)} pack(s)\n{', '.join(pack_names[:3])}"
         if len(pack_names) > 3:
-            names += f" (+{len(pack_names) - 3} more)"
-        self.mode_label.config(text=f"Packs: {names}")
-
-        randomizers = [entry for entry in packs if entry.config_snapshot.get("randomization_enabled")]
-        rand_text = f"Randomizer: {len(randomizers)}/{len(packs)} enabled"
-        self.scope_label.config(text=rand_text)
-
-        self.jobs_label.config(text="")
+            summary_text += f" (+{len(pack_names) - 3} more)"
+        self._set_text_widget(self.prompt_text, summary_text)
+        self._set_text_widget(self.negative_prompt_text, "")
+        self.stage_summary_label.config(text="Stages: -")
+        self.stage_flags_label.config(text=self._format_flags(False, False, False))
+        self.randomizer_label.config(text="Randomizer: OFF")
+        self.learning_metadata_label.config(text="Learning metadata: N/A")
+        self._update_action_states(job_draft)
 
     def update_from_controls(self, sidebar: Any) -> None:
         """Update preview summary from sidebar controls."""
-        enabled: list[str] = getattr(sidebar, "get_enabled_stages", lambda: [])()  # noqa: E501
+        enabled: list[str] = getattr(sidebar, "get_enabled_stages", lambda: [])()
         ordered = ["txt2img", "img2img", "adetailer", "upscale"]
-        enabled_set = set(enabled)
-        canonical = [stage for stage in ordered if stage in enabled_set]
+        canonical = [stage for stage in ordered if stage in set(enabled)]
         stage_labels = {
             "txt2img": "txt2img",
             "img2img": "img2img",
             "adetailer": "ADetailer",
             "upscale": "upscale",
         }
-        stages_text = " → ".join(stage_labels[stage] for stage in canonical) or "-"
-        self.summary_label.config(text=f"Stages: {stages_text}")
-        self.mode_label.config(text=f"Mode: {getattr(sidebar, 'get_run_mode', lambda: '-')()}")
-        self.scope_label.config(text=f"Scope: {getattr(sidebar, 'get_run_scope', lambda: '-')()}")
-        jobs, images_per_job = getattr(sidebar, "get_job_counts", lambda: (0, 0))()
-        total = jobs * max(1, images_per_job)
-        self.jobs_label.config(text=f"Jobs: {jobs} | Images/job: {images_per_job} | Total: {total}")
+        stages_text = " ƒ+' ".join(stage_labels[stage] for stage in canonical) or "-"
+        self.stage_summary_label.config(text=f"Stages: {stages_text}")
 
-    # ------------------------------------------------------------------
-    # Queue / runner helpers
-    # ------------------------------------------------------------------
+    def update_from_app_state(self, app_state: Any | None = None) -> None:
+        """Update action button availability based on app_state."""
+        if app_state is None:
+            app_state = self.app_state
+        job_draft = getattr(app_state, "job_draft", None)
+        self._update_action_states(job_draft)
 
-    def update_queue_items(self, items: list[str] | None) -> None:
-        """Render pending queue summary lines."""
-        contents = "\n".join(items or ["No pending jobs."])
-        self.queue_items_text.config(state=tk.NORMAL)
-        self.queue_items_text.delete(1.0, tk.END)
-        self.queue_items_text.insert(tk.END, contents)
-        self.queue_items_text.config(state=tk.DISABLED)
-
-    def update_running_job(self, job: dict[str, Any] | None) -> None:
-        """Display the currently running job."""
-        if not job:
-            self.running_job_label.config(text="Running Job: None")
-            self.running_job_status_label.config(text="Status: Idle")
+    def _render_summary(self, summary: JobUiSummary | None, total: int) -> None:
+        if summary is None:
+            self.job_count_label.config(text="No job selected")
+            self._set_text_widget(self.prompt_text, "")
+            self._set_text_widget(self.negative_prompt_text, "")
+            self.model_label.config(text="Model: -")
+            self.sampler_label.config(text="Sampler: -")
+            self.steps_label.config(text="Steps: -")
+            self.cfg_label.config(text="CFG: -")
+            self.seed_label.config(text="Seed: -")
+            self.stage_summary_label.config(text="Stages: -")
+            self.stage_flags_label.config(
+                text=self._format_flags(refiner=False, hires=False, upscale=False)
+            )
+            self.randomizer_label.config(text="Randomizer: OFF")
+            self.learning_metadata_label.config(text="Learning metadata: N/A")
             return
 
-        job_id = job.get("job_id") or "Unknown"
-        payload = job.get("payload") or {}
-        packs = payload.get("packs") or []
-        pack_count = len(packs) if isinstance(packs, list) else 0
-        status = job.get("status") or "running"
-        self.running_job_label.config(text=f"Running Job: {job_id} ({pack_count} packs)")
-        self.running_job_status_label.config(text=f"Status: {status.title()}")
+        job_text = "Jobs: " + str(total) if total > 1 else "Job: 1"
+        self.job_count_label.config(text=job_text)
+        self._set_text_widget(self.prompt_text, summary.prompt_short)
+        self._set_text_widget(self.negative_prompt_text, summary.negative_prompt_short or "")
+        self.model_label.config(text=f"Model: {summary.model}")
+        self.sampler_label.config(text=f"Sampler: {summary.sampler or '-'}")
+        self.steps_label.config(
+            text=f"Steps: {summary.steps if summary.steps is not None else '-'}"
+        )
+        cfg_value = summary.cfg_scale if summary.cfg_scale is not None else "-"
+        self.cfg_label.config(text=f"CFG: {cfg_value}")
+        self.seed_label.config(text=f"Seed: {summary.seed_display}")
+        self.stage_summary_label.config(text=f"Stages: {summary.stages_summary}")
 
-    def update_queue_status(self, status: str | None) -> None:
-        """Update the queue status badge."""
-        normalized = (status or "idle").lower()
-        text = normalized.title()
-        self.queue_status_label.config(text=f"Queue Status: {text}")
-        color = TEXT_PRIMARY
-        if normalized == "running":
-            color = ACCENT_GOLD
-        elif normalized == "paused":
-            color = ASWF_ERROR_RED
-        self.queue_status_label.config(foreground=color)
+        flag_text = self._format_flags(
+            refiner=summary.has_refiner,
+            hires=summary.has_hires,
+            upscale=summary.has_upscale,
+        )
+        self.stage_flags_label.config(text=flag_text)
 
-    def _invoke_controller(self, method_name: str) -> None:
+        randomizer_text = summary.randomizer_summary or "OFF"
+        self.randomizer_label.config(text=f"Randomizer: {randomizer_text}")
+        self.learning_metadata_label.config(text="Learning metadata: N/A")
+
+    @staticmethod
+    def _format_flags(*, refiner: bool, hires: bool, upscale: bool) -> str:
+        parts = [
+            f"Refiner: {'ON' if refiner else 'OFF'}",
+            f"HiRes: {'ON' if hires else 'OFF'}",
+            f"Upscale: {'ON' if upscale else 'OFF'}",
+        ]
+        return " · ".join(parts)
+
+    @staticmethod
+    def _set_text_widget(widget: tk.Text, value: str) -> None:
+        widget.config(state=tk.NORMAL)
+        widget.delete("1.0", tk.END)
+        widget.insert(tk.END, value)
+        widget.config(state=tk.DISABLED)
+
+    def _on_add_to_queue(self) -> None:
+        """Move the draft job into the queue."""
+        self._invoke_controller("on_add_job_to_queue_v2")
+
+    def _on_clear_draft(self) -> None:
+        """Clear the current draft job metadata."""
+        self._invoke_controller("on_clear_job_draft")
+
+    def _on_details_clicked(self) -> None:
+        """Show the logging view via controller helper."""
+        self._invoke_controller("show_log_trace_panel")
+
+    def _update_action_states(self, job_draft: Any | None) -> None:
+        """Enable/disable action buttons based on draft content."""
+        has_draft = False
+        if job_draft is not None:
+            packs = getattr(job_draft, "packs", [])
+            has_draft = bool(packs)
+        state = ["!disabled"] if has_draft else ["disabled"]
+        self.add_to_queue_button.state(state)
+        self.clear_draft_button.state(state)
+
+    def _invoke_controller(self, method_name: str, *args: Any) -> Any:
         """Call a controller hook if available."""
         controller = self.controller
         if not controller:
-            return
+            return None
         method = getattr(controller, method_name, None)
         if callable(method):
             try:
-                method()
+                return method(*args)
             except Exception:
                 pass
+        return None

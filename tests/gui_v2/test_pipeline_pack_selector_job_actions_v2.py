@@ -82,7 +82,7 @@ def test_pipeline_pack_selector_job_actions_v2() -> None:
 
         # Test preview updates
         preview_panel.update_from_job_draft(app_state.job_draft)
-        summary_text = preview_panel.summary_label.cget("text")
+        summary_text = preview_panel.job_count_label.cget("text")
         assert "Job Draft: 2 pack(s)" in summary_text, "Preview should show job draft summary"
 
         # Test clear job draft

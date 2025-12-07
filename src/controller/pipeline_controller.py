@@ -273,6 +273,14 @@ class PipelineController(_GUIPipelineController):
 
         return jobs
 
+    def get_preview_jobs(self) -> list[NormalizedJobRecord]:
+        """Return normalized jobs derived from the current GUI state for preview panels."""
+        try:
+            return self._build_normalized_jobs_from_state()
+        except Exception as exc:
+            _logger.debug("Failed to build preview jobs: %s", exc)
+            return []
+
     def _to_queue_job(
         self,
         record: NormalizedJobRecord,

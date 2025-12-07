@@ -120,3 +120,8 @@ class LogTracePanelV2(ttk.Frame):
         """Perform refresh and schedule next one."""
         self.refresh()
         self._schedule_refresh()
+
+    def show(self) -> None:
+        """Ensure the log panel is expanded."""
+        if not self._expanded.get():
+            self._on_toggle()
