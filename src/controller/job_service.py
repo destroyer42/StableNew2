@@ -17,7 +17,7 @@ from src.gui.pipeline_panel_v2 import format_queue_job_summary
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JobHistoryStore
-from src.pipeline.job_models_v2 import JobQueueItemDTO, JobHistoryItemDTO
+from src.pipeline.job_models_v2 import JobHistoryItemDTO, JobQueueItemDTO, JobStatusV2, UnifiedJobSummary
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
 from src.utils.process_container_v2 import (
@@ -28,6 +28,7 @@ from src.utils.process_container_v2 import (
     build_process_container,
 )
 from src.utils.watchdog_v2 import JobWatchdog, WatchdogConfig, WATCHDOG_LOG_PREFIX
+from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 try:
     import psutil  # type: ignore[import]
@@ -635,11 +636,25 @@ class JobService:
             for cb in callbacks
         ]
         
+        summary = self._build_unified_summary(job, status)
         for callback in status_callbacks:
             try:
                 callback(job, status)
             except Exception as exc:
                 logger.debug("Status callback failed: %s", exc)
+
+    def _build_unified_summary(self, job: Job, status: JobStatus) -> UnifiedJobSummary:
+        try:
+            normalized_status = JobStatusV2(status.value)
+        except ValueError:
+            normalized_status = JobStatusV2.QUEUED
+        record = normalized_job_from_snapshot(getattr(job, "snapshot", {}) or {})
+        if record is not None:
+            summary = record.to_unified_summary(normalized_status)
+        else:
+            summary = UnifiedJobSummary.from_job(job, normalized_status)
+        setattr(job, "unified_summary", summary)
+        return summary
 
     def _log_job_started(self, job_id: str | None) -> None:
         if not self._job_lifecycle_logger or not job_id:

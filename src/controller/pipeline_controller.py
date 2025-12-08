@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from typing import Callable, Any
+from typing import Callable, Any, Mapping
 
 from src.controller.job_service import JobService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
@@ -24,6 +24,11 @@ from src.controller.queue_execution_controller import QueueExecutionController
 from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
+from src.learning.model_defaults_resolver import (
+    GuiDefaultsResolver,
+    ModelDefaultsContext,
+    ModelDefaultsResolver,
+)
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
 from src.pipeline.job_models_v2 import (
@@ -41,6 +46,7 @@ from src.gui.state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 from src.config import app_config
 from src.config.app_config import is_queue_execution_enabled
+from src.utils.config import ConfigManager
 from src.controller.job_history_service import JobHistoryService
 from src.queue.job_history_store import JobHistoryEntry
 from src.controller.pipeline_config_assembler import PipelineConfigAssembler, GuiOverrides, RunPlan, PlannedJob
@@ -521,6 +527,8 @@ class PipelineController(_GUIPipelineController):
         config_assembler: PipelineConfigAssembler | None = None,
         job_builder: JobBuilderV2 | None = None,
         job_lifecycle_logger: JobLifecycleLogger | None = None,
+        config_manager: ConfigManager | None = None,
+        gui_defaults_resolver: GuiDefaultsResolver | None = None,
         **kwargs,
     ):
         # Pop parameters that are not for the parent class
@@ -543,6 +551,13 @@ class PipelineController(_GUIPipelineController):
         self._job_controller = JobExecutionController(execute_job=self._execute_job)
         self._queue_execution_controller: QueueExecutionController | None = queue_execution_controller or QueueExecutionController(job_controller=self._job_controller)
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
+        self._config_manager = config_manager or ConfigManager()
+        self._gui_defaults_resolver = (
+            gui_defaults_resolver
+            if gui_defaults_resolver is not None
+            else GuiDefaultsResolver(config_manager=self._config_manager)
+        )
+        self._model_defaults_resolver = ModelDefaultsResolver(config_manager=self._config_manager)
         self._config_assembler = config_assembler if config_assembler is not None else PipelineConfigAssembler()
         self._job_builder = job_builder if job_builder is not None else JobBuilderV2()
         self._webui_connection = webui_conn if webui_conn is not None else WebUIConnectionController()
@@ -581,6 +596,39 @@ class PipelineController(_GUIPipelineController):
 
             self._learning_runner = LearningRunner()
         return self._learning_runner
+
+    def get_gui_model_defaults(self, model_name: str | None, preset_name: str | None = None) -> dict[str, Any]:
+        """Return GUI-ready defaults for the specified model/preset."""
+        if not self._gui_defaults_resolver:
+            return {}
+        defaults = self._gui_defaults_resolver.resolve_for_gui(model_name=model_name, preset_name=preset_name)
+        _logger.debug(
+            "GUI defaults resolved for model=%s preset=%s keys=%s",
+            model_name,
+            preset_name,
+            sorted(defaults.keys()),
+        )
+        return defaults
+
+    def build_merged_config_for_run(
+        self,
+        model_name: str | None,
+        preset_name: str | None = None,
+        runtime_overrides: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return a model/preset-aware config dict for job construction."""
+        context = ModelDefaultsContext(model_name=model_name, preset_name=preset_name)
+        merged = self._model_defaults_resolver.resolve_config(
+            context,
+            runtime_overrides=runtime_overrides,
+        )
+        _logger.debug(
+            "Merged run config: model=%s preset=%s runtime_keys=%s",
+            model_name,
+            preset_name,
+            sorted((runtime_overrides or {}).keys()),
+        )
+        return merged
 
     def get_learning_runner_for_tests(self):
         """Return the learning runner instance for test inspection."""

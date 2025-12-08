@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-08T05:29:15",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251208-052905.zip",
-  "file_count": 1491,
-  "total_size_bytes": 17011064,
+  "created_at": "2025-12-08T07:51:02",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251208-075059.zip",
+  "file_count": 1503,
+  "total_size_bytes": 17236941,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -56,8 +56,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "size_bytes": 16817,
-      "mtime_iso": "2025-12-08T05:26:41"
+      "size_bytes": 17068,
+      "mtime_iso": "2025-12-08T06:53:49"
     },
     {
       "path": "custom_pack_lists.json",
@@ -2086,8 +2086,8 @@
     },
     {
       "path": "docs/ARCHITECTURE_v2.5.md",
-      "size_bytes": 14972,
-      "mtime_iso": "2025-12-07T21:14:30"
+      "size_bytes": 21660,
+      "mtime_iso": "2025-12-08T07:12:36"
     },
     {
       "path": "docs/ChatGPT-WhyNoPipeline.md",
@@ -2211,8 +2211,8 @@
     },
     {
       "path": "docs/StableNew_Coding_and_Testing_v2.5.md",
-      "size_bytes": 28975,
-      "mtime_iso": "2025-12-07T21:39:18"
+      "size_bytes": 29913,
+      "mtime_iso": "2025-12-08T07:14:46"
     },
     {
       "path": "docs/StableNew_V2_Inventory.md",
@@ -2850,6 +2850,11 @@
       "mtime_iso": "2025-12-07T21:43:40"
     },
     {
+      "path": "docs/pr_templates/PR-E — Unified Prompt & Config Resolution Layer (V2.5).md",
+      "size_bytes": 10531,
+      "mtime_iso": "2025-12-08T05:50:00"
+    },
+    {
       "path": "docs/pr_templates/PR-GUI-E – Refiner_Hires Fix_Upscale UX Fixes (V2.5).md",
       "size_bytes": 14523,
       "mtime_iso": "2025-12-06T18:21:18"
@@ -2993,6 +2998,11 @@
       "path": "docs/pr_templates/PR Doc Resources/PR-114-StreamOfThought.md",
       "size_bytes": 115084,
       "mtime_iso": "2025-12-06T18:21:18"
+    },
+    {
+      "path": "docs/pr_templates/PR Doc Resources/PR-E-SupplementaryWork.md",
+      "size_bytes": 137416,
+      "mtime_iso": "2025-12-08T05:45:06"
     },
     {
       "path": "docs/pr_templates/PriorWork_complete/CLASSIFY-FUTURE-SUBSYSTEMS-003_V2-P1.md",
@@ -5021,8 +5031,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 140174,
-      "mtime_iso": "2025-12-08T05:28:59"
+      "size_bytes": 141219,
+      "mtime_iso": "2025-12-08T07:11:53"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -5046,8 +5056,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 26226,
-      "mtime_iso": "2025-12-08T05:26:41"
+      "size_bytes": 26965,
+      "mtime_iso": "2025-12-08T07:10:54"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -5061,8 +5071,8 @@
     },
     {
       "path": "src/controller/pipeline_controller.py",
-      "size_bytes": 65018,
-      "mtime_iso": "2025-12-08T05:26:41"
+      "size_bytes": 68245,
+      "mtime_iso": "2025-12-08T06:57:51"
     },
     {
       "path": "src/controller/process_auto_scanner_service.py",
@@ -5236,8 +5246,8 @@
     },
     {
       "path": "src/gui/preview_panel_v2.py",
-      "size_bytes": 16040,
-      "mtime_iso": "2025-12-08T05:28:17"
+      "size_bytes": 16327,
+      "mtime_iso": "2025-12-08T06:53:49"
     },
     {
       "path": "src/gui/prompt_pack_adapter_v2.py",
@@ -5670,6 +5680,11 @@
       "mtime_iso": "2025-11-28T18:04:09"
     },
     {
+      "path": "src/learning/model_defaults_resolver.py",
+      "size_bytes": 4722,
+      "mtime_iso": "2025-12-08T06:59:19"
+    },
+    {
       "path": "src/learning/model_profiles.py",
       "size_bytes": 9486,
       "mtime_iso": "2025-12-06T18:21:19"
@@ -5701,8 +5716,8 @@
     },
     {
       "path": "src/pipeline/job_models_v2.py",
-      "size_bytes": 26841,
-      "mtime_iso": "2025-12-07T21:50:15"
+      "size_bytes": 34671,
+      "mtime_iso": "2025-12-08T07:12:13"
     },
     {
       "path": "src/pipeline/job_queue_v2.py",
@@ -5728,6 +5743,11 @@
       "path": "src/pipeline/randomizer_v2.py",
       "size_bytes": 5943,
       "mtime_iso": "2025-12-06T18:21:19"
+    },
+    {
+      "path": "src/pipeline/resolution_layer.py",
+      "size_bytes": 7106,
+      "mtime_iso": "2025-12-08T06:21:22"
     },
     {
       "path": "src/pipeline/run_config.py",
@@ -6011,8 +6031,8 @@
     },
     {
       "path": "state/queue_state_v2.json",
-      "size_bytes": 92,
-      "mtime_iso": "2025-12-07T21:42:41"
+      "size_bytes": 91,
+      "mtime_iso": "2025-12-08T07:15:27"
     },
     {
       "path": "tests/conftest.py",
@@ -6370,6 +6390,11 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
+      "path": "tests/controller/test_pipeline_controller_jobbundle_lifecycle.py",
+      "size_bytes": 18292,
+      "mtime_iso": "2025-12-08T07:06:49"
+    },
+    {
       "path": "tests/controller/test_pipeline_controller_job_specs_v2.py",
       "size_bytes": 22763,
       "mtime_iso": "2025-12-06T18:21:19"
@@ -6388,6 +6413,11 @@
       "path": "tests/controller/test_pipeline_controller_webui_gating.py",
       "size_bytes": 1650,
       "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "tests/controller/test_pipeline_model_defaults_v2.py",
+      "size_bytes": 1871,
+      "mtime_iso": "2025-12-08T06:58:16"
     },
     {
       "path": "tests/controller/test_pipeline_preview_to_queue_v2.py",
@@ -6413,6 +6443,11 @@
       "path": "tests/controller/test_presets_integration_v2.py",
       "size_bytes": 1911,
       "mtime_iso": "2025-12-02T08:03:48"
+    },
+    {
+      "path": "tests/controller/test_preview_queue_history_flow_v2.py",
+      "size_bytes": 18084,
+      "mtime_iso": "2025-12-08T07:06:49"
     },
     {
       "path": "tests/controller/test_profile_integration.py",
@@ -7050,6 +7085,11 @@
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
+      "path": "tests/learning/test_model_defaults_resolver.py",
+      "size_bytes": 1411,
+      "mtime_iso": "2025-12-08T06:58:24"
+    },
+    {
       "path": "tests/learning/test_model_profiles.py",
       "size_bytes": 1483,
       "mtime_iso": "2025-12-06T18:21:19"
@@ -7165,6 +7205,11 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
+      "path": "tests/pipeline/test_resolution_e2e.py",
+      "size_bytes": 944,
+      "mtime_iso": "2025-12-08T06:23:53"
+    },
+    {
       "path": "tests/pipeline/test_run_config_prompt_source.py",
       "size_bytes": 6169,
       "mtime_iso": "2025-12-06T18:21:19"
@@ -7193,6 +7238,21 @@
       "path": "tests/pipeline/test_stage_sequencing.py",
       "size_bytes": 16064,
       "mtime_iso": "2025-12-06T18:21:19"
+    },
+    {
+      "path": "tests/pipeline/test_unified_config_resolution.py",
+      "size_bytes": 1227,
+      "mtime_iso": "2025-12-08T06:23:46"
+    },
+    {
+      "path": "tests/pipeline/test_unified_job_summary_v2.py",
+      "size_bytes": 1956,
+      "mtime_iso": "2025-12-08T07:12:04"
+    },
+    {
+      "path": "tests/pipeline/test_unified_prompt_resolution.py",
+      "size_bytes": 1313,
+      "mtime_iso": "2025-12-08T06:25:28"
     },
     {
       "path": "tests/pipeline/test_upscale_hang_diag.py",

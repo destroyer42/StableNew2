@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, TypedDict
@@ -71,7 +72,7 @@ from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.gui.app_state_v2 import PackJobEntry, AppStateV2
 from src.learning.model_profiles import get_model_profile_defaults_for_model
 from src.controller.pipeline_controller import PipelineController
-from src.queue.job_model import Job
+from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JSONLJobHistoryStore
@@ -1009,56 +1010,60 @@ class AppController:
         except Exception:
             return default
 
-    def _on_job_status_for_panels(self, job: Job, status: str) -> None:
+    def _on_job_status_for_panels(self, job: Job, status: JobStatus | str) -> None:
         """Update queue/history panels when job status changes (PR-D callback)."""
-        from src.pipeline.job_models_v2 import JobQueueItemDTO, JobHistoryItemDTO
-        
+        from src.pipeline.job_models_v2 import JobHistoryItemDTO, JobQueueItemDTO
+
         if not self.main_window:
             return
-        
+
         queue_panel = getattr(self.main_window, "queue_panel", None)
         history_panel = getattr(self.main_window, "history_panel", None)
-        
+        status_value = status.value if hasattr(status, "value") else str(status)
+        summary = getattr(job, "unified_summary", None)
+
         # Update queue panel
-        if queue_panel and status in {"pending", "running"}:
+        if queue_panel and status_value in {"pending", "running", "queued"}:
             upsert_fn = getattr(queue_panel, "upsert_job", None)
             if callable(upsert_fn):
                 try:
-                    from datetime import datetime
-                    created_at = getattr(job, "created_at", None) or datetime.now()
+                    created_at = getattr(summary, "created_at", None) or getattr(
+                        job, "created_at", None
+                    ) or datetime.now()
                     dto = JobQueueItemDTO(
-                        job_id=job.job_id,
-                        label=getattr(job, "label", job.job_id),
-                        status=status,
-                        estimated_images=1,  # Placeholder
+                        job_id=getattr(summary, "job_id", job.job_id),
+                        label=getattr(summary, "model_name", None)
+                        or getattr(job, "label", job.job_id),
+                        status=status_value,
+                        estimated_images=getattr(summary, "num_expected_images", 1),
                         created_at=created_at,
                     )
                     upsert_fn(dto)
                 except Exception as exc:
                     self._append_log(f"[controller] Queue panel upsert error: {exc!r}")
-        
+
         # Remove from queue when completed/failed
-        if queue_panel and status in {"completed", "failed", "cancelled"}:
+        if queue_panel and status_value in {"completed", "failed", "cancelled"}:
             remove_fn = getattr(queue_panel, "remove_job", None)
             if callable(remove_fn):
                 try:
                     remove_fn(job.job_id)
                 except Exception as exc:
                     self._append_log(f"[controller] Queue panel remove error: {exc!r}")
-        
+
         # Add to history when completed
-        if history_panel and status == "completed":
+        if history_panel and status_value == "completed":
             append_fn = getattr(history_panel, "append_history_item", None)
             if callable(append_fn):
                 try:
-                    from datetime import datetime
                     completed_at = getattr(job, "completed_at", None) or datetime.now()
                     history_dto = JobHistoryItemDTO(
-                        job_id=job.job_id,
-                        label=getattr(job, "label", job.job_id),
+                        job_id=getattr(summary, "job_id", job.job_id),
+                        label=getattr(summary, "model_name", None)
+                        or getattr(job, "label", job.job_id),
                         completed_at=completed_at,
-                        total_images=getattr(job, "total_images", 0),
-                        stages="-",  # Placeholder
+                        total_images=getattr(summary, "num_expected_images", 0),
+                        stages=getattr(summary, "stages", "-"),
                     )
                     append_fn(history_dto)
                 except Exception as exc:

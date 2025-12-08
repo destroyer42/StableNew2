@@ -210,6 +210,7 @@ Each major module should have at least one corresponding test file.
 - Resolver tests are mandatory: `UnifiedPromptResolver` must be covered for concatenating GUI/pack prompts, applying global negatives, and truncating previews deterministically.
 - `UnifiedConfigResolver` must be exercised for stage flag propagation, batch/seed resolution, and final-size overrides so the job summary DTOs can reflect what the runner executes.
 - An end-to-end "resolution path" test (bridging builder → summary dto) must exist so preview, queue, and normalized records all share the same `ResolvedPrompt`/`ResolvedPipelineConfig`.
+- Use `PipelineController.get_gui_model_defaults` to seed GUI-stage cards and `PipelineController.build_merged_config_for_run` when constructing run payloads so model/profile defaults flow through the controller instead of being read ad-hoc.
 
 ---
 

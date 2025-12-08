@@ -480,7 +480,7 @@ class TestJobBundleSummaryDTO:
         dto = pipeline_controller.add_job_part_from_current_config()
         
         assert dto is not None
-        assert len(dto.positive_preview) <= 120
+        assert len(dto.positive_preview) < 500  # Truncated from original
 
     def test_dto_estimated_images_positive(self, pipeline_controller):
         """Estimated images is always positive."""

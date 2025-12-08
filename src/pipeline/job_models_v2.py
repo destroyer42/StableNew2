@@ -372,6 +372,77 @@ class JobBundleBuilder:
         )
 
 
+@dataclass(frozen=True)
+class UnifiedJobSummary:
+    """Canonical job summary shared between preview, queue, and history."""
+
+    job_id: str
+    status: JobStatusV2
+    positive_preview: str
+    negative_preview: str | None
+    num_parts: int
+    num_expected_images: int
+    stages: str
+    model_name: str
+    created_at: datetime
+
+    @staticmethod
+    def _stage_labels(names: list[str]) -> str:
+        if not names:
+            return "txt2img"
+        return " + ".join(names)
+
+    @staticmethod
+    def _truncate(value: str) -> str:
+        if not value:
+            return ""
+        return value if len(value) <= 120 else value[:120] + "..."
+
+    @classmethod
+    def from_normalized_record(cls, record: "NormalizedJobRecord", status: JobStatusV2) -> "UnifiedJobSummary":
+        positive = record._extract_prompt_field("final_prompt", "prompt")
+        negative = record._extract_prompt_field("final_negative_prompt", "negative_prompt")
+        stages = record._extract_stage_names()
+        model = record._extract_model_name()
+        return cls(
+            job_id=record.job_id,
+            status=status,
+            positive_preview=cls._truncate(positive),
+            negative_preview=cls._truncate(negative) if negative else None,
+            num_parts=record.num_parts,
+            num_expected_images=record.num_expected_images,
+            stages=cls._stage_labels(stages),
+            model_name=model,
+            created_at=record.created_at,
+        )
+
+    @classmethod
+    def from_job(cls, job: "Job", status: JobStatusV2) -> "UnifiedJobSummary":
+        config = getattr(job, "pipeline_config", None) or job.config_snapshot or {}
+        positive = ""
+        negative = ""
+        model = ""
+        if isinstance(config, dict):
+            positive = str(config.get("prompt") or "")
+            negative = str(config.get("negative_prompt") or "")
+            model = str(config.get("model") or config.get("model_name") or "")
+        else:
+            positive = str(getattr(config, "prompt", "") or "")
+            negative = str(getattr(config, "negative_prompt", "") or "")
+            model = str(getattr(config, "model", "") or getattr(config, "model_name", "") or "")
+        return cls(
+            job_id=job.job_id,
+            status=status,
+            positive_preview=cls._truncate(positive),
+            negative_preview=cls._truncate(negative) if negative else None,
+            num_parts=1,
+            num_expected_images=1,
+            stages="txt2img",
+            model_name=model or "unknown",
+            created_at=getattr(job, "created_at", datetime.utcnow()),
+        )
+
+
 @dataclass
 class JobUiSummary:
     """
@@ -385,7 +456,7 @@ class JobUiSummary:
     label: str                   # short display label (e.g. pack name or first prompt words)
     positive_preview: str        # truncated positive prompt
     negative_preview: str        # truncated negative prompt
-    stages_display: str          # e.g. "txt2img → adetailer (optional) → img2img (optional) → upscale (optional)"
+    stages_display: str          # e.g. "txt2img ?+' adetailer (optional) ?+' img2img (optional) ?+' upscale (optional)"
     estimated_images: int        # how many images this job will produce
     created_at: Optional[datetime] = None
 
@@ -440,7 +511,7 @@ class JobUiSummary:
             "upscale": "upscale",
         }
         stage_parts = [stage_labels.get(s, s) for s in stages] if stages else ["txt2img"]
-        stages_display = " → ".join(stage_parts)
+        stages_display = " ?+' ".join(stage_parts)
 
         label = f"{model} | seed={seed_display}"
         if variant_label:
@@ -459,7 +530,6 @@ class JobUiSummary:
             estimated_images=estimated_images,
             created_at=rec.created_ts,
         )
-
 @dataclass
 class JobLifecycleLogEvent:
     timestamp: datetime
@@ -531,6 +601,53 @@ class NormalizedJobRecord:
     img2img_prompt_info: StagePromptInfo | None = None
     pack_usage: list[PackUsageInfo] = field(default_factory=list)
 
+    @property
+    def created_at(self) -> datetime:
+        return datetime.fromtimestamp(self.created_ts) if self.created_ts else datetime.utcnow()
+
+    @property
+    def num_parts(self) -> int:
+        return len(self.pack_usage) if self.pack_usage else 1
+
+    @property
+    def num_expected_images(self) -> int:
+        total = self.variant_total * self.batch_total
+        return total if total > 0 else 1
+
+    def _config_value(self, *keys: str) -> Any:
+        for key in keys:
+            value = None
+            if isinstance(self.config, dict):
+                value = self.config.get(key)
+            else:
+                value = getattr(self.config, key, None)
+            if value not in (None, "", []):
+                return value
+        return None
+
+    def _extract_prompt_field(self, attr_name: str, *fallback_keys: str) -> str:
+        if self.txt2img_prompt_info:
+            info_value = getattr(self.txt2img_prompt_info, attr_name, None)
+            if info_value:
+                return info_value
+        fallback = self._config_value(*fallback_keys)
+        return str(fallback) if fallback is not None else ""
+
+    def _extract_stage_names(self) -> list[str]:
+        stages = self._config_value("stages")
+        if isinstance(stages, list):
+            return [str(stage) for stage in stages if stage]
+        flags = []
+        for stage in ("txt2img", "img2img", "upscale", "adetailer"):
+            enabled = self._config_value(f"stage_{stage}_enabled", stage)
+            if enabled or (isinstance(enabled, bool) and enabled):
+                flags.append(stage)
+        return flags or ["txt2img"]
+
+    def _extract_model_name(self) -> str:
+        value = self._config_value("model", "model_name")
+        return str(value or "unknown")
+
     def get_display_summary(self) -> str:
         """Get a short display string for the job."""
         config = self.config
@@ -555,6 +672,10 @@ class NormalizedJobRecord:
             batch_info = f" [b{self.batch_index + 1}/{self.batch_total}]"
 
         return f"{model} | seed={seed_str}{variant_info}{batch_info}"
+
+    def to_unified_summary(self, status: JobStatusV2) -> UnifiedJobSummary:
+        """Create a canonical summary for UI/queue/history consumers."""
+        return UnifiedJobSummary.from_normalized_record(self, status)
 
     def to_ui_summary(self) -> JobUiSummary:
         """Convert to a JobUiSummary for UI panel display.
@@ -835,6 +956,7 @@ __all__ = [
     "OutputSettings",
     "NormalizedJobRecord",
     "JobUiSummary",
+    "UnifiedJobSummary",
     "StagePromptInfo",
     "PackUsageInfo",
     "JobLifecycleLogEvent",

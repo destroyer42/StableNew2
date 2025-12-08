@@ -121,6 +121,15 @@ PR-ready config_snapshot
 
 This ensures consistency between GUI preview, queue view, and executed pipeline.
 
+### 4.6 Unified Job Summary Layer (NormalizedJobRecord → Queue/History → Preview)
+
+- A `UnifiedJobSummary` is derived from each `NormalizedJobRecord` and tagged with the current `JobStatus`.
+- JobService stamps every `Job` with the summary built from the normalized snapshot before emitting status callbacks.
+- PreviewPanelV2, QueuePanelV2, and HistoryPanelV2 consume the summary instead of ad-hoc dicts so that the prompt preview, stage list, model name, and image counts stay identical across lifecycle transitions.
+- Summary fields include: positive/negative preview strings, stage chain, expected images, model name, and creation timestamp, making replay, history, and debugging deterministic.
+
+This keeps the GUI aligned with the canonical job representation while avoiding duplicated metadata in every panel.
+
 0.5 TLDR Queue Model
 All pipeline execution passes through:
 
@@ -322,6 +331,8 @@ All prompt/config combinations must flow through the new `src/pipeline/resolutio
 
 Because the resolver layer is pure and centralized, every new prompt or config path must reuse it; no GUI code may assemble prompts or stage configs outside this layer.
 
+PipelineController now exposes dedicated helper APIs (`get_gui_model_defaults` and `build_merged_config_for_run`) that wrap `ModelDefaultsResolver`/`GuiDefaultsResolver`. GUI panels call `get_gui_model_defaults` whenever the selected model or preset changes so stage cards can be seeded with profile-driven refiner/hires defaults, while job/queue builders call `build_merged_config_for_run` to ensure the payload sent to the pipeline runner contains the same defaults the GUI displayed.
+
 6. JobBuilderV2 — Variant, Batch, and Seed Expansion
 JobBuilderV2 translates merged configs into a set of normalized jobs.
 
@@ -516,7 +527,120 @@ Be visible in queue view
 Produce a log entry visible in the Details panel
 
 ============================================================
-13. Deprecated Concepts and Why They Changed
+13. JobDraft / JobBundle Ownership & Lifecycle (PR-D)
+============================================================
+
+### 13.1 Draft Bundle Pattern
+
+StableNew implements a **controller-owned draft bundle pattern** for accumulating multi-part jobs before submission to the queue.
+
+**Design Principles:**
+- PipelineController owns `_draft_bundle` (JobBundle) and `_job_bundle_builder` (JobBundleBuilder)
+- Draft bundles accumulate multiple JobParts (prompts) before enqueueing
+- Preview panel displays draft summary via `JobBundleSummaryDTO`
+- "Add to Job" button adds parts to draft without enqueueing
+- "Add to Queue" button enqueues draft and clears it
+- Draft state is ephemeral (not persisted across sessions)
+
+### 13.2 Draft Bundle Lifecycle
+
+```mermaid
+flowchart LR
+    GUI[GUI: Add to Job]
+    PC[PipelineController]
+    BUILDER[JobBundleBuilder]
+    DRAFT[Draft Bundle]
+    DTO[JobBundleSummaryDTO]
+    PREVIEW[PreviewPanel]
+    QUEUE[JobService/Queue]
+
+    GUI --> PC
+    PC --> BUILDER
+    BUILDER --> DRAFT
+    DRAFT --> DTO
+    DTO --> PREVIEW
+    PC --> QUEUE
+```
+
+**ASCII Flow:**
+```
+"Add to Job" → add_job_part_from_current_config() → JobBundleBuilder → _draft_bundle
+_draft_bundle → get_draft_bundle_summary() → JobBundleSummaryDTO → PreviewPanel.update_from_summary()
+"Add to Queue" → enqueue_draft_bundle() → JobService.enqueue() → clear draft
+```
+
+### 13.3 Key Methods
+
+**PipelineController Draft Bundle API:**
+- `add_job_part_from_current_config() -> JobBundleSummaryDTO | None`: Adds single prompt to draft
+- `add_job_parts_from_pack(pack_name) -> JobBundleSummaryDTO | None`: Adds pack prompts to draft
+- `get_draft_bundle_summary() -> JobBundleSummaryDTO | None`: Returns DTO for preview display
+- `clear_draft_bundle()`: Clears draft and resets builder
+- `enqueue_draft_bundle() -> str | None`: Submits draft to queue, clears draft, returns job_id
+
+**Design Rationale:**
+- DTO-based public API prevents external code from mutating draft state
+- Controller encapsulates all draft logic (no GUI knowledge of JobBundle internals)
+- Builder is lazy-initialized from GUI state on first add operation
+- Builder is reused across add operations to maintain config consistency
+- Enqueue converts JobParts → PipelineConfig → Job → JobService.enqueue()
+- Clear operation resets both bundle and builder for fresh start
+
+### 13.4 Integration with Queue and History
+
+**Status Callback Flow:**
+```mermaid
+flowchart LR
+    JOB[Job Status Change]
+    JS[JobService]
+    CB[Status Callbacks]
+    QP[QueuePanel]
+    HP[HistoryPanel]
+
+    JOB --> JS
+    JS --> CB
+    CB --> QP
+    CB --> HP
+```
+
+**AppController registers status callback:**
+```python
+def _on_job_status_for_panels(job: Job, status: JobStatus):
+    if status in (QUEUED, RUNNING):
+        queue_panel.upsert_job(JobQueueItemDTO.from_job(job))
+    elif status in (COMPLETED, FAILED):
+        queue_panel.remove_job(job.job_id)
+        history_panel.append_history_item(JobHistoryItemDTO.from_job(job))
+```
+
+**Lifecycle Stages:**
+1. Draft accumulation (PipelineController)
+2. Enqueue to queue (JobService)
+3. Queue display (QueuePanelV2)
+4. Execution (Runner)
+5. History recording (HistoryPanelV2)
+
+### 13.5 Testing Strategy
+
+**Unit Tests** (test_pipeline_controller_jobbundle_lifecycle.py):
+- Draft bundle operations (add, clear, enqueue, get_summary)
+- Edge cases (empty prompts, whitespace, no state)
+- Error handling (missing config, builder failures)
+- DTO validation (field presence, truncation, positive values)
+
+**Integration Tests** (test_preview_queue_history_flow_v2.py):
+- Add to job → preview updates
+- Enqueue → queue updates, preview clears
+- Job status callbacks → queue/history panel updates
+- End-to-end workflows (multi-job, clear-and-restart)
+
+**Coverage:**
+- 29 unit tests for draft bundle lifecycle
+- 13 integration tests for preview→queue→history flow
+- All tests passing with 100% draft bundle API coverage
+
+============================================================
+14. Deprecated Concepts and Why They Changed
 ============================================================
 #ARCHIVED
 (This section is for historical context only. Agents must ignore.)
