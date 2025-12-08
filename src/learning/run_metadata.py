@@ -19,7 +19,7 @@ def write_run_metadata(
     run_id: str,
     config_snapshot: dict[str, Any],
     *,
-    packs: list[str] | None = None,
+    packs: list[dict[str, Any]] | None = None,
     one_click_action: str | None = None,
     stage_outputs: list[dict[str, Any]] | None = None,
     base_dir: str | Path = "runs",

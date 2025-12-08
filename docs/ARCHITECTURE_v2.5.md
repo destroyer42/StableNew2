@@ -381,6 +381,8 @@ Guarantees reproducibility for Learning/Cluster phases
  8. Queue & Execution Layer
 - Queue Model (JobService + JobQueueV2)
     - JobService now forwards completed and failed job signals to JobHistoryService so the history store consistently records metadata and emits completion events.
+    - Each `Job` stores a deterministic JSON snapshot (via `src/utils/snapshot_builder_v2.py`) and `JobHistoryEntry.snapshot` keeps it in the history store so every run carries the merged config, normalized job, prompts, seeds, stage flags, and run metadata for later replay.
+- JobHistoryService exposes a `replay_job_from_history` flow (`AppController`/`PipelineController` rehydrate the normalized job from the snapshot, re-populate the preview list, and submit it again through `_to_queue_job` → `JobService.submit_job_with_run_mode`), making every historical job reproducible without touching runner/pipeline internals.
 - JobService now subscribes to queue status transitions and re-emits `job_started`, `job_finished`, and `job_failed` events so GUI panels and the history subsystem can react to deterministic lifecycle updates.
 - Controllers (AppController, PipelineController, API surfaces) must submit every normalized job through JobService so _execute_job runs via the configured `runner_factory`. That DI path enforces the canonical flow: NormalizedJobRecord → JobService → JobQueue → SingleNodeJobRunner (with `_execute_job` as `run_callable`) before touching WebUI, which keeps queue-first semantics intact.
 Add jobs

@@ -25,6 +25,8 @@ from src.pipeline.job_models_v2 import (
     BatchSettings,
     NormalizedJobRecord,
     OutputSettings,
+    PackUsageInfo,
+    StagePromptInfo,
 )
 from src.randomizer import (
     RandomizationPlanV2,
@@ -131,6 +133,8 @@ class JobBuilderV2:
                     batch_total=batch.batch_runs,
                     created_ts=self._time_fn(),
                     randomizer_summary=randomizer_summary,
+                    txt2img_prompt_info=self._build_stage_prompt_info(config_variant),
+                    pack_usage=self._build_pack_usage(config_variant),
                 )
                 jobs.append(job)
 
@@ -220,6 +224,41 @@ class JobBuilderV2:
             summary["steps_values"] = len(plan.steps_values)
 
         return summary
+
+    def _build_stage_prompt_info(self, config: Any) -> StagePromptInfo:
+        """Capture prompt metadata for the txt2img stage."""
+        prompt = self._extract_config_value(config, "prompt")
+        negative = self._extract_config_value(config, "negative_prompt")
+        return StagePromptInfo(
+            original_prompt=prompt,
+            final_prompt=prompt,
+            original_negative_prompt=negative,
+            final_negative_prompt=negative,
+            global_negative_applied=False,
+            global_negative_terms="",
+        )
+
+    def _build_pack_usage(self, config: Any) -> list[PackUsageInfo]:
+        """Record prompt pack usage metadata if present."""
+        pack_name = self._extract_config_value(config, "pack_name")
+        if not pack_name:
+            return []
+        pack_path = self._extract_config_value(config, "pack_path")
+        usage = PackUsageInfo(pack_name=pack_name)
+        if pack_path:
+            usage.pack_path = pack_path
+        return [usage]
+
+    @staticmethod
+    def _extract_config_value(config: Any, key: str) -> str:
+        """Safely extract string value from config dict or object."""
+        if isinstance(config, dict):
+            value = config.get(key)
+        else:
+            value = getattr(config, key, None)
+        if value is None:
+            return ""
+        return str(value)
 
 
 __all__ = ["JobBuilderV2"]

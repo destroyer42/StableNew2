@@ -13,6 +13,7 @@ import requests
 from src.api.healthcheck import wait_for_webui_ready
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome, GenerateResult
 from src.utils import get_logger, LogContext, log_with_ctx
+from src.utils.api_failure_store_v2 import record_api_failure
 from src.utils.retry_policy_v2 import (
     IMG2IMG_RETRY_POLICY,
     RetryPolicy,
@@ -22,6 +23,32 @@ from src.utils.retry_policy_v2 import (
 )
 
 logger = get_logger(__name__)
+
+
+def _format_as_data_url(image_value: str | None) -> str | None:
+    """Return a data URL for the provided base64 string."""
+    if not image_value:
+        return None
+    candidate = str(image_value).strip()
+    if not candidate:
+        return None
+    return candidate if candidate.startswith("data:") else f"data:image/png;base64,{candidate}"
+
+
+def _log_stage_failure(stage_name: str, error: Exception | str) -> None:
+    """Log a structured stage failure without assuming the error has a stage attribute."""
+    ctx = LogContext(subsystem="api", stage=stage_name)
+    log_with_ctx(
+        logger,
+        logging.ERROR,
+        "Stage failed",
+        ctx=ctx,
+        extra_fields={
+            "stage": stage_name,
+            "error_type": type(error).__name__ if not isinstance(error, str) else "str",
+            "error": str(error),
+        },
+    )
 
 
 class SDWebUIClient:
@@ -157,6 +184,21 @@ class SDWebUIClient:
         if stage_key and not context.stage:
             context.stage = stage_key
 
+        payload_capture = kwargs.get("json") or kwargs.get("data")
+        if isinstance(payload_capture, dict):
+            payload_capture = dict(payload_capture)
+
+        def _log_api_failure(*, error_text: str, status: int | None = None, response_text: str | None = None) -> None:
+            record_api_failure(
+                stage=stage_key,
+                endpoint=endpoint,
+                method=method,
+                payload=payload_capture,
+                status_code=status,
+                response_text=response_text,
+                error_message=error_text,
+            )
+
         for attempt in range(retries):
             try:
                 response = requests.request(method.upper(), url, timeout=timeout_value, **kwargs)
@@ -175,6 +217,11 @@ class SDWebUIClient:
                         ctx=context,
                         extra_fields={"response_text": truncated_text},
                     )
+                    _log_api_failure(
+                        error_text=str(http_exc),
+                        status=status_code,
+                        response_text=truncated_text,
+                    )
                     raise
                 return response
             except Exception as exc:  # noqa: BLE001 - broad to ensure retries
@@ -191,6 +238,10 @@ class SDWebUIClient:
                         "attempt": attempt_index,
                         "max_attempts": retries,
                     },
+                    )
+                _log_api_failure(
+                    error_text=str(exc),
+                    response_text=str(getattr(exc, "response", "") or getattr(exc, "text", None)),
                 )
                 if self._retry_callback:
                     try:
@@ -557,15 +608,33 @@ class SDWebUIClient:
         Returns:
             Response data with upscaled image
         """
+        normalized_image = _format_as_data_url(image_base64)
+        if not normalized_image:
+            _log_stage_failure("upscale", "Missing image payload for upscale")
+            return None
+
         payload = {
             "resize_mode": 0,
             "upscaling_resize": upscaling_resize,
             "upscaler_1": upscaler,
-            "image": image_base64,
+            "image": normalized_image,
             "gfpgan_visibility": gfpgan_visibility,
             "codeformer_visibility": codeformer_visibility,
             "codeformer_weight": codeformer_weight,
         }
+        ctx = LogContext(subsystem="api", stage="upscale")
+        log_with_ctx(
+            logger,
+            logging.DEBUG,
+            "Upscale payload built",
+            ctx=ctx,
+            extra_fields={
+                "endpoint": "/sdapi/v1/extra-single-image",
+                "image_len": len(payload["image"]),
+                "upscaler": upscaler,
+                "scale": upscaling_resize,
+            },
+        )
         response = self._perform_request(
             "post",
             "/sdapi/v1/extra-single-image",
@@ -575,12 +644,13 @@ class SDWebUIClient:
         )
 
         if response is None:
+            _log_stage_failure("upscale", "No response from extra-single-image")
             return None
 
         try:
             data = response.json()
         except ValueError as exc:
-            logger.error(f"Upscale response parsing failed: {exc}")
+            _log_stage_failure("upscale", exc)
             return None
 
         # Log face restoration usage

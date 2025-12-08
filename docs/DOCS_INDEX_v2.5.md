@@ -184,6 +184,9 @@ These documents support testing and meta analysis. They remain in `docs/` for ea
 - **`docs/KNOWN_PITFALLS_QUEUE_TESTING.md`**  
   Queue testing pitfalls and guidelines for JobService/runner tests.
 
+- **Snapshot regression docs (StableNew_Coding_and_Testing_v2.5.md §7.12)**  
+  Explains how the snapshot-based regression suite loads `tests/data/snapshots/` fixtures and uses `pytest -m snapshot_regression` to keep Phase 9 replay wiring stable.
+
 - **`docs/StableNew_V2_Inventory.md`**  
   Large repository inventory listing modules and their roles.
 

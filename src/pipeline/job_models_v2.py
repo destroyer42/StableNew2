@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
@@ -17,6 +17,33 @@ class JobStatusV2(str, Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     FAILED = "failed"
+
+
+# ---------------------------------------------------------------------------
+# Prompt metadata helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StagePromptInfo:
+    """Prompt-level metadata captured for a pipeline stage."""
+
+    original_prompt: str
+    final_prompt: str
+    original_negative_prompt: str
+    final_negative_prompt: str
+    global_negative_applied: bool
+    global_negative_terms: str | None = None
+
+
+@dataclass
+class PackUsageInfo:
+    """Describes how a prompt pack contributed to a job."""
+
+    pack_name: str
+    pack_path: str | None = None
+    prompt_index: int | None = None
+    used_for_stage: str = "txt2img"
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +131,9 @@ class NormalizedJobRecord:
     batch_total: int = 1
     created_ts: float = 0.0
     randomizer_summary: dict[str, Any] | None = None
+    txt2img_prompt_info: StagePromptInfo | None = None
+    img2img_prompt_info: StagePromptInfo | None = None
+    pack_usage: list[PackUsageInfo] = field(default_factory=list)
 
     def get_display_summary(self) -> str:
         """Get a short display string for the job."""
@@ -148,8 +178,16 @@ class NormalizedJobRecord:
             return default
 
         model = _pick(["model", "model_name"], "unknown") or "unknown"
-        prompt_full = _pick(["prompt"], "") or ""
-        negative_prompt_full = _pick(["negative_prompt"], "") or ""
+        prompt_full = (
+            (self.txt2img_prompt_info and self.txt2img_prompt_info.final_prompt)
+            or _pick(["prompt"], "")
+            or ""
+        )
+        negative_prompt_full = (
+            (self.txt2img_prompt_info and self.txt2img_prompt_info.final_negative_prompt)
+            or _pick(["negative_prompt"], "")
+            or ""
+        )
         sampler = _pick(["sampler", "sampler_name"], "") or ""
         steps = self._coerce_int(_pick(["steps"]))
         cfg_scale = self._coerce_float(_pick(["cfg_scale"]))
@@ -308,6 +346,13 @@ class NormalizedJobRecord:
         if self.randomizer_summary:
             snapshot["randomizer_summary"] = self.randomizer_summary
 
+        if self.txt2img_prompt_info:
+            snapshot["txt2img_prompt_info"] = asdict(self.txt2img_prompt_info)
+        if self.img2img_prompt_info:
+            snapshot["img2img_prompt_info"] = asdict(self.img2img_prompt_info)
+        if self.pack_usage:
+            snapshot["pack_usage"] = [asdict(info) for info in self.pack_usage]
+
         return snapshot
 
 
@@ -414,4 +459,6 @@ __all__ = [
     "OutputSettings",
     "NormalizedJobRecord",
     "JobUiSummary",
+    "StagePromptInfo",
+    "PackUsageInfo",
 ]

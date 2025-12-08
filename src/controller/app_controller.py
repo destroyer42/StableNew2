@@ -20,7 +20,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, TypedDict
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, TypedDict
 import os
 import sys
 import threading
@@ -40,9 +40,15 @@ from src.pipeline.last_run_store_v2_5 import (
 )
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.main_window_v2 import MainWindow
+from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
+from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
 from src.gui.views.error_modal_v2 import ErrorModalV2
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
 from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
+from src.controller.process_auto_scanner_service import (
+    ProcessAutoScannerConfig,
+    ProcessAutoScannerService,
+)
 from src.utils import (
     InMemoryLogHandler,
     LogContext,
@@ -313,6 +319,11 @@ class AppController:
             job_service=self.job_service,
             pipeline_runner=self.pipeline_runner,
         )
+        self.process_auto_scanner = ProcessAutoScannerService(
+            config=ProcessAutoScannerConfig(),
+            protected_pids=self._get_protected_process_pids,
+        )
+
 
         # Wire GUI overrides into PipelineController so config assembler can access GUI state
         self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
@@ -504,6 +515,7 @@ class AppController:
                 count = pipeline_ctrl.submit_preview_jobs_to_queue(
                     source="gui",
                     prompt_source="pack",
+                    run_config=run_config,
                 )
                 if count > 0:
                     self._append_log(f"[controller] Submitted {count} job(s) from preview to queue")
@@ -527,6 +539,23 @@ class AppController:
 
         self._ensure_run_mode_default("add_to_queue")
         self._start_run_v2(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
+
+    def on_replay_history_job_v2(self, job_id: str) -> bool:
+        controller = getattr(self, "pipeline_controller", None)
+        if controller is None:
+            return False
+        replay_fn = getattr(controller, "replay_job_from_history", None)
+        if not callable(replay_fn):
+            return False
+        try:
+            count = replay_fn(job_id)
+            if count > 0:
+                self._append_log(f"[controller] Replayed job {job_id} ({count} queued).")
+                return True
+            self._append_log(f"[controller] Replay job {job_id} had no snapshot or jobs to queue.")
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"[controller] Replay job {job_id} failed: {exc!r}")
+        return False
 
     def set_main_window(self, main_window: MainWindow) -> None:
         """Set the main window and wire GUI callbacks."""
@@ -1400,6 +1429,42 @@ class AppController:
         """Expose a manual trigger for diagnostics bundles."""
         self._generate_diagnostics_bundle("manual_request")
 
+    def open_debug_hub(self) -> None:
+        """Primary entrypoint for the Unified Debug Hub."""
+        try:
+            DebugHubPanelV2.open(
+                master=self.main_window.root if self.main_window else None,
+                controller=self.pipeline_controller or self,
+                app_state=self.app_state,
+                log_handler=self.gui_log_handler,
+            )
+        except Exception as exc:
+            self._append_log(f"[controller] Failed to open Debug Hub: {exc!r}")
+
+    def explain_job(self, job_id: str) -> None:
+        """Open a job explanation for the given job ID."""
+        if not job_id:
+            return
+        try:
+            JobExplanationPanelV2(job_id, master=self.main_window.root if self.main_window else None)
+        except Exception as exc:
+            self._append_log(f"[controller] Failed to explain job {job_id}: {exc!r}")
+
+    def get_process_auto_scanner(self) -> ProcessAutoScannerService | None:
+        return getattr(self, "process_auto_scanner", None)
+
+    def _get_protected_process_pids(self) -> Iterable[int]:
+        if not self.job_service:
+            return ()
+        snapshot = self.job_service.get_diagnostics_snapshot()
+        jobs = snapshot.get("jobs") or []
+        pids: set[int] = set()
+        for entry in jobs:
+            for pid in entry.get("external_pids", []) or []:
+                if isinstance(pid, int):
+                    pids.add(pid)
+        return pids
+
     def _generate_diagnostics_bundle(
         self, reason: str, *, extra_context: Mapping[str, Any] | None = None
     ) -> Path | None:
@@ -2042,6 +2107,11 @@ class AppController:
                 pass
         try:
             self.state.lifecycle = LifecycleState.IDLE
+        except Exception:
+            pass
+        try:
+            if self.process_auto_scanner:
+                self.process_auto_scanner.stop()
         except Exception:
             pass
 

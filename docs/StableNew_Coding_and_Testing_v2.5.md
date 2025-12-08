@@ -312,12 +312,33 @@ They must NOT:
 - Manual crash/dump bundles are built via `src/utils/diagnostics_bundle_v2.build_crash_bundle()` and are wired to the LogTracePanel’s “Crash Bundle” button plus the `AppController.generate_diagnostics_bundle_manual()` helper so users can capture a consistent record on demand.
 - The same bundling helper also fires when unexpected exceptions propagate through `sys.excepthook`, Tk’s `report_callback_exception`, worker-thread hooks, or `JobService.EVENT_WATCHDOG_VIOLATION`, so every failure includes logs, job metadata, process enumerations, and anonymized system info in `reports/diagnostics/`.
 
+### Phase S1 Unified Debug Hub (V2.5)
+
+- `DebugHubPanelV2` brings Pipeline, Prompts, API, Processes, Crash Reports, and System tabs into one window and is accessible from the header "Debug" button wired through `AppController.open_debug_hub()`/`MainWindowV2` (no executor or pipeline core changes are required).
+- The Pipeline tab reuses `DiagnosticsDashboardV2`, the Prompts tab surfaces `NormalizedJobRecord` prompt metadata, the API tab hosts `LogTracePanelV2`, the Processes tab lists `iter_stablenew_like_processes()`, and the Crash tab surfaces zipped bundles stored under `reports/diagnostics/`.
+- Both the Debug Hub (Pipeline tab) and the Job History panel expose an “Explain This Job” action that launches `JobExplanationPanelV2`, which reads `runs/<job_id>/run_metadata.json` plus stage manifests (`txt2img_01.json`, `img2img_01.json`, `upscale_01.json`) to summarize the origin, prompts/negatives, and global-negative merge for the selected job without manual file browsing.
+- The Processes tab now surfaces the background auto-scanner status and toggle, leveraging `ProcessAutoScannerService` to scan every ~30s, protect tracked job PIDs, and log/terminate strays when they exceed idle/memory thresholds; `tests/utils/test_process_auto_scanner_service.py` cover the detection logic.
+- Because the hub reuses existing controller hooks, process inspectors, and diagnostics bundles, it stays read-only and non-blocking; `tests/gui_v2/test_debug_hub_panel_v2.py` exercises the new tab layout so regressions can be caught early.
+
 ### 7.10 Phase 6 Unified Error Model & Exception Taxonomy
 
 - `src/utils/error_envelope_v2.py` and `src/utils/exceptions_v2.py` now provide a shared `UnifiedErrorEnvelope`, `wrap_exception`, and taxonomy (`PipelineError`, `WebUIError`, `WatchdogViolationError`, `ResourceLimitError`, etc.) so every failure carries `error_type`, `subsystem`, `severity`, `stage`, `remediation`, and contextual metadata.
 - The pipeline runner, executor, JobService, watchdog, and PipelineController wrap and re-log exceptions through `wrap_exception`/`log_with_ctx`, store `Job.error_envelope`, and expose the serialized envelope via diagnostics snapshots so downstream tooling has consistent, machine-readable failure records.
 - LogTracePanelV2 highlights structured error lines, and AppController now surfaces `ErrorModalV2` plus crash-bundle context whenever runs fail, giving users remediation tips, stack traces, the current envelope snapshot, and a direct way to open `reports/diagnostics/`.
 - Diagnostics bundles sanitize local paths, include `[DIAG]` log notifications, and surface the last bundle's filename in the dashboard so support engineers can pair GUI logs with zipped evidence without exposing user-sensitive paths.
+
+### 7.11 Job Snapshotting & Replay (Phase 9)
+
+- Each `Job` now carries a precise JSON snapshot built by `src/utils/snapshot_builder_v2.py` that serializes the normalized job, effective prompts, run config, stage metadata, model selection, seeds, and randomizer summary; this snapshot is attached before the job is queued so it survives the entire lifecycle.
+- `JobHistoryService` persists the snapshot (`JobHistoryEntry.snapshot`) via the history store so every completed or failed job keeps a deterministically replayable record alongside the existing payload summary, timestamps, and result fields.
+- The history panel renders a new `Replay Job` button that fires `AppController.on_replay_history_job_v2`, which delegates to `PipelineController.replay_job_from_history(entry.job_id)`; the controller rebuilds the normalized job from the snapshot, updates the preview list, and re-queues the job through `_to_queue_job()` → `JobService.submit_job_with_run_mode()` so the core run path is exercised again.
+- Snapshot/replay coverage lives in `tests/utils/test_snapshot_builder_v2.py`, `tests/controller/test_pipeline_replay_job_v2.py`, and `tests/gui_v2/test_job_history_panel_v2.py`, and architecture/docs now describe the replay flow so QA and investigation tooling can rely on deterministic reproduction of any historical run.
+
+### 7.12 Snapshot-Based Regression Suite (Phase 10)
+
+- The regression harness in `tests/regression/test_snapshot_regression_v2.py` loads curated snapshots from `tests/data/snapshots/` and replays them via `PipelineController.reconstruct_jobs_from_snapshot` + `_submit_normalized_jobs()` to ensure the canonical AppController → PipelineController → JobService path stays functional for known-good job patterns.
+- Each snapshot JSON was produced with `build_job_snapshot(...)` and stores the run config, normalized job, effective prompts, stage metadata, seeds, and randomizer expansion info; the README in the snapshot folder documents how to add new fixtures.
+- Run the suite with `pytest -m snapshot_regression` to verify that the pipeline still reconstructs/takes the job path without hitting SDWebUI. The tests assert the expected stage sequence, variant counts, and that the job is enqueued through the stubbed JobService once the snapshot is replayed.
 
 ### 7.12 Phase 8 Unified Logging & Telemetry Harmonization
 

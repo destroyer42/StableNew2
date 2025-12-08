@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "recorded_at": "2025-12-07T19:11:18.632870",
+  "job_id": "snapshot-simple-txt2img",
+  "run_config": {
+    "run_mode": "queue",
+    "prompt_source": "manual",
+    "source": "gui"
+  },
+  "normalized_job": {
+    "job_id": "snapshot-simple-txt2img",
+    "path_output_dir": "runs/simple",
+    "filename_template": "{seed}_simple",
+    "seed": 12345,
+    "variant_index": 0,
+    "variant_total": 1,
+    "batch_index": 0,
+    "batch_total": 1,
+    "created_ts": 0.0,
+    "randomizer_summary": null,
+    "config": {
+      "prompt": "sunset over a calm lake",
+      "negative_prompt": "blur",
+      "model": "stable-diffusion-v1",
+      "sampler": "Euler",
+      "steps": 30,
+      "cfg_scale": 7.5,
+      "stages": [
+        "txt2img"
+      ]
+    }
+  },
+  "effective_prompts": {
+    "positive": "sunset over a calm lake",
+    "negative": "blur"
+  },
+  "seed_info": {
+    "master_seed": 12345,
+    "variant_index": 0,
+    "variant_total": 1,
+    "batch_index": 0,
+    "batch_total": 1
+  },
+  "stage_metadata": {
+    "stages": [
+      "txt2img"
+    ],
+    "flags": {
+      "txt2img": true,
+      "img2img": false,
+      "refiner": false,
+      "hires": false,
+      "upscale": false,
+      "adetailer": false
+    }
+  },
+  "randomizer_expansions": {},
+  "model_selection": {
+    "base_model": "stable-diffusion-v1",
+    "refiner_model": null,
+    "vae_model": null
+  },
+  "source": "gui",
+  "prompt_source": "manual"
+}

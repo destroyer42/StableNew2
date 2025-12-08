@@ -39,6 +39,7 @@ class JobHistoryEntry:
     prompt_source: str = "manual"  # "manual" | "pack"
     prompt_pack_id: str | None = None
     prompt_keys: List[str] | None = None
+    snapshot: Dict[str, Any] | None = None
 
     def to_json(self) -> str:
         data = asdict(self)
@@ -75,6 +76,7 @@ class JobHistoryEntry:
             prompt_source=raw.get("prompt_source", "manual"),
             prompt_pack_id=raw.get("prompt_pack_id"),
             prompt_keys=raw.get("prompt_keys"),
+            snapshot=raw.get("snapshot"),
         )
 
 

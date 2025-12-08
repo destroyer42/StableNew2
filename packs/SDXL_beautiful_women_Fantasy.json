@@ -220,7 +220,7 @@
     "hires_denoise": 0.3,
     "hires_use_base_model": true
   },
-  "randomization_enabled": false,
-  "max_variants": 1,
+  "randomization_enabled": true,
+  "max_variants": 2,
   "lora_strengths": []
 }

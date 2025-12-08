@@ -45,8 +45,27 @@ class JobHistoryPanelV2(ttk.Frame):
         action_bar.pack(fill=tk.X, pady=(0, 4))
         self.refresh_btn = ttk.Button(action_bar, text="Refresh History", command=self._on_refresh)
         self.refresh_btn.pack(side=tk.RIGHT, padx=(0, 4))
-        self.open_btn = ttk.Button(action_bar, text="Open Output Folder", command=self._on_open_folder, state=tk.DISABLED)
+        self.open_btn = ttk.Button(
+            action_bar,
+            text="Open Output Folder",
+            command=self._on_open_folder,
+            state=tk.DISABLED,
+        )
         self.open_btn.pack(side=tk.LEFT)
+        self.replay_btn = ttk.Button(
+            action_bar,
+            text="Replay Job",
+            command=self._on_replay_job,
+            state=tk.DISABLED,
+        )
+        self.replay_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.explain_btn = ttk.Button(
+            action_bar,
+            text="Explain Job",
+            command=self._on_explain_job,
+            state=tk.DISABLED,
+        )
+        self.explain_btn.pack(side=tk.LEFT, padx=(4, 0))
 
         columns = ("time", "status", "packs", "duration", "images", "output")
         headings = {
@@ -66,6 +85,9 @@ class JobHistoryPanelV2(ttk.Frame):
             self.history_tree.column(col, anchor=tk.W, width=width, stretch=True)
         self.history_tree.pack(fill=tk.BOTH, expand=True)
         self.history_tree.bind("<<TreeviewSelect>>", self._on_select)
+        self._history_menu = tk.Menu(self, tearoff=0)
+        self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
+        self.history_tree.bind("<Button-3>", self._on_context_menu)
 
         if app_state and hasattr(app_state, "subscribe"):
             app_state.subscribe("history_items", self._on_history_items_changed)
@@ -117,6 +139,7 @@ class JobHistoryPanelV2(ttk.Frame):
         if not selection:
             self._selected_job_id = None
             self.open_btn.configure(state=tk.DISABLED)
+            self.replay_btn.configure(state=tk.DISABLED)
             return
         item_id = selection[0]
         job_id = self._item_to_job.get(item_id)
@@ -125,8 +148,12 @@ class JobHistoryPanelV2(ttk.Frame):
         if not entry:
             self._selected_job_id = None
             self.open_btn.configure(state=tk.DISABLED)
+            self.replay_btn.configure(state=tk.DISABLED)
+            self.explain_btn.configure(state=tk.DISABLED)
             return
         self.open_btn.configure(state=tk.NORMAL)
+        self.replay_btn.configure(state=tk.NORMAL)
+        self.explain_btn.configure(state=tk.NORMAL)
 
     def _on_open_folder(self) -> None:
         if not self._selected_job_id:
@@ -141,6 +168,40 @@ class JobHistoryPanelV2(ttk.Frame):
             self._folder_opener(folder)
         except Exception:
             pass
+
+    def _on_replay_job(self) -> None:
+        if not self._selected_job_id or not self.controller:
+            return
+        handler = getattr(self.controller, "on_replay_history_job_v2", None)
+        if not callable(handler):
+            return
+        try:
+            handler(self._selected_job_id)
+        except Exception:
+            pass
+
+    def _on_explain_job(self) -> None:
+        if not self._selected_job_id or not self.controller:
+            return
+        handler = getattr(self.controller, "explain_job", None)
+        if callable(handler):
+            try:
+                handler(self._selected_job_id)
+            except Exception:
+                pass
+
+    def _on_context_menu(self, event: tk.Event) -> None:
+        item = self.history_tree.identify_row(event.y)
+        if not item:
+            return
+        self.history_tree.selection_set(item)
+        self.history_tree.focus(item)
+        job_id = self._item_to_job.get(item)
+        if not job_id:
+            return
+        self._selected_job_id = job_id
+        self.explain_btn.configure(state=tk.NORMAL)
+        self._history_menu.tk_popup(event.x_root, event.y_root)
 
     def _derive_output_folder(self, entry: JobHistoryEntry) -> str:
         base = Path("runs")

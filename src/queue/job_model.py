@@ -79,6 +79,7 @@ class Job:
     # PR-044: Variant metadata for randomizer tracking
     variant_index: Optional[int] = None
     variant_total: Optional[int] = None
+    snapshot: Optional[Dict[str, Any]] = None
     execution_metadata: JobExecutionMetadata = field(default_factory=JobExecutionMetadata)
 
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
@@ -113,6 +114,7 @@ class Job:
             "config_snapshot": self.config_snapshot,
             "variant_index": self.variant_index,
             "variant_total": self.variant_total,
+            "snapshot": self.snapshot,
             "error_envelope": serialize_envelope(self.error_envelope),
         }
 

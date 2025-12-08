@@ -295,10 +295,17 @@ class PipelineRunner:
             run_id = record.run_id
         metadata_payload = dict(config.metadata or {})
         metadata_payload.setdefault("stage_outputs", [])
+        packs: list[dict[str, Any]] = []
+        if config.pack_name:
+            pack_entry: dict[str, Any] = {"pack_name": config.pack_name, "prompt": config.prompt}
+            pack_path = (config.metadata or {}).get("pack_path")
+            if pack_path:
+                pack_entry["pack_path"] = pack_path
+            packs.append(pack_entry)
         write_run_metadata(
             run_id,
             executor_config,
-            packs=[config.pack_name] if config.pack_name else [],
+            packs=packs,
             one_click_action=(config.metadata or {}).get("one_click_action"),
             stage_outputs=[],
             base_dir=self._runs_base_dir,

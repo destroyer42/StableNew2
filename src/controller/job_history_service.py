@@ -195,6 +195,7 @@ class JobHistoryService:
             prompt_source=getattr(job, "prompt_source", "manual"),
             prompt_pack_id=getattr(job, "prompt_pack_id", None),
             prompt_keys=prompt_keys,
+            snapshot=getattr(job, "snapshot", None),
         )
 
 

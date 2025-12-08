@@ -32,6 +32,7 @@ class HeaderZone(ttk.Frame):
         self.settings_button = ttk.Button(self, text="Settings", style="Secondary.TButton")
         self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
         self.help_button = ttk.Button(self, text="Help", style="Secondary.TButton")
+        self.debug_button = ttk.Button(self, text="Debug", style="Secondary.TButton")
 
         for idx, btn in enumerate(
             [
@@ -41,6 +42,7 @@ class HeaderZone(ttk.Frame):
                 self.settings_button,
                 self.refresh_button,
                 self.help_button,
+                self.debug_button,
             ]
         ):
             btn.grid(row=0, column=idx, padx=4, pady=4)
@@ -254,6 +256,7 @@ class MainWindowV2:
                 ("on_open_settings", header.settings_button),
                 ("on_refresh_clicked", header.refresh_button),
                 ("on_help_clicked", header.help_button),
+                ("open_debug_hub", header.debug_button),
             ]:
                 callback = getattr(ctrl, attr, None)
                 if callable(callback):

@@ -596,3 +596,12 @@ class TestEdgeCases:
         # With batch > 1, should show batch info
         summary = jobs[1].get_display_summary()
         assert "[b2/2]" in summary
+
+def test_stage_prompt_info_included(builder, base_config):
+    base_config.prompt = 'PROMPT_SENTINEL'
+    base_config.negative_prompt = 'NEG_SENTINEL'
+    job = builder.build_jobs(base_config=base_config)[0]
+    assert job.txt2img_prompt_info is not None
+    assert job.txt2img_prompt_info.final_prompt == 'PROMPT_SENTINEL'
+    assert job.txt2img_prompt_info.final_negative_prompt == 'NEG_SENTINEL'
+

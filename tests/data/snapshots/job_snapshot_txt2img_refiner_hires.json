@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "recorded_at": "2025-12-07T19:11:18.634374",
+  "job_id": "snapshot-multi-stage",
+  "run_config": {
+    "run_mode": "queue",
+    "prompt_source": "manual",
+    "source": "gui"
+  },
+  "normalized_job": {
+    "job_id": "snapshot-multi-stage",
+    "path_output_dir": "runs/multi",
+    "filename_template": "{seed}_multi",
+    "seed": 8888,
+    "variant_index": 0,
+    "variant_total": 1,
+    "batch_index": 0,
+    "batch_total": 1,
+    "created_ts": 0.0,
+    "randomizer_summary": {
+      "enabled": false
+    },
+    "config": {
+      "prompt": "mountain sunrise over valleys",
+      "negative_prompt": "",
+      "model": "sd-v1.5",
+      "stages": [
+        "txt2img",
+        "hires",
+        "refiner"
+      ],
+      "hires_enabled": true,
+      "hires_upscale_factor": 2,
+      "refiner_enabled": true
+    }
+  },
+  "effective_prompts": {
+    "positive": "mountain sunrise over valleys",
+    "negative": ""
+  },
+  "seed_info": {
+    "master_seed": 8888,
+    "variant_index": 0,
+    "variant_total": 1,
+    "batch_index": 0,
+    "batch_total": 1
+  },
+  "stage_metadata": {
+    "stages": [
+      "txt2img",
+      "hires",
+      "refiner"
+    ],
+    "flags": {
+      "txt2img": true,
+      "img2img": false,
+      "refiner": true,
+      "hires": true,
+      "upscale": false,
+      "adetailer": false
+    }
+  },
+  "randomizer_expansions": {
+    "enabled": false
+  },
+  "model_selection": {
+    "base_model": "sd-v1.5",
+    "refiner_model": null,
+    "vae_model": null
+  },
+  "source": "gui",
+  "prompt_source": "manual"
+}

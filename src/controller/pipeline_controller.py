@@ -47,6 +47,7 @@ from src.utils.error_envelope_v2 import (
     wrap_exception,
 )
 from src.utils.queue_helpers_v2 import job_to_queue_job
+from src.utils.snapshot_builder_v2 import build_job_snapshot, normalized_job_from_snapshot
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
@@ -301,6 +302,7 @@ class PipelineController(_GUIPipelineController):
         source: str = "gui",
         prompt_source: str = "manual",
         prompt_pack_id: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> Job:
         """Convert a NormalizedJobRecord into the Job model used by JobService.
 
@@ -324,7 +326,7 @@ class PipelineController(_GUIPipelineController):
         # Build randomizer metadata from record
         randomizer_metadata = record.randomizer_summary
 
-        return Job(
+        job = Job(
             job_id=record.job_id,
             pipeline_config=pipeline_config,
             priority=JobPriority.NORMAL,
@@ -338,6 +340,13 @@ class PipelineController(_GUIPipelineController):
             variant_total=record.variant_total,
             learning_enabled=self._learning_enabled,
         )
+        job.snapshot = build_job_snapshot(
+            job,
+            record,
+            run_config=run_config or self._last_run_config,
+        )
+        return job
+
 
     def start_pipeline_v2(
         self,
@@ -1097,29 +1106,93 @@ class PipelineController(_GUIPipelineController):
         *,
         source: str = "gui",
         prompt_source: str = "pack",
+        run_config: dict[str, Any] | None = None,
     ) -> int:
         """Submit preview jobs as queue jobs using NormalizedJobRecord data."""
         normalized_jobs = self.get_preview_jobs()
         if not normalized_jobs:
             return 0
 
+        if run_config is not None:
+            self._last_run_config = run_config
+        submitted = self._submit_normalized_jobs(
+            normalized_jobs,
+            run_config=run_config,
+            source=source,
+            prompt_source=prompt_source,
+        )
+        return submitted
+
+    def _submit_normalized_jobs(
+        self,
+        records: list[NormalizedJobRecord],
+        *,
+        run_config: dict[str, Any] | None = None,
+        source: str = "gui",
+        prompt_source: str = "pack",
+    ) -> int:
+        if not records or not self._job_service:
+            return 0
         submitted = 0
-        for record in normalized_jobs:
+        run_config_to_use = run_config or self._last_run_config
+        for record in records:
             prompt_pack_id = None
-            config = record.config
-            if isinstance(config, dict):
-                prompt_pack_id = config.get("prompt_pack_id")
+            cfg = record.config
+            if isinstance(cfg, dict):
+                prompt_pack_id = cfg.get("prompt_pack_id")
             job = self._to_queue_job(
                 record,
                 run_mode="queue",
                 source=source,
                 prompt_source=prompt_source,
                 prompt_pack_id=prompt_pack_id,
+                run_config=run_config_to_use,
             )
             job.payload = lambda j=job: self._run_job(j)
             self._job_service.submit_job_with_run_mode(job)
             submitted += 1
         return submitted
+
+    def reconstruct_jobs_from_snapshot(self, snapshot: dict[str, Any]) -> list[NormalizedJobRecord]:
+        """Rebuild normalized jobs from a stored snapshot dictionary."""
+        if not snapshot:
+            return []
+        record = normalized_job_from_snapshot(snapshot)
+        if record is None:
+            return []
+        return [record]
+
+    def replay_job_from_history(self, job_id: str) -> int:
+        history_service = self.get_job_history_service()
+        if history_service is None:
+            return 0
+        entry = history_service.get_job(job_id)
+        if entry is None:
+            return 0
+        snapshot = getattr(entry, "snapshot", None)
+        if not isinstance(snapshot, dict):
+            return 0
+        record = normalized_job_from_snapshot(snapshot)
+        if record is None:
+            return 0
+        records = [record]
+        if self._app_state and hasattr(self._app_state, "set_preview_jobs"):
+            try:
+                self._app_state.set_preview_jobs(records)
+            except Exception:
+                pass
+        run_config = snapshot.get("run_config")
+        if run_config:
+            self._last_run_config = run_config
+        count = self._submit_normalized_jobs(
+            records,
+            run_config=run_config,
+            source=snapshot.get("source", "gui"),
+            prompt_source=snapshot.get("prompt_source", "manual"),
+        )
+        if count:
+            _logger.info("Replayed job %s with %d queued job(s)", job_id, count)
+        return count
 
     def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
         """Run pipeline synchronously and return result."""

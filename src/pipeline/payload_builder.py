@@ -330,11 +330,35 @@ def _apply_upscale_fields(
             payload["input_images"] = list(images)
             # For extra-single-image API, use 'image' key
             if len(images) > 0:
-                payload["image"] = images[0]
+                normalized = _normalize_upscale_image_entry(images[0])
+                if normalized:
+                    payload["image"] = normalized
 
     # Clear generation-specific fields that don't apply to upscale
     for key in ["prompt", "negative_prompt", "steps", "cfg_scale", "sampler_name"]:
         payload.pop(key, None)
+
+
+def _normalize_upscale_image_entry(image_entry: Any) -> str | None:
+    """Return a data URL for the upscale image entry."""
+    if image_entry is None:
+        return None
+    candidate = None
+    if isinstance(image_entry, dict):
+        candidate = (
+            image_entry.get("image")
+            or image_entry.get("value")
+            or image_entry.get("data")
+            or image_entry.get("b64_json")
+        )
+    else:
+        candidate = image_entry
+    if candidate is None:
+        return None
+    value = str(candidate).strip()
+    if not value:
+        return None
+    return value if value.startswith("data:") else f"data:image/png;base64,{value}"
 
 
 def _apply_adetailer_fields(
