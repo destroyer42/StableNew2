@@ -5,8 +5,111 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Callable, Literal, Optional, Sequence
 import uuid
+
+from src.pipeline.resolution_layer import (
+    ResolvedPipelineConfig,
+    ResolvedPrompt,
+    UnifiedConfigResolver,
+    UnifiedPromptResolver,
+)
+
+
+@dataclass(frozen=True)
+class JobBundleSummaryDTO:
+    num_parts: int
+    estimated_images: int
+    positive_preview: str
+    negative_preview: str | None
+    stage_summary: str
+    batch_summary: str
+    label: str
+
+    @classmethod
+    def from_job_bundle(cls, bundle: "JobBundle") -> "JobBundleSummaryDTO":
+        num_parts = len(bundle.parts)
+        estimated = bundle.total_image_count()
+        first_part = bundle.parts[-1] if bundle.parts else None
+        positive = cls._extract_positive_preview(first_part)
+        negative = cls._extract_negative_preview(first_part)
+        batch_summary = (
+            f"{first_part.config_snapshot.batch_size}×{first_part.config_snapshot.batch_count}"
+            if first_part
+            else "1×1"
+        )
+        stage_summary = cls._stage_summary_from_part(first_part)
+        return cls(
+            num_parts=num_parts,
+            estimated_images=estimated,
+            positive_preview=positive,
+            negative_preview=negative or None,
+            stage_summary=stage_summary,
+            batch_summary=batch_summary,
+            label=bundle.summary_label(),
+        )
+
+    @staticmethod
+    def _extract_positive_preview(part: "JobPart" | None) -> str:
+        if part and part.resolved_prompt:
+            return part.resolved_prompt.positive_preview
+        if part:
+            return (part.positive_prompt or "")[:120]
+        return ""
+
+    @staticmethod
+    def _extract_negative_preview(part: "JobPart" | None) -> str:
+        if part and part.resolved_prompt:
+            return part.resolved_prompt.negative_preview
+        if part:
+            return part.negative_prompt or ""
+        return ""
+
+    @staticmethod
+    def _stage_summary_from_part(part: "JobPart" | None) -> str:
+        if part and part.resolved_config:
+            stages = part.resolved_config.enabled_stage_names()
+            if stages:
+                return " + ".join(stages)
+        return "txt2img"
+
+
+@dataclass(frozen=True)
+class JobQueueItemDTO:
+    job_id: str
+    label: str
+    status: str
+    estimated_images: int
+    created_at: datetime
+
+    @classmethod
+    def from_job(cls, job: "Job") -> "JobQueueItemDTO":
+        return cls(
+            job_id=job.job_id,
+            label=getattr(job, "label", job.job_id) or job.job_id,
+            status=job.status.value if hasattr(job.status, "value") else str(job.status),
+            estimated_images=getattr(job, "total_images", 1),
+            created_at=getattr(job, "created_at", datetime.utcnow()),
+        )
+
+
+@dataclass(frozen=True)
+class JobHistoryItemDTO:
+    job_id: str
+    label: str
+    completed_at: datetime
+    total_images: int
+    stages: str
+
+    @classmethod
+    def from_job(cls, job: "Job") -> "JobHistoryItemDTO":
+        return cls(
+            job_id=job.job_id,
+            label=getattr(job, "label", job.job_id) or job.job_id,
+            completed_at=getattr(job, "completed_at", datetime.utcnow()) or datetime.utcnow(),
+            total_images=getattr(job, "total_images", 1),
+            stages="txt2img",
+        )
 
 
 class JobStatusV2(str, Enum):
@@ -52,29 +155,322 @@ class PackUsageInfo:
 
 
 @dataclass
-class JobUiSummary:
-    """Display-friendly summary of a job for UI panels.
+class PipelineConfigSnapshot:
+    """Canonical snapshot of pipeline-level config used before building jobs."""
 
-    This is the canonical summary for Preview/Queue panels to consume.
-    All fields are simple display strings or counts, no config objects.
+    model_name: str
+    sampler_name: str
+    scheduler_name: str
+    steps: int
+    cfg_scale: float
+    width: int
+    height: int
+    seed_mode: Literal["fixed", "random", "per_prompt"] = "fixed"
+    seed_value: int | None = None
+    batch_size: int = 1
+    batch_count: int = 1
+    enable_img2img: bool = False
+    enable_adetailer: bool = False
+    enable_hires_fix: bool = False
+    enable_upscale: bool = False
+    randomizer_config: dict[str, Any] | None = None
+    output_dir: str = "output"
+    filename_template: str = "{seed}"
+    metadata: dict[str, Any] | None = None
+
+    def copy_with_overrides(self, **overrides: Any) -> "PipelineConfigSnapshot":
+        data = {**self.__dict__, **overrides}
+        return PipelineConfigSnapshot(**data)
+
+    @staticmethod
+    def default() -> "PipelineConfigSnapshot":
+        return PipelineConfigSnapshot(
+            model_name="stable-diffusion-v1-5",
+            sampler_name="Euler a",
+            scheduler_name="ddim",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+        )
+
+
+@dataclass
+class JobPart:
+    """Represents a single prompt/negative + config to run."""
+
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    positive_prompt: str = ""
+    negative_prompt: str = ""
+    prompt_source: Literal["single", "pack", "preset", "other"] = "single"
+    pack_name: str | None = None
+    config_snapshot: PipelineConfigSnapshot = field(default_factory=PipelineConfigSnapshot.default)
+    resolved_prompt: ResolvedPrompt | None = None
+    resolved_config: ResolvedPipelineConfig | None = None
+    estimated_image_count: int = 1
+
+    def __post_init__(self) -> None:
+        self.estimated_image_count = max(
+            1, self.config_snapshot.batch_size * self.config_snapshot.batch_count
+        )
+
+
+@dataclass
+class JobBundle:
+    """Collection of JobParts that together represent user intent."""
+
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    label: str = ""
+    parts: list[JobPart] = field(default_factory=list)
+    global_negative_text: str = ""
+    run_mode: Literal["queue", "direct"] = "queue"
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    tags: list[str] = field(default_factory=list)
+
+    def total_image_count(self) -> int:
+        return sum(part.estimated_image_count for part in self.parts)
+
+    def summary_label(self) -> str:
+        if self.label:
+            return self.label
+        return f"{len(self.parts)} parts, {self.total_image_count()} images"
+
+
+class JobBundleBuilder:
+    """Builds canonical JobBundles from prompts/packs."""
+
+    def __init__(
+        self,
+        base_config: PipelineConfigSnapshot,
+        *,
+        global_negative_text: str = "",
+        apply_global_negative: bool = True,
+        prompt_resolver: UnifiedPromptResolver | None = None,
+        config_resolver: UnifiedConfigResolver | None = None,
+        stage_flags: dict[str, bool] | None = None,
+        batch_runs: int = 1,
+        randomizer_summary: dict[str, Any] | None = None,
+    ) -> None:
+        self._base_config = base_config
+        self._global_negative_text = global_negative_text.strip()
+        self._apply_global_negative = apply_global_negative
+        self._parts: list[JobPart] = []
+        self._prompt_resolver = prompt_resolver or UnifiedPromptResolver()
+        self._config_resolver = config_resolver or UnifiedConfigResolver()
+        self._stage_flags = stage_flags or {}
+        self._batch_runs = max(1, batch_runs)
+        self._randomizer_summary = randomizer_summary
+
+    def reset(self) -> None:
+        self._parts.clear()
+
+    def add_single_prompt(
+        self,
+        positive_prompt: str,
+        *,
+        negative_prompt: str = "",
+        override_config: PipelineConfigSnapshot | None = None,
+        prompt_source: Literal["single", "pack", "preset", "other"] = "single",
+    ) -> JobPart:
+        config = override_config or self._base_config
+        resolved_prompt = self._resolve_prompt(
+            base_prompt=positive_prompt,
+            negative_prompt=negative_prompt,
+        )
+        resolved_config = self._resolve_config(config)
+        part = JobPart(
+            positive_prompt=resolved_prompt.positive,
+            negative_prompt=resolved_prompt.negative,
+            prompt_source=prompt_source,
+            config_snapshot=config,
+            resolved_prompt=resolved_prompt,
+            resolved_config=resolved_config,
+        )
+        self._parts.append(part)
+        return part
+
+    def add_pack_prompts(
+        self,
+        pack_name: str,
+        prompts: Sequence[str],
+        *,
+        prepend_text: str = "",
+        pack_config: PipelineConfigSnapshot,
+    ) -> list[JobPart]:
+        result: list[JobPart] = []
+        for prompt in prompts:
+            resolved_prompt = self._resolve_prompt(
+                base_prompt=prompt,
+                prepend_text=prepend_text,
+                pack_prompt=prompt,
+                pack_negative=(
+                    pack_config.metadata.get("negative_prompt") if pack_config.metadata else ""
+                ),
+            )
+            resolved_config = self._resolve_config(pack_config)
+            part = JobPart(
+                positive_prompt=resolved_prompt.positive,
+                negative_prompt=resolved_prompt.negative,
+                prompt_source="pack",
+                pack_name=pack_name,
+                config_snapshot=pack_config,
+                resolved_prompt=resolved_prompt,
+                resolved_config=resolved_config,
+            )
+            self._parts.append(part)
+            result.append(part)
+        return result
+
+    def to_job_bundle(
+        self,
+        *,
+        label: str | None = None,
+        run_mode: Literal["queue", "direct"] = "queue",
+        tags: Sequence[str] | None = None,
+    ) -> JobBundle:
+        if not self._parts:
+            raise ValueError("JobBundleBuilder requires at least one JobPart")
+        bundle = JobBundle(
+            label=label or "",
+            parts=list(self._parts),
+            global_negative_text=self._global_negative_text,
+            run_mode=run_mode,
+            tags=list(tags or []),
+        )
+        if not bundle.label:
+            bundle.label = bundle.summary_label()
+        return bundle
+
+    def _resolve_prompt(
+        self,
+        *,
+        base_prompt: str,
+        negative_prompt: str = "",
+        pack_prompt: str | None = None,
+        prepend_text: str | None = None,
+        pack_negative: str | None = None,
+    ) -> ResolvedPrompt:
+        return self._prompt_resolver.resolve(
+            gui_prompt=base_prompt,
+            pack_prompt=pack_prompt,
+            prepend_text=prepend_text,
+            global_negative=self._global_negative_text,
+            apply_global_negative=self._apply_global_negative,
+            negative_override=negative_prompt,
+            pack_negative=pack_negative,
+        )
+
+    def _resolve_config(
+        self,
+        config: PipelineConfigSnapshot,
+    ) -> ResolvedPipelineConfig:
+        return self._config_resolver.resolve(
+            config_snapshot=config,
+            stage_flags=self._stage_flags,
+            batch_count=self._batch_runs,
+            randomizer_summary=self._randomizer_summary,
+        )
+
+
+@dataclass
+class JobUiSummary:
     """
+    Backward-compatible UI summary wrapper for preview/queue/history panels.
+
+    This is intentionally lightweight and derived from NormalizedJobRecord so
+    GUI code can display jobs without knowing pipeline internals.
+    """
+
     job_id: str
-    model: str
-    prompt_short: str
-    negative_prompt_short: str | None
-    sampler: str
-    steps: int | None
-    cfg_scale: float | None
-    seed_display: str
-    variant_label: str  # e.g., "" or "[v1/3]"
-    batch_label: str    # e.g., "" or "[b2/5]"
-    stages_summary: str  # e.g., "txt2img �+' upscale"
-    randomizer_summary: str | None
-    has_refiner: bool
-    has_hires: bool
-    has_upscale: bool
-    output_dir: str
-    total_summary: str  # e.g., "model | seed=12345 [v1/3]"
+    label: str                   # short display label (e.g. pack name or first prompt words)
+    positive_preview: str        # truncated positive prompt
+    negative_preview: str        # truncated negative prompt
+    stages_display: str          # e.g. "txt2img → adetailer (optional) → img2img (optional) → upscale (optional)"
+    estimated_images: int        # how many images this job will produce
+    created_at: Optional[datetime] = None
+
+    @classmethod
+    def from_normalized(cls, rec: "NormalizedJobRecord") -> "JobUiSummary":
+        """
+        Adapter to create JobUiSummary from NormalizedJobRecord.
+        """
+        config = rec.config
+
+        def _pick(keys: list[str], default: Any = None) -> Any:
+            for key in keys:
+                if isinstance(config, dict):
+                    value = config.get(key, None)
+                else:
+                    value = getattr(config, key, None)
+                if value is not None:
+                    return value
+            return default
+
+        model = _pick(["model", "model_name"], "unknown") or "unknown"
+        prompt_full = (
+            (rec.txt2img_prompt_info and rec.txt2img_prompt_info.final_prompt)
+            or _pick(["prompt"], "")
+            or ""
+        )
+        negative_prompt_full = (
+            (rec.txt2img_prompt_info and rec.txt2img_prompt_info.final_negative_prompt)
+            or _pick(["negative_prompt"], "")
+            or ""
+        )
+        stages = _pick(["stages"], []) or []
+
+        positive_preview = cls._truncate_text(prompt_full, 120)
+        negative_preview = (
+            cls._truncate_text(negative_prompt_full, 120) if negative_prompt_full else None
+        )
+        seed_display = str(rec.seed) if rec.seed is not None else "?"
+
+        variant_label = ""
+        if rec.variant_total > 1:
+            variant_label = f"[v{rec.variant_index + 1}/{rec.variant_total}]"
+
+        batch_label = ""
+        if rec.batch_total > 1:
+            batch_label = f"[b{rec.batch_index + 1}/{rec.batch_total}]"
+
+        stage_labels = {
+            "txt2img": "txt2img",
+            "img2img": "img2img",
+            "adetailer": "ADetailer",
+            "upscale": "upscale",
+        }
+        stage_parts = [stage_labels.get(s, s) for s in stages] if stages else ["txt2img"]
+        stages_display = " → ".join(stage_parts)
+
+        label = f"{model} | seed={seed_display}"
+        if variant_label:
+            label += f" {variant_label}"
+        if batch_label:
+            label += f" {batch_label}"
+
+        estimated_images = rec.variant_total * rec.batch_total if rec.variant_total and rec.batch_total else 1
+
+        return cls(
+            job_id=rec.job_id,
+            label=label,
+            positive_preview=positive_preview,
+            negative_preview=negative_preview,
+            stages_display=stages_display,
+            estimated_images=estimated_images,
+            created_at=rec.created_ts,
+        )
+
+@dataclass
+class JobLifecycleLogEvent:
+    timestamp: datetime
+    source: str
+    event_type: str
+    job_id: str | None
+    bundle_id: str | None
+    draft_size: int | None
+    message: str
+
+
 
 @dataclass
 class BatchSettings:
@@ -188,13 +584,10 @@ class NormalizedJobRecord:
             or _pick(["negative_prompt"], "")
             or ""
         )
-        sampler = _pick(["sampler", "sampler_name"], "") or ""
-        steps = self._coerce_int(_pick(["steps"]))
-        cfg_scale = self._coerce_float(_pick(["cfg_scale"]))
         stages = _pick(["stages"], []) or []
 
-        prompt_short = self._truncate_text(prompt_full, 40)
-        negative_prompt_short = (
+        positive_preview = self._truncate_text(prompt_full, 120)
+        negative_preview = (
             self._truncate_text(negative_prompt_full, 120) if negative_prompt_full else None
         )
         seed_display = str(self.seed) if self.seed is not None else "?"
@@ -214,41 +607,24 @@ class NormalizedJobRecord:
             "upscale": "upscale",
         }
         stage_parts = [stage_labels.get(s, s) for s in stages] if stages else ["txt2img"]
-        stages_summary = " → ".join(stage_parts)
+        stages_display = " → ".join(stage_parts)
 
-        total_summary = f"{model} | seed={seed_display}"
+        label = f"{model} | seed={seed_display}"
         if variant_label:
-            total_summary += f" {variant_label}"
+            label += f" {variant_label}"
         if batch_label:
-            total_summary += f" {batch_label}"
+            label += f" {batch_label}"
 
-        has_refiner = bool(_pick(["refiner_enabled"], False))
-        has_hires = bool(_pick(["hires_enabled"], False) or _pick(["hires_fix"]))
-        has_upscale = bool(
-            _pick(["upscale_enabled"], False)
-            or any(str(stage).lower() == "upscale" for stage in stages)
-        )
-
-        randomizer_text = self._format_randomizer_summary(self.randomizer_summary)
+        estimated_images = self.variant_total * self.batch_total if self.variant_total and self.batch_total else 1
 
         return JobUiSummary(
             job_id=self.job_id,
-            model=model,
-            prompt_short=prompt_short,
-            negative_prompt_short=negative_prompt_short,
-            sampler=sampler,
-            steps=steps,
-            cfg_scale=cfg_scale,
-            seed_display=seed_display,
-            variant_label=variant_label,
-            batch_label=batch_label,
-            stages_summary=stages_summary,
-            randomizer_summary=randomizer_text,
-            has_refiner=has_refiner,
-            has_hires=has_hires,
-            has_upscale=has_upscale,
-            output_dir=self.path_output_dir,
-            total_summary=total_summary,
+            label=label,
+            positive_preview=positive_preview,
+            negative_preview=negative_preview,
+            stages_display=stages_display,
+            estimated_images=estimated_images,
+            created_at=self.created_ts,
         )
 
     @staticmethod
@@ -461,4 +837,5 @@ __all__ = [
     "JobUiSummary",
     "StagePromptInfo",
     "PackUsageInfo",
+    "JobLifecycleLogEvent",
 ]

@@ -18,7 +18,12 @@ from dataclasses import dataclass
 import pytest
 
 from src.pipeline.job_builder_v2 import JobBuilderV2
-from src.pipeline.job_models_v2 import BatchSettings, OutputSettings
+from src.pipeline.job_models_v2 import (
+    BatchSettings,
+    JobBundleBuilder,
+    OutputSettings,
+    PipelineConfigSnapshot,
+)
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 
 
@@ -604,4 +609,82 @@ def test_stage_prompt_info_included(builder, base_config):
     assert job.txt2img_prompt_info is not None
     assert job.txt2img_prompt_info.final_prompt == 'PROMPT_SENTINEL'
     assert job.txt2img_prompt_info.final_negative_prompt == 'NEG_SENTINEL'
+
+
+class TestPipelineConfigSnapshot:
+    """Validate the PipelineConfigSnapshot DTO helpers."""
+
+    def test_default_snapshot_has_expected_fields(self) -> None:
+        snapshot = PipelineConfigSnapshot.default()
+        assert snapshot.model_name == "stable-diffusion-v1-5"
+        assert snapshot.sampler_name == "Euler a"
+        assert snapshot.scheduler_name == "ddim"
+        assert snapshot.steps == 20
+        assert snapshot.cfg_scale == 7.5
+        assert snapshot.width == 512
+        assert snapshot.height == 512
+        assert snapshot.batch_size == 1
+        assert snapshot.batch_count == 1
+
+    def test_copy_with_overrides_applies_values(self) -> None:
+        snapshot = PipelineConfigSnapshot.default()
+        modified = snapshot.copy_with_overrides(width=768, height=768, batch_count=4)
+        assert modified.width == 768
+        assert modified.height == 768
+        assert modified.batch_count == 4
+        # Original snapshot remains unchanged
+        assert snapshot.width == 512
+        assert snapshot.batch_count == 1
+
+
+class TestJobBundleBuilder:
+    """Tests for the new JobBundleBuilder intent model."""
+
+    @pytest.fixture
+    def base_snapshot(self) -> PipelineConfigSnapshot:
+        return PipelineConfigSnapshot.default().copy_with_overrides(batch_size=1, batch_count=1)
+
+    def test_add_single_prompt_without_global_negative(self, base_snapshot: PipelineConfigSnapshot) -> None:
+        builder = JobBundleBuilder(base_snapshot, apply_global_negative=False)
+        part = builder.add_single_prompt("castle in the clouds")
+        bundle = builder.to_job_bundle()
+
+        assert len(bundle.parts) == 1
+        assert bundle.total_image_count() == 1
+        assert part.positive_prompt == "castle in the clouds"
+        assert part.negative_prompt == ""
+        assert part.config_snapshot is base_snapshot
+        assert part.prompt_source == "single"
+
+    def test_add_single_prompt_with_global_negative(self, base_snapshot: PipelineConfigSnapshot) -> None:
+        builder = JobBundleBuilder(base_snapshot, global_negative_text="bad anatomy", apply_global_negative=True)
+        part = builder.add_single_prompt("cinematic hero")
+        assert part.negative_prompt == "bad anatomy"
+
+        # Adding another prompt that already has a negative should append the global terms
+        part2 = builder.add_single_prompt("epic scene", negative_prompt="red eyes")
+        assert part2.negative_prompt == "red eyes, bad anatomy"
+
+    def test_pack_prompts_apply_prepend_and_global_negative(self, base_snapshot: PipelineConfigSnapshot) -> None:
+        builder = JobBundleBuilder(base_snapshot, global_negative_text="global_bad", apply_global_negative=True)
+        pack_config = base_snapshot.copy_with_overrides(batch_size=2, batch_count=3, metadata={"negative_prompt": "pack_neg"})
+        parts = builder.add_pack_prompts(
+            "SDXL_heroes",
+            ["hero with wings", "angelic warrior"],
+            prepend_text="cinematic, 8k, ",
+            pack_config=pack_config,
+        )
+
+        assert len(parts) == 2
+        assert builder.to_job_bundle().total_image_count() == 12
+
+        assert parts[0].positive_prompt == "cinematic, 8k, hero with wings"
+        assert parts[1].positive_prompt == "cinematic, 8k, angelic warrior"
+        assert parts[0].negative_prompt == "pack_neg, global_bad"
+        assert parts[1].negative_prompt == "pack_neg, global_bad"
+
+    def test_to_job_bundle_without_parts_raises(self, base_snapshot: PipelineConfigSnapshot) -> None:
+        builder = JobBundleBuilder(base_snapshot)
+        with pytest.raises(ValueError):
+            builder.to_job_bundle()
 

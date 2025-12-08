@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from src.gui.gui_invoker import GuiInvoker
-from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2
+from src.pipeline.job_models_v2 import JobLifecycleLogEvent, NormalizedJobRecord, QueueJobV2
 from src.queue.job_history_store import JobHistoryEntry
 from src.utils.config import LoraRuntimeConfig
 
@@ -29,8 +29,36 @@ class PackJobEntry:
     randomizer_metadata: dict[str, Any] | None = None
 
 @dataclass
+class JobDraftPart:
+    positive_prompt: str
+    negative_prompt: str
+    estimated_images: int = 1
+
+
+@dataclass
+class JobDraftSummary:
+    part_count: int = 0
+    total_images: int = 0
+    last_positive_prompt: str = ""
+    last_negative_prompt: str = ""
+
+
+@dataclass
 class JobDraft:
     packs: list[PackJobEntry] = field(default_factory=list)
+    parts: list[JobDraftPart] = field(default_factory=list)
+    summary: JobDraftSummary = field(default_factory=JobDraftSummary)
+
+    def add_part(self, part: JobDraftPart) -> None:
+        self.parts.append(part)
+        self.summary.part_count = len(self.parts)
+        self.summary.total_images += part.estimated_images
+        self.summary.last_positive_prompt = part.positive_prompt
+        self.summary.last_negative_prompt = part.negative_prompt
+
+    def clear(self) -> None:
+        self.parts.clear()
+        self.summary = JobDraftSummary()
 
 
 @dataclass
@@ -98,6 +126,8 @@ class AppStateV2:
     _resource_listeners: List[Callable[[Dict[str, List[Any]]], None]] = field(default_factory=list)
     job_draft: JobDraft = field(default_factory=JobDraft)
     preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
+    log_events: list[JobLifecycleLogEvent] = field(default_factory=list)
+    log_events_max: int = 500
     lora_strengths: list[LoraRuntimeConfig] = field(default_factory=list)
     adetailer_models: list[str] = field(default_factory=list)
     adetailer_detectors: list[str] = field(default_factory=list)
@@ -313,7 +343,22 @@ class AppStateV2:
         self.job_draft.packs.extend(entries)
         self._notify("job_draft")
 
+    def add_job_draft_part(
+        self,
+        positive_prompt: str,
+        negative_prompt: str,
+        estimated_images: int = 1,
+    ) -> None:
+        part = JobDraftPart(
+            positive_prompt=positive_prompt,
+            negative_prompt=negative_prompt,
+            estimated_images=estimated_images,
+        )
+        self.job_draft.add_part(part)
+        self._notify("job_draft")
+
     def clear_job_draft(self) -> None:
+        self.job_draft.clear()
         self.job_draft.packs.clear()
         self._notify("job_draft")
 
@@ -323,6 +368,12 @@ class AppStateV2:
         if self.preview_jobs != jobs:
             self.preview_jobs = list(jobs)
             self._notify("preview_jobs")
+
+    def append_log_event(self, event: JobLifecycleLogEvent) -> None:
+        self.log_events.append(event)
+        if len(self.log_events) > self.log_events_max:
+            self.log_events = list(self.log_events[-self.log_events_max :])
+        self._notify("log_events")
 
     # PR-111: Run Controls UX state setters
     def set_is_run_in_progress(self, value: bool) -> None:

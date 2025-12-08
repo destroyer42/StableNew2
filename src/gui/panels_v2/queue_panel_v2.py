@@ -15,7 +15,7 @@ from src.gui.theme_v2 import (
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
-from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2
+from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2, JobQueueItemDTO
 
 
 class QueuePanelV2(ttk.Frame):
@@ -477,6 +477,57 @@ class QueuePanelV2(ttk.Frame):
             if job.job_id == self._running_job_id:
                 return i + 1  # 1-based
         return None
+
+    # -------------------------------------------------------------------------
+    # PR-D: DTO-based Queue Management
+    # -------------------------------------------------------------------------
+
+    def upsert_job(self, dto: JobQueueItemDTO) -> None:
+        """Add or update a job in the queue based on DTO.
+        
+        PR-D: Core method for queue panel updates via JobService callbacks.
+        
+        Args:
+            dto: JobQueueItemDTO with current job state
+        """
+        # Check if job already exists
+        for i, job in enumerate(self._jobs):
+            if job.job_id == dto.job_id:
+                # Update existing job with DTO data
+                # Convert DTO back to QueueJobV2 (simplified)
+                self._jobs[i] = QueueJobV2(
+                    job_id=dto.job_id,
+                    label=dto.label,
+                    prompt_preview=dto.label,  # Use label as fallback
+                    estimated_images=dto.estimated_images,
+                    created_at=dto.created_at,
+                    status=dto.status,
+                )
+                self.update_jobs(self._jobs)
+                return
+        
+        # Add new job
+        new_job = QueueJobV2(
+            job_id=dto.job_id,
+            label=dto.label,
+            prompt_preview=dto.label,
+            estimated_images=dto.estimated_images,
+            created_at=dto.created_at,
+            status=dto.status,
+        )
+        self._jobs.append(new_job)
+        self.update_jobs(self._jobs)
+
+    def remove_job(self, job_id: str) -> None:
+        """Remove a job from the queue by ID.
+        
+        PR-D: Core method for removing completed/cancelled jobs.
+        
+        Args:
+            job_id: The job ID to remove
+        """
+        self._jobs = [job for job in self._jobs if job.job_id != job_id]
+        self.update_jobs(self._jobs)
 
 
 __all__ = ["QueuePanelV2"]

@@ -10,12 +10,14 @@ import time
 from typing import Any, Callable, Literal, Protocol
 
 from src.controller.job_history_service import JobHistoryService
+from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.config.app_config import get_process_container_config, get_watchdog_config
 from src.queue.job_model import Job, JobExecutionMetadata, JobStatus, RetryAttempt
 from src.gui.pipeline_panel_v2 import format_queue_job_summary
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JobHistoryStore
+from src.pipeline.job_models_v2 import JobQueueItemDTO, JobHistoryItemDTO
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
 from src.utils.process_container_v2 import (
@@ -141,6 +143,7 @@ class JobService:
         watchdog_config: WatchdogConfig | None = None,
         process_container_config: ProcessContainerConfig | None = None,
         container_factory: Callable[[str, ProcessContainerConfig], ProcessContainer] | None = None,
+        job_lifecycle_logger: JobLifecycleLogger | None = None,
     ) -> None:
         """Initialize JobService with queue, runner, and history dependencies.
 
@@ -192,6 +195,7 @@ class JobService:
         )
         self._container_factory = container_factory or build_process_container
         self._process_containers: dict[str, ProcessContainer] = {}
+        self._job_lifecycle_logger = job_lifecycle_logger
         self.job_queue.register_status_callback(self._handle_job_status_change)
 
     @property
@@ -201,6 +205,20 @@ class JobService:
 
     def register_callback(self, event: str, callback: Callable[..., None]) -> None:
         self._listeners.setdefault(event, []).append(callback)
+
+    def set_status_callback(self, name: str, callback: Callable[[Job, JobStatus], None]) -> None:
+        """PR-D: Register a callback for job status changes with full job + status info.
+        
+        Args:
+            name: Identifier for this callback (e.g., "gui_queue_history")
+            callback: Function that receives (job: Job, status: JobStatus)
+        """
+        # Use a special event type for status callbacks
+        event_key = f"_status_callback_{name}"
+        self._listeners.setdefault(event_key, []).append(callback)
+
+    def set_job_lifecycle_logger(self, logger: JobLifecycleLogger | None) -> None:
+        self._job_lifecycle_logger = logger
 
     def enqueue(self, job: Job) -> None:
         self.job_queue.submit(job)
@@ -503,19 +521,28 @@ class JobService:
 
     def _handle_job_status_change(self, job: Job, status: JobStatus) -> None:
         if status == JobStatus.RUNNING:
+            self._log_job_started(job.job_id)
             self._emit(self.EVENT_JOB_STARTED, job)
             self._start_watchdog(job)
         elif status == JobStatus.COMPLETED:
+            self._log_job_finished(job.job_id, "completed", "Job completed successfully.")
             self._emit(self.EVENT_JOB_FINISHED, job)
             self._record_job_history(job, status)
-        elif status in {JobStatus.CANCELLED, JobStatus.FAILED}:
+        elif status == JobStatus.CANCELLED:
+            self._log_job_finished(job.job_id, "cancelled", job.error_message or "Job cancelled.")
             self._emit(self.EVENT_JOB_FAILED, job)
-            if status == JobStatus.FAILED:
-                self._record_job_history(job, status)
+        elif status == JobStatus.FAILED:
+            self._log_job_finished(job.job_id, "failed", job.error_message or "Job failed.")
+            self._emit(self.EVENT_JOB_FAILED, job)
+            self._record_job_history(job, status)
         if status in {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED}:
             self._stop_watchdog(job.job_id)
             self.cleanup_external_processes(job.job_id, reason=status.value.lower())
             self._destroy_container(job.job_id)
+        
+        # PR-D: Emit status-specific callbacks for GUI queue/history updates
+        self._emit_status_callbacks(job, status)
+        
         self._emit_queue_updated()
         if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
             self._emit(self.EVENT_QUEUE_EMPTY)
@@ -597,3 +624,31 @@ class JobService:
                 callback(*args)
             except Exception:
                 continue
+
+    def _emit_status_callbacks(self, job: Job, status: JobStatus) -> None:
+        """PR-D: Emit status callbacks registered via set_status_callback."""
+        # Find all status callback listeners
+        status_callbacks = [
+            cb
+            for key, callbacks in self._listeners.items()
+            if key.startswith("_status_callback_")
+            for cb in callbacks
+        ]
+        
+        for callback in status_callbacks:
+            try:
+                callback(job, status)
+            except Exception as exc:
+                logger.debug("Status callback failed: %s", exc)
+
+    def _log_job_started(self, job_id: str | None) -> None:
+        if not self._job_lifecycle_logger or not job_id:
+            return
+        self._job_lifecycle_logger.log_job_started(source="job_service", job_id=job_id)
+
+    def _log_job_finished(self, job_id: str | None, status: str, message: str) -> None:
+        if not self._job_lifecycle_logger or not job_id:
+            return
+        self._job_lifecycle_logger.log_job_finished(
+            source="job_service", job_id=job_id, status=status, message=message
+        )

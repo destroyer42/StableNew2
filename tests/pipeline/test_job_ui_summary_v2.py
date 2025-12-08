@@ -35,35 +35,21 @@ def test_to_ui_summary_includes_negative_prompt_and_flags():
     job = make_job_record()
     summary = job.to_ui_summary()
 
-    assert summary.negative_prompt_short.startswith("bad")
-    assert summary.has_refiner
-    assert summary.has_hires
-    assert summary.has_upscale
+    assert summary.negative_preview.startswith("bad")
+    assert summary.stages_display == "txt2img → upscale"
+    assert summary.estimated_images == 2  # variant_total
 
 
-def test_to_ui_summary_formats_randomizer_summary():
-    randomizer = {
-        "max_variants": 3,
-        "model_choices": 2,
-        "sampler_choices": 2,
-        "cfg_scale_values": 2,
-        "steps_values": 5,
-        "seed_mode": "per_variant",
-    }
-    job = make_job_record(randomizer_summary=randomizer)
+def test_to_ui_summary_formats_label():
+    job = make_job_record(seed=999)
     summary = job.to_ui_summary()
 
-    rand_text = summary.randomizer_summary or ""
-    assert "variants" in rand_text
-    assert "models" in rand_text
-    assert "samplers" in rand_text
-    assert "cfg" in rand_text.lower()
-    assert "seed" in rand_text.lower()
+    assert "base-model" in summary.label
+    assert "seed=999" in summary.label
 
 
 def test_to_ui_summary_upscale_detected_from_stages():
     job = make_job_record(config={"stages": ["txt2img", "upscale", "adetailer"]})
     summary = job.to_ui_summary()
 
-    assert "upscale" in summary.stages_summary.lower()
-    assert summary.has_upscale
+    assert "upscale" in summary.stages_display.lower()

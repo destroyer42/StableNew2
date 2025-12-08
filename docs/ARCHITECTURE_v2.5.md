@@ -222,17 +222,19 @@ Stores:
 
 Current selections
 
-Override bundles
+  Override bundles
 
-RandomizationPlanV2
+  RandomizationPlanV2
 
-Output settings
+  Output settings
 
-Draft job list
+  Draft job list
 
-Queue view models
+  Queue view models
 
-GUI must not perform pipeline, merging, or job construction logic.
+  The Add-to-Job vertical slice (PR-C) keeps the draft bundle entirely inside `AppStateV2.job_draft` and relies on the PipelineController helpers (`add_single_prompt_to_draft`, `get_preview_jobs`, `enqueue_draft_bundle`) to keep PreviewPanelV2, QueuePanelV2, and JobHistoryPanelV2 synchronized without duplicating job state.
+
+  GUI must not perform pipeline, merging, or job construction logic.
 
 The Pipeline tab arranges the three primary columns (pack/config sidebar, stage cards, preview/queue + running job) so that each column is rooted inside a single `ScrollableFrame`, keeping column-level scrollbars and consistent card stacking. `MainWindowV2` applies default geometry/minimum-width constants so that all three columns are visible on launch without horizontal clipping.
 
@@ -269,7 +271,7 @@ Independent of GUI
 
 Fully normalized
 
-It includes two components: ConfigMergerV2 and JobBuilderV2.
+It includes two components: ConfigMergerV2 and JobBuilderV2. Controllers now feed these builders through the canonical job-intent model introduced in PR-B: `PipelineConfigSnapshot`, `JobPart`, `JobBundle`, and `JobBundleBuilder`. GUI/Controller code expresses user intent (prompts, packs, overrides, output settings) as a `JobBundle` before handing it to `JobBuilderV2`, which keeps preview/queue/runner behavior aligned.
 
 5. ConfigMergerV2 — Override & Merge Logic
 Inputs:
@@ -308,6 +310,18 @@ ASCII:
 vbnet
 Copy code
 PackConfig + Overrides → ConfigMergerV2 → MergedRunConfig
+
+### 4.4 Unified Prompt & Config Resolution Layer (JobBundle → Runner)
+
+All prompt/config combinations must flow through the new `src/pipeline/resolution_layer.py` helpers before they reach the queue or runner. The layer exposes:
+
+- **UnifiedPromptResolver** – it deterministically merges prepend text, GUI prompt fields, prompt pack text, pack negatives, preset defaults, and the global negative toggle into a single `ResolvedPrompt`. It also trims values for preview DTOs and flags whether global penalties were applied.
+- **UnifiedConfigResolver** – it consumes a `PipelineConfigSnapshot`, stage toggle flags, batch/seed metadata, and any randomizer summary to emit a `ResolvedPipelineConfig` whose `stages` map mirrors the runner’s canonical order and whose `final_size` reflects what `JobBuilderV2` will actually execute.
+
+`JobBundleBuilder`, the preview DTOs, and the controller’s queue/history wiring all draw from these resolved objects so Preview = Queue = Runner, stage summaries never drift, and history snapshots can be replayed with confidence.
+
+Because the resolver layer is pure and centralized, every new prompt or config path must reuse it; no GUI code may assemble prompts or stage configs outside this layer.
+
 6. JobBuilderV2 — Variant, Batch, and Seed Expansion
 JobBuilderV2 translates merged configs into a set of normalized jobs.
 

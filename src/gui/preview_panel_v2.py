@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from types import SimpleNamespace
 from typing import Any
 
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord
@@ -156,18 +157,61 @@ class PreviewPanelV2(ttk.Frame):
         first_summary = summaries[0] if summaries else None
         self._render_summary(first_summary, len(summaries))
 
+    def update_from_summary(self, dto: Any | None) -> None:
+        """Update preview from JobBundleSummaryDTO (PR-D method)."""
+        from src.pipeline.job_models_v2 import JobBundleSummaryDTO
+        
+        if dto is None or not isinstance(dto, JobBundleSummaryDTO):
+            self._render_summary(None, 0)
+            self._update_action_states(None)
+            return
+        
+        # Convert DTO to display data using SimpleNamespace to avoid type issues
+        job_id_display = f"{dto.num_parts} part(s)"
+        label_display = dto.label or "Draft Bundle"
+        positive_text = dto.positive_preview or ""
+        negative_text = dto.negative_preview if dto.negative_preview else ""
+        stages_text = dto.stage_summary or "-"
+        
+        summary = SimpleNamespace(
+            job_id=job_id_display,
+            label=label_display,
+            positive_preview=positive_text,
+            negative_preview=negative_text,
+            stages_display=stages_text,
+            estimated_images=dto.estimated_images,
+            created_at=None,
+        )
+        
+        self._render_summary(summary, dto.num_parts)  # type: ignore[arg-type]
+        # Enable buttons when draft has content
+        has_draft = dto.num_parts > 0
+        state = ["!disabled"] if has_draft else ["disabled"]
+        self.add_to_queue_button.state(state)
+        self.clear_draft_button.state(state)
+
     def update_from_job_draft(self, job_draft: Any) -> None:
         """Update preview summary from job draft."""
-        packs = getattr(job_draft, "packs", [])
-        if not packs:
+        if job_draft is None:
             self._render_summary(None, 0)
-            self._update_action_states(job_draft)
+            self._update_action_states(None)
             return
 
-        entry = packs[0]
-        summary = self._summary_from_pack_entry(entry)
-        self._render_summary(summary, len(packs))
-        self._update_action_states(job_draft)
+        packs = getattr(job_draft, "packs", [])
+        total = 0
+        summary = None
+        if packs:
+            entry = packs[0]
+            summary = self._summary_from_pack_entry(entry)
+            total = len(packs)
+        else:
+            draft_summary = getattr(job_draft, "summary", None)
+            if draft_summary and getattr(draft_summary, "part_count", 0) > 0:
+                summary = self._summary_from_draft_summary(draft_summary)
+                total = draft_summary.part_count
+
+        self._render_summary(summary, total)
+        self._update_action_states(job_draft, getattr(self.app_state, "preview_jobs", None))
 
     def update_from_controls(self, sidebar: Any) -> None:
         """Update preview summary from sidebar controls."""
@@ -183,17 +227,30 @@ class PreviewPanelV2(ttk.Frame):
         stages_text = " + ".join(stage_labels[stage] for stage in canonical) or "-"
         self.stage_summary_label.config(text=f"Stages: {stages_text}")
 
+    def _summary_from_draft_summary(self, summary: Any) -> Any:
+        return SimpleNamespace(
+            prompt_short=summary.last_positive_prompt,
+            negative_prompt_short=summary.last_negative_prompt,
+            model="Manual",
+            sampler="Manual",
+            steps=None,
+            cfg_scale=None,
+            seed_display="?",
+            variant_label="",
+            batch_label="",
+            stages_summary="-",
+            randomizer_summary=None,
+            has_refiner=False,
+            has_hires=False,
+            has_upscale=False,
+            output_dir="",
+            total_summary="Manual",
+        )
+
     def _summary_from_pack_entry(self, entry: Any) -> JobUiSummary:
         config = entry.config_snapshot or {}
         prompt_text = entry.prompt_text or str(config.get("prompt") or "")
         negative = entry.negative_prompt_text or str(config.get("negative_prompt", "") or "")
-        sampler = str(config.get("sampler") or config.get("sampler_name") or "")
-        steps = self._coerce_int(config.get("steps"))
-        cfg_scale = self._coerce_float(config.get("cfg_scale"))
-
-        model = str(config.get("model") or config.get("model_name") or entry.pack_name or "unknown") or "unknown"
-        seed = config.get("seed")
-        seed_display = str(seed) if seed is not None else "?"
         stage_flags = entry.stage_flags or {}
         stages = []
         stage_labels = {
@@ -207,33 +264,19 @@ class PreviewPanelV2(ttk.Frame):
                 stages.append(label)
         if not stages:
             stages.append("txt2img")
-        stages_summary = " + ".join(stages)
+        stages_display = " + ".join(stages)
 
-        randomizer_summary = NormalizedJobRecord._format_randomizer_summary(entry.randomizer_metadata)
-
-        has_refiner = bool(stage_flags.get("refiner") or config.get("refiner_enabled"))
-        has_hires = bool(stage_flags.get("hires") or config.get("hires_enabled"))
-        has_upscale = bool(stage_flags.get("upscale") or config.get("upscale_enabled"))
-        output_dir = str(config.get("output_dir") or config.get("path_output_dir") or "output")
+        model = str(config.get("model") or config.get("model_name") or entry.pack_name or "unknown") or "unknown"
+        label = f"{model} | seed={config.get('seed', '?')}"
 
         return JobUiSummary(
             job_id=entry.pack_id,
-            model=model,
-            prompt_short=self._truncate_text(prompt_text, limit=120),
-            negative_prompt_short=self._truncate_text(negative, limit=120) if negative else None,
-            sampler=sampler,
-            steps=steps,
-            cfg_scale=cfg_scale,
-            seed_display=seed_display,
-            variant_label="",
-            batch_label="",
-            stages_summary=stages_summary,
-            randomizer_summary=randomizer_summary,
-            has_refiner=has_refiner,
-            has_hires=has_hires,
-            has_upscale=has_upscale,
-            output_dir=output_dir,
-            total_summary=f"{model} | seed={seed_display}",
+            label=label,
+            positive_preview=self._truncate_text(prompt_text, limit=120),
+            negative_preview=self._truncate_text(negative, limit=120) if negative else "",
+            stages_display=stages_display,
+            estimated_images=1,  # Default for pack entry
+            created_at=None,
         )
 
     @staticmethod
@@ -281,29 +324,18 @@ class PreviewPanelV2(ttk.Frame):
             self.learning_metadata_label.config(text="Learning metadata: N/A")
             return
 
-        job_text = "Jobs: " + str(total) if total > 1 else "Job: 1"
+        job_text = f"Job: {summary.job_id}" if total == 1 else f"Jobs: {total}"
         self.job_count_label.config(text=job_text)
-        self._set_text_widget(self.prompt_text, summary.prompt_short)
-        self._set_text_widget(self.negative_prompt_text, summary.negative_prompt_short or "")
-        self.model_label.config(text=f"Model: {summary.model}")
-        self.sampler_label.config(text=f"Sampler: {summary.sampler or '-'}")
-        self.steps_label.config(
-            text=f"Steps: {summary.steps if summary.steps is not None else '-'}"
-        )
-        cfg_value = summary.cfg_scale if summary.cfg_scale is not None else "-"
-        self.cfg_label.config(text=f"CFG: {cfg_value}")
-        self.seed_label.config(text=f"Seed: {summary.seed_display}")
-        self.stage_summary_label.config(text=f"Stages: {summary.stages_summary}")
-
-        flag_text = self._format_flags(
-            refiner=summary.has_refiner,
-            hires=summary.has_hires,
-            upscale=summary.has_upscale,
-        )
-        self.stage_flags_label.config(text=flag_text)
-
-        randomizer_text = summary.randomizer_summary or "OFF"
-        self.randomizer_label.config(text=f"Randomizer: {randomizer_text}")
+        self._set_text_widget(self.prompt_text, summary.positive_preview or "")
+        self._set_text_widget(self.negative_prompt_text, summary.negative_preview or "")
+        self.model_label.config(text=f"Model: {summary.label}")
+        self.sampler_label.config(text="Sampler: -")
+        self.steps_label.config(text="Steps: -")
+        self.cfg_label.config(text="CFG: -")
+        self.seed_label.config(text="Seed: -")
+        self.stage_summary_label.config(text=f"Stages: {summary.stages_display}")
+        self.stage_flags_label.config(text=self._format_flags(refiner=False, hires=False, upscale=False))
+        self.randomizer_label.config(text="Randomizer: OFF")
         self.learning_metadata_label.config(text="Learning metadata: N/A")
 
     @staticmethod
@@ -324,11 +356,11 @@ class PreviewPanelV2(ttk.Frame):
 
     def _on_add_to_queue(self) -> None:
         """Move the draft job into the queue."""
-        self._invoke_controller("on_add_job_to_queue_v2")
+        self._invoke_controller("enqueue_draft_bundle")
 
     def _on_clear_draft(self) -> None:
         """Clear the current draft job metadata."""
-        self._invoke_controller("on_clear_job_draft")
+        self._invoke_controller("clear_draft_job_bundle")
 
     def _on_details_clicked(self) -> None:
         """Show the logging view via controller helper."""
@@ -343,7 +375,9 @@ class PreviewPanelV2(ttk.Frame):
         has_draft = False
         if job_draft is not None:
             packs = getattr(job_draft, "packs", [])
-            has_draft = bool(packs)
+            part_summary = getattr(job_draft, "summary", None)
+            has_parts = bool(getattr(part_summary, "part_count", 0))
+            has_draft = bool(packs) or has_parts
         has_preview = bool(preview_jobs)
         state = ["!disabled"] if has_draft or has_preview else ["disabled"]
         self.add_to_queue_button.state(state)

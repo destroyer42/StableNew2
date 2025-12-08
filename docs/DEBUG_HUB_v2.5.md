@@ -18,4 +18,9 @@ Access the hub via the Debug button in `MainWindowV2` or through `AppController.
 - Final prompts/negatives per stage and which global-negative terms were applied.
 - Stage flow (txt2img → img2img → upscale) and manifest availability.
 
+
+### Job Lifecycle Console
+
+The Pipeline tab includes `DebugLogPanelV2` below the preview and queue cards. This console displays `AppStateV2.log_events`, which are emitted by `JobLifecycleLogger` whenever the GUI adds a job to the draft, submits it to the queue, or JobService reports runner pickups/completions. Each line shows the source, event type, job ID (if any), and a concise message so operators can follow the job lifecycle without reading raw log files.
+
 Use the hub for faster diagnostics without touching the pipeline runner or queue internals.

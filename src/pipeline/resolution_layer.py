@@ -1,0 +1,198 @@
+"""Deterministic prompt and pipeline config resolution helpers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Mapping, Tuple
+
+
+MAX_PREVIEW_PROMPT_LENGTH = 120
+
+
+def _truncate(value: str, limit: int) -> str:
+    if not value:
+        return ""
+    return value if len(value) <= limit else value[:limit] + "..."
+
+
+@dataclass(frozen=True)
+class ResolvedPrompt:
+    """Immutable metadata describing how a prompt was resolved."""
+
+    positive: str
+    negative: str
+    positive_preview: str
+    negative_preview: str
+    global_negative_applied: bool
+
+    @classmethod
+    def empty(cls) -> "ResolvedPrompt":
+        return cls(positive="", negative="", positive_preview="", negative_preview="", global_negative_applied=False)
+
+
+@dataclass(frozen=True)
+class StageResolution:
+    """Per-stage resolution summary used for UI/DTO display."""
+
+    name: str
+    enabled: bool
+    details: dict[str, Any] = None
+
+
+@dataclass(frozen=True)
+class ResolvedPipelineConfig:
+    """Canonical representation of a resolved pipeline configuration."""
+
+    model_name: str
+    sampler_name: str
+    scheduler_name: str
+    steps: int
+    cfg_scale: float
+    width: int
+    height: int
+    final_size: Tuple[int, int]
+    seed: int | None
+    batch_size: int
+    batch_count: int
+    stages: dict[str, StageResolution]
+    randomizer_summary: dict[str, Any] | None = None
+
+    def enabled_stage_names(self) -> list[str]:
+        return [name for name, stage in self.stages.items() if stage.enabled]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "model_name": self.model_name,
+            "sampler_name": self.sampler_name,
+            "scheduler_name": self.scheduler_name,
+            "steps": self.steps,
+            "cfg_scale": self.cfg_scale,
+            "width": self.width,
+            "height": self.height,
+            "final_width": self.final_size[0],
+            "final_height": self.final_size[1],
+            "seed": self.seed,
+            "batch_size": self.batch_size,
+            "batch_count": self.batch_count,
+            "stages": {name: {"enabled": stage.enabled, **(stage.details or {})} for name, stage in self.stages.items()},
+            "randomizer_summary": self.randomizer_summary,
+        }
+
+
+class UnifiedPromptResolver:
+    """Deterministic merger for GUI prompt inputs, pack prompts, and negatives."""
+
+    def __init__(self, *, max_preview_length: int = MAX_PREVIEW_PROMPT_LENGTH, safety_negative: str = "") -> None:
+        self._max_preview_length = max_preview_length
+        self._safety_negative = safety_negative.strip()
+
+    def resolve(
+        self,
+        *,
+        gui_prompt: str,
+        pack_prompt: str | None = None,
+        prepend_text: str | None = None,
+        global_negative: str = "",
+        apply_global_negative: bool = True,
+        negative_override: str | None = None,
+        pack_negative: str | None = None,
+        preset_negative: str | None = None,
+    ) -> ResolvedPrompt:
+        positives = []
+        for part in (prepend_text, gui_prompt, pack_prompt):
+            if part:
+                cleaned = part.strip()
+                if cleaned:
+                    positives.append(cleaned)
+        positive = " ".join(positives).strip()
+
+        negative_parts = []
+        if negative_override:
+            negative_parts.append(negative_override.strip())
+        if pack_negative:
+            negative_parts.append(pack_negative.strip())
+        if preset_negative:
+            negative_parts.append(preset_negative.strip())
+        global_applied = False
+        if apply_global_negative and global_negative:
+            negative_parts.insert(0, global_negative.strip())
+            global_applied = True
+        if self._safety_negative:
+            negative_parts.append(self._safety_negative)
+        negative = ", ".join(part for part in negative_parts if part).strip()
+
+        positive_preview = _truncate(positive, self._max_preview_length)
+        negative_preview = _truncate(negative, self._max_preview_length)
+
+        return ResolvedPrompt(
+            positive=positive,
+            positive_preview=positive_preview,
+            negative=negative,
+            negative_preview=negative_preview,
+            global_negative_applied=global_applied,
+        )
+
+
+class UnifiedConfigResolver:
+    """Resolves stage toggles, seeds, and sizing into a single config snapshot."""
+
+    DEFAULT_STAGE_ORDER: list[str] = ["txt2img", "img2img", "upscale", "adetailer"]
+    DEFAULT_FLAGS: dict[str, bool] = {
+        "txt2img": True,
+        "img2img": False,
+        "upscale": False,
+        "adetailer": False,
+    }
+
+    def resolve(
+        self,
+        *,
+        config_snapshot: Any,
+        stage_flags: Mapping[str, bool] | None = None,
+        batch_count: int | None = None,
+        seed_value: int | None = None,
+        randomizer_summary: dict[str, Any] | None = None,
+        final_size_override: Tuple[int, int] | None = None,
+    ) -> ResolvedPipelineConfig:
+        flags = dict(self.DEFAULT_FLAGS)
+        if stage_flags:
+            for name, enabled in stage_flags.items():
+                if name in flags and isinstance(enabled, bool):
+                    flags[name] = enabled
+
+        width = getattr(config_snapshot, "width", 512) if config_snapshot else 512
+        height = getattr(config_snapshot, "height", 512) if config_snapshot else 512
+        final_size = final_size_override or (width, height)
+        batch_size = getattr(config_snapshot, "batch_size", 1) if config_snapshot else 1
+        batch_runs = batch_count if batch_count is not None else getattr(config_snapshot, "batch_count", 1)
+        seed = seed_value if seed_value is not None else getattr(config_snapshot, "seed_value", None)
+        randomizer = randomizer_summary or getattr(config_snapshot, "randomizer_config", None)
+
+        stages: dict[str, StageResolution] = {}
+        for stage_name in self.DEFAULT_STAGE_ORDER:
+            details = {
+                "model": getattr(config_snapshot, "model_name", None),
+                "sampler": getattr(config_snapshot, "sampler_name", None),
+                "scheduler": getattr(config_snapshot, "scheduler_name", None),
+            }
+            stages[stage_name] = StageResolution(
+                name=stage_name,
+                enabled=flags.get(stage_name, False),
+                details={k: v for k, v in details.items() if v},
+            )
+
+        return ResolvedPipelineConfig(
+            model_name=getattr(config_snapshot, "model_name", "unknown"),
+            sampler_name=getattr(config_snapshot, "sampler_name", "unknown"),
+            scheduler_name=getattr(config_snapshot, "scheduler_name", "unknown"),
+            steps=getattr(config_snapshot, "steps", 20),
+            cfg_scale=getattr(config_snapshot, "cfg_scale", 7.0),
+            width=width,
+            height=height,
+            final_size=final_size,
+            seed=seed,
+            batch_size=batch_size,
+            batch_count=batch_runs,
+            stages=stages,
+            randomizer_summary=randomizer,
+        )

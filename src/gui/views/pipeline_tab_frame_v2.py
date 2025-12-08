@@ -20,6 +20,7 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
+from src.gui.panels_v2.debug_log_panel_v2 import DebugLogPanelV2
 
 logger = logging.getLogger(__name__)
 
@@ -278,6 +279,14 @@ class PipelineTabFrame(ttk.Frame):
 
         self.pack_loader_compat = self.sidebar
         self.left_compat = self.sidebar
+
+        log_card = _create_card(self.right_scroll.inner)
+        log_card.grid(row=5, column=0, sticky="ew", padx=(0, 12), pady=(0, 0))
+        self.log_panel = DebugLogPanelV2(
+            log_card,
+            app_state=self.app_state,
+        )
+        self.log_panel.grid(row=0, column=0, sticky="nsew")
 
         # PR-GUI-D: Ensure minimum window width on first show
         self._width_ensured = False

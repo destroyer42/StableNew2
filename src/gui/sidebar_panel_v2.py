@@ -551,6 +551,10 @@ class SidebarPanelV2(ttk.Frame):
             return
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if not selection:
+            controller = self.controller
+            add_single = getattr(controller, "add_single_prompt_to_draft", None)
+            if callable(add_single):
+                add_single()
             return
         pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
         controller = self.controller

@@ -205,6 +205,12 @@ Each major module should have at least one corresponding test file.
   - To UI summary (`to_ui_summary`)
 - Tests must verify conversions and data integrity.
 
+### 5.4 Prompt & Config Resolution Tests
+
+- Resolver tests are mandatory: `UnifiedPromptResolver` must be covered for concatenating GUI/pack prompts, applying global negatives, and truncating previews deterministically.
+- `UnifiedConfigResolver` must be exercised for stage flag propagation, batch/seed resolution, and final-size overrides so the job summary DTOs can reflect what the runner executes.
+- An end-to-end "resolution path" test (bridging builder → summary dto) must exist so preview, queue, and normalized records all share the same `ResolvedPrompt`/`ResolvedPipelineConfig`.
+
 ---
 
 ============================================================
@@ -326,6 +332,11 @@ They must NOT:
 - The pipeline runner, executor, JobService, watchdog, and PipelineController wrap and re-log exceptions through `wrap_exception`/`log_with_ctx`, store `Job.error_envelope`, and expose the serialized envelope via diagnostics snapshots so downstream tooling has consistent, machine-readable failure records.
 - LogTracePanelV2 highlights structured error lines, and AppController now surfaces `ErrorModalV2` plus crash-bundle context whenever runs fail, giving users remediation tips, stack traces, the current envelope snapshot, and a direct way to open `reports/diagnostics/`.
 - Diagnostics bundles sanitize local paths, include `[DIAG]` log notifications, and surface the last bundle's filename in the dashboard so support engineers can pair GUI logs with zipped evidence without exposing user-sensitive paths.
+
+### 7.10 Job Lifecycle Logging
+
+- `JobLifecycleLogger` writes structured `JobLifecycleLogEvent` entries into `AppStateV2.log_events` whenever the GUI adds a draft job, enqueues a preview, or JobService updates a job's running/completed status. The buffer is capped via `log_events_max` so the console stays responsive.
+- `DebugLogPanelV2`, embedded in the Pipeline tab, subscribes to `log_events` and renders the most recent entries as `HH:MM:SS | source | event | job=...`. This gives operators an in-app narrative of Add-to-Job, Add-to-Queue, runner picks, and completions without tailing external logs.
 
 ### 7.11 Job Snapshotting & Replay (Phase 9)
 

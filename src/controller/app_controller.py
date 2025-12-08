@@ -77,6 +77,7 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JSONLJobHistoryStore
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_service import JobService
+from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
     load_queue_snapshot,
@@ -267,6 +268,7 @@ class AppController:
     ) -> None:
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
+        self._job_lifecycle_logger = JobLifecycleLogger(app_state=self.app_state)
         self.state = AppState()
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
@@ -298,6 +300,8 @@ class AppController:
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
         self._job_history_path = Path("runs") / "job_history.json"
         self.job_service = job_service or self._build_job_service()
+        if self.job_service:
+            self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
         self._diagnostics_lock = threading.Lock()
@@ -318,6 +322,7 @@ class AppController:
             structured_logger=self._structured_logger,
             job_service=self.job_service,
             pipeline_runner=self.pipeline_runner,
+            job_lifecycle_logger=self._job_lifecycle_logger,
         )
         self.process_auto_scanner = ProcessAutoScannerService(
             config=ProcessAutoScannerConfig(),
@@ -644,6 +649,7 @@ class AppController:
             history_store=history_store,
             history_service=history_service,
             run_callable=self._execute_job,
+            job_lifecycle_logger=self._job_lifecycle_logger,
         )
 
     def _setup_queue_callbacks(self) -> None:
@@ -658,6 +664,8 @@ class AppController:
         self._refresh_job_history()
         # PR-GUI-F3: Load persisted queue state on startup
         self._load_queue_state()
+        # PR-D: Register status callback for queue/history panel sync
+        self.job_service.set_status_callback("gui_queue_history", self._on_job_status_for_panels)
 
     def _setup_diagnostics_hooks(self) -> None:
         if not self.job_service:
@@ -1000,6 +1008,61 @@ class AppController:
             return float(value)
         except Exception:
             return default
+
+    def _on_job_status_for_panels(self, job: Job, status: str) -> None:
+        """Update queue/history panels when job status changes (PR-D callback)."""
+        from src.pipeline.job_models_v2 import JobQueueItemDTO, JobHistoryItemDTO
+        
+        if not self.main_window:
+            return
+        
+        queue_panel = getattr(self.main_window, "queue_panel", None)
+        history_panel = getattr(self.main_window, "history_panel", None)
+        
+        # Update queue panel
+        if queue_panel and status in {"pending", "running"}:
+            upsert_fn = getattr(queue_panel, "upsert_job", None)
+            if callable(upsert_fn):
+                try:
+                    from datetime import datetime
+                    created_at = getattr(job, "created_at", None) or datetime.now()
+                    dto = JobQueueItemDTO(
+                        job_id=job.job_id,
+                        label=getattr(job, "label", job.job_id),
+                        status=status,
+                        estimated_images=1,  # Placeholder
+                        created_at=created_at,
+                    )
+                    upsert_fn(dto)
+                except Exception as exc:
+                    self._append_log(f"[controller] Queue panel upsert error: {exc!r}")
+        
+        # Remove from queue when completed/failed
+        if queue_panel and status in {"completed", "failed", "cancelled"}:
+            remove_fn = getattr(queue_panel, "remove_job", None)
+            if callable(remove_fn):
+                try:
+                    remove_fn(job.job_id)
+                except Exception as exc:
+                    self._append_log(f"[controller] Queue panel remove error: {exc!r}")
+        
+        # Add to history when completed
+        if history_panel and status == "completed":
+            append_fn = getattr(history_panel, "append_history_item", None)
+            if callable(append_fn):
+                try:
+                    from datetime import datetime
+                    completed_at = getattr(job, "completed_at", None) or datetime.now()
+                    history_dto = JobHistoryItemDTO(
+                        job_id=job.job_id,
+                        label=getattr(job, "label", job.job_id),
+                        completed_at=completed_at,
+                        total_images=getattr(job, "total_images", 0),
+                        stages="-",  # Placeholder
+                    )
+                    append_fn(history_dto)
+                except Exception as exc:
+                    self._append_log(f"[controller] History panel append error: {exc!r}")
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self.app_state:
@@ -2436,21 +2499,30 @@ class AppController:
 
     def _get_active_prompt_text(self) -> str:
         """
-        Prefer PromptWorkspaceState prompt (Prompt tab) when available; fall back to legacy sources.
+        Get prompt from Pipeline tab's prompt_text widget first, then fall back to PromptWorkspaceState.
 
-        This is a temporary bridge until the full Pipeline tab refactor lands.
+        PR-D: Updated to check pipeline_panel.prompt_text for "Add to Job" functionality.
         """
+        # First try pipeline panel prompt text widget
+        try:
+            pipeline_panel = getattr(self.main_window, "pipeline_panel", None)
+            if pipeline_panel is not None and hasattr(pipeline_panel, "get_prompt"):
+                prompt_text = pipeline_panel.get_prompt()
+                if prompt_text and prompt_text.strip():
+                    return prompt_text
+        except Exception:
+            pass
+        
+        # Fall back to PromptWorkspaceState (Prompt tab)
         try:
             ws = getattr(self.main_window, "prompt_workspace_state", None)
             if ws is not None:
                 prompt_text = ws.get_current_prompt_text()
                 if prompt_text and prompt_text.strip():
-                    self._append_log("[controller] Using PromptWorkspaceState prompt.")
                     return prompt_text
         except Exception:
             pass
 
-        self._append_log("[controller] Using legacy prompt source (PromptWorkspaceState empty).")
         return ""
 
     # ------------------------------------------------------------------
@@ -2534,9 +2606,12 @@ class AppController:
         if not prompt:
             prompt = (pack.name if pack else current.get("preset_name")) or "StableNew GUI Run"
 
+        # Get negative prompt from AppStateV2 (not CurrentConfig)
+        negative_prompt = getattr(self.app_state, "negative_prompt", "") if self.app_state else ""
+
         return {
             "prompt": prompt,
-            "negative_prompt": getattr(self.state.current_config, "negative_prompt", "") or "",
+            "negative_prompt": negative_prompt or "",
             "model": current.get("model", ""),
             "model_name": current.get("model", ""),
             "vae_name": getattr(self.state.current_config, "vae_name", "") or "",
@@ -3036,6 +3111,64 @@ class AppController:
         if entries and self.app_state:
             self.app_state.add_packs_to_job_draft(entries)
             self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
+
+    def add_single_prompt_to_draft(self) -> None:
+        """Capture the current prompt/negative pair in the pipeline draft summary."""
+        controller = getattr(self, "pipeline_controller", None)
+        add_fn = getattr(controller, "add_job_part_from_current_config", None)
+        if not callable(add_fn):
+            return
+        try:
+            dto = add_fn()
+            if dto:
+                self._refresh_preview_from_bundle_dto(dto)
+                self._append_log(f"[controller] Added job part to draft ({dto.num_parts} part(s))")
+        except Exception as exc:
+            self._append_log(f"[controller] add_single_prompt_to_draft error: {exc!r}")
+
+    def clear_draft_job_bundle(self) -> None:
+        """Clear the current draft bundle from the GUI state."""
+        controller = getattr(self, "pipeline_controller", None)
+        clear_fn = getattr(controller, "clear_draft_bundle", None)
+        if not callable(clear_fn):
+            return
+        try:
+            clear_fn()
+            self._refresh_preview_from_bundle_dto(None)
+            self._append_log("[controller] Cleared draft bundle")
+        except Exception as exc:
+            self._append_log(f"[controller] clear_draft_job_bundle error: {exc!r}")
+
+    def enqueue_draft_bundle(self) -> int:
+        """Forward a draft bundle enqueue request to the pipeline controller."""
+        controller = getattr(self, "pipeline_controller", None)
+        enqueue_fn = getattr(controller, "enqueue_draft_bundle", None)
+        if not callable(enqueue_fn):
+            return 0
+        try:
+            job_id = enqueue_fn()
+            if job_id:
+                self._refresh_preview_from_bundle_dto(None)
+                self._append_log(f"[controller] Enqueued draft bundle as job {job_id}")
+                return 1
+            return 0
+        except Exception as exc:
+            self._append_log(f"[controller] enqueue_draft_bundle error: {exc!r}")
+            return 0
+
+    def _refresh_preview_from_bundle_dto(self, dto: Any | None) -> None:
+        """Refresh preview panel with draft bundle summary DTO."""
+        if not self.main_window:
+            return
+        preview_panel = getattr(self.main_window, "preview_panel", None)
+        if not preview_panel:
+            return
+        update_fn = getattr(preview_panel, "update_from_summary", None)
+        if callable(update_fn):
+            try:
+                update_fn(dto)
+            except Exception as exc:
+                self._append_log(f"[controller] Preview update error: {exc!r}")
 
     def on_add_job_to_queue(self) -> None:
         """Enqueue the current job draft."""

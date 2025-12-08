@@ -15,6 +15,7 @@ import uuid
 from typing import Callable, Any
 
 from src.controller.job_service import JobService
+from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.gui.controller import PipelineController as _GUIPipelineController
 from src.gui.state import StateManager
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
@@ -24,18 +25,24 @@ from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
 from src.pipeline.job_builder_v2 import JobBuilderV2
+from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     NormalizedJobRecord,
     BatchSettings,
     OutputSettings,
     QueueJobV2,
+    JobBundleSummaryDTO,
+    JobBundle,
+    JobBundleBuilder,
+    PipelineConfigSnapshot,
 )
 from src.gui.state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 from src.config import app_config
 from src.config.app_config import is_queue_execution_enabled
 from src.controller.job_history_service import JobHistoryService
+from src.queue.job_history_store import JobHistoryEntry
 from src.controller.pipeline_config_assembler import PipelineConfigAssembler, GuiOverrides, RunPlan, PlannedJob
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.state import PipelineState
@@ -513,6 +520,7 @@ class PipelineController(_GUIPipelineController):
         on_learning_record: Callable[[LearningRecord], None] | None = None,
         config_assembler: PipelineConfigAssembler | None = None,
         job_builder: JobBuilderV2 | None = None,
+        job_lifecycle_logger: JobLifecycleLogger | None = None,
         **kwargs,
     ):
         # Pop parameters that are not for the parent class
@@ -548,6 +556,11 @@ class PipelineController(_GUIPipelineController):
         self._active_job_id: str | None = None
         self._last_run_config: dict[str, Any] | None = None
         self._app_state: Any | None = None
+        self._job_lifecycle_logger = job_lifecycle_logger
+        
+        # PR-D: Draft bundle ownership
+        self._draft_bundle: JobBundle | None = None
+        self._job_bundle_builder: JobBundleBuilder | None = None
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
         history_store = self._job_controller.get_history_store()
@@ -557,6 +570,8 @@ class PipelineController(_GUIPipelineController):
             if job_service is not None
             else JobService(queue, runner, history_store, history_service=history_service)
         )
+        if self._job_lifecycle_logger:
+            self._job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
         self._job_controller.set_status_callback("pipeline", self._on_job_status)
         self._setup_queue_callbacks()
 
@@ -842,6 +857,7 @@ class PipelineController(_GUIPipelineController):
         self._job_service.register_callback(JobService.EVENT_JOB_FINISHED, self._on_job_finished)
         self._job_service.register_callback(JobService.EVENT_JOB_FAILED, self._on_job_failed)
         self._job_service.register_callback(JobService.EVENT_QUEUE_EMPTY, self._on_queue_empty)
+        self._setup_history_callbacks()
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self._app_state:
@@ -866,6 +882,15 @@ class PipelineController(_GUIPipelineController):
         if self._app_state:
             self._app_state.set_queue_status("idle")
 
+    def _setup_history_callbacks(self) -> None:
+        history_service = self.get_job_history_service()
+        if history_service is None:
+            return
+        history_service.register_callback(self._on_history_entry_updated)
+
+    def _on_history_entry_updated(self, entry: JobHistoryEntry) -> None:
+        self._refresh_app_state_history()
+
     def _refresh_app_state_queue(self) -> None:
         if not self._app_state or not self._job_service:
             return
@@ -879,6 +904,20 @@ class PipelineController(_GUIPipelineController):
                 setter(queue_jobs)
             except Exception:
                 pass
+
+    def _refresh_app_state_history(self) -> None:
+        if not self._app_state or not self._job_service:
+            return
+        store = getattr(self._job_service, "history_store", None)
+        entries: list[JobHistoryEntry] = []
+        if store and hasattr(store, "list_jobs"):
+            try:
+                entries = store.list_jobs(limit=20)
+            except Exception:
+                entries = []
+        setter = getattr(self._app_state, "set_history_items", None)
+        if callable(setter):
+            setter(entries)
 
     def _list_service_jobs(self) -> list[Job]:
         queue = getattr(self._job_service, "queue", None)
@@ -896,6 +935,31 @@ class PipelineController(_GUIPipelineController):
             self._app_state.set_running_job(None)
             return
         self._app_state.set_running_job(job_to_queue_job(job))
+
+    def _get_draft_part_count(self) -> int:
+        if not self._app_state:
+            return 0
+        summary = getattr(self._app_state.job_draft, "summary", None)
+        if summary is None:
+            return 0
+        return getattr(summary, "part_count", 0) or 0
+
+    def _log_add_to_job_event(self) -> None:
+        if not self._job_lifecycle_logger:
+            return
+        self._job_lifecycle_logger.log_add_to_job(
+            source="pipeline_tab",
+            draft_size=self._get_draft_part_count(),
+        )
+
+    def _log_add_to_queue_event(self, job_id: str | None) -> None:
+        if not self._job_lifecycle_logger:
+            return
+        self._job_lifecycle_logger.log_add_to_queue(
+            source="pipeline_tab",
+            job_id=job_id,
+            draft_size=self._get_draft_part_count(),
+        )
 
     # ------------------------------------------------------------------
     # GUI callbacks for preview + job controls
@@ -1005,6 +1069,59 @@ class PipelineController(_GUIPipelineController):
             job.status = JobStatus.QUEUED
             job.error_message = None
             self._job_service.enqueue(job)
+
+    def add_single_prompt_to_draft(self) -> None:
+        """Add the current prompt/negative pair to the GUI job draft summary."""
+        if not self._app_state:
+            return
+        prompt = (getattr(self._app_state, "prompt", "") or "").strip()
+        if not prompt:
+            return
+        negative = (getattr(self._app_state, "negative_prompt", "") or "").strip()
+        estimated = self._estimate_draft_image_count()
+        add_fn = getattr(self._app_state, "add_job_draft_part", None)
+        if callable(add_fn):
+            add_fn(prompt, negative, estimated)
+            self._refresh_preview_jobs_from_state()
+            self._log_add_to_job_event()
+
+    def clear_draft_job_bundle(self) -> None:
+        """Clear the GUI job draft bundle state."""
+        if not self._app_state:
+            return
+        clear_fn = getattr(self._app_state, "clear_job_draft", None)
+        if callable(clear_fn):
+            clear_fn()
+        self._refresh_preview_jobs_from_state()
+
+    def enqueue_draft_bundle_legacy(self) -> int:
+        """DEPRECATED: Old implementation using app_state.job_draft. Use enqueue_draft_bundle instead."""
+        if not self._app_state:
+            return 0
+        summary = getattr(self._app_state.job_draft, "summary", None)
+        if not summary or summary.part_count == 0:
+            return 0
+        count = self.submit_preview_jobs_to_queue()
+        if count:
+            self.clear_draft_job_bundle()
+        return count
+
+    def _refresh_preview_jobs_from_state(self) -> None:
+        """Refresh preview jobs so GUI panels display the latest normalized records."""
+        if not self._app_state:
+            return
+        records = self.get_preview_jobs()
+        setter = getattr(self._app_state, "set_preview_jobs", None)
+        if callable(setter):
+            setter(records or [])
+
+    def _estimate_draft_image_count(self) -> int:
+        """Estimate total images based on batch/batch_runs overrides in state."""
+        overrides = self._extract_state_overrides()
+        batch_size = getattr(overrides, "batch_size", 1) or 1
+        pipeline_state = getattr(self.state_manager, "pipeline_state", None)
+        batch_runs = getattr(pipeline_state, "batch_runs", 1) or 1
+        return batch_size * batch_runs
 
     def submit_run_plan(
         self,
@@ -1150,6 +1267,7 @@ class PipelineController(_GUIPipelineController):
             )
             job.payload = lambda j=job: self._run_job(j)
             self._job_service.submit_job_with_run_mode(job)
+            self._log_add_to_queue_event(job.job_id)
             submitted += 1
         return submitted
 
@@ -1217,6 +1335,270 @@ class PipelineController(_GUIPipelineController):
             except Exception:
                 pass
         return self._job_history_service
+
+    # -------------------------------------------------------------------------
+    # PR-D: Draft JobBundle Lifecycle
+    # -------------------------------------------------------------------------
+
+    def _ensure_bundle_builder(self) -> JobBundleBuilder:
+        """Lazy-initialize the JobBundleBuilder with current config."""
+        if self._job_bundle_builder is None:
+            # Build base config from current state
+            try:
+                base_config = self._build_pipeline_config_from_state()
+                overrides = self._extract_state_overrides()
+                
+                config_snapshot = PipelineConfigSnapshot(
+                    model_name=getattr(overrides, "model_name", None) or getattr(base_config, "model_name", "sd-v1-5"),
+                    sampler_name=getattr(overrides, "sampler", None) or getattr(base_config, "sampler", "Euler a"),
+                    scheduler_name=getattr(base_config, "scheduler", "ddim"),
+                    steps=getattr(overrides, "steps", 20) or 20,
+                    cfg_scale=getattr(overrides, "cfg_scale", 7.5) or 7.5,
+                    width=getattr(overrides, "width", 512) or 512,
+                    height=getattr(overrides, "height", 512) or 512,
+                    batch_size=getattr(overrides, "batch_size", 1) or 1,
+                    batch_count=getattr(self.state_manager, "batch_runs", 1) or 1,
+                )
+                
+                global_negative = getattr(overrides, "negative_prompt", "")
+                stage_flags = self._collect_stage_flags()
+                batch_runs = getattr(self.state_manager, "batch_runs", 1) or 1
+                randomizer_metadata = self._extract_metadata("randomizer_metadata")
+                prompt_resolver = UnifiedPromptResolver()
+                config_resolver = UnifiedConfigResolver()
+                self._job_bundle_builder = JobBundleBuilder(
+                    config_snapshot,
+                    global_negative_text=global_negative,
+                    apply_global_negative=True,
+                    prompt_resolver=prompt_resolver,
+                    config_resolver=config_resolver,
+                    stage_flags=stage_flags,
+                    batch_runs=batch_runs,
+                    randomizer_summary=randomizer_metadata,
+                )
+            except Exception as exc:
+                _logger.warning("Failed to initialize JobBundleBuilder: %s", exc)
+                # Fallback to default config
+                self._job_bundle_builder = JobBundleBuilder(
+                    PipelineConfigSnapshot.default(),
+                    global_negative_text="",
+                )
+        return self._job_bundle_builder
+
+    def _collect_stage_flags(self) -> dict[str, bool]:
+        pipeline_state = getattr(self.state_manager, "pipeline_state", None)
+        return {
+            "txt2img": bool(getattr(pipeline_state, "stage_txt2img_enabled", True)),
+            "img2img": bool(getattr(pipeline_state, "stage_img2img_enabled", False)),
+            "upscale": bool(getattr(pipeline_state, "stage_upscale_enabled", False)),
+            "adetailer": bool(getattr(pipeline_state, "stage_adetailer_enabled", False)),
+        }
+
+    def add_job_part_from_current_config(self) -> JobBundleSummaryDTO | None:
+        """Add a single job part from the current GUI config to the draft bundle.
+        
+        PR-D: Core method for "Add to Job" (single prompt) button.
+        
+        Returns:
+            JobBundleSummaryDTO for preview panel update, or None on failure.
+        """
+        try:
+            builder = self._ensure_bundle_builder()
+            overrides = self._extract_state_overrides()
+            
+            # Get prompt from state
+            prompt_state = getattr(self.state_manager, "prompt_workspace_state", None)
+            positive_prompt = ""
+            if prompt_state:
+                positive_prompt = getattr(prompt_state, "prompt", "") or ""
+            if not positive_prompt:
+                positive_prompt = getattr(overrides, "prompt", "")
+            
+            # Strip whitespace and check if empty
+            positive_prompt = positive_prompt.strip() if positive_prompt else ""
+            if not positive_prompt:
+                _logger.warning("add_job_part_from_current_config called with empty prompt")
+                return None
+            
+            negative_prompt = getattr(overrides, "negative_prompt", "")
+            
+            # Add the part
+            builder.add_single_prompt(
+                positive_prompt,
+                negative_prompt=negative_prompt,
+                prompt_source="single",
+            )
+            
+            # Build draft bundle
+            self._draft_bundle = builder.to_job_bundle(
+                label="Draft Bundle",
+                run_mode="queue",
+            )
+            
+            # Return summary for preview
+            return JobBundleSummaryDTO.from_job_bundle(self._draft_bundle)
+            
+        except Exception as exc:
+            _logger.error("Failed to add job part from current config: %s", exc)
+            return None
+
+    def add_job_parts_from_pack(
+        self,
+        pack_id: str,
+        prepend_text: str = "",
+    ) -> JobBundleSummaryDTO | None:
+        """Add multiple job parts from a prompt pack to the draft bundle.
+        
+        PR-D: Core method for "Add to Job" (with pack) button.
+        
+        Args:
+            pack_id: The identifier of the prompt pack to load.
+            prepend_text: Optional text to prepend to each prompt.
+            
+        Returns:
+            JobBundleSummaryDTO for preview panel update, or None on failure.
+        """
+        try:
+            builder = self._ensure_bundle_builder()
+            
+            # Load pack prompts (implementation depends on your pack loading logic)
+            # This is a placeholder - you'll need to wire in actual pack loading
+            prompts = self._load_pack_prompts(pack_id)
+            if not prompts:
+                _logger.warning("No prompts found in pack: %s", pack_id)
+                return None
+            
+            # Get current config for pack
+            overrides = self._extract_state_overrides()
+            pack_config = PipelineConfigSnapshot(
+                model_name=getattr(overrides, "model_name", "sd-v1-5"),
+                sampler_name=getattr(overrides, "sampler", "Euler a"),
+                scheduler_name="ddim",
+                steps=getattr(overrides, "steps", 20),
+                cfg_scale=getattr(overrides, "cfg_scale", 7.5),
+                width=getattr(overrides, "width", 512),
+                height=getattr(overrides, "height", 512),
+                batch_size=getattr(overrides, "batch_size", 1),
+                batch_count=getattr(self.state_manager, "batch_runs", 1),
+            )
+            
+            # Add all pack prompts
+            builder.add_pack_prompts(
+                pack_name=pack_id,
+                prompts=prompts,
+                prepend_text=prepend_text,
+                pack_config=pack_config,
+            )
+            
+            # Build draft bundle
+            self._draft_bundle = builder.to_job_bundle(
+                label=f"Pack: {pack_id}",
+                run_mode="queue",
+            )
+            
+            # Return summary for preview
+            return JobBundleSummaryDTO.from_job_bundle(self._draft_bundle)
+            
+        except Exception as exc:
+            _logger.error("Failed to add job parts from pack %s: %s", pack_id, exc)
+            return None
+
+    def _load_pack_prompts(self, pack_id: str) -> list[str]:
+        """Load prompts from a pack. Placeholder for actual pack loading logic."""
+        # TODO: Wire in actual pack loading from your file_io or pack manager
+        return []
+
+    def clear_draft_bundle(self) -> None:
+        """Clear the draft bundle and reset the builder.
+        
+        PR-D: Core method for "Clear Draft" button.
+        """
+        try:
+            self._draft_bundle = None
+            if self._job_bundle_builder:
+                self._job_bundle_builder.reset()
+            _logger.debug("Draft bundle cleared")
+        except Exception as exc:
+            _logger.error("Failed to clear draft bundle: %s", exc)
+
+    def enqueue_draft_bundle(self) -> str | None:
+        """Enqueue the current draft bundle and clear it.
+        
+        PR-D: Core method for "Add to Queue" button.
+        
+        Returns:
+            Job ID if successful, None otherwise.
+        """
+        try:
+            if not self._draft_bundle or not self._draft_bundle.parts:
+                _logger.warning("enqueue_draft_bundle called with empty draft")
+                return None
+            
+            # Save parts count before clearing
+            parts_count = len(self._draft_bundle.parts)
+            bundle_job_id: str | None = None
+            
+            # Convert bundle parts to jobs and enqueue
+            for part in self._draft_bundle.parts:
+                try:
+                    from src.pipeline.pipeline_runner import PipelineConfig
+                    
+                    config = PipelineConfig(
+                        prompt=part.positive_prompt,
+                        negative_prompt=part.negative_prompt,
+                        model=part.config_snapshot.model_name,
+                        sampler=part.config_snapshot.sampler_name,
+                        steps=part.config_snapshot.steps,
+                        cfg_scale=part.config_snapshot.cfg_scale,
+                        width=part.config_snapshot.width,
+                        height=part.config_snapshot.height,
+                    )
+                    
+                    # Build job using existing helper
+                    job = self._build_job(
+                        config,
+                        run_mode="queue",
+                        source="gui_bundle",
+                        prompt_source=part.prompt_source,
+                    )
+                    
+                    # Submit to queue
+                    if self._job_service:
+                        self._job_service.submit_queued(job)
+                    
+                    # Track the first job ID as representative
+                    if bundle_job_id is None:
+                        bundle_job_id = job.job_id
+                    
+                except Exception as exc:
+                    _logger.error("Failed to convert JobPart to job: %s", exc)
+                    continue
+            
+            if bundle_job_id is None:
+                return None
+            
+            # Clear the draft after successful enqueue
+            self.clear_draft_bundle()
+            
+            _logger.info("Enqueued draft bundle with %d parts", parts_count)
+            return bundle_job_id
+            
+        except Exception as exc:
+            _logger.error("Failed to enqueue draft bundle: %s", exc)
+            return None
+
+    def get_draft_bundle_summary(self) -> JobBundleSummaryDTO | None:
+        """Get summary of the current draft bundle for preview.
+        
+        Returns:
+            JobBundleSummaryDTO if draft exists, None otherwise.
+        """
+        if self._draft_bundle:
+            try:
+                return JobBundleSummaryDTO.from_job_bundle(self._draft_bundle)
+            except Exception as exc:
+                _logger.error("Failed to create bundle summary: %s", exc)
+        return None
 
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         if self._job_service is None:
