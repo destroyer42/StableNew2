@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-09T06:54:49",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251209-065439.zip",
-  "file_count": 1553,
-  "total_size_bytes": 26009285,
+  "created_at": "2025-12-09T07:52:03",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251209-075201.zip",
+  "file_count": 1554,
+  "total_size_bytes": 26026126,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -2083,6 +2083,11 @@
       "path": "data/webui_cache.json",
       "size_bytes": 172,
       "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "docs/ARCHITECTURAL_DEBT_ANALYSIS.md",
+      "size_bytes": 11243,
+      "mtime_iso": "2025-12-09T07:50:46"
     },
     {
       "path": "docs/ARCHITECTURE_v2.5.md",
@@ -5231,8 +5236,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 143773,
-      "mtime_iso": "2025-12-09T06:50:56"
+      "size_bytes": 145202,
+      "mtime_iso": "2025-12-09T07:50:46"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -5271,8 +5276,8 @@
     },
     {
       "path": "src/controller/pipeline_controller.py",
-      "size_bytes": 75122,
-      "mtime_iso": "2025-12-09T06:51:03"
+      "size_bytes": 76159,
+      "mtime_iso": "2025-12-09T07:50:46"
     },
     {
       "path": "src/controller/process_auto_scanner_service.py",
@@ -5446,8 +5451,8 @@
     },
     {
       "path": "src/gui/preview_panel_v2.py",
-      "size_bytes": 23442,
-      "mtime_iso": "2025-12-08T22:12:59"
+      "size_bytes": 26575,
+      "mtime_iso": "2025-12-09T07:50:46"
     },
     {
       "path": "src/gui/prompt_pack_adapter_v2.py",
@@ -5492,7 +5497,7 @@
     {
       "path": "src/gui/sidebar_panel_v2.py",
       "size_bytes": 42668,
-      "mtime_iso": "2025-12-09T06:37:55"
+      "mtime_iso": "2025-12-09T07:50:46"
     },
     {
       "path": "src/gui/stage_chooser.py",
@@ -6251,8 +6256,8 @@
     },
     {
       "path": "state/queue_state_v2.json",
-      "size_bytes": 92,
-      "mtime_iso": "2025-12-08T21:36:14"
+      "size_bytes": 91,
+      "mtime_iso": "2025-12-09T07:32:17"
     },
     {
       "path": "tests/conftest.py",
