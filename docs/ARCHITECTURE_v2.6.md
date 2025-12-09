@@ -1,531 +1,581 @@
-#CANONICAL
 ARCHITECTURE_v2.6.md
-StableNew – Canonical Software Architecture (Updated for PromptPack-Only Model)
+ (Canonical)
 
-Version: 2.6
-Status: Canonical
-Last Updated: 2025-12-08
-Supersedes: ARCHITECTURE_v2.5.md
+StableNew – Core Architecture Specification (v2.6)
+Last Updated: 2025-12-09
+Status: Canonical, Binding**
 
-0. Overview
+0. Purpose
 
-StableNew is structured into clear, decoupled subsystems:
+This document defines the only valid architecture for StableNew’s execution pipeline, UI → backend flows, state ownership, and model boundaries.
 
-GUI V2 → Controllers → Builder Pipeline (PR-CORE-B) → JobService → Queue → Runner → Executor
-                                  ↘ Learning
-                                  ↘ Debug Hub
-                                  ↘ History
+v2.6 replaces all earlier architectures and renders all legacy pathways invalid, including:
 
+V1 pipeline paths
 
-The system is governed by PromptPack-Only execution:
+GUI prompt-entry–based jobs
 
-All pipeline jobs MUST originate from a saved Prompt Pack.
-No free-text prompts are allowed in the Pipeline Tab.
-All jobs must be fully normalized before entering the Queue or Runner.
+Legacy JobBundle-based flows
 
-This architecture ensures:
+Legacy StateManager usage
 
-Deterministic, reproducible image generation
+Legacy Job.payload–based execution
 
-Stable testing and debugging
+pipeline_config–derived jobs
 
-Clean subsystem boundaries
+Direct runner invocation from UI/controllers
 
-Reliable Queue/Runner execution
+Any partial migration layers
 
-Meaningful Learning records
+Every subsystem in StableNew must comply with this document.
 
-GUI consistency and simplicity
+1. System Overview
 
-1. High-Level System Diagram
- ┌────────────┐     ┌──────────────────┐     ┌─────────────────────┐
- │  GUI V2    │ --> │   Controllers    │ --> │  Builder Pipeline    │
- │            │     │ (App + Pipeline) │     │ (CORE-B components)  │
- └─────┬──────┘     └─────────┬────────┘     └──────────┬──────────┘
-       │                        │                         │
-       │ UnifiedJobSummary      │ NormalizedJobRecord     │
-       ▼                        ▼                         ▼
- ┌──────────────┐       ┌─────────────────┐       ┌───────────────────┐
- │ Preview Pane │       │   JobService    │ ----> │      Queue        │
- └──────────────┘       └──────┬──────────┘       └─────────┬─────────┘
-                                │                            │
-                                ▼                            ▼
-                         ┌─────────────┐            ┌────────────────────┐
-                         │ RunnerDriver│ ---------> │    Executor         │
-                         └──────┬──────┘            └─────────┬──────────┘
-                                │                             │
-                                ▼                             ▼
-                     ┌────────────────┐                ┌────────────────┐
-                     │   History      │                │   Learning     │
-                     └────────────────┘                └────────────────┘
-                                         ▲
-                                         │
-                                  ┌──────────────┐
-                                  │   Debug Hub  │
-                                  └──────────────┘
+StableNew is composed of five primary layers:
 
-2. Canonical Invariants
+GUI Layer (Tkinter V2)
 
-These invariants govern the entire system:
+Controller Layer
 
-2.1 PromptPack-Only Execution (MANDATORY)
+Application State (AppStateV2)
 
-All pipeline jobs must reference:
+Builder Pipeline Layer
 
-prompt_pack_id
+Execution Layer (Queue + Runner + Outputs)
 
-prompt_pack_row_index
+Post-Execution Layer (History, Learning, DebugHub)
 
-GUI cannot accept or store free-text prompts.
+Only one unified path exists for job creation and execution:
 
-Prompt Packs are parsed and resolved only by the Builder Pipeline.
+Advanced Prompt Builder →
+PromptPack (TXT + JSON) →
+Pipeline Tab →
+Config + Overrides + Sweeps →
+Builder Pipeline →
+NormalizedJobRecord[] →
+JobService Queue →
+Runner →
+Outputs + History →
+Learning System
 
-No job may enter JobService without full normalization.
 
-2.2 Controllers Are the Single Source of Truth
+There are no exception paths, no alternate flows, and no legacy compatibility routes.
 
-Controllers govern:
+2. PromptPack-Only Input Model
+2.1 PromptPack is the sole source of prompt text
 
-App state transitions
+All generation begins with a Prompt Pack:
 
-PromptPack selection
+{pack_name}.txt — contains prompt rows
 
-Config snapshot selection
+{pack_name}.json — contains metadata:
 
-RunMode decisions
+matrix slots
 
-Submission of fully normalized jobs to JobService
+allowed randomization values
 
-Controllers never:
+tags, style metadata
 
-modify prompts
+default config block (optional)
 
-construct payloads for Executor
+There are no GUI text fields for prompts, no “manual mode,” no fallback prompt sources.
 
-re-interpret stage configs
+This invariant is enforced across:
 
-2.3 Builder Pipeline Produces Final Job Records
+GUI
 
-The builder (PR-CORE-B) is the only subsystem allowed to:
+Controllers
 
-Merge configs
+Builder pipeline
 
-Resolve prompts
+Job construction
 
-Select matrix variants
+Testing
 
-Compute seeds
+Documentation
 
-Build StageChain
+2.2 Prompt Pack Lifecycle (Summary)
 
-Construct NormalizedJobRecord objects
+Prompt Packs are created/edited only in the Advanced Prompt Builder.
+Pipeline Tab cannot modify packs.
 
-Queue/Runner must not perform builder logic.
+Editing a PromptPack means:
 
-2.4 Queue & Runner Consume NormalizedJobRecords Only
+Editing the TXT (prompt rows)
 
-Queue/Runner treat jobs as:
+Editing the JSON (matrix / defaults)
 
-Immutable
+Packs are immutable at runtime during job execution.
 
-Fully resolved
+3. Application State Architecture (AppStateV2)
+3.1 AppStateV2 is the only runtime state container
 
-Complete execution specifications
+AppStateV2 contains:
 
-They never:
+Loaded Prompt Packs
 
-build configs
+Selected PromptPack + selected row index
 
-derive prompts
+Pipeline overrides & sweep configurations
 
-resolve LoRAs
+Global negative
 
-synthesize negative prompts
+UI panel state
 
-modify jobs
+JobDraft (a description of the pipeline run being assembled)
 
-2.5 GUI Must Be Purely Declarative
+3.2 Controllers must never store draft state
 
-GUI:
+PipelineController must not contain _draft_bundle
 
-Reads data
+No controller may mutate or own job state
 
-Displays summaries
+All draft manipulation flows through:
 
-Invokes controllers via explicit events
+app_state.job_draft
 
-GUI must not:
+3.3 StateManager and legacy V1 state systems are forbidden
 
-resolve prompts
+All usage must be removed.
 
-merge configs
+4. Builder Pipeline Architecture (Canonical)
 
-modify job objects
+The builder pipeline is the single source of truth for constructing jobs.
 
-build any part of a job request
+There is one, and only one, allowed sequence:
 
-3. Subsystem Descriptions
-3.1 GUI V2
+4.1 ConfigMergerV2
+4.2 RandomizerEngineV2
+4.3 UnifiedPromptResolver
+4.4 UnifiedConfigResolver
+4.5 JobBuilderV2
+→ N NormalizedJobRecord objects
 
-GUI is strictly a view layer.
 
-3.1.1 Pipeline Tab
+Each step is pure, stateless, deterministic, and validated.
 
-Displays:
+4.1 ConfigMergerV2
 
-PromptPack selector
+Inputs:
 
-Config snapshot selector
+Pack-level defaults
 
-UnifiedJobSummary preview
+AppStateV2 pipeline settings
 
-Cannot:
+Global Negative flag
 
-Accept free-text prompts
+Sweep/Variant plan
 
-Construct job objects
+Outputs:
 
-3.1.2 Queue Panel
+A single MergedBaseConfig
 
-Displays:
+A ConfigVariantPlanV2 describing sweep expansions
 
-Jobs in SUBMITTED/QUEUED/RUNNING states
+Rules:
 
-Derived from UnifiedJobSummary + lifecycle events
+Never reads prompts
 
-3.1.3 Running Job View
+Never reads GUI text fields
 
-Displays:
+Must not mutate PromptPack JSON
 
-Active job’s UnifiedJobSummary
+4.2 RandomizerEngineV2
 
-Stage progress
+Works only with:
 
-Current image previews
+Matrix slots from PromptPack JSON
 
-3.1.4 History Panel
+Randomization settings configured in Pipeline Tab
 
-Displays:
+Output:
 
-Completed jobs
+RandomizationPlanV2 describing variant expansions of matrix slots
 
-Canonical history entries based on NormalizedJobRecord
+Rules:
 
-3.1.5 Debug Hub
+Expansion is deterministic
 
-Displays:
+Variants are applied to prompt templates in UnifiedPromptResolver
 
-Structured lifecycle events
+4.3 UnifiedPromptResolver
 
-“Explain Job” using job summaries and records
+Inputs:
 
-3.2 Controllers
+PromptPack TXT row
 
-Controllers enforce system rules:
-
-Validate UI input
-
-Enforce PromptPack-only constraint
-
-Request job construction from builder
-
-Call JobService to enqueue jobs
-
-Push summaries and state changes back to GUI
-
-Controllers do not:
-
-Build job records
-
-Modify NormalizedJobRecord fields
-
-Handle runner logic
-
-3.3 Builder Pipeline (PR-CORE-B)
-
-The builder pipeline consists of:
-
-PresetConfig + PackConfig + RuntimeOverrides
-    ↓
-ConfigMergerV2
-    ↓
 RandomizationPlanV2
-    ↓
-RandomizerEngineV2 → VariantConfig
-    ↓
-PromptPack TXT Row
-    ↓
-UnifiedPromptResolver
-    ↓
-UnifiedConfigResolver
-    ↓
-JobBuilderV2
-    ↓
-list[NormalizedJobRecord]
 
-PromptPackNormalizedJobBuilder orchestrates this chain inside PipelineController: it loads the pack config/rows, feeds them through the resolvers, applies randomization metadata, and hands deterministic variants to JobBuilderV2 so each NormalizedJobRecord carries prompt_pack provenance, embeddings/LoRAs, matrix slot selections, stage chain details, and aesthetic metadata before JobService persists or queues it.
+Global negative (from settings)
 
+Outputs:
 
-Each NormalizedJobRecord is:
+ResolvedPositivePrompt
 
-Complete
+ResolvedNegativePrompt
 
-Deterministic
+Rules:
 
-Immutable
+All substitutions happen here
 
-Ready for queue
+Matrix values must be applied exactly once
 
-This pipeline is pure and testable.
+Global negative merges into negative prompt only
 
-3.4 JobService & Queue
+No mutation of PromptPack or config occurs here
 
-JobService:
+4.4 UnifiedConfigResolver
 
-Accepts lists of NormalizedJobRecord
+Inputs:
 
-Validates them
+MergedBaseConfig
 
-Emits SUBMITTED/QUEUED events
+ConfigVariantPlanV2
 
-Queue:
+Stage toggles
 
-FIFO storage
+Pack defaults
 
-Holds immutable records
+Outputs:
 
-Does not mutate jobs
+Fully resolved stage-by-stage config:
 
-3.5 Runner & Executor
+txt2img
 
-RunnerDriver:
+refiner
 
-Pulls jobs from queue
+hires
 
-Sends requests to Executor
+upscale
 
-Produces output metadata
+adetailer (if enabled)
 
-Emits RUNNING → COMPLETED/FAILED events
+Rules:
 
-Writes history entries
+Must output a complete, immutable config tree
 
-Executor:
+Builder pipeline does not permit missing fields
 
-Talks to Stable Diffusion WebUI / API
+4.5 JobBuilderV2
 
-Produces images
+This is the final expansion stage.
 
-No architectural authority
+Inputs:
 
-3.6 History System
+Resolved prompts
 
-History stores:
+Resolved config
 
-Immutable job record (full schema)
+Randomization variants
+
+Config variants
+
+Batch size
+
+Seeds
+
+Output:
+
+List[NormalizedJobRecord] (immutable)
+
+Rules:
+
+No mutation downstream
+
+Job IDs assigned here
+
+Stage chain stored in final NJR
+
+5. NormalizedJobRecord (NJR)
+
+The NJR is the only valid job representation for execution.
+
+It contains:
+
+PromptPack metadata
+
+Source prompt row
+
+Resolved prompts
+
+Resolved config + all stages
+
+Randomization slot values
+
+Config sweep values
+
+Batch index
+
+Variant index
+
+Seeds
+
+Execution metadata
+
+5.1 NJRs are immutable
+
+Controllers, queue, runner, and history may not modify them.
+
+6. Execution Layer
+
+The execution layer consists of:
+
+JobService (Queue Manager)
+
+Queue
+
+Runner
+
+There is no alternate path.
+
+6.1 JobService
+
+Responsibilities:
+
+Accept lists of NJRs
+
+Enqueue NJRs (FIFO)
+
+Track lifecycle states:
+
+SUBMITTED
+
+QUEUED
+
+RUNNING
+
+COMPLETED
+
+FAILED
+
+JobService performs no job mutation.
+
+6.2 Queue
+
+Pure FIFO.
+
+Only NJRs may enter
+
+No legacy job types
+
+No “payload jobs”
+
+No pipeline_config jobs
+
+No reconstruction inside queue
+
+6.3 Runner
+
+Runner:
+
+Consumes NJRs
+
+Does not interpret or modify config
+
+Calls API/WebUI exactly as described by NJR
+
+Emits:
+
+Output images
+
+Logs
+
+Timing data
+
+Errors
+
+7. Post-Execution Layer
+7.1 History
+
+Stores immutable job execution summaries:
+
+NJR snapshot
+
+Execution metadata
 
 Output paths
 
-Start/stop timestamps
+Duration
 
-Failure messages
+Error data
 
-Supports:
+History → Restore replays job by reconstructing NJR from snapshot.
 
-Learning tab consumption
+7.2 Learning System
 
-Re-run pipelines
+Consumes History entries:
 
-Debugging workflows
+Prompts
 
-3.7 Learning System
+Config snapshot
 
-Consumes:
+Rating metadata
 
-Full NormalizedJobRecord
+Outcome scoring
 
-User ratings
+Learning system never alters NJRs.
 
-Derived learning features
-
-Learning depends critically on PromptPack provenance and matrix metadata.
-
-3.8 Debug Hub
+7.3 DebugHub
 
 Receives:
 
-Lifecycle events
+Builder pipeline trace
 
-Canonical job summaries
+Resolved config trees
 
-Error/failure events
+Resolved prompts
 
-Payload constructions (debug mode only)
+Randomizer + sweep expansions
 
-Supports:
+Runner logs
 
-Explain Job
+Error traces
 
-Job reconstruction
+DebugHub is read-only.
 
-Sequence diagrams
+8. GUI Architecture
+8.1 Pipeline Tab
 
-4. Key Data Models
-4.1 UnifiedJobSummary (GUI-facing)
+Pipeline Tab is responsible for:
 
-Contains:
+Selecting PromptPack + row
 
-prompt_pack_id & name
+Configuring sweeps and variants
 
-prompt preview
+Configuring stage toggles
 
-negative preview
+Previewing resolved job summaries (UnifiedJobSummary)
 
-stage chain preview
+Pipeline Tab does NOT:
 
-seed, sampler, model
+Hold draft job objects
 
-matrix slot summary
+Construct jobs
 
-variant_index, batch_index
+Read/write prompt text
 
-status
+Store builder logic
 
-Summaries are read-only and derived.
+It only manipulates AppStateV2.job_draft.
 
-4.2 NormalizedJobRecord (Queue/Runner-facing)
+8.2 Advanced Prompt Builder
 
-Full job spec including:
+This is the only place where:
 
-PromptPack provenance
+Prompt text is edited
 
-Fully resolved positive/negative prompts
+Matrix slots added/removed
 
-Embedding tags
+Pack-level defaults edited
 
-LoRA tags
+PromptPack TXT and JSON are updated
 
-Matrix slot values
+Pipeline Tab merely consumes these packs.
 
-StageChain with stage configs
+8.3 Queue / History / Learning UIs
 
-Sampler, scheduler, cfg, steps
+Must present:
 
-Seed, resolution
+UnifiedJobSummary
 
-Loop semantics
+Job lifecycle data
 
-Variant & batch indices
+Execution metadata
 
-randomization metadata
+Ratings (Learning Tab)
 
-run_mode, queue_source
+Must not reconstruct or mutate NJRs.
 
-This is the canonical execution contract.
+9. Forbidden Systems and Code Paths
 
-5. Core Architectural Flows
-5.1 Pipeline Job Construction Flow
-GUI selects Prompt Pack + Config Snapshot
-    ↓
-Controller requests builder
-    ↓
-Builder returns list[NormalizedJobRecord]
-    ↓
-Controller sends to JobService
-    ↓
-Queue stores records
-    ↓
-Runner executes
+The following MUST NOT exist in repo code:
 
-5.2 Lifecycle Event Flow
-JobService SUBMITTED → GUI Queue Panel
-JobQueue QUEUED → GUI Queue Panel
-Runner RUNNING → GUI Running Panel + Debug Hub
-Runner COMPLETED / FAILED → GUI History Panel + Debug Hub
+GUI prompt text fields
 
-5.3 Re-run Flow
+Any job created outside the builder pipeline
 
-History → Controller → Builder → New jobs
+pipeline_config or legacy config union models
 
-GUI cannot modify old jobs.
+Legacy JobBundle or enqueue_draft_bundle_legacy
 
-6. Error Handling & Validation
+Controller-owned _draft_bundle
 
-Missing PromptPack → hard error
+StateManager usage
 
-Missing required config → hard error
+DTOs representing job summaries outside NJR/UJS
 
-Empty prompt after resolution → error
+Direct runner calls bypassing JobService
 
-Invalid stage configs → error
+Shims bridging v1→v2 pipeline behavior
 
-Queue never accepts incomplete jobs
+Any such code must be removed during PRs.
 
-Runner catches failures and reports via Debug Hub
+10. Versioning & Architectural Change Protocol
+10.1 Architecture versioning
 
-7. Testing Guidance
+This document is v2.6.
+Any architectural modification requires:
 
-Testing must verify:
+Planner agent issues Architecture Change Proposal
 
-Determinism of builder pipeline
+Update to:
 
-Reproducibility of job records
+ARCHITECTURE_v2.X.md
 
-Lifecycle correctness
+PROMPT_PACK_LIFECYCLE_v2.X.md
 
-GUI receives correct UnifiedJobSummary objects
+Builder Deep-Dive
 
-All flows functional under PromptPack-only constraint
+Roadmap
 
-8. Appendix A — Diagrams
-8.1 Builder Pipeline Expanded
-Preset     Pack JSON     Overrides
-   \         |              /
-    \        |             /
-     └── ConfigMergerV2 ──┘
-               ↓
-      RandomizationPlanV2
-               ↓
-      RandomizerEngineV2
-               ↓
-  PromptPack TXT Rows (N)
-           × Variants (V)
-           × Batches (B)
-               ↓
-      UnifiedPromptResolver
-               ↓
-      UnifiedConfigResolver
-               ↓
-      JobBuilderV2
-               ↓
- list[NormalizedJobRecord]
+Codex receives explicit authorization to modify architecture
 
-9. Appendix B — Forbidden Couplings
+Codex must never modify architecture without Planner-delivered updates.
 
-The following are strictly forbidden:
+11. Golden Path (Execution Guarantee)
 
-GUI constructing job objects
+Every PR and every change must preserve:
 
-Runner modifying job records
+1. User selects PromptPack
+2. User selects row
+3. Pipeline Tab configures overrides/sweeps
+4. Builder pipeline constructs NJRs
+5. JobService enqueues NJRs
+6. Runner executes NJRs
+7. Outputs + History are written
+8. Learning consumes History
+9. DebugHub provides traces and introspection
 
-Queue invoking resolver logic
 
-Controller reconstructing prompts
+If this path breaks, a PR must fix it immediately.
 
-Learning modifying history records
+12. Summary of Architectural Invariants
+12.1 All jobs come from Prompt Packs
 
-Any subsystem generating prompts outside builder
+No alternate prompt source exists.
 
-10. Versioning & Governance
+12.2 There is one builder pipeline
 
-This file supersedes all previous architectural definitions.
+All jobs must pass through it.
 
-Future changes must:
+12.3 NJRs are the only execution units
 
-Pass through governance review
+Queue + Runner only consume NJRs.
 
-Update this canonical document
+12.4 No mutation past JobBuilder
 
-Update tests and PR templates accordingly
+NJR is final.
 
-END — ARCHITECTURE_v2.6.md
+12.5 AppStateV2 is the only mutable runtime state
+
+Controllers do not own draft state.
+
+12.6 No legacy systems may remain
+
+Shims, parallel codepaths, V1 state, V1 job models → delete them.
+
+12.7 Documentation must match implementation
+
+No drift allowed.
+
+END OF ARCHITECTURE_v2.6.md (Canonical Edition)
