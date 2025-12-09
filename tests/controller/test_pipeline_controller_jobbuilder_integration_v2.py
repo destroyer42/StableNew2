@@ -102,6 +102,11 @@ class FakeWebUIConnection:
         from src.controller.webui_connection_controller import WebUIConnectionState
         return WebUIConnectionState.READY
 
+
+def _start_pipeline_with_pack(controller: PipelineController, **kwargs: Any) -> bool:
+    controller._last_run_config = {"prompt_pack_id": "test-pack-123"}
+    return controller.start_pipeline_v2(**kwargs)
+
     def get_state(self) -> Any:
         from src.controller.webui_connection_controller import WebUIConnectionState
         return WebUIConnectionState.READY
@@ -243,7 +248,7 @@ class TestSingleJobQueueMode:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        result = controller.start_pipeline_v2(run_mode="queue")
+        result = _start_pipeline_with_pack(controller, run_mode="queue")
 
         # Assert
         assert result is True
@@ -271,7 +276,7 @@ class TestSingleJobQueueMode:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        controller.start_pipeline_v2(run_mode="queue")
+        _start_pipeline_with_pack(controller, run_mode="queue")
 
         # Assert
         assert len(fake_builder.calls) == 1
@@ -309,7 +314,7 @@ class TestMultipleJobSubmission:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        result = controller.start_pipeline_v2(run_mode="queue")
+        result = _start_pipeline_with_pack(controller, run_mode="queue")
 
         # Assert
         assert result is True
@@ -338,7 +343,7 @@ class TestMultipleJobSubmission:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        controller.start_pipeline_v2(run_mode="queue")
+        _start_pipeline_with_pack(controller, run_mode="queue")
 
         # Assert
         jobs = [job for job, _ in fake_service.submitted_jobs]
@@ -374,7 +379,7 @@ class TestDirectMode:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        result = controller.start_pipeline_v2(run_mode="direct")
+        result = _start_pipeline_with_pack(controller, run_mode="direct")
 
         # Assert
         assert result is True
@@ -409,7 +414,7 @@ class TestEmptyBuilderOutput:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        result = controller.start_pipeline_v2()
+        result = _start_pipeline_with_pack(controller)
 
         # Assert
         assert result is False
@@ -430,7 +435,7 @@ class TestEmptyBuilderOutput:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act & Assert - no exception
-        result = controller.start_pipeline_v2()
+        result = _start_pipeline_with_pack(controller)
         assert result is False
 
 
@@ -465,7 +470,7 @@ class TestMetadataPreservation:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        controller.start_pipeline_v2()
+        _start_pipeline_with_pack(controller)
 
         # Assert
         job, _ = fake_service.submitted_jobs[0]
@@ -476,6 +481,7 @@ class TestMetadataPreservation:
         assert snapshot["variant_total"] == 5
         assert snapshot["model"] == "test_model"
         assert snapshot["prompt"] == "test prompt"
+        assert snapshot["prompt_pack_id"] == "test-pack-123"
 
     def test_source_and_prompt_source_preserved(
         self, fake_state_manager: FakeStateManager
@@ -495,7 +501,8 @@ class TestMetadataPreservation:
         controller._webui_connection = FakeWebUIConnection()
 
         # Act
-        controller.start_pipeline_v2(
+        _start_pipeline_with_pack(
+            controller,
             source="api",
             prompt_source="pack",
             prompt_pack_id="test-pack-123",
@@ -533,7 +540,7 @@ class TestCannotRunState:
         controller._job_service = fake_service
 
         # Act
-        result = controller.start_pipeline_v2()
+        result = _start_pipeline_with_pack(controller)
 
         # Assert
         assert result is False

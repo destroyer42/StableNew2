@@ -55,6 +55,7 @@ Randomizer GUI foundations
 Prompt Pack + Config override correctness
 
 Fix all pipeline correctness issues (e.g., missing prompts, inconsistent configs)
+Queue/Runner lifecycle repair (PR-CORE-C) with PromptPack-only normalized records, job_submitted events, and consistent GUI/history delivery of canonical summaries.
 
 Begin documentation consolidation PRs (DOC-300 series)
 

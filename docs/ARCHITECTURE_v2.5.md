@@ -130,6 +130,11 @@ This ensures consistency between GUI preview, queue view, and executed pipeline.
 
 This keeps the GUI aligned with the canonical job representation while avoiding duplicated metadata in every panel.
 
+### 4.7 Queue/Runner Lifecycle Repair (PromptPack-only NormalizedJobs)
+
+- PR-CORE-C tightened the JobService boundary so only normalized records that originate from a prompt pack make it into the queue. AppController instantiates JobService with `require_normalized_records=True`, and JobService validates every normalized snapshot for `prompt_pack_id`, a non-empty resolved positive prompt, and a complete stage chain before enqueueing the job. Free-text prompts outside a pack are rejected at the controller boundary.
+- JobService now emits a dedicated `EVENT_JOB_SUBMITTED` and the job lifecycle logger surfaces `job_submitted` entries, giving Debug Hub and AppState structured visibility for the SUBMITTED → QUEUED → RUNNING → COMPLETED/FAILED lifecycle while the queue, runner, history, and debug panels all share the same canonical normalized record.
+
 0.5 TLDR Queue Model
 All pipeline execution passes through:
 

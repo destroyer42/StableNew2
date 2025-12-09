@@ -1,6 +1,6 @@
 {
   "jobs": [],
-  "auto_run_enabled": true,
+  "auto_run_enabled": false,
   "paused": false,
   "schema_version": 1
 }

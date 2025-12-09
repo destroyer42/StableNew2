@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 import src.pipeline.executor as executor_module
+from src.api.types import GenerateResult
 from src.pipeline.executor import Pipeline
 from src.gui.state import CancellationError
 from src.utils.logger import StructuredLogger
@@ -22,7 +23,8 @@ class ToggleToken:
 
 class DummyClient:
     def generate_images(self, *, stage, payload, **kwargs):
-        return SimpleNamespace(ok=True, result={"images": ["fake-image-1", "fake-image-2"]})
+        result = GenerateResult(images=["fake-image-1", "fake-image-2"], info={}, stage=stage)
+        return SimpleNamespace(ok=True, result=result)
 
     def set_model(self, *_args, **_kwargs):
         return None

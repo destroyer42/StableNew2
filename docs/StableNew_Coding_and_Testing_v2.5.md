@@ -225,6 +225,7 @@ Controllers must:
 - Read from AppState
 - Invoke ConfigMergerV2 and JobBuilderV2
 - Submit jobs to JobService
+- Assemble normalized snapshots (prompt_pack_id, resolved prompt, stage chain, pack metadata) before reaching JobService; AppController wires `require_normalized_records=True` so prompt-pack-only JobService instances reject incomplete submissions.
 - Update Preview/Queue panels with normalized jobs
 - Enforce run-mode semantics (direct vs queue)
 - Never embed pipeline logic directly
@@ -242,6 +243,7 @@ Controllers must:
   - Given AppState + config + randomization plan
   - Verify correct jobs are built and passed to JobService
 - Use mocks/spies for JobService to assert calls, not actual execution.
+- Add regression tests that instantiate JobService with `require_normalized_records=True` and confirm submissions without normalized snapshots are rejected so the PromptPack-only invariant remains enforced (`tests/controller/test_job_service_normalized_v2.py` already demonstrates this pattern).
 
 ---
 

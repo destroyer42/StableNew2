@@ -15,7 +15,13 @@ from src.gui.theme_v2 import (
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
-from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2, JobQueueItemDTO
+from src.pipeline.job_models_v2 import (
+    JobStatusV2,
+    NormalizedJobRecord,
+    QueueJobV2,
+    UnifiedJobSummary,
+    JobQueueItemDTO,
+)
 
 
 class QueuePanelV2(ttk.Frame):
@@ -44,6 +50,7 @@ class QueuePanelV2(ttk.Frame):
         self._is_queue_paused = False
         self._auto_run_enabled = False
         self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
+        self._summaries: list[UnifiedJobSummary] = []
 
         # Title row
         title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -167,6 +174,27 @@ class QueuePanelV2(ttk.Frame):
 
         # Initial button state
         self._update_button_states()
+
+        if self.app_state and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe("queue_job_summaries", self._on_queue_summaries_changed)
+            except Exception:
+                pass
+            try:
+                self.app_state.subscribe("running_job_summary", self._on_running_summary_changed)
+            except Exception:
+                pass
+            # PR-CORE-D: Subscribe to lifecycle events for real-time updates
+            try:
+                self.app_state.subscribe("log_events", self._on_lifecycle_event)
+            except Exception:
+                pass
+            try:
+                self.app_state.subscribe("queue_jobs", self._on_queue_jobs_changed)
+            except Exception:
+                pass
+            self._on_queue_summaries_changed()
+            self._on_running_summary_changed()
 
     def _on_selection_changed(self, event: tk.Event[tk.Listbox] | None = None) -> None:
         """Handle selection change in the listbox."""
@@ -528,6 +556,99 @@ class QueuePanelV2(ttk.Frame):
         """
         self._jobs = [job for job in self._jobs if job.job_id != job_id]
         self.update_jobs(self._jobs)
+
+    # -------------------------------------------------------------------------
+    # PR-CORE-D: Lifecycle Event Integration
+    # -------------------------------------------------------------------------
+
+    def _on_lifecycle_event(self) -> None:
+        """Handle lifecycle events from app_state (PR-CORE-D).
+        
+        Responds to SUBMITTED, QUEUED, RUNNING, CANCELLED events.
+        """
+        if not self.app_state:
+            return
+        
+        log_events = getattr(self.app_state, "log_events", None)
+        if not log_events:
+            return
+        
+        # Process the most recent event
+        if log_events:
+            latest_event = log_events[-1]
+            event_type = getattr(latest_event, "event_type", None)
+            job_id = getattr(latest_event, "job_id", None)
+            
+            if event_type == "RUNNING" and job_id:
+                self._running_job_id = job_id
+                self._refresh_display()
+            elif event_type in ("COMPLETED", "FAILED", "CANCELLED") and job_id:
+                # Remove from queue display if completed/failed/cancelled
+                self.remove_job(job_id)
+                if self._running_job_id == job_id:
+                    self._running_job_id = None
+                self._refresh_display()
+
+    def _on_queue_jobs_changed(self) -> None:
+        """Handle queue_jobs changes from app_state (PR-CORE-D)."""
+        if not self.app_state:
+            return
+        
+        queue_jobs = getattr(self.app_state, "queue_jobs", None)
+        if queue_jobs is not None:
+            self.update_jobs(queue_jobs)
+
+    def _on_queue_summaries_changed(self) -> None:
+        """Handle queue summaries changes (legacy compatibility)."""
+        # Fallback to queue_jobs if available
+        self._on_queue_jobs_changed()
+
+    def _on_running_summary_changed(self) -> None:
+        """Handle running job summary changes (legacy compatibility)."""
+        if not self.app_state:
+            return
+        
+        running_job = getattr(self.app_state, "running_job", None)
+        if running_job:
+            self._running_job_id = getattr(running_job, "job_id", None)
+            self._refresh_display()
+
+    @staticmethod
+    def _format_queue_item_with_pack_metadata(summary: UnifiedJobSummary) -> str:
+        """PR-CORE-D: Format queue item with PromptPack metadata.
+        
+        Args:
+            summary: UnifiedJobSummary with PromptPack provenance
+            
+        Returns:
+            Formatted string like "Angelic Warriors [Row 3] v2/b1 Seed: 12345"
+        """
+        parts = []
+        
+        # Pack name
+        pack_name = getattr(summary, "prompt_pack_name", None)
+        if pack_name:
+            parts.append(pack_name)
+        
+        # Row index
+        row_idx = getattr(summary, "prompt_pack_row_index", None)
+        if row_idx is not None:
+            parts.append(f"[Row {row_idx + 1}]")
+        
+        # Variant/batch indices
+        variant_idx = getattr(summary, "variant_index", None)
+        batch_idx = getattr(summary, "batch_index", None)
+        if variant_idx is not None or batch_idx is not None:
+            v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
+            b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
+            parts.append(f"{v_text}/{b_text}")
+        
+        # Seed
+        seed = getattr(summary, "seed", None)
+        if seed is not None:
+            parts.append(f"Seed: {seed}")
+        
+        return " ".join(parts) if parts else "Unknown Job"
 
 
 __all__ = ["QueuePanelV2"]

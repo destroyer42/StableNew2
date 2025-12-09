@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import asdict
+from datetime import datetime
 import logging
 import time
 
@@ -17,7 +18,13 @@ from src.gui.pipeline_panel_v2 import format_queue_job_summary
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JobHistoryStore
-from src.pipeline.job_models_v2 import JobHistoryItemDTO, JobQueueItemDTO, JobStatusV2, UnifiedJobSummary
+from src.pipeline.job_models_v2 import (
+    JobHistoryItemDTO,
+    JobQueueItemDTO,
+    JobStatusV2,
+    UnifiedJobSummary,
+    NormalizedJobRecord,
+)
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
 from src.utils.process_container_v2 import (
@@ -125,6 +132,7 @@ class JobService:
     """
 
     EVENT_QUEUE_UPDATED = "queue_updated"
+    EVENT_JOB_SUBMITTED = "job_submitted"
     EVENT_JOB_STARTED = "job_started"
     EVENT_JOB_FINISHED = "job_finished"
     EVENT_JOB_FAILED = "job_failed"
@@ -145,6 +153,7 @@ class JobService:
         process_container_config: ProcessContainerConfig | None = None,
         container_factory: Callable[[str, ProcessContainerConfig], ProcessContainer] | None = None,
         job_lifecycle_logger: JobLifecycleLogger | None = None,
+        require_normalized_records: bool = False,
     ) -> None:
         """Initialize JobService with queue, runner, and history dependencies.
 
@@ -197,6 +206,7 @@ class JobService:
         self._container_factory = container_factory or build_process_container
         self._process_containers: dict[str, ProcessContainer] = {}
         self._job_lifecycle_logger = job_lifecycle_logger
+        self._require_normalized_records = bool(require_normalized_records)
         self.job_queue.register_status_callback(self._handle_job_status_change)
 
     @property
@@ -244,10 +254,25 @@ class JobService:
             ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
             extra_fields={"run_mode": mode},
         )
+        self._prepare_job_for_submission(job)
         if mode == "direct":
             self.submit_direct(job)
         else:
             self.submit_queued(job)
+
+    def _prepare_job_for_submission(self, job: Job) -> NormalizedJobRecord | None:
+        """Ensure normalized metadata is present and log previews as needed."""
+        record = getattr(job, "_normalized_record", None)
+        snapshot = getattr(job, "snapshot", None) or {}
+        if record is None and snapshot:
+            record = normalized_job_from_snapshot(snapshot)
+        if record is None and self._require_normalized_records:
+            raise ValueError("JobService requires normalized job metadata (missing snapshot).")
+        if record is not None:
+            self._validate_normalized_record(record)
+            job.unified_summary = record.to_unified_summary()
+            setattr(job, "_normalized_record", record)
+        return record
 
     def submit_direct(self, job: Job) -> dict | None:
         """Execute a job synchronously (bypasses queue for 'Run Now' semantics).
@@ -261,6 +286,7 @@ class JobService:
             ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
         )
         self.job_queue.submit(job)
+        self._notify_job_submitted(job)
         self._emit_queue_updated()
         try:
             result = self.runner.run_once(job)
@@ -280,8 +306,31 @@ class JobService:
             ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
         )
         self.enqueue(job)
+        self._notify_job_submitted(job)
         if not self.runner.is_running():
             self.runner.start()
+
+    def _validate_normalized_record(self, record: NormalizedJobRecord) -> None:
+        """Basic validation of normalized job metadata before queue acceptance."""
+        if not record.prompt_pack_id:
+            raise ValueError(f"Normalized job '{record.job_id}' is missing prompt_pack_id.")
+        if not record.positive_prompt or not record.positive_prompt.strip():
+            raise ValueError(f"Normalized job '{record.job_id}' must include a positive prompt.")
+        if record.config is None:
+            raise ValueError(f"Normalized job '{record.job_id}' lacks a merged config payload.")
+        if not record.stage_chain:
+            raise ValueError(f"Normalized job '{record.job_id}' must have at least one stage in stage_chain.")
+
+    def _notify_job_submitted(self, job: Job) -> None:
+        """Emit a lifecycle event and log the submission when a job is accepted."""
+        record = getattr(job, "_normalized_record", None)
+        summary = record.to_unified_summary() if record else getattr(job, "unified_summary", None)
+        self._emit(self.EVENT_JOB_SUBMITTED, job, summary)
+        if self._job_lifecycle_logger:
+            self._job_lifecycle_logger.log_job_submitted(
+                source=getattr(job, "source", "job_service") or "job_service",
+                job_id=job.job_id,
+            )
 
     def submit_jobs(self, jobs: list[Job]) -> None:
         """Submit multiple jobs respecting each job's configured run_mode.
@@ -650,7 +699,12 @@ class JobService:
             normalized_status = JobStatusV2.QUEUED
         record = normalized_job_from_snapshot(getattr(job, "snapshot", {}) or {})
         if record is not None:
-            summary = record.to_unified_summary(normalized_status)
+            record.status = normalized_status
+            if status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+                completed = getattr(job, "completed_at", None)
+                if completed:
+                    record.completed_at = completed
+            summary = record.to_unified_summary()
         else:
             summary = UnifiedJobSummary.from_job(job, normalized_status)
         setattr(job, "unified_summary", summary)

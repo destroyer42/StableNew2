@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import traceback
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Mapping
 
 from src.utils.exceptions_v2 import StableNewError
@@ -90,6 +90,9 @@ def get_attached_envelope(exc: Exception) -> UnifiedErrorEnvelope | None:
 def serialize_envelope(envelope: UnifiedErrorEnvelope | None) -> dict[str, Any] | None:
     if envelope is None:
         return None
-    data = asdict(envelope)
-    data.pop("cause", None)
+    data = {
+        field.name: getattr(envelope, field.name)
+        for field in fields(UnifiedErrorEnvelope)
+        if field.name != "cause"
+    }
     return data

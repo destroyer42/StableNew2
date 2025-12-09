@@ -282,6 +282,35 @@ class PipelineController(_GUIPipelineController):
         except Exception as exc:
             _logger.debug("Could not extract output settings: %s", exc)
 
+        # PR-CORE-E: Extract config sweep plan from state
+        config_variant_plan = None
+        try:
+            from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2, ConfigVariant
+            
+            # Check if app state has config sweep enabled
+            app_state = getattr(self.state_manager, "_app_state", None)
+            if app_state:
+                sweep_enabled = getattr(app_state, "config_sweep_enabled", False)
+                sweep_variants = getattr(app_state, "config_sweep_variants", [])
+                
+                if sweep_enabled and sweep_variants:
+                    # Build ConfigVariant objects from state
+                    variants = []
+                    for idx, var_dict in enumerate(sweep_variants):
+                        variant = ConfigVariant(
+                            label=var_dict.get("label", f"variant_{idx}"),
+                            overrides=var_dict.get("overrides", {}),
+                            index=idx,
+                        )
+                        variants.append(variant)
+                    
+                    config_variant_plan = ConfigVariantPlanV2(
+                        variants=variants,
+                        enabled=True,
+                    )
+        except Exception as exc:
+            _logger.debug("Could not extract config variant plan: %s", exc)
+
         # Build jobs via JobBuilderV2
         try:
             jobs = self._job_builder.build_jobs(
@@ -289,6 +318,7 @@ class PipelineController(_GUIPipelineController):
                 randomization_plan=randomization_plan,
                 batch_settings=batch_settings,
                 output_settings=output_settings,
+                config_variant_plan=config_variant_plan,  # PR-CORE-E
             )
         except Exception as exc:
             _logger.warning("JobBuilderV2 failed to build jobs: %s", exc)

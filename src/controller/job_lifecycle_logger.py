@@ -40,6 +40,15 @@ class JobLifecycleLogger:
             message=f"Submitted draft to queue (job_id={job_id}) with {draft_size} part(s).",
         )
 
+    def log_job_submitted(self, *, source: str, job_id: str | None) -> None:
+        """Track whenever a job leaves controller and is accepted for execution."""
+        self._log(
+            source=source,
+            event_type="job_submitted",
+            job_id=job_id,
+            message="Job accepted by JobService for execution.",
+        )
+
     def log_job_started(self, *, source: str, job_id: str | None) -> None:
         self._log(
             source=source,

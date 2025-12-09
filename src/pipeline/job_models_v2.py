@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Literal, Optional, Sequence
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence
 import uuid
 
 from src.pipeline.resolution_layer import (
@@ -122,6 +122,9 @@ class JobStatusV2(str, Enum):
     FAILED = "failed"
 
 
+StageType = Literal["txt2img", "img2img", "adetailer", "upscale"]
+
+
 # ---------------------------------------------------------------------------
 # Prompt metadata helpers
 # ---------------------------------------------------------------------------
@@ -152,6 +155,26 @@ class PackUsageInfo:
 # ---------------------------------------------------------------------------
 # Job Builder Data Classes (PR-204B)
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LoRATag:
+    name: str
+    weight: float
+
+
+@dataclass
+class StageConfig:
+    stage_type: StageType
+    enabled: bool = False
+    steps: Optional[int] = None
+    cfg_scale: Optional[float] = None
+    denoising_strength: Optional[float] = None
+    sampler_name: Optional[str] = None
+    scheduler: Optional[str] = None
+    model: Optional[str] = None
+    vae: Optional[str] = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -374,23 +397,34 @@ class JobBundleBuilder:
 
 @dataclass(frozen=True)
 class UnifiedJobSummary:
-    """Canonical job summary shared between preview, queue, and history."""
+    """Canonical job summary shared between preview, queue, history, learning, and Debug Hub."""
 
     job_id: str
-    status: JobStatusV2
-    positive_preview: str
-    negative_preview: str | None
-    num_parts: int
-    num_expected_images: int
-    stages: str
-    model_name: str
+    prompt_pack_id: str
+    prompt_pack_name: str
+    prompt_pack_row_index: int
+    positive_prompt_preview: str
+    negative_prompt_preview: Optional[str]
+    lora_preview: str
+    embedding_preview: str
+    base_model: str
+    sampler_name: str
+    cfg_scale: float
+    steps: int
+    width: int
+    height: int
+    stage_chain_labels: list[str]
+    randomization_enabled: bool
+    matrix_mode: Optional[str]
+    matrix_slot_values_preview: str
+    variant_index: int
+    batch_index: int
+    config_variant_label: str
+    config_variant_index: int
+    estimated_image_count: int
+    status: str
     created_at: datetime
-
-    @staticmethod
-    def _stage_labels(names: list[str]) -> str:
-        if not names:
-            return "txt2img"
-        return " + ".join(names)
+    completed_at: Optional[datetime]
 
     @staticmethod
     def _truncate(value: str) -> str:
@@ -399,47 +433,68 @@ class UnifiedJobSummary:
         return value if len(value) <= 120 else value[:120] + "..."
 
     @classmethod
-    def from_normalized_record(cls, record: "NormalizedJobRecord", status: JobStatusV2) -> "UnifiedJobSummary":
-        positive = record._extract_prompt_field("final_prompt", "prompt")
-        negative = record._extract_prompt_field("final_negative_prompt", "negative_prompt")
-        stages = record._extract_stage_names()
-        model = record._extract_model_name()
+    def from_normalized_record(cls, record: "NormalizedJobRecord") -> "UnifiedJobSummary":
         return cls(
             job_id=record.job_id,
-            status=status,
-            positive_preview=cls._truncate(positive),
-            negative_preview=cls._truncate(negative) if negative else None,
-            num_parts=record.num_parts,
-            num_expected_images=record.num_expected_images,
-            stages=cls._stage_labels(stages),
-            model_name=model,
+            prompt_pack_id=record.prompt_pack_id,
+            prompt_pack_name=record.prompt_pack_name,
+            prompt_pack_row_index=record.prompt_pack_row_index,
+            positive_prompt_preview=cls._truncate(record.positive_prompt),
+            negative_prompt_preview=cls._truncate(record.negative_prompt)
+            if record.negative_prompt
+            else None,
+            lora_preview=record.lora_preview,
+            embedding_preview=" + ".join(record.positive_embeddings),
+            base_model=record.base_model or "unknown",
+            sampler_name=record.sampler_name,
+            cfg_scale=record.cfg_scale,
+            steps=record.steps,
+            width=record.width,
+            height=record.height,
+            stage_chain_labels=record.stage_chain_labels,
+            randomization_enabled=record.randomization_enabled,
+            matrix_mode=record.matrix_mode,
+            matrix_slot_values_preview=record.matrix_slot_values_preview(),
+            variant_index=record.variant_index,
+            batch_index=record.batch_index,
+            config_variant_label=record.config_variant_label,
+            config_variant_index=record.config_variant_index,
+            estimated_image_count=record.estimated_image_count(),
+            status=record.status.value.upper(),
             created_at=record.created_at,
+            completed_at=record.completed_at,
         )
 
     @classmethod
     def from_job(cls, job: "Job", status: JobStatusV2) -> "UnifiedJobSummary":
-        config = getattr(job, "pipeline_config", None) or job.config_snapshot or {}
-        positive = ""
-        negative = ""
-        model = ""
-        if isinstance(config, dict):
-            positive = str(config.get("prompt") or "")
-            negative = str(config.get("negative_prompt") or "")
-            model = str(config.get("model") or config.get("model_name") or "")
-        else:
-            positive = str(getattr(config, "prompt", "") or "")
-            negative = str(getattr(config, "negative_prompt", "") or "")
-            model = str(getattr(config, "model", "") or getattr(config, "model_name", "") or "")
+        now = getattr(job, "created_at", datetime.utcnow())
         return cls(
             job_id=job.job_id,
-            status=status,
-            positive_preview=cls._truncate(positive),
-            negative_preview=cls._truncate(negative) if negative else None,
-            num_parts=1,
-            num_expected_images=1,
-            stages="txt2img",
-            model_name=model or "unknown",
-            created_at=getattr(job, "created_at", datetime.utcnow()),
+            prompt_pack_id="",
+            prompt_pack_name="",
+            prompt_pack_row_index=0,
+            positive_prompt_preview="",
+            negative_prompt_preview=None,
+            lora_preview="",
+            embedding_preview="",
+            base_model="unknown",
+            sampler_name="",
+            cfg_scale=0.0,
+            steps=0,
+            width=0,
+            height=0,
+            stage_chain_labels=["txt2img"],
+            randomization_enabled=False,
+            matrix_mode=None,
+            matrix_slot_values_preview="",
+            variant_index=0,
+            batch_index=0,
+            config_variant_label="base",
+            config_variant_index=0,
+            estimated_image_count=1,
+            status=status.value.upper(),
+            created_at=now,
+            completed_at=getattr(job, "completed_at", None),
         )
 
 
@@ -600,6 +655,49 @@ class NormalizedJobRecord:
     txt2img_prompt_info: StagePromptInfo | None = None
     img2img_prompt_info: StagePromptInfo | None = None
     pack_usage: list[PackUsageInfo] = field(default_factory=list)
+    prompt_pack_id: str = ""
+    prompt_pack_name: str = ""
+    prompt_pack_row_index: int = 0
+    prompt_pack_version: Optional[str] = None
+    positive_prompt: str = ""
+    negative_prompt: str = ""
+    positive_embeddings: list[str] = field(default_factory=list)
+    negative_embeddings: list[str] = field(default_factory=list)
+    lora_tags: list[LoRATag] = field(default_factory=list)
+    matrix_slot_values: dict[str, str] = field(default_factory=dict)
+    steps: int = 0
+    cfg_scale: float = 0.0
+    width: int = 0
+    height: int = 0
+    sampler_name: str = ""
+    scheduler: str = ""
+    clip_skip: int = 0
+    base_model: str = ""
+    vae: Optional[str] = None
+    stage_chain: list[StageConfig] = field(default_factory=list)
+    loop_type: Literal["pipeline", "prompt", "image"] = "pipeline"
+    loop_count: int = 1
+    images_per_prompt: int = 1
+    variant_mode: str = "standard"
+    run_mode: Literal["DIRECT", "QUEUE"] = "QUEUE"
+    queue_source: Literal["RUN_NOW", "ADD_TO_QUEUE"] = "ADD_TO_QUEUE"
+    randomization_enabled: bool = False
+    matrix_name: Optional[str] = None
+    matrix_mode: Optional[str] = None
+    matrix_prompt_mode: Optional[str] = None
+    config_variant_label: str = "base"
+    config_variant_index: int = 0
+    config_variant_overrides: dict[str, Any] = field(default_factory=dict)
+    aesthetic_enabled: bool = False
+    aesthetic_weight: Optional[float] = None
+    aesthetic_text: Optional[str] = None
+    aesthetic_embedding: Optional[str] = None
+    extra_metadata: dict[str, Any] = field(default_factory=dict)
+    output_paths: list[str] = field(default_factory=list)
+    thumbnail_path: Optional[str] = None
+    completed_at: Optional[datetime] = None
+    status: JobStatusV2 = JobStatusV2.QUEUED
+    error_message: Optional[str] = None
 
     @property
     def created_at(self) -> datetime:
@@ -648,6 +746,24 @@ class NormalizedJobRecord:
         value = self._config_value("model", "model_name")
         return str(value or "unknown")
 
+    @property
+    def stage_chain_labels(self) -> list[str]:
+        if self.stage_chain:
+            return [stage.stage_type for stage in self.stage_chain]
+        return ["txt2img"]
+
+    def matrix_slot_values_preview(self) -> str:
+        if not self.matrix_slot_values:
+            return ""
+        return "; ".join(f"{key}={value}" for key, value in self.matrix_slot_values.items())
+
+    @property
+    def lora_preview(self) -> str:
+        return ", ".join(f"{tag.name}({tag.weight})" for tag in self.lora_tags)
+
+    def estimated_image_count(self) -> int:
+        return max(1, self.images_per_prompt * self.loop_count)
+
     def get_display_summary(self) -> str:
         """Get a short display string for the job."""
         config = self.config
@@ -664,6 +780,12 @@ class NormalizedJobRecord:
                 prompt += "..."
 
         seed_str = str(self.seed) if self.seed is not None else "?"
+        
+        # PR-CORE-E: Add config variant label
+        config_variant_info = ""
+        if self.config_variant_label and self.config_variant_label != "base":
+            config_variant_info = f" [{self.config_variant_label}]"
+        
         variant_info = ""
         if self.variant_total > 1:
             variant_info = f" [v{self.variant_index + 1}/{self.variant_total}]"
@@ -671,11 +793,11 @@ class NormalizedJobRecord:
         if self.batch_total > 1:
             batch_info = f" [b{self.batch_index + 1}/{self.batch_total}]"
 
-        return f"{model} | seed={seed_str}{variant_info}{batch_info}"
+        return f"{model} | seed={seed_str}{config_variant_info}{variant_info}{batch_info}"
 
-    def to_unified_summary(self, status: JobStatusV2) -> UnifiedJobSummary:
+    def to_unified_summary(self) -> UnifiedJobSummary:
         """Create a canonical summary for UI/queue/history consumers."""
-        return UnifiedJobSummary.from_normalized_record(self, status)
+        return UnifiedJobSummary.from_normalized_record(self)
 
     def to_ui_summary(self) -> JobUiSummary:
         """Convert to a JobUiSummary for UI panel display.
@@ -843,6 +965,21 @@ class NormalizedJobRecord:
         if self.randomizer_summary:
             snapshot["randomizer_summary"] = self.randomizer_summary
 
+        snapshot["prompt_pack_id"] = self.prompt_pack_id
+        snapshot["prompt_pack_name"] = self.prompt_pack_name
+        snapshot["prompt_pack_row_index"] = self.prompt_pack_row_index
+        snapshot["stage_chain"] = [stage.stage_type for stage in self.stage_chain]
+        snapshot["images_per_prompt"] = self.images_per_prompt
+        snapshot["loop_type"] = self.loop_type
+        snapshot["loop_count"] = self.loop_count
+        snapshot["variant_mode"] = self.variant_mode
+        snapshot["randomization_enabled"] = self.randomization_enabled
+        snapshot["matrix_slot_values"] = dict(self.matrix_slot_values)
+        snapshot["lora_tags"] = [asdict(tag) for tag in self.lora_tags]
+        snapshot["queue_source"] = self.queue_source
+        snapshot["run_mode"] = self.run_mode
+        snapshot["status"] = self.status.value if hasattr(self.status, "value") else str(self.status)
+
         if self.txt2img_prompt_info:
             snapshot["txt2img_prompt_info"] = asdict(self.txt2img_prompt_info)
         if self.img2img_prompt_info:
@@ -887,7 +1024,10 @@ class QueueJobV2:
         )
 
     def get_display_summary(self) -> str:
-        """Get a short display string for the job."""
+        """Get a short display string for the job.
+        
+        PR-CORE-E: Includes config variant label in display.
+        """
         config = self.config_snapshot
         stage = config.get("stage", "txt2img")
         model = config.get("model", config.get("model_name", "unknown"))
@@ -895,7 +1035,14 @@ class QueueJobV2:
         prompt = config.get("prompt", "")[:30]
         if len(config.get("prompt", "")) > 30:
             prompt += "..."
-        return f"{stage} | {model} | seed={seed}"
+        
+        # PR-CORE-E: Add config variant label if present
+        config_variant_label = config.get("config_variant_label", None)
+        variant_suffix = ""
+        if config_variant_label and config_variant_label != "base":
+            variant_suffix = f" [{config_variant_label}]"
+        
+        return f"{stage} | {model} | seed={seed}{variant_suffix}"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize job to dictionary for persistence."""
@@ -958,6 +1105,8 @@ __all__ = [
     "JobUiSummary",
     "UnifiedJobSummary",
     "StagePromptInfo",
+    "StageConfig",
+    "LoRATag",
     "PackUsageInfo",
     "JobLifecycleLogEvent",
 ]

@@ -8,7 +8,12 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.job_models_v2 import (
+    JobStatusV2,
+    LoRATag,
+    NormalizedJobRecord,
+    StageConfig,
+)
 from src.queue.job_model import Job
 
 SCHEMA_VERSION = "1.0"
@@ -90,7 +95,48 @@ def _extract_stage_metadata(config: Any) -> dict[str, Any]:
     return {"stages": list(stages), "flags": stage_flags}
 
 
+def _serialize_stage_chain(chain: list[StageConfig]) -> list[dict[str, Any]]:
+    return [asdict(stage) for stage in chain]
+
+
+def _deserialize_stage_chain(data: Any) -> list[StageConfig]:
+    result: list[StageConfig] = []
+    if not data:
+        return result
+    for entry in data:
+        if isinstance(entry, StageConfig):
+            result.append(entry)
+        elif isinstance(entry, dict):
+            try:
+                result.append(StageConfig(**entry))
+            except Exception:
+                continue
+    return result
+
+
+def _serialize_lora_tags(tags: list[LoRATag]) -> list[dict[str, Any]]:
+    return [asdict(tag) for tag in tags]
+
+
+def _deserialize_lora_tags(data: Any) -> list[LoRATag]:
+    result: list[LoRATag] = []
+    if not data:
+        return result
+    for entry in data:
+        if isinstance(entry, LoRATag):
+            result.append(entry)
+        elif isinstance(entry, dict):
+            try:
+                name = entry.get("name", "")
+                weight = float(entry.get("weight", 0.0))
+            except (TypeError, ValueError):
+                continue
+            result.append(LoRATag(name=name, weight=weight))
+    return result
+
+
 def _serialize_normalized_job(record: NormalizedJobRecord) -> dict[str, Any]:
+    status_value = record.status.value if isinstance(record.status, JobStatusV2) else str(record.status)
     return {
         "job_id": record.job_id,
         "path_output_dir": record.path_output_dir,
@@ -103,24 +149,123 @@ def _serialize_normalized_job(record: NormalizedJobRecord) -> dict[str, Any]:
         "created_ts": record.created_ts,
         "randomizer_summary": record.randomizer_summary,
         "config": _serialize_pipeline_config(record.config),
+        "prompt_pack_id": record.prompt_pack_id,
+        "prompt_pack_name": record.prompt_pack_name,
+        "prompt_pack_row_index": record.prompt_pack_row_index,
+        "prompt_pack_version": record.prompt_pack_version,
+        "positive_prompt": record.positive_prompt,
+        "negative_prompt": record.negative_prompt,
+        "positive_embeddings": list(record.positive_embeddings),
+        "negative_embeddings": list(record.negative_embeddings),
+        "lora_tags": _serialize_lora_tags(record.lora_tags),
+        "matrix_slot_values": dict(record.matrix_slot_values),
+        "steps": record.steps,
+        "cfg_scale": record.cfg_scale,
+        "width": record.width,
+        "height": record.height,
+        "sampler_name": record.sampler_name,
+        "scheduler": record.scheduler,
+        "clip_skip": record.clip_skip,
+        "base_model": record.base_model,
+        "vae": record.vae,
+        "stage_chain": _serialize_stage_chain(record.stage_chain),
+        "loop_type": record.loop_type,
+        "loop_count": record.loop_count,
+        "images_per_prompt": record.images_per_prompt,
+        "variant_mode": record.variant_mode,
+        "run_mode": record.run_mode,
+        "queue_source": record.queue_source,
+        "randomization_enabled": record.randomization_enabled,
+        "matrix_name": record.matrix_name,
+        "matrix_mode": record.matrix_mode,
+        "matrix_prompt_mode": record.matrix_prompt_mode,
+        "aesthetic_enabled": record.aesthetic_enabled,
+        "aesthetic_weight": record.aesthetic_weight,
+        "aesthetic_text": record.aesthetic_text,
+        "aesthetic_embedding": record.aesthetic_embedding,
+        "extra_metadata": dict(record.extra_metadata or {}),
+        "output_paths": list(record.output_paths),
+        "thumbnail_path": record.thumbnail_path,
+        "status": status_value,
+        "error_message": record.error_message,
+        "completed_at_ts": record.completed_at.timestamp() if record.completed_at else None,
     }
 
 
 def _deserialize_normalized_job(data: Mapping[str, Any]) -> NormalizedJobRecord | None:
     if not data:
         return None
+    status_value = data.get("status", JobStatusV2.QUEUED.value)
+    try:
+        status = JobStatusV2(status_value)
+    except ValueError:
+        status = JobStatusV2.QUEUED
+    completed_at_ts = data.get("completed_at_ts")
+    completed_at = None
+    if isinstance(completed_at_ts, (int, float)):
+        try:
+            completed_at = datetime.fromtimestamp(completed_at_ts)
+        except Exception:
+            completed_at = None
+
+    def _coerce_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     return NormalizedJobRecord(
         job_id=str(data.get("job_id") or uuid.uuid4()),
         config=data.get("config") or {},
         path_output_dir=data.get("path_output_dir", ""),
         filename_template=data.get("filename_template", "{seed}"),
         seed=data.get("seed"),
-        variant_index=int(data.get("variant_index", 0)),
-        variant_total=int(data.get("variant_total", 1)),
-        batch_index=int(data.get("batch_index", 0)),
-        batch_total=int(data.get("batch_total", 1)),
+        variant_index=_coerce_int(data.get("variant_index", 0)),
+        variant_total=_coerce_int(data.get("variant_total", 1)),
+        batch_index=_coerce_int(data.get("batch_index", 0)),
+        batch_total=_coerce_int(data.get("batch_total", 1)),
         created_ts=float(data.get("created_ts", time.time())),
         randomizer_summary=data.get("randomizer_summary"),
+        prompt_pack_id=str(data.get("prompt_pack_id", "") or ""),
+        prompt_pack_name=str(data.get("prompt_pack_name", "") or ""),
+        prompt_pack_row_index=_coerce_int(data.get("prompt_pack_row_index", 0)),
+        prompt_pack_version=data.get("prompt_pack_version"),
+        positive_prompt=str(data.get("positive_prompt", "") or ""),
+        negative_prompt=str(data.get("negative_prompt", "") or ""),
+        positive_embeddings=list(data.get("positive_embeddings") or []),
+        negative_embeddings=list(data.get("negative_embeddings") or []),
+        lora_tags=_deserialize_lora_tags(data.get("lora_tags")),
+        matrix_slot_values=dict(data.get("matrix_slot_values") or {}),
+        steps=_coerce_int(data.get("steps", 0)),
+        cfg_scale=float(data.get("cfg_scale", 0.0) or 0.0),
+        width=_coerce_int(data.get("width", 0)),
+        height=_coerce_int(data.get("height", 0)),
+        sampler_name=str(data.get("sampler_name", "") or ""),
+        scheduler=str(data.get("scheduler", "") or ""),
+        clip_skip=_coerce_int(data.get("clip_skip", 0)),
+        base_model=str(data.get("base_model", "") or ""),
+        vae=data.get("vae"),
+        stage_chain=_deserialize_stage_chain(data.get("stage_chain")),
+        loop_type=str(data.get("loop_type", "pipeline") or "pipeline"),
+        loop_count=_coerce_int(data.get("loop_count", 1)),
+        images_per_prompt=_coerce_int(data.get("images_per_prompt", 1)),
+        variant_mode=str(data.get("variant_mode", "standard") or "standard"),
+        run_mode=str(data.get("run_mode", "QUEUE") or "QUEUE"),
+        queue_source=str(data.get("queue_source", "ADD_TO_QUEUE") or "ADD_TO_QUEUE"),
+        randomization_enabled=bool(data.get("randomization_enabled", False)),
+        matrix_name=data.get("matrix_name"),
+        matrix_mode=data.get("matrix_mode"),
+        matrix_prompt_mode=data.get("matrix_prompt_mode"),
+        aesthetic_enabled=bool(data.get("aesthetic_enabled", False)),
+        aesthetic_weight=data.get("aesthetic_weight"),
+        aesthetic_text=data.get("aesthetic_text"),
+        aesthetic_embedding=data.get("aesthetic_embedding"),
+        extra_metadata=dict(data.get("extra_metadata") or {}),
+        output_paths=list(data.get("output_paths") or []),
+        thumbnail_path=data.get("thumbnail_path"),
+        completed_at=completed_at,
+        status=status,
+        error_message=data.get("error_message"),
     )
 
 

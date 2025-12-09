@@ -5,7 +5,12 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from src.gui.gui_invoker import GuiInvoker
-from src.pipeline.job_models_v2 import JobLifecycleLogEvent, NormalizedJobRecord, QueueJobV2
+from src.pipeline.job_models_v2 import (
+    JobLifecycleLogEvent,
+    NormalizedJobRecord,
+    QueueJobV2,
+    UnifiedJobSummary,
+)
 from src.queue.job_history_store import JobHistoryEntry
 from src.utils.config import LoraRuntimeConfig
 
@@ -27,6 +32,9 @@ class PackJobEntry:
     negative_prompt_text: str | None = None
     stage_flags: dict[str, bool] = field(default_factory=dict)
     randomizer_metadata: dict[str, Any] | None = None
+    pack_row_index: int | None = None
+    pack_version: str | None = None
+    matrix_slot_values: dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class JobDraftPart:
@@ -97,9 +105,17 @@ class AppStateV2:
     _invoker: Optional[GuiInvoker] = None
     _notifications_enabled: bool = True
 
-    prompt: str = ""
-    negative_prompt: str = ""
-    current_pack: Optional[str] = None
+    # Legacy prompt fields (deprecated - use PromptPack instead)
+    prompt: str = ""  # DEPRECATED: Use selected_prompt_pack_id instead
+    negative_prompt: str = ""  # DEPRECATED: Use selected_prompt_pack_id instead
+    current_pack: Optional[str] = None  # DEPRECATED: Use selected_prompt_pack_id instead
+    
+    # PR-CORE-D: PromptPack-Only tracking fields
+    selected_prompt_pack_id: Optional[str] = None
+    selected_prompt_pack_name: Optional[str] = None
+    selected_config_snapshot_id: Optional[str] = None
+    last_unified_job_summary: Optional[UnifiedJobSummary] = None
+    
     is_running: bool = False
     controller: Optional[Any] = None
     status_text: str = "Idle"
@@ -144,6 +160,14 @@ class AppStateV2:
 
     # PR-203: Auto-run queue flag
     auto_run_queue: bool = False
+
+    # PR-CORE-E: Config Sweep state
+    config_sweep_enabled: bool = False
+    config_sweep_variants: list[dict[str, Any]] = field(default_factory=list)
+    apply_global_negative_txt2img: bool = True
+    apply_global_negative_img2img: bool = True
+    apply_global_negative_upscale: bool = True
+    apply_global_negative_adetailer: bool = True
 
     def set_invoker(self, invoker: GuiInvoker) -> None:
         """Set an invoker used to marshal notifications onto the GUI thread."""
@@ -192,9 +216,35 @@ class AppStateV2:
             self._notify("negative_prompt")
 
     def set_current_pack(self, value: Optional[str]) -> None:
+        """DEPRECATED: Use set_selected_prompt_pack instead."""
         if self.current_pack != value:
             self.current_pack = value
             self._notify("current_pack")
+    
+    # PR-CORE-D: PromptPack-Only setters
+    def set_selected_prompt_pack(self, pack_id: Optional[str], pack_name: Optional[str] = None) -> None:
+        """Set the selected PromptPack (PR-CORE-D PromptPack-only enforcement)."""
+        changed = False
+        if self.selected_prompt_pack_id != pack_id:
+            self.selected_prompt_pack_id = pack_id
+            changed = True
+        if self.selected_prompt_pack_name != pack_name:
+            self.selected_prompt_pack_name = pack_name
+            changed = True
+        if changed:
+            self._notify("selected_prompt_pack")
+    
+    def set_selected_config_snapshot(self, snapshot_id: Optional[str]) -> None:
+        """Set the selected config snapshot ID (PR-CORE-D)."""
+        if self.selected_config_snapshot_id != snapshot_id:
+            self.selected_config_snapshot_id = snapshot_id
+            self._notify("selected_config_snapshot")
+    
+    def set_last_unified_job_summary(self, summary: Optional[UnifiedJobSummary]) -> None:
+        """Set the last unified job summary for preview display (PR-CORE-D)."""
+        if self.last_unified_job_summary != summary:
+            self.last_unified_job_summary = summary
+            self._notify("last_unified_job_summary")
 
     def set_running(self, value: bool) -> None:
         if self.is_running != value:
@@ -406,3 +456,38 @@ class AppStateV2:
         if self.last_error_message != value:
             self.last_error_message = value
             self._notify("last_error_message")
+
+    # PR-CORE-E: Config Sweep setters
+    def set_config_sweep_enabled(self, value: bool) -> None:
+        """Enable/disable config sweep feature."""
+        if self.config_sweep_enabled != value:
+            self.config_sweep_enabled = value
+            self._notify("config_sweep_enabled")
+
+    def set_config_sweep_variants(self, variants: list[dict[str, Any]] | None) -> None:
+        """Set the list of config sweep variants."""
+        if variants is None:
+            variants = []
+        if self.config_sweep_variants != variants:
+            self.config_sweep_variants = list(variants)
+            self._notify("config_sweep_variants")
+
+    def add_config_sweep_variant(self, variant: dict[str, Any]) -> None:
+        """Add a config sweep variant to the list."""
+        self.config_sweep_variants.append(variant)
+        self._notify("config_sweep_variants")
+
+    def remove_config_sweep_variant(self, index: int) -> None:
+        """Remove a config sweep variant by index."""
+        if 0 <= index < len(self.config_sweep_variants):
+            self.config_sweep_variants.pop(index)
+            self._notify("config_sweep_variants")
+
+    def set_apply_global_negative(self, stage: str, value: bool) -> None:
+        """Set apply_global_negative flag for a specific stage."""
+        attr_name = f"apply_global_negative_{stage}"
+        if hasattr(self, attr_name):
+            current = getattr(self, attr_name)
+            if current != value:
+                setattr(self, attr_name, value)
+                self._notify(attr_name)

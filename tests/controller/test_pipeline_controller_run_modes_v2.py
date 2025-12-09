@@ -100,6 +100,11 @@ class FakeWebUIConnection:
         return WebUIConnectionState.READY
 
 
+def _start_pipeline_with_pack(controller: PipelineController, **kwargs: Any) -> bool:
+    controller._last_run_config = {"prompt_pack_id": "test-pack-xyz"}
+    return controller.start_pipeline_v2(**kwargs)
+
+
 class FakeJobController:
     """Fake job execution controller."""
 
@@ -212,7 +217,7 @@ class TestRunModeEnforcement:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        result = controller.start_pipeline_v2(run_mode="direct")
+        result = _start_pipeline_with_pack(controller, run_mode="direct")
 
         assert result is True
         job, mode = fake_service.submitted_jobs[0]
@@ -233,7 +238,7 @@ class TestRunModeEnforcement:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        result = controller.start_pipeline_v2(run_mode="queue")
+        result = _start_pipeline_with_pack(controller, run_mode="queue")
 
         assert result is True
         job, mode = fake_service.submitted_jobs[0]
@@ -258,7 +263,7 @@ class TestRunModeEnforcement:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        result = controller.start_pipeline_v2()  # No explicit run_mode
+        result = _start_pipeline_with_pack(controller)  # No explicit run_mode
 
         assert result is True
         job, mode = fake_service.submitted_jobs[0]
@@ -283,7 +288,7 @@ class TestRunModeEnforcement:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        result = controller.start_pipeline_v2()
+        result = _start_pipeline_with_pack(controller)
 
         assert result is True
         job, mode = fake_service.submitted_jobs[0]
@@ -318,7 +323,7 @@ class TestMultipleJobsSameRunMode:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        controller.start_pipeline_v2(run_mode="direct")
+        _start_pipeline_with_pack(controller, run_mode="direct")
 
         assert len(fake_service.submitted_jobs) == 3
         for job, mode in fake_service.submitted_jobs:
@@ -344,7 +349,7 @@ class TestMultipleJobsSameRunMode:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        controller.start_pipeline_v2(run_mode="queue")
+        _start_pipeline_with_pack(controller, run_mode="queue")
 
         assert len(fake_service.submitted_jobs) == 2
         for job, mode in fake_service.submitted_jobs:
@@ -374,7 +379,7 @@ class TestJobPayloadAttachment:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        controller.start_pipeline_v2()
+        _start_pipeline_with_pack(controller)
 
         job, _ = fake_service.submitted_jobs[0]
         assert job.payload is not None
@@ -408,7 +413,7 @@ class TestJobServiceIntegration:
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
 
-        controller.start_pipeline_v2()
+        _start_pipeline_with_pack(controller)
 
         # Verify correct number of submissions
         assert len(fake_service.submitted_jobs) == 2
@@ -417,3 +422,29 @@ class TestJobServiceIntegration:
         job_ids = [job.job_id for job, _ in fake_service.submitted_jobs]
         assert "srv1" in job_ids
         assert "srv2" in job_ids
+
+
+class TestPromptPackRequirement:
+    """Verify that pipeline runs require a prompt pack."""
+
+    def test_start_pipeline_without_pack_returns_false(
+        self, fake_state_manager: FakeStateManager, fake_job_service: FakeJobService
+    ) -> None:
+        record = make_normalized_job()
+        fake_builder = FakeJobBuilder(jobs_to_return=[record])
+        controller = PipelineController(
+            state_manager=fake_state_manager,
+            job_builder=fake_builder,
+            config_assembler=FakeConfigAssembler(),
+        )
+        controller._job_service = fake_job_service
+        controller._webui_connection = FakeWebUIConnection()
+        errors: list[Exception] = []
+
+        result = controller.start_pipeline_v2(
+            run_mode="queue",
+            on_error=lambda exc: errors.append(exc),
+        )
+
+        assert result is False
+        assert errors and isinstance(errors[0], ValueError)

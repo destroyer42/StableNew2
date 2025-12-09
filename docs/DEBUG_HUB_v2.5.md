@@ -23,4 +23,6 @@ Access the hub via the Debug button in `MainWindowV2` or through `AppController.
 
 The Pipeline tab includes `DebugLogPanelV2` below the preview and queue cards. This console displays `AppStateV2.log_events`, which are emitted by `JobLifecycleLogger` whenever the GUI adds a job to the draft, submits it to the queue, or JobService reports runner pickups/completions. Each line shows the source, event type, job ID (if any), and a concise message so operators can follow the job lifecycle without reading raw log files.
 
+PR-CORE-C adds a `job_submitted` lifecycle entry emitted whenever JobService doors a normalized, PromptPack-backed job into the queue. These entries make it easy to see the SUBMITTED → QUEUED → RUNNING → COMPLETED/FAILED path alongside the existing `job_started` and `job_finished` events without hitting the runner logs directly.
+
 Use the hub for faster diagnostics without touching the pipeline runner or queue internals.

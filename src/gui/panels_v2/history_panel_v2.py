@@ -97,9 +97,44 @@ class HistoryPanelV2(ttk.Frame):
         """
         self._history_items.append(dto)
         
-        # Format display text
+        # PR-CORE-D: Format display text with PromptPack metadata
         timestamp = dto.completed_at.strftime("%H:%M:%S") if dto.completed_at else "??:??:??"
-        display_text = f"[{timestamp}] {dto.label} ({dto.total_images} images)"
+        
+        # Extract metadata for richer display
+        pack_name = getattr(dto, "prompt_pack_name", None)
+        row_idx = getattr(dto, "prompt_pack_row_index", None)
+        variant_idx = getattr(dto, "variant_index", None)
+        batch_idx = getattr(dto, "batch_index", None)
+        
+        # PR-CORE-E: Extract config variant metadata
+        config_variant_label = getattr(dto, "config_variant_label", None)
+        config_variant_index = getattr(dto, "config_variant_index", None)
+        
+        # Build display text with metadata
+        parts = [f"[{timestamp}]"]
+        
+        if pack_name:
+            pack_text = pack_name
+            if row_idx is not None:
+                pack_text += f" R{row_idx + 1}"
+            
+            # PR-CORE-E: Add config variant label if present
+            if config_variant_label and config_variant_label != "base":
+                pack_text += f" [{config_variant_label}]"
+            elif config_variant_index is not None and config_variant_index > 0:
+                pack_text += f" [cfg_v{config_variant_index}]"
+            
+            if variant_idx is not None or batch_idx is not None:
+                v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
+                b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
+                pack_text += f" [{v_text}/{b_text}]"
+            parts.append(pack_text)
+        else:
+            parts.append(dto.label)
+        
+        parts.append(f"({dto.total_images} img{'s' if dto.total_images != 1 else ''})")
+        
+        display_text = " ".join(parts)
         
         self.history_listbox.insert(tk.END, display_text)
         

@@ -11,7 +11,7 @@ from src.gui.theme_v2 import (
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
-from src.pipeline.job_models_v2 import JobStatusV2, QueueJobV2
+from src.pipeline.job_models_v2 import JobStatusV2, QueueJobV2, UnifiedJobSummary
 
 
 class RunningJobPanelV2(ttk.Frame):
@@ -38,6 +38,7 @@ class RunningJobPanelV2(ttk.Frame):
         self.controller = controller
         self.app_state = app_state
         self._current_job: QueueJobV2 | None = None
+        self._current_job_summary: UnifiedJobSummary | None = None  # PR-CORE-D
         self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
 
         # Title with queue origin indicator
@@ -63,6 +64,22 @@ class RunningJobPanelV2(ttk.Frame):
             wraplength=200,
         )
         self.job_info_label.pack(fill="x", pady=(0, 4))
+        
+        # PR-CORE-D: PromptPack provenance label
+        self.pack_info_label = ttk.Label(
+            self,
+            text="",
+            wraplength=200,
+        )
+        self.pack_info_label.pack(fill="x", pady=(0, 4))
+        
+        # PR-CORE-D: Stage chain with current stage highlighting
+        self.stage_chain_label = ttk.Label(
+            self,
+            text="",
+            wraplength=200,
+        )
+        self.stage_chain_label.pack(fill="x", pady=(0, 4))
 
         # Progress frame
         progress_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -151,6 +168,8 @@ class RunningJobPanelV2(ttk.Frame):
 
         if job is None:
             self.job_info_label.configure(text="No job running")
+            self.pack_info_label.configure(text="")  # PR-CORE-D
+            self.stage_chain_label.configure(text="")  # PR-CORE-D
             self.progress_bar.configure(value=0)
             self.progress_label.configure(text="0%")
             self.status_label.configure(text="Status: Idle")
@@ -164,6 +183,35 @@ class RunningJobPanelV2(ttk.Frame):
 
         # Job info
         self.job_info_label.configure(text=job.get_display_summary())
+        
+        # PR-CORE-D: Display PromptPack metadata if available
+        if self._current_job_summary:
+            pack_name = getattr(self._current_job_summary, "prompt_pack_name", None)
+            row_idx = getattr(self._current_job_summary, "prompt_pack_row_index", None)
+            if pack_name:
+                pack_text = f"Pack: {pack_name}"
+                if row_idx is not None:
+                    pack_text += f" (Row {row_idx + 1})"
+                variant_idx = getattr(self._current_job_summary, "variant_index", None)
+                batch_idx = getattr(self._current_job_summary, "batch_index", None)
+                if variant_idx is not None or batch_idx is not None:
+                    v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
+                    b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
+                    pack_text += f" [{v_text}/{b_text}]"
+                self.pack_info_label.configure(text=pack_text)
+            else:
+                self.pack_info_label.configure(text="")
+            
+            # Display stage chain (could add current stage highlighting later)
+            stage_labels = getattr(self._current_job_summary, "stage_chain_labels", None)
+            if stage_labels:
+                stage_text = " → ".join(stage_labels)
+                self.stage_chain_label.configure(text=f"Stages: {stage_text}")
+            else:
+                self.stage_chain_label.configure(text="")
+        else:
+            self.pack_info_label.configure(text="")
+            self.stage_chain_label.configure(text="")
 
         # PR-GUI-F2: Queue origin display
         if self._queue_origin is not None:
@@ -245,6 +293,24 @@ class RunningJobPanelV2(ttk.Frame):
             queue_origin: 1-based queue position the job came from, or None.
         """
         self._current_job = job
+        self._queue_origin = queue_origin
+        self._update_display()
+    
+    def update_job_with_summary(
+        self,
+        job: QueueJobV2 | None,
+        summary: UnifiedJobSummary | None = None,
+        queue_origin: int | None = None
+    ) -> None:
+        """PR-CORE-D: Update the panel with job and UnifiedJobSummary.
+        
+        Args:
+            job: The running job, or None if no job is running.
+            summary: UnifiedJobSummary with PromptPack metadata.
+            queue_origin: 1-based queue position the job came from, or None.
+        """
+        self._current_job = job
+        self._current_job_summary = summary
         self._queue_origin = queue_origin
         self._update_display()
 

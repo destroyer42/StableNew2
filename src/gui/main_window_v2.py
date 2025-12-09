@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
 from src.gui.app_state_v2 import AppStateV2
@@ -264,20 +264,48 @@ class MainWindowV2:
                         btn.configure(command=callback)
                     except Exception:
                         pass
-            return
+        else:
+            # Best-effort fallback wiring using pipeline/pack controllers
+            if self.pipeline_controller:
+                start_cb = getattr(self.pipeline_controller, "start_pipeline", None) or getattr(
+                    self.pipeline_controller, "start", None
+                )
+                stop_cb = getattr(self.pipeline_controller, "stop_pipeline", None) or getattr(
+                    self.pipeline_controller, "stop", None
+                )
+                if callable(start_cb):
+                    header.run_button.configure(command=start_cb)
+                if callable(stop_cb):
+                    header.stop_button.configure(command=stop_cb)
 
-        # Best-effort fallback wiring using pipeline/pack controllers
-        if self.pipeline_controller:
-            start_cb = getattr(self.pipeline_controller, "start_pipeline", None) or getattr(
-                self.pipeline_controller, "start", None
-            )
-            stop_cb = getattr(self.pipeline_controller, "stop_pipeline", None) or getattr(
-                self.pipeline_controller, "stop", None
-            )
-            if callable(start_cb):
-                header.run_button.configure(command=start_cb)
-            if callable(stop_cb):
-                header.stop_button.configure(command=stop_cb)
+        if getattr(self, "app_state", None) and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe("preview_jobs", self._update_run_button_state)
+            except Exception:
+                pass
+            try:
+                self.app_state.subscribe("current_pack", self._update_run_button_state)
+            except Exception:
+                pass
+        self._update_run_button_state()
+
+    def _update_run_button_state(self, *_: Any) -> None:
+        header = getattr(self, "header_zone", None)
+        if header is None:
+            return
+        button = getattr(header, "run_button", None)
+        if button is None or not hasattr(button, "state"):
+            return
+        app_state = getattr(self, "app_state", None)
+        can_run = False
+        if app_state is not None:
+            has_pack = bool(getattr(app_state, "current_pack", None))
+            preview_jobs = getattr(app_state, "preview_jobs", None) or []
+            can_run = bool(has_pack and preview_jobs)
+        if can_run:
+            button.state(["!disabled"])
+        else:
+            button.state(["disabled"])
 
     def set_graceful_exit_handler(self, handler: Callable[[str], None] | None) -> None:
         """Register the handler used for canonical shutdown."""

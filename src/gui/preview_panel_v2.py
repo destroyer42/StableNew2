@@ -7,7 +7,7 @@ from tkinter import ttk
 from types import SimpleNamespace
 from typing import Any
 
-from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord
+from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.gui.design_system_v2 import DANGER_BUTTON
 from src.gui.theme_v2 import (
     BACKGROUND_ELEVATED,
@@ -142,16 +142,53 @@ class PreviewPanelV2(ttk.Frame):
         self.clear_draft_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         self._update_action_states(None)
+        self._bind_app_state_previews()
 
     def set_jobs(self, jobs: list[Any]) -> None:
         """Update preview from a list of NormalizedJobRecord objects."""
-        summaries: list[JobUiSummary] = []
-        for job in jobs:
-            if hasattr(job, "to_ui_summary"):
-                summaries.append(job.to_ui_summary())
-        self.set_job_summaries(summaries)
+        self.set_preview_jobs(jobs)
 
-    def set_job_summaries(self, summaries: list[JobUiSummary]) -> None:
+    def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
+        """Render previews from NormalizedJobRecord objects."""
+        summary_entries: list[Any] = []
+        for job in jobs or []:
+            summary_entries.append(self._summary_from_normalized_job(job))
+        self.set_job_summaries(summary_entries)
+
+    def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
+        unified = job.to_unified_summary() if hasattr(job, "to_unified_summary") else None
+        ui_summary = job.to_ui_summary() if hasattr(job, "to_ui_summary") else None
+
+        positive_preview = ""
+        negative_preview = ""
+        if ui_summary:
+            positive_preview = ui_summary.positive_preview or ""
+            negative_preview = ui_summary.negative_preview or ""
+        if not positive_preview and unified:
+            positive_preview = unified.positive_prompt_preview or ""
+        if not negative_preview and unified:
+            negative_preview = unified.negative_prompt_preview or ""
+
+        stage_display = "-"
+        if unified and unified.stage_chain_labels:
+            stage_display = " + ".join(unified.stage_chain_labels)
+        elif ui_summary:
+            stage_display = ui_summary.stages_display
+
+        return SimpleNamespace(
+            job_id=(unified.job_id if unified else getattr(ui_summary, "job_id", "")),
+            label=(unified.base_model if unified else getattr(ui_summary, "label", "")),
+            positive_preview=positive_preview,
+            negative_preview=negative_preview,
+            stages_display=stage_display,
+            sampler_name=(unified.sampler_name if unified else ""),
+            steps=(unified.steps if unified else None),
+            cfg_scale=(unified.cfg_scale if unified else None),
+            seed=getattr(job, "seed", None),
+            base_model=(unified.base_model if unified else getattr(ui_summary, "label", "")),
+        )
+
+    def set_job_summaries(self, summaries: list[Any]) -> None:
         """Render one or more JobUiSummary entries."""
         self._job_summaries = list(summaries)
         first_summary = summaries[0] if summaries else None
@@ -298,6 +335,67 @@ class PreviewPanelV2(ttk.Frame):
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _format_stage_chain(summary: UnifiedJobSummary | None) -> str:
+        """PR-CORE-D: Format stage chain as human-friendly labels.
+        
+        Args:
+            summary: UnifiedJobSummary with stage_chain_labels
+            
+        Returns:
+            Formatted string like "txt2img → img2img → adetailer → upscale"
+        """
+        if not summary or not hasattr(summary, "stage_chain_labels"):
+            return "-"
+        
+        labels = getattr(summary, "stage_chain_labels", None)
+        if not labels:
+            return "-"
+        
+        return " → ".join(labels)
+    
+    @staticmethod
+    def _format_matrix_slots(summary: UnifiedJobSummary | None) -> str:
+        """PR-CORE-D: Format matrix slot values for display.
+        
+        Args:
+            summary: UnifiedJobSummary with matrix_slot_values
+            
+        Returns:
+            Formatted string like "env: volcanic lair, lighting: hellish"
+        """
+        if not summary or not hasattr(summary, "matrix_slot_values"):
+            return ""
+        
+        slots = getattr(summary, "matrix_slot_values", None)
+        if not slots or not isinstance(slots, dict):
+            return ""
+        
+        # Format as "key: value" pairs
+        pairs = [f"{key}: {value}" for key, value in slots.items()]
+        return ", ".join(pairs) if pairs else ""
+    
+    @staticmethod
+    def _format_pack_provenance(summary: UnifiedJobSummary | None) -> str:
+        """PR-CORE-D: Format PromptPack provenance for display.
+        
+        Args:
+            summary: UnifiedJobSummary with prompt_pack_name and row_index
+            
+        Returns:
+            Formatted string like "Pack: Angelic Warriors (Row 3)"
+        """
+        if not summary:
+            return "Pack: -"
+        
+        pack_name = getattr(summary, "prompt_pack_name", None) or "Unknown"
+        row_index = getattr(summary, "prompt_pack_row_index", None)
+        
+        if row_index is not None:
+            return f"Pack: {pack_name} (Row {row_index + 1})"
+        else:
+            return f"Pack: {pack_name}"
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update action button availability based on app_state."""
         if app_state is None:
@@ -306,7 +404,22 @@ class PreviewPanelV2(ttk.Frame):
         preview_jobs = getattr(app_state, "preview_jobs", None)
         self._update_action_states(job_draft, preview_jobs)
 
-    def _render_summary(self, summary: JobUiSummary | None, total: int) -> None:
+    def _bind_app_state_previews(self) -> None:
+        if not self.app_state or not hasattr(self.app_state, "subscribe"):
+            return
+        try:
+            self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
+        except Exception:
+            pass
+        self._on_preview_jobs_changed()
+
+    def _on_preview_jobs_changed(self) -> None:
+        if not self.app_state:
+            return
+        records = getattr(self.app_state, "preview_jobs", None)
+        self.set_preview_jobs(records)
+
+    def _render_summary(self, summary: Any | None, total: int) -> None:
         if summary is None:
             self.job_count_label.config(text="No job selected")
             self._set_text_widget(self.prompt_text, "")
@@ -324,19 +437,69 @@ class PreviewPanelV2(ttk.Frame):
             self.learning_metadata_label.config(text="Learning metadata: N/A")
             return
 
-        job_text = f"Job: {summary.job_id}" if total == 1 else f"Jobs: {total}"
+        summary_obj = self._normalize_summary(summary)
+        if summary_obj is None:
+            self.job_count_label.config(text="No job selected")
+            return
+
+        job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
         self.job_count_label.config(text=job_text)
-        self._set_text_widget(self.prompt_text, summary.positive_preview or "")
-        self._set_text_widget(self.negative_prompt_text, summary.negative_preview or "")
-        self.model_label.config(text=f"Model: {summary.label}")
-        self.sampler_label.config(text="Sampler: -")
-        self.steps_label.config(text="Steps: -")
-        self.cfg_label.config(text="CFG: -")
-        self.seed_label.config(text="Seed: -")
-        self.stage_summary_label.config(text=f"Stages: {summary.stages_display}")
+
+        positive = getattr(summary_obj, "positive_preview", "")
+        negative = getattr(summary_obj, "negative_preview", "")
+        self._set_text_widget(self.prompt_text, positive or "")
+        self._set_text_widget(self.negative_prompt_text, negative or "")
+
+        model_text = getattr(summary_obj, "label", None) or getattr(summary_obj, "base_model", "-")
+        self.model_label.config(text=f"Model: {model_text}")
+        sampler_text = getattr(summary_obj, "sampler_name", getattr(summary_obj, "sampler", "-"))
+        self.sampler_label.config(text=f"Sampler: {sampler_text}")
+        steps_value = self._coerce_int(getattr(summary_obj, "steps", None))
+        self.steps_label.config(text=f"Steps: {steps_value if steps_value is not None else '-'}")
+        cfg_value = self._coerce_float(getattr(summary_obj, "cfg_scale", None))
+        cfg_text = f"{cfg_value:.1f}" if cfg_value is not None else "-"
+        self.cfg_label.config(text=f"CFG: {cfg_text}")
+        seed_value = getattr(summary_obj, "seed", None)
+        seed_text = str(seed_value) if seed_value is not None else "-"
+        self.seed_label.config(text=f"Seed: {seed_text}")
+
+        stages_text = getattr(summary_obj, "stages_display", "-")
+        self.stage_summary_label.config(text=f"Stages: {stages_text}")
         self.stage_flags_label.config(text=self._format_flags(refiner=False, hires=False, upscale=False))
-        self.randomizer_label.config(text="Randomizer: OFF")
+        
+        # PR-CORE-D: Display randomization/matrix metadata if available
+        randomizer_text = "Randomizer: OFF"
+        if isinstance(summary, UnifiedJobSummary):
+            matrix_slots = self._format_matrix_slots(summary)
+            if matrix_slots:
+                randomizer_text = f"Randomizer: ON ({matrix_slots})"
+            variant_idx = getattr(summary, "variant_index", None)
+            batch_idx = getattr(summary, "batch_index", None)
+            if variant_idx is not None or batch_idx is not None:
+                variant_text = f"v{variant_idx}" if variant_idx is not None else "-"
+                batch_text = f"b{batch_idx}" if batch_idx is not None else "-"
+                randomizer_text += f" [{variant_text}/{batch_text}]"
+        
+        self.randomizer_label.config(text=randomizer_text)
         self.learning_metadata_label.config(text="Learning metadata: N/A")
+
+    def _normalize_summary(self, summary: Any) -> Any | None:
+        if summary is None:
+            return None
+        if isinstance(summary, UnifiedJobSummary):
+            return SimpleNamespace(
+                job_id=summary.job_id,
+                label=summary.base_model,
+                positive_preview=summary.positive_prompt_preview or "",
+                negative_preview=summary.negative_prompt_preview or "",
+                stages_display=" + ".join(summary.stage_chain_labels or ["txt2img"]),
+                sampler_name=summary.sampler_name,
+                steps=summary.steps,
+                cfg_scale=summary.cfg_scale,
+                seed=getattr(summary, "seed", None),
+                base_model=summary.base_model,
+            )
+        return summary
 
     @staticmethod
     def _format_flags(*, refiner: bool, hires: bool, upscale: bool) -> str:

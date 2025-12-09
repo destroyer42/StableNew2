@@ -651,6 +651,7 @@ class AppController:
             history_service=history_service,
             run_callable=self._execute_job,
             job_lifecycle_logger=self._job_lifecycle_logger,
+            require_normalized_records=True,
         )
 
     def _setup_queue_callbacks(self) -> None:

@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Tuple
 
+from src.pipeline.prompt_pack_parser import PackRow
+
 
 MAX_PREVIEW_PROMPT_LENGTH = 120
+
+
+MATRIX_TOKEN_RE = re.compile(r"\[\[([a-zA-Z0-9_]+)\]\]")
 
 
 def _truncate(value: str, limit: int) -> str:
@@ -28,6 +34,18 @@ class ResolvedPrompt:
     @classmethod
     def empty(cls) -> "ResolvedPrompt":
         return cls(positive="", negative="", positive_preview="", negative_preview="", global_negative_applied=False)
+
+
+@dataclass(frozen=True)
+class PromptResolution:
+    positive: str
+    negative: str
+    positive_preview: str
+    negative_preview: str
+    positive_embeddings: Tuple[str, ...]
+    negative_embeddings: Tuple[str, ...]
+    lora_tags: Tuple[Tuple[str, float], ...]
+    global_negative_applied: bool
 
 
 @dataclass(frozen=True)
@@ -102,7 +120,7 @@ class UnifiedPromptResolver:
         for part in (prepend_text, gui_prompt, pack_prompt):
             if part:
                 cleaned = part.strip()
-                if cleaned:
+                if cleaned and (not positives or positives[-1] != cleaned):
                     positives.append(cleaned)
         positive = " ".join(positives).strip()
 
@@ -115,7 +133,7 @@ class UnifiedPromptResolver:
             negative_parts.append(preset_negative.strip())
         global_applied = False
         if apply_global_negative and global_negative:
-            negative_parts.insert(0, global_negative.strip())
+            negative_parts.append(global_negative.strip())
             global_applied = True
         if self._safety_negative:
             negative_parts.append(self._safety_negative)
@@ -129,6 +147,65 @@ class UnifiedPromptResolver:
             positive_preview=positive_preview,
             negative=negative,
             negative_preview=negative_preview,
+            global_negative_applied=global_applied,
+        )
+
+    @staticmethod
+    def _substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:
+        if not template or not slots:
+            return template
+        def replace(match: re.Match[str]) -> str:
+            name = match.group(1)
+            return slots.get(name, match.group(0))
+        return MATRIX_TOKEN_RE.sub(replace, template)
+
+    def resolve_from_pack(
+        self,
+        *,
+        pack_row: PackRow,
+        matrix_slot_values: Mapping[str, str] | None = None,
+        pack_negative: str | None = None,
+        global_negative: str = "",
+        apply_global_negative: bool = True,
+    ) -> PromptResolution:
+        subject = self._substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
+        lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in pack_row.lora_tags)
+        positive_parts = []
+        positive_parts.extend(pack_row.embeddings)
+        if pack_row.quality_line:
+            positive_parts.append(pack_row.quality_line)
+        if subject:
+            positive_parts.append(subject)
+        if lora_tokens:
+            positive_parts.append(lora_tokens)
+
+        positive = " ".join(part for part in positive_parts if part).strip()
+
+        negative_parts = []
+        global_applied = False
+        if apply_global_negative and global_negative:
+            negative_parts.append(global_negative.strip())
+            global_applied = True
+        if pack_negative:
+            negative_parts.append(pack_negative.strip())
+        negative_parts.extend(phrase for phrase in pack_row.negative_phrases if phrase)
+        negative_parts.extend(f"<embedding:{tag}>" for tag in pack_row.negative_embeddings)
+        if self._safety_negative:
+            negative_parts.append(self._safety_negative)
+
+        negative = ", ".join(part for part in negative_parts if part).strip()
+
+        positive_preview = _truncate(positive, self._max_preview_length)
+        negative_preview = _truncate(negative, self._max_preview_length)
+
+        return PromptResolution(
+            positive=positive,
+            negative=negative,
+            positive_preview=positive_preview,
+            negative_preview=negative_preview,
+            positive_embeddings=pack_row.embeddings,
+            negative_embeddings=pack_row.negative_embeddings,
+            lora_tags=pack_row.lora_tags,
             global_negative_applied=global_applied,
         )
 

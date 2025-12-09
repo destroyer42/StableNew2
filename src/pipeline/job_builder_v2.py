@@ -28,6 +28,7 @@ from src.pipeline.job_models_v2 import (
     PackUsageInfo,
     StagePromptInfo,
 )
+from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.randomizer import (
     RandomizationPlanV2,
     RandomizationSeedMode,
@@ -65,6 +66,7 @@ class JobBuilderV2:
         *,
         base_config: Any,
         randomization_plan: RandomizationPlanV2 | None = None,
+        config_variant_plan: ConfigVariantPlanV2 | None = None,
         batch_settings: BatchSettings | None = None,
         output_settings: OutputSettings | None = None,
         rng_seed: int | None = None,
@@ -76,6 +78,8 @@ class JobBuilderV2:
                 Can be a dataclass, dict, or any object with model/seed attrs.
             randomization_plan: Optional plan for variant generation.
                 If None or disabled, produces a single variant.
+            config_variant_plan: Optional plan for config sweeps (PR-CORE-E).
+                If None or disabled, uses single base config.
             batch_settings: Settings for batch expansion.
                 If None, defaults to batch_size=1, batch_runs=1.
             output_settings: Settings for output directory and filename.
@@ -84,61 +88,125 @@ class JobBuilderV2:
 
         Returns:
             List of NormalizedJobRecord instances in deterministic order:
-            - Outer: variant_index ascending (0 to variant_total-1)
+            - Outer: config_variant_index ascending (0 to config_variants-1)
+            - Middle: variant_index ascending (0 to variant_total-1)
             - Inner: batch_index ascending (0 to batch_runs-1)
 
-        Total jobs = len(variants) * batch_runs
+        Total jobs = len(config_variants) * len(matrix_variants) * batch_runs
         """
         # Apply defaults
         batch = batch_settings or BatchSettings()
         output = output_settings or OutputSettings()
+        config_plan = config_variant_plan or ConfigVariantPlanV2.single_variant()
 
-        # Step 1: Generate variants via randomizer
-        variant_configs = self._generate_variants(
-            base_config, randomization_plan, rng_seed
-        )
-        variant_total = len(variant_configs)
-
-        # Step 2: Apply seed mode for non-randomized path
-        # (Randomizer engine already applies seed mode when plan.enabled is True)
-        if randomization_plan is None or not randomization_plan.enabled:
-            variant_configs = self._apply_seed_mode_non_randomized(
-                variant_configs, randomization_plan
-            )
-
-        # Step 3: Expand by batch_runs and build job records
+        # Step 1: Iterate over config variants (PR-CORE-E)
         jobs: list[NormalizedJobRecord] = []
 
-        for variant_index, config_variant in enumerate(variant_configs):
-            for batch_index in range(batch.batch_runs):
-                # Extract seed from config
-                seed = self._extract_seed(config_variant)
+        for config_variant in config_plan.iter_variants():
+            # Apply config variant overrides to base_config
+            config_with_overrides = self._apply_config_overrides(
+                base_config, config_variant.overrides
+            )
 
-                # Build randomizer summary if applicable
-                randomizer_summary = None
-                if randomization_plan and randomization_plan.enabled:
-                    randomizer_summary = self._build_randomizer_summary(
-                        randomization_plan, variant_index
-                    )
+            # Step 2: Generate matrix variants via randomizer
+            variant_configs = self._generate_variants(
+                config_with_overrides, randomization_plan, rng_seed
+            )
+            variant_total = len(variant_configs)
 
-                job = NormalizedJobRecord(
-                    job_id=self._id_fn(),
-                    config=config_variant,
-                    path_output_dir=output.base_output_dir,
-                    filename_template=output.filename_template,
-                    seed=seed,
-                    variant_index=variant_index,
-                    variant_total=variant_total,
-                    batch_index=batch_index,
-                    batch_total=batch.batch_runs,
-                    created_ts=self._time_fn(),
-                    randomizer_summary=randomizer_summary,
-                    txt2img_prompt_info=self._build_stage_prompt_info(config_variant),
-                    pack_usage=self._build_pack_usage(config_variant),
+            # Step 3: Apply seed mode for non-randomized path
+            if randomization_plan is None or not randomization_plan.enabled:
+                variant_configs = self._apply_seed_mode_non_randomized(
+                    variant_configs, randomization_plan
                 )
-                jobs.append(job)
+
+            # Step 4: Expand by batch_runs and build job records
+            for variant_index, matrix_config in enumerate(variant_configs):
+                for batch_index in range(batch.batch_runs):
+                    # Extract seed from config
+                    seed = self._extract_seed(matrix_config)
+
+                    # Build randomizer summary if applicable
+                    randomizer_summary = None
+                    if randomization_plan and randomization_plan.enabled:
+                        randomizer_summary = self._build_randomizer_summary(
+                            randomization_plan, variant_index
+                        )
+
+                    job = NormalizedJobRecord(
+                        job_id=self._id_fn(),
+                        config=matrix_config,
+                        path_output_dir=output.base_output_dir,
+                        filename_template=output.filename_template,
+                        seed=seed,
+                        variant_index=variant_index,
+                        variant_total=variant_total,
+                        batch_index=batch_index,
+                        batch_total=batch.batch_runs,
+                        config_variant_label=config_variant.label,
+                        config_variant_index=config_variant.index,
+                        config_variant_overrides=config_variant.overrides.copy(),
+                        created_ts=self._time_fn(),
+                        randomizer_summary=randomizer_summary,
+                        txt2img_prompt_info=self._build_stage_prompt_info(matrix_config),
+                        pack_usage=self._build_pack_usage(matrix_config),
+                    )
+                    jobs.append(job)
 
         return jobs
+
+    def _apply_config_overrides(
+        self,
+        base_config: Any,
+        overrides: dict[str, Any],
+    ) -> Any:
+        """Apply config variant overrides to base config (PR-CORE-E).
+
+        Supports dot-notation paths (e.g., "txt2img.cfg_scale" -> config["txt2img"]["cfg_scale"]).
+
+        Args:
+            base_config: Base merged config (dict or object).
+            overrides: Dict of dot-path keys to values.
+
+        Returns:
+            Deep copy of base_config with overrides applied.
+        """
+        if not overrides:
+            return deepcopy(base_config)
+
+        # Deep copy to avoid mutating base
+        config_copy = deepcopy(base_config)
+
+        for path, value in overrides.items():
+            # Split dot-notation path
+            parts = path.split(".")
+
+            # Navigate to parent container
+            current = config_copy
+            for part in parts[:-1]:
+                if isinstance(current, dict):
+                    if part not in current:
+                        current[part] = {}
+                    current = current[part]
+                else:
+                    # Object attribute navigation
+                    if not hasattr(current, part):
+                        # Can't set on frozen dataclass, skip
+                        break
+                    current = getattr(current, part)
+
+            # Set final value
+            final_key = parts[-1]
+            if isinstance(current, dict):
+                current[final_key] = value
+            elif hasattr(current, final_key):
+                try:
+                    setattr(current, final_key, value)
+                except (AttributeError, TypeError):
+                    # Frozen or read-only, skip
+                    pass
+
+        return config_copy
 
     def _generate_variants(
         self,

@@ -448,33 +448,28 @@ class PipelineTabFrame(ttk.Frame):
             panel.apply_resource_update(resources)
 
     def _on_job_draft_changed(self) -> None:
-        if self.app_state is None or not hasattr(self, "preview_panel"):
+        if self.app_state is None:
             return
         try:
-            job_draft = self.app_state.job_draft
-            if not self._refresh_preview_from_pipeline_jobs():
-                self.preview_panel.update_from_job_draft(job_draft)
+            self._refresh_preview_from_pipeline_jobs()
         except Exception:
             pass
 
     def _refresh_preview_from_pipeline_jobs(self) -> bool:
         """Attempt to render JobUiSummary data before falling back to draft text."""
-        if not hasattr(self, "preview_panel"):
-            return False
         records = self._get_pipeline_preview_jobs()
-        if not records:
-            return False
+        has_records = bool(records)
+        if self.app_state and hasattr(self.app_state, "set_preview_jobs"):
+            try:
+                self.app_state.set_preview_jobs(records if has_records else [])
+            except Exception:
+                pass
         try:
-            self.preview_panel.set_jobs(records)
-            if self.app_state and hasattr(self.app_state, "set_preview_jobs"):
-                try:
-                    self.app_state.set_preview_jobs(records)
-                except Exception:
-                    pass
-            self.preview_panel.update_from_app_state(self.app_state)
-            return True
+            if hasattr(self, "preview_panel"):
+                self.preview_panel.update_from_app_state(self.app_state)
         except Exception:
-            return False
+            pass
+        return has_records
 
     def _get_pipeline_preview_jobs(self) -> list[NormalizedJobRecord]:
         controller = self.pipeline_controller or getattr(self.app_controller, "pipeline_controller", None)
