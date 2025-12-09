@@ -1,382 +1,507 @@
-#CANONICAL
-Builder Pipeline Deep-Dive (v2.6).md
-How Prompt Pack Substitution, Matrix Expansion, Overrides, and Normalization Work Internally
+BUILDER PIPELINE DEEP-DIVE (v2.6).md
 
-Version: 2.6
-Status: Canonical / Drop-In Doc
-Last Updated: Today
-Subsystems Covered: ConfigMergerV2 • RandomizationEngineV2 • UnifiedPromptResolver • UnifiedConfigResolver • JobBuilderV2
+StableNew – Canonical Execution Architecture
+Last Updated: 2025-12-09
+Status: Canonical**
 
-1. Purpose
+0. Purpose
 
-This document explains, in exact implementation detail:
+This document provides a full internal breakdown of the Builder Pipeline—the subsystem that converts a user’s PromptPack selection into a fully deterministic graph of NormalizedJobRecord (NJR) objects to be executed by the runner.
 
-How prompt substitution works
+This is the definitive reference for:
 
-How matrix slot values are selected and substituted
+how PromptPack selection becomes a job
 
-How matrix combinations or rotations are expanded into variants
+how randomization, matrix slots, config sweeps, and overrides are resolved
 
-How runtime overrides influence substitution without violating PromptPack-Only
+exactly how NJRs are built and validated
 
-How the builder pipeline produces normalized, reproducible jobs
+the allowed vs forbidden behaviors in the builder path
 
-This is not design theory; it describes the actual ordering, data flows, and internal responsibilities as defined in the architecture.
+how PR-CORE-A/B/C/D/E integrate
 
-2. The Builder Pipeline: High-Level Flow
+If behavior contradicts this file, the code must be updated.
 
-From PROMPT_PACK_LIFECYCLE_v2.6.md:
-Prompt text comes ONLY from the Prompt Pack TXT. Matrix metadata comes from the Prompt Pack JSON. Overrides come from Pipeline Tab. No GUI component may do any text substitutions.
+1. Builder Pipeline Overview
 
-The full pipeline is:
+The Builder Pipeline begins after the user selects:
 
-Preset Snapshot + Pack JSON + Overrides
+PromptPack
+
+Row(s)
+
+Config overrides
+
+Randomization settings
+
+Config sweeps
+
+Enable/disable global negative
+
+…and ends with a list of NJR objects ready for queue/runner execution.
+
+2. End-to-End Flow (High Level)
+PromptPack (txt+json)
         ↓
-ConfigMergerV2            (merges base config)
+Validation Layer
         ↓
-RandomizationPlanV2       (describes matrix-enabled variant production)
+RandomizerEngineV2 (matrix expansion)
         ↓
-RandomizerEngineV2        (generates variant configs + matrix slot selections)
+ConfigVariantPlanV2 (sweep expansion)
         ↓
-PromptPack TXT Row        (raw prompt with [[slots]])
+UnifiedPromptResolver (positive + negative)
         ↓
-UnifiedPromptResolver     (slot substitution, negative layering)
+UnifiedConfigResolver (pipeline config per stage)
         ↓
-UnifiedConfigResolver     (stage chain + final config)
+JobBuilderV2 (Cartesian expansion)
         ↓
-JobBuilderV2              (produce NormalizedJobRecord objects)
+NormalizedJobRecord[]
 
-3. Detailed Stage Walkthrough
-3.1 ConfigMergerV2 — What Gets Merged?
 
-ConfigMergerV2 is pure (no I/O) and only merges configs, never touches text.
+There is no alternate path.
+No GUI prompt text.
+No legacy payloads.
+No ad-hoc job dicts.
 
-Input layers:
+3. Builder Pipeline Responsibilities
 
-PresetConfig (global defaults)
+The builder pipeline is responsible for exactly:
 
-Pack JSON Config (pack-specific SDXL settings)
+Prompt resolution
 
-StageOverridesBundle (Pipeline tab override flags)
+Randomization / matrix substitution
 
-Merge rules (from PROMPT_PACK_LIFECYCLE_v2.6.md + ARCHITECTURE_v2.6.md):
+Sweep expansion
 
-Overrides apply only when explicitly selected.
+Stage chain assembly
 
-Disabled stages stay disabled even if pack config enables them.
+Config override application
 
-Pack JSON’s randomization metadata is preserved.
+Seed allocation
 
-No mutation of underlying pack json; deep copies only.
+NJR creation (immutable)
 
-Output: MergedRunConfig for a single row prior to randomization.
+Validation of final records
 
-3.2 RandomizationPlanV2 — Describing Substitution Intent
+It is not responsible for:
 
-The plan records:
+queue behavior
 
-Whether randomization is enabled
+runner behavior
 
-The mode ("rotate" or "combine")
+model execution
 
-prompt_mode ("prepend" or "replace")
+preview panel formatting
 
-Matrix slots + slot arrays (e.g., environment = ["volcanic lair", "ruined cathedral"])
+writing image files
 
-Max variants
+pack editing
 
-Seed behavior
+4. The Five Deterministic Expansion Dimensions
 
-An example extracted from the pack JSON:
+Every job produced by the Builder Pipeline arises from:
 
-"randomization": {
-  "enabled": true,
-  "matrix": {
-    "mode": "rotate",
-    "prompt_mode": "prepend",
-    "slots": {
-      "environment": ["volcanic lair", "ruined cathedral"],
-      "lighting": ["hellish backlight", "golden hour"]
-    }
-  }
+(1) Row selection — which line(s) of the PromptPack are chosen
+(2) Matrix Randomization — substitution for each slot
+(3) Config Variants — parameter sweeps
+(4) Batch size — N images per job
+(5) Seed generation — deterministic if seed fixed, random otherwise
+
+The total job count:
+
+job_count = rows × matrix_variants × config_variants × batch_size
+
+5. Core Components (Canonical Definitions)
+5.1 RandomizerEngineV2
+
+Generates matrix slot combinations:
+
+Inputs:
+
+Pack JSON matrix definition
+
+Randomization settings (sampling mode, count)
+
+Outputs:
+
+A list of MatrixVariant objects:
+
+{
+  "slot_values": { "character": "knight", "environment": "desert" },
+  "index": 0
 }
 
 
-RandomizationPlanV2 does not perform substitution; it only encodes intent.
+Engine produces fully deterministic variants for repeatability.
 
-3.3 RandomizerEngineV2 — Producing the Variant Grid
+5.2 ConfigVariantPlanV2
 
-RandomizerEngineV2 takes:
+From PR-CORE-E, used for sweeps:
 
-MergedRunConfig + RandomizationPlanV2
+[
+  {
+    "label": "cfg_low",
+    "overrides": {"txt2img.cfg_scale": 4.5},
+    "index": 0
+  },
+  {
+    "label": "cfg_high",
+    "overrides": {"txt2img.cfg_scale": 10.0},
+    "index": 1
+  }
+]
 
 
-It produces:
+This applies per job, never globally.
+Does not modify PromptPack or presets.
 
-3.3.1 VariantConfig List
+5.3 UnifiedPromptResolver
+Inputs:
 
-Each variant represents:
+raw TXT row
 
-The resolved slot selection (environment = "volcanic lair")
+slot substitution values
 
-Variant index and total
+global negative + stage flags
 
-A config signature for reproducibility
+override-negative (future reserved)
 
-Seed assignment (deterministic)
+Outputs:
+ResolvedPositivePrompt
+ResolvedNegativePrompt
+resolved_metadata (matrix slot map, global-negative-applied flag)
 
-3.3.2 How slot values are chosen
 
-Mode = rotate
+Rules:
 
-Environment[0] + Lighting[0]
+Substitute slots first
 
-Environment[1] + Lighting[1]
+Layer negatives in canonical order
 
-Wrap if lengths mismatch
+Produce final prompt text used by NJR
 
-Mode = combine
+The runner sees only these final strings.
 
-Full cross-product:
+5.4 UnifiedConfigResolver
 
-environment × lighting × camera × style …
+Combines:
 
-3.3.3 Explicit Guarantees
+Pack JSON defaults
 
-Deterministic with fixed seed
+Config snapshot
 
-Independent of prompt text
+Per-run overrides
 
-Never edits strings; only chooses which slot value is passed forward
+Sweep variant overrides
 
-Output: A list of VariantConfig objects — each with a concrete set of chosen slot values.
+Stage flags
 
-4. Prompt Substitution Layer
+Global negative (if applicable)
 
-This stage performs the actual insertion of slot values into the prompt text.
+Produces full config per stage:
 
-It follows exactly the rules from PROMPT_PACK_LIFECYCLE_v2.6.md:
+txt2img: width, height, sampler, steps, cfg, model, negative, seed…
+refiner: enabled?, strength, model…
+hires: enabled?, upscale factor…
+adetailer: enabled?, face model…
 
-“Prompt structure stays in TXT. Randomization metadata stays in JSON. Only Prompt Pack authoring subsystem modifies the pack.”
 
-4.1 Inputs to UnifiedPromptResolver
+No inference outside the pack + overrides.
 
-For each row and variant:
+5.5 NormalizedJobRecord (NJR)
 
-TXT Row String  (e.g. "A warrior in [[environment]] under [[lighting]]")
-VariantConfig   (e.g. { environment: "volcanic lair", lighting: "hellish backlight" })
-Pack JSON negatives
-Global negative
-Row-level negatives
-Prompt_mode ("prepend" or "replace")
+The canonical execution DTO.
 
-4.2 Substitution Algorithm (Exact)
-let final_prompt = row_text
+Contains:
 
-for slot_name, slot_value in variant_config.slots:
-    final_prompt = final_prompt.replace(f"[[{slot_name}]]", slot_value)
+Resolved prompt text
 
+Resolved negative text
 
-Details:
+Complete pipeline config
 
-If a slot exists in the TXT but NOT in JSON slots → error
-(This ensures editor consistency.)
+Stage chain
 
-If a slot exists in JSON but NOT in TXT → no-op
-(Unused metadata is allowed.)
+Randomizer result
 
-4.3 prompt_mode Behavior
-prompt_mode = "replace"
+Sweep variant label + index
 
-Replaces the entire row with slot selection text.
+Seeds
 
-Example:
+PromptPack origin metadata
 
-Row: "A warrior portrait"
-Slot value: "volcanic lair"
-Final prompt: "volcanic lair"
+Global-negative-applied flags
 
-prompt_mode = "prepend"
-
-Adds slot value(s) before the resolved row:
-
-"volcanic lair, hellish backlight, A warrior portrait"
-
-
-Order is deterministic: alphabetical by slot name unless otherwise specified.
-
-4.4 Negative Prompt Construction
-
-NEGATIVE =
-
-Row.negatives
-+ Pack JSON negatives (txt2img.negative_prompt, etc.)
-+ Global negative (from app settings)
-+ Runtime negative override (optional; does not mutate pack)
-
-
-From PROMPT_PACK_LIFECYCLE_v2.6.md:
-
-“Final negative is row negatives + pack JSON negatives + global negative + runtime negative override”
-
-No component combines or rewrites text outside this rule.
-
-5. UnifiedConfigResolver — Producing Executable Stage Chains
-
-After prompt substitution, UnifiedConfigResolver creates:
-
-StageChain (canonical order)
-
-Stage config objects (refiner, hires, upscale…)
-
-Loop/batch metadata
-
-Output settings
-
-Final resolution, sampler, scheduler, cfg
-
-This must align exactly with the runner’s required schema in ARCHITECTURE_v2.6.md:
-
-“Builder Pipeline is the only subsystem allowed to build StageChain.”
-
-6. JobBuilderV2 — Final Normalization
-
-JobBuilderV2 combines:
-
-Resolved prompt + Resolved negative
-Resolved pipeline config (UnifiedConfigResolver)
-Variant index
 Batch index
-Seed (deterministic)
-Pack provenance (pack_id, row_index)
-Randomization metadata
-Output settings
 
-
-It produces NormalizedJobRecord, which is:
+Everything runner needs
 
 Immutable
 
-Self-contained
+After creation, NJR may not be mutated.
+If any component requires mutation → new NJR must be built.
 
-Fully resolved
-
-Queue-safe
-
-Runner-ready
-
-History/Learning-ready
-
-From ARCHITECTURE_v2.6.md:
-
-“Queue/Runner consume NormalizedJobRecords only; they never modify jobs.”
-
-7. Worked Example (Concrete)
-
-Prompt Pack TXT contains:
-
-A mythical beast in [[environment]] with [[lighting]] ambiance.
+6. JobBuilderV2 – Internal Mechanics
+6.1 Master Build Loop
+for row in selected_rows:
+  for cfg_variant in sweep_variants:
+    for matrix_variant in matrix_variants:
+      for b in range(batch_size):
+         yield NJR
 
 
-Pack JSON contains:
+This loop must remain simple, pure, predictable.
 
-"slots": {
-  "environment": ["volcanic lair", "ruined cathedral"],
-  "lighting": ["hellish backlight", "amber torchlight"]
-},
-"prompt_mode":"prepend"
-
-Step 1 — RandomizerEngineV2 (mode = rotate)
-
-Variant 0:
-
-environment = "volcanic lair"
-
-lighting = "hellish backlight"
-
-Variant 1:
-
-environment = "ruined cathedral"
-
-lighting = "amber torchlight"
-
-Step 2 — UnifiedPromptResolver
-
-Variant 0 prompt:
-
-"volcanic lair, hellish backlight, A mythical beast in volcanic lair with hellish backlight ambiance."
+6.2 Row Resolution
+resolved_txt = substitute_slots(row, matrix_variant.slot_values)
 
 
-Variant 1 prompt:
+If a slot is missing → validation error.
 
-"ruined cathedral, amber torchlight, A mythical beast in ruined cathedral with amber torchlight ambiance."
+6.3 Negative Layering
+final_neg = (
+    pack_negatives     # currently none in v2.6
+    + global_negative  # if enabled for this stage
+    + override_negative # future reserved
+)
+
+6.4 Config Resolution Flow
+config = merge(
+  pack_defaults,
+  runtime_overrides,
+  sweep_variant.overrides
+)
+config = apply_stage_chain(config)
+config = embed_negative(config, final_neg)
+config = assign_seed(config, user_seed or random)
+
+6.5 Stage Assembly
+stage_chain = [
+  StageConfig("txt2img", config.txt2img, enabled=True),
+  StageConfig("img2img", config.img2img, enabled=False),
+  ...
+]
 
 
-Negatives constructed per the 4-part rule.
+Illegal chains are pre-blocked via pack schema validation.
 
-Step 3 — UnifiedConfigResolver
+6.6 NJR Creation
+NJR(
+  prompt=resolved_txt,
+  negative=final_neg,
+  row_index=row.index,
+  matrix_index=matrix_variant.index,
+  matrix_values=matrix_variant.slot_values,
+  config_variant_label=cfg_variant.label,
+  config_variant_index=cfg_variant.index,
+  config_variant_overrides=cfg_variant.overrides,
+  stage_chain=stage_chain,
+  seed=seed,
+  batch_index=b,
+  pack_name=pack.name,
+  pack_version=pack.version
+)
 
-Resolve model, sampler, scheduler, steps
+7. Builder Pipeline Invariants
 
-Build canonical StageChain
+The Builder Pipeline must always comply with:
 
-Attach per-stage configs
+7.1 Single Source of Prompt Truth
 
-Step 4 — JobBuilderV2
+Only PromptPack TXT rows supply prompt text.
 
-Two NormalizedJobRecord objects produced, each ready for queueing.
+Forbidden:
 
-8. Failure Modes Caught Early
+GUI text fields
 
-The following are enforced:
+Controller-provided prompts
 
-Missing slot definitions in JSON → error
+Legacy draft bundles
 
-Missing slot tokens in TXT → allowed
+“Manual prompt” mode
 
-Unresolved tokens after substitution → error
+7.2 Single Builder Path
 
-Empty prompt after substitution → error
+Only JobBuilderV2 may construct jobs.
 
-Any mutation of prompts outside the resolver → forbidden
+7.3 PromptPack Immutability
 
-Any GUI attempt to produce text → forbidden
+Execution cannot modify PromptPack files.
 
-9. Testing Requirements (from Coding & Testing Standards)
+7.4 Determinism
 
-Pipeline tests MUST assert:
+Given identical input → builder produces identical NJRs.
 
-Substitution correctness
+7.5 No Silent Defaults
 
-Slot-to-token mapping
+If a config field is missing, builder must:
 
-prompt_mode behavior
+fill with explicit pack default or
 
-Randomization variant ordering
+raise an error
+but never silently substitute hidden values.
 
-Deterministic seeds
+7.6 No Runner-Dependent Behavior
 
-Merged negatives
+Builder must not ask the runner for information.
 
-JSON slot/txt token mismatch handling
+8. Builder Diagnostics & Debug Hooks (DebugHub v2.6)
 
-GUI tests must not test substitution—GUI cannot perform substitution.
+The Builder Pipeline emits a structured DTO:
 
-10. Summary
+BuilderDebugInfo {
+  prompt_layers: [...],
+  matrix_slot_values: {...},
+  config_final: {...},
+  stage_chain: [...],
+  sweep_variant: {...},
+  negative_layers: [...],
+  computed_seed: 12345,
+  njr_preview: {...}
+}
 
-Substitution happens only inside UnifiedPromptResolver.
-Slot values are chosen only by RandomizerEngineV2.
-Stage construction happens only in UnifiedConfigResolver + JobBuilderV2.
-The GUI never constructs prompts, never substitutes tokens, and never edits packs.
 
-This preserves:
+DebugHub surfaces:
 
-Determinism
+pre-NJR prompt layer stack
 
-Reproducibility
+final config after merges
 
-Clean subsystem boundaries
+slot substitution map
 
-Reasonable testability
+sweep variant metadata
 
-PromptPack-Only architecture integrity
+stage sequence
+
+seed path
+
+This is essential for correctness testing and learning.
+
+9. Interaction with Tech-Debt Cleanup (2025–2026)
+
+The Builder Pipeline is replacing:
+
+Legacy Component	Status
+Legacy PromptResolver	Delete
+Legacy JobDraft / DraftBundle	Delete
+Legacy RunPayload	Delete
+All ad-hoc job dicts in GUI	Delete
+Old stage sequencing logic	Delete
+PromptPack v1 schema	Delete
+Builder functions in AppController	Delete (move to JobBuilderV2)
+
+The Pipeline must become:
+
+the only job construction path
+
+the only prompt resolution engine
+
+the only config resolution engine
+
+10. Golden Path Integration (E2E)
+
+Builder Pipeline participates in Golden Path tests:
+
+GP1 – Simple Single-Row Job
+GP2 – Matrix Randomization
+GP3 – Config Sweep Expansion
+GP4 – Seeds & Determinism
+GP5 – Stage Chain Enforcement
+GP6 – Global Negative Integration
+GP7 – Learning Replay Consistency
+
+All Golden Path failures produce BuilderDiagnostic output.
+
+11. Failure Modes & Required Behavior
+A. Invalid Matrix Slot
+
+→ Builder error with slot name and row index.
+
+B. Invalid Config Override
+
+→ Reject PR or block run.
+
+C. Illegal Stage Chain
+
+→ Validation error at Preview stage.
+
+D. Missing Defaults
+
+→ Validation error (no silent repair).
+
+E. Empty PromptPack
+
+→ Fatal; cannot build.
+
+F. Zero jobs produced
+
+→ Fatal; pipeline must abort.
+
+12. Testing the Builder Pipeline
+12.1 Unit Tests
+
+slot substitution
+
+negative layering
+
+config merging
+
+sweep expansion
+
+seed assignment
+
+NJR immutability
+
+12.2 Integration Tests
+
+Golden Path full-chain tests
+
+replaying NJR into runner consistently
+
+12.3 Fuzz Tests
+
+random PromptPacks
+
+random sweep shapes
+
+random matrix structures
+
+No builder code may be merged without test coverage.
+
+13. Summary: Why the Builder Pipeline Exists
+
+To eliminate:
+
+4 execution paths
+
+3 job formats
+
+2 prompt sources
+
+dozens of legacy shims
+
+thousands of lines of architectural debt
+
+…and replace them with:
+
+One job format: NJR
+
+One prompt source: PromptPack
+
+One builder: JobBuilderV2
+
+This creates:
+
+Stability
+
+Predictability
+
+Testability
+
+Performance consistency
+
+Clean controller architecture
+
+Learning-ready metadata
+
+END OF BUILDER PIPELINE DEEP-DIVE v2.6 (Canonical Edition)

@@ -1,396 +1,447 @@
-#CANONICAL
 PROMPT_PACK_LIFECYCLE_v2.6.md
-Authoritative Reference for Prompt Authoring, Pack Configs, Randomization, and Overrides in StableNew
 
-Version: 2.6
-Status: Canonical
-Last Updated: 2025-12-08
+(Canonical)
+
+StableNew – PromptPack Lifecycle Specification (v2.6)
+Last Updated: 2025-12-09
+Status: Canonical, Binding**
 
 0. Purpose
 
-The Prompt Pack Lifecycle defines:
+A PromptPack is the only input source for all jobs executed in StableNew.
 
-Where prompts originate
+This document defines:
 
-How Prompt Packs are authored, stored, and versioned
+How PromptPacks are created, edited, validated, stored, loaded, and consumed
 
-How their associated configuration (pack JSON) is created and edited
+How PromptPacks integrate with the builder pipeline
 
-Where and how global negatives, randomization matrices, and slot values are defined
+How PromptPacks interact with randomization, sweeps, and config defaults
 
-How runtime config overrides and config sweeps work without violating PromptPack-only architecture
+Ownership, restrictions, allowed behaviors, and forbidden behaviors
 
-This document is required reading for all developers working within PR-CORE-A/B/C/D.
+The entire lifecycle from authoring → execution → history → learning
 
-1. PromptPack-Only Principle
+This document eliminates all legacy v1/v2.0-v2.5 ambiguity.
+If behavior contradicts this file, the code must be updated.
 
-StableNew v2.6 uses the following architectural invariant:
+1. PromptPack Definition
 
-All pipeline jobs MUST originate from a saved Prompt Pack.
-GUI-owned free-text prompt fields are forbidden in the Pipeline Tab.
-Only the Advanced Prompt Builder can author prompt content.
+A PromptPack is defined by exactly two files, same base name:
 
-This eliminates ambiguity, ensures reproducibility, and dramatically stabilizes testing, debugging, and learning.
+{name}.txt      # prompt rows
+{name}.json     # metadata
 
-2. Prompt Pack Components
 
-Each Prompt Pack consists of two files, always stored together:
+No PromptPack exists without both.
 
-2.1 Prompt Pack TXT
+1.1 .txt (Prompt Rows)
 
-Human-authored content from the Advanced Prompt Builder, including:
+A list of prompt “rows,” each a self-contained positive prompt.
 
-Positive embedding tags
+Each row may contain placeholders for matrix slots.
 
-Negative embedding tags
+Rows are indexed (0..N-1).
 
-Style/quality line
+Rows must be plain text, UTF-8.
 
-Subject template(s)
+Comments are allowed using # at line start.
 
-Per-row negative blocks
+1.2 .json (Metadata)
 
-Optional randomization tokens:
+The JSON file defines:
 
-[[environment]]
+A. Matrix Slots
 
-[[lighting]]
+Example:
 
-[[camera]]
-
-[[style]]
-
-[[world_flavor]]
-
-etc.
-
-This file contains all semantic prompt structure.
-
-No other subsystem is allowed to modify or generate prompt text.
-
-2.2 Prompt Pack JSON
-
-Machine-readable configuration associated with the pack, created on the first save of a pack.
-
-Includes:
-
-A. SDXL pipeline configuration
-
-txt2img block
-
-img2img block
-
-upscale block
-
-adetailer block
-
-pipeline (looping, batch, variant mode)
-
-aesthetic settings
-
-B. Randomization Matrix (if enabled)
-randomization: {
-    enabled: true,
-    matrix: {
-        mode: "rotate" | "combine",
-        prompt_mode: "prepend" | "replace",
-        slots: {
-            "environment": [...],
-            "lighting": [...],
-            "style": [...],
-            ...
-        }
-    }
+"matrix": {
+  "character": ["knight", "princess", "rogue"],
+  "environment": ["forest", "castle"]
 }
 
-C. Pack-level metadata
+B. PromptPack Defaults
+"defaults": {
+  "cfg_scale": 7,
+  "steps": 30,
+  "sampler": "dpmpp_2m",
+  "width": 1024,
+  "height": 1024
+}
 
-prompt_pack_id
+C. Stage Toggles
 
-version/hash
+Reflecting available backend stages:
 
-authoring timestamp
+"stages": {
+  "txt2img": true,
+  "img2img": false,
+  "refiner": false,
+  "hires": false,
+  "upscale": false,
+  "adetailer": false
+}
 
-D. Negative prompt layers
+D. Global Negative Stage Flags
 
-Config-level negatives are allowed here, separate from row negatives.
+Allowing per-stage control:
 
-3. Lifecycle Stage 1 — Pack Creation
-Step 1: User authors content inside Advanced Prompt Builder
+"apply_global_negative": {
+  "txt2img": true,
+  "img2img": false,
+  "refiner": false,
+  "hires": false,
+  "upscale": true,
+  "adetailer": false
+}
 
-User creates:
+E. Tags / Style Metadata (optional)
+"tags": ["fantasy", "cinematic", "sdxl"]
 
-Embedding lines
+F. Versioning
 
-Style lines
+All packs carry a version:
 
-Subject line(s) (with or without matrix tokens)
+"version": "2.6"
 
-Per-row negatives
+2. PromptPack Lifecycle Overview
+Author → Validate → Store → Select → Resolve → Expand → Build NJR → Execute → History → Learning
 
-Step 2: User saves the pack
 
-Controller writes:
+This lifecycle is strict, deterministic, and enforced.
 
-pack_name.txt
+3. Authoring Phase (Creation & Editing)
+3.1 Single Authoring Location
 
-pack_name.json (initialized skeleton)
+A PromptPack may only be edited inside:
 
-The JSON skeleton contains default config and no matrix slot values yet.
+Advanced Prompt Builder (GUI)
 
-4. Lifecycle Stage 2 — Pack Configuration & Matrix Editor
+TXT editor
 
-(OPTION A – Official & Canonical)
+JSON editor (structured)
 
-Prompt Pack JSON is enriched only inside Advanced Prompt Builder via the Pack Config / Randomization Editor panel.
+Validation engine
 
-This editor:
+Preview & test substitution panel
 
-Automatically detects [[tokens]] in the TXT file
+Save & publish
 
-Creates corresponding empty matrix.slots entries
+Direct file system editing is possible but discouraged.
+The GUI version is canonical unless invalid JSON/TXT is detected.
 
-Provides a UI for adding values (e.g., “volcanic lair”, “ruined cathedral”)
+3.2 Rules for Authoring
 
-Allows switching mode and prompt_mode
+TXT rows must be valid prompts, not empty.
 
-Allows toggling randomization.enabled
+JSON must be strictly schema-validated.
 
-Example workflow:
+Matrix slot variables must be referenced using {slot_name} syntax.
 
-User adds [[environment]] and [[lighting]] in TXT
-→ Pack Config Editor displays these slots
-→ User enters values
-→ Controller updates pack JSON
+Matrix slot definitions in JSON must match placeholders in TXT (detect unused or undefined slots).
 
+Defaults must be valid pipeline config values.
 
-This ensures:
+Stage toggles must represent a valid pipeline chain.
 
-Prompt structure stays in TXT
+3.3 Forbidden at Authoring
 
-Randomization metadata stays in JSON
+Inline free-text negative prompts in TXT (negatives are resolved via JSON + global negative).
 
-Only Prompt Pack authoring subsystem modifies the pack
+Pipeline/executor settings embedded directly in TXT.
 
-Pipeline Tab never edits packs
+Dynamic Python logic or script expressions in TXT.
 
-5. Lifecycle Stage 3 — Global Negative Handling
+User-defined placeholders outside matrix slots.
 
-Global negative exists outside any pack and is layered during prompt resolution.
+4. Selection Phase (Pipeline Tab)
 
-Ownership:
+The pipeline tab does not modify PromptPack data.
+It only selects:
 
-Global negative lives in app settings (e.g., app_settings.json).
+PromptPack
 
-It is not editable in the Pipeline Tab.
+Row
 
-It is not stored in pack JSON unless explicitly chosen.
+Overrides (CFG, steps, sampler, dimensions, stage toggles)
 
-During prompt resolution, final negative is:
-final_negative_prompt =
-    PromptPackRow.negatives
-  + PromptPackJSON.txt2img.negative_prompt (optional)
-  + global_negative_prompt (from app settings)
-  + runtime_negative_override (optional & controlled)
+Randomization Settings
 
+Config Sweep Settings
 
-This preserves:
+Global Negative Enable Flag (per run)
 
-PromptPack-only ownership of semantic prompt text
+The pipeline tab constructs a JobDraft inside AppStateV2.
 
-ability for the user to define a global negative
+5. Validation Phase
 
-no architectural violations
+Every PromptPack loaded undergoes:
 
-6. Lifecycle Stage 4 — Runtime Overrides & Config Sweeps
+A. Schema Validation
 
-Even under PromptPack-only architecture, users must be able to:
+JSON structure
 
-Run the same prompt multiple times with different configs
-(e.g., testing different cfg, sampler, steps, or stage chains)
+Required fields
 
-This is fully supported via runtime overrides and/or config sweeps.
+Stage toggles
 
-6.1 Runtime Overrides
+Defaults
 
-User selects:
+B. Matrix Slot Validation
 
-A Prompt Pack
+Check placeholders in TXT exist in JSON
 
-A config snapshot (preset or pack JSON baseline)
+Check JSON matrix slots are referenced at least once
 
-Selectively overrides config parameters in the Pipeline tab:
+Validate each slot value is string or literal list of strings
 
-cfg
+C. Prompt Row Validation
 
-steps
+Lines must be non-empty unless commented
 
-sampler
+No leading/trailing control characters
 
-resolution
+D. Stages Validation
 
-aDetailer on/off
+Stage chain must represent a legal pipeline (txt2img first, etc.)
 
-hires on/off
+If any validation fails:
 
-etc.
+Pack is marked invalid
 
-The override is passed to:
+Cannot be selected
 
-ConfigMergerV2 → UnifiedConfigResolver → JobBuilderV2
+Error surfaced in UI
 
+6. Resolution Phase
 
-Overrides affect only the current run, not the pack.
+This phase converts a PromptPack into fully resolved prompt text during job construction (UnifiedPromptResolver).
 
-6.2 Config Sweep (multi-config testing)
+6.1 Inputs
 
-User selects:
+TXT row
 
-“Run same prompt 5 times, each with a different config.”
+JSON metadata
 
-This is implemented as:
+RandomizerEngineV2 output (matrix variant values)
 
-Pipeline Tab builds a ConfigVariantPlan
+Global negative
 
-Builder treats each config variation as a variant
+Stage toggles
 
-JobBuilder expands rows × config variants × batch
+Config overrides
 
-This allows:
+6.2 Positive Prompt Resolution
 
-Config experiments
+Load TXT row
 
-Hyperparameter sweeps
+Substitute matrix slot values
 
-Learning comparison studies
+Output ResolvedPositivePrompt
 
-While preserving prompt integrity.
+6.3 Negative Prompt Resolution
 
-7. Lifecycle Stage 5 — Job Construction (PR-CORE-B)
+Negative prompt is formed from layers:
 
-Builder expands:
+Row-level negative (none in v2.6)
+Pack-level negative (optional future extension)
+Global negative (if stage-enable flag is true)
+Runtime negative override (reserved for future learning optimizations)
 
-Rows × Variants × Batches
 
+Output: ResolvedNegativePrompt.
 
-into a list of immutable NormalizedJobRecord objects, each containing:
+7. Expansion Phase
 
-PromptPack provenance
+PromptPacks enable two dimensions of expansion:
 
-Fully resolved prompt
+Matrix Variants → set by RandomizerEngineV2
 
-Matrix slot selections
+Config Variants (Sweeps) → ConfigVariantPlanV2
 
-Embeddings + LoRAs
+The total number of jobs:
 
-Stage chain
+job_count = rows_selected × matrix_variants × config_variants × batch_size
 
-Config parameters
+
+All expansions are pure and deterministic.
+
+8. Job Construction Phase (JobBuilderV2)
+
+Outputs a list of NormalizedJobRecord objects.
+
+Each NJR stores:
+
+PromptPack metadata
+
+Resolved positive/negative prompts
+
+Randomized slot values
+
+Config sweep overrides
+
+Full pipeline config per stage
+
+Row index
 
 Seeds
 
-Variant and batch indices
+Variant IDs
 
-run_mode + queue_source
+Execution metadata
 
-All downstream subsystems consume these records as-is.
+NJR is immutable and becomes the only job representation allowed further in the system.
 
-8. Lifecycle Stage 6 — Queue / Runner Execution
+9. Execution Phase (Queue & Runner)
 
-Queue and Runner:
+PromptPacks no longer participate in execution.
+Their resolved content is embedded in NJRs.
 
-Accept only NormalizedJobRecord
+Runner does not:
 
-Never perform prompt or config resolution
+Re-load PromptPack
 
-Never mutate jobs
+Resolve slots
 
-Write history entries with full metadata for Learning
+Apply defaults
 
-Emit lifecycle events for GUI and Debug Hub
+Look up JSON config
 
-This guarantees predictability & reproducibility.
+Runner consumes only NJR & pipeline config.
 
-9. Lifecycle Stage 7 — History & Learning
+10. Post-Execution Phase
+10.1 History
 
-Each completed job yields:
+Stores:
 
-Output images
+Full NJR snapshot
 
-Full NormalizedJobRecord snapshot
+Output paths
 
-Pack ID + Pack row index
+Timing
 
-Matrix slot values
+Failure reason
 
-Config signature
+Ratings
 
-Variant & batch metadata
+History → learning system.
 
-This supports:
+10.2 Learning
 
-Learning feedback loops
+Learning receives NJR + output → trains scoring model.
 
-Reproduce previous results
+Learning may propose:
 
-Compare config sweeps
+Better config defaults
 
-Debug accuracy
+Prompt expansions
 
-10. Summary Diagram — Prompt Pack Lifecycle
-[Advanced Prompt Builder]
-    ↓
-Create TXT  ────────────────────────┐
-Create JSON skeleton                │
-    ↓                               │
-[Pack Config / Matrix Editor]       │
-    ↓                               │
-Enrich JSON with slots/values       │
-    ↓                               │
-Save Pack                           │
-    ↓                               ▼
-  PromptPack = { TXT + JSON }  <────────────→  Editable only in Advanced Prompt Builder
-    ↓
-[Pipeline Tab]
-Select Pack + Config + Overrides
-    ↓
-ConfigMergerV2 → RandomizerEngine → UnifiedPromptResolver → UnifiedConfigResolver → JobBuilderV2
-    ↓
-list[NormalizedJobRecord]
-    ↓
-Queue → Runner → History → Learning
+Negative prompt adjustments
 
-11. Key Ownership Boundaries (Critical to Architecture)
-Area	Owner	Notes
-Prompt Text	PromptPack TXT	Only authored in Advanced Prompt Builder
-Randomization Slot Definitions	PromptPack JSON	Edited only in Pack Config/Matrix Editor
-Randomization Values	PromptPack JSON	Never created by Pipeline Tab
-Global Negative	App Settings	Only layered in during prompt resolution
-Runtime Config Overrides	Pipeline Tab	Allowed; does not mutate Pack JSON
-Config Sweeps	Pipeline Tab	Implemented as VariantConfigs
-Prompt Resolution	Builder Pipeline	Never done by GUI
-Job Construction	Builder Pipeline	Produces full NormalizedJobRecord
-Job Execution	Queue + Runner	Do not alter job records
-12. Why This Lifecycle Matters
+But learning may not modify PromptPack files directly.
 
-This lifecycle enables:
+11. Ownership Rules (Canonical)
+Concern	Owner
+Prompt text	PromptPack (.txt)
+Matrix slots	PromptPack (.json)
+Pack defaults	PromptPack (.json)
+Runtime overrides	Pipeline Tab
+Sweeps	Pipeline Tab
+Global negative	User settings
+Job expansion	Builder Pipeline
+Job execution	Queue + Runner
+History	History Service
+Recommendations	Learning System
+12. Forbidden Behaviors
 
-Reproducible prompting
+The following must not exist:
 
-Stable debugging
+12.1 GUI Prompt Text Entry
 
-Deterministic randomization
+No editing or overriding prompt text in Pipeline Tab.
 
-Better testability
+12.2 PromptPack Mutation During Execution
 
-Clear data ownership
+No controller or pipeline step may modify PromptPack content.
 
-Fewer GUI failures
+12.3 Legacy Prompt Sources
 
-Better Learning inputs
+Forbidden:
 
-Easy config experimentation
+“Enter prompt” text boxes
 
-Without prompt fragmentation or architectural drift.
+Job payloads storing prompt text
 
-END – PROMPT_PACK_LIFECYCLE_v2.6.md
+Prompt reconstruction from GUI fields
+
+12.4 Multiple Job Construction Paths
+
+Only the Unified Builder Pipeline is allowed.
+
+12.5 Pack JSON Editing in Pipeline Tab
+
+Only Advanced Prompt Builder may modify packs.
+
+13. Versioning & Migration Rules
+13.1 Pack Version Field
+
+Each pack includes:
+
+"version": "2.6"
+
+13.2 Backward Compatibility
+
+If a PromptPack lacks new fields, the validator inserts defaults but never modifies the pack file without user approval.
+
+13.3 Future Extensions
+
+Extensions must go through:
+
+Architecture Proposal
+
+PromptPack JSON schema update
+
+Validator update
+
+Builder Pipeline update
+
+14. Golden Path for PromptPack
+1. Author pack in Advanced Prompt Builder
+2. Save TXT + JSON
+3. Pipeline Tab: select pack + row
+4. Configure overrides, sweeps, global negative
+5. Builder pipeline resolves prompts, config, variants
+6. JobService receives NJRs
+7. Runner executes
+8. History records results
+9. Learning consumes history
+
+
+Any deviation is considered a bug.
+
+15. Summary of Invariants
+15.1 PromptPack is the only prompt source
+
+Nothing else feeds prompt text into jobs.
+
+15.2 PromptPack TXT + JSON form an atomic unit
+
+They are validated together.
+
+15.3 No mutation during job execution
+
+Packs remain static.
+
+15.4 No GUI prompt editing
+
+Pipeline Tab is for configuration only.
+
+15.5 Builder is the sole job constructor
+
+No alternate flows allowed.
+
+15.6 All expansions are deterministic
+
+Randomizer + sweeps yield reproducible paths.
+
+END OF PROMPT_PACK_LIFECYCLE_v2.6.md (Canonical Edition)
