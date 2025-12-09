@@ -731,8 +731,26 @@ class AppController:
         save_queue_snapshot(snapshot)
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
-        self._append_log(f"[queue] Executing job {job.job_id} with payload {job.payload!r}")
-
+        self._append_log(f"[queue] Executing job {job.job_id}")
+        
+        # PR-CORE-D/E: Check for pipeline_config first (PromptPack-based jobs)
+        pipeline_config = getattr(job, "pipeline_config", None)
+        if pipeline_config is not None:
+            self._append_log(f"[queue] Job {job.job_id} has pipeline_config, executing via runner")
+            try:
+                # Use the pipeline runner directly
+                result = self._run_pipeline_via_runner_only(pipeline_config)
+                return {
+                    "job_id": job.job_id,
+                    "status": "executed",
+                    "mode": "pipeline_config",
+                    "result": result,
+                }
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[queue] Pipeline execution for job {job.job_id} raised: {exc!r}")
+                raise
+        
+        # Legacy path: check payload
         payload = getattr(job, "payload", None)
 
         if callable(payload):
@@ -749,6 +767,7 @@ class AppController:
             }
 
         if not isinstance(payload, dict):
+            self._append_log(f"[queue] Job {job.job_id} has no pipeline_config or valid payload")
             return {
                 "job_id": job.job_id,
                 "status": "executed",
@@ -3085,15 +3104,19 @@ class AppController:
 
     def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
         """Add one or more packs to the current job draft."""
+        print(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
         self._append_log(f"[controller] Adding packs to job: {pack_ids}")
         
         entries = []
         stage_flags = self._build_stage_flags()
         randomizer_metadata = self._build_randomizer_metadata()
+        print(f"[AppController] Stage flags: {stage_flags}")
         for pack_id in pack_ids:
             pack = self._find_pack_by_id(pack_id)
+            print(f"[AppController] Looking for pack '{pack_id}': {pack}")
             if pack is None:
                 self._append_log(f"[controller] Pack not found: {pack_id}")
+                print(f"[AppController] ERROR: Pack '{pack_id}' not found!")
                 continue
             
             # Get current run config from app_state
@@ -3103,6 +3126,7 @@ class AppController:
             if "randomization_enabled" not in run_config:
                 run_config["randomization_enabled"] = self.state.current_config.randomization_enabled
             prompt_text, negative_prompt_text = self._read_pack_prompts(pack)
+            print(f"[AppController] Pack '{pack_id}' prompt length: {len(prompt_text)} chars")
             entry = PackJobEntry(
                 pack_id=pack_id,
                 pack_name=pack.name,
@@ -3113,10 +3137,41 @@ class AppController:
                 randomizer_metadata=randomizer_metadata,
             )
             entries.append(entry)
+            print(f"[AppController] Created PackJobEntry for '{pack_id}'")
         
+        print(f"[AppController] Total entries created: {len(entries)}")
+        print(f"[AppController] app_state exists: {self.app_state is not None}")
         if entries and self.app_state:
             self.app_state.add_packs_to_job_draft(entries)
             self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
+            print(f"[AppController] Added {len(entries)} entries to job draft")
+            
+            # PR-CORE-D/E: Pass app_state to pipeline_controller for enqueue
+            if self.pipeline_controller:
+                self.pipeline_controller._app_state_for_enqueue = self.app_state
+                print(f"[AppController] Set _app_state_for_enqueue on pipeline_controller")
+            
+            # PR-CORE-D/E: Update preview panel to show draft contents
+            print(f"[AppController] main_window exists: {self.main_window is not None}")
+            if self.main_window:
+                # Preview panel is on pipeline_tab, not directly on main_window
+                pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+                print(f"[AppController] pipeline_tab: {pipeline_tab}")
+                if pipeline_tab:
+                    preview_panel = getattr(pipeline_tab, "preview_panel", None)
+                    print(f"[AppController] preview_panel: {preview_panel}")
+                    if preview_panel and hasattr(preview_panel, "update_from_job_draft"):
+                        print(f"[AppController] Calling preview_panel.update_from_job_draft()")
+                        preview_panel.update_from_job_draft(self.app_state.job_draft)
+                        print(f"[AppController] Preview panel updated successfully")
+                    else:
+                        print(f"[AppController] ERROR: preview_panel missing or no update_from_job_draft method")
+                else:
+                    print(f"[AppController] ERROR: No pipeline_tab!")
+            else:
+                print(f"[AppController] ERROR: No main_window!")
+        else:
+            print(f"[AppController] ERROR: No entries or no app_state!")
 
     def add_single_prompt_to_draft(self) -> None:
         """Capture the current prompt/negative pair in the pipeline draft summary."""
@@ -3146,8 +3201,19 @@ class AppController:
             self._append_log(f"[controller] clear_draft_job_bundle error: {exc!r}")
 
     def enqueue_draft_bundle(self) -> int:
-        """Forward a draft bundle enqueue request to the pipeline controller."""
+        """Forward a draft bundle enqueue request to the pipeline controller.
+        
+        PR-CORE-D/E: Ensures app_state is passed to pipeline controller for PromptPack-based jobs.
+        """
         controller = getattr(self, "pipeline_controller", None)
+        if not controller:
+            return 0
+        
+        # PR-CORE-D/E: Set app_state on pipeline_controller before enqueuing
+        if self.app_state:
+            controller._app_state_for_enqueue = self.app_state
+            print(f"[AppController] enqueue_draft_bundle: Set _app_state_for_enqueue on pipeline_controller")
+        
         enqueue_fn = getattr(controller, "enqueue_draft_bundle", None)
         if not callable(enqueue_fn):
             return 0

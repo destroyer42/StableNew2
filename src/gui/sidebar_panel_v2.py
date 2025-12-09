@@ -547,22 +547,39 @@ class SidebarPanelV2(ttk.Frame):
                 pass
 
     def _on_add_to_job(self) -> None:
+        """Handle 'Add to Job' button click.
+        
+        PR-CORE-D/E: PromptPack-only architecture - button should only be enabled when pack(s) selected.
+        Routes to controller's on_pipeline_add_packs_to_job.
+        """
+        print("[SidebarPanel] _on_add_to_job called")
         if not self.pack_listbox:
+            print("[SidebarPanel] No pack_listbox, returning")
             return
+        
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
-        if not selection:
-            controller = self.controller
-            add_single = getattr(controller, "add_single_prompt_to_draft", None)
-            if callable(add_single):
-                add_single()
-            return
-        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
         controller = self.controller
+        print(f"[SidebarPanel] Selection: {selection}, Controller: {controller}")
+        
+        # PromptPack-only: This should not execute if button state is correct, but guard anyway
+        if not selection:
+            print("[SidebarPanel] No selection, returning")
+            return
+        
+        # Add selected pack(s) to job draft
+        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
+        print(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
         if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
+            print(f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})")
             try:
                 controller.on_pipeline_add_packs_to_job(pack_ids)
-            except Exception:
-                pass
+                print("[SidebarPanel] Successfully called on_pipeline_add_packs_to_job")
+            except Exception as e:
+                import logging
+                print(f"[SidebarPanel] EXCEPTION: {e}")
+                logging.exception(f"Error adding packs to job: {e}")
+        else:
+            print(f"[SidebarPanel] Controller missing or doesn't have on_pipeline_add_packs_to_job method")
 
     def _toggle_pack_preview(self) -> None:
         if not self.preview_toggle_button or not self.pack_listbox:
@@ -669,12 +686,14 @@ class SidebarPanelV2(ttk.Frame):
             return
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         single = len(selection) == 1
+        has_selection = len(selection) > 0
         if self.load_config_button:
             self.load_config_button.config(state=tk.NORMAL if single else tk.DISABLED)
         if self.apply_config_button:
             self.apply_config_button.config(state=tk.NORMAL)
         if self.add_to_job_button:
-            self.add_to_job_button.config(state=tk.NORMAL)
+            # PR-CORE-D/E: PromptPack-only architecture - "Add to Job" requires pack selection
+            self.add_to_job_button.config(state=tk.NORMAL if has_selection else tk.DISABLED)
         if self.preview_toggle_button:
             if not single:
                 self.preview_toggle_button.config(state=tk.DISABLED)

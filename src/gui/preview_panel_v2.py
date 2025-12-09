@@ -228,27 +228,49 @@ class PreviewPanelV2(ttk.Frame):
         self.clear_draft_button.state(state)
 
     def update_from_job_draft(self, job_draft: Any) -> None:
-        """Update preview summary from job draft."""
+        """Update preview summary from job draft.
+        
+        PR-CORE-D/E: Main entry point when user clicks 'Add to Job' from sidebar.
+        Renders PackJobEntry data into preview panel and enables action buttons.
+        """
+        print(f"[PreviewPanel] update_from_job_draft called with job_draft: {job_draft}")
+        
         if job_draft is None:
+            print("[PreviewPanel] job_draft is None, rendering empty state")
             self._render_summary(None, 0)
             self._update_action_states(None)
             return
 
+        # PR-CORE-D/E: Check for PromptPack-based draft first
         packs = getattr(job_draft, "packs", [])
+        print(f"[PreviewPanel] Found {len(packs)} pack(s) in job_draft")
+        
         total = 0
         summary = None
         if packs:
+            # Show first pack's data
             entry = packs[0]
+            print(f"[PreviewPanel] First pack: {entry.pack_name}")
             summary = self._summary_from_pack_entry(entry)
             total = len(packs)
+            print(f"[PreviewPanel] Created summary from pack entry, total={total}")
         else:
+            # Legacy: check for text-based draft parts
             draft_summary = getattr(job_draft, "summary", None)
             if draft_summary and getattr(draft_summary, "part_count", 0) > 0:
+                print(f"[PreviewPanel] Using legacy draft_summary path")
                 summary = self._summary_from_draft_summary(draft_summary)
                 total = draft_summary.part_count
+            else:
+                print(f"[PreviewPanel] No packs and no legacy parts - empty draft")
 
+        print(f"[PreviewPanel] Calling _render_summary with summary={bool(summary)}, total={total}")
         self._render_summary(summary, total)
+        
+        print(f"[PreviewPanel] Calling _update_action_states")
         self._update_action_states(job_draft, getattr(self.app_state, "preview_jobs", None))
+        
+        print(f"[PreviewPanel] update_from_job_draft complete")
 
     def update_from_controls(self, sidebar: Any) -> None:
         """Update preview summary from sidebar controls."""
@@ -284,10 +306,17 @@ class PreviewPanelV2(ttk.Frame):
             total_summary="Manual",
         )
 
-    def _summary_from_pack_entry(self, entry: Any) -> JobUiSummary:
+    def _summary_from_pack_entry(self, entry: Any) -> Any:
+        """PR-CORE-D/E: Convert PackJobEntry to display summary with all metadata.
+        
+        Returns SimpleNamespace with all fields needed for _render_summary.
+        """
         config = entry.config_snapshot or {}
         prompt_text = entry.prompt_text or str(config.get("prompt") or "")
         negative = entry.negative_prompt_text or str(config.get("negative_prompt", "") or "")
+        
+        print(f"[PreviewPanel] _summary_from_pack_entry: prompt_text length={len(prompt_text)}")
+        
         stage_flags = entry.stage_flags or {}
         stages = []
         stage_labels = {
@@ -303,17 +332,31 @@ class PreviewPanelV2(ttk.Frame):
             stages.append("txt2img")
         stages_display = " + ".join(stages)
 
-        model = str(config.get("model") or config.get("model_name") or entry.pack_name or "unknown") or "unknown"
-        label = f"{model} | seed={config.get('seed', '?')}"
+        # Extract settings from txt2img config if available
+        txt2img_config = config.get("txt2img", {})
+        
+        model = txt2img_config.get("model") or config.get("model") or config.get("model_name") or entry.pack_name or "unknown"
+        sampler = txt2img_config.get("sampler_name") or config.get("sampler") or "DPM++ 2M"
+        steps = txt2img_config.get("steps") or config.get("steps") or 20
+        cfg_scale = txt2img_config.get("cfg_scale") or config.get("cfg_scale") or 7.0
+        seed = txt2img_config.get("seed") or config.get("seed") or -1
+        
+        label = f"{model}"
+        
+        print(f"[PreviewPanel] Created summary: label={label}, sampler={sampler}, steps={steps}, cfg={cfg_scale}, stages={stages_display}")
 
-        return JobUiSummary(
+        # Return SimpleNamespace so _render_summary can access all fields
+        return SimpleNamespace(
             job_id=entry.pack_id,
             label=label,
             positive_preview=self._truncate_text(prompt_text, limit=120),
             negative_preview=self._truncate_text(negative, limit=120) if negative else "",
             stages_display=stages_display,
-            estimated_images=1,  # Default for pack entry
-            created_at=None,
+            sampler_name=sampler,
+            steps=steps,
+            cfg_scale=cfg_scale,
+            seed=seed,
+            base_model=model,
         )
 
     @staticmethod
@@ -420,7 +463,10 @@ class PreviewPanelV2(ttk.Frame):
         self.set_preview_jobs(records)
 
     def _render_summary(self, summary: Any | None, total: int) -> None:
+        print(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
+        
         if summary is None:
+            print(f"[PreviewPanel] Rendering empty state")
             self.job_count_label.config(text="No job selected")
             self._set_text_widget(self.prompt_text, "")
             self._set_text_widget(self.negative_prompt_text, "")
@@ -439,25 +485,35 @@ class PreviewPanelV2(ttk.Frame):
 
         summary_obj = self._normalize_summary(summary)
         if summary_obj is None:
+            print(f"[PreviewPanel] _normalize_summary returned None")
             self.job_count_label.config(text="No job selected")
             return
 
         job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
+        print(f"[PreviewPanel] Setting job_count_label to: {job_text}")
         self.job_count_label.config(text=job_text)
 
         positive = getattr(summary_obj, "positive_preview", "")
         negative = getattr(summary_obj, "negative_preview", "")
+        print(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
         self._set_text_widget(self.prompt_text, positive or "")
         self._set_text_widget(self.negative_prompt_text, negative or "")
+        
+        # Force Tkinter to update the display immediately
+        self.update_idletasks()
 
         model_text = getattr(summary_obj, "label", None) or getattr(summary_obj, "base_model", "-")
+        print(f"[PreviewPanel] Model: {model_text}")
         self.model_label.config(text=f"Model: {model_text}")
         sampler_text = getattr(summary_obj, "sampler_name", getattr(summary_obj, "sampler", "-"))
+        print(f"[PreviewPanel] Sampler: {sampler_text}")
         self.sampler_label.config(text=f"Sampler: {sampler_text}")
         steps_value = self._coerce_int(getattr(summary_obj, "steps", None))
+        print(f"[PreviewPanel] Steps: {steps_value}")
         self.steps_label.config(text=f"Steps: {steps_value if steps_value is not None else '-'}")
         cfg_value = self._coerce_float(getattr(summary_obj, "cfg_scale", None))
         cfg_text = f"{cfg_value:.1f}" if cfg_value is not None else "-"
+        print(f"[PreviewPanel] CFG: {cfg_text}")
         self.cfg_label.config(text=f"CFG: {cfg_text}")
         seed_value = getattr(summary_obj, "seed", None)
         seed_text = str(seed_value) if seed_value is not None else "-"
@@ -541,8 +597,10 @@ class PreviewPanelV2(ttk.Frame):
             part_summary = getattr(job_draft, "summary", None)
             has_parts = bool(getattr(part_summary, "part_count", 0))
             has_draft = bool(packs) or has_parts
+            print(f"[PreviewPanel] _update_action_states: packs={len(packs)}, has_parts={has_parts}, has_draft={has_draft}")
         has_preview = bool(preview_jobs)
         state = ["!disabled"] if has_draft or has_preview else ["disabled"]
+        print(f"[PreviewPanel] Setting button state to: {state}")
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)
 

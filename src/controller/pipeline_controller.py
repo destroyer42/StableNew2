@@ -1603,11 +1603,25 @@ class PipelineController(_GUIPipelineController):
         """Enqueue the current draft bundle and clear it.
         
         PR-D: Core method for "Add to Queue" button.
+        PR-CORE-D/E: Also handles job_draft.packs (PromptPack-based jobs).
         
         Returns:
             Job ID if successful, None otherwise.
         """
         try:
+            # PR-CORE-D/E: Check app_state.job_draft.packs first (PromptPack-based)
+            # AppController sets this when adding packs
+            app_state = getattr(self, "_app_state_for_enqueue", None)
+            print(f"[PipelineController] enqueue_draft_bundle - app_state: {app_state}")
+            if app_state:
+                print(f"[PipelineController] app_state.job_draft: {getattr(app_state, 'job_draft', None)}")
+                if hasattr(app_state, "job_draft") and app_state.job_draft.packs:
+                    print(f"[PipelineController] Enqueuing from job_draft.packs: {len(app_state.job_draft.packs)} pack(s)")
+                    return self._enqueue_pack_based_jobs(app_state.job_draft.packs, app_state)
+                else:
+                    print(f"[PipelineController] job_draft exists but packs is empty: {getattr(app_state.job_draft, 'packs', [])}")
+            
+            # Legacy path: check _draft_bundle.parts
             if not self._draft_bundle or not self._draft_bundle.parts:
                 _logger.warning("enqueue_draft_bundle called with empty draft")
                 return None
@@ -1663,6 +1677,108 @@ class PipelineController(_GUIPipelineController):
             
         except Exception as exc:
             _logger.error("Failed to enqueue draft bundle: %s", exc)
+            return None
+
+    def _enqueue_pack_based_jobs(self, pack_entries: list[Any], app_state: Any) -> str | None:
+        """Enqueue jobs from PackJobEntry list (PR-CORE-D/E PromptPack-based jobs).
+        
+        Args:
+            pack_entries: List of PackJobEntry objects from app_state.job_draft.packs
+            app_state: AppStateV2 instance to clear after enqueue
+            
+        Returns:
+            First job ID if successful, None otherwise.
+        """
+        try:
+            bundle_job_id: str | None = None
+            print(f"[PipelineController] _enqueue_pack_based_jobs: Processing {len(pack_entries)} pack entries")
+            
+            for entry in pack_entries:
+                try:
+                    print(f"[PipelineController] Building job for pack '{entry.pack_name}'")
+                    from src.pipeline.pipeline_runner import PipelineConfig
+                    
+                    # Extract config from PackJobEntry
+                    config_snapshot = entry.config_snapshot
+                    prompt_text = entry.prompt_text or ""
+                    negative_text = entry.negative_prompt_text or ""
+                    
+                    print(f"[PipelineController] Prompt length: {len(prompt_text)}, Negative: {len(negative_text)}")
+                    
+                    if not prompt_text:
+                        _logger.warning("Skipping pack entry '%s' - no prompt text", entry.pack_name)
+                        continue
+                    
+                    # Extract config from txt2img section if available
+                    txt2img_config = config_snapshot.get("txt2img", {})
+                    model = txt2img_config.get("model") or config_snapshot.get("model", "juggernautXL_ragnarokBy.safetensors")
+                    sampler = txt2img_config.get("sampler_name") or config_snapshot.get("sampler", "DPM++ 2M")
+                    steps = txt2img_config.get("steps") or config_snapshot.get("steps", 20)
+                    cfg_scale = txt2img_config.get("cfg_scale") or config_snapshot.get("cfg_scale", 7.0)
+                    width = txt2img_config.get("width") or config_snapshot.get("width", 1024)
+                    height = txt2img_config.get("height") or config_snapshot.get("height", 1024)
+                    
+                    config = PipelineConfig(
+                        prompt=prompt_text,
+                        negative_prompt=negative_text,
+                        model=model,
+                        sampler=sampler,
+                        steps=steps,
+                        cfg_scale=cfg_scale,
+                        width=width,
+                        height=height,
+                    )
+                    
+                    print(f"[PipelineController] Built config: model={model}, sampler={sampler}, steps={steps}")
+                    
+                    # Build job using existing helper
+                    job = self._build_job(
+                        config,
+                        run_mode="queue",
+                        source="gui_pack",
+                        prompt_source=f"pack:{entry.pack_name}",
+                        prompt_pack_id=entry.pack_id,
+                    )
+                    
+                    print(f"[PipelineController] Built job {job.job_id} for pack '{entry.pack_name}'")
+                    print(f"[PipelineController] Job has pipeline_config: {job.pipeline_config is not None}")
+                    
+                    # Submit to queue
+                    if self._job_service:
+                        self._job_service.submit_queued(job)
+                        print(f"[PipelineController] Submitted job {job.job_id} to queue")
+                        print(f"[PipelineController] Runner is_running: {self._job_service.runner.is_running()}")
+                    else:
+                        _logger.error("No job_service available!")
+                        return None
+                    
+                    # Track the first job ID as representative
+                    if bundle_job_id is None:
+                        bundle_job_id = job.job_id
+                    
+                except Exception as exc:
+                    _logger.error("Failed to convert PackJobEntry to job: %s", exc)
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            
+            if bundle_job_id is None:
+                _logger.warning("No jobs were successfully enqueued from pack entries")
+                return None
+            
+            # Clear the app_state job draft after successful enqueue
+            if app_state and hasattr(app_state, "clear_job_draft"):
+                app_state.clear_job_draft()
+                print(f"[PipelineController] Cleared job draft after enqueue")
+            
+            _logger.info("Enqueued %d pack-based job(s)", len(pack_entries))
+            print(f"[PipelineController] Successfully enqueued {len(pack_entries)} pack-based job(s)")
+            return bundle_job_id
+            
+        except Exception as exc:
+            _logger.error("Failed to enqueue pack-based jobs: %s", exc)
+            import traceback
+            traceback.print_exc()
             return None
 
     def get_draft_bundle_summary(self) -> JobBundleSummaryDTO | None:
