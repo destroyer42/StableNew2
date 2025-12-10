@@ -410,9 +410,10 @@ preview_panel_v2._on_add_to_queue()
 - ✅ CORE1-D1 migrates legacy history to NJR-only snapshots; history replay no longer depends on pipeline_config payloads.
 - ƒo. PR-CORE1-B3 ensures _to_queue_job() clears pipeline_config, so new jobs carry only NJR snapshots
 
+**Debt Resolved (CORE1-D1/D2/D3):** Legacy history formats, pipeline_config persistence, mixed-era draft-bundle records, schema drift, and multiple replay paths are eliminated; history_schema 2.6 is enforced on load/save via HistoryMigrationEngine + schema normalization, and replay is unified through NJR → RunPlan → PipelineRunner.run_njr.
+
 **Next Steps (CORE1-C):**
-1. ✅ CORE1-D1: Legacy history entries auto-migrate to NJR snapshots; pipeline_config/draft-bundle persistence removed from history.
-2. Remove `run(config)` method from PipelineRunner (keep only `run_njr`)
-3. Clean up legacy execution branches in AppController
-4. Add explicit tests for NJR-only execution
-5. Remove dynamic attribute injection workarounds
+1. Remove `run(config)` method from PipelineRunner (keep only `run_njr`)
+2. Clean up legacy execution branches in AppController
+3. Add explicit tests for NJR-only execution
+4. Remove dynamic attribute injection workarounds

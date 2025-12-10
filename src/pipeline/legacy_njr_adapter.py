@@ -116,9 +116,14 @@ def _strip_draft_fields(data: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in data.items() if k not in legacy_keys}
 
 
+def _normalize_model_name(value: Any) -> str:
+    name = str(value or "").strip()
+    return name or "unknown"
+
+
 def build_njr_from_history_dict(legacy_dict: dict[str, Any]) -> NormalizedJobRecord:
     """
-    Accepts ANY historical job dict from StableNew v1.x → v2.6.
+    Accepts ANY historical job dict from StableNew v1.x -> v2.6.
     Produces a full NJR with all required fields.
     Deterministic hydration.
     """
@@ -138,7 +143,7 @@ def build_njr_from_history_dict(legacy_dict: dict[str, Any]) -> NormalizedJobRec
     if isinstance(pipeline_config, Mapping):
         config = PipelineConfig(
             prompt=str(pipeline_config.get("prompt", "") or ""),
-            model=str(pipeline_config.get("model", "") or pipeline_config.get("model_name", "") or "unknown"),
+            model=_normalize_model_name(pipeline_config.get("model", "") or pipeline_config.get("model_name", "")),
             sampler=str(pipeline_config.get("sampler", "") or pipeline_config.get("sampler_name", "") or "Euler a"),
             width=_coerce_int(pipeline_config.get("width", 512), 512),
             height=_coerce_int(pipeline_config.get("height", 512), 512),
@@ -151,7 +156,7 @@ def build_njr_from_history_dict(legacy_dict: dict[str, Any]) -> NormalizedJobRec
 
     prompt = str(data.get("prompt") or data.get("positive_prompt") or "")
     negative_prompt = str(data.get("negative_prompt") or data.get("neg_prompt") or "")
-    model = str(data.get("model") or data.get("model_name") or "unknown")
+    model = _normalize_model_name(data.get("model") or data.get("model_name"))
     scheduler = str(data.get("scheduler") or data.get("scheduler_name") or "")
     sampler = str(data.get("sampler") or data.get("sampler_name") or "Euler a") or "Euler a"
     seed = _coerce_int(data.get("seed", 0), 0)

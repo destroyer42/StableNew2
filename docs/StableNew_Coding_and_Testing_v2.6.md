@@ -458,8 +458,15 @@ Tests MUST verify that `_run_job` is called when `_normalized_record` is present
 Tests MUST verify that NJR execution failures result in job error status (NO fallback to pipeline_config).
 Tests MUST verify that new queue jobs do not expose a `pipeline_config` field (PR-CORE1-C2); any legacy coverage should work through history data only.
 Tests MUST NOT reference `pipeline_config` or legacy job dicts in persistence/replay suites; all history-oriented tests hydrate NJRs from snapshots.
+Tests covering history persistence/replay MUST exercise `HistoryMigrationEngine` (legacy → NJR) and assert `history_schema == "2.6"` with no deprecated/draft-bundle fields present in persisted snapshots. History JSONL writes must be deterministic (key ordering stable); tests SHOULD compare `json.dumps(entry, sort_keys=True)` across saves to enforce determinism.
 
 Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
+
+### Replay Testing (CORE1-D3)
+
+- Replay tests MUST assert that the replay path builds RunPlan via `build_run_plan_from_njr` and calls `PipelineRunner.run_njr` with that plan.
+- Replay vs fresh runs MUST produce identical RunPlans for the same NJR.
+- Tests MUST NOT construct alternate replay payloads or bypass the unified NJR → RunPlan → Runner path.
 
 Tests for legacy jobs (without NJR) MUST verify `pipeline_config` branch still works.
 

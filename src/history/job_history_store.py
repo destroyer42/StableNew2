@@ -5,22 +5,13 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from src.history.history_migration_engine import HistoryMigrationEngine
-from src.history.history_record import DEFAULT_HISTORY_VERSION, HistoryRecord
-
-_LEGACY_KEYS = {
-    "pipeline_config",
-    "draft",
-    "bundle",
-    "draft_bundle",
-    "job_bundle",
-    "bundle_summary",
-}
-
-
-def _strip_legacy(snapshot: Mapping[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(snapshot, Mapping):
-        return {}
-    return {k: v for k, v in snapshot.items() if k not in _LEGACY_KEYS}
+from src.history.history_record import HistoryRecord
+from src.history.history_schema_v26 import (
+    ALLOWED_FIELDS,
+    HISTORY_SCHEMA_VERSION,
+    HistorySchemaError,
+    validate_entry,
+)
 
 
 class JobHistoryStore:
@@ -34,16 +25,23 @@ class JobHistoryStore:
     def load(self) -> list[HistoryRecord]:
         raw_entries = self._read_jsonl()
         migrated_entries = self._migration.migrate_all(raw_entries)
-        return [self._hydrate_record(entry) for entry in migrated_entries]
+        validated: list[dict[str, Any]] = []
+        for entry in migrated_entries:
+            ok, errors = validate_entry(entry)
+            if not ok:
+                raise HistorySchemaError(errors)
+            validated.append(entry)
+        return [self._hydrate_record(entry) for entry in validated]
 
     def save(self, entries: Iterable[HistoryRecord | Mapping[str, Any]]) -> None:
         serializable: list[dict[str, Any]] = []
         for entry in entries:
             record = entry if isinstance(entry, HistoryRecord) else HistoryRecord.from_dict(entry)
-            data = record.to_dict()
-            data["history_version"] = DEFAULT_HISTORY_VERSION
-            data["njr_snapshot"] = _strip_legacy(data.get("njr_snapshot"))
-            serializable.append(data)
+            normalized = self._migration.normalize_schema(record.to_dict())
+            ok, errors = validate_entry(normalized)
+            if not ok:
+                raise HistorySchemaError(errors)
+            serializable.append(self._order_entry(normalized))
         self._write_jsonl(serializable)
 
     def append(self, record: HistoryRecord | Mapping[str, Any]) -> None:
@@ -77,8 +75,33 @@ class JobHistoryStore:
     def _write_jsonl(self, entries: Iterable[Mapping[str, Any]]) -> None:
         lines = []
         for entry in entries:
-            data = dict(entry)
-            data["history_version"] = DEFAULT_HISTORY_VERSION
-            data["njr_snapshot"] = _strip_legacy(data.get("njr_snapshot"))
+            data = self._order_entry(entry)
             lines.append(json.dumps(data, ensure_ascii=True))
         self._path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+    def _order_entry(self, entry: Mapping[str, Any]) -> dict[str, Any]:
+        """Return entry with deterministic key ordering per schema."""
+        ordered_keys = [
+            "id",
+            "timestamp",
+            "status",
+            "history_schema",
+            "njr_snapshot",
+            "ui_summary",
+            "metadata",
+            "runtime",
+        ]
+        data = {k: entry[k] for k in ordered_keys if k in entry}
+        # Preserve transitional history_version if present for compatibility
+        if "history_version" in entry:
+            data["history_version"] = entry["history_version"]
+        # Drop unknown keys defensively
+        for key in list(data.keys()):
+            if key not in ALLOWED_FIELDS:
+                data.pop(key, None)
+        # Ensure defaults exist
+        data.setdefault("history_schema", HISTORY_SCHEMA_VERSION)
+        data.setdefault("ui_summary", {})
+        data.setdefault("metadata", {})
+        data.setdefault("runtime", {})
+        return data

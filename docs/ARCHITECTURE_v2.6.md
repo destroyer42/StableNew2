@@ -472,6 +472,9 @@ Duration
 Error data
 
 History → Restore replays job by reconstructing NJR from snapshot. History load is NJR hydration only; any legacy fields (pipeline_config, draft bundles) are stripped and normalized on load.
+**History Schema v2.6 (CORE1-D2):** History load = pure NJR hydration + schema normalization. Every persisted entry MUST contain: `id`, `timestamp`, `status`, `history_schema`, `njr_snapshot`, `ui_summary`, `metadata`, `runtime`. Deprecated fields (pipeline_config, draft/draft_bundle/job_bundle, legacy_* blobs) are forbidden and removed during migration. All entries are written in deterministic order; `history_schema` is always `2.6`.
+
+**Unified Replay Path (CORE1-D3):** Replay starts from a validated v2.6 HistoryRecord → hydrate NJR snapshot → build RunPlan via `build_run_plan_from_njr` → execute `PipelineRunner.run_njr(run_plan)` → return RunResult. No legacy replay branches, no pipeline_config rebuilds, no controller-local shortcuts. Fresh runs and replays share the exact NJR → RunPlan → Runner chain.
 
 7.2 Learning System
 

@@ -336,8 +336,9 @@ class PipelineRunner:
     def run_njr(
         self,
         record: NormalizedJobRecord,
-        cancel_token: "CancelToken",
+        cancel_token: "CancelToken" | None = None,
         log_fn: Optional[Callable[[str], None]] = None,
+        run_plan: Any | None = None,
     ) -> "PipelineRunResult":
         """Execute the pipeline using a NormalizedJobRecord (PR-CORE1-B2).
         

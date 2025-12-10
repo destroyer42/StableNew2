@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
@@ -15,11 +15,15 @@ from src.config.app_config import get_job_history_path
 from src.cluster.worker_registry import WorkerRegistry
 from src.cluster.worker_model import WorkerDescriptor
 from src.history.history_record import HistoryRecord
+from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.replay_engine import ReplayEngine
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 
 def _njr_from_snapshot(snapshot: dict[str, Any]) -> NormalizedJobRecord | None:
+    if not snapshot:
+        return None
     constructor = getattr(NormalizedJobRecord, "from_snapshot", None)
     if callable(constructor):
         try:
@@ -27,12 +31,8 @@ def _njr_from_snapshot(snapshot: dict[str, Any]) -> NormalizedJobRecord | None:
         except Exception:
             # Fallback to legacy util for pre-from_snapshot classes
             pass
-    if "normalized_job" in snapshot:
-        return normalized_job_from_snapshot(snapshot)
-    return normalized_job_from_snapshot({"normalized_job": snapshot})
-from src.history.history_record import HistoryRecord
-from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+    normalized_source = snapshot if "normalized_job" in snapshot else {"normalized_job": snapshot}
+    return normalized_job_from_snapshot(normalized_source)
 
 
 class JobExecutionController:
@@ -44,6 +44,7 @@ class JobExecutionController:
         poll_interval: float = 0.05,
         history_store: JobHistoryStore | None = None,
         worker_registry: WorkerRegistry | None = None,
+        replay_runner: Any | None = None,
     ) -> None:
         self._history_store = history_store or self._default_history_store()
         self._worker_registry = worker_registry or WorkerRegistry()
@@ -52,6 +53,19 @@ class JobExecutionController:
         self._runner = SingleNodeJobRunner(
             self._queue, self._execute_job, poll_interval=poll_interval, on_status_change=self._on_status
         )
+
+        replay_target: Any | None = replay_runner
+        if replay_target is None and hasattr(self._runner, "run_njr"):
+            replay_target = self._runner
+        if replay_target is None and callable(self._execute_job):
+            class _ExecuteAdapter:
+                def __init__(self, fn: Callable[[Any], Any]) -> None:
+                    self._fn = fn
+
+                def run_njr(self, record: NormalizedJobRecord, *_: Any, **__: Any) -> Any:
+                    return self._fn(record)  # type: ignore[arg-type]
+            replay_target = _ExecuteAdapter(self._execute_job)
+        self._replay_engine = ReplayEngine(replay_target, cancel_token=None)
         self._started = False
         self._lock = threading.Lock()
         self._callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
@@ -120,27 +134,15 @@ class JobExecutionController:
     def get_runner(self) -> SingleNodeJobRunner:
         return self._runner
 
-    def replay(self, record: HistoryRecord) -> Any:
-        """Replay a migrated history record using NJR-only execution path."""
-        njr = _njr_from_snapshot(record.njr_snapshot)
-        if njr is None:
-            return None
-        return self.run_njr(njr)
+    def replay(self, record: HistoryRecord | NormalizedJobRecord | Mapping[str, Any]) -> Any:
+        """Replay path that accepts only NJR snapshots (history records or direct NJRs)."""
+        if isinstance(record, NormalizedJobRecord):
+            return self.run_njr(record)
+        return self._replay_engine.replay_history_record(record)
 
     def run_njr(self, record: NormalizedJobRecord) -> Any:
-        """Execute a NormalizedJobRecord directly (bypassing legacy payloads)."""
-        run_direct = getattr(self._runner, "run_njr", None)
-        if callable(run_direct):
-            try:
-                return run_direct(record)
-            except Exception:
-                return None
-        if callable(self._execute_job):
-            try:
-                return self._execute_job(record)  # type: ignore[arg-type]
-            except Exception:
-                return None
-        return None
+        """Execute a NormalizedJobRecord directly via unified replay engine."""
+        return self._replay_engine.replay_njr(record)
 
     def _default_history_store(self) -> JobHistoryStore:
         path = Path(get_job_history_path())
