@@ -450,10 +450,11 @@ AppController._execute_job
 - ?o. Jobs created via queue pipeline have `_normalized_record` attached
 - ?o. NJR execution failures return error status (no silent fallback)
 - ??O `pipeline_config` is removed from queue `Job` instances (PR-CORE1-C2); NJR snapshots are the only executable payloads.
+- ??O History load path is NJR hydration only; legacy history entries are auto-migrated to NJR snapshots before replay.
 
-**Legacy Support:**
+**Legacy Support (retired in CORE1-D1):**
 
-Jobs without `_normalized_record` (imported from old history, pre-v2.6 jobs) can still execute via `pipeline_config` path. This is clearly marked as legacy-only in code comments and will be removed in a future cleanup PR (CORE1-C).
+Legacy history formats are migrated in-memory to NJR snapshots via `HistoryMigrationEngine`. Replay paths no longer accept `pipeline_config` or draft-bundle structures; hydration is NJR-only.
 
 7. Post-Execution Layer
 7.1 History
@@ -470,7 +471,7 @@ Duration
 
 Error data
 
-History → Restore replays job by reconstructing NJR from snapshot.
+History → Restore replays job by reconstructing NJR from snapshot. History load is NJR hydration only; any legacy fields (pipeline_config, draft bundles) are stripped and normalized on load.
 
 7.2 Learning System
 

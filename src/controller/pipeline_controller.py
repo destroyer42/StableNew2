@@ -23,6 +23,8 @@ from src.controller.job_execution_controller import JobExecutionController
 from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
+from src.history.history_migration_engine import HistoryMigrationEngine
+from src.history.history_record import HistoryRecord
 from src.learning.model_defaults_resolver import (
     GuiDefaultsResolver,
     ModelDefaultsContext,
@@ -592,6 +594,7 @@ class PipelineController(_GUIPipelineController):
         self._last_run_config: dict[str, Any] | None = None
         self._app_state: AppStateV2 | None = app_state
         self._job_lifecycle_logger = job_lifecycle_logger
+        self._history_migration = HistoryMigrationEngine()
         
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
@@ -1363,42 +1366,83 @@ class PipelineController(_GUIPipelineController):
         """Rebuild normalized jobs from a stored snapshot dictionary."""
         if not snapshot:
             return []
-        record = normalized_job_from_snapshot(snapshot)
+        record = self._hydrate_njr_from_snapshot(snapshot)
         if record is None:
             return []
         return [record]
+
+    def _hydrate_history_record(self, entry: Any) -> HistoryRecord | None:
+        if entry is None:
+            return None
+        if isinstance(entry, HistoryRecord):
+            return entry
+        raw: dict[str, Any] = {}
+        if isinstance(entry, Mapping):
+            raw.update(entry)
+        else:
+            raw.update(getattr(entry, "__dict__", {}) or {})
+        if hasattr(entry, "job_id"):
+            raw.setdefault("job_id", getattr(entry, "job_id"))
+            raw.setdefault("id", getattr(entry, "job_id"))
+        if hasattr(entry, "status"):
+            raw.setdefault("status", getattr(entry, "status"))
+        if hasattr(entry, "created_at"):
+            raw.setdefault("timestamp", getattr(entry, "created_at"))
+        snapshot = getattr(entry, "snapshot", None)
+        if snapshot is not None:
+            raw.setdefault("snapshot", snapshot)
+        migrated = self._history_migration.migrate_entry(raw)
+        return HistoryRecord.from_dict(migrated)
+
+    def _hydrate_njr_from_snapshot(self, snapshot: Mapping[str, Any] | None) -> NormalizedJobRecord | None:
+        if not snapshot:
+            return None
+        constructor = getattr(NormalizedJobRecord, "from_snapshot", None)
+        if callable(constructor):
+            try:
+                return constructor(snapshot)
+            except Exception:
+                pass
+        if "normalized_job" in snapshot:
+            return normalized_job_from_snapshot(snapshot)
+        return normalized_job_from_snapshot({"normalized_job": snapshot})
 
     def replay_job_from_history(self, job_id: str) -> int:
         history_service = self.get_job_history_service()
         if history_service is None:
             return 0
         entry = history_service.get_job(job_id)
-        if entry is None:
-            return 0
-        snapshot = getattr(entry, "snapshot", None)
-        if not isinstance(snapshot, dict):
-            return 0
-        record = normalized_job_from_snapshot(snapshot)
+        record = self._hydrate_history_record(entry)
         if record is None:
             return 0
-        records = [record]
+        njr = self._hydrate_njr_from_snapshot(record.njr_snapshot)
+        if njr is None:
+            return 0
+        records = [njr]
         if self._app_state and hasattr(self._app_state, "set_preview_jobs"):
             try:
                 self._app_state.set_preview_jobs(records)
             except Exception:
                 pass
-        run_config = snapshot.get("run_config")
+        run_config = record.metadata or record.njr_snapshot.get("run_config") or {}
         if run_config:
             self._last_run_config = run_config
         count = self._submit_normalized_jobs(
             records,
             run_config=run_config,
-            source=snapshot.get("source", "gui"),
-            prompt_source=snapshot.get("prompt_source", "manual"),
+            source=record.njr_snapshot.get("source", "gui"),
+            prompt_source=record.njr_snapshot.get("prompt_source", "manual"),
         )
         if count:
             _logger.info("Replayed job %s with %d queued job(s)", job_id, count)
         return count
+
+    def on_replay_history_job_v2(self, record: HistoryRecord) -> Any:
+        """Replay entrypoint that assumes NJR-only history records."""
+        try:
+            return self._job_controller.replay(record)
+        except Exception:
+            return None
 
     def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
         """Run pipeline synchronously and return result."""

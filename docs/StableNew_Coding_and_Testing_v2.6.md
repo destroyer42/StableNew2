@@ -457,6 +457,7 @@ Tests MUST verify that `_run_job` is called when `_normalized_record` is present
 
 Tests MUST verify that NJR execution failures result in job error status (NO fallback to pipeline_config).
 Tests MUST verify that new queue jobs do not expose a `pipeline_config` field (PR-CORE1-C2); any legacy coverage should work through history data only.
+Tests MUST NOT reference `pipeline_config` or legacy job dicts in persistence/replay suites; all history-oriented tests hydrate NJRs from snapshots.
 
 Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
 

@@ -407,10 +407,11 @@ preview_panel_v2._on_add_to_queue()
 - ✅ Display layer is NJR-driven (CORE1-A3)
 - ✅ Execution layer is NJR-only for new jobs, legacy support for old jobs (CORE1-B2)
 - ✅ PR-CORE1-B4 removes `PipelineRunner.run(config)` and routes every execution through `run_njr` via the legacy NJR adapter.
+- ✅ CORE1-D1 migrates legacy history to NJR-only snapshots; history replay no longer depends on pipeline_config payloads.
 - ƒo. PR-CORE1-B3 ensures _to_queue_job() clears pipeline_config, so new jobs carry only NJR snapshots
 
 **Next Steps (CORE1-C):**
-1. Ensure legacy history entries with `pipeline_config` payloads are replayable via the legacy NJR adapter and consider migrating them to NJR snapshots.
+1. ✅ CORE1-D1: Legacy history entries auto-migrate to NJR snapshots; pipeline_config/draft-bundle persistence removed from history.
 2. Remove `run(config)` method from PipelineRunner (keep only `run_njr`)
 3. Clean up legacy execution branches in AppController
 4. Add explicit tests for NJR-only execution

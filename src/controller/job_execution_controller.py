@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
@@ -14,6 +14,25 @@ from pathlib import Path
 from src.config.app_config import get_job_history_path
 from src.cluster.worker_registry import WorkerRegistry
 from src.cluster.worker_model import WorkerDescriptor
+from src.history.history_record import HistoryRecord
+from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+
+
+def _njr_from_snapshot(snapshot: dict[str, Any]) -> NormalizedJobRecord | None:
+    constructor = getattr(NormalizedJobRecord, "from_snapshot", None)
+    if callable(constructor):
+        try:
+            return constructor(snapshot)
+        except Exception:
+            # Fallback to legacy util for pre-from_snapshot classes
+            pass
+    if "normalized_job" in snapshot:
+        return normalized_job_from_snapshot(snapshot)
+    return normalized_job_from_snapshot({"normalized_job": snapshot})
+from src.history.history_record import HistoryRecord
+from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 
 class JobExecutionController:
@@ -100,6 +119,28 @@ class JobExecutionController:
 
     def get_runner(self) -> SingleNodeJobRunner:
         return self._runner
+
+    def replay(self, record: HistoryRecord) -> Any:
+        """Replay a migrated history record using NJR-only execution path."""
+        njr = _njr_from_snapshot(record.njr_snapshot)
+        if njr is None:
+            return None
+        return self.run_njr(njr)
+
+    def run_njr(self, record: NormalizedJobRecord) -> Any:
+        """Execute a NormalizedJobRecord directly (bypassing legacy payloads)."""
+        run_direct = getattr(self._runner, "run_njr", None)
+        if callable(run_direct):
+            try:
+                return run_direct(record)
+            except Exception:
+                return None
+        if callable(self._execute_job):
+            try:
+                return self._execute_job(record)  # type: ignore[arg-type]
+            except Exception:
+                return None
+        return None
 
     def _default_history_store(self) -> JobHistoryStore:
         path = Path(get_job_history_path())
