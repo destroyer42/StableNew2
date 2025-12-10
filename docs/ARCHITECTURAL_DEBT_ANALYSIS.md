@@ -28,14 +28,17 @@ _execute_pack_entry() → legacy execution
 
 > **Status:** Resolved (CORE1-B5). Payload-based entry points (`Job.payload`, `_execute_pack_entry`, `_build_pack_result`, RunPayload) have been removed; no new jobs use this path.
 
-### Path 2: PipelineConfig-Based (What We're Trying to Use)
+### Path 2: PipelineConfig-Based (Legacy-only after CORE1-C2)
 ```python
-Job.pipeline_config = PipelineConfig(...)
-↓
-AppController._execute_job() → NEW: checks pipeline_config
-↓
+# Legacy jobs imported from history still carry pipeline_config blobs.
+job = Job(job_id="legacy", pipeline_config=None)
+job.pipeline_config = PipelineConfig(...)
+?+
+AppController._execute_job() ?+' detects the legacy config
+?+
 _run_pipeline_via_runner_only()
 ```
+> **Status:** Restricted to legacy history imports (PR-CORE1-C2). New jobs never populate `pipeline_config`; any legacy payloads are rehydrated from history via the adapter.
 
 ### Path 3: NormalizedJobRecord-Based (PR-CORE-B/C - Incomplete)
 ```python
@@ -49,7 +52,7 @@ NormalizedJobRecord → "canonical job representation"
 PipelineRunner.run(config) → Direct execution
 ```
 
-**Problem:** These paths used to diverge, but most have now been collapsed: Path 1 was deleted in CORE1-B5, Path 4 was migrated through the NJR adapter in CORE1-B4, leaving only the pipeline_config fallback for vintage jobs and the canonical NormalizedJobRecord path. The remaining paths still need integration to guarantee determinism and single-source execution.
+**Problem:** These paths used to diverge, but most have now been collapsed: Path 1 was deleted in CORE1-B5, Path 4 was migrated through the NJR adapter in CORE1-B4, and Path 2 now exists only for legacy history imports (PR-CORE1-C2), leaving the canonical NormalizedJobRecord path as the sole active execution model.
 
 ---
 
@@ -120,10 +123,10 @@ pipeline_controller._app_state_for_enqueue = app_state
    - New: `src/gui/pipeline_panel_v2.py`
    - **Status:** Both still exist, both partially used
 
-2. **JobBundle → JobDraft (PR-D)**
-   - Old: `JobBundle` with `parts`
-   - New: `JobDraft` with `packs`
-   - **Status:** Both systems active simultaneously
+  2. **JobBundle → JobDraft (PR-D)**
+     - Old: `JobBundle` with `parts`
+     - New: `JobDraft` with `packs`
+     - **Status:** JobBundle-centric flows retired in CORE1-C3B; AppStateV2.job_draft alone manages draft intent while JobBuilderV2 produces NJRs.
 
 3. **Job → NormalizedJobRecord (PR-CORE-B/C)**
    - Old: `Job` class
@@ -133,8 +136,8 @@ pipeline_controller._app_state_for_enqueue = app_state
 4. **StateManager → AppStateV2**
    - Old: `StateManager` in `src/gui/state.py`
    - New: `AppStateV2` in `src/gui/gui_state.py`
-   - **Status:** Both referenced in different controllers
-   - **Resolution:** PR-CORE1-C1 removed StateManager from core controllers/tests so AppStateV2 drives cross-subsystem state
+   - **Status:** AppStateV2 is now the canonical cross-subsystem state; GUI retains a local state machine
+   - **Resolution:** PR-CORE1-C1 and PR-CORE1-C3A removed StateManager from core controllers and controller tests, while GUI/legacy state coverage now lives in `tests/gui/test_state_manager_legacy.py`
    - **Remaining:** GUI still owns StateManager for UI-only state; removal planned for PR-GUI-C-series
 
 ---
@@ -184,9 +187,9 @@ pipeline_controller._app_state_for_enqueue = app_state
    - Purpose: Legacy text-based job draft
    - Status: Parallel to AppStateV2.job_draft, creates confusion
 
-3. **`JobBundleSummaryDTO` conversions**
-   - Purpose: Bridge between Job and JobUiSummary
-   - Status: Redundant with NormalizedJobRecord.to_ui_summary()
+  3. **`JobBundleSummaryDTO` conversions**
+     - Purpose: Bridge between Job and JobUiSummary
+     - Status: Removed in favor of NJR→JobUiSummary mappings; legacy DTOs are no longer produced for current flows.
 
 4. **Multiple `submit_*` methods in JobService**
    - `submit_queued()` vs `submit_job_with_run_mode()` vs `enqueue()`
@@ -211,7 +214,7 @@ pipeline_controller._app_state_for_enqueue = app_state
 3. **Create single state injection pattern** - all controllers take AppStateV2 in __init__
 
 ### Phase 2: Standardize Job Model (High Priority)
-1. **Pick ONE job type:** Job with pipeline_config OR NormalizedJobRecord
+1. **Pick ONE job type:** NormalizedJobRecord; pipeline_config-only jobs are retired and exist solely as legacy history blobs (PR-CORE1-C2).
 2. **Remove `payload` attribute** from Job class
 3. **Unify execution path:** All jobs go through same runner entry point
 
@@ -265,7 +268,7 @@ def enqueue_draft_bundle(self) -> int:
 ### Complexity Indicators:
 - **Files with "v2" suffix:** 47
 - **Files with "legacy" in name:** 12
-- **Controller indirection layers:** 7+ (GUI → AppController → PipelineController → JobService → Runner)
+- **Controller indirection layers:** 5 (GUI → AppController → PipelineController → JobExecutionController → Runner); PR-CORE1-C5 removed the QueueExecutionController façade.
 - **State synchronization points:** 15+
 - **Job execution code paths:** 4 distinct paths
 
@@ -346,10 +349,10 @@ preview_panel_v2._on_add_to_queue()
    - JobService and JobHistoryService prefer NJR snapshots for display data
    - Legacy `pipeline_config` fallback preserved only for old jobs without NJR snapshots
 
-2. **JobBundle/JobBundleBuilder Clarified**
-   - Marked as **"legacy but active"** (not scheduled for immediate removal)
-   - Used for draft job features and preview panel during transition
-   - Will be retired in CORE1-D/CORE1-E, not CORE1-A3
+2. **JobBundle/JobBundleBuilder Retired (CORE1-C3B)**
+     - JobBundle-based helpers have been removed entirely; controllers no longer expose `_draft_bundle` or bundle DTOs.
+     - AppStateV2.job_draft plus JobBuilderV2 now drive preview and queue flows.
+     - Documentation and tests updated to reflect the NJR-only pipeline and the lack of JobBundle targets.
 
 3. **Documentation Updated**
    - `ARCHITECTURE_v2.6.md` now documents **CORE1 Hybrid State**
@@ -381,12 +384,13 @@ preview_panel_v2._on_add_to_queue()
 
 **State System Consolidation (CORE1-C/D - NOT YET STARTED):**
 - Multiple state systems still exist (StateManager, AppStateV2, PipelineController._draft_bundle)
-- Dynamic attribute injection (`_app_state_for_enqueue`) remains as temporary bridge
+- Dynamic attribute injection (`_app_state_for_enqueue`) and reflection-based dispatch have been replaced by the explicit controller event API (PR-CORE1-C4A); controllers now rely on AppStateV2 job drafts only.
 - Full state unification deferred to later phases
 
 **Controller Pattern Unification (CORE1-E - NOT YET STARTED):**
-- Mixed callback patterns (direct calls, string invocation, callbacks)
-- 7-layer indirection chains unchanged
+- Explicit controller event entrypoints have been published (PR-CORE1-C4A), addressing the mixed callback/reflection patterns noted earlier.
+- 7-layer indirection chains remain unchanged
+- QueueExecutionController has been removed (PR-CORE1-C5), collapsing the queue execution path down to PipelineController → JobExecutionController → Runner.
 - Architectural simplification deferred
 
 ### 📊 **Updated Metrics**
@@ -396,8 +400,8 @@ preview_panel_v2._on_add_to_queue()
 | Job execution paths | 4 | **3** (display unified) | **2** (NJR preferred) | **1.5** (NJR-only for new) | 1 |
 | State management systems | 4 | 4 | 4 | 4 | 1 |
 | Display DTO sources | Mixed | **NJR-only** ✅ | **NJR-only** ✅ | **NJR-only** ✅ | NJR-only |
-| Execution payload | `pipeline_config` | `pipeline_config` | **Hybrid (NJR preferred)** | **NJR-only (new jobs, `pipeline_config` None)** ✅ | NJR |
-| JobBuilder implementations | 2 (JobBuilderV2 + JobBundleBuilder) | 2 (transitional) | 2 (transitional) | 2 (transitional) | 1 |
+| Execution payload | `pipeline_config` | `pipeline_config` | **Hybrid (NJR preferred)** | **NJR-only (new jobs, pipeline_config removed)** ✅ | NJR |
+| JobBuilder implementations | 2 (JobBuilderV2 + JobBundleBuilder) | 2 (transitional) | 2 (transitional) | 1 (JobBuilderV2 only) | 1 |
 
 **Key Achievements:** 
 - ✅ Display layer is NJR-driven (CORE1-A3)
@@ -406,9 +410,8 @@ preview_panel_v2._on_add_to_queue()
 - ƒo. PR-CORE1-B3 ensures _to_queue_job() clears pipeline_config, so new jobs carry only NJR snapshots
 
 **Next Steps (CORE1-C):**
-1. Remove `pipeline_config` field entirely once legacy job migration is complete (PR-CORE1-B3 already ensures new jobs skip the field)
+1. Ensure legacy history entries with `pipeline_config` payloads are replayable via the legacy NJR adapter and consider migrating them to NJR snapshots.
 2. Remove `run(config)` method from PipelineRunner (keep only `run_njr`)
 3. Clean up legacy execution branches in AppController
 4. Add explicit tests for NJR-only execution
 5. Remove dynamic attribute injection workarounds
-

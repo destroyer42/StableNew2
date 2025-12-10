@@ -94,7 +94,7 @@ class FakeHistory:
 
 
 def make_job(job_id: str = "job1") -> Job:
-    return Job(job_id=job_id, pipeline_config=None, priority=JobPriority.NORMAL)
+    return Job(job_id=job_id, priority=JobPriority.NORMAL)
 
 
 @pytest.fixture

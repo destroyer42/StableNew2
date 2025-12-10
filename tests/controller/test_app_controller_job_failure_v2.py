@@ -35,7 +35,7 @@ def _build_controller() -> AppController:
 
 def test_structured_job_failure_updates_state(monkeypatch: pytest.MonkeyPatch) -> None:
     controller = _build_controller()
-    job = Job(job_id="job-1", pipeline_config=None)
+    job = Job(job_id="job-1")
     job.status = JobStatus.FAILED
     envelope = wrap_exception(Exception("boom"), subsystem="pipeline", job_id=job.job_id)
     job.error_envelope = envelope

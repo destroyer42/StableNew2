@@ -28,9 +28,9 @@ class TestJobQueueMoveUp:
     def test_move_up_swaps_positions(self) -> None:
         """Moving a job up should swap it with the job above."""
         queue = JobQueue()
-        job1 = Job(job_id="j1", pipeline_config=None, config_snapshot={"prompt": "first"})
-        job2 = Job(job_id="j2", pipeline_config=None, config_snapshot={"prompt": "second"})
-        job3 = Job(job_id="j3", pipeline_config=None, config_snapshot={"prompt": "third"})
+        job1 = Job(job_id="j1", config_snapshot={"prompt": "first"})
+        job2 = Job(job_id="j2", config_snapshot={"prompt": "second"})
+        job3 = Job(job_id="j3", config_snapshot={"prompt": "third"})
 
         queue.submit(job1)
         queue.submit(job2)
@@ -48,8 +48,8 @@ class TestJobQueueMoveUp:
     def test_move_up_at_top_returns_false(self) -> None:
         """Moving the top job up should return False."""
         queue = JobQueue()
-        job1 = Job(job_id="j1", pipeline_config=None)
-        job2 = Job(job_id="j2", pipeline_config=None)
+        job1 = Job(job_id="j1")
+        job2 = Job(job_id="j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -71,8 +71,8 @@ class TestJobQueueMoveDown:
     def test_move_down_swaps_positions(self) -> None:
         """Moving a job down should swap it with the job below."""
         queue = JobQueue()
-        job1 = Job(job_id="j1", pipeline_config=None)
-        job2 = Job(job_id="j2", pipeline_config=None)
+        job1 = Job(job_id="j1")
+        job2 = Job(job_id="j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -84,8 +84,8 @@ class TestJobQueueMoveDown:
     def test_move_down_at_bottom_returns_false(self) -> None:
         """Moving the bottom job down should return False."""
         queue = JobQueue()
-        job1 = Job(job_id="j1", pipeline_config=None)
-        job2 = Job(job_id="j2", pipeline_config=None)
+        job1 = Job(job_id="j1")
+        job2 = Job(job_id="j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -107,7 +107,7 @@ class TestJobQueueRemove:
     def test_remove_returns_job(self) -> None:
         """Removing a job should return the removed job."""
         queue = JobQueue()
-        job = Job(job_id="j1", pipeline_config=None, config_snapshot={"test": True})
+        job = Job(job_id="j1", config_snapshot={"test": True})
         queue.submit(job)
 
         removed = queue.remove("j1")
@@ -117,8 +117,8 @@ class TestJobQueueRemove:
     def test_remove_deletes_from_queue(self) -> None:
         """Removed job should not appear in list_jobs."""
         queue = JobQueue()
-        job1 = Job(job_id="j1", pipeline_config=None)
-        job2 = Job(job_id="j2", pipeline_config=None)
+        job1 = Job(job_id="j1")
+        job2 = Job(job_id="j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -143,7 +143,7 @@ class TestJobQueueClear:
         """Clear should remove all queued jobs."""
         queue = JobQueue()
         for i in range(5):
-            queue.submit(Job(job_id=f"j{i}", pipeline_config=None))
+            queue.submit(Job(job_id=f"j{i}"))
 
         count = queue.clear()
         assert count == 5
@@ -154,8 +154,8 @@ class TestJobQueueClear:
     def test_clear_returns_count(self) -> None:
         """Clear should return number of removed jobs."""
         queue = JobQueue()
-        queue.submit(Job(job_id="j1", pipeline_config=None))
-        queue.submit(Job(job_id="j2", pipeline_config=None))
+        queue.submit(Job(job_id="j1"))
+        queue.submit(Job(job_id="j2"))
 
         count = queue.clear()
         assert count == 2

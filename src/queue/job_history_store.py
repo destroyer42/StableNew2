@@ -3,9 +3,11 @@
 
 """Persistent history storage for queue jobs.
 
-PR-CORE1-B2: For jobs created after v2.6, history entries should include NJR
-snapshots in the 'snapshot' field. The snapshot['normalized_job'] contains the
-NormalizedJobRecord data. Legacy entries may only have pipeline_config data.
+PR-CORE1-B2/C2: For v2.6 jobs, history entries should include NJR snapshots in
+the 'snapshot' field. The snapshot['normalized_job'] contains the
+NormalizedJobRecord data. Legacy entries on disk may still expose pipeline_config
+blobs, but new entries no longer persist pipeline_config—legacy_njr_adapter
+reconstructs NJRs when needed.
 """
 
 from __future__ import annotations
@@ -265,15 +267,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 first_prompt = ""
             summary = f"{total} entries"
             if first_prompt:
-                snippet = first_prompt if len(first_prompt) <= 60 else first_prompt[:60] + "…"
+                snippet = first_prompt if len(first_prompt) <= 60 else first_prompt[:60] + "?"
                 summary += f" | {snippet}"
             return summary
-        cfg = getattr(job, "pipeline_config", None)
-        if cfg:
-            prompt = getattr(cfg, "prompt", "") or ""
-            model = getattr(cfg, "model", "") or getattr(cfg, "model_name", "")
-            return f"{prompt[:64]} | {model}"
-        payload = getattr(job, "payload", None)
-        if callable(payload):
-            return "callable payload"
-        return str(payload)[:80]
+        return job.summary()

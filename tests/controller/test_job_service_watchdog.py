@@ -60,7 +60,7 @@ def test_watchdog_violation_triggers_cancel(monkeypatch) -> None:
     runner = DummyRunner()
     config = WatchdogConfig(enabled=True, interval_sec=0.1)
     service = JobService(job_queue, runner, watchdog_config=config)
-    job = Job(job_id="job-watchdog", pipeline_config=None)
+    job = Job(job_id="job-watchdog")
     job_queue.submit(job)
 
     cancellation: list[tuple[str, str | None]] = []

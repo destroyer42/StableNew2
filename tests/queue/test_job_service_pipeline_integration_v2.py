@@ -28,7 +28,7 @@ from typing import Any
 import pytest
 
 from src.controller.job_service import JobService
-from src.pipeline.pipeline_runner import PipelineConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
@@ -39,22 +39,48 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 # ---------------------------------------------------------------------------
 
 
-def make_pipeline_config(
+def make_normalized_record(
     *,
+    job_id: str = "test-job",
     model: str = "test-model",
     prompt: str = "test prompt",
     steps: int = 20,
     cfg_scale: float = 7.0,
-) -> PipelineConfig:
-    """Create a PipelineConfig for testing."""
-    return PipelineConfig(
-        prompt=prompt,
-        model=model,
-        sampler="Euler",
-        width=512,
-        height=512,
+) -> NormalizedJobRecord:
+    """Create a NormalizedJobRecord for testing."""
+    return NormalizedJobRecord(
+        job_id=job_id,
+        config={"prompt": prompt, "model": model, "steps": steps},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=12345,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=1000.0,
+        prompt_pack_id="test-pack",
+        prompt_pack_name="test pack",
+        positive_prompt=prompt,
+        negative_prompt="",
+        stage_chain=[
+            StageConfig(
+                stage_type="txt2img",
+                enabled=True,
+                steps=steps,
+                cfg_scale=cfg_scale,
+                sampler_name="Euler a",
+            )
+        ],
         steps=steps,
         cfg_scale=cfg_scale,
+        width=512,
+        height=512,
+        sampler_name="Euler a",
+        scheduler="ddim",
+        base_model=model,
+        queue_source="ADD_TO_QUEUE",
+        run_mode="QUEUE",
     )
 
 
@@ -67,8 +93,10 @@ def make_job(
     config_snapshot: dict[str, Any] | None = None,
 ) -> Job:
     """Create a Job for testing."""
-    config = make_pipeline_config(model=model, steps=steps)
-    job = Job(job_id=job_id, pipeline_config=config, run_mode=run_mode)
+    record = make_normalized_record(job_id=job_id, model=model, steps=steps)
+    job = Job(job_id=job_id, run_mode=run_mode)
+    job._normalized_record = record
+    job.snapshot = record.to_queue_snapshot()
     if config_snapshot is not None:
         job.config_snapshot = config_snapshot
     return job
@@ -210,8 +238,8 @@ class TestDirectModeExecution:
 
         assert len(recording_callable.calls) == 1
         executed_job = recording_callable.calls[0]
-        assert executed_job.pipeline_config.model == "special-model"
-        assert executed_job.pipeline_config.steps == 42
+        assert executed_job._normalized_record.config["model"] == "special-model"
+        assert executed_job._normalized_record.config["steps"] == 42
 
     def test_direct_mode_job_completes(
         self,
@@ -315,8 +343,8 @@ class TestQueuedModeExecution:
 
         assert len(recording_callable.calls) >= 1
         executed_job = next(j for j in recording_callable.calls if j.job_id == "queued-004")
-        assert executed_job.pipeline_config.model == "queue-model"
-        assert executed_job.pipeline_config.steps == 30
+        assert executed_job._normalized_record.config["model"] == "queue-model"
+        assert executed_job._normalized_record.config["steps"] == 30
 
 
 # ---------------------------------------------------------------------------
@@ -420,8 +448,14 @@ class TestDirectQueueParity:
         # Both received same config
         assert len(direct_calls) == 1
         assert len(queue_calls) == 1
-        assert direct_calls[0].pipeline_config.model == queue_calls[0].pipeline_config.model
-        assert direct_calls[0].pipeline_config.steps == queue_calls[0].pipeline_config.steps
+        assert (
+            direct_calls[0]._normalized_record.config["model"]
+            == queue_calls[0]._normalized_record.config["model"]
+        )
+        assert (
+            direct_calls[0]._normalized_record.config["steps"]
+            == queue_calls[0]._normalized_record.config["steps"]
+        )
 
 
 # ---------------------------------------------------------------------------

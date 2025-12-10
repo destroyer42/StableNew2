@@ -54,7 +54,7 @@ def _make_normalized_record() -> NormalizedJobRecord:
 
 
 def _build_job_with_snapshot(record: NormalizedJobRecord, *, run_config: Mapping[str, object] | None = None) -> Job:
-    job = Job(job_id=record.job_id, pipeline_config=None, run_mode="queue", prompt_pack_id=record.prompt_pack_id)
+    job = Job(job_id=record.job_id, run_mode="queue", prompt_pack_id=record.prompt_pack_id)
     job.snapshot = build_job_snapshot(job, record, run_config=run_config)
     return job
 
@@ -65,7 +65,7 @@ class TestJobServiceNormalizedEnforcement:
         runner = StubRunner(queue)
         service = JobService(queue, runner, require_normalized_records=True)
 
-        job = Job(job_id="missing-normalized", pipeline_config=None, run_mode="queue")
+        job = Job(job_id="missing-normalized", run_mode="queue")
 
         with pytest.raises(ValueError):
             service.submit_job_with_run_mode(job)

@@ -159,30 +159,17 @@ class JobHistoryService:
 
     def _summarize(self, job: Job) -> str:
         """Build display summary for history panel (PR-CORE1-A3).
-        
-        Prefers NJR snapshot data over pipeline_config for display (PR-CORE1-B3).
-        pipeline_config is retained ONLY for legacy jobs without NJR snapshots.
+
+        Prefers NJR snapshot data. Legacy pipeline_config-only jobs no longer
+        go through the standard controller path.
         """
-        # PR-CORE1-A3: Prefer NJR snapshot for display summary
         snapshot = getattr(job, "snapshot", None)
         if snapshot:
             prompt = snapshot.get("positive_prompt", "") or ""
             model = snapshot.get("base_model", "") or snapshot.get("model_name", "")
             if prompt or model:
                 return f"{prompt[:64]} | {model}"
-        
-        # Legacy fallback: Use pipeline_config if no NJR snapshot
-        cfg = getattr(job, "pipeline_config", None)
-        if cfg:
-            prompt = getattr(cfg, "prompt", "") or ""
-            model = getattr(cfg, "model", "") or getattr(cfg, "model_name", "")
-            return f"{prompt[:64]} | {model}"
-        
-        # Last resort: callable or raw payload
-        payload = getattr(job, "payload", None)
-        if callable(payload):
-            return "callable payload"
-        return str(payload)[:80]
+        return job.summary()
 
     def _build_entry(
         self,

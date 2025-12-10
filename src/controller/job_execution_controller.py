@@ -56,7 +56,12 @@ class JobExecutionController:
             worker_id = self._worker_registry.get_local_worker().id
         except Exception:
             worker_id = None
-        job = Job(job_id=job_id, pipeline_config=None, priority=priority, payload=pipeline_callable, worker_id=worker_id)
+        job = Job(
+            job_id=job_id,
+            priority=priority,
+            payload=pipeline_callable,
+            worker_id=worker_id,
+        )
         self._queue.submit(job)
         self.start()
         return job_id

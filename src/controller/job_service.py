@@ -26,7 +26,6 @@ from src.pipeline.job_models_v2 import (
     UnifiedJobSummary,
 )
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest
-from src.pipeline.pipeline_runner import PipelineConfig
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
 from src.utils.process_container_v2 import (
@@ -283,10 +282,9 @@ class JobService:
         *,
         priority: JobPriority = JobPriority.NORMAL,
     ) -> Job:
-        # PR-CORE1-B3: NJR-backed jobs must not store pipeline_config.
+        # PR-CORE1-B3/C2: NJR-backed jobs are purely NJR-only and don't store pipeline_config.
         job = Job(
             job_id=record.job_id,
-            pipeline_config=None,
             priority=priority,
             run_mode=run_request.run_mode.value,
             source=run_request.source.value,

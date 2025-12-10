@@ -77,36 +77,21 @@ class PipelineRunControlsV2(ttk.Frame):
 
         self.update_from_app_state(self.app_state)
 
-    def _invoke_controller(self, method_name: str, *args: Any) -> Any:
-        """Safely invoke a controller method."""
-        controller = self.controller
-        if not controller:
-            print(f"[PipelineRunControlsV2] No controller for {method_name}")
-            return None
-        method = getattr(controller, method_name, None)
-        if callable(method):
-            try:
-                return method(*args)
-            except Exception as exc:
-                print(f"[PipelineRunControlsV2] {method_name} error: {exc!r}")
-                import traceback
-                traceback.print_exc()
-        else:
-            print(f"[PipelineRunControlsV2] {method_name} not found on controller")
-        return None
-
     def _on_auto_run_changed(self) -> None:
         """Handle auto-run checkbox change."""
         enabled = self.auto_run_var.get()
         self._auto_run_enabled = enabled
-        self._invoke_controller("on_set_auto_run_v2", enabled)
+        if self.controller:
+            self.controller.on_set_auto_run_v2(enabled)
 
     def _on_pause_resume(self) -> None:
         """Toggle queue pause state."""
+        if not self.controller:
+            return
         if self._is_queue_paused:
-            self._invoke_controller("on_resume_queue_v2")
+            self.controller.on_resume_queue_v2()
         else:
-            self._invoke_controller("on_pause_queue_v2")
+            self.controller.on_pause_queue_v2()
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Refresh UI to reflect queue state."""

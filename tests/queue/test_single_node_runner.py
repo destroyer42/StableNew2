@@ -36,7 +36,7 @@ class DummyResultRunner:
 
 def test_run_once_marks_completed_result():
     queue = JobQueue()
-    job = Job("run-1", _pipeline_config())
+    job = Job(job_id="run-1")
     queue.submit(job)
     runner = SingleNodeJobRunner(queue, run_callable=DummyResultRunner())
 
@@ -47,7 +47,7 @@ def test_run_once_marks_completed_result():
 
 def test_run_once_handles_error():
     queue = JobQueue()
-    job = Job("run-error", _pipeline_config())
+    job = Job(job_id="run-error")
     queue.submit(job)
     runner = SingleNodeJobRunner(queue, run_callable=DummyResultRunner(should_raise=True))
 
@@ -58,7 +58,7 @@ def test_run_once_handles_error():
 
 def test_run_once_publishes_cancelled():
     queue = JobQueue()
-    job = Job("cancelled", _pipeline_config())
+    job = Job(job_id="cancelled")
     queue.submit(job)
     class CancelingRunner:
         def __init__(self):

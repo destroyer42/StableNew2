@@ -9,6 +9,7 @@ GUI Run buttons → AppController._start_run_v2 → PipelineController.start_pip
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import uuid
 
@@ -19,7 +20,6 @@ from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.gui.controller import PipelineController as _GUIPipelineController
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.controller.job_execution_controller import JobExecutionController
-from src.controller.queue_execution_controller import QueueExecutionController
 from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
@@ -37,15 +37,6 @@ from src.pipeline.job_models_v2 import (
     BatchSettings,
     OutputSettings,
     QueueJobV2,
-    JobBundleSummaryDTO,
-    JobBundle,
-    JobBundleBuilder,
-    PipelineConfigSnapshot,
-)
-from src.pipeline.job_requests_v2 import (
-    PipelineRunMode,
-    PipelineRunRequest,
-    PipelineRunSource,
 )
 from src.gui.state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
@@ -70,6 +61,17 @@ from src.utils.snapshot_builder_v2 import build_job_snapshot, normalized_job_fro
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PreviewSummaryDTO:
+    job_count: int
+    label: str
+    positive_preview: str
+    negative_preview: str | None
+    sampler_name: str | None
+    steps: int | None
+    cfg_scale: float | None
 
 
 class PipelineController(_GUIPipelineController):
@@ -111,7 +113,6 @@ class PipelineController(_GUIPipelineController):
 
         return Job(
             job_id=str(uuid.uuid4()),
-            pipeline_config=config,
             priority=JobPriority.NORMAL,
             run_mode=run_mode,
             source=source,
@@ -355,15 +356,11 @@ class PipelineController(_GUIPipelineController):
 
         config_snapshot = record.to_queue_snapshot()
 
-        # PR-CORE1-B3: pipeline_config is legacy debug data only and is kept None.
-        pipeline_config = None
-
         # Build randomizer metadata from record
         randomizer_metadata = record.randomizer_summary
 
         job = Job(
             job_id=record.job_id,
-            pipeline_config=pipeline_config,
             priority=JobPriority.NORMAL,
             run_mode=run_mode,
             source=source,
@@ -563,7 +560,6 @@ class PipelineController(_GUIPipelineController):
         structured_logger = kwargs.pop("structured_logger", None)
         pipeline_runner = kwargs.pop("pipeline_runner", None)
         
-        queue_execution_controller = kwargs.pop("queue_execution_controller", None)
         webui_conn = kwargs.pop("webui_connection_controller", None)
         super().__init__(**kwargs)
         self._learning_runner = None
@@ -575,7 +571,6 @@ class PipelineController(_GUIPipelineController):
         self._last_stage_events: list[dict[Any, Any]] | None = None
         self._learning_enabled: bool = False
         self._job_controller = JobExecutionController(execute_job=self._execute_job)
-        self._queue_execution_controller: QueueExecutionController | None = queue_execution_controller or QueueExecutionController(job_controller=self._job_controller)
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
         self._gui_defaults_resolver = (
@@ -588,20 +583,16 @@ class PipelineController(_GUIPipelineController):
         self._job_builder = job_builder if job_builder is not None else JobBuilderV2()
         self._webui_connection = webui_conn if webui_conn is not None else WebUIConnectionController()
         self._pipeline_runner = pipeline_runner
-        if self._queue_execution_controller:
-            try:
-                self._queue_execution_controller.observe("pipeline_ctrl", self._on_queue_status)
-            except Exception:
-                pass
+        try:
+            self._job_controller.set_status_callback("pipeline_ctrl", self._on_queue_status)
+        except Exception:
+            pass
         self._job_history_service: JobHistoryService | None = None
         self._active_job_id: str | None = None
         self._last_run_config: dict[str, Any] | None = None
         self._app_state: AppStateV2 | None = app_state
         self._job_lifecycle_logger = job_lifecycle_logger
         
-        # PR-D: Draft bundle ownership
-        self._draft_bundle: JobBundle | None = None
-        self._job_bundle_builder: JobBundleBuilder | None = None
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
         history_store = self._job_controller.get_history_store()
@@ -826,11 +817,6 @@ class PipelineController(_GUIPipelineController):
                     on_error(exc)
                 raise
 
-        if self._queue_execution_enabled and self._queue_execution_controller:
-            self._active_job_id = self._queue_execution_controller.submit_pipeline_job(_payload)
-            self._safe_gui_transition(GUIState.RUNNING)
-            return True
-
         self._active_job_id = self._job_controller.submit_pipeline_run(_payload)
         self._safe_gui_transition(GUIState.RUNNING)
         return True
@@ -887,17 +873,15 @@ class PipelineController(_GUIPipelineController):
     def stop_pipeline(self) -> bool:
         """Cancel the active job."""
 
-        if self._active_job_id:
-            if self._queue_execution_enabled and self._queue_execution_controller:
-                try:
-                    self._queue_execution_controller.cancel_job(self._active_job_id)
-                except Exception:
-                    pass
-            else:
-                self._job_controller.cancel_job(self._active_job_id)
-            self._active_job_id = None
-            self._safe_gui_transition(GUIState.STOPPING)
-            return True
+        if not self._active_job_id:
+            return False
+        try:
+            self._job_controller.cancel_job(self._active_job_id)
+        except Exception:
+            pass
+        self._active_job_id = None
+        self._safe_gui_transition(GUIState.STOPPING)
+        return True
         return False
 
     def _execute_job(self, job: Any) -> dict[Any, Any]:
@@ -1040,66 +1024,14 @@ class PipelineController(_GUIPipelineController):
             return 0
         return getattr(summary, "part_count", 0) or 0
 
-    def _log_add_to_job_event(self) -> None:
-        if not self._job_lifecycle_logger:
-            return
-        self._job_lifecycle_logger.log_add_to_job(
-            source="pipeline_tab",
-            draft_size=self._get_draft_part_count(),
-        )
-
     def _log_add_to_queue_event(self, job_id: str | None) -> None:
-        if not self._job_lifecycle_logger:
+        logger = getattr(self, "_job_lifecycle_logger", None)
+        if not logger:
             return
-        self._job_lifecycle_logger.log_add_to_queue(
+        logger.log_add_to_queue(
             source="pipeline_tab",
             job_id=job_id,
             draft_size=self._get_draft_part_count(),
-        )
-
-    def _build_run_request_from_job_draft(
-        self,
-        *,
-        run_mode: PipelineRunMode,
-        source: PipelineRunSource,
-    ) -> PipelineRunRequest | None:
-        """Construct a PipelineRunRequest from the current AppState job_draft."""
-        if not self._app_state:
-            _logger.warning("PipelineController missing AppState for draft submission")
-            return None
-        job_draft = getattr(self._app_state, "job_draft", None)
-        if not job_draft:
-            _logger.warning("No job_draft available for pipeline run request")
-            return None
-        pack_entries = list(getattr(job_draft, "packs", []))
-        if not pack_entries:
-            _logger.warning("Job draft contains no PromptPack entries")
-            return None
-        first_pack_id = pack_entries[0].pack_id or ""
-        if not first_pack_id:
-            _logger.warning("First PromptPack entry missing pack_id")
-            return None
-        selected_rows = [
-            str(entry.pack_row_index)
-            for entry in pack_entries
-            if entry.pack_row_index is not None
-        ]
-        selected_rows = selected_rows or ["0"]
-        config_snapshot_id = getattr(self._app_state, "selected_config_snapshot_id", "")
-        sweep_state = {}
-        randomizer_plan = {}
-        return PipelineRunRequest(
-            prompt_pack_id=first_pack_id,
-            selected_row_ids=selected_rows,
-            config_snapshot_id=config_snapshot_id or "",
-            run_mode=run_mode,
-            source=source,
-            sweep_state=sweep_state or None,
-            randomizer_plan=randomizer_plan or None,
-            explicit_output_dir=None,
-            tags=[],
-            requested_job_label=None,
-            pack_entries=pack_entries,
         )
 
     # ------------------------------------------------------------------
@@ -1211,42 +1143,6 @@ class PipelineController(_GUIPipelineController):
             job.error_message = None
             self._job_service.enqueue(job)
 
-    def add_single_prompt_to_draft(self) -> None:
-        """Add the current prompt/negative pair to the GUI job draft summary."""
-        if not self._app_state:
-            return
-        prompt = (getattr(self._app_state, "prompt", "") or "").strip()
-        if not prompt:
-            return
-        negative = (getattr(self._app_state, "negative_prompt", "") or "").strip()
-        estimated = self._estimate_draft_image_count()
-        add_fn = getattr(self._app_state, "add_job_draft_part", None)
-        if callable(add_fn):
-            add_fn(prompt, negative, estimated)
-            self._refresh_preview_jobs_from_state()
-            self._log_add_to_job_event()
-
-    def clear_draft_job_bundle(self) -> None:
-        """Clear the GUI job draft bundle state."""
-        if not self._app_state:
-            return
-        clear_fn = getattr(self._app_state, "clear_job_draft", None)
-        if callable(clear_fn):
-            clear_fn()
-        self._refresh_preview_jobs_from_state()
-
-    def enqueue_draft_bundle_legacy(self) -> int:
-        """DEPRECATED: Old implementation using app_state.job_draft. Use enqueue_draft_bundle instead."""
-        if not self._app_state:
-            return 0
-        summary = getattr(self._app_state.job_draft, "summary", None)
-        if not summary or summary.part_count == 0:
-            return 0
-        count = self.submit_preview_jobs_to_queue()
-        if count:
-            self.clear_draft_job_bundle()
-        return count
-
     def _refresh_preview_jobs_from_state(self) -> None:
         """Refresh preview jobs so GUI panels display the latest normalized records."""
         if not self._app_state:
@@ -1256,13 +1152,63 @@ class PipelineController(_GUIPipelineController):
         if callable(setter):
             setter(records or [])
 
-    def _estimate_draft_image_count(self) -> int:
-        """Estimate total images based on batch/batch_runs overrides in state."""
-        overrides = self._extract_state_overrides()
-        batch_size = getattr(overrides, "batch_size", 1) or 1
-        pipeline_state = self._get_pipeline_state()
-        batch_runs = getattr(pipeline_state, "batch_runs", 1) or 1
-        return batch_size * batch_runs
+    def refresh_preview_from_state(self) -> None:
+        """Public helper used by the GUI bridge to rebuild preview job records."""
+        self._refresh_preview_jobs_from_state()
+
+    def build_preview_summary(self) -> PreviewSummaryDTO | None:
+        """Return a simple preview summary based on the first normalized job record."""
+        records = self.get_preview_jobs()
+        if not records:
+            return None
+        first = records[0]
+        ui_summary = first.to_ui_summary() if hasattr(first, "to_ui_summary") else None
+        label = getattr(ui_summary, "label", getattr(first, "job_id", ""))
+        positive = getattr(ui_summary, "positive_preview", "")
+        negative = getattr(ui_summary, "negative_preview", None)
+        sampler = getattr(ui_summary, "sampler_name", None)
+        steps = getattr(ui_summary, "steps", None)
+        cfg_scale = getattr(ui_summary, "cfg_scale", None)
+        return PreviewSummaryDTO(
+            job_count=len(records),
+            label=label,
+            positive_preview=positive,
+            negative_preview=negative,
+            sampler_name=sampler,
+            steps=steps,
+            cfg_scale=cfg_scale,
+        )
+
+    def enqueue_draft_jobs(self, *, run_config: dict[str, Any] | None = None) -> int:
+        """Enqueue all preview jobs derived from the current AppState job draft."""
+        count = self.submit_preview_jobs_to_queue(run_config=run_config)
+        if count and self._app_state:
+            self._app_state.clear_job_draft()
+            self.refresh_preview_from_state()
+        return count
+
+    def add_packs_to_draft(self, entries: list[PackJobEntry]) -> None:
+        if not self._app_state:
+            return
+        if not entries:
+            return
+        self._app_state.add_packs_to_job_draft(entries)
+        self.refresh_preview_from_state()
+
+    def remove_pack_from_draft(self, pack_id: str) -> None:
+        if not self._app_state:
+            return
+        filtered = [entry for entry in self._app_state.job_draft.packs if entry.pack_id != pack_id]
+        if len(filtered) == len(self._app_state.job_draft.packs):
+            return
+        self._app_state.job_draft.packs = filtered
+        self.refresh_preview_from_state()
+
+    def clear_draft(self) -> None:
+        if not self._app_state:
+            return
+        self._app_state.clear_job_draft()
+        self.refresh_preview_from_state()
 
     def submit_run_plan(
         self,
@@ -1288,7 +1234,6 @@ class PipelineController(_GUIPipelineController):
             run_mode = self._normalize_run_mode(pipeline_state)
             job = Job(
                 job_id=str(uuid.uuid4()),
-                pipeline_config=config,
                 priority=JobPriority.NORMAL,
                 lora_settings=planned_job.lora_settings,
                 randomizer_metadata=planned_job.randomizer_metadata,
@@ -1299,20 +1244,19 @@ class PipelineController(_GUIPipelineController):
             self._job_service.submit_job_with_run_mode(job)
 
     def _run_job(self, job: Job) -> dict[str, Any]:
-        """Run a single job using NJR-preferred execution (PR-CORE1-B1).
-        
-        Accepts a Job that may have:
-        - _normalized_record (preferred) - uses PipelineRunner.run_njr()
-        - pipeline_config (fallback) - uses PipelineRunner.run_njr() via legacy_njr_adapter
-        
+        """Run a single job using NJR-only execution (PR-CORE1-B1/C2).
+
+        Accepts a Job that must have _normalized_record (preferred) for PipelineRunner.run_njr().
+        Legacy pipeline_config execution is retired in CORE1-C2.
+
         Returns dict with job result metadata or error information.
-        
-        If both are missing, returns error dict rather than raising.
+
+        If the record is missing, returns an error dict instead of raising.
         """
         record = getattr(job, "_normalized_record", None)
         if record is not None:
             job_id = job.job_id
-            stage = record.stage_chain[0].stage_type if record.stage_chain else "txt2img"
+            stage = self._infer_job_stage(job) or "txt2img"
             ctx = LogContext(job_id=job_id, subsystem="pipeline", stage=stage)
             api_client = SDWebUIClient(
                 base_url="http://127.0.0.1:7860",
@@ -1333,62 +1277,24 @@ class PipelineController(_GUIPipelineController):
                     "error": str(exc),
                     "error_envelope": serialize_envelope(envelope),
                 }
-        if not job.pipeline_config:
-            return {"error": "No pipeline config"}
-        job_id = job.job_id
-        stage = self._infer_job_stage(job)
-        ctx = LogContext(job_id=job_id, subsystem="pipeline", stage=stage)
-        def _retry_callback(stage: str | None, attempt_index: int, max_attempts: int, reason: str) -> None:
-            if not self._job_service:
-                return
-            try:
-                self._job_service.record_retry_attempt(job_id, stage, attempt_index, max_attempts, reason)
-            except Exception:
-                pass
-        api_client = SDWebUIClient(
-            base_url="http://127.0.0.1:7860",
-            retry_callback=_retry_callback,
+        error_msg = (
+            "Job missing _normalized_record; NJR-only execution requires NormalizedJobRecord snapshots."
         )
-        structured_logger = StructuredLogger()
-        runner = PipelineRunner(api_client, structured_logger)
-        record = build_njr_from_legacy_pipeline_config(job.pipeline_config)
-        try:
-            result = runner.run_njr(record, self.cancel_token)
-            return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
-        except Exception as exc:  # noqa: BLE001
-            envelope = get_attached_envelope(exc)
-            if envelope is None:
-                envelope = wrap_exception(
-                    exc,
-                    subsystem="pipeline",
-                    job_id=job_id,
-                    stage=stage,
-                    user_message="Pipeline execution failed for this job.",
-                    context={
-                        "run_mode": job.run_mode,
-                        "source": job.source,
-                    },
-                )
-            log_with_ctx(
-                _logger,
-                logging.ERROR,
-                f"Pipeline job {job_id} failed: {envelope.user_message}",
-                ctx=ctx,
-                extra_fields={
-                    "error_type": envelope.error_type,
-                    "run_mode": job.run_mode,
-                    "source": job.source,
-                },
-            )
-            raise
+        return {"error": error_msg, "job_id": job.job_id}
 
     def _infer_job_stage(self, job: Job) -> str | None:
-        config = job.pipeline_config
-        stage = None
-        if config is not None:
-            stage = getattr(config, "stage", None) or getattr(config, "stage_name", None)
-        if stage is None and isinstance(job.config_snapshot, dict):
-            stage = job.config_snapshot.get("stage") or job.config_snapshot.get("stage_name")
+        record = getattr(job, "_normalized_record", None)
+        if record and record.stage_chain:
+            first_stage = record.stage_chain[0]
+            stage_name = getattr(first_stage, "stage_type", None) or getattr(first_stage, "stage_name", None)
+            if stage_name:
+                return str(stage_name).lower()
+        snapshot = getattr(job, "snapshot", None) or {}
+        stage = snapshot.get("stage") or snapshot.get("stage_name")
+        if stage:
+            return str(stage).lower()
+        config_snapshot = getattr(job, "config_snapshot", None) or {}
+        stage = config_snapshot.get("stage") or config_snapshot.get("stage_name")
         if stage:
             return str(stage).lower()
         return None
@@ -1426,7 +1332,7 @@ class PipelineController(_GUIPipelineController):
         if not records or not self._job_service:
             return 0
         submitted = 0
-        run_config_to_use = run_config or self._last_run_config
+        run_config_to_use = run_config or getattr(self, "_last_run_config", None)
         for record in records:
             prompt_pack_id = None
             cfg = record.config
@@ -1448,14 +1354,6 @@ class PipelineController(_GUIPipelineController):
                     f"Job ID: {job.job_id}, Source: {source}"
                 )
 
-            # PR-CORE1-B3: pipeline_config must be None for v2.6 jobs.
-            if getattr(job, "pipeline_config", None) is not None:
-                _logger.error(
-                    "PR-CORE1-B3: pipeline_config must be None for NJR-only jobs (Job ID: %s)",
-                    job.job_id,
-                )
-                job.pipeline_config = None
-            
             self._job_service.submit_job_with_run_mode(job)
             self._log_add_to_queue_event(job.job_id)
             submitted += 1
@@ -1529,243 +1427,6 @@ class PipelineController(_GUIPipelineController):
         return self._job_history_service
 
     # -------------------------------------------------------------------------
-    # PR-D: Draft JobBundle Lifecycle
-    # -------------------------------------------------------------------------
-
-    def _ensure_bundle_builder(self) -> JobBundleBuilder:
-        """Lazy-initialize the JobBundleBuilder with current config."""
-        if self._job_bundle_builder is None:
-            # Build base config from current state
-            try:
-                base_config = self._build_pipeline_config_from_state()
-                overrides = self._extract_state_overrides()
-                
-                config_snapshot = PipelineConfigSnapshot(
-                    model_name=getattr(overrides, "model_name", None) or getattr(base_config, "model_name", "sd-v1-5"),
-                    sampler_name=getattr(overrides, "sampler", None) or getattr(base_config, "sampler", "Euler a"),
-                    scheduler_name=getattr(base_config, "scheduler", "ddim"),
-                    steps=getattr(overrides, "steps", 20) or 20,
-                    cfg_scale=getattr(overrides, "cfg_scale", 7.5) or 7.5,
-                    width=getattr(overrides, "width", 512) or 512,
-                    height=getattr(overrides, "height", 512) or 512,
-                    batch_size=getattr(overrides, "batch_size", 1) or 1,
-                    batch_count=self._get_batch_runs(),
-                )
-                
-                global_negative = getattr(overrides, "negative_prompt", "")
-                stage_flags = self._collect_stage_flags()
-                batch_runs = self._get_batch_runs()
-                randomizer_metadata = self._extract_metadata("randomizer_metadata")
-                prompt_resolver = UnifiedPromptResolver()
-                config_resolver = UnifiedConfigResolver()
-                self._job_bundle_builder = JobBundleBuilder(
-                    config_snapshot,
-                    global_negative_text=global_negative,
-                    apply_global_negative=True,
-                    prompt_resolver=prompt_resolver,
-                    config_resolver=config_resolver,
-                    stage_flags=stage_flags,
-                    batch_runs=batch_runs,
-                    randomizer_summary=randomizer_metadata,
-                )
-            except Exception as exc:
-                _logger.warning("Failed to initialize JobBundleBuilder: %s", exc)
-                # Fallback to default config
-                self._job_bundle_builder = JobBundleBuilder(
-                    PipelineConfigSnapshot.default(),
-                    global_negative_text="",
-                )
-        return self._job_bundle_builder
-
-    def _collect_stage_flags(self) -> dict[str, bool]:
-        pipeline_state = self._get_pipeline_state()
-        return {
-            "txt2img": bool(getattr(pipeline_state, "stage_txt2img_enabled", True)),
-            "img2img": bool(getattr(pipeline_state, "stage_img2img_enabled", False)),
-            "upscale": bool(getattr(pipeline_state, "stage_upscale_enabled", False)),
-            "adetailer": bool(getattr(pipeline_state, "stage_adetailer_enabled", False)),
-        }
-
-    def add_job_part_from_current_config(self) -> JobBundleSummaryDTO | None:
-        """Add a single job part from the current GUI config to the draft bundle.
-        
-        PR-D: Core method for "Add to Job" (single prompt) button.
-        
-        Returns:
-            JobBundleSummaryDTO for preview panel update, or None on failure.
-        """
-        try:
-            builder = self._ensure_bundle_builder()
-            overrides = self._extract_state_overrides()
-            
-            # Get prompt from state
-            prompt_state = self._get_prompt_workspace_state()
-            positive_prompt = ""
-            if prompt_state:
-                positive_prompt = getattr(prompt_state, "prompt", "") or ""
-            if not positive_prompt:
-                positive_prompt = getattr(overrides, "prompt", "")
-            
-            # Strip whitespace and check if empty
-            positive_prompt = positive_prompt.strip() if positive_prompt else ""
-            if not positive_prompt:
-                _logger.warning("add_job_part_from_current_config called with empty prompt")
-                return None
-            
-            negative_prompt = getattr(overrides, "negative_prompt", "")
-            
-            # Add the part
-            builder.add_single_prompt(
-                positive_prompt,
-                negative_prompt=negative_prompt,
-                prompt_source="single",
-            )
-            
-            # Build draft bundle
-            self._draft_bundle = builder.to_job_bundle(
-                label="Draft Bundle",
-                run_mode="queue",
-            )
-            
-            # Return summary for preview
-            return JobBundleSummaryDTO.from_job_bundle(self._draft_bundle)
-            
-        except Exception as exc:
-            _logger.error("Failed to add job part from current config: %s", exc)
-            return None
-
-    def add_job_parts_from_pack(
-        self,
-        pack_id: str,
-        prepend_text: str = "",
-    ) -> JobBundleSummaryDTO | None:
-        """Add multiple job parts from a prompt pack to the draft bundle.
-        
-        PR-D: Core method for "Add to Job" (with pack) button.
-        
-        Args:
-            pack_id: The identifier of the prompt pack to load.
-            prepend_text: Optional text to prepend to each prompt.
-            
-        Returns:
-            JobBundleSummaryDTO for preview panel update, or None on failure.
-        """
-        try:
-            builder = self._ensure_bundle_builder()
-            
-            # Load pack prompts (implementation depends on your pack loading logic)
-            # This is a placeholder - you'll need to wire in actual pack loading
-            prompts = self._load_pack_prompts(pack_id)
-            if not prompts:
-                _logger.warning("No prompts found in pack: %s", pack_id)
-                return None
-            
-            # Get current config for pack
-            overrides = self._extract_state_overrides()
-            pack_config = PipelineConfigSnapshot(
-                model_name=getattr(overrides, "model_name", "sd-v1-5"),
-                sampler_name=getattr(overrides, "sampler", "Euler a"),
-                scheduler_name="ddim",
-                steps=getattr(overrides, "steps", 20),
-                cfg_scale=getattr(overrides, "cfg_scale", 7.5),
-                width=getattr(overrides, "width", 512),
-                height=getattr(overrides, "height", 512),
-                batch_size=getattr(overrides, "batch_size", 1),
-                batch_count=self._get_batch_runs(),
-            )
-            
-            # Add all pack prompts
-            builder.add_pack_prompts(
-                pack_name=pack_id,
-                prompts=prompts,
-                prepend_text=prepend_text,
-                pack_config=pack_config,
-            )
-            
-            # Build draft bundle
-            self._draft_bundle = builder.to_job_bundle(
-                label=f"Pack: {pack_id}",
-                run_mode="queue",
-            )
-            
-            # Return summary for preview
-            return JobBundleSummaryDTO.from_job_bundle(self._draft_bundle)
-            
-        except Exception as exc:
-            _logger.error("Failed to add job parts from pack %s: %s", pack_id, exc)
-            return None
-
-    def _load_pack_prompts(self, pack_id: str) -> list[str]:
-        """Load prompts from a pack. Placeholder for actual pack loading logic."""
-        # TODO: Wire in actual pack loading from your file_io or pack manager
-        return []
-
-    def clear_draft_bundle(self) -> None:
-        """Clear the draft bundle and reset the builder.
-        
-        PR-D: Core method for "Clear Draft" button.
-        """
-        try:
-            self._draft_bundle = None
-            if self._job_bundle_builder:
-                self._job_bundle_builder.reset()
-            _logger.debug("Draft bundle cleared")
-        except Exception as exc:
-            _logger.error("Failed to clear draft bundle: %s", exc)
-
-    def enqueue_draft_bundle(self) -> str | None:
-        """Enqueue the current job draft and clear it."""
-        if not self._app_state:
-            _logger.warning("enqueue_draft_bundle called without bound AppState")
-            return None
-        request = self._build_run_request_from_job_draft(
-            run_mode=PipelineRunMode.QUEUE,
-            source=PipelineRunSource.ADD_TO_QUEUE,
-        )
-        if request is None:
-            return None
-        if not request.pack_entries:
-            _logger.warning("enqueue_draft_bundle has no pack entries to enqueue")
-            return None
-        if not self._job_service:
-            _logger.warning("enqueue_draft_bundle cannot execute without job_service")
-            return None
-        njrs = self._job_builder.build_from_run_request(request)
-        if not njrs:
-            _logger.warning("enqueue_draft_bundle builder produced no jobs")
-            return None
-        job_ids = self._job_service.enqueue_njrs(njrs, request)
-        if not job_ids:
-            _logger.warning("enqueue_draft_bundle failed to enqueue job entries")
-            return None
-        job_id = job_ids[0]
-        self._log_add_to_queue_event(job_id)
-        try:
-            self.clear_draft_bundle()
-        except Exception:
-            pass
-        if self._app_state:
-            clear_job_draft = getattr(self._app_state, "clear_job_draft", None)
-            if callable(clear_job_draft):
-                try:
-                    clear_job_draft()
-                except Exception:
-                    pass
-        return job_id
-
-    def get_draft_bundle_summary(self) -> JobBundleSummaryDTO | None:
-        """Get summary of the current draft bundle for preview.
-        
-        Returns:
-            JobBundleSummaryDTO if draft exists, None otherwise.
-        """
-        if self._draft_bundle:
-            try:
-                return JobBundleSummaryDTO.from_job_bundle(self._draft_bundle)
-            except Exception as exc:
-                _logger.error("Failed to create bundle summary: %s", exc)
-        return None
-
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         """Get diagnostics snapshot (PR-CORE1-A3: includes NJR visibility).
         

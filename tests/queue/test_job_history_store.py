@@ -6,7 +6,7 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 
 def test_job_history_records_submission_and_status(tmp_path):
     store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    job = Job(job_id="job-1", pipeline_config=None, priority=JobPriority.NORMAL, worker_id="local")
+    job = Job(job_id="job-1", priority=JobPriority.NORMAL, worker_id="local")
 
     store.record_job_submission(job)
     run_ts = datetime.utcnow()
@@ -26,8 +26,8 @@ def test_job_history_records_submission_and_status(tmp_path):
 
 def test_job_history_filters_by_status(tmp_path):
     store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    job1 = Job(job_id="job-1", pipeline_config=None, priority=JobPriority.NORMAL)
-    job2 = Job(job_id="job-2", pipeline_config=None, priority=JobPriority.NORMAL)
+    job1 = Job(job_id="job-1", priority=JobPriority.NORMAL)
+    job2 = Job(job_id="job-2", priority=JobPriority.NORMAL)
 
     store.record_job_submission(job1)
     store.record_status_change(job1.job_id, JobStatus.FAILED, datetime.utcnow(), error="boom")
@@ -44,7 +44,7 @@ def test_job_history_filters_by_status(tmp_path):
 
 def test_job_history_persists_run_mode(tmp_path):
     store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    job = Job(job_id="job-direct", pipeline_config=None, priority=JobPriority.NORMAL, run_mode="direct")
+    job = Job(job_id="job-direct", priority=JobPriority.NORMAL, run_mode="direct")
 
     store.record_job_submission(job)
     store.record_status_change(job.job_id, JobStatus.COMPLETED, datetime.utcnow())

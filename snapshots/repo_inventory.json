@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-09T22:59:49",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251209-225946.zip",
+  "created_at": "2025-12-10T06:08:11",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251210-060809.zip",
   "file_count": 1577,
-  "total_size_bytes": 26162093,
+  "total_size_bytes": 26166202,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -2091,8 +2091,8 @@
     },
     {
       "path": "docs/ARCHITECTURAL_DEBT_ANALYSIS.md",
-      "size_bytes": 16174,
-      "mtime_iso": "2025-12-09T22:55:45"
+      "size_bytes": 16745,
+      "mtime_iso": "2025-12-10T06:05:10"
     },
     {
       "path": "docs/ARCHITECTURE_ENFORCEMENT_CHECKLIST_v2.6.md",
@@ -2106,8 +2106,8 @@
     },
     {
       "path": "docs/ARCHITECTURE_v2.6.md",
-      "size_bytes": 12530,
-      "mtime_iso": "2025-12-09T22:41:37"
+      "size_bytes": 12740,
+      "mtime_iso": "2025-12-10T06:02:12"
     },
     {
       "path": "docs/Builder Pipeline Deep-Dive (v2.6).md",
@@ -2301,8 +2301,8 @@
     },
     {
       "path": "docs/StableNew_Coding_and_Testing_v2.6.md",
-      "size_bytes": 12062,
-      "mtime_iso": "2025-12-09T22:56:18"
+      "size_bytes": 12406,
+      "mtime_iso": "2025-12-10T06:03:36"
     },
     {
       "path": "docs/StableNew_V2_Inventory.md",
@@ -5321,8 +5321,8 @@
     },
     {
       "path": "src/controller/job_history_service.py",
-      "size_bytes": 10393,
-      "mtime_iso": "2025-12-09T22:15:40"
+      "size_bytes": 9767,
+      "mtime_iso": "2025-12-10T05:56:46"
     },
     {
       "path": "src/controller/job_lifecycle_logger.py",
@@ -5331,8 +5331,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 32782,
-      "mtime_iso": "2025-12-09T22:15:36"
+      "size_bytes": 32705,
+      "mtime_iso": "2025-12-10T05:56:54"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -5346,8 +5346,8 @@
     },
     {
       "path": "src/controller/pipeline_controller.py",
-      "size_bytes": 73246,
-      "mtime_iso": "2025-12-09T22:40:19"
+      "size_bytes": 71257,
+      "mtime_iso": "2025-12-10T05:57:58"
     },
     {
       "path": "src/controller/process_auto_scanner_service.py",
@@ -5411,8 +5411,8 @@
     },
     {
       "path": "src/gui/controller.py",
-      "size_bytes": 13341,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "size_bytes": 15869,
+      "mtime_iso": "2025-12-09T23:26:31"
     },
     {
       "path": "src/gui/core_config_panel_v2.py",
@@ -5806,8 +5806,8 @@
     },
     {
       "path": "src/gui/views/pipeline_tab_frame_v2.py",
-      "size_bytes": 22851,
-      "mtime_iso": "2025-12-08T20:39:22"
+      "size_bytes": 22844,
+      "mtime_iso": "2025-12-09T23:08:29"
     },
     {
       "path": "src/gui/views/prompt_tab_frame.py",
@@ -6091,13 +6091,13 @@
     },
     {
       "path": "src/queue/job_history_store.py",
-      "size_bytes": 10417,
-      "mtime_iso": "2025-12-09T21:57:09"
+      "size_bytes": 10144,
+      "mtime_iso": "2025-12-10T05:56:21"
     },
     {
       "path": "src/queue/job_model.py",
-      "size_bytes": 5187,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 5453,
+      "mtime_iso": "2025-12-10T05:52:20"
     },
     {
       "path": "src/queue/job_queue.py",
@@ -6337,7 +6337,7 @@
     {
       "path": "state/last_run_v2.json",
       "size_bytes": 3825,
-      "mtime_iso": "2025-12-09T22:56:50"
+      "mtime_iso": "2025-12-10T06:06:02"
     },
     {
       "path": "state/queue_state_v2.json",
@@ -6576,8 +6576,8 @@
     },
     {
       "path": "tests/controller/test_controller_job_lifecycle.py",
-      "size_bytes": 921,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "size_bytes": 936,
+      "mtime_iso": "2025-12-09T23:30:12"
     },
     {
       "path": "tests/controller/test_controller_learning_toggle.py",
@@ -6586,18 +6586,18 @@
     },
     {
       "path": "tests/controller/test_controller_queue_execution.py",
-      "size_bytes": 900,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "size_bytes": 915,
+      "mtime_iso": "2025-12-09T23:30:22"
     },
     {
       "path": "tests/controller/test_core_run_path_v2.py",
-      "size_bytes": 9017,
-      "mtime_iso": "2025-12-09T22:41:17"
+      "size_bytes": 8771,
+      "mtime_iso": "2025-12-10T06:00:07"
     },
     {
       "path": "tests/controller/test_job_construction_b3.py",
-      "size_bytes": 1183,
-      "mtime_iso": "2025-12-09T22:16:08"
+      "size_bytes": 1106,
+      "mtime_iso": "2025-12-10T06:00:43"
     },
     {
       "path": "tests/controller/test_job_history_controller_v2.py",
@@ -6731,13 +6731,13 @@
     },
     {
       "path": "tests/controller/test_pipeline_controller_queue_mode.py",
-      "size_bytes": 3097,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "size_bytes": 3087,
+      "mtime_iso": "2025-12-09T23:29:50"
     },
     {
       "path": "tests/controller/test_pipeline_controller_run_modes_v2.py",
-      "size_bytes": 14503,
-      "mtime_iso": "2025-12-08T18:23:52"
+      "size_bytes": 15078,
+      "mtime_iso": "2025-12-09T23:29:28"
     },
     {
       "path": "tests/controller/test_pipeline_controller_webui_gating.py",
@@ -6776,8 +6776,8 @@
     },
     {
       "path": "tests/controller/test_preview_queue_history_flow_v2.py",
-      "size_bytes": 18084,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 19884,
+      "mtime_iso": "2025-12-09T23:35:13"
     },
     {
       "path": "tests/controller/test_profile_integration.py",
@@ -7636,13 +7636,13 @@
     },
     {
       "path": "tests/queue/test_job_history_store.py",
-      "size_bytes": 2123,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 2025,
+      "mtime_iso": "2025-12-10T05:58:20"
     },
     {
       "path": "tests/queue/test_job_model.py",
-      "size_bytes": 340,
-      "mtime_iso": "2025-11-22T18:13:44"
+      "size_bytes": 492,
+      "mtime_iso": "2025-12-10T05:58:12"
     },
     {
       "path": "tests/queue/test_job_queue_basic.py",
@@ -7651,8 +7651,8 @@
     },
     {
       "path": "tests/queue/test_job_service_pipeline_integration_v2.py",
-      "size_bytes": 20929,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 21965,
+      "mtime_iso": "2025-12-10T05:59:24"
     },
     {
       "path": "tests/queue/test_job_variant_metadata_v2.py",

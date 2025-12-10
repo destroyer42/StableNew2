@@ -67,7 +67,6 @@ class TestNJRPreferredExecution:
         job = Job(
             job_id="test-job-1",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job._normalized_record = dummy_njr
         job.pipeline_config = dummy_pipeline_config
@@ -89,7 +88,6 @@ class TestNJRPreferredExecution:
         job = Job(
             job_id="test-job-2",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job._normalized_record = dummy_njr
         job.pipeline_config = dummy_pipeline_config
@@ -115,7 +113,6 @@ class TestNJRPreferredExecution:
         job = Job(
             job_id="test-job-3",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         # No _normalized_record attribute
         job.pipeline_config = dummy_pipeline_config
@@ -137,7 +134,6 @@ class TestNJRPreferredExecution:
         job = Job(
             job_id="test-job-4",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job._normalized_record = dummy_njr
         job.pipeline_config = dummy_pipeline_config
@@ -157,7 +153,6 @@ class TestNJRPreferredExecution:
         job = Job(
             job_id="test-job-5",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job._normalized_record = None  # Explicitly None
         job.pipeline_config = dummy_pipeline_config
@@ -175,7 +170,6 @@ class TestNJRPreferredExecution:
         job = Job(
             job_id="test-job-6",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job.payload = {"packs": []}
         job.pipeline_config = None

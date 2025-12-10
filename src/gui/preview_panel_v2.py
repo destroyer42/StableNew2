@@ -198,84 +198,6 @@ class PreviewPanelV2(ttk.Frame):
         first_summary = summaries[0] if summaries else None
         self._render_summary(first_summary, len(summaries))
 
-    def update_from_summary(self, dto: Any | None) -> None:
-        """Update preview from JobBundleSummaryDTO (PR-D method)."""
-        from src.pipeline.job_models_v2 import JobBundleSummaryDTO
-        
-        if dto is None or not isinstance(dto, JobBundleSummaryDTO):
-            self._render_summary(None, 0)
-            self._update_action_states(None)
-            return
-        
-        # Convert DTO to display data using SimpleNamespace to avoid type issues
-        job_id_display = f"{dto.num_parts} part(s)"
-        label_display = dto.label or "Draft Bundle"
-        positive_text = dto.positive_preview or ""
-        negative_text = dto.negative_preview if dto.negative_preview else ""
-        stages_text = dto.stage_summary or "-"
-        
-        summary = SimpleNamespace(
-            job_id=job_id_display,
-            label=label_display,
-            positive_preview=positive_text,
-            negative_preview=negative_text,
-            stages_display=stages_text,
-            estimated_images=dto.estimated_images,
-            created_at=None,
-        )
-        
-        self._render_summary(summary, dto.num_parts)  # type: ignore[arg-type]
-        # Enable buttons when draft has content
-        has_draft = dto.num_parts > 0
-        state = ["!disabled"] if has_draft else ["disabled"]
-        self.add_to_queue_button.state(state)
-        self.clear_draft_button.state(state)
-
-    def update_from_job_draft(self, job_draft: Any) -> None:
-        """Update preview summary from job draft.
-        
-        PR-CORE-D/E: Main entry point when user clicks 'Add to Job' from sidebar.
-        Renders PackJobEntry data into preview panel and enables action buttons.
-        """
-        print(f"[PreviewPanel] update_from_job_draft called with job_draft: {job_draft}")
-        
-        if job_draft is None:
-            print("[PreviewPanel] job_draft is None, rendering empty state")
-            self._render_summary(None, 0)
-            self._update_action_states(None)
-            return
-
-        # PR-CORE-D/E: Check for PromptPack-based draft first
-        packs = getattr(job_draft, "packs", [])
-        print(f"[PreviewPanel] Found {len(packs)} pack(s) in job_draft")
-        
-        total = 0
-        summary = None
-        if packs:
-            # Show first pack's data
-            entry = packs[0]
-            print(f"[PreviewPanel] First pack: {entry.pack_name}")
-            summary = self._summary_from_pack_entry(entry)
-            total = len(packs)
-            print(f"[PreviewPanel] Created summary from pack entry, total={total}")
-        else:
-            # Legacy: check for text-based draft parts
-            draft_summary = getattr(job_draft, "summary", None)
-            if draft_summary and getattr(draft_summary, "part_count", 0) > 0:
-                print(f"[PreviewPanel] Using legacy draft_summary path")
-                summary = self._summary_from_draft_summary(draft_summary)
-                total = draft_summary.part_count
-            else:
-                print(f"[PreviewPanel] No packs and no legacy parts - empty draft")
-
-        print(f"[PreviewPanel] Calling _render_summary with summary={bool(summary)}, total={total}")
-        self._render_summary(summary, total)
-        
-        print(f"[PreviewPanel] Calling _update_action_states")
-        self._update_action_states(job_draft, getattr(self.app_state, "preview_jobs", None))
-        
-        print(f"[PreviewPanel] update_from_job_draft complete")
-
     def update_from_controls(self, sidebar: Any) -> None:
         """Update preview summary from sidebar controls."""
         enabled: list[str] = getattr(sidebar, "get_enabled_stages", lambda: [])()
@@ -579,15 +501,21 @@ class PreviewPanelV2(ttk.Frame):
 
     def _on_add_to_queue(self) -> None:
         """Move the draft job into the queue."""
-        self._invoke_controller("enqueue_draft_bundle")
+        if not self.controller:
+            return
+        self.controller.on_add_to_queue()
 
     def _on_clear_draft(self) -> None:
         """Clear the current draft job metadata."""
-        self._invoke_controller("clear_draft_job_bundle")
+        if not self.controller:
+            return
+        self.controller.on_clear_draft()
 
     def _on_details_clicked(self) -> None:
         """Show the logging view via controller helper."""
-        self._invoke_controller("show_log_trace_panel")
+        if not self.controller:
+            return
+        self.controller.show_log_trace_panel()
 
     def _update_action_states(
         self,
@@ -608,15 +536,3 @@ class PreviewPanelV2(ttk.Frame):
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)
 
-    def _invoke_controller(self, method_name: str, *args: Any) -> Any:
-        """Call a controller hook if available."""
-        controller = self.controller
-        if not controller:
-            return None
-        method = getattr(controller, method_name, None)
-        if callable(method):
-            try:
-                return method(*args)
-            except Exception:
-                pass
-        return None

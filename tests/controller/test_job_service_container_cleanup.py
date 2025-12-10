@@ -66,7 +66,7 @@ def test_job_service_containers_receive_pids_and_kill(monkeypatch) -> None:
         process_container_config=config,
         container_factory=lambda job_id, cfg: container,
     )
-    job = Job(job_id="job-container", pipeline_config=None)
+    job = Job(job_id="job-container")
     job_queue.submit(job)
 
     monkeypatch.setattr(job_service_module, "JobWatchdog", DummyWatchdog)

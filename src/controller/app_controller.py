@@ -270,6 +270,10 @@ class AppController:
     ) -> None:
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
+        if self.app_state is None:
+            self.app_state = AppStateV2()
+            if main_window is not None:
+                setattr(main_window, "app_state", self.app_state)
         self._job_lifecycle_logger = JobLifecycleLogger(app_state=self.app_state)
         self.state = AppState()
         self.threaded = threaded
@@ -355,20 +359,16 @@ class AppController:
 
     def run_pipeline_v2_bridge(self) -> bool:
         """
-        Optional hook into the modern PipelineController path.
+        Optional bridge into the modern PipelineController path.
 
         Returns True if a PipelineController was attached and called successfully.
         """
-        controller = getattr(self, "pipeline_controller", None)
+        controller = self.pipeline_controller
         if controller is None:
             return False
 
-        start_fn = getattr(controller, "start_pipeline", None)
-        if not callable(start_fn):
-            return False
-
         try:
-            start_fn()
+            controller.start_pipeline()
             return True
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] PipelineController bridge error: {exc!r}")
@@ -425,6 +425,40 @@ class AppController:
             cfg["pipeline_state_snapshot"] = snapshot
         return cfg
 
+    def on_run_now(self) -> Any:
+        """Explicit event API: run pipeline now via the controller."""
+        self._ensure_run_mode_default("run_now")
+        return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
+
+    def on_add_to_queue(self) -> None:
+        """Explicit event API: enqueue preview-built jobs."""
+        run_config = self._prepare_queue_run_config()
+        controller = self.pipeline_controller
+        if controller is None:
+            return
+        count = controller.enqueue_draft_jobs(run_config=run_config)
+        if count:
+            self._append_log(f"[controller] Submitted {count} job(s) from preview to queue")
+
+    def on_clear_draft(self) -> None:
+        """Explicit event API: clear the current job draft state."""
+        controller = self.pipeline_controller
+        if controller is None:
+            return
+        controller.clear_draft()
+        self._append_log("[controller] Job draft cleared")
+
+    def on_add_to_job(self, pack_ids: list[str]) -> None:
+        """Explicit event API: add the selected packs to the pipeline draft."""
+        self.on_pipeline_add_packs_to_job(pack_ids)
+
+    def on_update_preview(self) -> None:
+        """Explicit event API: refresh preview records."""
+        controller = self.pipeline_controller
+        if controller is None:
+            return
+        controller.refresh_preview_from_state()
+
     def _build_stage_flags(self) -> dict[str, bool]:
         defaults = {"txt2img": True, "img2img": False, "adetailer": True, "upscale": False}
         stage_flags: dict[str, bool] = dict(defaults)
@@ -470,93 +504,70 @@ class AppController:
                 pass
         run_config = self._build_run_config(mode, source)
         self._last_run_config = dict(run_config)
-        controller = getattr(self, "pipeline_controller", None)
+        controller = self.pipeline_controller
         if controller is not None:
-            start_fn = getattr(controller, "start_pipeline", None)
-            if callable(start_fn):
+            try:
+                self._append_log(
+                    f"[controller] _start_run_v2 via PipelineController.start_pipeline "
+                    f"(mode={mode.value}, source={source.value})"
+                )
+                return controller.start_pipeline(run_config=run_config)
+            except TypeError:
                 try:
-                    self._append_log(
-                        f"[controller] _start_run_v2 via PipelineController.start_pipeline "
-                        f"(mode={mode.value}, source={source.value})"
-                    )
-                    return start_fn(run_config=run_config)
-                except TypeError:
-                    self._append_log(
-                        "[controller] PipelineController.start_pipeline does not accept run_config; calling without it."
-                    )
-                    return start_fn()
+                    return controller.start_pipeline()
                 except Exception as exc:  # noqa: BLE001
                     self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
         self._append_log("[controller] _start_run_v2 falling back to legacy start_run().")
-        legacy = getattr(self, "start_run", None)
-        if callable(legacy):
-            return legacy()
-        return None
+        return self.start_run()
 
     def on_run_job_now_v2(self) -> Any:
         """
-        V2 entrypoint for "Run Now": prefer the queue-backed handler, fall back to start_run_v2().
+        V2 entrypoint for "Run Now": use the explicit `on_run_now` API and fall back to legacy run.
         """
         self._ensure_run_mode_default("run_now")
-        handler_names = ("on_run_job_now", "on_run_queue_now_clicked")
-        for name in handler_names:
-            handler = getattr(self, name, None)
-            if callable(handler):
-                try:
-                    self._append_log(f"[controller] on_run_job_now_v2 using {name}.")
-                    return handler()
-                except Exception as exc:  # noqa: BLE001
-                    self._append_log(f"[controller] on_run_job_now_v2 handler {name} error: {exc!r}")
-                    break
-
+        try:
+            return self.on_run_now()
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"[controller] on_run_job_now_v2 error: {exc!r}")
         self._ensure_run_mode_default("run_now")
         return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
 
     def on_add_job_to_queue_v2(self) -> None:
-        """Queue-first Add-to-Queue entrypoint; safe no-op if none available."""
+        """Queue-first Add-to-Queue entrypoint; uses explicit APIs and falls back to legacy run."""
         self._ensure_run_mode_default("add_to_queue")
-        run_config = self._build_run_config(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
-        self._last_run_config = dict(run_config)
-        pipeline_ctrl = getattr(self, "pipeline_controller", None)
-        if pipeline_ctrl and hasattr(pipeline_ctrl, "submit_preview_jobs_to_queue"):
+        controller = self.pipeline_controller
+        run_config = self._prepare_queue_run_config()
+        if controller is not None:
             try:
-                count = pipeline_ctrl.submit_preview_jobs_to_queue(
-                    source="gui",
-                    prompt_source="pack",
-                    run_config=run_config,
-                )
+                count = controller.enqueue_draft_jobs(run_config=run_config)
                 if count > 0:
                     self._append_log(f"[controller] Submitted {count} job(s) from preview to queue")
                     return
             except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[controller] submit_preview_jobs_to_queue error: {exc!r}")
-
-        handler_names = ("on_add_job_to_queue", "on_add_to_queue")
-        for name in handler_names:
-            handler = getattr(self, name, None)
-            if callable(handler):
-                try:
-                    self._append_log(f"[controller] on_add_job_to_queue_v2 using {name}.")
-                    handler()
-                    return
-                except Exception as exc:  # noqa: BLE001
-                    self._append_log(
-                        f"[controller] on_add_job_to_queue_v2 handler {name} error: {exc!r}"
-                    )
-                    return
-
+                self._append_log(f"[controller] enqueue_draft_jobs error: {exc!r}")
+        handler = getattr(self, "on_add_job_to_queue", None)
+        if callable(handler):
+            try:
+                handler()
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[controller] fallback add job to queue error: {exc!r}")
         self._ensure_run_mode_default("add_to_queue")
         self._start_run_v2(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
 
+    def _prepare_queue_run_config(self) -> dict[str, Any]:
+        run_config = self._build_run_config(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
+        self._last_run_config = dict(run_config)
+        return run_config
+
     def on_replay_history_job_v2(self, job_id: str) -> bool:
-        controller = getattr(self, "pipeline_controller", None)
+        controller = self.pipeline_controller
         if controller is None:
             return False
-        replay_fn = getattr(controller, "replay_job_from_history", None)
-        if not callable(replay_fn):
-            return False
         try:
-            count = replay_fn(job_id)
+            count = controller.replay_job_from_history(job_id)
             if count > 0:
                 self._append_log(f"[controller] Replayed job {job_id} ({count} queued).")
                 return True
@@ -2741,7 +2752,6 @@ class AppController:
             return None
         job = Job(
             job_id=str(uuid.uuid4()),
-            pipeline_config=None,
             payload=self._job_payload_from_draft(),
             lora_settings=self._lora_settings_payload(),
         )
@@ -2911,97 +2921,35 @@ class AppController:
             entries.append(entry)
             print(f"[AppController] Created PackJobEntry for '{pack_id}'")
         
-        print(f"[AppController] Total entries created: {len(entries)}")
-        print(f"[AppController] app_state exists: {self.app_state is not None}")
         if entries and self.app_state:
             self.app_state.add_packs_to_job_draft(entries)
             self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
-            print(f"[AppController] Added {len(entries)} entries to job draft")
-        # PR-CORE-D/E: Update preview panel to show draft contents
-        print(f"[AppController] main_window exists: {self.main_window is not None}")
-        if self.main_window:
-            # Preview panel is on pipeline_tab, not directly on main_window
-            pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-            print(f"[AppController] pipeline_tab: {pipeline_tab}")
-            if pipeline_tab:
-                preview_panel = getattr(pipeline_tab, "preview_panel", None)
-                print(f"[AppController] preview_panel: {preview_panel}")
-                if preview_panel and hasattr(preview_panel, "update_from_job_draft"):
-                    print(f"[AppController] Calling preview_panel.update_from_job_draft()")
-                    preview_panel.update_from_job_draft(self.app_state.job_draft)
-                    print(f"[AppController] Preview panel updated successfully")
-                else:
-                    print(f"[AppController] ERROR: preview_panel missing or no update_from_job_draft method")
-            else:
-                print(f"[AppController] ERROR: No pipeline_tab!")
-        else:
-            print(f"[AppController] ERROR: No main_window!")
-        if not entries or not self.app_state:
-            print(f"[AppController] ERROR: No entries or no app_state!")
+            self._refresh_preview_from_state()
 
     def add_single_prompt_to_draft(self) -> None:
         """Capture the current prompt/negative pair in the pipeline draft summary."""
+        if not self.app_state:
+            return
+        prompt = (getattr(self.app_state, "prompt", "") or "").strip()
+        if not prompt:
+            return
+        negative = (getattr(self.app_state, "negative_prompt", "") or "").strip()
+        self.app_state.add_job_draft_part(prompt, negative, estimated_images=1)
+        self._append_log("[controller] Added current prompt pair to job draft")
+        self._refresh_preview_from_state()
+
+    def _refresh_preview_from_state(self) -> None:
+        """Refresh preview records using the current AppState/job draft."""
         controller = getattr(self, "pipeline_controller", None)
-        add_fn = getattr(controller, "add_job_part_from_current_config", None)
-        if not callable(add_fn):
+        if controller is None:
+            return
+        refresh_fn = getattr(controller, "refresh_preview_from_state", None)
+        if not callable(refresh_fn):
             return
         try:
-            dto = add_fn()
-            if dto:
-                self._refresh_preview_from_bundle_dto(dto)
-                self._append_log(f"[controller] Added job part to draft ({dto.num_parts} part(s))")
+            refresh_fn()
         except Exception as exc:
-            self._append_log(f"[controller] add_single_prompt_to_draft error: {exc!r}")
-
-    def clear_draft_job_bundle(self) -> None:
-        """Clear the current draft bundle from the GUI state."""
-        controller = getattr(self, "pipeline_controller", None)
-        clear_fn = getattr(controller, "clear_draft_bundle", None)
-        if not callable(clear_fn):
-            return
-        try:
-            clear_fn()
-            self._refresh_preview_from_bundle_dto(None)
-            self._append_log("[controller] Cleared draft bundle")
-        except Exception as exc:
-            self._append_log(f"[controller] clear_draft_job_bundle error: {exc!r}")
-
-    def enqueue_draft_bundle(self) -> int:
-        """Forward a draft bundle enqueue request to the pipeline controller.
-        
-        PR-CORE-D/E: Ensures app_state is passed to pipeline controller for PromptPack-based jobs.
-        """
-        controller = getattr(self, "pipeline_controller", None)
-        if not controller:
-            return 0
-        
-        enqueue_fn = getattr(controller, "enqueue_draft_bundle", None)
-        if not callable(enqueue_fn):
-            return 0
-        try:
-            job_id = enqueue_fn()
-            if job_id:
-                self._refresh_preview_from_bundle_dto(None)
-                self._append_log(f"[controller] Enqueued draft bundle as job {job_id}")
-                return 1
-            return 0
-        except Exception as exc:
-            self._append_log(f"[controller] enqueue_draft_bundle error: {exc!r}")
-            return 0
-
-    def _refresh_preview_from_bundle_dto(self, dto: Any | None) -> None:
-        """Refresh preview panel with draft bundle summary DTO."""
-        if not self.main_window:
-            return
-        preview_panel = getattr(self.main_window, "preview_panel", None)
-        if not preview_panel:
-            return
-        update_fn = getattr(preview_panel, "update_from_summary", None)
-        if callable(update_fn):
-            try:
-                update_fn(dto)
-            except Exception as exc:
-                self._append_log(f"[controller] Preview update error: {exc!r}")
+            self._append_log(f"[controller] Refresh preview error: {exc!r}")
 
     def on_add_job_to_queue(self) -> None:
         """Enqueue the current job draft."""

@@ -9,12 +9,12 @@ def test_history_service_merges_active_and_history(tmp_path):
     queue = JobQueue(history_store=store)
     service = JobHistoryService(queue, store)
 
-    completed_job = Job(job_id="done", pipeline_config=None, priority=JobPriority.NORMAL)
+    completed_job = Job(job_id="done", priority=JobPriority.NORMAL)
     queue.submit(completed_job)
     queue.mark_running(completed_job.job_id)
     queue.mark_completed(completed_job.job_id)
 
-    active_job = Job(job_id="active", pipeline_config=None, priority=JobPriority.NORMAL)
+    active_job = Job(job_id="active", priority=JobPriority.NORMAL)
     queue.submit(active_job)
 
     active = service.list_active_jobs()
@@ -54,10 +54,10 @@ def test_history_service_cancel_and_retry(tmp_path):
     stub = StubController()
     service = JobHistoryService(queue, store, job_controller=stub)
 
-    queued = Job(job_id="queued", pipeline_config=None, priority=JobPriority.NORMAL)
+    queued = Job(job_id="queued", priority=JobPriority.NORMAL)
     queue.submit(queued)
 
-    completed = Job(job_id="done", pipeline_config=None, priority=JobPriority.NORMAL, payload=lambda: None)
+    completed = Job(job_id="done", priority=JobPriority.NORMAL, payload=lambda: None)
     queue.submit(completed)
     queue.mark_running(completed.job_id)
     queue.mark_completed(completed.job_id)
@@ -74,7 +74,7 @@ def test_history_service_records_result(tmp_path):
     queue = JobQueue(history_store=store)
     service = JobHistoryService(queue, store)
 
-    job = Job(job_id="finished", pipeline_config=None, priority=JobPriority.NORMAL)
+    job = Job(job_id="finished", priority=JobPriority.NORMAL)
     queue.submit(job)
     queue.mark_running(job.job_id)
     queue.mark_completed(job.job_id, result={"mode": "test"})

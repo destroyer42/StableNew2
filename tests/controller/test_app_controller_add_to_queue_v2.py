@@ -55,7 +55,7 @@ def test_on_add_job_to_queue_v2_prefers_pipeline_controller():
         def __init__(self) -> None:
             self.calls = 0
 
-        def submit_preview_jobs_to_queue(self, **kwargs: Any) -> int:
+        def enqueue_draft_jobs(self, **kwargs: Any) -> int:
             self.calls += 1
             return 1
 

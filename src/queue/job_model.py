@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 import time
 
-from src.pipeline.pipeline_runner import PipelineConfig
 from src.cluster.worker_model import WorkerId
 from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
 
@@ -55,7 +54,6 @@ def _utcnow() -> datetime:
 @dataclass
 class Job:
     job_id: str
-    pipeline_config: PipelineConfig | None
     priority: JobPriority = JobPriority.NORMAL
     status: JobStatus = JobStatus.QUEUED
     created_at: datetime = field(default_factory=_utcnow)
@@ -105,7 +103,6 @@ class Job:
             "randomizer_metadata": self.randomizer_metadata or {},
             "error_message": self.error_message,
             "result": self.result,
-            "pipeline_config": self.pipeline_config.__dict__ if self.pipeline_config is not None else None,
             "worker_id": self.worker_id,
             "run_mode": self.run_mode,
             "source": self.source,
@@ -119,12 +116,27 @@ class Job:
         }
 
     def summary(self) -> str:
-        if self.pipeline_config:
-            prompt = getattr(self.pipeline_config, "prompt", "") or ""
-            model = getattr(self.pipeline_config, "model", "") or getattr(self.pipeline_config, "model_name", "")
+        snapshot = self.snapshot or {}
+        prompt = snapshot.get("positive_prompt") or snapshot.get("prompt") or ""
+        model = (
+            snapshot.get("base_model")
+            or snapshot.get("model_name")
+            or snapshot.get("model")
+            or snapshot.get("prompt_model")
+            or ""
+        )
+        if prompt or model:
             return f"{prompt[:64]} | {model}"
-        if self.payload:
-            return str(self.payload)[:64]
+        config_snapshot = self.config_snapshot or {}
+        prompt = prompt or config_snapshot.get("prompt", "")
+        model = model or config_snapshot.get("model", "")
+        if prompt or model:
+            return f"{prompt[:64]} | {model}"
+        payload = getattr(self, "payload", None)
+        if callable(payload):
+            return "callable payload"
+        if payload:
+            return str(payload)[:64]
         return self.job_id
 
 

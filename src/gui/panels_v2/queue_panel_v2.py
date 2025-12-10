@@ -248,40 +248,32 @@ class QueuePanelV2(ttk.Frame):
         """Move the selected job up in the queue."""
         job = self._get_selected_job()
         if job and self.controller:
-            method = getattr(self.controller, "on_queue_move_up_v2", None)
-            if callable(method):
-                method(job.job_id)
-                # Maintain selection after move
-                idx = self._get_selected_index()
-                if idx is not None and idx > 0:
-                    self._select_index(idx - 1)
+            self.controller.on_queue_move_up_v2(job.job_id)
+            # Maintain selection after move
+            idx = self._get_selected_index()
+            if idx is not None and idx > 0:
+                self._select_index(idx - 1)
 
     def _on_move_down(self) -> None:
         """Move the selected job down in the queue."""
         job = self._get_selected_job()
         if job and self.controller:
-            method = getattr(self.controller, "on_queue_move_down_v2", None)
-            if callable(method):
-                method(job.job_id)
-                # Maintain selection after move
-                idx = self._get_selected_index()
-                if idx is not None and idx < len(self._jobs) - 1:
-                    self._select_index(idx + 1)
+            self.controller.on_queue_move_down_v2(job.job_id)
+            # Maintain selection after move
+            idx = self._get_selected_index()
+            if idx is not None and idx < len(self._jobs) - 1:
+                self._select_index(idx + 1)
 
     def _on_remove(self) -> None:
         """Remove the selected job from the queue."""
         job = self._get_selected_job()
         if job and self.controller:
-            method = getattr(self.controller, "on_queue_remove_job_v2", None)
-            if callable(method):
-                method(job.job_id)
+            self.controller.on_queue_remove_job_v2(job.job_id)
 
     def _on_clear(self) -> None:
         """Clear all jobs from the queue."""
         if self.controller:
-            method = getattr(self.controller, "on_queue_clear_v2", None)
-            if callable(method):
-                method()
+            self.controller.on_queue_clear_v2()
 
     def _select_index(self, index: int) -> None:
         """Select a specific index in the listbox."""
@@ -405,31 +397,21 @@ class QueuePanelV2(ttk.Frame):
     # Queue control callbacks (PR-GUI-F1: moved from PipelineRunControlsV2)
     # ------------------------------------------------------------------
 
-    def _invoke_controller(self, method_name: str, *args: Any) -> Any:
-        """Safely invoke a controller method."""
-        controller = self.controller
-        if not controller:
-            return None
-        method = getattr(controller, method_name, None)
-        if callable(method):
-            try:
-                return method(*args)
-            except Exception:
-                pass
-        return None
-
     def _on_auto_run_changed(self) -> None:
         """Handle auto-run checkbox change."""
         enabled = self.auto_run_var.get()
         self._auto_run_enabled = enabled
-        self._invoke_controller("on_set_auto_run_v2", enabled)
+        if self.controller:
+            self.controller.on_set_auto_run_v2(enabled)
 
     def _on_pause_resume(self) -> None:
         """Toggle queue pause state."""
         if self._is_queue_paused:
-            self._invoke_controller("on_resume_queue_v2")
+            if self.controller:
+                self.controller.on_resume_queue_v2()
         else:
-            self._invoke_controller("on_pause_queue_v2")
+            if self.controller:
+                self.controller.on_pause_queue_v2()
 
     def _on_send_job(self) -> None:
         """Handle Send Job button click.
@@ -437,7 +419,8 @@ class QueuePanelV2(ttk.Frame):
         PR-GUI-F3: Dispatches the top job from the queue immediately.
         Respects pause state (JobService handles this).
         """
-        self._invoke_controller("on_queue_send_job_v2")
+        if self.controller:
+            self.controller.on_queue_send_job_v2()
 
     def _update_queue_status_display(
         self, is_paused: bool, running_job: Any | None, queue_count: int

@@ -121,10 +121,9 @@ def test_njr_backed_job_uses_njr_execution_path(tmp_path: Path) -> None:
     
     # Create job with NJR
     njr = _make_dummy_record()
-    job = Job(job_id="njr-test-1", priority=None, pipeline_config=None)
+    job = Job(job_id="njr-test-1", priority=None)
     job._normalized_record = njr
-    job.pipeline_config = None  # No fallback needed
-    
+
     # Mock pipeline_controller._run_job to verify it's called
     controller.pipeline_controller._run_job = lambda j: {"status": "ok", "mode": "njr"}
     
@@ -145,7 +144,7 @@ def test_legacy_job_without_njr_uses_pipeline_config_path(tmp_path: Path) -> Non
     
     # Create legacy job with only pipeline_config
     from src.pipeline.pipeline_runner import PipelineConfig
-    job = Job(job_id="legacy-test-1", priority=None, pipeline_config=None)
+    job = Job(job_id="legacy-test-1", priority=None)
     job.pipeline_config = PipelineConfig(
         prompt="test",
         model="sdxl",
@@ -174,9 +173,8 @@ def test_njr_job_failure_returns_error_no_fallback_b2(tmp_path: Path) -> None:
     
     # Create job with NJR
     njr = _make_dummy_record()
-    job = Job(job_id="njr-test-fail", priority=None, pipeline_config=None)
+    job = Job(job_id="njr-test-fail", priority=None)
     job._normalized_record = njr
-    job.pipeline_config = None  # Should not be used as fallback
     
     # Mock pipeline_controller._run_job to raise exception
     def failing_run_job(j):
@@ -211,7 +209,7 @@ def test_queue_jobs_have_normalized_record_b2(tmp_path: Path) -> None:
     assert queue_job._normalized_record is not None
     assert queue_job._normalized_record == njr
     assert queue_job.job_id == njr.job_id
-    assert queue_job.pipeline_config is None
+    assert getattr(queue_job, "pipeline_config", None) is None
 
 
 def test_legacy_pipeline_config_job_uses_adapter_and_run_njr(monkeypatch: Any) -> None:

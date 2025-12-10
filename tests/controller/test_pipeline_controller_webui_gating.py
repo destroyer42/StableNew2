@@ -2,20 +2,10 @@ from unittest import mock
 
 from src.controller.pipeline_controller import PipelineController
 from src.controller.webui_connection_controller import WebUIConnectionState
-from src.gui.state import StateManager, GUIState
-
-
-class FakeStateManager(StateManager):
-    def __init__(self):
-        super().__init__(initial_state=GUIState.IDLE)
-
-    def can_run(self):
-        return True
 
 
 def test_run_blocked_when_webui_not_ready(monkeypatch):
-    state_mgr = FakeStateManager()
-    controller = PipelineController(state_mgr)
+    controller = PipelineController()
     controller._webui_connection = mock.Mock()
     controller._webui_connection.ensure_connected.return_value = WebUIConnectionState.ERROR
     controller._build_pipeline_config_from_state = mock.Mock()
@@ -27,8 +17,7 @@ def test_run_blocked_when_webui_not_ready(monkeypatch):
 
 
 def test_run_allowed_when_webui_ready(monkeypatch):
-    state_mgr = FakeStateManager()
-    controller = PipelineController(state_mgr)
+    controller = PipelineController()
     controller._webui_connection = mock.Mock()
     controller._webui_connection.ensure_connected.return_value = WebUIConnectionState.READY
     controller._build_pipeline_config_from_state = mock.Mock(return_value=mock.Mock())

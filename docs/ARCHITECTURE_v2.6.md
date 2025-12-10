@@ -15,7 +15,7 @@ V1 pipeline paths
 
 GUI prompt-entry–based jobs
 
-Legacy JobBundle-based flows
+Legacy JobBundle-based flows (retired; AppStateV2.job_draft is the canonical draft state, and JobBuilderV2 produces all NJRs)
 
 Legacy StateManager usage
 
@@ -137,6 +137,11 @@ app_state.job_draft
 3.3 StateManager and legacy V1 state systems are forbidden
 
 All usage must be removed.
+
+3.4 Controller Event API (PR-CORE1-C4A)
+
+Controllers expose a fixed set of entrypoints that the GUI binds to. AppController now implements `on_run_now`, `on_add_to_queue`, `on_clear_draft`, `on_add_to_job`, and `on_update_preview`; PipelineController exposes `start_pipeline`, `enqueue_draft_jobs`, `build_preview_summary`, `add_packs_to_draft`, `remove_pack_from_draft`, and `clear_draft`. These methods call into AppStateV2 and PipelineController without guessing handler names or using reflection (`getattr`, `_invoke_controller`, etc.). Any new controller requirements must be wired through this explicit API, not via string-based dispatch or dynamically injected attributes.
+GUI components must call these typed controller entrypoints directly; string-based dispatch has been retired in PR-CORE1-C4B and will not be reintroduced.
 
 4. Builder Pipeline Architecture (Canonical)
 
@@ -407,6 +412,7 @@ AppController._execute_job
   → if normalized_record present → PipelineController._run_job → PipelineRunner.run_njr
   → on failure → return error status (NO fallback to pipeline_config)
 ```
+This Job object no longer exposes a `pipeline_config` field; `_normalized_record` is the only execution payload carried between subsystems.
 
 **For legacy jobs (pre-v2.6 or imported):**
 ```
@@ -415,18 +421,22 @@ AppController._execute_job
   → _run_pipeline_via_runner_only(pipeline_config) → PipelineRunner.run_njr(legacy NJR adapter)
 ```
 
+**Controller Chain (PR-CORE1-C5):**
+- PipelineController → JobExecutionController → JobQueue / SingleNodeJobRunner is the single queue execution path now.
+- QueueExecutionController has been removed; PipelineController calls JobExecutionController directly for submission, status observation, and cancellation.
+
 **PR-CORE1-B2 Changes:**
 
 - **NJR is the SOLE execution payload for all new jobs created in v2.6**
 - If a job has `_normalized_record`, execution uses NJR path ONLY
 - If NJR execution fails, the job is marked as failed (no pipeline_config fallback)
-- `pipeline_config` field may still exist for debugging/inspection but is NOT used for execution
-- `pipeline_config` branch is LEGACY-ONLY for old jobs without NJR
+- The queue `Job` model no longer defines `pipeline_config`; new jobs never expose or persist this field (PR-CORE1-C2).
+- Any remaining `pipeline_config` payloads live in legacy history entries and are rehydrated via `legacy_njr_adapter.build_njr_from_legacy_pipeline_config()`.
 
 **PR-CORE1-B3 Changes:**
 
-- `pipeline_config` is explicitly set to `None` when `PipelineController._to_queue_job()` builds jobs. NJRs drive the queue, runner, and history DTOs.
-- Queue/JobService/History treat `pipeline_config` as legacy metadata; only imported pre-v2.6 jobs may still store a non-null value.
+- The queue `Job` model no longer exposes `pipeline_config`; `PipelineController._to_queue_job()` instantiates NJR-only jobs without storing pipeline_config.
+- Queue/JobService/History treat `pipeline_config` as legacy metadata; only imported pre-v2.6 jobs may still store a non-null value via manual assignment.
 - **PR-CORE1-B4 Changes:**
 - PipelineRunner no longer offers a public `run(config)` entrypoint; `run_njr(record, cancel_token)` is the sole execution API.
 - Legacy `PipelineConfig` executions pass through `legacy_njr_adapter.build_njr_from_legacy_pipeline_config()` and then run through `run_njr`, ensuring the runner core only sees NJRs.
@@ -436,12 +446,10 @@ AppController._execute_job
 - ✅ NJR is canonical for preview/queue/history display (PR-CORE1-A3)
 - ✅ JobBuilderV2 is the only job builder
 - ✅ Display DTOs never introspect pipeline_config (use NJR snapshots)
-- ✅ **NJR is the ONLY execution path for new jobs (PR-CORE1-B2)**
-- ✅ Jobs created via queue pipeline have `_normalized_record` attached
-- ✅ NJR execution failures return error status (no silent fallback)
-- ⏳ pipeline_config field still exists as legacy debug field
-- ❌ Do NOT use pipeline_config for execution of NJR-backed jobs
-- ❌ pipeline_config is None for every new NJR-backed job (PR-CORE1-B3)
+- ?o. NJR is the ONLY execution path for new jobs (PR-CORE1-B2)
+- ?o. Jobs created via queue pipeline have `_normalized_record` attached
+- ?o. NJR execution failures return error status (no silent fallback)
+- ??O `pipeline_config` is removed from queue `Job` instances (PR-CORE1-C2); NJR snapshots are the only executable payloads.
 
 **Legacy Support:**
 
@@ -559,11 +567,11 @@ Any job created outside the builder pipeline
 
 pipeline_config or legacy config union models
 
-Legacy JobBundle or enqueue_draft_bundle_legacy
+Legacy draft-bundle flow (enqueue_draft_bundle_legacy, controller-owned draft bundles) has been retired; AppStateV2.job_draft is now the only draft state, and JobBuilderV2 builds the NJRs that flow through the queue.
 
-Controller-owned _draft_bundle
+Controller-managed draft bundles no longer exist; AppState job_draft plus pipeline controller refreshes drive previews and queue submissions.
 
-StateManager usage
+StateManager usage is restricted to the GUI layer and must not bleed into controllers or shared subsystems.
 
 DTOs representing job summaries outside NJR/UJS
 

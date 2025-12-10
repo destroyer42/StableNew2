@@ -88,7 +88,7 @@ def test_normalized_job_record_generates_summary() -> None:
 
 
 def test_unified_summary_can_build_from_job() -> None:
-    job = Job(job_id="job-999", pipeline_config=None)
+    job = Job(job_id="job-999")
     job.config_snapshot = {"prompt": "fallback", "model": "default-model"}
 
     summary = UnifiedJobSummary.from_job(job, JobStatusV2.RUNNING)

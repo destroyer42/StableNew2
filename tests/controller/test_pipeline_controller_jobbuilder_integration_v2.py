@@ -42,21 +42,6 @@ class FakeConfig:
     seed: int = 12345
 
 
-class FakeStateManager:
-    """Fake state manager for testing."""
-
-    def __init__(self) -> None:
-        self.current_state = "idle"
-        self._can_run = True
-        self.batch_runs = 1
-
-    def can_run(self) -> bool:
-        return self._can_run
-
-    def transition_to(self, state: Any) -> None:
-        self.current_state = state
-
-
 class FakeJobBuilder:
     """Fake JobBuilderV2 that records calls and returns deterministic results."""
 
@@ -71,7 +56,9 @@ class FakeJobBuilder:
         randomization_plan: Any = None,
         batch_settings: Any = None,
         output_settings: Any = None,
+        config_variant_plan: Any = None,
         rng_seed: int | None = None,
+        **kwargs: Any,
     ) -> list[NormalizedJobRecord]:
         """Record call and return predetermined jobs."""
         self.calls.append({
@@ -79,6 +66,7 @@ class FakeJobBuilder:
             "randomization_plan": randomization_plan,
             "batch_settings": batch_settings,
             "output_settings": output_settings,
+            "config_variant_plan": config_variant_plan,
             "rng_seed": rng_seed,
         })
         return list(self._jobs_to_return)
@@ -107,9 +95,18 @@ def _start_pipeline_with_pack(controller: PipelineController, **kwargs: Any) -> 
     controller._last_run_config = {"prompt_pack_id": "test-pack-123"}
     return controller.start_pipeline_v2(**kwargs)
 
-    def get_state(self) -> Any:
-        from src.controller.webui_connection_controller import WebUIConnectionState
-        return WebUIConnectionState.READY
+def _prepare_controller(
+    fake_builder: FakeJobBuilder,
+    fake_service: FakeJobService,
+    config_assembler: FakeConfigAssembler | None = None,
+) -> PipelineController:
+    controller = PipelineController(
+        job_builder=fake_builder,
+        config_assembler=config_assembler or FakeConfigAssembler(),
+    )
+    controller._job_service = fake_service
+    controller._webui_connection = FakeWebUIConnection()
+    return controller
 
 
 class FakeJobController:
@@ -213,11 +210,6 @@ def make_normalized_job(
 
 
 @pytest.fixture
-def fake_state_manager() -> FakeStateManager:
-    return FakeStateManager()
-
-
-@pytest.fixture
 def fake_job_service() -> FakeJobService:
     return FakeJobService()
 
@@ -230,22 +222,14 @@ def fake_job_service() -> FakeJobService:
 class TestSingleJobQueueMode:
     """Test single job submission in queue mode."""
 
-    def test_single_job_submitted_to_job_service(
-        self, fake_state_manager: FakeStateManager
-    ) -> None:
+    def test_single_job_submitted_to_job_service(self) -> None:
         """Single job from builder is submitted via JobService."""
         # Arrange
         record = make_normalized_job(job_id="test-job-1")
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         # Act
         result = _start_pipeline_with_pack(controller, run_mode="queue")
@@ -257,9 +241,7 @@ class TestSingleJobQueueMode:
         assert mode == "queue"
         assert submitted_job.job_id == "test-job-1"
 
-    def test_builder_called_with_correct_config(
-        self, fake_state_manager: FakeStateManager
-    ) -> None:
+    def test_builder_called_with_correct_config(self) -> None:
         """JobBuilderV2 is called with the assembled config."""
         # Arrange
         record = make_normalized_job()
@@ -267,13 +249,11 @@ class TestSingleJobQueueMode:
         fake_config = FakeConfig(model="specific_model")
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
+        controller = _prepare_controller(
+            fake_builder,
+            fake_service,
             config_assembler=FakeConfigAssembler(config=fake_config),
         )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
 
         # Act
         _start_pipeline_with_pack(controller, run_mode="queue")
@@ -293,7 +273,7 @@ class TestMultipleJobSubmission:
     """Test multiple job submission."""
 
     def test_multiple_jobs_all_submitted(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """Multiple jobs from builder are all submitted."""
         # Arrange
@@ -305,13 +285,7 @@ class TestMultipleJobSubmission:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         # Act
         result = _start_pipeline_with_pack(controller, run_mode="queue")
@@ -323,7 +297,7 @@ class TestMultipleJobSubmission:
         assert submitted_ids == ["job-1", "job-2", "job-3"]
 
     def test_variant_metadata_preserved(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """Variant index and total are preserved in submitted jobs."""
         # Arrange
@@ -334,13 +308,7 @@ class TestMultipleJobSubmission:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         # Act
         _start_pipeline_with_pack(controller, run_mode="queue")
@@ -362,7 +330,7 @@ class TestDirectMode:
     """Test direct mode submission."""
 
     def test_direct_mode_sets_run_mode(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """Direct mode sets run_mode='direct' on jobs."""
         # Arrange
@@ -370,13 +338,7 @@ class TestDirectMode:
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         # Act
         result = _start_pipeline_with_pack(controller, run_mode="direct")
@@ -398,20 +360,14 @@ class TestEmptyBuilderOutput:
     """Test behavior when builder returns no jobs."""
 
     def test_empty_jobs_returns_false(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """Returns False when builder produces no jobs."""
         # Arrange
         fake_builder = FakeJobBuilder(jobs_to_return=[])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         # Act
         result = _start_pipeline_with_pack(controller)
@@ -421,14 +377,13 @@ class TestEmptyBuilderOutput:
         assert len(fake_service.submitted_jobs) == 0
 
     def test_no_crash_on_empty_output(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """No exception when builder returns empty list."""
         # Arrange
         fake_builder = FakeJobBuilder(jobs_to_return=[])
 
         controller = PipelineController(
-            state_manager=fake_state_manager,
             job_builder=fake_builder,
             config_assembler=FakeConfigAssembler(),
         )
@@ -448,7 +403,7 @@ class TestMetadataPreservation:
     """Test that job metadata is preserved through conversion."""
 
     def test_config_snapshot_contains_job_fields(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """Config snapshot includes all expected fields."""
         # Arrange
@@ -458,16 +413,11 @@ class TestMetadataPreservation:
             variant_index=2,
             variant_total=5,
         )
+        record.prompt_pack_id = "test-pack-123"
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         # Act
         _start_pipeline_with_pack(controller)
@@ -484,7 +434,7 @@ class TestMetadataPreservation:
         assert snapshot["prompt_pack_id"] == "test-pack-123"
 
     def test_source_and_prompt_source_preserved(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """Source and prompt_source are set on job."""
         # Arrange
@@ -492,13 +442,7 @@ class TestMetadataPreservation:
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         # Act
         _start_pipeline_with_pack(
@@ -524,19 +468,15 @@ class TestCannotRunState:
     """Test behavior when state manager reports cannot run."""
 
     def test_cannot_run_returns_false(
-        self, fake_state_manager: FakeStateManager
+        self
     ) -> None:
         """Returns False when state_manager.can_run() is False."""
         # Arrange
-        fake_state_manager._can_run = False
         fake_builder = FakeJobBuilder(jobs_to_return=[make_normalized_job()])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
+        controller = _prepare_controller(fake_builder, fake_service)
+        controller.state_manager.can_run = lambda: False
         controller._job_service = fake_service
 
         # Act

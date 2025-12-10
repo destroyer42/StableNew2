@@ -51,7 +51,7 @@ def _make_job_service(store: FakeHistoryStore) -> JobService:
 def test_job_service_records_completion() -> None:
     store = FakeHistoryStore()
     service = _make_job_service(store)
-    job = Job(job_id="done", pipeline_config=None, priority=JobPriority.NORMAL)
+    job = Job(job_id="done", priority=JobPriority.NORMAL)
     job.result = {"mode": "test"}
     service._handle_job_status_change(job, JobStatus.COMPLETED)
 
@@ -65,7 +65,7 @@ def test_job_service_records_completion() -> None:
 def test_job_service_records_failure() -> None:
     store = FakeHistoryStore()
     service = _make_job_service(store)
-    job = Job(job_id="fail", pipeline_config=None, priority=JobPriority.NORMAL)
+    job = Job(job_id="fail", priority=JobPriority.NORMAL)
     job.error_message = "boom"
     service._handle_job_status_change(job, JobStatus.FAILED)
 

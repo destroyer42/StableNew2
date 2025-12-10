@@ -1,80 +1,65 @@
-from src.controller.webui_connection_controller import WebUIConnectionState
 from types import SimpleNamespace
-from unittest import mock
 
+# Need WebUIConnectionState for stubbing the ensure_connected result
 import pytest
 
 from src.controller.pipeline_controller import PipelineController
+from src.controller.webui_connection_controller import WebUIConnectionState
 from src.queue.job_model import JobStatus
-from src.gui.state import StateManager, GUIState
 
 
-class FakeQueueExecutionController:
-    def __init__(self):
+class FakeJobExecutionController:
+    def __init__(self) -> None:
         self.submitted = []
         self.cancelled = []
-        self.callback = None
+        self.callbacks: dict[str, callable] = {}
 
-    def submit_pipeline_job(self, payload):
+    def submit_pipeline_run(self, payload_callable):
         job_id = f"job-{len(self.submitted)+1}"
-        self.submitted.append(payload)
+        self.submitted.append(payload_callable)
         return job_id
 
-    def cancel_job(self, job_id: str):
+    def cancel_job(self, job_id: str) -> None:
         self.cancelled.append(job_id)
 
-    def observe(self, key, callback):
-        self.callback = callback
-
-    register_status_callback = observe
+    def set_status_callback(self, key: str, callback: callable) -> None:
+        self.callbacks[key] = callback
 
 
-def test_queue_mode_disabled_uses_direct(monkeypatch):
-    monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: False)
+def _setup_controller(monkeypatch, queue_enabled: bool) -> tuple[PipelineController, FakeJobExecutionController]:
+    fake_job_ctrl = FakeJobExecutionController()
+    monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: queue_enabled)
     controller = PipelineController()
+    controller._job_controller = fake_job_ctrl
+    controller._job_controller.set_status_callback("pipeline_ctrl", controller._on_queue_status)
+    controller._job_controller.set_status_callback("pipeline", controller._on_job_status)
+    controller._queue_execution_enabled = queue_enabled
     controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
-    controller._queue_execution_enabled = False
-    controller._queue_execution_controller = mock.Mock()
-    controller._job_controller.submit_pipeline_run = mock.Mock(return_value="direct-job")
-
-    called = controller.start_pipeline(lambda: {"result": 1})
-    assert called is True
-    controller._job_controller.submit_pipeline_run.assert_called_once()
-    controller._queue_execution_controller.submit_pipeline_job.assert_not_called()
+    return controller, fake_job_ctrl
 
 
-def test_queue_mode_enabled_submits_and_handles_callbacks(monkeypatch):
-    monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: True)
-    queue_ctrl = FakeQueueExecutionController()
-    sm = StateManager()
-    controller = PipelineController(queue_execution_controller=queue_ctrl)
-    controller.state_manager = sm
-    controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
-    controller._queue_execution_enabled = True
-
+def test_queue_mode_disabled_still_uses_job_controller(monkeypatch):
+    controller, fake = _setup_controller(monkeypatch, queue_enabled=False)
     started = controller.start_pipeline(lambda: {"ok": True})
+    assert started is True
+    assert fake.submitted, "JobExecutionController should be used even when queue mode is disabled"
+
+
+def test_queue_mode_enabled_submits_and_handles_status(monkeypatch):
+    controller, fake = _setup_controller(monkeypatch, queue_enabled=True)
+    started = controller.start_pipeline(lambda: {"ok": False})
     assert started is True
     assert controller._active_job_id == "job-1"
 
-    job = SimpleNamespace(job_id="job-1")
-    queue_ctrl.callback(job, JobStatus.QUEUED)
-    assert sm.is_state(GUIState.RUNNING)
-
-    queue_ctrl.callback(job, JobStatus.RUNNING)
-    assert sm.is_state(GUIState.RUNNING)
-
-    queue_ctrl.callback(job, JobStatus.COMPLETED)
-    assert sm.is_state(GUIState.IDLE)
+    Job = SimpleNamespace(job_id="job-1")
+    fake.callbacks["pipeline_ctrl"](Job, JobStatus.QUEUED)
+    fake.callbacks["pipeline_ctrl"](Job, JobStatus.RUNNING)
+    fake.callbacks["pipeline_ctrl"](Job, JobStatus.COMPLETED)
     assert controller._active_job_id is None
 
 
-def test_queue_mode_cancel(monkeypatch):
-    monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: True)
-    queue_ctrl = FakeQueueExecutionController()
-    controller = PipelineController(queue_execution_controller=queue_ctrl)
-    controller.state_manager = StateManager()
-    controller._queue_execution_enabled = True
-    controller._active_job_id = "job-xyz"
-
+def test_stop_pipeline_delegates_to_job_controller(monkeypatch):
+    controller, fake = _setup_controller(monkeypatch, queue_enabled=True)
+    controller._active_job_id = "job-42"
     controller.stop_pipeline()
-    assert queue_ctrl.cancelled == ["job-xyz"]
+    assert fake.cancelled == ["job-42"]

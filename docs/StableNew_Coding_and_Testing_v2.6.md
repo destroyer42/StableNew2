@@ -376,7 +376,7 @@ Any reference to “manual prompt mode”
 
 Before removal, tests must be updated.
 
-Controller-focused tests must construct controllers without injecting `StateManager`/`GUIState`; GUI state machinery belongs in `tests/gui`.
+Controller-focused tests must construct controllers without injecting `StateManager`/`GUIState`; GUI state machinery belongs in `tests/gui` (see `tests/gui/test_state_manager_legacy.py` for the legacy coverage removed from controller specs). These tests must also avoid JobBundle/JobBundleSummaryDTO assertions—coverage should rely on AppStateV2.job_draft + `NormalizedJobRecord` outputs instead of legacy bundles.
 
 5. Controller Integration Rules
 
@@ -394,13 +394,15 @@ must accept only canonical DTOs
 
 Controller responsibilities:
 
-capture UI state
-
-build config variant plans
-
-pass context to builder
-
-enqueue NJRs
+  capture UI state
+ 
+  build config variant plans
+ 
+  pass context to builder
+  
+  rely on AppStateV2.job_draft + JobBuilderV2; do not maintain `_draft_bundle` or JobBundle state in controllers.
+ 
+  enqueue NJRs
 
 Controllers do not:
 
@@ -413,7 +415,15 @@ build pipeline configs
 merge dictionaries
 
 create stage chains
-- depend on `src/gui.state.StateManager` or `GUIState`
+- depend on `src/gui.state.StateManager` or `GUIState`; controller tests must use AppStateV2-only fixtures, and GUI state coverage exists in `tests/gui/test_state_manager_legacy.py`
+
+### Controller Event API (PR-CORE1-C4A)
+
+Controller tests must interact with controllers via their explicit event methods (`on_run_now`, `on_add_to_queue`, `on_clear_draft`, `on_update_preview`, etc.) rather than probing for optional handler names with `getattr`/`hasattr`. Dynamic attribute injection and string-based dispatch are forbidden in both implementation and tests, so the tests focus on AppStateV2 + NJR outcomes instead of legacy reflection.
+
+GUI tests must assert that UI actions call these explicit controller hooks; reflection-based wiring or `_invoke_controller` helpers are no longer used.
+
+Controllers also must consume `JobExecutionController` directly for queue execution; introducing façade layers such as a `QueueExecutionController` that merely proxies into `JobExecutionController` is forbidden (PR-CORE1-C5 collapsed that chain).
 
 ### 5.1 **NJR-Only Execution Invariants** (PR-CORE1-B2)
 
@@ -423,7 +433,7 @@ New rules for queue execution path after B2:
 
 **REQUIRED:** If a Job has `normalized_record`, the queue execution path MUST use `run_njr` via `_run_job`.
 
-**FORBIDDEN:** Controllers, JobService, and Queue/Runner MUST NOT rely on `pipeline_config` for any job that has a `normalized_record`.
+**FORBIDDEN:** Controllers, JobService, and Queue/Runner MUST NOT reference `pipeline_config` on `Job` instances; the field no longer exists in the queue model (PR-CORE1-C2).
 
 **FORBIDDEN:** If NJR execution fails for an NJR-backed job, the execution path MUST NOT fall back to `pipeline_config`. The job should be marked as failed.
 
@@ -435,7 +445,7 @@ AppController._execute_job MUST check for `_normalized_record` FIRST. If present
 
 All jobs created via `PipelineController._to_queue_job` MUST have `_normalized_record` attached.
 
-`pipeline_config` field is set to `None` for all v2.6 jobs created via JobBuilderV2; non-null values are only tolerated for legacy jobs imported before v2.6. Execution MUST NOT rely on it. PR-CORE1-B3 enforces this invariant across the controller, JobService, and queue layers by clearing `pipeline_config` as part of `_to_queue_job()`.
+`pipeline_config` field no longer exists on Job objects created via JobBuilderV2; new jobs rely solely on NJR snapshots (PR-CORE1-C2). Legacy pipeline_config data lives only in history entries and is rehydrated via `legacy_njr_adapter.build_njr_from_legacy_pipeline_config()`.
 
 **PR-CORE1-B4:** `PipelineRunner.run(config)` no longer exists. Tests (both unit and integration) must exercise `run_njr()` exclusively and may rely on the legacy adapter if they need to replay pipeline_config-only data.
 
@@ -446,6 +456,7 @@ All golden-path E2E tests MUST assert NJR execution is used for new queue jobs.
 Tests MUST verify that `_run_job` is called when `_normalized_record` is present.
 
 Tests MUST verify that NJR execution failures result in job error status (NO fallback to pipeline_config).
+Tests MUST verify that new queue jobs do not expose a `pipeline_config` field (PR-CORE1-C2); any legacy coverage should work through history data only.
 
 Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
 

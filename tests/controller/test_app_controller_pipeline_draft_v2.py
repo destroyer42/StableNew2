@@ -7,49 +7,48 @@ from src.controller.app_controller import AppController
 
 class _DummyPipelineController:
     def __init__(self) -> None:
-        self.calls: list[str] = []
+        self.refresh_calls = 0
 
-    def add_single_prompt_to_draft(self) -> None:
-        self.calls.append("add")
+    def refresh_preview_from_state(self) -> None:
+        self.refresh_calls += 1
 
-    def clear_draft_job_bundle(self) -> None:
-        self.calls.append("clear")
 
-    def enqueue_draft_bundle(self) -> int:
-        self.calls.append("enqueue")
-        return 2
+class _DummyAppState:
+    def __init__(self) -> None:
+        self.prompt = "test prompt"
+        self.negative_prompt = "test negative"
+        self.parts: list[tuple[str, str, int]] = []
+
+    def add_job_draft_part(self, positive: str, negative: str, estimated_images: int = 1) -> None:
+        self.parts.append((positive, negative, estimated_images))
 
 
 class _AppControllerStub(AppController):
-    """Lightweight stub that avoids running the real __init__."""
+    def __init__(self, pipeline_controller: Any, app_state: Any) -> None:
+        self.pipeline_controller = pipeline_controller
+        self.app_state = app_state
+        self._logged: list[str] = []
 
-    def __init__(self) -> None:
-        # Skip AppController.__init__ by not calling super().__init__
-        self.pipeline_controller = None  # type: ignore[assignment]
-        self.app_state = None  # type: ignore[assignment]
-
-
-def _make_controller() -> AppController:
-    ctrl = _AppControllerStub.__new__(_AppControllerStub)
-    ctrl.pipeline_controller = _DummyPipelineController()
-    ctrl.app_state = None  # type: ignore[assignment]
-    return ctrl
+    def _append_log(self, message: str) -> None:
+        self._logged.append(message)
 
 
-def test_add_single_prompt_to_draft_forwards_to_pipeline_controller() -> None:
+def _make_controller() -> _AppControllerStub:
+    pipeline_ctrl = _DummyPipelineController()
+    app_state = _DummyAppState()
+    return _AppControllerStub(pipeline_controller=pipeline_ctrl, app_state=app_state)
+
+
+def test_add_single_prompt_to_draft_records_part_and_refreshes_preview() -> None:
     ctrl = _make_controller()
     ctrl.add_single_prompt_to_draft()
-    assert ctrl.pipeline_controller.calls == ["add"]
+    assert ctrl.app_state.parts == [("test prompt", "test negative", 1)]
+    assert ctrl.pipeline_controller.refresh_calls == 1
 
 
-def test_clear_draft_job_bundle_forwards_to_pipeline_controller() -> None:
+def test_add_single_prompt_to_draft_skips_empty_prompt() -> None:
     ctrl = _make_controller()
-    ctrl.clear_draft_job_bundle()
-    assert ctrl.pipeline_controller.calls == ["clear"]
-
-
-def test_enqueue_draft_bundle_returns_pipeline_result() -> None:
-    ctrl = _make_controller()
-    result = ctrl.enqueue_draft_bundle()
-    assert result == 2
-    assert ctrl.pipeline_controller.calls == ["enqueue"]
+    ctrl.app_state.prompt = ""
+    ctrl.add_single_prompt_to_draft()
+    assert ctrl.app_state.parts == []
+    assert ctrl.pipeline_controller.refresh_calls == 0

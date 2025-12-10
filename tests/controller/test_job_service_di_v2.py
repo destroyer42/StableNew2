@@ -66,7 +66,6 @@ class TestStubRunnerDI:
         runner = StubRunner(queue)
         job = Job(
             job_id="test-stub-1",
-            pipeline_config=None,
             priority=JobPriority.NORMAL,
         )
 
@@ -103,7 +102,6 @@ class TestNullHistoryServiceDI:
         history = NullHistoryService()
         job = Job(
             job_id="test-null-1",
-            pipeline_config=None,
             priority=JobPriority.NORMAL,
         )
 
@@ -115,7 +113,6 @@ class TestNullHistoryServiceDI:
         history = NullHistoryService()
         job = Job(
             job_id="test-null-2",
-            pipeline_config=None,
             priority=JobPriority.NORMAL,
         )
 
@@ -220,7 +217,6 @@ class TestHistoryRecordingViaJobService:
 
         job = Job(
             job_id="track-1",
-            pipeline_config=None,
             priority=JobPriority.NORMAL,
         )
         job.result = {"images": ["test.png"]}
@@ -249,7 +245,6 @@ class TestHistoryRecordingViaJobService:
 
         job = Job(
             job_id="track-2",
-            pipeline_config=None,
             priority=JobPriority.NORMAL,
         )
         job.error_message = "test failure"

@@ -83,7 +83,7 @@ def test_on_add_job_to_queue_enqueues_and_updates_state() -> None:
     assert fake_service.enqueue_calls == 1
     assert fake_service.last_job is not None
 
-    job = Job(job_id="job-alpha", pipeline_config=None)
+    job = Job(job_id="job-alpha")
     job.status = JobStatus.QUEUED
     fake_service.set_jobs([job])
     fake_service.emit(FakeJobService.EVENT_QUEUE_UPDATED, ["job-summary"])

@@ -42,22 +42,6 @@ class FakeConfig:
     seed: int = 12345
 
 
-class FakeStateManager:
-    """Fake state manager for testing."""
-
-    def __init__(self) -> None:
-        self.current_state = "idle"
-        self._can_run = True
-        self.batch_runs = 1
-        self.pipeline_state = FakePipelineState()
-
-    def can_run(self) -> bool:
-        return self._can_run
-
-    def transition_to(self, state: Any) -> None:
-        self.current_state = state
-
-
 class FakePipelineState:
     """Fake pipeline state with run_mode."""
 
@@ -105,10 +89,25 @@ def _start_pipeline_with_pack(controller: PipelineController, **kwargs: Any) -> 
     return controller.start_pipeline_v2(**kwargs)
 
 
-def _with_fake_state_manager(
-    controller: PipelineController, state_manager: FakeStateManager
+def _attach_pipeline_state(
+    controller: PipelineController, state: FakePipelineState | None = None
+) -> FakePipelineState:
+    if state is None:
+        state = FakePipelineState()
+    controller.gui_get_pipeline_state = lambda: state
+    return state
+
+
+def _prepare_controller(
+    fake_builder: FakeJobBuilder, fake_service: FakeJobService
 ) -> PipelineController:
-    controller.state_manager = state_manager
+    controller = PipelineController(
+        job_builder=fake_builder,
+        config_assembler=FakeConfigAssembler(),
+    )
+    controller._job_service = fake_service
+    controller._webui_connection = FakeWebUIConnection()
+    _attach_pipeline_state(controller)
     return controller
 
 
@@ -193,11 +192,6 @@ def make_normalized_job(
 
 
 @pytest.fixture
-def fake_state_manager() -> FakeStateManager:
-    return FakeStateManager()
-
-
-@pytest.fixture
 def fake_job_service() -> FakeJobService:
     return FakeJobService()
 
@@ -210,21 +204,13 @@ def fake_job_service() -> FakeJobService:
 class TestRunModeEnforcement:
     """Test that run mode is correctly applied to jobs."""
 
-    def test_explicit_direct_mode(self, fake_state_manager: FakeStateManager) -> None:
+    def test_explicit_direct_mode(self) -> None:
         """Explicit run_mode='direct' is respected."""
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         result = _start_pipeline_with_pack(controller, run_mode="direct")
 
@@ -233,21 +219,13 @@ class TestRunModeEnforcement:
         assert job.run_mode == "direct"
         assert mode == "direct"
 
-    def test_explicit_queue_mode(self, fake_state_manager: FakeStateManager) -> None:
+    def test_explicit_queue_mode(self) -> None:
         """Explicit run_mode='queue' is respected."""
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         result = _start_pipeline_with_pack(controller, run_mode="queue")
 
@@ -256,25 +234,15 @@ class TestRunModeEnforcement:
         assert job.run_mode == "queue"
         assert mode == "queue"
 
-    def test_default_uses_state_run_mode(
-        self, fake_state_manager: FakeStateManager
-    ) -> None:
+    def test_default_uses_state_run_mode(self) -> None:
         """When run_mode is None, uses pipeline_state.run_mode."""
-        fake_state_manager.pipeline_state.run_mode = "direct"
-
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
+        state = _attach_pipeline_state(controller)
+        state.run_mode = "direct"
 
         result = _start_pipeline_with_pack(controller)  # No explicit run_mode
 
@@ -282,26 +250,14 @@ class TestRunModeEnforcement:
         job, mode = fake_service.submitted_jobs[0]
         assert job.run_mode == "direct"
 
-    def test_default_queue_when_no_state(
-        self, fake_state_manager: FakeStateManager
-    ) -> None:
+    def test_default_queue_when_no_state(self) -> None:
         """Defaults to queue mode when pipeline_state is not available."""
-        # Remove pipeline_state
-        delattr(fake_state_manager, "pipeline_state")
-
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
+        controller.gui_get_pipeline_state = lambda: None
 
         result = _start_pipeline_with_pack(controller)
 
@@ -318,9 +274,7 @@ class TestRunModeEnforcement:
 class TestMultipleJobsSameRunMode:
     """Test that all jobs in a batch get the same run mode."""
 
-    def test_all_jobs_get_direct_mode(
-        self, fake_state_manager: FakeStateManager
-    ) -> None:
+    def test_all_jobs_get_direct_mode(self) -> None:
         """All jobs get direct mode when specified."""
         records = [
             make_normalized_job(job_id="j1"),
@@ -330,15 +284,7 @@ class TestMultipleJobsSameRunMode:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         _start_pipeline_with_pack(controller, run_mode="direct")
 
@@ -347,9 +293,7 @@ class TestMultipleJobsSameRunMode:
             assert job.run_mode == "direct"
             assert mode == "direct"
 
-    def test_all_jobs_get_queue_mode(
-        self, fake_state_manager: FakeStateManager
-    ) -> None:
+    def test_all_jobs_get_queue_mode(self) -> None:
         """All jobs get queue mode when specified."""
         records = [
             make_normalized_job(job_id="q1"),
@@ -358,15 +302,7 @@ class TestMultipleJobsSameRunMode:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         _start_pipeline_with_pack(controller, run_mode="queue")
 
@@ -384,21 +320,13 @@ class TestMultipleJobsSameRunMode:
 class TestJobPayloadAttachment:
     """Test that jobs have execution payloads attached."""
 
-    def test_job_has_payload(self, fake_state_manager: FakeStateManager) -> None:
+    def test_job_has_payload(self) -> None:
         """Submitted jobs have callable payload attached."""
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         _start_pipeline_with_pack(controller)
 
@@ -415,9 +343,7 @@ class TestJobPayloadAttachment:
 class TestJobServiceIntegration:
     """Test that JobService is used correctly."""
 
-    def test_submit_job_with_run_mode_called(
-        self, fake_state_manager: FakeStateManager
-    ) -> None:
+    def test_submit_job_with_run_mode_called(self) -> None:
         """submit_job_with_run_mode is called for each job."""
         records = [
             make_normalized_job(job_id="srv1"),
@@ -426,15 +352,7 @@ class TestJobServiceIntegration:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_service)
 
         _start_pipeline_with_pack(controller)
 
@@ -451,19 +369,11 @@ class TestPromptPackRequirement:
     """Verify that pipeline runs require a prompt pack."""
 
     def test_start_pipeline_without_pack_returns_false(
-        self, fake_state_manager: FakeStateManager, fake_job_service: FakeJobService
+        self, fake_job_service: FakeJobService
     ) -> None:
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        controller = _with_fake_state_manager(
-            PipelineController(
-                job_builder=fake_builder,
-                config_assembler=FakeConfigAssembler(),
-            ),
-            fake_state_manager,
-        )
-        controller._job_service = fake_job_service
-        controller._webui_connection = FakeWebUIConnection()
+        controller = _prepare_controller(fake_builder, fake_job_service)
         errors: list[Exception] = []
 
         result = controller.start_pipeline_v2(

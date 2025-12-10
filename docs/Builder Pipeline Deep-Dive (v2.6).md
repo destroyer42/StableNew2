@@ -352,26 +352,15 @@ Builder must not ask the runner for information.
 - All job construction goes through JobBuilderV2.build_jobs()
 - Produces immutable NJR instances with complete execution metadata
 
-**JobBundle / JobBundleBuilder Status:**
-- **Legacy but active** during CORE1-A/B phases
-- Used for:
-  - PipelineController draft job lifecycle (`_draft_bundle`)
-  - Preview panel display via JobBundleSummaryDTO
-  - Some end-to-end tests
-- **NOT scheduled for removal in PR-CORE1-A3**
-- Will be retired in **CORE1-D/CORE1-E** after full NJR-only migration
-
-**Why Both Exist:**
-- JobBuilderV2: New, canonical, NJR-producing builder
-- JobBundleBuilder: Transitional support for draft job features
-- Display layer fully migrated to NJR (PR-CORE1-A3)
-- Execution layer migration to NJR-only pending CORE1-B
+**Draft Flow Status:**
+- JobBundle / JobBundleBuilder have been retired; AppStateV2.job_draft is the canonical draft store and JobBuilderV2 is the only NJR producer.
+- Preview and queue panels consume normalized records (`JobUiSummary`, `UnifiedJobSummary`) so display data stays aligned with execution.
+- All draft mutations in controllers operate through AppState job_draft + JobBuilderV2; no controller-level `_draft_bundle` exists.
 
 **Rules:**
-- ✅ New features MUST use JobBuilderV2
-- ✅ Display DTOs MUST derive from NJR, not JobBundle
-- ⚠️ JobBundle remains valid for draft features until CORE1-D
-- ❌ Do NOT add new JobBundle-based execution paths
+- New work MUST target JobBuilderV2 and AppStateV2.job_draft instead of any JobBundle helper.
+- Display DTOs derive from normalized jobs rather than bundle summaries.
+- Do NOT add new JobBundle-based flows; they were retired in CORE1-C3B.
 
 ### 7.8 **NJR-Only Job Construction** (PR-CORE1-B3)
 

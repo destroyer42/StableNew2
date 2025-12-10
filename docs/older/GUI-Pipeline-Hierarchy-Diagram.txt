@@ -1,0 +1,77 @@
+
+Left
+PipelineTabFrame (ttk.Frame)
+├── left_column (ttk.Frame, style=SURFACE_FRAME_STYLE)
+│   ├── left_scroll (ScrollableFrame, style=CARD_FRAME_STYLE)
+│   │   └── left_inner (Frame)
+│   │       └── sidebar (SidebarPanelV2)
+│   │           ├── config_source_label (ttk.Label, style=BODY_LABEL_STYLE)
+│   │           ├── preset_card (_SidebarCard)
+│   │           │   └── [Preset combo, Actions menu button]
+│   │           ├── pack_selector_card (_SidebarCard, collapsible=True)
+│   │           │   └── [Load/Apply/Add buttons, Pack list combo, Listbox, Preview toggle, Global negative controls]
+│   │           ├── core_config_card (_SidebarCard, collapsible=True)
+│   │           │   └── core_config_panel (CoreConfigPanelV2)
+│   │           │       └── [Model/VAE/Sampler/Resolution controls]
+│   │           ├── pipeline_config_card (_SidebarCard)
+│   │           │   └── pipeline_config_panel (PipelineConfigPanel)
+│   │           │       └── [Pipeline-specific configuration controls]
+│   │           └── output_settings_card (_SidebarCard)
+│   │               └── [Output settings controls]
+│   └── restore_last_run_button (ttk.Button)
+
+
+Middle
+PipelineTabFrame (ttk.Frame)
+├── center_column (ttk.Frame, style=SURFACE_FRAME_STYLE)
+│   ├── stage_scroll (ScrollableFrame, style=CARD_FRAME_STYLE)
+│   │   └── stage_cards_frame (Frame)
+│   │       └── stage_cards_panel (StageCardsPanel)
+│   │           ├── txt2img_card (AdvancedTxt2ImgStageCardV2)
+│   │           │   ├── title_label (ttk.Label, style=HEADING_LABEL_STYLE)
+│   │           │   ├── body_frame (ttk.Frame, style=CARD_FRAME_STYLE)
+│   │           │   │   ├── sampler_section (Frame)
+│   │           │   │   │   └── [Sampler controls, Steps, CFG Scale]
+│   │           │   │   ├── meta_frame (Frame)
+│   │           │   │   │   └── [Seed controls, Batch size, Dimensions]
+│   │           │   │   └── [Additional txt2img-specific controls]
+│   │           │   └── validation_label (ttk.Label, style=MUTED_LABEL_STYLE)
+│   │           ├── img2img_card (AdvancedImg2ImgStageCardV2)
+│   │           ├── adetailer_card (ADetailerStageCardV2)
+│   │           └── upscale_card (AdvancedUpscaleStageCardV2)
+
+Right
+PipelineTabFrame (ttk.Frame)
+├── right_column (ttk.Frame, style=SURFACE_FRAME_STYLE)
+│   ├── run_controls (PipelineRunControlsV2)
+│   │   ├── title (ttk.Label, style=STATUS_STRONG_LABEL_STYLE)
+│   │   └── buttons_frame (ttk.Frame)
+│   │       ├── add_button (ttk.Button, "Add to Queue")
+│   │       ├── run_now_button (ttk.Button, "Run Now")
+│   │       └── clear_draft_button (ttk.Button, "Clear Draft")
+│   ├── preview_panel (PreviewPanelV2)
+│   │   ├── header_label (ttk.Label, "Preview")
+│   │   ├── _scroll (ScrollableFrame)
+│   │   │   └── body (ttk.Frame)
+│   │   │       ├── summary_label (ttk.Label, "Stages: -")
+│   │   │       ├── mode_label (ttk.Label, "Mode: -")
+│   │   │       ├── scope_label (ttk.Label, "Scope: -")
+│   │   │       ├── jobs_label (ttk.Label, "Jobs: -")
+│   │   │       ├── current_image_label (ttk.Label, "No image")
+│   │   │       ├── metadata_text (tk.Text)
+│   │   │       ├── queue_header (ttk.Label, "Queue")
+│   │   │       ├── queue_status_label (ttk.Label, "Queue Status: Idle")
+│   │   │       ├── queue_items_text (tk.Text)
+│   │   │       ├── running_job_label (ttk.Label, "Running Job: None")
+│   │   │       ├── running_job_status_label (ttk.Label, "Status: Idle")
+│   │   │       └── queue_controls_frame (ttk.Frame)
+│   │   │           ├── pause_button (ttk.Button, "Pause Queue")
+│   │   │           ├── resume_button (ttk.Button, "Resume Queue")
+│   │   │           └── cancel_button (ttk.Button, "Cancel Active")
+│   └── history_panel (JobHistoryPanelV2)
+│       ├── header (ttk.Label, "Job History")
+│       ├── action_bar (ttk.Frame)
+│       │   ├── open_btn (ttk.Button, "Open Output Folder")
+│       │   └── refresh_btn (ttk.Button, "Refresh History")
+│       └── history_tree (ttk.Treeview)
+│           └── [Columns: time, status, packs, duration, images, output]

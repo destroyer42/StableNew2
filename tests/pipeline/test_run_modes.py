@@ -14,6 +14,7 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.controller.job_service import JobService
+from src.gui.app_state_v2 import AppStateV2
 
 
 class TestJobMetadataFields:
@@ -21,25 +22,25 @@ class TestJobMetadataFields:
 
     def test_job_has_source_field(self):
         """Job should have source field with default 'unknown'."""
-        job = Job(job_id="test-1", pipeline_config=None)
+        job = Job(job_id="test-1")
         assert hasattr(job, "source")
         assert job.source == "unknown"
 
     def test_job_has_prompt_source_field(self):
         """Job should have prompt_source field with default 'manual'."""
-        job = Job(job_id="test-1", pipeline_config=None)
+        job = Job(job_id="test-1")
         assert hasattr(job, "prompt_source")
         assert job.prompt_source == "manual"
 
     def test_job_has_prompt_pack_id_field(self):
         """Job should have prompt_pack_id field with default None."""
-        job = Job(job_id="test-1", pipeline_config=None)
+        job = Job(job_id="test-1")
         assert hasattr(job, "prompt_pack_id")
         assert job.prompt_pack_id is None
 
     def test_job_has_config_snapshot_field(self):
         """Job should have config_snapshot field with default None."""
-        job = Job(job_id="test-1", pipeline_config=None)
+        job = Job(job_id="test-1")
         assert hasattr(job, "config_snapshot")
         assert job.config_snapshot is None
 
@@ -47,7 +48,6 @@ class TestJobMetadataFields:
         """Job should accept custom metadata values."""
         job = Job(
             job_id="test-1",
-            pipeline_config=None,
             source="gui",
             prompt_source="pack",
             prompt_pack_id="heroes-journey-v1",
@@ -62,7 +62,6 @@ class TestJobMetadataFields:
         """Job.to_dict() should include all metadata fields."""
         job = Job(
             job_id="test-1",
-            pipeline_config=None,
             source="api",
             prompt_source="randomizer",
             prompt_pack_id="pack-123",
@@ -98,7 +97,6 @@ class TestRunModeEnforcement:
         """submit_direct should execute job immediately and return result."""
         job = Job(
             job_id=str(uuid.uuid4()),
-            pipeline_config=None,
             run_mode="direct",
         )
         result = job_service.submit_direct(job)
@@ -109,7 +107,6 @@ class TestRunModeEnforcement:
         """submit_queued should add job to queue without blocking."""
         job = Job(
             job_id=str(uuid.uuid4()),
-            pipeline_config=None,
             run_mode="queue",
         )
         job_service.submit_queued(job)
@@ -122,7 +119,6 @@ class TestRunModeEnforcement:
         """submit_job_with_run_mode should call submit_direct for 'direct' mode."""
         job = Job(
             job_id=str(uuid.uuid4()),
-            pipeline_config=None,
             run_mode="direct",
         )
         with patch.object(job_service, "submit_direct") as mock_direct:
@@ -133,7 +129,6 @@ class TestRunModeEnforcement:
         """submit_job_with_run_mode should call submit_queued for 'queue' mode."""
         job = Job(
             job_id=str(uuid.uuid4()),
-            pipeline_config=None,
             run_mode="queue",
         )
         with patch.object(job_service, "submit_queued") as mock_queued:
@@ -144,7 +139,6 @@ class TestRunModeEnforcement:
         """submit_job_with_run_mode should default to queue if run_mode is empty."""
         job = Job(
             job_id=str(uuid.uuid4()),
-            pipeline_config=None,
             run_mode="",
         )
         with patch.object(job_service, "submit_queued") as mock_queued:
@@ -158,9 +152,8 @@ class TestPipelineControllerBuildJob:
     def test_build_job_creates_job_with_metadata(self):
         """_build_job should create a Job with all metadata fields populated."""
         from src.controller.pipeline_controller import PipelineController
-        from src.gui.state import StateManager
 
-        controller = PipelineController(StateManager())
+        controller = PipelineController(app_state=AppStateV2())
         
         job = controller._build_job(
             config=None,
@@ -180,10 +173,9 @@ class TestPipelineControllerBuildJob:
     def test_build_job_creates_config_snapshot(self):
         """_build_job should create config_snapshot from PipelineConfig."""
         from src.controller.pipeline_controller import PipelineController
-        from src.gui.state import StateManager
         from src.pipeline.pipeline_runner import PipelineConfig
 
-        controller = PipelineController(StateManager())
+        controller = PipelineController(app_state=AppStateV2())
 
         config = PipelineConfig(
             prompt="a beautiful sunset",
@@ -205,9 +197,8 @@ class TestPipelineControllerBuildJob:
     def test_build_job_defaults(self):
         """_build_job should use sensible defaults for optional fields."""
         from src.controller.pipeline_controller import PipelineController
-        from src.gui.state import StateManager
 
-        controller = PipelineController(StateManager())
+        controller = PipelineController(app_state=AppStateV2())
         
         job = controller._build_job(config=None)
         

@@ -35,14 +35,13 @@ def test_submit_preview_jobs_to_queue_submits_jobs():
     )
     controller.get_preview_jobs = lambda: [record]  # type: ignore[assignment]
     controller._to_queue_job = lambda rec, **kwargs: Job(
-        job_id=rec.job_id,
-        pipeline_config=None,
-        run_mode=kwargs["run_mode"],
-        source=kwargs["source"],
-        prompt_source=kwargs["prompt_source"],
-        prompt_pack_id=kwargs.get("prompt_pack_id"),
-        config_snapshot=rec.to_queue_snapshot(),
-    )
+            job_id=rec.job_id,
+            run_mode=kwargs["run_mode"],
+            source=kwargs["source"],
+            prompt_source=kwargs["prompt_source"],
+            prompt_pack_id=kwargs.get("prompt_pack_id"),
+            config_snapshot=rec.to_queue_snapshot(),
+        )
     controller._run_job = lambda job: {}  # type: ignore[assignment]
 
     submitted = controller.submit_preview_jobs_to_queue()

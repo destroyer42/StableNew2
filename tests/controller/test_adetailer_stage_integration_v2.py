@@ -97,14 +97,22 @@ def test_config_load_updates_panel_and_sidebar_state() -> None:
 def test_resource_refresh_forwards_resources_to_stage_panel() -> None:
     panel = FakeStageCardsPanel()
     controller = _build_controller(panel=panel)
-    controller.state.resources = {
+    resources = {
         "models": ["m1"],
         "vaes": ["v1"],
         "samplers": ["s1"],
         "schedulers": ["sched1"],
     }
+    controller.state.resources = resources
+    controller.app_state.resources = dict(resources)
 
     controller._update_gui_dropdowns()
 
     assert panel.resource_updates
-    assert panel.resource_updates[-1] == controller.state.resources
+    update = panel.resource_updates[-1]
+    assert update["models"] == resources["models"]
+    assert update["vaes"] == resources["vaes"]
+    assert update["samplers"] == resources["samplers"]
+    assert update["schedulers"] == resources["schedulers"]
+    assert update.get("adetailer_models")
+    assert "upscalers" in update
