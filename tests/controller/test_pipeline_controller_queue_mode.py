@@ -31,7 +31,7 @@ class FakeQueueExecutionController:
 
 def test_queue_mode_disabled_uses_direct(monkeypatch):
     monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: False)
-    controller = PipelineController(state_manager=StateManager())
+    controller = PipelineController()
     controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
     controller._queue_execution_enabled = False
     controller._queue_execution_controller = mock.Mock()
@@ -47,7 +47,8 @@ def test_queue_mode_enabled_submits_and_handles_callbacks(monkeypatch):
     monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: True)
     queue_ctrl = FakeQueueExecutionController()
     sm = StateManager()
-    controller = PipelineController(state_manager=sm, queue_execution_controller=queue_ctrl)
+    controller = PipelineController(queue_execution_controller=queue_ctrl)
+    controller.state_manager = sm
     controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
     controller._queue_execution_enabled = True
 
@@ -70,7 +71,8 @@ def test_queue_mode_enabled_submits_and_handles_callbacks(monkeypatch):
 def test_queue_mode_cancel(monkeypatch):
     monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: True)
     queue_ctrl = FakeQueueExecutionController()
-    controller = PipelineController(state_manager=StateManager(), queue_execution_controller=queue_ctrl)
+    controller = PipelineController(queue_execution_controller=queue_ctrl)
+    controller.state_manager = StateManager()
     controller._queue_execution_enabled = True
     controller._active_job_id = "job-xyz"
 

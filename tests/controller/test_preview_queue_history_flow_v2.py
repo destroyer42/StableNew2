@@ -18,7 +18,7 @@ import pytest
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
-from src.gui.app_state_v2 import AppStateV2
+from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.gui.panels_v2.history_panel_v2 import HistoryPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -80,6 +80,7 @@ def mock_job_service():
     service = Mock(spec=JobService)
     service.enqueue.return_value = "test-job-123"
     service._status_callbacks = {}
+    service.enqueue_njrs = Mock(return_value=["test-job-456"])
 
     def set_callback(name: str, callback: callable):
         service._status_callbacks[name] = callback
@@ -122,11 +123,35 @@ def mock_history_panel():
 def pipeline_controller(mock_job_service):
     """Create PipelineController with mocked dependencies."""
     state_manager = MockStateManager()
-    controller = PipelineController(
-        job_service=mock_job_service,
-        state_manager=state_manager,
-    )
+    controller = PipelineController(job_service=mock_job_service)
+    controller.state_manager = state_manager
+    controller.bind_app_state(AppStateV2())
     return controller
+
+
+def _add_job_draft_pack_entry(
+    controller: PipelineController,
+    *,
+    pack_id: str = "test-pack",
+    prompt_text: str = "test prompt",
+    negative_prompt: str = "test negative",
+) -> None:
+    if not controller._app_state:
+        return
+    if not controller._app_state.selected_config_snapshot_id:
+        controller._app_state.selected_config_snapshot_id = f"{pack_id}-cfg"
+
+    entry = PackJobEntry(
+        pack_id=pack_id,
+        pack_name=pack_id,
+        config_snapshot={
+            "prompt": prompt_text,
+            "negative_prompt": negative_prompt,
+        },
+        prompt_text=prompt_text,
+        negative_prompt_text=negative_prompt,
+    )
+    controller._app_state.job_draft.packs.append(entry)
 
 
 @pytest.fixture
@@ -234,6 +259,8 @@ class TestAddToJobPreviewFlow:
         # Add and then clear
         pipeline_controller.state_manager.set_prompt("test prompt", "test negative")
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(pipeline_controller, prompt_text="test prompt")
+        _add_job_draft_pack_entry(pipeline_controller, prompt_text="test prompt")
         pipeline_controller.clear_draft_bundle()
 
         # Get summary after clear
@@ -262,6 +289,7 @@ class TestAddToQueueFlow:
         # Add job part
         pipeline_controller.state_manager.set_prompt("test prompt", "test negative")
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(pipeline_controller, prompt_text="test prompt")
 
         # Enqueue the draft
         job_id = pipeline_controller.enqueue_draft_bundle()
@@ -280,6 +308,7 @@ class TestAddToQueueFlow:
         # Add job part
         pipeline_controller.state_manager.set_prompt("test prompt", "test negative")
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(pipeline_controller, prompt_text="test prompt")
 
         # Enqueue
         pipeline_controller.enqueue_draft_bundle()
@@ -403,6 +432,11 @@ class TestEndToEndFlow:
             "beautiful landscape", "low quality"
         )
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(
+            pipeline_controller,
+            prompt_text="beautiful landscape",
+            negative_prompt="low quality",
+        )
 
         # Step 2: Preview updates
         dto_after_add = pipeline_controller.get_draft_bundle_summary()
@@ -445,12 +479,18 @@ class TestEndToEndFlow:
         # Job 1: Add and enqueue
         pipeline_controller.state_manager.set_prompt("prompt 1", "neg 1")
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(
+            pipeline_controller, prompt_text="prompt 1", negative_prompt="neg 1"
+        )
         job_id_1 = pipeline_controller.enqueue_draft_bundle()
         assert job_id_1 is not None
 
         # Job 2: Add and enqueue
         pipeline_controller.state_manager.set_prompt("prompt 2", "neg 2")
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(
+            pipeline_controller, prompt_text="prompt 2", negative_prompt="neg 2"
+        )
         job_id_2 = pipeline_controller.enqueue_draft_bundle()
         assert job_id_2 is not None
 
@@ -483,11 +523,17 @@ class TestEndToEndFlow:
         # Add and clear (don't enqueue)
         pipeline_controller.state_manager.set_prompt("prompt 1", "neg 1")
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(
+            pipeline_controller, prompt_text="prompt 1", negative_prompt="neg 1"
+        )
         pipeline_controller.clear_draft_bundle()
 
         # Add again and enqueue
         pipeline_controller.state_manager.set_prompt("prompt 2", "neg 2")
         pipeline_controller.add_job_part_from_current_config()
+        _add_job_draft_pack_entry(
+            pipeline_controller, prompt_text="prompt 2", negative_prompt="neg 2"
+        )
         job_id = pipeline_controller.enqueue_draft_bundle()
 
         # Verify only the second prompt was enqueued

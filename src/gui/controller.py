@@ -8,7 +8,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from .state import CancellationError, CancelToken, GUIState, StateManager
+from .state import CancellationError, CancelToken, GUIState, PipelineState, StateManager
+from src.gui.prompt_workspace_state import PromptWorkspaceState
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,8 @@ class PipelineController:
 
     _JOIN_TIMEOUT = 5.0
 
-    def __init__(self, state_manager: StateManager):
-        self.state_manager = state_manager
+    def __init__(self, state_manager: StateManager | None = None):
+        self.state_manager = state_manager or StateManager()
         self.cancel_token = CancelToken()
         self.log_queue: queue.Queue[LogMessage] = queue.Queue()
 
@@ -350,3 +351,63 @@ class PipelineController:
             self.cancel_token.cancel()
         except Exception:
             pass
+
+    def gui_can_run(self) -> bool:
+        """Return whether the GUI allows a new pipeline run."""
+        return self.state_manager.can_run()
+
+    def gui_can_stop(self) -> bool:
+        """Return whether a running pipeline can be stopped."""
+        return self.state_manager.can_stop()
+
+    def gui_transition_state(self, new_state: GUIState) -> bool:
+        """Transition the GUI state machine to the provided state."""
+        return self.state_manager.transition_to(new_state)
+
+    def gui_get_pipeline_state(self) -> PipelineState | None:
+        """Return the current GUI pipeline state snapshot (readonly)."""
+        return getattr(self.state_manager, "pipeline_state", None)
+
+    def gui_set_pipeline_run_mode(self, mode: str) -> None:
+        """Update the GUI pipeline state's run_mode setting."""
+        pipeline_state = self.gui_get_pipeline_state()
+        if pipeline_state is not None:
+            try:
+                pipeline_state.run_mode = mode
+            except Exception:
+                pass
+
+    def gui_get_pipeline_overrides(self) -> dict[str, object]:
+        """Return overrides the GUI has stored for pipeline construction."""
+        extractor = getattr(self.state_manager, "get_pipeline_overrides", None)
+        overrides: dict[str, object] | None = None
+        if callable(extractor):
+            try:
+                overrides = extractor()
+            except Exception:
+                overrides = None
+        if isinstance(overrides, dict) and overrides:
+            return dict(overrides)
+        stored = getattr(self.state_manager, "pipeline_overrides", None)
+        if isinstance(stored, dict):
+            return dict(stored)
+        return {}
+
+    def gui_get_metadata(self, attr_name: str) -> dict[str, Any] | None:
+        """Return metadata stored on the GUI state manager (learning/randomizer)."""
+        accessor = getattr(self.state_manager, attr_name, None)
+        value: Any = None
+        if callable(accessor):
+            try:
+                value = accessor()
+            except Exception:
+                return None
+        else:
+            value = accessor
+        if isinstance(value, dict):
+            return dict(value)
+        return None
+
+    def gui_get_prompt_workspace_state(self) -> PromptWorkspaceState | None:
+        """Return the GUI's PromptWorkspaceState if available."""
+        return getattr(self.state_manager, "prompt_workspace_state", None)

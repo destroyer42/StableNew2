@@ -345,6 +345,40 @@ but never silently substitute hidden values.
 
 Builder must not ask the runner for information.
 
+### 7.7 **CORE1 Hybrid State Note** (PR-CORE1-A3, December 2025)
+
+**JobBuilderV2 Role:**
+- JobBuilderV2 is the canonical builder for **NormalizedJobRecord**
+- All job construction goes through JobBuilderV2.build_jobs()
+- Produces immutable NJR instances with complete execution metadata
+
+**JobBundle / JobBundleBuilder Status:**
+- **Legacy but active** during CORE1-A/B phases
+- Used for:
+  - PipelineController draft job lifecycle (`_draft_bundle`)
+  - Preview panel display via JobBundleSummaryDTO
+  - Some end-to-end tests
+- **NOT scheduled for removal in PR-CORE1-A3**
+- Will be retired in **CORE1-D/CORE1-E** after full NJR-only migration
+
+**Why Both Exist:**
+- JobBuilderV2: New, canonical, NJR-producing builder
+- JobBundleBuilder: Transitional support for draft job features
+- Display layer fully migrated to NJR (PR-CORE1-A3)
+- Execution layer migration to NJR-only pending CORE1-B
+
+**Rules:**
+- ✅ New features MUST use JobBuilderV2
+- ✅ Display DTOs MUST derive from NJR, not JobBundle
+- ⚠️ JobBundle remains valid for draft features until CORE1-D
+- ❌ Do NOT add new JobBundle-based execution paths
+
+### 7.8 **NJR-Only Job Construction** (PR-CORE1-B3)
+
+- NJRs are the only execution payload produced by JobBuilderV2 for v2.6 jobs; pipeline_config is left None.
+- PipelineController._to_queue_job() attaches _normalized_record, sets pipeline_config = None, and builds NJR-driven queue/history snapshots.
+- Queue, JobService, Runner, and History rely on NJR snapshots for display/execution. Any non-null pipeline_config values belong to legacy pre-v2.6 data.
+
 8. Builder Diagnostics & Debug Hooks (DebugHub v2.6)
 
 The Builder Pipeline emits a structured DTO:

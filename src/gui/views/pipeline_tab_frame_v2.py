@@ -459,9 +459,9 @@ class PipelineTabFrame(ttk.Frame):
         """Attempt to render JobUiSummary data before falling back to draft text."""
         records = self._get_pipeline_preview_jobs()
         has_records = bool(records)
-        if self.app_state and hasattr(self.app_state, "set_preview_jobs"):
+        if has_records and self.app_state and hasattr(self.app_state, "set_preview_jobs"):
             try:
-                self.app_state.set_preview_jobs(records if has_records else [])
+                self.app_state.set_preview_jobs(records)
             except Exception:
                 pass
         try:

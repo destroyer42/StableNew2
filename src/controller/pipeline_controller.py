@@ -17,7 +17,6 @@ from typing import Callable, Any, Mapping
 from src.controller.job_service import JobService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.gui.controller import PipelineController as _GUIPipelineController
-from src.gui.state import StateManager
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.queue_execution_controller import QueueExecutionController
@@ -31,6 +30,7 @@ from src.learning.model_defaults_resolver import (
 )
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
+from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     NormalizedJobRecord,
@@ -42,6 +42,11 @@ from src.pipeline.job_models_v2 import (
     JobBundleBuilder,
     PipelineConfigSnapshot,
 )
+from src.pipeline.job_requests_v2 import (
+    PipelineRunMode,
+    PipelineRunRequest,
+    PipelineRunSource,
+)
 from src.gui.state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 from src.config import app_config
@@ -52,6 +57,7 @@ from src.queue.job_history_store import JobHistoryEntry
 from src.controller.pipeline_config_assembler import PipelineConfigAssembler, GuiOverrides, RunPlan, PlannedJob
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.state import PipelineState
+from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.api.client import SDWebUIClient
 from src.utils import LogContext, StructuredLogger, log_with_ctx
 from src.utils.error_envelope_v2 import (
@@ -143,24 +149,19 @@ class PipelineController(_GUIPipelineController):
         return GuiOverrides()
 
     def _extract_state_overrides(self) -> GuiOverrides:
-        extractor = getattr(self.state_manager, "get_pipeline_overrides", None)
-        if callable(extractor):
+        overrides: dict[str, Any] | None = None
+        getter = getattr(self, "gui_get_pipeline_overrides", None)
+        if callable(getter):
             try:
-                result = extractor()
-                # Only use if it contains actual data
-                if result and isinstance(result, dict):
-                    return self._coerce_overrides(result)
+                overrides = getter()
+            except Exception:
+                overrides = None
+
+        if overrides:
+            try:
+                return self._coerce_overrides(overrides)
             except Exception:
                 pass
-
-        if hasattr(self.state_manager, "pipeline_overrides"):
-            overrides = getattr(self.state_manager, "pipeline_overrides")
-            # Only use pipeline_overrides if it contains actual data
-            if overrides and isinstance(overrides, dict):
-                try:
-                    return self._coerce_overrides(overrides)
-                except Exception:
-                    pass
 
         fallback = getattr(self, "get_gui_overrides", None)
         if callable(fallback):
@@ -178,18 +179,12 @@ class PipelineController(_GUIPipelineController):
 
 
     def _extract_metadata(self, attr_name: str) -> dict[str, Any] | None:
-        value = None
-        accessor = getattr(self.state_manager, attr_name, None)
-        if callable(accessor):
+        getter = getattr(self, "gui_get_metadata", None)
+        if callable(getter):
             try:
-                value = accessor()
+                return getter(attr_name)
             except Exception:
-                value = None
-        elif accessor is not None:
-            value = accessor
-
-        if isinstance(value, dict):
-            return dict(value)
+                return None
         return None
 
     def _build_pipeline_config_from_state(self) -> PipelineConfig:
@@ -264,7 +259,7 @@ class PipelineController(_GUIPipelineController):
         try:
             overrides = self._extract_state_overrides()
             batch_size = getattr(overrides, "batch_size", 1) or 1
-            batch_runs = getattr(self.state_manager, "batch_runs", 1) or 1
+            batch_runs = self._get_batch_runs()
             batch_settings = BatchSettings(batch_size=batch_size, batch_runs=batch_runs)
         except Exception as exc:
             _logger.debug("Could not extract batch settings: %s", exc)
@@ -288,7 +283,7 @@ class PipelineController(_GUIPipelineController):
             from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2, ConfigVariant
             
             # Check if app state has config sweep enabled
-            app_state = getattr(self.state_manager, "_app_state", None)
+            app_state = self._app_state
             if app_state:
                 sweep_enabled = getattr(app_state, "config_sweep_enabled", False)
                 sweep_variants = getattr(app_state, "config_sweep_variants", [])
@@ -351,20 +346,17 @@ class PipelineController(_GUIPipelineController):
 
         This adapter preserves all metadata from the normalized record
         while producing a Job compatible with the existing queue system.
+
+        PR-CORE1-B3: NJR-backed jobs MUST NOT carry pipeline_config. The field may
+        exist for legacy records, but new v2.6 jobs rely solely on NJR snapshots.
         """
-        # Get config snapshot from normalized record
+        if record is None:
+            raise ValueError("PR-CORE1-B3: _to_queue_job requires a NormalizedJobRecord")
+
         config_snapshot = record.to_queue_snapshot()
 
-        # Extract pipeline_config from record.config if it's the right type
+        # PR-CORE1-B3: pipeline_config is legacy debug data only and is kept None.
         pipeline_config = None
-        if isinstance(record.config, PipelineConfig):
-            pipeline_config = record.config
-        elif hasattr(record.config, "__dict__"):
-            # Try to construct PipelineConfig from dict-like object
-            try:
-                pipeline_config = record.config
-            except Exception:
-                pass
 
         # Build randomizer metadata from record
         randomizer_metadata = record.randomizer_summary
@@ -388,6 +380,8 @@ class PipelineController(_GUIPipelineController):
             record,
             run_config=run_config or self._last_run_config,
         )
+        # PR-CORE1-B2: Attach NormalizedJobRecord for NJR-only execution
+        job._normalized_record = record  # type: ignore[attr-defined]
         return job
 
 
@@ -419,7 +413,7 @@ class PipelineController(_GUIPipelineController):
         Returns:
             True if jobs were submitted, False otherwise.
         """
-        if not self.state_manager.can_run():
+        if not self.gui_can_run():
             return False
 
         # Check WebUI connection
@@ -427,7 +421,7 @@ class PipelineController(_GUIPipelineController):
             state = self._webui_connection.ensure_connected(autostart=True)
             if state is not None and state is not WebUIConnectionState.READY:
                 try:
-                    self.state_manager.transition_to(GUIState.ERROR)
+                    self._safe_gui_transition(GUIState.ERROR)
                 except Exception:
                     pass
                 return False
@@ -435,7 +429,7 @@ class PipelineController(_GUIPipelineController):
         # Resolve run mode
         if run_mode is None:
             try:
-                pipeline_state = getattr(self.state_manager, "pipeline_state", None)
+                pipeline_state = self._get_pipeline_state()
                 if pipeline_state:
                     run_mode = self._normalize_run_mode(pipeline_state)
                 else:
@@ -448,6 +442,13 @@ class PipelineController(_GUIPipelineController):
             normalized_jobs = self._build_normalized_jobs_from_state()
         except Exception as exc:
             _logger.error("Failed to build normalized jobs: %s", exc)
+            if on_error:
+                on_error(exc)
+            return False
+
+        prompt_pack_id = self._last_run_config and self._last_run_config.get("prompt_pack_id")
+        if not prompt_pack_id:
+            exc = ValueError("start_pipeline_v2 requires prompt_pack_id for provenance")
             if on_error:
                 on_error(exc)
             return False
@@ -478,10 +479,7 @@ class PipelineController(_GUIPipelineController):
                     on_error(exc)
 
         if submitted_count > 0:
-            try:
-                self.state_manager.transition_to(GUIState.RUNNING)
-            except Exception:
-                pass
+            self._safe_gui_transition(GUIState.RUNNING)
             _logger.info("Submitted %d jobs via V2 pipeline", submitted_count)
             return True
 
@@ -546,12 +544,10 @@ class PipelineController(_GUIPipelineController):
                 config[k] = v
         return config
 
-    """Provide a default StateManager so legacy imports keep working."""
-
     def __init__(
         self,
-        state_manager: StateManager | None = None,
         *,
+        app_state: AppStateV2 | None = None,
         learning_record_writer: LearningRecordWriter | None = None,
         on_learning_record: Callable[[LearningRecord], None] | None = None,
         config_assembler: PipelineConfigAssembler | None = None,
@@ -569,7 +565,7 @@ class PipelineController(_GUIPipelineController):
         
         queue_execution_controller = kwargs.pop("queue_execution_controller", None)
         webui_conn = kwargs.pop("webui_connection_controller", None)
-        super().__init__(state_manager or StateManager(), **kwargs)
+        super().__init__(**kwargs)
         self._learning_runner = None
         self._learning_record_writer = learning_record_writer
         self._learning_record_callback = on_learning_record
@@ -600,7 +596,7 @@ class PipelineController(_GUIPipelineController):
         self._job_history_service: JobHistoryService | None = None
         self._active_job_id: str | None = None
         self._last_run_config: dict[str, Any] | None = None
-        self._app_state: Any | None = None
+        self._app_state: AppStateV2 | None = app_state
         self._job_lifecycle_logger = job_lifecycle_logger
         
         # PR-D: Draft bundle ownership
@@ -619,6 +615,49 @@ class PipelineController(_GUIPipelineController):
             self._job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
         self._job_controller.set_status_callback("pipeline", self._on_job_status)
         self._setup_queue_callbacks()
+
+    def _get_pipeline_state(self) -> PipelineState | None:
+        getter = getattr(self, "gui_get_pipeline_state", None)
+        if callable(getter):
+            try:
+                return getter()
+            except Exception:
+                return None
+        return None
+
+    def _get_batch_runs(self) -> int:
+        pipeline_state = self._get_pipeline_state()
+        count = getattr(pipeline_state, "batch_runs", 1) or 1
+        return max(1, count)
+
+    def _safe_gui_transition(self, new_state: GUIState) -> None:
+        transition = getattr(self, "gui_transition_state", None)
+        if callable(transition):
+            try:
+                transition(new_state)
+            except Exception:
+                pass
+
+    def _set_pipeline_run_mode(self, mode: str) -> None:
+        setter = getattr(self, "gui_set_pipeline_run_mode", None)
+        if callable(setter):
+            try:
+                setter(mode)
+            except Exception:
+                pass
+
+    def _get_prompt_workspace_state(self) -> PromptWorkspaceState | None:
+        if self._app_state is not None:
+            prompt_state = getattr(self._app_state, "prompt_workspace_state", None)
+            if prompt_state is not None:
+                return prompt_state
+        getter = getattr(self, "gui_get_prompt_workspace_state", None)
+        if callable(getter):
+            try:
+                return getter()
+            except Exception:
+                return None
+        return None
 
     def _get_learning_runner(self):
         if self._learning_runner is None:
@@ -745,14 +784,14 @@ class PipelineController(_GUIPipelineController):
         run_config: dict[str, Any] | None = None,
     ) -> bool:
         """Submit a pipeline job using assembler-enforced config."""
-        if not self.state_manager.can_run():
+        if not self.gui_can_run():
             return False
 
         if hasattr(self, "_webui_connection"):
             state = self._webui_connection.ensure_connected(autostart=True)
             if state is not None and state is not WebUIConnectionState.READY:
                 try:
-                    self.state_manager.transition_to(GUIState.ERROR)
+                    self._safe_gui_transition(GUIState.ERROR)
                 except Exception:
                     pass
                 return False
@@ -762,7 +801,7 @@ class PipelineController(_GUIPipelineController):
             requested_mode = (run_config.get("run_mode") or "").strip().lower()
             try:
                 if requested_mode in {"direct", "queue"}:
-                    self.state_manager.pipeline_state.run_mode = requested_mode
+                    self._set_pipeline_run_mode(requested_mode)
             except Exception:
                 pass
 
@@ -789,17 +828,11 @@ class PipelineController(_GUIPipelineController):
 
         if self._queue_execution_enabled and self._queue_execution_controller:
             self._active_job_id = self._queue_execution_controller.submit_pipeline_job(_payload)
-            try:
-                self.state_manager.transition_to(GUIState.RUNNING)
-            except Exception:
-                pass
+            self._safe_gui_transition(GUIState.RUNNING)
             return True
 
         self._active_job_id = self._job_controller.submit_pipeline_run(_payload)
-        try:
-            self.state_manager.transition_to(GUIState.RUNNING)
-        except Exception:
-            pass
+        self._safe_gui_transition(GUIState.RUNNING)
         return True
 
     def _run_pipeline_job(
@@ -863,10 +896,7 @@ class PipelineController(_GUIPipelineController):
             else:
                 self._job_controller.cancel_job(self._active_job_id)
             self._active_job_id = None
-            try:
-                self.state_manager.transition_to(GUIState.STOPPING)
-            except Exception:
-                pass
+            self._safe_gui_transition(GUIState.STOPPING)
             return True
         return False
 
@@ -888,28 +918,16 @@ class PipelineController(_GUIPipelineController):
         if job_id is None or job_id != self._active_job_id:
             return
         if status == JobStatus.COMPLETED:
-            try:
-                self.state_manager.transition_to(GUIState.IDLE)
-            except Exception:
-                pass
+            self._safe_gui_transition(GUIState.IDLE)
             self._active_job_id = None
         elif status == JobStatus.FAILED:
-            try:
-                self.state_manager.transition_to(GUIState.ERROR)
-            except Exception:
-                pass
+            self._safe_gui_transition(GUIState.ERROR)
             self._active_job_id = None
         elif status == JobStatus.CANCELLED:
-            try:
-                self.state_manager.transition_to(GUIState.IDLE)
-            except Exception:
-                pass
+            self._safe_gui_transition(GUIState.IDLE)
             self._active_job_id = None
         elif status in {JobStatus.QUEUED, JobStatus.RUNNING}:
-            try:
-                self.state_manager.transition_to(GUIState.RUNNING)
-            except Exception:
-                pass
+            self._safe_gui_transition(GUIState.RUNNING)
 
     def bind_app_state(self, app_state: Any | None) -> None:
         """Bind an AppStateV2 instance for updating GUI data."""
@@ -1037,6 +1055,51 @@ class PipelineController(_GUIPipelineController):
             source="pipeline_tab",
             job_id=job_id,
             draft_size=self._get_draft_part_count(),
+        )
+
+    def _build_run_request_from_job_draft(
+        self,
+        *,
+        run_mode: PipelineRunMode,
+        source: PipelineRunSource,
+    ) -> PipelineRunRequest | None:
+        """Construct a PipelineRunRequest from the current AppState job_draft."""
+        if not self._app_state:
+            _logger.warning("PipelineController missing AppState for draft submission")
+            return None
+        job_draft = getattr(self._app_state, "job_draft", None)
+        if not job_draft:
+            _logger.warning("No job_draft available for pipeline run request")
+            return None
+        pack_entries = list(getattr(job_draft, "packs", []))
+        if not pack_entries:
+            _logger.warning("Job draft contains no PromptPack entries")
+            return None
+        first_pack_id = pack_entries[0].pack_id or ""
+        if not first_pack_id:
+            _logger.warning("First PromptPack entry missing pack_id")
+            return None
+        selected_rows = [
+            str(entry.pack_row_index)
+            for entry in pack_entries
+            if entry.pack_row_index is not None
+        ]
+        selected_rows = selected_rows or ["0"]
+        config_snapshot_id = getattr(self._app_state, "selected_config_snapshot_id", "")
+        sweep_state = {}
+        randomizer_plan = {}
+        return PipelineRunRequest(
+            prompt_pack_id=first_pack_id,
+            selected_row_ids=selected_rows,
+            config_snapshot_id=config_snapshot_id or "",
+            run_mode=run_mode,
+            source=source,
+            sweep_state=sweep_state or None,
+            randomizer_plan=randomizer_plan or None,
+            explicit_output_dir=None,
+            tags=[],
+            requested_job_label=None,
+            pack_entries=pack_entries,
         )
 
     # ------------------------------------------------------------------
@@ -1197,7 +1260,7 @@ class PipelineController(_GUIPipelineController):
         """Estimate total images based on batch/batch_runs overrides in state."""
         overrides = self._extract_state_overrides()
         batch_size = getattr(overrides, "batch_size", 1) or 1
-        pipeline_state = getattr(self.state_manager, "pipeline_state", None)
+        pipeline_state = self._get_pipeline_state()
         batch_runs = getattr(pipeline_state, "batch_runs", 1) or 1
         return batch_size * batch_runs
 
@@ -1236,7 +1299,40 @@ class PipelineController(_GUIPipelineController):
             self._job_service.submit_job_with_run_mode(job)
 
     def _run_job(self, job: Job) -> dict[str, Any]:
-        """Run a single job."""
+        """Run a single job using NJR-preferred execution (PR-CORE1-B1).
+        
+        Accepts a Job that may have:
+        - _normalized_record (preferred) - uses PipelineRunner.run_njr()
+        - pipeline_config (fallback) - uses PipelineRunner.run_njr() via legacy_njr_adapter
+        
+        Returns dict with job result metadata or error information.
+        
+        If both are missing, returns error dict rather than raising.
+        """
+        record = getattr(job, "_normalized_record", None)
+        if record is not None:
+            job_id = job.job_id
+            stage = record.stage_chain[0].stage_type if record.stage_chain else "txt2img"
+            ctx = LogContext(job_id=job_id, subsystem="pipeline", stage=stage)
+            api_client = SDWebUIClient(
+                base_url="http://127.0.0.1:7860",
+            )
+            structured_logger = StructuredLogger()
+            runner = PipelineRunner(api_client, structured_logger)
+            try:
+                result = runner.run_njr(record, self.cancel_token)
+                return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
+            except Exception as exc:  # noqa: BLE001
+                envelope = get_attached_envelope(exc)
+                if envelope is None:
+                    envelope = wrap_exception(
+                        exc,
+                        subsystem="pipeline_controller",
+                    )
+                return {
+                    "error": str(exc),
+                    "error_envelope": serialize_envelope(envelope),
+                }
         if not job.pipeline_config:
             return {"error": "No pipeline config"}
         job_id = job.job_id
@@ -1255,8 +1351,9 @@ class PipelineController(_GUIPipelineController):
         )
         structured_logger = StructuredLogger()
         runner = PipelineRunner(api_client, structured_logger)
+        record = build_njr_from_legacy_pipeline_config(job.pipeline_config)
         try:
-            result = runner.run(job.pipeline_config, self.cancel_token)
+            result = runner.run_njr(record, self.cancel_token)
             return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
         except Exception as exc:  # noqa: BLE001
             envelope = get_attached_envelope(exc)
@@ -1344,6 +1441,21 @@ class PipelineController(_GUIPipelineController):
                 run_config=run_config_to_use,
             )
             job.payload = lambda j=job: self._run_job(j)
+            # PR-CORE1-B2: Enforce NJR-only invariant for new queue jobs
+            if not hasattr(job, "_normalized_record") or job._normalized_record is None:
+                _logger.warning(
+                    "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. "
+                    f"Job ID: {job.job_id}, Source: {source}"
+                )
+
+            # PR-CORE1-B3: pipeline_config must be None for v2.6 jobs.
+            if getattr(job, "pipeline_config", None) is not None:
+                _logger.error(
+                    "PR-CORE1-B3: pipeline_config must be None for NJR-only jobs (Job ID: %s)",
+                    job.job_id,
+                )
+                job.pipeline_config = None
+            
             self._job_service.submit_job_with_run_mode(job)
             self._log_add_to_queue_event(job.job_id)
             submitted += 1
@@ -1393,12 +1505,14 @@ class PipelineController(_GUIPipelineController):
     def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
         """Run pipeline synchronously and return result."""
         if self._pipeline_runner is not None:
-            result = self._pipeline_runner.run(config, self.cancel_token)
+            record = build_njr_from_legacy_pipeline_config(config)
+            result = self._pipeline_runner.run_njr(record, self.cancel_token)
         else:
             api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
             structured_logger = StructuredLogger()
             runner = PipelineRunner(api_client, structured_logger)
-            result = runner.run(config, self.cancel_token)
+            record = build_njr_from_legacy_pipeline_config(config)
+            result = runner.run_njr(record, self.cancel_token)
         self.record_run_result(result)
         return result
 
@@ -1435,12 +1549,12 @@ class PipelineController(_GUIPipelineController):
                     width=getattr(overrides, "width", 512) or 512,
                     height=getattr(overrides, "height", 512) or 512,
                     batch_size=getattr(overrides, "batch_size", 1) or 1,
-                    batch_count=getattr(self.state_manager, "batch_runs", 1) or 1,
+                    batch_count=self._get_batch_runs(),
                 )
                 
                 global_negative = getattr(overrides, "negative_prompt", "")
                 stage_flags = self._collect_stage_flags()
-                batch_runs = getattr(self.state_manager, "batch_runs", 1) or 1
+                batch_runs = self._get_batch_runs()
                 randomizer_metadata = self._extract_metadata("randomizer_metadata")
                 prompt_resolver = UnifiedPromptResolver()
                 config_resolver = UnifiedConfigResolver()
@@ -1464,7 +1578,7 @@ class PipelineController(_GUIPipelineController):
         return self._job_bundle_builder
 
     def _collect_stage_flags(self) -> dict[str, bool]:
-        pipeline_state = getattr(self.state_manager, "pipeline_state", None)
+        pipeline_state = self._get_pipeline_state()
         return {
             "txt2img": bool(getattr(pipeline_state, "stage_txt2img_enabled", True)),
             "img2img": bool(getattr(pipeline_state, "stage_img2img_enabled", False)),
@@ -1485,7 +1599,7 @@ class PipelineController(_GUIPipelineController):
             overrides = self._extract_state_overrides()
             
             # Get prompt from state
-            prompt_state = getattr(self.state_manager, "prompt_workspace_state", None)
+            prompt_state = self._get_prompt_workspace_state()
             positive_prompt = ""
             if prompt_state:
                 positive_prompt = getattr(prompt_state, "prompt", "") or ""
@@ -1557,7 +1671,7 @@ class PipelineController(_GUIPipelineController):
                 width=getattr(overrides, "width", 512),
                 height=getattr(overrides, "height", 512),
                 batch_size=getattr(overrides, "batch_size", 1),
-                batch_count=getattr(self.state_manager, "batch_runs", 1),
+                batch_count=self._get_batch_runs(),
             )
             
             # Add all pack prompts
@@ -1600,186 +1714,44 @@ class PipelineController(_GUIPipelineController):
             _logger.error("Failed to clear draft bundle: %s", exc)
 
     def enqueue_draft_bundle(self) -> str | None:
-        """Enqueue the current draft bundle and clear it.
-        
-        PR-D: Core method for "Add to Queue" button.
-        PR-CORE-D/E: Also handles job_draft.packs (PromptPack-based jobs).
-        
-        Returns:
-            Job ID if successful, None otherwise.
-        """
+        """Enqueue the current job draft and clear it."""
+        if not self._app_state:
+            _logger.warning("enqueue_draft_bundle called without bound AppState")
+            return None
+        request = self._build_run_request_from_job_draft(
+            run_mode=PipelineRunMode.QUEUE,
+            source=PipelineRunSource.ADD_TO_QUEUE,
+        )
+        if request is None:
+            return None
+        if not request.pack_entries:
+            _logger.warning("enqueue_draft_bundle has no pack entries to enqueue")
+            return None
+        if not self._job_service:
+            _logger.warning("enqueue_draft_bundle cannot execute without job_service")
+            return None
+        njrs = self._job_builder.build_from_run_request(request)
+        if not njrs:
+            _logger.warning("enqueue_draft_bundle builder produced no jobs")
+            return None
+        job_ids = self._job_service.enqueue_njrs(njrs, request)
+        if not job_ids:
+            _logger.warning("enqueue_draft_bundle failed to enqueue job entries")
+            return None
+        job_id = job_ids[0]
+        self._log_add_to_queue_event(job_id)
         try:
-            # PR-CORE-D/E: Check app_state.job_draft.packs first (PromptPack-based)
-            # AppController sets this when adding packs
-            app_state = getattr(self, "_app_state_for_enqueue", None)
-            print(f"[PipelineController] enqueue_draft_bundle - app_state: {app_state}")
-            if app_state:
-                print(f"[PipelineController] app_state.job_draft: {getattr(app_state, 'job_draft', None)}")
-                if hasattr(app_state, "job_draft") and app_state.job_draft.packs:
-                    print(f"[PipelineController] Enqueuing from job_draft.packs: {len(app_state.job_draft.packs)} pack(s)")
-                    return self._enqueue_pack_based_jobs(app_state.job_draft.packs, app_state)
-                else:
-                    print(f"[PipelineController] job_draft exists but packs is empty: {getattr(app_state.job_draft, 'packs', [])}")
-            
-            # Legacy path: check _draft_bundle.parts
-            if not self._draft_bundle or not self._draft_bundle.parts:
-                _logger.warning("enqueue_draft_bundle called with empty draft")
-                return None
-            
-            # Save parts count before clearing
-            parts_count = len(self._draft_bundle.parts)
-            bundle_job_id: str | None = None
-            
-            # Convert bundle parts to jobs and enqueue
-            for part in self._draft_bundle.parts:
-                try:
-                    from src.pipeline.pipeline_runner import PipelineConfig
-                    
-                    config = PipelineConfig(
-                        prompt=part.positive_prompt,
-                        negative_prompt=part.negative_prompt,
-                        model=part.config_snapshot.model_name,
-                        sampler=part.config_snapshot.sampler_name,
-                        steps=part.config_snapshot.steps,
-                        cfg_scale=part.config_snapshot.cfg_scale,
-                        width=part.config_snapshot.width,
-                        height=part.config_snapshot.height,
-                    )
-                    
-                    # Build job using existing helper
-                    job = self._build_job(
-                        config,
-                        run_mode="queue",
-                        source="gui_bundle",
-                        prompt_source=part.prompt_source,
-                    )
-                    
-                    # Submit to queue
-                    if self._job_service:
-                        self._job_service.submit_queued(job)
-                    
-                    # Track the first job ID as representative
-                    if bundle_job_id is None:
-                        bundle_job_id = job.job_id
-                    
-                except Exception as exc:
-                    _logger.error("Failed to convert JobPart to job: %s", exc)
-                    continue
-            
-            if bundle_job_id is None:
-                return None
-            
-            # Clear the draft after successful enqueue
             self.clear_draft_bundle()
-            
-            _logger.info("Enqueued draft bundle with %d parts", parts_count)
-            return bundle_job_id
-            
-        except Exception as exc:
-            _logger.error("Failed to enqueue draft bundle: %s", exc)
-            return None
-
-    def _enqueue_pack_based_jobs(self, pack_entries: list[Any], app_state: Any) -> str | None:
-        """Enqueue jobs from PackJobEntry list (PR-CORE-D/E PromptPack-based jobs).
-        
-        Args:
-            pack_entries: List of PackJobEntry objects from app_state.job_draft.packs
-            app_state: AppStateV2 instance to clear after enqueue
-            
-        Returns:
-            First job ID if successful, None otherwise.
-        """
-        try:
-            bundle_job_id: str | None = None
-            print(f"[PipelineController] _enqueue_pack_based_jobs: Processing {len(pack_entries)} pack entries")
-            
-            for entry in pack_entries:
+        except Exception:
+            pass
+        if self._app_state:
+            clear_job_draft = getattr(self._app_state, "clear_job_draft", None)
+            if callable(clear_job_draft):
                 try:
-                    print(f"[PipelineController] Building job for pack '{entry.pack_name}'")
-                    from src.pipeline.pipeline_runner import PipelineConfig
-                    
-                    # Extract config from PackJobEntry
-                    config_snapshot = entry.config_snapshot
-                    prompt_text = entry.prompt_text or ""
-                    negative_text = entry.negative_prompt_text or ""
-                    
-                    print(f"[PipelineController] Prompt length: {len(prompt_text)}, Negative: {len(negative_text)}")
-                    
-                    if not prompt_text:
-                        _logger.warning("Skipping pack entry '%s' - no prompt text", entry.pack_name)
-                        continue
-                    
-                    # Extract config from txt2img section if available
-                    txt2img_config = config_snapshot.get("txt2img", {})
-                    model = txt2img_config.get("model") or config_snapshot.get("model", "juggernautXL_ragnarokBy.safetensors")
-                    sampler = txt2img_config.get("sampler_name") or config_snapshot.get("sampler", "DPM++ 2M")
-                    steps = txt2img_config.get("steps") or config_snapshot.get("steps", 20)
-                    cfg_scale = txt2img_config.get("cfg_scale") or config_snapshot.get("cfg_scale", 7.0)
-                    width = txt2img_config.get("width") or config_snapshot.get("width", 1024)
-                    height = txt2img_config.get("height") or config_snapshot.get("height", 1024)
-                    
-                    config = PipelineConfig(
-                        prompt=prompt_text,
-                        negative_prompt=negative_text,
-                        model=model,
-                        sampler=sampler,
-                        steps=steps,
-                        cfg_scale=cfg_scale,
-                        width=width,
-                        height=height,
-                    )
-                    
-                    print(f"[PipelineController] Built config: model={model}, sampler={sampler}, steps={steps}")
-                    
-                    # Build job using existing helper
-                    job = self._build_job(
-                        config,
-                        run_mode="queue",
-                        source="gui_pack",
-                        prompt_source=f"pack:{entry.pack_name}",
-                        prompt_pack_id=entry.pack_id,
-                    )
-                    
-                    print(f"[PipelineController] Built job {job.job_id} for pack '{entry.pack_name}'")
-                    print(f"[PipelineController] Job has pipeline_config: {job.pipeline_config is not None}")
-                    
-                    # Submit to queue
-                    if self._job_service:
-                        self._job_service.submit_queued(job)
-                        print(f"[PipelineController] Submitted job {job.job_id} to queue")
-                        print(f"[PipelineController] Runner is_running: {self._job_service.runner.is_running()}")
-                    else:
-                        _logger.error("No job_service available!")
-                        return None
-                    
-                    # Track the first job ID as representative
-                    if bundle_job_id is None:
-                        bundle_job_id = job.job_id
-                    
-                except Exception as exc:
-                    _logger.error("Failed to convert PackJobEntry to job: %s", exc)
-                    import traceback
-                    traceback.print_exc()
-                    continue
-            
-            if bundle_job_id is None:
-                _logger.warning("No jobs were successfully enqueued from pack entries")
-                return None
-            
-            # Clear the app_state job draft after successful enqueue
-            if app_state and hasattr(app_state, "clear_job_draft"):
-                app_state.clear_job_draft()
-                print(f"[PipelineController] Cleared job draft after enqueue")
-            
-            _logger.info("Enqueued %d pack-based job(s)", len(pack_entries))
-            print(f"[PipelineController] Successfully enqueued {len(pack_entries)} pack-based job(s)")
-            return bundle_job_id
-            
-        except Exception as exc:
-            _logger.error("Failed to enqueue pack-based jobs: %s", exc)
-            import traceback
-            traceback.print_exc()
-            return None
+                    clear_job_draft()
+                except Exception:
+                    pass
+        return job_id
 
     def get_draft_bundle_summary(self) -> JobBundleSummaryDTO | None:
         """Get summary of the current draft bundle for preview.
@@ -1795,6 +1767,11 @@ class PipelineController(_GUIPipelineController):
         return None
 
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        """Get diagnostics snapshot (PR-CORE1-A3: includes NJR visibility).
+        
+        Delegates to JobService which provides queue/history state including
+        NormalizedJobRecord snapshots for debugging.
+        """
         if self._job_service is None:
             return {}
         try:

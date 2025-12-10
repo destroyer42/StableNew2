@@ -62,6 +62,8 @@ parallel job formats
 
 legacy prompt resolution code
 
+Legacy RunPayload/job.payload helpers were removed in PR-CORE1-B5 and must not reappear in new code or tests.
+
 All jobs must pass through:
 
 RandomizerEngineV2
@@ -374,6 +376,8 @@ Any reference to “manual prompt mode”
 
 Before removal, tests must be updated.
 
+Controller-focused tests must construct controllers without injecting `StateManager`/`GUIState`; GUI state machinery belongs in `tests/gui`.
+
 5. Controller Integration Rules
 
 Controllers:
@@ -402,11 +406,50 @@ Controllers do not:
 
 assemble payloads
 
+execute payload-based jobs (RunPayload / `Job.payload`)
+
 build pipeline configs
 
 merge dictionaries
 
 create stage chains
+- depend on `src/gui.state.StateManager` or `GUIState`
+
+### 5.1 **NJR-Only Execution Invariants** (PR-CORE1-B2)
+
+New rules for queue execution path after B2:
+
+**Execution Path - NJR-ONLY for New Jobs:**
+
+**REQUIRED:** If a Job has `normalized_record`, the queue execution path MUST use `run_njr` via `_run_job`.
+
+**FORBIDDEN:** Controllers, JobService, and Queue/Runner MUST NOT rely on `pipeline_config` for any job that has a `normalized_record`.
+
+**FORBIDDEN:** If NJR execution fails for an NJR-backed job, the execution path MUST NOT fall back to `pipeline_config`. The job should be marked as failed.
+
+**LEGACY-ONLY:** `pipeline_config` execution branch is allowed ONLY for jobs without `_normalized_record` (imported from old history, pre-v2.6 jobs).
+
+AppController._execute_job MUST check for `_normalized_record` FIRST. If present, use NJR path exclusively.
+
+**Job Construction:**
+
+All jobs created via `PipelineController._to_queue_job` MUST have `_normalized_record` attached.
+
+`pipeline_config` field is set to `None` for all v2.6 jobs created via JobBuilderV2; non-null values are only tolerated for legacy jobs imported before v2.6. Execution MUST NOT rely on it. PR-CORE1-B3 enforces this invariant across the controller, JobService, and queue layers by clearing `pipeline_config` as part of `_to_queue_job()`.
+
+**PR-CORE1-B4:** `PipelineRunner.run(config)` no longer exists. Tests (both unit and integration) must exercise `run_njr()` exclusively and may rely on the legacy adapter if they need to replay pipeline_config-only data.
+
+**Testing Requirements:**
+
+All golden-path E2E tests MUST assert NJR execution is used for new queue jobs.
+
+Tests MUST verify that `_run_job` is called when `_normalized_record` is present.
+
+Tests MUST verify that NJR execution failures result in job error status (NO fallback to pipeline_config).
+
+Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
+
+Tests for legacy jobs (without NJR) MUST verify `pipeline_config` branch still works.
 
 6. GUI Integration Rules
 

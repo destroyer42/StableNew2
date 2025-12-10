@@ -1,7 +1,12 @@
 # Subsystem: Queue
 # Role: Persists completed job history for inspection and learning.
 
-"""Persistent history storage for queue jobs."""
+"""Persistent history storage for queue jobs.
+
+PR-CORE1-B2: For jobs created after v2.6, history entries should include NJR
+snapshots in the 'snapshot' field. The snapshot['normalized_job'] contains the
+NormalizedJobRecord data. Legacy entries may only have pipeline_config data.
+"""
 
 from __future__ import annotations
 
@@ -163,6 +168,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
             payload_summary=self._summarize_job(job),
             worker_id=getattr(job, "worker_id", None),
             run_mode=getattr(job, "run_mode", "queue"),
+            snapshot=getattr(job, "snapshot", None),
         )
         self._append(entry)
 
@@ -194,6 +200,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
             worker_id=current.worker_id if current else None,
             result=result if result is not None else (current.result if current else None),
             run_mode=current.run_mode if current else "queue",
+            snapshot=current.snapshot if current else None,
         )
         self._append(entry)
 

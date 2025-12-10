@@ -384,6 +384,69 @@ Timing data
 
 Errors
 
+### 6.4 **CORE1 Execution State** (Updated PR-CORE1-B2, December 2025)
+
+**Current Reality:**
+
+StableNew execution model in v2.6:
+
+**Build & Display Path (NJR-only):**
+- PromptPack → GUI state → JobBuilderV2 → **NormalizedJobRecord[]**
+- Preview/Queue/History panels display jobs via **NJR-driven DTOs**:
+  - UnifiedJobSummary
+  - JobQueueItemDTO
+  - JobHistoryItemDTO
+- All display data comes from NJR snapshots, NOT from pipeline_config
+
+**Execution Path after B2 (NJR-only for new jobs):**
+
+**For new queue jobs (v2.6+):**
+```
+Job (with normalized_record) →
+AppController._execute_job
+  → if normalized_record present → PipelineController._run_job → PipelineRunner.run_njr
+  → on failure → return error status (NO fallback to pipeline_config)
+```
+
+**For legacy jobs (pre-v2.6 or imported):**
+```
+Job (with only pipeline_config, no normalized_record) →
+AppController._execute_job
+  → _run_pipeline_via_runner_only(pipeline_config) → PipelineRunner.run_njr(legacy NJR adapter)
+```
+
+**PR-CORE1-B2 Changes:**
+
+- **NJR is the SOLE execution payload for all new jobs created in v2.6**
+- If a job has `_normalized_record`, execution uses NJR path ONLY
+- If NJR execution fails, the job is marked as failed (no pipeline_config fallback)
+- `pipeline_config` field may still exist for debugging/inspection but is NOT used for execution
+- `pipeline_config` branch is LEGACY-ONLY for old jobs without NJR
+
+**PR-CORE1-B3 Changes:**
+
+- `pipeline_config` is explicitly set to `None` when `PipelineController._to_queue_job()` builds jobs. NJRs drive the queue, runner, and history DTOs.
+- Queue/JobService/History treat `pipeline_config` as legacy metadata; only imported pre-v2.6 jobs may still store a non-null value.
+- **PR-CORE1-B4 Changes:**
+- PipelineRunner no longer offers a public `run(config)` entrypoint; `run_njr(record, cancel_token)` is the sole execution API.
+- Legacy `PipelineConfig` executions pass through `legacy_njr_adapter.build_njr_from_legacy_pipeline_config()` and then run through `run_njr`, ensuring the runner core only sees NJRs.
+
+**Invariants (PR-CORE1-B2):**
+
+- ✅ NJR is canonical for preview/queue/history display (PR-CORE1-A3)
+- ✅ JobBuilderV2 is the only job builder
+- ✅ Display DTOs never introspect pipeline_config (use NJR snapshots)
+- ✅ **NJR is the ONLY execution path for new jobs (PR-CORE1-B2)**
+- ✅ Jobs created via queue pipeline have `_normalized_record` attached
+- ✅ NJR execution failures return error status (no silent fallback)
+- ⏳ pipeline_config field still exists as legacy debug field
+- ❌ Do NOT use pipeline_config for execution of NJR-backed jobs
+- ❌ pipeline_config is None for every new NJR-backed job (PR-CORE1-B3)
+
+**Legacy Support:**
+
+Jobs without `_normalized_record` (imported from old history, pre-v2.6 jobs) can still execute via `pipeline_config` path. This is clearly marked as legacy-only in code comments and will be removed in a future cleanup PR (CORE1-C).
+
 7. Post-Execution Layer
 7.1 History
 

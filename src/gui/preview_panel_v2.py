@@ -1,4 +1,8 @@
-"""Preview panel scaffold for GUI v2."""
+"""Preview panel for GUI v2 (PR-CORE1-A3: NJR-only display).
+
+This panel displays job previews using NormalizedJobRecord and UnifiedJobSummary.
+All display data comes from NJR snapshots, never from pipeline_config.
+"""
 
 from __future__ import annotations
 

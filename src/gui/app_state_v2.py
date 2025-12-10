@@ -140,6 +140,7 @@ class AppStateV2:
     run_config: Dict[str, Any] = field(default_factory=dict)
     current_config: CurrentConfig = field(default_factory=CurrentConfig)
     _resource_listeners: List[Callable[[Dict[str, List[Any]]], None]] = field(default_factory=list)
+    # Canonical PromptPack-first draft state used by controllers (CORE1-A1)
     job_draft: JobDraft = field(default_factory=JobDraft)
     preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
     log_events: list[JobLifecycleLogEvent] = field(default_factory=list)

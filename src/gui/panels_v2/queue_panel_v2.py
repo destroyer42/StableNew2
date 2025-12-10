@@ -1,4 +1,8 @@
-"""V2 Queue Panel - displays ordered job list with manipulation controls."""
+"""V2 Queue Panel (PR-CORE1-A3: NJR-only display).
+
+Displays ordered job list with manipulation controls.
+All display data comes from UnifiedJobSummary (derived from NJR snapshots).
+"""
 
 from __future__ import annotations
 

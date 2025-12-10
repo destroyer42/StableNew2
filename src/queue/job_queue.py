@@ -1,7 +1,12 @@
 # Subsystem: Queue
 # Role: Implements the in-memory job queue contract.
 
-"""In-memory job queue with simple priority + FIFO behavior."""
+"""In-memory job queue with simple priority + FIFO behavior.
+
+PR-CORE1-B2: For jobs created after v2.6, NormalizedJobRecord (NJR) is required
+for execution. The pipeline_config field is legacy-only and should not be relied
+upon for new queue jobs.
+"""
 
 from __future__ import annotations
 

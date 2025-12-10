@@ -45,6 +45,7 @@ from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
 from src.gui.views.error_modal_v2 import ErrorModalV2
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
+from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
 from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
@@ -324,6 +325,7 @@ class AppController:
             job_service=self.job_service,
             pipeline_runner=self.pipeline_runner,
             job_lifecycle_logger=self._job_lifecycle_logger,
+            app_state=self.app_state,
         )
         self.process_auto_scanner = ProcessAutoScannerService(
             config=ProcessAutoScannerConfig(),
@@ -731,14 +733,43 @@ class AppController:
         save_queue_snapshot(snapshot)
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
+        """Execute a job via NJR or legacy pipeline_config only (PR-CORE1-B2/B5).
+
+        Execution path:
+        1. NormalizedJobRecord (via PipelineController._run_job) - REQUIRED for new jobs
+           - If NJR present and execution fails, the job is marked as failed (no fallback)
+        2. pipeline_config (via _run_pipeline_via_runner_only) - LEGACY ONLY
+           - Used only when NJR is absent
+
+        PR-CORE1-B5 removed the payload-based execution path; every runnable job must carry an NJR
+        or, for very old entries, a PipelineConfig that feeds the legacy adapter.
+        """
         self._append_log(f"[queue] Executing job {job.job_id}")
-        
-        # PR-CORE-D/E: Check for pipeline_config first (PromptPack-based jobs)
+
+        normalized_record = getattr(job, "_normalized_record", None)
+        if normalized_record is not None and self.pipeline_controller is not None:
+            self._append_log(f"[queue] Job {job.job_id} has normalized_record, executing via NJR-only path")
+            try:
+                result = self.pipeline_controller._run_job(job)
+                return {
+                    "job_id": job.job_id,
+                    "status": "executed",
+                    "mode": "njr",
+                    "result": result,
+                }
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[queue] NJR execution for job {job.job_id} failed: {exc!r}")
+                return {
+                    "job_id": job.job_id,
+                    "status": "error",
+                    "mode": "njr",
+                    "error": str(exc),
+                }
+
         pipeline_config = getattr(job, "pipeline_config", None)
         if pipeline_config is not None:
             self._append_log(f"[queue] Job {job.job_id} has pipeline_config, executing via runner")
             try:
-                # Use the pipeline runner directly
                 result = self._run_pipeline_via_runner_only(pipeline_config)
                 return {
                     "job_id": job.job_id,
@@ -749,274 +780,14 @@ class AppController:
             except Exception as exc:  # noqa: BLE001
                 self._append_log(f"[queue] Pipeline execution for job {job.job_id} raised: {exc!r}")
                 raise
-        
-        # Legacy path: check payload
-        payload = getattr(job, "payload", None)
 
-        if callable(payload):
-            try:
-                result = payload()
-            except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[queue] Callable payload for job {job.job_id} raised: {exc!r}")
-                raise
-            return {
-                "job_id": job.job_id,
-                "status": "executed",
-                "mode": "callable",
-                "result": result,
-            }
-
-        if not isinstance(payload, dict):
-            self._append_log(f"[queue] Job {job.job_id} has no pipeline_config or valid payload")
-            return {
-                "job_id": job.job_id,
-                "status": "executed",
-                "mode": "opaque",
-                "payload_type": type(payload).__name__,
-            }
-
-        packs = payload.get("packs") or []
-        run_config = payload.get("run_config") or {}
-
-        if not packs:
-            return {
-                "job_id": job.job_id,
-                "status": "executed",
-                "mode": "prompt_pack_batch",
-                "total_entries": 0,
-                "results": [],
-            }
-
-        results: list[dict[str, Any]] = []
-        for idx, pack in enumerate(packs):
-            pack_id = pack.get("pack_id", "")
-            pack_name = pack.get("pack_name", "")
-            cfg_snapshot = pack.get("config_snapshot") or {}
-            variant_index = pack.get("variant_index") or cfg_snapshot.get("variant_index") or idx
-            try:
-                entry_result = self._execute_pack_entry(
-                    pack_id=pack_id,
-                    pack_name=pack_name,
-                    cfg_snapshot=cfg_snapshot,
-                    run_config=run_config,
-                    variant_index=variant_index,
-                )
-            except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[queue] Error while executing pack {pack_id or pack_name}: {exc!r}")
-                entry_result = self._build_pack_result(
-                    pack_id=pack_id,
-                    pack_name=pack_name,
-                    variant_index=variant_index,
-                    prompt=cfg_snapshot.get("prompt", ""),
-                    negative_prompt=cfg_snapshot.get("negative_prompt", ""),
-                    params=self._merge_run_params(cfg_snapshot, run_config),
-                    pipeline_mode=None,
-                    run_result=None,
-                    status="error",
-                    error=str(exc),
-                )
-            results.append(entry_result)
-
+        self._append_log(f"[queue] Job {job.job_id} has no executable payload (missing NJR & pipeline_config)")
         return {
             "job_id": job.job_id,
-            "status": "executed",
-            "mode": "prompt_pack_batch",
-            "total_entries": len(packs),
-            "results": results,
+            "status": "error",
+            "mode": "missing",
+            "error": "No executable path (NJRs and pipeline_config missing)",
         }
-
-    def _execute_pack_entry(
-        self,
-        *,
-        pack_id: str,
-        pack_name: str,
-        cfg_snapshot: dict[str, Any],
-        run_config: dict[str, Any],
-        variant_index: int | None = None,
-    ) -> dict[str, Any]:
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-
-        prompt = self._derive_prompt(cfg_snapshot, run_config)
-        negative_prompt = self._derive_negative_prompt(cfg_snapshot, run_config)
-
-        if pipeline_tab and hasattr(pipeline_tab, "prompt_text"):
-            try:
-                pipeline_tab.prompt_text.delete(0, "end")
-                if prompt:
-                    pipeline_tab.prompt_text.insert(0, prompt)
-            except Exception:
-                pass
-
-        self._apply_pipeline_tab_config(pipeline_tab, cfg_snapshot, run_config)
-
-        params = self._merge_run_params(cfg_snapshot, run_config)
-
-        run_result = self.run_pipeline()
-        pipeline_mode = run_result.get("mode") if isinstance(run_result, dict) else None
-
-        return self._build_pack_result(
-            pack_id=pack_id,
-            pack_name=pack_name,
-            variant_index=variant_index,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            params=params,
-            pipeline_mode=pipeline_mode,
-            run_result=run_result,
-            status="ok",
-        )
-
-    def _build_pack_result(
-        self,
-        *,
-        pack_id: str,
-        pack_name: str,
-        variant_index: int | None,
-        prompt: str,
-        negative_prompt: str,
-        params: dict[str, Any],
-        pipeline_mode: str | None,
-        run_result: dict[str, Any] | None,
-        status: str,
-        error: str | None = None,
-    ) -> dict[str, Any]:
-        outputs = self._collect_outputs(run_result)
-        return {
-            "pack_id": pack_id,
-            "pack_name": pack_name,
-            "variant_index": variant_index,
-            "status": status,
-            "error": error,
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "pipeline_mode": pipeline_mode,
-            "params": params,
-            "outputs": outputs,
-            "raw_result": run_result,
-        }
-
-    def _collect_outputs(self, run_result: dict[str, Any] | None) -> list[dict[str, Any]]:
-        outputs: list[dict[str, Any]] = []
-        if not isinstance(run_result, dict):
-            return outputs
-
-        images: list[Any] = []
-
-        def gather(entry: Any) -> None:
-            if isinstance(entry, dict):
-                imgs = entry.get("images")
-                if isinstance(imgs, list):
-                    images.extend(imgs)
-
-        gather(run_result.get("response") or run_result.get("raw") or run_result)
-        for entry in run_result.get("upscaled") or []:
-            gather(entry)
-
-        for idx in range(len(images)):
-            outputs.append({"path": None, "index": idx})
-
-        return outputs
-
-    def _apply_pipeline_tab_config(
-        self,
-        pipeline_tab: Any | None,
-        cfg_snapshot: dict[str, Any],
-        run_config: dict[str, Any],
-    ) -> None:
-        if pipeline_tab is None:
-            return
-
-        def _set_if_has(attr: str, value: Any) -> None:
-            if value is None:
-                return
-            target = getattr(pipeline_tab, attr, None)
-            if target is None:
-                return
-            try:
-                if hasattr(target, "set"):
-                    target.set(value)
-            except Exception:
-                pass
-
-        for key, attr in [
-            ("txt2img_enabled", "txt2img_enabled"),
-            ("img2img_enabled", "img2img_enabled"),
-            ("adetailer_enabled", "adetailer_enabled"),
-            ("upscale_enabled", "upscale_enabled"),
-        ]:
-            _set_if_has(attr, cfg_snapshot.get(key, run_config.get(key)))
-
-        for key, attr in [
-            ("upscale_factor", "upscale_factor"),
-            ("upscale_model", "upscale_model"),
-            ("upscale_tile_size", "upscale_tile_size"),
-        ]:
-            _set_if_has(attr, cfg_snapshot.get(key, run_config.get(key)))
-
-        input_image_path = cfg_snapshot.get("input_image_path") or run_config.get("input_image_path")
-        if input_image_path and hasattr(pipeline_tab, "input_image_path"):
-            try:
-                pipeline_tab.input_image_path = input_image_path
-            except Exception:
-                pass
-
-    def _derive_prompt(self, cfg_snapshot: dict[str, Any], run_config: dict[str, Any]) -> str:
-        return (
-            cfg_snapshot.get("prompt")
-            or cfg_snapshot.get("positive_prompt")
-            or run_config.get("prompt", "")
-        ) or ""
-
-    def _derive_negative_prompt(self, cfg_snapshot: dict[str, Any], run_config: dict[str, Any]) -> str:
-        return (
-            cfg_snapshot.get("negative_prompt") or run_config.get("negative_prompt", "")
-        ) or ""
-
-    def _merge_run_params(self, cfg_snapshot: dict[str, Any], run_config: dict[str, Any]) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        params["model"] = (
-            cfg_snapshot.get("model")
-            or cfg_snapshot.get("model_name")
-            or run_config.get("model")
-            or run_config.get("model_name")
-            or ""
-        )
-        params["sampler"] = (
-            cfg_snapshot.get("sampler")
-            or cfg_snapshot.get("sampler_name")
-            or run_config.get("sampler")
-            or run_config.get("sampler_name")
-            or ""
-        )
-        params["steps"] = self._safe_int(cfg_snapshot.get("steps") or run_config.get("steps"), 0)
-        params["width"] = self._safe_int(cfg_snapshot.get("width") or run_config.get("width"), 512)
-        params["height"] = self._safe_int(cfg_snapshot.get("height") or run_config.get("height"), 512)
-        params["cfg_scale"] = self._safe_float(
-            cfg_snapshot.get("cfg_scale") or run_config.get("cfg_scale"), 7.0
-        )
-        params["seed"] = cfg_snapshot.get("seed") or run_config.get("seed")
-        params["upscale_factor"] = float(
-            cfg_snapshot.get("upscale_factor")
-            or run_config.get("upscale_factor")
-            or 2.0
-        )
-        params["upscale_model"] = (
-            cfg_snapshot.get("upscale_model")
-            or cfg_snapshot.get("upscaler")
-            or run_config.get("upscale_model")
-            or ""
-        )
-        params["upscale_tile_size"] = self._safe_int(
-            cfg_snapshot.get("upscale_tile_size") or run_config.get("upscale_tile_size"), 0
-        )
-        lora_settings = cfg_snapshot.get("lora_strengths") or run_config.get("lora_strengths") or []
-        params["lora"] = [
-            dict(item) if isinstance(item, dict) else item for item in lora_settings
-        ]
-        params["randomization_enabled"] = bool(
-            cfg_snapshot.get("randomization_enabled") or run_config.get("randomization_enabled")
-        )
-        return params
 
     def _safe_int(self, value: Any, default: int) -> int:
         try:
@@ -1833,7 +1604,8 @@ class AppController:
         self._append_log("[controller] Starting pipeline execution (runner).")
         executor_config = runner._build_executor_config(pipeline_config)
         self._cache_last_run_payload(executor_config, pipeline_config)
-        return runner.run(pipeline_config, None, self._append_log_threadsafe)
+        record = build_njr_from_legacy_pipeline_config(pipeline_config)
+        return runner.run_njr(record, None, self._append_log_threadsafe)
 
     def _get_pipeline_tab_upscale_params(self, pipeline_tab: Any) -> tuple[float, str, int]:
         factor_var = getattr(pipeline_tab, "upscale_factor", None)
@@ -3145,32 +2917,26 @@ class AppController:
             self.app_state.add_packs_to_job_draft(entries)
             self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
             print(f"[AppController] Added {len(entries)} entries to job draft")
-            
-            # PR-CORE-D/E: Pass app_state to pipeline_controller for enqueue
-            if self.pipeline_controller:
-                self.pipeline_controller._app_state_for_enqueue = self.app_state
-                print(f"[AppController] Set _app_state_for_enqueue on pipeline_controller")
-            
-            # PR-CORE-D/E: Update preview panel to show draft contents
-            print(f"[AppController] main_window exists: {self.main_window is not None}")
-            if self.main_window:
-                # Preview panel is on pipeline_tab, not directly on main_window
-                pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-                print(f"[AppController] pipeline_tab: {pipeline_tab}")
-                if pipeline_tab:
-                    preview_panel = getattr(pipeline_tab, "preview_panel", None)
-                    print(f"[AppController] preview_panel: {preview_panel}")
-                    if preview_panel and hasattr(preview_panel, "update_from_job_draft"):
-                        print(f"[AppController] Calling preview_panel.update_from_job_draft()")
-                        preview_panel.update_from_job_draft(self.app_state.job_draft)
-                        print(f"[AppController] Preview panel updated successfully")
-                    else:
-                        print(f"[AppController] ERROR: preview_panel missing or no update_from_job_draft method")
+        # PR-CORE-D/E: Update preview panel to show draft contents
+        print(f"[AppController] main_window exists: {self.main_window is not None}")
+        if self.main_window:
+            # Preview panel is on pipeline_tab, not directly on main_window
+            pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+            print(f"[AppController] pipeline_tab: {pipeline_tab}")
+            if pipeline_tab:
+                preview_panel = getattr(pipeline_tab, "preview_panel", None)
+                print(f"[AppController] preview_panel: {preview_panel}")
+                if preview_panel and hasattr(preview_panel, "update_from_job_draft"):
+                    print(f"[AppController] Calling preview_panel.update_from_job_draft()")
+                    preview_panel.update_from_job_draft(self.app_state.job_draft)
+                    print(f"[AppController] Preview panel updated successfully")
                 else:
-                    print(f"[AppController] ERROR: No pipeline_tab!")
+                    print(f"[AppController] ERROR: preview_panel missing or no update_from_job_draft method")
             else:
-                print(f"[AppController] ERROR: No main_window!")
+                print(f"[AppController] ERROR: No pipeline_tab!")
         else:
+            print(f"[AppController] ERROR: No main_window!")
+        if not entries or not self.app_state:
             print(f"[AppController] ERROR: No entries or no app_state!")
 
     def add_single_prompt_to_draft(self) -> None:
@@ -3208,11 +2974,6 @@ class AppController:
         controller = getattr(self, "pipeline_controller", None)
         if not controller:
             return 0
-        
-        # PR-CORE-D/E: Set app_state on pipeline_controller before enqueuing
-        if self.app_state:
-            controller._app_state_for_enqueue = self.app_state
-            print(f"[AppController] enqueue_draft_bundle: Set _app_state_for_enqueue on pipeline_controller")
         
         enqueue_fn = getattr(controller, "enqueue_draft_bundle", None)
         if not callable(enqueue_fn):

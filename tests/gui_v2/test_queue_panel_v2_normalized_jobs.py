@@ -1,4 +1,7 @@
-"""Tests for QueuePanelV2.set_normalized_jobs() with NormalizedJobRecord."""
+"""Tests for QueuePanelV2.set_normalized_jobs() with NormalizedJobRecord (PR-CORE1-A3).
+
+Confirms queue panel uses NJR-based display, not pipeline_config.
+"""
 
 from __future__ import annotations
 

@@ -29,6 +29,7 @@ from src.utils import StructuredLogger, get_logger, LogContext, log_with_ctx
 from src.utils.config import ConfigManager
 from src.utils.error_envelope_v2 import get_attached_envelope, serialize_envelope, wrap_exception
 
+from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 if TYPE_CHECKING:  # pragma: no cover
     from src.controller.app_controller import CancelToken
 
@@ -139,21 +140,21 @@ class PipelineRunner:
 
         self._learning_enabled = bool(enabled)
 
-    def run(
+    def _execute_with_config(
         self,
         config: PipelineConfig,
         cancel_token: "CancelToken",
         log_fn: Optional[Callable[[str], None]] = None,
     ) -> "PipelineRunResult":
-        """Execute the full pipeline using the provided configuration."""
+        """Execute the pipeline using a PipelineConfig (LEGACY-ONLY, PR-CORE1-B2)."""
 
         if log_fn:
             log_fn("[pipeline] PipelineRunner starting execution.")
 
         executor_config = self._build_executor_config(config)
         prompt = config.prompt.strip() or config.pack_name or config.preset_name or "StableNew GUI Run"
-        run_name = config.pack_name or config.preset_name or "stable_new_session"
         success = False
+        record: LearningRecord | None = None
         last_image_meta: dict[str, Any] | None = None
         stage_plan: StageExecutionPlan | None = None
         run_id = str(uuid4())
@@ -331,6 +332,46 @@ class PipelineRunner:
                 result.learning_records = [record]
         self._last_run_result = result
         return result
+
+    def run_njr(
+        self,
+        record: NormalizedJobRecord,
+        cancel_token: "CancelToken",
+        log_fn: Optional[Callable[[str], None]] = None,
+    ) -> "PipelineRunResult":
+        """Execute the pipeline using a NormalizedJobRecord (PR-CORE1-B2).
+        
+        This is the PRIMARY execution method for all new jobs in v2.6+.
+        For jobs created via the core queue pipeline, this is the only execution path.
+        
+        Converts NJR to PipelineConfig and delegates to _execute_with_config().
+        Uses same executor logic as run() but with data from NormalizedJobRecord.
+        
+        See also:
+        - run(config, ...): Legacy-only execution for old history replay and direct tests.
+        """
+        config = self._pipeline_config_from_njr(record)
+        return self._execute_with_config(config, cancel_token, log_fn=log_fn)
+
+    def _pipeline_config_from_njr(self, record: NormalizedJobRecord) -> PipelineConfig:
+        prompt = record.positive_prompt or record.prompt_pack_name or "StableNew Run"
+        negative = record.negative_prompt or ""
+        executor_config = PipelineConfig(
+            prompt=prompt,
+            negative_prompt=negative,
+            model=record.base_model or "unknown",
+            sampler=record.sampler_name or "Euler a",
+            width=record.width or 1024,
+            height=record.height or 1024,
+            steps=record.steps or 20,
+            cfg_scale=record.cfg_scale or 7.5,
+            pack_name=record.prompt_pack_name or None,
+            metadata={
+                "_pack_output_dir": record.path_output_dir,
+                "_config_variant_label": record.config_variant_label,
+            },
+        )
+        return executor_config
 
     def _call_stage(
         self,
@@ -584,7 +625,7 @@ class PipelineRunner:
 
 @dataclass
 class PipelineRunResult:
-    """Stable output contract for PipelineRunner.run."""
+    """Stable output contract for PipelineRunner.run_njr."""
 
     run_id: str
     success: bool

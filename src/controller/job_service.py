@@ -13,7 +13,7 @@ from typing import Any, Callable, Literal, Protocol
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.config.app_config import get_process_container_config, get_watchdog_config
-from src.queue.job_model import Job, JobExecutionMetadata, JobStatus, RetryAttempt
+from src.queue.job_model import Job, JobExecutionMetadata, JobPriority, JobStatus, RetryAttempt
 from src.gui.pipeline_panel_v2 import format_queue_job_summary
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
@@ -22,9 +22,11 @@ from src.pipeline.job_models_v2 import (
     JobHistoryItemDTO,
     JobQueueItemDTO,
     JobStatusV2,
-    UnifiedJobSummary,
     NormalizedJobRecord,
+    UnifiedJobSummary,
 )
+from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest
+from src.pipeline.pipeline_runner import PipelineConfig
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
 from src.utils.process_container_v2 import (
@@ -273,6 +275,49 @@ class JobService:
             job.unified_summary = record.to_unified_summary()
             setattr(job, "_normalized_record", record)
         return record
+
+    def _job_from_njr(
+        self,
+        record: NormalizedJobRecord,
+        run_request: PipelineRunRequest,
+        *,
+        priority: JobPriority = JobPriority.NORMAL,
+    ) -> Job:
+        # PR-CORE1-B3: NJR-backed jobs must not store pipeline_config.
+        job = Job(
+            job_id=record.job_id,
+            pipeline_config=None,
+            priority=priority,
+            run_mode=run_request.run_mode.value,
+            source=run_request.source.value,
+            prompt_source="pack",
+            prompt_pack_id=record.prompt_pack_id or run_request.prompt_pack_id,
+            randomizer_metadata=record.randomizer_summary,
+            variant_index=record.variant_index,
+            variant_total=record.variant_total,
+        )
+        job.snapshot = asdict(record)
+        job._normalized_record = record  # type: ignore[attr-defined]
+        return job
+
+    def enqueue_njrs(self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest) -> list[str]:
+        """Enqueue a batch of NormalizedJobRecord instances."""
+        job_ids: list[str] = []
+        for record in njrs[: run_request.max_njr_count]:
+            job = self._job_from_njr(record, run_request)
+            self.submit_job_with_run_mode(job)
+            job_ids.append(job.job_id)
+        return job_ids
+
+    def run_njrs_direct(self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest) -> list[str]:
+        """Run NJRs immediately (Run Now semantics)."""
+        job_ids: list[str] = []
+        for record in njrs[: run_request.max_njr_count]:
+            job = self._job_from_njr(record, run_request)
+            job.run_mode = PipelineRunMode.DIRECT.value
+            self.submit_job_with_run_mode(job)
+            job_ids.append(job.job_id)
+        return job_ids
 
     def submit_direct(self, job: Job) -> dict | None:
         """Execute a job synchronously (bypasses queue for 'Run Now' semantics).
@@ -693,10 +738,17 @@ class JobService:
                 logger.debug("Status callback failed: %s", exc)
 
     def _build_unified_summary(self, job: Job, status: JobStatus) -> UnifiedJobSummary:
+        """Build UnifiedJobSummary from NJR snapshot (PR-CORE1-A3).
+        
+        For jobs built via JobBuilderV2, reconstruct from NJR snapshot first.
+        Falls back to Job attributes only for legacy jobs without snapshots.
+        This ensures display DTOs are NJR-driven, not pipeline_config-driven.
+        """
         try:
             normalized_status = JobStatusV2(status.value)
         except ValueError:
             normalized_status = JobStatusV2.QUEUED
+        # PR-CORE1-A3: Prefer NJR snapshot over Job attributes for display
         record = normalized_job_from_snapshot(getattr(job, "snapshot", {}) or {})
         if record is not None:
             record.status = normalized_status

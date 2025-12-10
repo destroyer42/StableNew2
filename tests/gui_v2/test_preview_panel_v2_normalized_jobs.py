@@ -1,4 +1,7 @@
-"""Tests verifying PreviewPanelV2 renders NormalizedJobRecord prompts."""
+"""Tests verifying PreviewPanelV2 renders NormalizedJobRecord prompts (PR-CORE1-A3).
+
+Confirms preview panel uses NJR-based display, not pipeline_config.
+"""
 
 from __future__ import annotations
 

@@ -105,6 +105,13 @@ def _start_pipeline_with_pack(controller: PipelineController, **kwargs: Any) -> 
     return controller.start_pipeline_v2(**kwargs)
 
 
+def _with_fake_state_manager(
+    controller: PipelineController, state_manager: FakeStateManager
+) -> PipelineController:
+    controller.state_manager = state_manager
+    return controller
+
+
 class FakeJobController:
     """Fake job execution controller."""
 
@@ -209,10 +216,12 @@ class TestRunModeEnforcement:
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -230,10 +239,12 @@ class TestRunModeEnforcement:
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -255,10 +266,12 @@ class TestRunModeEnforcement:
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -280,10 +293,12 @@ class TestRunModeEnforcement:
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -315,10 +330,12 @@ class TestMultipleJobsSameRunMode:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -341,10 +358,12 @@ class TestMultipleJobsSameRunMode:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -371,10 +390,12 @@ class TestJobPayloadAttachment:
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -405,10 +426,12 @@ class TestJobServiceIntegration:
         fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
 
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_service
         controller._webui_connection = FakeWebUIConnection()
@@ -432,10 +455,12 @@ class TestPromptPackRequirement:
     ) -> None:
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        controller = PipelineController(
-            state_manager=fake_state_manager,
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
+        controller = _with_fake_state_manager(
+            PipelineController(
+                job_builder=fake_builder,
+                config_assembler=FakeConfigAssembler(),
+            ),
+            fake_state_manager,
         )
         controller._job_service = fake_job_service
         controller._webui_connection = FakeWebUIConnection()

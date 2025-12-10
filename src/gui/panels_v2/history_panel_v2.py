@@ -1,4 +1,7 @@
-"""V2 History Panel - displays completed job history."""
+"""V2 History Panel (PR-CORE1-A3: NJR-only display).
+
+Displays completed job history using NJR-derived DTOs.
+"""
 
 from __future__ import annotations
 
@@ -16,10 +19,10 @@ from src.pipeline.job_models_v2 import JobHistoryItemDTO
 
 
 class HistoryPanelV2(ttk.Frame):
-    """
-    History panel displaying completed jobs.
+    """History panel displaying completed jobs (NJR-driven).
     
-    PR-D: Receives completed jobs from JobService callbacks.
+    Receives completed jobs from JobService callbacks.
+    All display data derived from NJR snapshots via JobHistoryItemDTO.
     
     Features:
     - Display list of completed jobs

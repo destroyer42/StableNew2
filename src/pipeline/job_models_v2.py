@@ -18,6 +18,12 @@ from src.pipeline.resolution_layer import (
 
 @dataclass(frozen=True)
 class JobBundleSummaryDTO:
+    """Display DTO derived from JobBundle for preview panel.
+    
+    JobBundle is legacy but active during CORE1 hybrid state.
+    This DTO provides backward-compatible preview display data.
+    Prefer NormalizedJobRecord-based DTOs (UnifiedJobSummary) for new code.
+    """
     num_parts: int
     estimated_images: int
     positive_preview: str
@@ -76,6 +82,12 @@ class JobBundleSummaryDTO:
 
 @dataclass(frozen=True)
 class JobQueueItemDTO:
+    """Queue display DTO derived from NormalizedJobRecord snapshot.
+    
+    For jobs built via JobBuilderV2, this DTO should be constructed from
+    the NJR snapshot stored in Job.snapshot, not from Job.pipeline_config.
+    Legacy jobs without NJR snapshots may fall back to pipeline_config.
+    """
     job_id: str
     label: str
     status: str
@@ -95,6 +107,12 @@ class JobQueueItemDTO:
 
 @dataclass(frozen=True)
 class JobHistoryItemDTO:
+    """History display DTO derived from NormalizedJobRecord snapshot.
+    
+    For jobs built via JobBuilderV2, this DTO should be constructed from
+    the NJR snapshot stored in history entries, not from pipeline_config.
+    Legacy history entries without NJR snapshots may fall back to pipeline_config.
+    """
     job_id: str
     label: str
     completed_at: datetime
@@ -240,7 +258,16 @@ class JobPart:
 
 @dataclass
 class JobBundle:
-    """Collection of JobParts that together represent user intent."""
+    """Legacy but active collection of JobParts for draft job features (CORE1 hybrid state).
+    
+    JobBundle and JobBundleBuilder remain in active use for:
+    - PipelineController draft job lifecycle
+    - Preview panel display via JobBundleSummaryDTO
+    - Some end-to-end tests
+    
+    Scheduled for cleanup in CORE1-D/CORE1-E after full NJR-only migration.
+    Not removed in PR-CORE1-A3.
+    """
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     label: str = ""
@@ -260,7 +287,12 @@ class JobBundle:
 
 
 class JobBundleBuilder:
-    """Builds canonical JobBundles from prompts/packs."""
+    """Legacy but active builder for JobBundles (CORE1 hybrid state).
+    
+    Builds JobBundles from prompts/packs for draft job features.
+    Remains in active use alongside JobBuilderV2 during CORE1-A/B phases.
+    Scheduled for cleanup in CORE1-D/CORE1-E.
+    """
 
     def __init__(
         self,
@@ -500,11 +532,13 @@ class UnifiedJobSummary:
 
 @dataclass
 class JobUiSummary:
-    """
-    Backward-compatible UI summary wrapper for preview/queue/history panels.
+    """Unified UI summary derived from NormalizedJobRecord for display panels.
 
-    This is intentionally lightweight and derived from NormalizedJobRecord so
-    GUI code can display jobs without knowing pipeline internals.
+    This is the preferred display DTO for preview/queue/history panels in CORE1.
+    Intentionally lightweight - GUI code displays jobs without knowing pipeline internals.
+    
+    Always constructed from NormalizedJobRecord snapshots, never from pipeline_config.
+    Replaces ad-hoc display DTOs and provides consistent job display across all panels.
     """
 
     job_id: str
@@ -623,9 +657,20 @@ class OutputSettings:
 
 @dataclass
 class NormalizedJobRecord:
-    """A fully normalized job record ready for queue/preview/executor.
+    """Canonical job record for preview, queue display, and history (CORE1 hybrid state).
 
-    This is the canonical job representation produced by JobBuilderV2.
+    This is the single source of truth for:
+    - Job construction via JobBuilderV2
+    - Preview/queue/history display via UnifiedJobSummary
+    - Job snapshots and provenance tracking
+    
+    NormalizedJobRecord is the "read model" - used for building and displaying jobs.
+    During early CORE1-A/B hybrid state, Job.pipeline_config was the execution payload,
+    but PR-CORE1-B3 now guarantees new v2.6 jobs never populate this field.
+    Full NJR-only execution is enforced for all new jobs; pipeline_config remains
+    legacy-only (always None for v2.6 jobs).
+    PR-CORE1-B5 removed the old Job.payload-driven execution path in favor of NJRs.
+    
     All fields are explicit - no hidden defaults or missing values.
 
     Attributes:
