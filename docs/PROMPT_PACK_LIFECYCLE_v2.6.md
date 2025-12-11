@@ -444,4 +444,10 @@ No alternate flows allowed.
 
 Randomizer + sweeps yield reproducible paths.
 
+## CORE1-D10 Addendum (Pack → NJR → Queue)
+
+- PromptPack submissions MUST set `prompt_source=pack` and include a non-empty `prompt_pack_id` on every NormalizedJobRecord.
+- NJR snapshots persist pack id/name for replay; queue/history stores treat the NJR snapshot as authoritative for provenance.
+- Validation failures (e.g., missing pack id) are handled by JobService with diagnostics instead of crashes.
+
 END OF PROMPT_PACK_LIFECYCLE_v2.6.md (Canonical Edition)

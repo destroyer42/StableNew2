@@ -18,6 +18,7 @@ import pytest
 from src.controller.job_service import JobService
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunResult
 from src.pipeline.payload_builder import build_sdxl_payload
+from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 from src.pipeline.stage_sequencer import StageSequencer
 from src.pipeline.run_config import PromptSource, RunConfig
 from src.queue.job_history_store import (
@@ -28,6 +29,7 @@ from src.queue.job_history_store import (
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
+from tests.helpers.job_helpers import make_test_job_from_njr
 
 
 def wait_for_job_completion(
@@ -45,6 +47,21 @@ def wait_for_job_completion(
             return entry
         time.sleep(poll_interval)
     return history_store.get_job(job_id)
+
+
+def _job_from_config(
+    cfg: PipelineConfig,
+    *,
+    run_mode: str,
+    source: str,
+    prompt_source: str = "manual",
+    prompt_pack_id: str | None = None,
+) -> Job:
+    njr = build_njr_from_legacy_pipeline_config(cfg)
+    njr.prompt_source = prompt_source
+    if prompt_source == "pack":
+        njr.prompt_pack_id = prompt_pack_id or "pack-auto"
+    return make_test_job_from_njr(njr, run_mode=run_mode, source=source, prompt_source=prompt_source)
 
 
 # ---------------------------------------------------------------------------
@@ -297,10 +314,8 @@ class TestDirectRunNowEndToEnd:
     ) -> None:
         """DIRECT run completes and writes JobRecord with stub images."""
         # Build a Job with direct run_mode
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=small_pipeline_config,
-            priority=JobPriority.NORMAL,
+        job = _job_from_config(
+            small_pipeline_config,
             run_mode="direct",
             source="run_now",
             prompt_source="manual",
@@ -337,11 +352,11 @@ class TestDirectRunNowEndToEnd:
         small_pipeline_config: PipelineConfig,
     ) -> None:
         """DIRECT run records completed_at timestamp."""
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=small_pipeline_config,
+        job = _job_from_config(
+            small_pipeline_config,
             run_mode="direct",
             source="run_now",
+            prompt_source="manual",
         )
 
         before_run = datetime.utcnow()
@@ -362,9 +377,8 @@ class TestDirectRunNowEndToEnd:
         small_pipeline_config: PipelineConfig,
     ) -> None:
         """DIRECT run with manual prompt source is recorded correctly."""
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=small_pipeline_config,
+        job = _job_from_config(
+            small_pipeline_config,
             run_mode="direct",
             source="run_now",
             prompt_source="manual",
@@ -398,10 +412,8 @@ class TestQueueRunEndToEnd:
     ) -> None:
         """QUEUE run is enqueued, processed, and recorded."""
         # Build a Job with queue run_mode
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=small_pipeline_config,
-            priority=JobPriority.NORMAL,
+        job = _job_from_config(
+            small_pipeline_config,
             run_mode="queue",
             source="add_to_queue",
             prompt_source="pack",
@@ -433,9 +445,8 @@ class TestQueueRunEndToEnd:
         small_pipeline_config: PipelineConfig,
     ) -> None:
         """QUEUE run with pack source records prompt origin."""
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=small_pipeline_config,
+        job = _job_from_config(
+            small_pipeline_config,
             run_mode="queue",
             source="run",
             prompt_source="pack",
@@ -471,11 +482,12 @@ class TestQueueRunEndToEnd:
 
         job_ids = []
         for config in configs:
-            job = Job(
-                job_id=str(uuid.uuid4()),
-                pipeline_config=config,
+            job = _job_from_config(
+                config,
                 run_mode="queue",
                 source="add_to_queue",
+                prompt_source="pack",
+                prompt_pack_id="pack-batch",
             )
             job_ids.append(job.job_id)
             job_service.submit_queued(job)
@@ -504,11 +516,12 @@ class TestQueueRunEndToEnd:
         small_pipeline_config: PipelineConfig,
     ) -> None:
         """QUEUE run records started_at and completed_at timestamps."""
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=small_pipeline_config,
+        job = _job_from_config(
+            small_pipeline_config,
             run_mode="queue",
             source="run",
+            prompt_source="pack",
+            prompt_pack_id="pack-queue-ts",
         )
 
         before_run = datetime.utcnow()
@@ -545,18 +558,17 @@ class TestMixedRunModes:
     ) -> None:
         """Direct run followed by queue run both complete successfully."""
         # Direct run first
-        direct_job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=small_pipeline_config,
+        direct_job = _job_from_config(
+            small_pipeline_config,
             run_mode="direct",
             source="run_now",
+            prompt_source="manual",
         )
         job_service.submit_direct(direct_job)
 
         # Queue run second
-        queue_job = Job(
-            job_id=str(uuid.uuid4()),
-            pipeline_config=PipelineConfig(
+        queue_job = _job_from_config(
+            PipelineConfig(
                 prompt="Queue test prompt",
                 model="test-model",
                 sampler="Euler",
@@ -567,6 +579,8 @@ class TestMixedRunModes:
             ),
             run_mode="queue",
             source="add_to_queue",
+            prompt_source="pack",
+            prompt_pack_id="pack-555",
         )
         job_service.submit_queued(queue_job)
 

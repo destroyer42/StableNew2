@@ -2,6 +2,7 @@
 
 Displays ordered job list with manipulation controls.
 All display data comes from UnifiedJobSummary (derived from NJR snapshots).
+Panel consumers must only invoke its API from the Tk main thread (e.g., via `AppController._run_in_gui_thread` or a similar dispatcher).
 """
 
 from __future__ import annotations

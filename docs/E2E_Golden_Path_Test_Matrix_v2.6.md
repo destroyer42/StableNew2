@@ -567,3 +567,12 @@ If these pass, the system is usable end-to-end.
 If these fail, the system is unstable for real users regardless of how many unit tests pass.
 
 This matrix becomes the benchmark for future regressions, major refactors, and new features.
+
+## Compatibility Addendum
+
+CORE1-D8 introduces versioned fixtures under `tests/data/history_compat_v2/` and `tests/data/queue_compat_v2/` plus suites `tests/compat/test_history_compat_v2.py`, `tests/compat/test_queue_compat_v2.py`, and `tests/compat/test_replay_compat_v2.py`. These guard restoration and replay of V2.0/V2.4/V2.6 history/queue snapshots and ensure any future persistence change adds a new fixture/test before it merges.
+
+## CORE1-D10 (PromptPack NJR Queue Path)
+
+- New suites `tests/pipeline/test_prompt_pack_njr_invariants.py` and `tests/pipeline/test_job_service_njr_validation.py` validate that PromptPack runs emit NJR-backed jobs with pack metadata and that JobService enforces pack identity without crashing.
+- End-to-end queue tests no longer construct jobs with `pipeline_config=`; they wrap NormalizedJobRecord snapshots instead.

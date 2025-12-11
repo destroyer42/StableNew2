@@ -44,7 +44,7 @@ from src.gui.main_window_v2 import MainWindow
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
 from src.gui.views.error_modal_v2 import ErrorModalV2
-from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner
+from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner, normalize_run_result
 from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
 from src.controller.process_auto_scanner_service import (
@@ -744,61 +744,33 @@ class AppController:
         save_queue_snapshot(snapshot)
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
-        """Execute a job via NJR or legacy pipeline_config only (PR-CORE1-B2/B5).
-
-        Execution path:
-        1. NormalizedJobRecord (via PipelineController._run_job) - REQUIRED for new jobs
-           - If NJR present and execution fails, the job is marked as failed (no fallback)
-        2. pipeline_config (via _run_pipeline_via_runner_only) - LEGACY ONLY
-           - Used only when NJR is absent
-
-        PR-CORE1-B5 removed the payload-based execution path; every runnable job must carry an NJR
-        or, for very old entries, a PipelineConfig that feeds the legacy adapter.
-        """
+        """Execute a job via NJR only (PR-CORE1-D11 pack-only path)."""
         self._append_log(f"[queue] Executing job {job.job_id}")
 
+        execution_path = "missing"
+        result_payload: Any | None = None
         normalized_record = getattr(job, "_normalized_record", None)
         if normalized_record is not None and self.pipeline_controller is not None:
+            execution_path = "njr"
             self._append_log(f"[queue] Job {job.job_id} has normalized_record, executing via NJR-only path")
             try:
-                result = self.pipeline_controller._run_job(job)
-                return {
-                    "job_id": job.job_id,
-                    "status": "executed",
-                    "mode": "njr",
-                    "result": result,
-                }
+                result_payload = self.pipeline_controller._run_job(job)
             except Exception as exc:  # noqa: BLE001
                 self._append_log(f"[queue] NJR execution for job {job.job_id} failed: {exc!r}")
-                return {
-                    "job_id": job.job_id,
-                    "status": "error",
-                    "mode": "njr",
-                    "error": str(exc),
-                }
+                result_payload = {"error": str(exc)}
+        else:
+            execution_path = "missing_njr"
+            self._append_log(f"[queue] Job {job.job_id} is missing normalized_record; cannot execute.")
+            result_payload = {
+                "error": "Job is missing normalized_record; legacy/pipeline_config execution is disabled.",
+            }
 
-        pipeline_config = getattr(job, "pipeline_config", None)
-        if pipeline_config is not None:
-            self._append_log(f"[queue] Job {job.job_id} has pipeline_config, executing via runner")
-            try:
-                result = self._run_pipeline_via_runner_only(pipeline_config)
-                return {
-                    "job_id": job.job_id,
-                    "status": "executed",
-                    "mode": "pipeline_config",
-                    "result": result,
-                }
-            except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[queue] Pipeline execution for job {job.job_id} raised: {exc!r}")
-                raise
-
-        self._append_log(f"[queue] Job {job.job_id} has no executable payload (missing NJR & pipeline_config)")
-        return {
-            "job_id": job.job_id,
-            "status": "error",
-            "mode": "missing",
-            "error": "No executable path (NJRs and pipeline_config missing)",
-        }
+        canonical_result = normalize_run_result(result_payload, default_run_id=job.job_id)
+        metadata = dict(canonical_result.get("metadata") or {})
+        metadata["execution_path"] = execution_path
+        metadata.setdefault("job_id", job.job_id)
+        canonical_result["metadata"] = metadata
+        return canonical_result
 
     def _safe_int(self, value: Any, default: int) -> int:
         try:
@@ -811,6 +783,37 @@ class AppController:
             return float(value)
         except Exception:
             return default
+
+    def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
+        """Schedule fn to run on the Tk main thread if a dispatcher exists."""
+        if not self.main_window or fn is None:
+            return
+        log_with_ctx(
+            logger,
+            logging.DEBUG,
+            "gui_controller_scheduler | Scheduling callback on GUI thread",
+            ctx=LogContext(subsystem="gui_controller"),
+        )
+        try:
+            dispatcher = getattr(self.main_window, "run_in_main_thread", None)
+            if callable(dispatcher):
+                dispatcher(fn)
+                return
+        except Exception:
+            pass
+
+        try:
+            root = getattr(self.main_window, "root", None) or getattr(self.main_window, "master", None)
+            if root is not None and hasattr(root, "after"):
+                root.after(0, fn)
+                return
+        except Exception:
+            pass
+
+        try:
+            fn()
+        except Exception:
+            pass
 
     def _on_job_status_for_panels(self, job: Job, status: JobStatus | str) -> None:
         """Update queue/history panels when job status changes (PR-D callback)."""
@@ -825,51 +828,61 @@ class AppController:
         summary = getattr(job, "unified_summary", None)
 
         # Update queue panel
-        if queue_panel and status_value in {"pending", "running", "queued"}:
-            upsert_fn = getattr(queue_panel, "upsert_job", None)
-            if callable(upsert_fn):
-                try:
-                    created_at = getattr(summary, "created_at", None) or getattr(
-                        job, "created_at", None
-                    ) or datetime.now()
-                    dto = JobQueueItemDTO(
-                        job_id=getattr(summary, "job_id", job.job_id),
-                        label=getattr(summary, "model_name", None)
-                        or getattr(job, "label", job.job_id),
-                        status=status_value,
-                        estimated_images=getattr(summary, "num_expected_images", 1),
-                        created_at=created_at,
-                    )
-                    upsert_fn(dto)
-                except Exception as exc:
-                    self._append_log(f"[controller] Queue panel upsert error: {exc!r}")
+        queue_upsert_needed = queue_panel and status_value in {"pending", "running", "queued"}
+        queue_remove_needed = queue_panel and status_value in {"completed", "failed", "cancelled"}
+        history_append_needed = history_panel and status_value == "completed"
+        queue_dto = None
+        history_dto = None
 
-        # Remove from queue when completed/failed
-        if queue_panel and status_value in {"completed", "failed", "cancelled"}:
-            remove_fn = getattr(queue_panel, "remove_job", None)
-            if callable(remove_fn):
-                try:
-                    remove_fn(job.job_id)
-                except Exception as exc:
-                    self._append_log(f"[controller] Queue panel remove error: {exc!r}")
+        if queue_upsert_needed:
+            created_at = getattr(summary, "created_at", None) or getattr(job, "created_at", None) or datetime.now()
+            queue_dto = JobQueueItemDTO(
+                job_id=getattr(summary, "job_id", job.job_id),
+                label=getattr(summary, "model_name", None) or getattr(job, "label", job.job_id),
+                status=status_value,
+                estimated_images=getattr(summary, "num_expected_images", 1),
+                created_at=created_at,
+            )
 
-        # Add to history when completed
-        if history_panel and status_value == "completed":
-            append_fn = getattr(history_panel, "append_history_item", None)
-            if callable(append_fn):
-                try:
-                    completed_at = getattr(job, "completed_at", None) or datetime.now()
-                    history_dto = JobHistoryItemDTO(
-                        job_id=getattr(summary, "job_id", job.job_id),
-                        label=getattr(summary, "model_name", None)
-                        or getattr(job, "label", job.job_id),
-                        completed_at=completed_at,
-                        total_images=getattr(summary, "num_expected_images", 0),
-                        stages=getattr(summary, "stages", "-"),
-                    )
-                    append_fn(history_dto)
-                except Exception as exc:
-                    self._append_log(f"[controller] History panel append error: {exc!r}")
+        if history_append_needed:
+            completed_at = getattr(job, "completed_at", None) or datetime.now()
+            history_dto = JobHistoryItemDTO(
+                job_id=getattr(summary, "job_id", job.job_id),
+                label=getattr(summary, "model_name", None) or getattr(job, "label", job.job_id),
+                completed_at=completed_at,
+                total_images=getattr(summary, "num_expected_images", 0),
+                stages=getattr(summary, "stages", "-"),
+            )
+
+        if not (queue_upsert_needed or queue_remove_needed or history_append_needed):
+            return
+
+        def _apply_panel_updates() -> None:
+            if queue_upsert_needed and queue_dto:
+                upsert_fn = getattr(queue_panel, "upsert_job", None)
+                if callable(upsert_fn):
+                    try:
+                        upsert_fn(queue_dto)
+                    except Exception as exc:
+                        self._append_log(f"[controller] Queue panel upsert error: {exc!r}")
+
+            if queue_remove_needed:
+                remove_fn = getattr(queue_panel, "remove_job", None)
+                if callable(remove_fn):
+                    try:
+                        remove_fn(job.job_id)
+                    except Exception as exc:
+                        self._append_log(f"[controller] Queue panel remove error: {exc!r}")
+
+            if history_append_needed and history_dto:
+                append_fn = getattr(history_panel, "append_history_item", None)
+                if callable(append_fn):
+                    try:
+                        append_fn(history_dto)
+                    except Exception as exc:
+                        self._append_log(f"[controller] History panel append error: {exc!r}")
+
+        self._run_in_gui_thread(_apply_panel_updates)
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self.app_state:

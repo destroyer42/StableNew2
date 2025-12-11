@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Mapping, Optional, TYPE_CHECKING
 from uuid import uuid4
 import logging
 
@@ -169,6 +169,29 @@ class PipelineRunner:
             self._validate_stage_plan(stage_plan)
             if not stage_plan.stages:
                 raise ValueError("No pipeline stages enabled")
+            metadata = executor_config.get("metadata") or {}
+            job_id = metadata.get("_job_id", "unknown")
+            prompt_pack_id = metadata.get("_prompt_pack_id")
+            log_with_ctx(
+                get_logger(__name__),
+                logging.INFO,
+                "NJR_EXEC_START | Starting NJR pipeline run",
+                ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
+                extra_fields={
+                    "stage_count": len(stage_plan.stages),
+                    "prompt_pack_id": prompt_pack_id,
+                },
+            )
+            log_with_ctx(
+                get_logger(__name__),
+                logging.INFO,
+                "PIPELINE_JOB_START | Starting pipeline execution",
+                ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
+                extra_fields={
+                    "run_mode": getattr(record, "run_mode", "QUEUE"),
+                    "job_id": job_id,
+                },
+            )
             self._ensure_not_cancelled(cancel_token, "pipeline start")
             
             # Use pack output dir from config metadata if provided, otherwise fallback
@@ -190,6 +213,17 @@ class PipelineRunner:
                 current_stage = StageTypeEnum(stage.stage_type)
                 self._apply_stage_metadata(executor_config, stage)
                 self._ensure_not_cancelled(cancel_token, f"{current_stage.value} start")
+                log_with_ctx(
+                    get_logger(__name__),
+                    logging.INFO,
+                    "NJR_STAGE_START | Executing stage",
+                    ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
+                    extra_fields={
+                        "stage_index": stage.order_index,
+                        "stage_type": current_stage.value,
+                        "prompt_pack_id": prompt_pack_id,
+                    },
+                )
                 stage_events.append(
                     {
                         "stage": current_stage.value,
@@ -218,6 +252,25 @@ class PipelineRunner:
                     input_image_path,
                     prompt_index=prompt_index,
                     job_date=job_date,
+                    job_id=job_id,
+                )
+                log_with_ctx(
+                    get_logger(__name__),
+                    logging.INFO,
+                    "NJR_STAGE_DONE | Stage completed",
+                    ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
+                    extra_fields={
+                        "stage_index": stage.order_index,
+                        "stage_type": current_stage.value,
+                        "prompt_pack_id": prompt_pack_id,
+                    },
+                )
+                log_with_ctx(
+                    get_logger(__name__),
+                    logging.INFO,
+                    "PIPELINE_STAGE_COMPLETED | Stage finished",
+                    ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
+                    extra_fields={"stage_type": current_stage.value, "job_id": job_id},
                 )
                 if last_image_meta and last_image_meta.get("path"):
                     prev_image_path = Path(last_image_meta["path"])
@@ -288,6 +341,14 @@ class PipelineRunner:
         finally:
             record = None
 
+        if success:
+            log_with_ctx(
+                get_logger(__name__),
+                logging.INFO,
+                "PIPELINE_JOB_COMPLETED | All stages done",
+                ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
+                extra_fields={"job_id": job_id},
+            )
         if log_fn:
             log_fn("[pipeline] PipelineRunner completed execution.")
 
@@ -372,6 +433,8 @@ class PipelineRunner:
                 "_config_variant_label": record.config_variant_label,
             },
         )
+        executor_config.metadata["_job_id"] = record.job_id
+        executor_config.metadata["_prompt_pack_id"] = record.prompt_pack_id
         return executor_config
 
     def _call_stage(
@@ -383,20 +446,33 @@ class PipelineRunner:
         input_image_path: Path | None,
         prompt_index: int = 1,
         job_date: str = "",
+        job_id: str | None = None,
     ) -> dict[str, Any] | None:
         """Execute a stage using the executor helpers and the built payload.
-        
+
         Image naming convention: {stage_type}_{prompt_index:02d}_{date}.png
         Example: txt2img_01_2024-12-04.png
         """
 
         stage_type = StageTypeEnum(stage.stage_type)
-        # New naming: stage_promptIndex_date (e.g., txt2img_01_2024-12-04)
+        log_with_ctx(
+            get_logger(__name__),
+            logging.INFO,
+            "PIPELINE_STAGE_API_CALL | Calling generate_images",
+            ctx=LogContext(job_id=job_id or "unknown", subsystem="pipeline_runner"),
+            extra_fields={
+                "stage_type": stage_type.value,
+                "sampler": payload.get("sampler_name"),
+                "steps": payload.get("steps"),
+                "job_id": job_id,
+            },
+        )
+
         if job_date:
             image_name = f"{stage_type.value}_{prompt_index:02d}_{job_date}"
         else:
             image_name = f"{stage_type.value}_{prompt_index:02d}"
-        
+
         if stage_type == StageTypeEnum.TXT2IMG:
             return self._pipeline.run_txt2img_stage(
                 payload.get("prompt", ""),
@@ -643,6 +719,69 @@ class PipelineRunResult:
     def variant_count(self) -> int:
         return len(self.variants)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "success": self.success,
+            "error": self.error,
+            "variants": [dict(variant) for variant in self.variants],
+            "learning_records": [asdict(record) for record in self.learning_records],
+            "randomizer_mode": self.randomizer_mode,
+            "randomizer_plan_size": self.randomizer_plan_size,
+            "metadata": dict(self.metadata or {}),
+            "stage_plan": self._serialize_stage_plan(),
+            "stage_events": [dict(event) for event in self.stage_events],
+        }
+
+    def _serialize_stage_plan(self) -> dict[str, Any] | None:
+        if not self.stage_plan:
+            return None
+        return {
+            "run_id": self.stage_plan.run_id,
+            "stage_types": self.stage_plan.get_stage_types(),
+            "one_click_action": self.stage_plan.one_click_action,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any], default_run_id: str | None = None) -> "PipelineRunResult":
+        run_id = str(data.get("run_id") or default_run_id or "")
+        learning_records: list[LearningRecord] = []
+        for record in data.get("learning_records") or []:
+            if isinstance(record, Mapping):
+                learning_records.append(LearningRecord(**record))
+        stage_events = [dict(event) for event in data.get("stage_events") or []]
+        return cls(
+            run_id=run_id,
+            success=bool(data.get("success", False)),
+            error=data.get("error"),
+            variants=[dict(variant) for variant in data.get("variants") or []],
+            learning_records=learning_records,
+            randomizer_mode=str(data.get("randomizer_mode") or ""),
+            randomizer_plan_size=int(data.get("randomizer_plan_size") or 0),
+            metadata=dict(data.get("metadata") or {}),
+            stage_plan=None,
+            stage_events=stage_events,
+        )
+
+
+def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[str, Any]:
+    """Return a canonical PipelineRunResult dict for any run output."""
+    if isinstance(value, PipelineRunResult):
+        return value.to_dict()
+    if isinstance(value, Mapping):
+        try:
+            return PipelineRunResult.from_dict(value, default_run_id=default_run_id).to_dict()
+        except Exception:
+            pass
+    fallback = PipelineRunResult(
+        run_id=default_run_id or "",
+        success=False,
+        error=str(value) if value is not None else None,
+        variants=[],
+        learning_records=[],
+    )
+    return fallback.to_dict()
+
 
 def _extract_primary_knobs(config: dict[str, Any]) -> dict[str, Any]:
     txt2img = (config or {}).get("txt2img", {}) or {}
@@ -655,4 +794,4 @@ def _extract_primary_knobs(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["PipelineConfig", "PipelineRunner", "PipelineRunResult"]
+__all__ = ["PipelineConfig", "PipelineRunner", "PipelineRunResult", "normalize_run_result"]

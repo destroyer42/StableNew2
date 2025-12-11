@@ -1,11 +1,12 @@
 """Tests that validate the canonical controller → JobService → runner path (PR-CORE1-A3).
 
-Validates that preview/queue/history use NJR-based DTOs, never pipeline_config.
-Confirms pipeline_config remains a legacy fallback only when NJR snapshots are absent.
+Validates that preview/queue/history use NJR-based DTOs only (pack-only NJR paths).
 """
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import Mock
@@ -16,8 +17,9 @@ from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import JobStatusV2, NormalizedJobRecord, StageConfig
-from src.pipeline.pipeline_runner import PipelineConfig
-from src.queue.job_model import Job
+from src.pipeline.pipeline_runner import PipelineRunResult
+from src.queue.job_model import Job, JobStatus
+from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.stub_runner import StubRunner
 
 
@@ -74,6 +76,17 @@ def _make_dummy_record() -> NormalizedJobRecord:
         run_mode="QUEUE",
     )
 
+
+def _canonical_run_result(job_id: str, *, success: bool = True, error: str | None = None) -> dict[str, Any]:
+    return PipelineRunResult(
+        run_id=job_id,
+        success=success,
+        error=error,
+        variants=[],
+        learning_records=[],
+        metadata={},
+    ).to_dict()
+
 def test_app_controller_builds_job_service_with_execute_callable(tmp_path: Path) -> None:
     """JobService gets constructed through the runner factory using _execute_job."""
 
@@ -124,42 +137,14 @@ def test_njr_backed_job_uses_njr_execution_path(tmp_path: Path) -> None:
     job = Job(job_id="njr-test-1", priority=None)
     job._normalized_record = njr
 
-    # Mock pipeline_controller._run_job to verify it's called
-    controller.pipeline_controller._run_job = lambda j: {"status": "ok", "mode": "njr"}
-    
-    result = controller._execute_job(job)
-    
-    assert result["mode"] == "njr"
-    assert result["job_id"] == "njr-test-1"
+    run_result_data = _canonical_run_result(job.job_id)
+    controller.pipeline_controller._run_job = lambda j: run_result_data
 
-
-def test_legacy_job_without_njr_uses_pipeline_config_path(tmp_path: Path) -> None:
-    """Job without _normalized_record should use pipeline_config fallback (PR-CORE1-B1)."""
-    
-    controller = RecordingAppController(
-        main_window=None,
-        threaded=False,
-        tmp_history=tmp_path / "job_history.json",
-    )
-    
-    # Create legacy job with only pipeline_config
-    from src.pipeline.pipeline_runner import PipelineConfig
-    job = Job(job_id="legacy-test-1", priority=None)
-    job.pipeline_config = PipelineConfig(
-        prompt="test",
-        model="sdxl",
-        sampler="Euler a",
-        steps=20,
-        cfg_scale=7.5,
-        width=512,
-        height=512,
-    )
-    # No _normalized_record
-    
     result = controller._execute_job(job)
-    
-    assert result["mode"] == "pipeline_config"
-    assert result["job_id"] == "legacy-test-1"
+
+    assert result["success"] is True
+    assert result["metadata"]["execution_path"] == "njr"
+    assert result["metadata"]["job_id"] == job.job_id
 
 
 def test_njr_job_failure_returns_error_no_fallback_b2(tmp_path: Path) -> None:
@@ -183,12 +168,12 @@ def test_njr_job_failure_returns_error_no_fallback_b2(tmp_path: Path) -> None:
     controller.pipeline_controller._run_job = failing_run_job
     
     result = controller._execute_job(job)
-    
+
     # PR-CORE1-B2: Should return error status, not fall back to pipeline_config
-    assert result["status"] == "error"
-    assert result["mode"] == "njr"
-    assert result["job_id"] == "njr-test-fail"
+    assert result["success"] is False
     assert "NJR execution failed" in result["error"]
+    assert result["metadata"]["execution_path"] == "njr"
+    assert result["metadata"]["job_id"] == job.job_id
 
 
 def test_queue_jobs_have_normalized_record_b2(tmp_path: Path) -> None:
@@ -212,43 +197,43 @@ def test_queue_jobs_have_normalized_record_b2(tmp_path: Path) -> None:
     assert getattr(queue_job, "pipeline_config", None) is None
 
 
-def test_legacy_pipeline_config_job_uses_adapter_and_run_njr(monkeypatch: Any) -> None:
+def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None:
+    """Queue submissions via AppController do not block the caller thread."""
+
     controller = RecordingAppController(
         main_window=None,
         threaded=False,
-        tmp_history=Path("jobs.json"),
-    )
-    config = PipelineConfig(
-        prompt="legacy prompt",
-        model="sdxl",
-        sampler="Euler a",
-        width=512,
-        height=512,
-        steps=20,
-        cfg_scale=7.5,
+        tmp_history=tmp_path / "job_history.json",
     )
 
-    adapter_called = []
+    start_event = threading.Event()
+    release_event = threading.Event()
 
-    def fake_adapter(cfg: PipelineConfig) -> NormalizedJobRecord:
-        adapter_called.append(cfg)
-        return _make_dummy_record()
+    def blocking_run(job: Job) -> dict[str, Any]:
+        start_event.set()
+        release_event.wait(timeout=2.0)
+        return {"job_id": job.job_id, "status": "completed"}
 
-    monkeypatch.setattr(
-        "src.controller.app_controller.build_njr_from_legacy_pipeline_config",
-        fake_adapter,
-    )
+    runner = SingleNodeJobRunner(controller.job_service.job_queue, blocking_run, poll_interval=0.01)
+    controller.job_service.runner = runner
 
-    run_calls = []
+    njr = _make_dummy_record()
+    queue_job = controller.pipeline_controller._to_queue_job(njr)
 
-    def fake_run_njr(record: NormalizedJobRecord, cancel_token: Any, log_fn: Callable | None = None) -> dict:
-        run_calls.append(record)
-        return {"mode": "njr-legacy"}
+    start = time.monotonic()
+    controller.job_service.submit_queued(queue_job)
+    duration = time.monotonic() - start
+    assert duration < 0.2
 
-    controller.pipeline_runner.run_njr = fake_run_njr
+    assert start_event.wait(timeout=1.0)
+    release_event.set()
 
-    result = controller._run_pipeline_via_runner_only(config)
+    for _ in range(100):
+        candidate = controller.job_service.job_queue.get_job(queue_job.job_id)
+        if candidate and candidate.status == JobStatus.COMPLETED:
+            break
+        time.sleep(0.01)
+    else:
+        pytest.fail("Queue job did not complete after release_event")
 
-    assert adapter_called
-    assert run_calls
-    assert result["mode"] == "njr-legacy"
+    controller.job_service.runner.stop()

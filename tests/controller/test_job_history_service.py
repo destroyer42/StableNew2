@@ -21,13 +21,13 @@ def test_history_service_merges_active_and_history(tmp_path):
     assert len(active) == 1
     assert active[0].job_id == "active"
     assert active[0].is_active is True
-    assert active[0].status == JobStatus.QUEUED
+    assert active[0].status == JobStatus.QUEUED.value
 
     recent = service.list_recent_jobs()
     ids = {r.job_id for r in recent}
     assert "done" in ids
     done_entry = next(r for r in recent if r.job_id == "done")
-    assert done_entry.status == JobStatus.COMPLETED
+    assert done_entry.status == JobStatus.COMPLETED.value
     assert done_entry.is_active is False
 
     fetched = service.get_job("active")

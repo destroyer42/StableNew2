@@ -377,6 +377,7 @@ Any reference to “manual prompt mode”
 Before removal, tests must be updated.
 
 Controller-focused tests must construct controllers without injecting `StateManager`/`GUIState`; GUI state machinery belongs in `tests/gui` (see `tests/gui/test_state_manager_legacy.py` for the legacy coverage removed from controller specs). These tests must also avoid JobBundle/JobBundleSummaryDTO assertions—coverage should rely on AppStateV2.job_draft + `NormalizedJobRecord` outputs instead of legacy bundles.
+Tests must not assert against legacy job DTOs (`JobUiSummary`, `JobQueueItemDTO`, `JobHistoryItemDTO`); controller and history tests should derive summaries via `JobView.from_njr()` (or `JobHistoryService.summarize_history_record()`) and never reconstruct pipeline_config fragments.
 
 5. Controller Integration Rules
 
@@ -457,6 +458,8 @@ Tests MUST verify that `_run_job` is called when `_normalized_record` is present
 
 Tests MUST verify that NJR execution failures result in job error status (NO fallback to pipeline_config).
 Tests MUST verify that new queue jobs do not expose a `pipeline_config` field (PR-CORE1-C2); any legacy coverage should work through history data only.
+Tests covering queue persistence (`tests/queue/test_job_queue_persistence_v2.py`, `tests/queue/test_job_history_store.py`) must inspect `state/queue_state_v2.json` and assert every entry ships with `njr_snapshot` plus queue metadata only (`queue_id`, `priority`, `status`, `created_at`, optional auto-run/paused flags) and that forbidden keys like `pipeline_config`, `_normalized_record`, or `draft`/`bundle` blobs never survive serialization; this proves queue I/O already matches history’s NJR semantics until D6 unifies the queue file with history’s JSONL codec.
+Tests covering any JSONL persistence must leverage `JSONLCodec` (`src.utils.jsonl_codec`) and the accompanying `tests/utils/test_jsonl_codec.py` helpers to verify deterministic serialization, sorted keys, trailing newlines, and standardized skipping/logging of corrupt lines, instead of reimplementing ad-hoc JSONL readers or writers.
 Tests MUST NOT reference `pipeline_config` or legacy job dicts in persistence/replay suites; all history-oriented tests hydrate NJRs from snapshots.
 Tests covering history persistence/replay MUST exercise `HistoryMigrationEngine` (legacy → NJR) and assert `history_schema == "2.6"` with no deprecated/draft-bundle fields present in persisted snapshots. History JSONL writes must be deterministic (key ordering stable); tests SHOULD compare `json.dumps(entry, sort_keys=True)` across saves to enforce determinism.
 
@@ -501,6 +504,15 @@ reflect summary state
 differentiate “preview” vs “draft”
 
 trigger controller actions only
+
+- Status callbacks must route GUI updates through `_run_in_gui_thread` (or an equivalent Tk dispatcher); tests must ensure worker threads never call queue/history panel methods directly.
+- Queue/runner tests must cover queue worker lifecycle (worker start/stop logs, non-blocking submissions) and ensure failures during worker start/execution are surfaced via structured logs rather than hanging the GUI.
+- `tests/queue/test_single_node_runner.py` now exercises the `SingleNodeJobRunner` loop to confirm jobs keep processing alive after exceptions, and `tests/queue/test_job_service_pipeline_integration_v2.py` includes a regression that asserts `submit_queued()` returns quickly even when a job blocks, ensuring the queue worker instrumentation remains visible.
+- Queue diagnostics coverage must assert the `QUEUE_JOB_*` and `JOB_EXEC_*` log markers appear, history entries gain `duration_ms` plus error details, and queue submissions remain non-blocking so slow/stuck NJR runs surface through logs before any GUI impact.
+- **Compatibility Suite Requirements:** Every schema change must ship with versioned fixtures under `tests/data/history_compat_v2/` and/or `tests/data/queue_compat_v2/`, and each fixture must be consumed by the compatibility suites (`tests/compat/test_history_compat_v2.py`, `tests/compat/test_queue_compat_v2.py`, `tests/compat/test_replay_compat_v2.py`). These tests prove that:
+  - History entries from V2.0–V2.6 hydrate into valid `HistoryRecord` objects paired with canonical `NormalizedJobRecord` snapshots.
+  - Queue snapshots from transitional versions round-trip through `QueueMigrationEngine` and always expose `queue_schema="2.6"`, `njr_snapshot`, and valid `job_id`s.
+  - Replay requests for old entries go through `legacy_njr_adapter`/`HistoryMigrationEngine` before hitting the unified runner path, preventing regressions in `PipelineController.replay_job_from_history`.
 
 7. DebugHub Integration Requirements
 
@@ -615,12 +627,19 @@ If any fail → PR rejected.
 [X] All builder logic passes unit tests
 [X] New sweep parameters validated
 [X] Prompt resolves through PromptPack-only path
+[X] Preview jobs refresh when PromptPack entries exist and their NormalizedJobRecord fields (prompt/model) match the pack data
 [X] NJRs created via JobBuilderV2
 [X] No GUI prompt code added
 [X] Tech debt removed (draftbundle.py deleted)
 [X] Docs updated: Builder Deep Dive v2.6
 [X] Golden Path tests updated and passing
 [X] Codex executor instructions included
+
+### Run Result Canonicalization (CORE1-D7)
+
+- Tests that inspect pipeline/controller run outputs must rely on the canonical `PipelineRunResult` dictionary (`PipelineRunResult.to_dict()` or `normalize_run_result`) instead of legacy `mode`/`status` flags.
+- Fixtures should annotate `metadata.execution_path` and `metadata.job_id` so queue vs. direct runs remain distinguishable.
+- Queue/history persistence tests must assert `HistoryRecord.result` exists and follows the canonical schema (variants, learning_records, stage_events, metadata) each time JSONL entries are written (`tests/pipeline/test_pipeline_runner.py`, `tests/controller/test_core_run_path_v2.py`, `tests/history/test_history_roundtrip.py`, `tests/history/test_history_replay_integration.py`, `tests/queue/test_job_history_store.py`).
 
 11. Summary
 

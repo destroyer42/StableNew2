@@ -1,8 +1,12 @@
 import tkinter as tk
 from types import SimpleNamespace
+from typing import Any, Callable
 
 import pytest
 
+from src.controller.app_controller import AppController
+from src.pipeline.job_models_v2 import JobHistoryItemDTO, JobQueueItemDTO
+from src.queue.job_model import Job, JobPriority, JobStatus
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -124,3 +128,96 @@ def test_queue_panel_invokes_controller_actions(tk_root: tk.Tk) -> None:
         "clear",
         "send",
     ]
+
+
+def test_job_status_updates_use_ui_dispatcher() -> None:
+    class FakeQueuePanel:
+        def __init__(self) -> None:
+            self.upsert_calls: list[JobQueueItemDTO] = []
+            self.remove_calls: list[str] = []
+
+        def upsert_job(self, dto: JobQueueItemDTO) -> None:
+            self.upsert_calls.append(dto)
+
+        def remove_job(self, job_id: str) -> None:
+            self.remove_calls.append(job_id)
+
+    class FakeHistoryPanel:
+        def __init__(self) -> None:
+            self.append_calls: list[JobHistoryItemDTO] = []
+
+        def append_history_item(self, dto: JobHistoryItemDTO) -> None:
+            self.append_calls.append(dto)
+
+    class FakeMainWindow:
+        def __init__(self) -> None:
+            self.queue_panel = FakeQueuePanel()
+            self.history_panel = FakeHistoryPanel()
+            self.dispatched: list[Callable[[], None]] = []
+
+        def run_in_main_thread(self, fn: Callable[[], None]) -> None:
+            self.dispatched.append(fn)
+
+    controller = AppController.__new__(AppController)
+    controller.main_window = FakeMainWindow()
+    controller._append_log = lambda *args, **kwargs: None
+
+    job = Job(job_id="queued-job", priority=JobPriority.NORMAL)
+    controller._on_job_status_for_panels(job, JobStatus.QUEUED)
+
+    assert controller.main_window.queue_panel.upsert_calls == []
+    assert controller.main_window.queue_panel.remove_calls == []
+    assert controller.main_window.history_panel.append_calls == []
+    assert len(controller.main_window.dispatched) == 1
+
+    for fn in controller.main_window.dispatched:
+        fn()
+
+    assert len(controller.main_window.queue_panel.upsert_calls) == 1
+    assert controller.main_window.queue_panel.remove_calls == []
+    assert controller.main_window.history_panel.append_calls == []
+
+
+def test_job_status_updates_with_root_fallback_run() -> None:
+    class FakeQueuePanel:
+        def __init__(self) -> None:
+            self.upsert_calls: list[JobQueueItemDTO] = []
+            self.remove_calls: list[str] = []
+
+        def upsert_job(self, dto: JobQueueItemDTO) -> None:
+            self.upsert_calls.append(dto)
+
+        def remove_job(self, job_id: str) -> None:
+            self.remove_calls.append(job_id)
+
+    class FakeHistoryPanel:
+        def __init__(self) -> None:
+            self.append_calls: list[JobHistoryItemDTO] = []
+
+        def append_history_item(self, dto: JobHistoryItemDTO) -> None:
+            self.append_calls.append(dto)
+
+    class FakeRoot:
+        def __init__(self) -> None:
+            self.after_calls: list[tuple[int, Callable[[], None]]] = []
+
+        def after(self, delay: int, fn: Callable[[], None]) -> None:
+            self.after_calls.append((delay, fn))
+            fn()
+
+    class FakeMainWindow:
+        def __init__(self) -> None:
+            self.queue_panel = FakeQueuePanel()
+            self.history_panel = FakeHistoryPanel()
+            self.root = FakeRoot()
+
+    controller = AppController.__new__(AppController)
+    controller.main_window = FakeMainWindow()
+    controller._append_log = lambda *args, **kwargs: None
+
+    job = Job(job_id="completed-job", priority=JobPriority.NORMAL)
+    controller._on_job_status_for_panels(job, JobStatus.COMPLETED)
+
+    assert controller.main_window.root.after_calls
+    assert controller.main_window.queue_panel.remove_calls == ["completed-job"]
+    assert controller.main_window.history_panel.append_calls

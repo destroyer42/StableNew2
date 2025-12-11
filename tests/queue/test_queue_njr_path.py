@@ -45,7 +45,6 @@ class TestQueueNJRPath:
         job = Job(
             job_id="njr-job-1",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job._normalized_record = njr
         job.snapshot = {"normalized_job": njr.to_queue_snapshot()}
@@ -58,7 +57,7 @@ class TestQueueNJRPath:
         assert retrieved is not None
         assert hasattr(retrieved, "_normalized_record")
         assert retrieved._normalized_record is not None
-        assert retrieved.pipeline_config is None
+        assert getattr(retrieved, "pipeline_config", None) is None
 
     def test_njr_backed_job_execution_uses_njr_only(self, tmp_path: Path):
         """Job with NJR should execute via NJR path only (no pipeline_config fallback)."""
@@ -70,7 +69,6 @@ class TestQueueNJRPath:
         job = Job(
             job_id="njr-exec-1",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job._normalized_record = njr
         
@@ -85,7 +83,7 @@ class TestQueueNJRPath:
         assert hasattr(retrieved, "_normalized_record")
         assert retrieved._normalized_record is not None
         # pipeline_config should remain None for NJR-only jobs
-        assert retrieved.pipeline_config is None
+        assert getattr(retrieved, "pipeline_config", None) is None
 
     def test_legacy_pipeline_config_only_job(self, tmp_path: Path):
         """Legacy job with only pipeline_config (no NJR) should still work."""
@@ -96,7 +94,6 @@ class TestQueueNJRPath:
         job = Job(
             job_id="legacy-1",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         # No _normalized_record attribute
         job.pipeline_config = PipelineConfig(
@@ -115,7 +112,7 @@ class TestQueueNJRPath:
         retrieved = queue.get_job("legacy-1")
         assert retrieved is not None
         assert not hasattr(retrieved, "_normalized_record") or retrieved._normalized_record is None
-        assert retrieved.pipeline_config is not None
+        assert getattr(retrieved, "pipeline_config", None) is not None
 
     def test_history_entry_with_njr_snapshot(self, tmp_path: Path):
         """History entries for NJR jobs should include NJR snapshot."""
@@ -126,7 +123,6 @@ class TestQueueNJRPath:
         job = Job(
             job_id="history-njr-1",
             priority=JobPriority.NORMAL,
-            pipeline_config=None,
         )
         job._normalized_record = njr
         job.snapshot = {
@@ -166,11 +162,9 @@ class TestQueueNJRPath:
             run_mode="queue",
             source="gui",
             prompt_source="pack",
-            pipeline_config=None,
         )
         job._normalized_record = njr
-        # pipeline_config is intentionally None for new NJR-only jobs
-        job.pipeline_config = None
+        # pipeline_config is intentionally absent for new NJR-only jobs
         
         queue.submit(job)
         
@@ -178,6 +172,6 @@ class TestQueueNJRPath:
         retrieved = queue.get_job("new-job-1")
         assert hasattr(retrieved, "_normalized_record")
         assert retrieved._normalized_record is not None
-        assert retrieved.pipeline_config is None
+        assert getattr(retrieved, "pipeline_config", None) is None
         # PR-CORE1-B2 contract: Execution MUST use _normalized_record, not pipeline_config
         # This is enforced in app_controller._execute_job

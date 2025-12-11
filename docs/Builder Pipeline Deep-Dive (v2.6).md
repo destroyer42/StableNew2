@@ -368,6 +368,8 @@ Builder must not ask the runner for information.
 - PipelineController._to_queue_job() attaches _normalized_record, sets pipeline_config = None, and builds NJR-driven queue/history snapshots.
 - Queue, JobService, Runner, and History rely on NJR snapshots for display/execution. Any non-null pipeline_config values belong to legacy pre-v2.6 data.
 
+Queue persistence output remains the JSON dump stored at `state/queue_state_v2.json`; D5 enforces that the file only ever contains NJR snapshots plus queue metadata (`queue_id`, `status`, `priority`, `created_at`, `queue_schema == "2.6"`, optional metadata, auto-run/paused flags) and no `_normalized_record`, pipeline_config, or bundle/draft keys. Queue persistence tests confirm this invariance, proving the queue file already mirrors history’s NJR schema even before D6 introduces the shared JSONL codec/format that will eventually let history and queue share the same serialization layer.
+
 8. Builder Diagnostics & Debug Hooks (DebugHub v2.6)
 
 The Builder Pipeline emits a structured DTO:

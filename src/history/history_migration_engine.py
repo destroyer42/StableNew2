@@ -122,6 +122,7 @@ class HistoryMigrationEngine:
         normalized["ui_summary"] = self._build_ui_summary_from_njr(normalized["njr_snapshot"])
         normalized["metadata"] = self._ensure_dict(working.get("metadata"))
         normalized["runtime"] = self._ensure_dict(working.get("runtime"))
+        normalized["result"] = self._ensure_dict(working.get("result"))
 
         return self._strip_entry_unknown(normalized)
 

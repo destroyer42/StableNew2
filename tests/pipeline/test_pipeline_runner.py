@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
-from src.pipeline.pipeline_runner import PipelineRunResult, PipelineRunner
+from src.pipeline.pipeline_runner import PipelineRunResult, PipelineRunner, normalize_run_result
 
 
 def _minimal_normalized_record() -> NormalizedJobRecord:
@@ -46,3 +46,33 @@ def test_run_njr_delegates_to_executor() -> None:
     result = runner.run_njr(record, cancel_token=None)
     assert result is expected
     runner._execute_with_config.assert_called_once()
+
+
+def test_pipeline_run_result_to_dict_and_back() -> None:
+    result = PipelineRunResult(
+        run_id="roundtrip-001",
+        success=True,
+        error=None,
+        variants=[{"variant": "a"}],
+        learning_records=[],
+        metadata={"note": "test"},
+        stage_plan=None,
+        stage_events=[{"stage": "txt2img"}],
+    )
+    data = result.to_dict()
+    assert data["run_id"] == "roundtrip-001"
+    assert data["metadata"]["note"] == "test"
+    restored = PipelineRunResult.from_dict(data)
+    assert restored.run_id == result.run_id
+    assert restored.success == result.success
+    assert restored.metadata == result.metadata
+
+
+def test_normalize_run_result_accepts_dicts_and_defaults() -> None:
+    canonical = normalize_run_result({"run_id": "from-dict", "success": True}, default_run_id="fallback")
+    assert canonical["run_id"] == "from-dict"
+    assert canonical["success"] is True
+    fallback = normalize_run_result("unexpected", default_run_id="fallback")
+    assert fallback["run_id"] == "fallback"
+    assert fallback["success"] is False
+    assert fallback["error"] == "unexpected"

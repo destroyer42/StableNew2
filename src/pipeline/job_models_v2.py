@@ -16,6 +16,60 @@ from src.pipeline.resolution_layer import (
 )
 
 
+_STAGE_DISPLAY_MAP: dict[str, str] = {
+    "txt2img": "txt2img",
+    "img2img": "img2img",
+    "upscale": "upscale",
+    "adetailer": "ADetailer",
+}
+
+
+def _coerce_iso_timestamp(value: float | str | datetime | None) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value).isoformat()
+        except Exception:
+            pass
+    if isinstance(value, str) and value:
+        return value
+    return datetime.utcnow().isoformat()
+
+
+def _coerce_iso_datetime(value: datetime | str | None) -> str | None:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _truncate_display_text(value: str | None, limit: int) -> str:
+    if not value:
+        return ""
+    return value if len(value) <= limit else f"{value[:limit]}..."
+
+
+def _format_stage_display(stage_names: Sequence[str]) -> str:
+    if not stage_names:
+        return _STAGE_DISPLAY_MAP["txt2img"]
+    formatted = [_STAGE_DISPLAY_MAP.get(name, name) for name in stage_names if name]
+    return " + ".join(formatted) if formatted else _STAGE_DISPLAY_MAP["txt2img"]
+
+
+def _format_variant_label(index: int, total: int) -> str | None:
+    if total > 1:
+        return f"[v{index + 1}/{total}]"
+    return None
+
+
+def _format_batch_label(index: int, total: int) -> str | None:
+    if total > 1:
+        return f"[b{index + 1}/{total}]"
+    return None
+
+
 @dataclass(frozen=True)
 class JobQueueItemDTO:
     """Queue display DTO derived from NormalizedJobRecord snapshot.
@@ -179,7 +233,7 @@ class JobPart:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     positive_prompt: str = ""
     negative_prompt: str = ""
-    prompt_source: Literal["single", "pack", "preset", "other"] = "single"
+    prompt_source: Literal["pack"] = "pack"
     pack_name: str | None = None
     config_snapshot: PipelineConfigSnapshot = field(default_factory=PipelineConfigSnapshot.default)
     resolved_prompt: ResolvedPrompt | None = None
@@ -265,11 +319,13 @@ class UnifiedJobSummary:
     @classmethod
     def from_job(cls, job: "Job", status: JobStatusV2) -> "UnifiedJobSummary":
         now = getattr(job, "created_at", datetime.utcnow())
+        prompt_pack_id = getattr(job, "prompt_pack_id", "") or ""
+        prompt_pack_name = getattr(job, "prompt_pack_name", "") or ""
         return cls(
             job_id=job.job_id,
-            prompt_pack_id="",
-            prompt_pack_name="",
-            prompt_pack_row_index=0,
+            prompt_pack_id=prompt_pack_id,
+            prompt_pack_name=prompt_pack_name,
+            prompt_pack_row_index=getattr(job, "prompt_pack_row_index", 0) or 0,
             positive_prompt_preview="",
             negative_prompt_preview=None,
             lora_preview="",
@@ -299,90 +355,40 @@ class UnifiedJobSummary:
 class JobUiSummary:
     """Unified UI summary derived from NormalizedJobRecord for display panels.
 
-    This is the preferred display DTO for preview/queue/history panels in CORE1.
-    Intentionally lightweight - GUI code displays jobs without knowing pipeline internals.
-    
-    Always constructed from NormalizedJobRecord snapshots, never from pipeline_config.
-    Replaces ad-hoc display DTOs and provides consistent job display across all panels.
+    This DTO is intentionally limited to presentation values derived from
+    NormalizedJobRecord snapshots. It no longer inspects pipeline config or
+    reconstructs prompts itself; instead it mirrors the data already produced
+    by `JobView`.
     """
 
     job_id: str
-    label: str                   # short display label (e.g. pack name or first prompt words)
-    positive_preview: str        # truncated positive prompt
-    negative_preview: str        # truncated negative prompt
-    stages_display: str          # e.g. "txt2img ?+' adetailer (optional) ?+' img2img (optional) ?+' upscale (optional)"
-    estimated_images: int        # how many images this job will produce
+    label: str
+    positive_preview: str
+    negative_preview: str | None
+    stages_display: str
+    estimated_images: int
     created_at: Optional[datetime] = None
 
     @classmethod
     def from_normalized(cls, rec: "NormalizedJobRecord") -> "JobUiSummary":
-        """
-        Adapter to create JobUiSummary from NormalizedJobRecord.
-        """
-        config = rec.config
+        return cls.from_job_view(rec.to_job_view())
 
-        def _pick(keys: list[str], default: Any = None) -> Any:
-            for key in keys:
-                if isinstance(config, dict):
-                    value = config.get(key, None)
-                else:
-                    value = getattr(config, key, None)
-                if value is not None:
-                    return value
-            return default
-
-        model = _pick(["model", "model_name"], "unknown") or "unknown"
-        prompt_full = (
-            (rec.txt2img_prompt_info and rec.txt2img_prompt_info.final_prompt)
-            or _pick(["prompt"], "")
-            or ""
-        )
-        negative_prompt_full = (
-            (rec.txt2img_prompt_info and rec.txt2img_prompt_info.final_negative_prompt)
-            or _pick(["negative_prompt"], "")
-            or ""
-        )
-        stages = _pick(["stages"], []) or []
-
-        positive_preview = cls._truncate_text(prompt_full, 120)
-        negative_preview = (
-            cls._truncate_text(negative_prompt_full, 120) if negative_prompt_full else None
-        )
-        seed_display = str(rec.seed) if rec.seed is not None else "?"
-
-        variant_label = ""
-        if rec.variant_total > 1:
-            variant_label = f"[v{rec.variant_index + 1}/{rec.variant_total}]"
-
-        batch_label = ""
-        if rec.batch_total > 1:
-            batch_label = f"[b{rec.batch_index + 1}/{rec.batch_total}]"
-
-        stage_labels = {
-            "txt2img": "txt2img",
-            "img2img": "img2img",
-            "adetailer": "ADetailer",
-            "upscale": "upscale",
-        }
-        stage_parts = [stage_labels.get(s, s) for s in stages] if stages else ["txt2img"]
-        stages_display = " ?+' ".join(stage_parts)
-
-        label = f"{model} | seed={seed_display}"
-        if variant_label:
-            label += f" {variant_label}"
-        if batch_label:
-            label += f" {batch_label}"
-
-        estimated_images = rec.variant_total * rec.batch_total if rec.variant_total and rec.batch_total else 1
-
+    @classmethod
+    def from_job_view(cls, view: "JobView") -> "JobUiSummary":
+        created_at = None
+        if view.created_at:
+            try:
+                created_at = datetime.fromisoformat(view.created_at)
+            except ValueError:
+                created_at = None
         return cls(
-            job_id=rec.job_id,
-            label=label,
-            positive_preview=positive_preview,
-            negative_preview=negative_preview,
-            stages_display=stages_display,
-            estimated_images=estimated_images,
-            created_at=rec.created_ts,
+            job_id=view.job_id,
+            label=view.label,
+            positive_preview=view.positive_preview,
+            negative_preview=view.negative_preview,
+            stages_display=view.stages_display,
+            estimated_images=view.estimated_images,
+            created_at=created_at,
         )
 @dataclass
 class JobLifecycleLogEvent:
@@ -450,6 +456,9 @@ class NormalizedJobRecord:
         batch_total: Total number of batch runs.
         created_ts: Timestamp when job was created.
         randomizer_summary: Optional summary of randomization applied.
+    For jobs where `prompt_source == "pack"`, `prompt_pack_id` must be non-empty and
+    `prompt_pack_name` should be populated when available so downstream services can
+    attribute the job to the correct PromptPack.
     """
     job_id: str
     config: Any  # PipelineConfig or dict - fully merged
@@ -610,81 +619,37 @@ class NormalizedJobRecord:
         return UnifiedJobSummary.from_normalized_record(self)
 
     def to_ui_summary(self) -> JobUiSummary:
-        """Convert to a JobUiSummary for UI panel display.
+        """Build a JobUiSummary derived from this normalized record."""
+        return JobUiSummary.from_job_view(self.to_job_view())
 
-        Extracts display-friendly strings from config and job metadata.
-        """
-        config = self.config
-
-        def _pick(keys: list[str], default: Any = None) -> Any:
-            for key in keys:
-                if isinstance(config, dict):
-                    value = config.get(key, None)
-                else:
-                    value = getattr(config, key, None)
-                if value is not None:
-                    return value
-            return default
-
-        model = _pick(["model", "model_name"], "unknown") or "unknown"
-        prompt_full = (
-            (self.txt2img_prompt_info and self.txt2img_prompt_info.final_prompt)
-            or _pick(["prompt"], "")
-            or ""
+    def to_job_view(
+        self,
+        *,
+        status: str | None = None,
+        created_at: str | None = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
+        is_active: bool = False,
+        last_error: str | None = None,
+        worker_id: str | None = None,
+        result: dict[str, Any] | None = None,
+    ) -> "JobView":
+        """Return a presentation-focused JobView derived from this NJR."""
+        normalized_status = (
+            status
+            or str(self.status.value if hasattr(self.status, "value") else self.status)
         )
-        negative_prompt_full = (
-            (self.txt2img_prompt_info and self.txt2img_prompt_info.final_negative_prompt)
-            or _pick(["negative_prompt"], "")
-            or ""
+        return JobView.from_njr(
+            self,
+            status=normalized_status,
+            created_at=created_at or _coerce_iso_timestamp(self.created_ts),
+            started_at=started_at,
+            completed_at=completed_at or _coerce_iso_datetime(self.completed_at),
+            is_active=is_active,
+            last_error=last_error or self.error_message,
+            worker_id=worker_id,
+            result=result,
         )
-        stages = _pick(["stages"], []) or []
-
-        positive_preview = self._truncate_text(prompt_full, 120)
-        negative_preview = (
-            self._truncate_text(negative_prompt_full, 120) if negative_prompt_full else None
-        )
-        seed_display = str(self.seed) if self.seed is not None else "?"
-
-        variant_label = ""
-        if self.variant_total > 1:
-            variant_label = f"[v{self.variant_index + 1}/{self.variant_total}]"
-
-        batch_label = ""
-        if self.batch_total > 1:
-            batch_label = f"[b{self.batch_index + 1}/{self.batch_total}]"
-
-        stage_labels = {
-            "txt2img": "txt2img",
-            "img2img": "img2img",
-            "adetailer": "ADetailer",
-            "upscale": "upscale",
-        }
-        stage_parts = [stage_labels.get(s, s) for s in stages] if stages else ["txt2img"]
-        stages_display = " → ".join(stage_parts)
-
-        label = f"{model} | seed={seed_display}"
-        if variant_label:
-            label += f" {variant_label}"
-        if batch_label:
-            label += f" {batch_label}"
-
-        estimated_images = self.variant_total * self.batch_total if self.variant_total and self.batch_total else 1
-
-        return JobUiSummary(
-            job_id=self.job_id,
-            label=label,
-            positive_preview=positive_preview,
-            negative_preview=negative_preview,
-            stages_display=stages_display,
-            estimated_images=estimated_images,
-            created_at=self.created_ts,
-        )
-
-    @staticmethod
-    def _truncate_text(value: str, limit: int) -> str:
-        if not value:
-            return ""
-        return value if len(value) <= limit else value[:limit] + "..."
 
     @staticmethod
     def _coerce_int(value: Any) -> int | None:
@@ -692,6 +657,11 @@ class NormalizedJobRecord:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    @property
+    def is_pack_job(self) -> bool:
+        """Return True if this normalized job originated from a prompt pack."""
+        return (getattr(self, "prompt_source", "") or "").lower() == "pack"
 
     @staticmethod
     def _coerce_float(value: Any) -> float | None:
@@ -798,6 +768,100 @@ class NormalizedJobRecord:
             snapshot["pack_usage"] = [asdict(info) for info in self.pack_usage]
 
         return snapshot
+
+
+@dataclass(frozen=True)
+class JobView:
+    """Thin, NJR-derived presentation view used by controllers, history, and diagnostics."""
+
+    job_id: str
+    status: str
+    model: str
+    prompt: str
+    negative_prompt: str | None
+    seed: int | None
+    label: str
+    positive_preview: str
+    negative_preview: str | None
+    stages_display: str
+    estimated_images: int
+    created_at: str
+    prompt_pack_id: str
+    prompt_pack_name: str
+    variant_label: str | None
+    batch_label: str | None
+    started_at: str | None = None
+    completed_at: str | None = None
+    is_active: bool = False
+    last_error: str | None = None
+    worker_id: str | None = None
+    result: dict[str, Any] | None = None
+
+    @classmethod
+    def from_njr(
+        cls,
+        record: "NormalizedJobRecord",
+        *,
+        status: str | None = None,
+        created_at: str | None = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
+        is_active: bool = False,
+        last_error: str | None = None,
+        worker_id: str | None = None,
+        result: dict[str, Any] | None = None,
+    ) -> "JobView":
+        model = record.base_model or record._extract_model_name() or "unknown"
+        prompt_text = (
+            record.positive_prompt
+            or (record.txt2img_prompt_info and record.txt2img_prompt_info.final_prompt)
+            or ""
+        )
+        negative_text = (
+            record.negative_prompt
+            or (record.txt2img_prompt_info and record.txt2img_prompt_info.final_negative_prompt)
+            or None
+        )
+        positive_preview = _truncate_display_text(prompt_text, 120)
+        negative_preview = _truncate_display_text(negative_text, 120) if negative_text else None
+        stage_names = [stage.stage_type for stage in record.stage_chain if stage.stage_type]
+        stages_display = _format_stage_display(stage_names)
+        variant_label = _format_variant_label(record.variant_index, record.variant_total)
+        batch_label = _format_batch_label(record.batch_index, record.batch_total)
+        seed_display = str(record.seed) if record.seed is not None else "?"
+
+        label = f"{model} | seed={seed_display}"
+        if variant_label:
+            label += f" {variant_label}"
+        if batch_label:
+            label += f" {batch_label}"
+
+        status_value = status or str(record.status.value if hasattr(record.status, "value") else record.status)
+        created_iso = created_at or _coerce_iso_timestamp(record.created_ts)
+        return cls(
+            job_id=record.job_id,
+            status=status_value,
+            model=model,
+            prompt=prompt_text,
+            negative_prompt=negative_text,
+            seed=record.seed,
+            label=label,
+            positive_preview=positive_preview,
+            negative_preview=negative_preview,
+            stages_display=stages_display,
+            estimated_images=record.estimated_image_count(),
+            created_at=created_iso,
+            prompt_pack_id=record.prompt_pack_id,
+            prompt_pack_name=record.prompt_pack_name,
+            variant_label=variant_label,
+            batch_label=batch_label,
+            started_at=started_at,
+            completed_at=completed_at,
+            is_active=is_active,
+            last_error=last_error,
+            worker_id=worker_id,
+            result=result,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -919,4 +983,5 @@ __all__ = [
     "LoRATag",
     "PackUsageInfo",
     "JobLifecycleLogEvent",
+    "JobView",
 ]

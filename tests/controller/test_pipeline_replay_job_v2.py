@@ -43,7 +43,6 @@ class DummyPipelineController(PipelineController):
 def _make_snapshot_entry(record: NormalizedJobRecord) -> tuple[JobHistoryEntry, Job]:
     job = Job(
         job_id=record.job_id,
-        pipeline_config=None,
         config_snapshot=record.to_queue_snapshot(),
         run_mode="queue",
         source="gui",

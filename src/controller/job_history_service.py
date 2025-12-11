@@ -2,26 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
+from src.history.history_record import HistoryRecord
+from src.pipeline.job_models_v2 import JobView
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
-
-
-@dataclass
-class JobViewModel:
-    job_id: str
-    status: JobStatus
-    created_at: str
-    started_at: str | None
-    completed_at: str | None
-    payload_summary: str
-    is_active: bool
-    last_error: str | None = None
-    worker_id: str | None = None
-    result: Dict[str, Any] | None = None
+from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 
 class JobHistoryService:
@@ -66,27 +54,31 @@ class JobHistoryService:
         except Exception:
             pass
 
-    def list_active_jobs(self) -> List[JobViewModel]:
+    def list_active_jobs(self) -> List[JobView]:
         active_statuses = {JobStatus.QUEUED, JobStatus.RUNNING}
         jobs = [j for j in self._queue.list_jobs() if j.status in active_statuses]
-        return [self._from_job(j) for j in jobs]
+        return [self._from_job(j, is_active=True) for j in jobs]
 
-    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> List[JobViewModel]:
+    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> List[JobView]:
         history_entries = self._history.list_jobs(status=status, limit=limit)
-        active_by_id = {j.job_id: j for j in self._queue.list_jobs()}
-        view_models: list[JobViewModel] = []
+        active_by_id = {
+            j.job_id: j
+            for j in self._queue.list_jobs()
+            if j.status in {JobStatus.QUEUED, JobStatus.RUNNING}
+        }
+        view_models: list[JobView] = []
         for entry in history_entries:
             active_job = active_by_id.get(entry.job_id)
             if active_job:
-                view_models.append(self._from_job(active_job))
+                view_models.append(self._from_job(active_job, is_active=True))
             else:
                 view_models.append(self._from_history(entry))
         return view_models
 
-    def get_job(self, job_id: str) -> Optional[JobViewModel]:
+    def get_job(self, job_id: str) -> Optional[JobView]:
         active = next((j for j in self._queue.list_jobs() if j.job_id == job_id), None)
         if active:
-            return self._from_job(active)
+            return self._from_job(active, is_active=True)
         entry = self._history.get_job(job_id)
         if entry:
             return self._from_history(entry)
@@ -128,33 +120,101 @@ class JobHistoryService:
                 return None
         return None
 
-    def _from_job(self, job: Job) -> JobViewModel:
-        is_active = job.status in {JobStatus.QUEUED, JobStatus.RUNNING}
-        return JobViewModel(
-            job_id=job.job_id,
-            status=job.status,
-            created_at=job.created_at.isoformat(),
-            started_at=job.started_at.isoformat() if job.started_at else None,
-            completed_at=job.completed_at.isoformat() if job.completed_at else None,
-            payload_summary=self._summarize(job),
-            is_active=is_active,
-            last_error=job.error_message,
-            worker_id=getattr(job, "worker_id", None),
-            result=job.result,
+    def _from_job(self, job: Job, *, is_active: bool = False) -> JobView:
+        return self._build_view_from_job(job, is_active=is_active)
+
+    def _from_history(self, entry: JobHistoryEntry) -> JobView:
+        record = normalized_job_from_snapshot(entry.snapshot or {})
+        status_value = entry.status.value if hasattr(entry.status, "value") else str(entry.status)
+        created_at = entry.created_at.isoformat()
+        started_at = entry.started_at.isoformat() if entry.started_at else None
+        completed_at = entry.completed_at.isoformat() if entry.completed_at else None
+        result = entry.result
+        last_error = entry.error_message
+        worker_id = entry.worker_id
+
+        if record:
+            return record.to_job_view(
+                status=status_value,
+                created_at=created_at,
+                started_at=started_at,
+                completed_at=completed_at,
+                is_active=False,
+                last_error=last_error,
+                worker_id=worker_id,
+                result=result,
+            )
+
+        return JobView(
+            job_id=entry.job_id,
+            status=status_value,
+            model="unknown",
+            prompt="",
+            negative_prompt=None,
+            seed=None,
+            label=entry.payload_summary or entry.job_id,
+            positive_preview=entry.payload_summary or "",
+            negative_preview=None,
+            stages_display="txt2img",
+            estimated_images=1,
+            created_at=created_at,
+            prompt_pack_id=entry.prompt_pack_id or "",
+            prompt_pack_name="",
+            variant_label=None,
+            batch_label=None,
+            started_at=started_at,
+            completed_at=completed_at,
+            is_active=False,
+            last_error=last_error,
+            worker_id=worker_id,
+            result=result,
         )
 
-    def _from_history(self, entry: JobHistoryEntry) -> JobViewModel:
-        return JobViewModel(
-            job_id=entry.job_id,
-            status=entry.status,
-            created_at=entry.created_at.isoformat(),
-            started_at=entry.started_at.isoformat() if entry.started_at else None,
-            completed_at=entry.completed_at.isoformat() if entry.completed_at else None,
-            payload_summary=entry.payload_summary,
-            is_active=False,
-            last_error=entry.error_message,
-            worker_id=entry.worker_id,
-            result=entry.result,
+    def _build_view_from_job(self, job: Job, *, is_active: bool) -> JobView:
+        status_value = job.status.value if hasattr(job.status, "value") else str(job.status)
+        created_at = job.created_at.isoformat()
+        started_at = job.started_at.isoformat() if job.started_at else None
+        completed_at = job.completed_at.isoformat() if job.completed_at else None
+        result = job.result
+        last_error = job.error_message
+        worker_id = getattr(job, "worker_id", None)
+        record = normalized_job_from_snapshot(getattr(job, "snapshot", {}) or {})
+
+        if record:
+            return record.to_job_view(
+                status=status_value,
+                created_at=created_at,
+                started_at=started_at,
+                completed_at=completed_at,
+                is_active=is_active,
+                last_error=last_error,
+                worker_id=worker_id,
+                result=result,
+            )
+
+        return JobView(
+            job_id=job.job_id,
+            status=status_value,
+            model="unknown",
+            prompt="",
+            negative_prompt=None,
+            seed=getattr(job, "seed", None),
+            label=getattr(job, "label", job.job_id) or job.job_id,
+            positive_preview="",
+            negative_preview=None,
+            stages_display="txt2img",
+            estimated_images=max(1, getattr(job, "total_images", 1)),
+            created_at=created_at,
+            prompt_pack_id=getattr(job, "prompt_pack_id", "") or "",
+            prompt_pack_name=getattr(job, "prompt_pack_name", "") or "",
+            variant_label=None,
+            batch_label=None,
+            started_at=started_at,
+            completed_at=completed_at,
+            is_active=is_active,
+            last_error=last_error,
+            worker_id=worker_id,
+            result=result,
         )
 
     def _summarize(self, job: Job) -> str:
@@ -201,6 +261,22 @@ class JobHistoryService:
             snapshot=getattr(job, "snapshot", None),
         )
 
+    def summarize_history_record(self, record: HistoryRecord) -> JobView:
+        njr = normalized_job_from_snapshot(record.njr_snapshot)
+        if njr is None:
+            raise ValueError("HistoryRecord missing NormalizedJobRecord snapshot")
+        result = record.result
+        return njr.to_job_view(
+            status=record.status,
+            created_at=record.timestamp,
+            started_at=record.runtime.get("started_at") if record.runtime else None,
+            completed_at=record.runtime.get("completed_at") if record.runtime else None,
+            is_active=False,
+            last_error=record.runtime.get("error_message") if record.runtime else None,
+            worker_id=record.runtime.get("worker_id") if record.runtime else None,
+            result=result,
+        )
+
 
 class NullHistoryService(JobHistoryService):
     """No-op history service for tests that don't care about history.
@@ -238,15 +314,15 @@ class NullHistoryService(JobHistoryService):
         """No-op record for failed jobs."""
         pass
 
-    def list_active_jobs(self) -> List[JobViewModel]:
+    def list_active_jobs(self) -> List[JobView]:
         """Return empty list - no active jobs tracked."""
         return []
 
-    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> List[JobViewModel]:
+    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> List[JobView]:
         """Return empty list - no history tracked."""
         return []
 
-    def get_job(self, job_id: str) -> Optional[JobViewModel]:
+    def get_job(self, job_id: str) -> Optional[JobView]:
         """Return None - no jobs tracked."""
         return None
 

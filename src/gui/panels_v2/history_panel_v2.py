@@ -1,6 +1,7 @@
 """V2 History Panel (PR-CORE1-A3: NJR-only display).
 
 Displays completed job history using NJR-derived DTOs.
+History updates must run on the Tk main thread via AppController's dispatcher (e.g., `_run_in_gui_thread`).
 """
 
 from __future__ import annotations

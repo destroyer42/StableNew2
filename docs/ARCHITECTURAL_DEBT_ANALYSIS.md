@@ -348,6 +348,8 @@ preview_panel_v2._on_add_to_queue()
    - DTOs derive from `NormalizedJobRecord` snapshots, NOT from `pipeline_config`
    - JobService and JobHistoryService prefer NJR snapshots for display data
    - Legacy `pipeline_config` fallback preserved only for old jobs without NJR snapshots
+   - **CORE1-D4: Job Model Unification** completed the DTO collapse; `JobView` is now the only controller-facing summary and every view comes straight from an NJR.
+   - Job data models shrank from six candidates to one canonical record, and DTO inconsistency points fell from 4+ down to zero; controller/history tests now assert directly on `JobView`/NJR rather than legacy DTOs.
 
 2. **JobBundle/JobBundleBuilder Retired (CORE1-C3B)**
      - JobBundle-based helpers have been removed entirely; controllers no longer expose `_draft_bundle` or bundle DTOs.
@@ -412,8 +414,106 @@ preview_panel_v2._on_add_to_queue()
 
 **Debt Resolved (CORE1-D1/D2/D3):** Legacy history formats, pipeline_config persistence, mixed-era draft-bundle records, schema drift, and multiple replay paths are eliminated; history_schema 2.6 is enforced on load/save via HistoryMigrationEngine + schema normalization, and replay is unified through NJR → RunPlan → PipelineRunner.run_njr.
 
+### ?o. **Resolved in PR-BUG-PPREV1: PromptPack Preview Uses NJR Builder**
+
+**What Was Fixed:**
+1. `PipelineController.get_preview_jobs()` now routes `AppStateV2.job_draft.packs` through `PromptPackNormalizedJobBuilder`, so preview state is derived from prompt packs and stored as NJRs inside `AppStateV2.preview_jobs`.
+2. The GUI preview panel reads these normalized records directly, avoiding any legacy `pipeline_config` inspection whenever packs are present.
+3. Regression tests (`tests/controller/test_prompt_pack_preview_v2.py`, `tests/pipeline/test_prompt_pack_job_builder.py`) now assert that pack entries populate the preview records and that the manual fallback branch still runs when no packs exist.
+
+**Impact:**
+- Debt removed: prompt-pack preview logic that previously ignored job_draft.packs.
+- Preview pipeline remains NJR-only and shares the canonical builder path.
+- Preview tests cover the pack-driven branch and keep the manual fallback path documented.
+
+### ?o. **Resolved in PR-CORE1-D5: Queue Persistence Normalization**
+
+**What Was Fixed:**
+1. `state/queue_state_v2.json` now stores NJR snapshots plus strict queue metadata (`queue_id`, `status`, `priority`, `created_at`, `queue_schema == "2.6"`, optional metadata, auto-run/paused flags). `_normalized_record`, `pipeline_config`, draft/bundle blobs, and other duplicated execution data are stripped so queue snapshots never diverge from NJR semantics.
+2. Queue persistence tests (`tests/queue/test_job_queue_persistence_v2.py`, `tests/queue/test_job_history_store.py`, `tests/pipeline/test_job_queue_persistence_v2.py`) validate the normalized schema, forbid legacy fields, and assert deterministic round-trips, proving queue storage now mirrors history?s invariants.
+3. Controller and execution logic persist NJR snapshots + scheduling metadata only, so queue replay paths hydrate NJRs via the unified replay engine instead of reconstructing configs.
+
+**Impact:**
+- Debt removed: queue item schema drift, transitional `_normalized_record` field, pipeline_config remnants in persistence, and inconsistent queue/history summaries.
+- Queue/history persistence now share the NJR-led invariant, with queue state already using the shared JSONL codec (D6) so the persistence file matches history’s behavior without altering the schema semantics described above.
+- Queue persistence and replay tests now assert against `state/queue_state_v2.json` contents, ensuring forbidden keys never reappear in storage.
+
+### ?o. **Resolved in PR-CORE1-D6: Unified JSONL Codec**
+
+**What Was Fixed:**
+1. All JSONL persistence paths now share `src.utils.jsonl_codec.JSONLCodec`, so history (`validate_entry`), queue (`QueueMigrationEngine` + `validate_queue_item`), and any diagnostics/last-run layers alike benefit from deterministic serialization, sorted keys, and trailing-newline semantics.
+2. Corrupt lines are logged and skipped consistently across files, eliminating duplicated error-handling logic and the previous quiet failure gaps when queue/history snapshots partially broke.
+3. The codec knife keeps JSONL I/O behavior centralized, enabling new tests (`tests/utils/test_jsonl_codec.py`) and documentation to require `JSONLCodec` usage rather than ad-hoc readers or writers.
+
+**Impact:**
+- Debt removed: duplicate JSONL readers/writers across subsystems, inconsistent corrupt-line handling between queue/history, and non-deterministic serialization differences that made persistence tests fragile.
+- JSONL I/O implementations dropped from 3+ custom readers/writers to a single `JSONLCodec`, which is now the canonical entry point for future enhancements (checksums, compression hooks, etc.).
+- Queue/history persistence and tests stay in sync via the shared codec, and documentation makes the covariant expectation explicit.
+
 **Next Steps (CORE1-C):**
 1. Remove `run(config)` method from PipelineRunner (keep only `run_njr`)
 2. Clean up legacy execution branches in AppController
 3. Add explicit tests for NJR-only execution
 4. Remove dynamic attribute injection workarounds
+
+## Problem 7: Divergent Run Results (Resolved in CORE1-D7)
+
+### Symptom
+Direct runs, queued execution, replay, and history logging each emitted their own ad-hoc result dictionaries (`{"mode": ...}`, `{"status": ...}`, or legacy payloads) while `PipelineRunner.run_njr()` produced `PipelineRunResult`. The GUI and diagnostics could not depend on a stable schema because the "result" payload differed depending on the entry point.
+
+### Resolution
+CORE1-D7 finally unifies on the `PipelineRunResult` dataclass. `AppController._execute_job`, `JobExecutionController`, and the queue runner canonicalize every payload via `normalize_run_result`, annotate `metadata.execution_path`/`metadata.job_id`, and persist `PipelineRunResult.to_dict()` in `Job.result`, queue history entries, and the new `HistoryRecord.result` field. History + queue persistence now rely on the same schema with `HistoryRecord.result` preserved in JSONL round-trips and validated by the shared codec.
+
+### Validation
+- `tests/pipeline/test_pipeline_runner.py` and `tests/utils/test_jsonl_codec.py` cover serialization + normalization of the canonical RunResult.
+- `tests/controller/test_core_run_path_v2.py`, `tests/controller/test_app_controller_njr_exec.py`, and controller integration tests assert on `metadata.execution_path` instead of legacy `mode`/`status` keys.
+- `tests/history/test_history_roundtrip.py`, `tests/history/test_history_replay_integration.py`, and `tests/queue/test_job_history_store.py` confirm that `HistoryRecord.result` and queue history entries store the canonical dict and survive schema normalization/migration.
+
+### Metrics
+- Run result representations: `3+` legacy shapes → `1` canonical `PipelineRunResult`.
+- Queue + history result fields now share the same `result` subtree per entry.
+
+---
+
+## Problem 8: Worker Threads Updating GUI (Resolved in PR-BUG-021)
+
+### Symptom
+Queue and history callbacks executed on the background worker thread were directly calling Tk panel methods (`upsert_job`, `remove_job`, `append_history_item`), leading to Tkinter thread violations that surfaced as white screens, hangs, or fatal errors once jobs started executing.
+
+### Resolution
+CORE1-BUG-021 introduces `AppController._run_in_gui_thread` as the canonical dispatcher and refactors `_on_job_status_for_panels` to capture DTOs and schedule all panel updates through that helper. Queue/history updates now execute on the Tk main thread regardless of which worker invoked the callback, avoiding the previous concurrency hazard.
+
+### Validation
+- `tests/gui/test_gui_controller_bindings.py` now uses fake main windows/dispatchers to confirm no panel methods run immediately and that both the dispatcher and the `after(0, ...)` fallback execute the updates safely.
+- Queue/history panels themselves document that their public APIs are Tk thread only, forcing future callers to obey the dispatcher pattern.
+- `tests/controller/test_queue_worker_threading.py` exercises the queue worker lifecycle: `submit_queued` spins up the worker once, enqueues jobs without blocking, and surfaces runner start failures through structured logs.
+- `tests/queue/test_single_node_runner.py` and `tests/queue/test_job_service_pipeline_integration_v2.py` extend the coverage by proving the runner loop survives exceptions, emits the expected job lifecycle transitions, and `submit_queued()` returns immediately even when jobs block, keeping the worker instrumentation visible.
+- `BUG-QUEUE-HANG-01` adds structured queue/runner diagnostics (`QUEUE_JOB_*`, `JOB_EXEC_*`), history `duration_ms`, and dispatcher telemetry so stalled NJR executions surface through logs/history while the Tk thread remains responsive.
+
+### Metrics
+- Tk thread violations in queue/history callbacks: 1 → 0.
+- Dispatch helper coverage (tests documenting `_run_in_gui_thread` usage): +1.
+
+### Future Work
+- All subsequent queue/runner enhancements must respect the dispatcher contract; background threads may only enque panel updates through `_run_in_gui_thread` or a new shared dispatcher.
+
+## Problem 9: Legacy History & Queue Compatibility (Resolved in PR-CORE1-D8)
+
+### Symptom
+Updating the persistence formats for queue_state and history.jsonl left no explicit guarantees that the new schema could still load/replay the older data that existing deployments had already recorded. Without a compatibility suite the project risked regressing old history or queue snapshots.
+
+### Resolution
+CORE1-D8 adds versioned fixtures under `tests/data/history_compat_v2/` and `tests/data/queue_compat_v2/` plus new suites:
+- `tests/compat/test_history_compat_v2.py`
+- `tests/compat/test_queue_compat_v2.py`
+- `tests/compat/test_replay_compat_v2.py`
+
+These tests force every historical entry – V2.0 pre-NJR, V2.4 hybrid, V2.6 pre-CORE1 – through `HistoryMigrationEngine`, `QueueMigrationEngine`, and `legacy_njr_adapter`. They prove that:
+- `JobHistoryStore` returns `HistoryRecord` instances whose `to_njr()` works.
+- `load_queue_snapshot()` normalizes legacy jobs and keeps `queue_schema="2.6"`.
+- Replay reconstruction still produces executable NJRs before handing off to the unified runner.
+
+### Validation
+- Fixtures cover the concrete legacy shapes the live system once emitted.
+- Any future persistence change must ship a new fixture and update these compatibility suites.
+- The new tests eliminate the implicit bend that once allowed older snapshots to survive – compatibility is now explicit and automated.

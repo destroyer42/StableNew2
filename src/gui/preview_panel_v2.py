@@ -503,7 +503,12 @@ class PreviewPanelV2(ttk.Frame):
         """Move the draft job into the queue."""
         if not self.controller:
             return
-        self.controller.on_add_to_queue()
+        try:
+            self.controller.on_add_to_queue()
+        except ValueError as exc:
+            print(f"[PreviewPanel] _on_add_to_queue validation error: {exc}")
+        except Exception as exc:
+            print(f"[PreviewPanel] _on_add_to_queue unexpected error: {exc}")
 
     def _on_clear_draft(self) -> None:
         """Clear the current draft job metadata."""
@@ -524,14 +529,18 @@ class PreviewPanelV2(ttk.Frame):
     ) -> None:
         """Enable/disable action buttons based on draft content."""
         has_draft = False
+        packs = []
+        packs: list[Any] = []
+        has_parts = False
         if job_draft is not None:
             packs = getattr(job_draft, "packs", [])
             part_summary = getattr(job_draft, "summary", None)
             has_parts = bool(getattr(part_summary, "part_count", 0))
             has_draft = bool(packs) or has_parts
-            print(f"[PreviewPanel] _update_action_states: packs={len(packs)}, has_parts={has_parts}, has_draft={has_draft}")
-        has_preview = bool(preview_jobs)
-        state = ["!disabled"] if has_draft or has_preview else ["disabled"]
+        has_preview = bool(preview_jobs) and has_draft
+        print(f"[PreviewPanel] _update_action_states: packs={len(packs)}, has_parts={has_parts}, has_draft={has_draft}")
+        can_queue = has_draft and has_preview
+        state = ["!disabled"] if can_queue else ["disabled"]
         print(f"[PreviewPanel] Setting button state to: {state}")
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)

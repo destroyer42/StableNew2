@@ -47,6 +47,7 @@ class JobHistoryEntry:
     prompt_pack_id: str | None = None
     prompt_keys: List[str] | None = None
     snapshot: Dict[str, Any] | None = None
+    duration_ms: int | None = None
 
     def to_json(self) -> str:
         data = asdict(self)
@@ -59,6 +60,8 @@ class JobHistoryEntry:
             value = data.get(key)
             if isinstance(value, datetime):
                 data[key] = value.isoformat()
+        if self.duration_ms is not None:
+            data["duration_ms"] = self.duration_ms
         return json.dumps(data, ensure_ascii=True)
 
     @staticmethod
@@ -84,6 +87,7 @@ class JobHistoryEntry:
             prompt_pack_id=raw.get("prompt_pack_id"),
             prompt_keys=raw.get("prompt_keys"),
             snapshot=raw.get("snapshot"),
+            duration_ms=int(raw["duration_ms"]) if raw.get("duration_ms") is not None else None,
         )
 
 
@@ -191,6 +195,11 @@ class JSONLJobHistoryStore(JobHistoryStore):
         if status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
             completed_at = ts
 
+        duration_ms: int | None = None
+        if started_at and completed_at:
+            delta = completed_at - started_at
+            duration_ms = int(delta.total_seconds() * 1000)
+
         entry = JobHistoryEntry(
             job_id=job_id,
             created_at=created_at,
@@ -203,6 +212,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
             result=result if result is not None else (current.result if current else None),
             run_mode=current.run_mode if current else "queue",
             snapshot=current.snapshot if current else None,
+            duration_ms=duration_ms,
         )
         self._append(entry)
 

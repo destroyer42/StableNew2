@@ -60,6 +60,7 @@ from src.utils.error_envelope_v2 import (
 )
 from src.utils.queue_helpers_v2 import job_to_queue_job
 from src.utils.snapshot_builder_v2 import build_job_snapshot, normalized_job_from_snapshot
+from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
@@ -327,9 +328,35 @@ class PipelineController(_GUIPipelineController):
 
         return jobs
 
+    def _get_prompt_pack_builder(self) -> PromptPackNormalizedJobBuilder | None:
+        if not self._config_manager or not getattr(self, "_job_builder", None):
+            return None
+        packs_dir = getattr(self._config_manager, "packs_dir", "packs")
+        return PromptPackNormalizedJobBuilder(
+            config_manager=self._config_manager,
+            job_builder=self._job_builder,
+            packs_dir=packs_dir,
+        )
+
     def get_preview_jobs(self) -> list[NormalizedJobRecord]:
         """Return normalized jobs derived from the current GUI state for preview panels."""
         try:
+            job_draft = getattr(self._app_state, "job_draft", None)
+            pack_entries = getattr(job_draft, "packs", None) or []
+            if pack_entries:
+                builder = self._get_prompt_pack_builder()
+                if builder:
+                    jobs = builder.build_jobs(pack_entries)
+                    if jobs:
+                        _logger.debug(
+                            "Built %d preview jobs from %d prompt pack entries",
+                            len(jobs),
+                            len(pack_entries),
+                        )
+                        return jobs
+                    _logger.debug(
+                        "Prompt pack preview builder returned no jobs, falling back to GUI state builder"
+                    )
             return self._build_normalized_jobs_from_state()
         except Exception as exc:
             _logger.debug("Failed to build preview jobs: %s", exc)
@@ -360,13 +387,20 @@ class PipelineController(_GUIPipelineController):
 
         # Build randomizer metadata from record
         randomizer_metadata = record.randomizer_summary
+        if not prompt_pack_id:
+            prompt_pack_id = getattr(record, "prompt_pack_id", None) or None
+        prompt_pack_name = getattr(record, "prompt_pack_name", None)
+        prompt_source_value = prompt_source or getattr(record, "prompt_source", None) or "manual"
+        prompt_source_value = str(prompt_source_value).lower()
+        if prompt_pack_id and prompt_source_value != "pack":
+            prompt_source_value = "pack"
 
         job = Job(
             job_id=record.job_id,
             priority=JobPriority.NORMAL,
             run_mode=run_mode,
             source=source,
-            prompt_source=prompt_source,
+            prompt_source=prompt_source_value,
             prompt_pack_id=prompt_pack_id,
             config_snapshot=config_snapshot,
             randomizer_metadata=randomizer_metadata,
@@ -381,6 +415,15 @@ class PipelineController(_GUIPipelineController):
         )
         # PR-CORE1-B2: Attach NormalizedJobRecord for NJR-only execution
         job._normalized_record = record  # type: ignore[attr-defined]
+        _logger.debug(
+            "Prepared NJR-backed job for queue",
+            extra={
+                "job_id": job.job_id,
+                "prompt_source": prompt_source_value,
+                "prompt_pack_id": prompt_pack_id,
+                "prompt_pack_name": prompt_pack_name,
+            },
+        )
         return job
 
 
@@ -1313,16 +1356,64 @@ class PipelineController(_GUIPipelineController):
         normalized_jobs = self.get_preview_jobs()
         if not normalized_jobs:
             return 0
+        queueable, non_queueable = self._split_queueable_records(normalized_jobs)
 
         if run_config is not None:
             self._last_run_config = run_config
+
+        if not queueable:
+            message = (
+                "No queueable jobs were found for the current preview. "
+                "Select at least one prompt pack before adding jobs to the queue."
+            )
+            log_with_ctx(
+                _logger,
+                logging.WARNING,
+                "submit_preview_jobs_to_queue: rejecting enqueue of non-queueable jobs",
+                ctx=LogContext(subsystem="pipeline_controller"),
+                extra_fields={
+                    "total_records": len(normalized_jobs),
+                    "non_queueable": len(non_queueable),
+                },
+            )
+            raise ValueError(message)
+
         submitted = self._submit_normalized_jobs(
-            normalized_jobs,
+            queueable,
             run_config=run_config,
             source=source,
             prompt_source=prompt_source,
         )
         return submitted
+
+    def _split_queueable_records(
+        self,
+        records: list[NormalizedJobRecord],
+    ) -> tuple[list[NormalizedJobRecord], list[NormalizedJobRecord]]:
+        queueable: list[NormalizedJobRecord] = []
+        non_queueable: list[NormalizedJobRecord] = []
+        for record in records:
+            config = record.config or {}
+            prompt_pack_id = record.prompt_pack_id or (config.get("prompt_pack_id") if isinstance(config, dict) else None)
+            if prompt_pack_id:
+                queueable.append(record)
+            else:
+                non_queueable.append(record)
+        return queueable, non_queueable
+
+    def _ensure_record_prompt_pack_metadata(
+        self,
+        record: NormalizedJobRecord,
+        prompt_pack_id: str | None,
+        prompt_pack_name: str | None,
+    ) -> None:
+        if not prompt_pack_id:
+            return
+        record.prompt_source = "pack"
+        if not getattr(record, "prompt_pack_id", None):
+            record.prompt_pack_id = prompt_pack_id
+        if prompt_pack_name and not getattr(record, "prompt_pack_name", None):
+            record.prompt_pack_name = prompt_pack_name
 
     def _submit_normalized_jobs(
         self,
@@ -1341,6 +1432,15 @@ class PipelineController(_GUIPipelineController):
             cfg = record.config
             if isinstance(cfg, dict):
                 prompt_pack_id = cfg.get("prompt_pack_id")
+            if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
+                try:
+                    record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
+                except Exception:
+                    setattr(record, "prompt_pack_id", prompt_pack_id)
+            prompt_pack_name = None
+            if isinstance(cfg, dict):
+                prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
+            self._ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
             job = self._to_queue_job(
                 record,
                 run_mode="queue",

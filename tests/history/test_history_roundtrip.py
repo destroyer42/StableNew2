@@ -76,3 +76,10 @@ def test_roundtrip_save_load_is_deterministic(tmp_path) -> None:
     assert [r.to_dict() for r in first] == [r.to_dict() for r in second]
     assert all(rec.history_version == "2.6" for rec in second)
     assert all("pipeline_config" not in rec.njr_snapshot for rec in second)
+    assert all("result" in rec.to_dict() for rec in second)
+    assert all(rec.result is not None for rec in second)
+
+    first_dump = history_path.read_text(encoding="utf-8")
+    store.save(second)
+    second_dump = history_path.read_text(encoding="utf-8")
+    assert first_dump == second_dump

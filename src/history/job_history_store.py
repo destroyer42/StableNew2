@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import logging
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -12,6 +12,10 @@ from src.history.history_schema_v26 import (
     HistorySchemaError,
     validate_entry,
 )
+from src.utils.jsonl_codec import JSONLCodec
+
+
+logger = logging.getLogger(__name__)
 
 
 class JobHistoryStore:
@@ -21,17 +25,12 @@ class JobHistoryStore:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._migration = HistoryMigrationEngine()
+        self._codec = JSONLCodec(schema_validator=validate_entry, logger=logger.warning)
 
     def load(self) -> list[HistoryRecord]:
-        raw_entries = self._read_jsonl()
+        raw_entries = self._codec.read_jsonl(self._path)
         migrated_entries = self._migration.migrate_all(raw_entries)
-        validated: list[dict[str, Any]] = []
-        for entry in migrated_entries:
-            ok, errors = validate_entry(entry)
-            if not ok:
-                raise HistorySchemaError(errors)
-            validated.append(entry)
-        return [self._hydrate_record(entry) for entry in validated]
+        return [self._hydrate_record(entry) for entry in migrated_entries]
 
     def save(self, entries: Iterable[HistoryRecord | Mapping[str, Any]]) -> None:
         serializable: list[dict[str, Any]] = []
@@ -42,7 +41,7 @@ class JobHistoryStore:
             if not ok:
                 raise HistorySchemaError(errors)
             serializable.append(self._order_entry(normalized))
-        self._write_jsonl(serializable)
+        self._codec.write_jsonl(self._path, serializable)
 
     def append(self, record: HistoryRecord | Mapping[str, Any]) -> None:
         entries = self.load()
@@ -52,32 +51,6 @@ class JobHistoryStore:
 
     def _hydrate_record(self, data: Mapping[str, Any]) -> HistoryRecord:
         return HistoryRecord.from_dict(data)
-
-    def _read_jsonl(self) -> list[dict[str, Any]]:
-        if not self._path.exists():
-            return []
-        try:
-            lines = self._path.read_text(encoding="utf-8").splitlines()
-        except Exception:
-            return []
-        entries: list[dict[str, Any]] = []
-        for line in lines:
-            if not line:
-                continue
-            try:
-                parsed = json.loads(line)
-                if isinstance(parsed, dict):
-                    entries.append(parsed)
-            except Exception:
-                continue
-        return entries
-
-    def _write_jsonl(self, entries: Iterable[Mapping[str, Any]]) -> None:
-        lines = []
-        for entry in entries:
-            data = self._order_entry(entry)
-            lines.append(json.dumps(data, ensure_ascii=True))
-        self._path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
     def _order_entry(self, entry: Mapping[str, Any]) -> dict[str, Any]:
         """Return entry with deterministic key ordering per schema."""
@@ -90,6 +63,7 @@ class JobHistoryStore:
             "ui_summary",
             "metadata",
             "runtime",
+            "result",
         ]
         data = {k: entry[k] for k in ordered_keys if k in entry}
         # Preserve transitional history_version if present for compatibility
@@ -104,4 +78,5 @@ class JobHistoryStore:
         data.setdefault("ui_summary", {})
         data.setdefault("metadata", {})
         data.setdefault("runtime", {})
+        data.setdefault("result", {})
         return data

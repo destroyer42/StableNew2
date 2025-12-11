@@ -13,7 +13,7 @@ def test_controller_uses_assembler_for_runs(monkeypatch):
     controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
 
     class JobShim(Job):
-        def __init__(self, *args, pipeline_config=None, **kwargs):
+        def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
     monkeypatch.setattr("src.controller.job_execution_controller.Job", JobShim)

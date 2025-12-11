@@ -346,6 +346,34 @@ class TestQueuedModeExecution:
         assert executed_job._normalized_record.config["model"] == "queue-model"
         assert executed_job._normalized_record.config["steps"] == 30
 
+    def test_queued_mode_returns_without_blocking_on_long_jobs(self) -> None:
+        """submit_queued() returns immediately even if the job takes time to execute."""
+        job_queue = JobQueue()
+
+        start_event = threading.Event()
+        release_event = threading.Event()
+
+        def blocking_callable(job: Job) -> dict[str, Any]:
+            start_event.set()
+            release_event.wait(timeout=2.0)
+            return {"job_id": job.job_id, "status": "completed"}
+
+        runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=blocking_callable, poll_interval=0.01)
+        service = JobService(job_queue=job_queue, runner=runner)
+
+        job = make_job("queued-block-001")
+
+        start = time.monotonic()
+        service.submit_queued(job)
+        duration = time.monotonic() - start
+
+        assert duration < 0.2
+        assert start_event.wait(timeout=1.0)
+
+        release_event.set()
+        poll_until_terminal(job_queue, "queued-block-001")
+        runner.stop()
+
 
 # ---------------------------------------------------------------------------
 # Test: Multiple Queued Jobs + Order

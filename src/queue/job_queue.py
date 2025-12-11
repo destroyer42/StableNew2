@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import heapq
 from threading import Lock
-from typing import Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Callable, Dict, Iterable, List, Optional, TYPE_CHECKING
 
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_history_store import JobHistoryStore
@@ -31,6 +31,7 @@ class JobQueue:
         self._lock = Lock()
         self._history_store = history_store
         self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
+        self._state_listeners: list[Callable[[], None]] = []
 
     def submit(self, job: Job) -> None:
         with self._lock:
@@ -38,6 +39,7 @@ class JobQueue:
             self._jobs[job.job_id] = job
             heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._record_submission(job)
+        self._notify_state_listeners()
 
     def get_next_job(self) -> Optional[Job]:
         with self._lock:
@@ -89,6 +91,7 @@ class JobQueue:
             ts = job.updated_at
         self._record_status(job_id, status, ts, error_message, result=result)
         self._notify_status(job, status)
+        self._notify_state_listeners()
         return job
 
     def _record_submission(self, job: Job) -> None:
@@ -152,6 +155,7 @@ class JobQueue:
                     prev_priority, prev_counter, prev_jid = queued[i - 1]
                     # Adjust internal queue entries
                     self._swap_queue_positions(job_id, prev_jid, priority, prev_priority)
+                    self._notify_state_listeners()
                     return True
             return False
 
@@ -173,6 +177,7 @@ class JobQueue:
                     # Swap priorities with the job below
                     next_priority, next_counter, next_jid = queued[i + 1]
                     self._swap_queue_positions(job_id, next_jid, priority, next_priority)
+                    self._notify_state_listeners()
                     return True
             return False
 
@@ -191,10 +196,11 @@ class JobQueue:
                 # Remove from heap by marking as cancelled
                 job.status = JobStatus.CANCELLED
                 # Rebuild queue without this job
-                self._queue = [
-                    (p, c, jid) for (p, c, jid) in self._queue if jid != job_id
-                ]
-                heapq.heapify(self._queue)
+            self._queue = [
+                (p, c, jid) for (p, c, jid) in self._queue if jid != job_id
+            ]
+            heapq.heapify(self._queue)
+            self._notify_state_listeners()
             return job
 
     def clear(self) -> int:
@@ -219,6 +225,7 @@ class JobQueue:
                 if jid not in queued_ids
             ]
             heapq.heapify(self._queue)
+            self._notify_state_listeners()
             return count
 
     def _get_ordered_queued_jobs(self) -> list[tuple[int, int, str]]:
@@ -248,3 +255,26 @@ class JobQueue:
                 new_queue.append((priority, counter, jid))
         self._queue = new_queue
         heapq.heapify(self._queue)
+
+    def register_state_listener(self, callback: Callable[[], None]) -> None:
+        """Register a listener for queue state changes."""
+        if callback not in self._state_listeners:
+            self._state_listeners.append(callback)
+
+    def _notify_state_listeners(self) -> None:
+        """Notify listeners that the queue state has changed."""
+        for listener in list(self._state_listeners):
+            try:
+                listener()
+            except Exception:
+                continue
+
+    def restore_jobs(self, jobs: Iterable[Job]) -> None:
+        """Restore queued jobs without recording submissions."""
+        with self._lock:
+            for job in jobs:
+                self._counter += 1
+                job.status = JobStatus.QUEUED
+                self._jobs[job.job_id] = job
+                heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
+        self._notify_state_listeners()

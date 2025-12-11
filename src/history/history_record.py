@@ -48,6 +48,7 @@ class HistoryRecord:
     metadata: dict[str, Any] = field(default_factory=dict)
     runtime: dict[str, Any] = field(default_factory=dict)
     ui_summary: dict[str, Any] = field(default_factory=dict)
+    result: dict[str, Any] | None = None
     history_version: str | None = None  # transitional compatibility
 
     @classmethod
@@ -70,7 +71,9 @@ class HistoryRecord:
         raw_runtime = data.get("runtime") or {}
         runtime = dict(raw_runtime) if isinstance(raw_runtime, Mapping) else {}
         raw_ui_summary = data.get("ui_summary") or {}
+        raw_result = data.get("result")
         ui_summary = dict(raw_ui_summary) if isinstance(raw_ui_summary, Mapping) else {}
+        result = dict(raw_result) if isinstance(raw_result, Mapping) else None
         return cls(
             id=record_id or snapshot.get("job_id") or "",
             timestamp=timestamp,
@@ -80,6 +83,7 @@ class HistoryRecord:
             metadata=metadata,
             runtime=runtime,
             ui_summary=ui_summary,
+            result=result,
             history_version=str(data.get("history_version") or data.get("history_schema") or HISTORY_SCHEMA_VERSION),
         )
 
@@ -95,6 +99,8 @@ class HistoryRecord:
             "metadata": dict(self.metadata or {}),
             "runtime": dict(self.runtime or {}),
         }
+        if self.result is not None:
+            base["result"] = dict(self.result)
         return base
 
     def to_njr(self) -> "NormalizedJobRecord":

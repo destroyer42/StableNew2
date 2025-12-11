@@ -401,6 +401,9 @@ StableNew execution model in v2.6:
   - UnifiedJobSummary
   - JobQueueItemDTO
   - JobHistoryItemDTO
+- GUI updates triggered by queue/hist status events must be marshaled through `AppController._run_in_gui_thread` (or an equivalent dispatcher); background threads may never call panel APIs directly.
+- Queue submissions feed a dedicated background worker thread (managed by `JobService`/`JobExecutionController`) that dequeues NJR-backed jobs, so `submit_queue_jobs` never executes jobs inline or blocks the GUI.
+- Queue execution now includes diagnostics and hung-job guardrails: `JobService`/`JobExecutionController` log `JOB_EXEC_START`, `JOB_EXEC_REPLAY`, and error events, `SingleNodeJobRunner` emits `QUEUE_JOB_START`, `QUEUE_JOB_DONE`, `QUEUE_JOB_WARNING`, and `QUEUE_JOB_ERROR` with `duration_ms`, and history entries persist those diagnostics so stuck NJR runs surface in logs/history without blocking Tk panels.
 - All display data comes from NJR snapshots, NOT from pipeline_config
 
 **Execution Path after B2 (NJR-only for new jobs):**
@@ -432,6 +435,29 @@ AppController._execute_job
 - If NJR execution fails, the job is marked as failed (no pipeline_config fallback)
 - The queue `Job` model no longer defines `pipeline_config`; new jobs never expose or persist this field (PR-CORE1-C2).
 - Any remaining `pipeline_config` payloads live in legacy history entries and are rehydrated via `legacy_njr_adapter.build_njr_from_legacy_pipeline_config()`.
+
+**Queue Persistence (CORE1-D5):**
+
+- The queue snapshot file (`state/queue_state_v2.json`) now records `queue_schema`, `queue_id`, `njr_snapshot`, `priority`, `status`, `created_at`, and lightweight metadata such as `source`/`prompt_source`. Every entry derives directly from the NJR snapshot and drops deprecated keys (`pipeline_config`, bundle summaries, draft blobs) before serialization so that the file always reflects canonical NJR data.
+- History remains in `data/job_history.jsonl`, but the NJR payload carried by both queue and history entries is now identical. D5 keeps them aligned, and D6 will share a JSONL codec/reader so queue persistence can move to the same format with minimal additional work.
+
+### 6.5 Multi-Version Compatibility Suite (CORE1-D8)
+
+StableNew v2.6 guarantees that every known queue/history snapshot can still be loaded and replayed via today’s unified NJR path. The compatibility contract spans:
+
+| Version | History Format | Queue Format | Notes |
+| --- | --- | --- | --- |
+| V2.0 Pre‑NJR | JSONL entries containing only `pipeline_config` blobs and ad-hoc `result` dictionaries | Legacy JSON queues with `pipeline_config` per job | Written entries are normalized with `HistoryMigrationEngine`, `QueueMigrationEngine`, and `legacy_njr_adapter` before execution |
+| V2.4 Hybrid | JSONL with mixed `snapshot`/`njr_snapshot` fields and inconsistent metadata | Transitional queue state carrying both NJR fragments and legacy keys | Loaders hydrate NJRs, strip deprecated keys, and enforce schema v2.6 |
+| V2.6 Pre‑CORE1 | JSONL that already contains `njr_snapshot` but misses some invariant metadata | `state/queue_state_v2.json` entries with `_normalized_record` leftovers | Schema validator enforces canonical fields (`queue_schema=2.6`, `njr_snapshot`, `queue_id`, `priority`, `status`, `created_at`) while keeping RunResult data intact |
+| V2.6 CORE1+ | Canonical NJR snapshot + `PipelineRunResult` `result` subtree | NJR-only queue snapshot (schema 2.6) | Target format; compatibility tests guard it from regressions |
+
+Key guards:
+
+1. `HistoryMigrationEngine` and `QueueMigrationEngine` run before any record is hydrated or replayed, so deprecated fields are stripped in a single place and NJRs are guaranteed.
+2. The shared JSONL codec (`JSONLCodec`) keeps persistence reads/writes deterministic, warns on corrupt lines, and logs validation errors without crashing the app.
+3. `legacy_njr_adapter` remains the only adapter for deriving NJRs from pipeline_config-heavy records; replay requests rely entirely on the resulting NJRs plus the unified runner path.
+4. Regression fixtures under `tests/data/history_compat_v2/` and `tests/data/queue_compat_v2/` feed `tests/compat/test_history_compat_v2.py`, `tests/compat/test_queue_compat_v2.py`, and `tests/compat/test_replay_compat_v2.py`. Any future schema change must introduce a new fixture and extend these suites before it merges.
 
 **PR-CORE1-B3 Changes:**
 
@@ -474,7 +500,15 @@ Error data
 History → Restore replays job by reconstructing NJR from snapshot. History load is NJR hydration only; any legacy fields (pipeline_config, draft bundles) are stripped and normalized on load.
 **History Schema v2.6 (CORE1-D2):** History load = pure NJR hydration + schema normalization. Every persisted entry MUST contain: `id`, `timestamp`, `status`, `history_schema`, `njr_snapshot`, `ui_summary`, `metadata`, `runtime`. Deprecated fields (pipeline_config, draft/draft_bundle/job_bundle, legacy_* blobs) are forbidden and removed during migration. All entries are written in deterministic order; `history_schema` is always `2.6`.
 
+**Queue Schema v2.6 (CORE1-D5):** `state/queue_state_v2.json` mirrors History Schema v2.6 by storing `njr_snapshot` plus scheduling metadata (`queue_id`, `status`, `priority`, `created_at`, `queue_schema == "2.6"`, optional `metadata`, auto-run/paused flags). Deprecated fields such as `_normalized_record`, `pipeline_config`, `draft_bundle_summary`, `legacy_config_blob`, and any other duplicated execution data are stripped on load/save so queue snapshots never duplicate NJR state. Tests (`tests/queue/test_job_history_store.py`, `tests/pipeline/test_job_queue_persistence_v2.py`) now assert queue persistence only yields NJR-backed entries and that normalization remains idempotent.
+
+Queue replay, persistence, and controller summaries therefore derive from the same NJR-led invariant as history, even though the queue file stays as the JSON dump it has always been until D6 delivers the shared JSONL codec and format that will let queue persistence join history without altering these schema semantics yet.
+
+**Unified JSONL Codec (CORE1-D6):** History, queue, diagnostics, and any future JSONL-based persistence must go through `src.utils.jsonl_codec.JSONLCodec`. This codec enforces deterministic serialization (`sort_keys=True`, `separators=(",", ":")`, trailing newline), pluggable schema validation, and a consistent strategy for skipping corrupt or invalid lines while logging the reason. History uses `validate_entry` per record, queue state writes the latest snapshot (with jobs normalized via `QueueMigrationEngine`) and still persists to `state/queue_state_v2.json`, and diagnostics layers may reuse the same helper once implemented. No subsystem may introduce ad-hoc JSONL parsing or writing outside of this codec to keep persistence behavior uniform across the pipeline.
+
 **Unified Replay Path (CORE1-D3):** Replay starts from a validated v2.6 HistoryRecord → hydrate NJR snapshot → build RunPlan via `build_run_plan_from_njr` → execute `PipelineRunner.run_njr(run_plan)` → return RunResult. No legacy replay branches, no pipeline_config rebuilds, no controller-local shortcuts. Fresh runs and replays share the exact NJR → RunPlan → Runner chain.
+
+**Run Result Unification (CORE1-D7):** `PipelineRunner.run_njr()` now returns the strongly typed `PipelineRunResult`, and every execution path stores `PipelineRunResult.to_dict()` in `Job.result` plus the new `HistoryRecord.result` field. `AppController._execute_job` and `JobExecutionController` both call `normalize_run_result`, annotate `metadata.execution_path`/`metadata.job_id`, and persist the canonical dict through the queue history (`JSONLJobHistoryStore` use) and history JSONL codec. `JobHistoryService` and `JobView` read the unified `result` subtree so UI summaries, diagnostics snapshots, and replay records all agree on the same shape. Tests (`tests/pipeline/test_pipeline_runner.py`, `tests/controller/test_core_run_path_v2.py`, `tests/history/test_history_replay_integration.py`, `tests/queue/test_job_history_store.py`) lock this contract and ensure the reconciliation is deterministic.
 
 7.2 Learning System
 
@@ -575,6 +609,8 @@ Legacy draft-bundle flow (enqueue_draft_bundle_legacy, controller-owned draft bu
 
 Controller-managed draft bundles no longer exist; AppState job_draft plus pipeline controller refreshes drive previews and queue submissions.
 
+PromptPack-driven previews are now built via `PromptPackNormalizedJobBuilder` inside `PipelineController.get_preview_jobs()`: AppStateV2.job_draft.packs flow through the same NJR builder that execution uses, and the resulting records are stored in AppStateV2.preview_jobs so the GUI preview panel always renders prompt-pack-derived positive prompts/models without exposing pipeline_config or legacy drafts.
+
 StateManager usage is restricted to the GUI layer and must not bleed into controllers or shared subsystems.
 
 DTOs representing job summaries outside NJR/UJS
@@ -652,5 +688,19 @@ Shims, parallel codepaths, V1 state, V1 job models → delete them.
 12.7 Documentation must match implementation
 
 No drift allowed.
+
+12.8 Single Job Model Rule (CORE1-D4)
+
+- NormalizedJobRecord is the single source of truth for every job displayed, queued, replayed, or persisted.
+- Controllers and diagnostics now project `JobView` instances derived directly from NJR snapshots; no controller-level DTO parses pipeline config.
+- History records carry only `njr_snapshot` + metadata/runtime/ui_summary, so the Replay path rehydrates the canonical record before building UI views.
+- Legacy summary DTOs and bundle helpers neither appear nor drive new controller/test code; every job summary is either the NJR itself or the thin `JobView`.
+
+## CORE1-D10 Addendum (PromptPack NJR Invariants)
+
+- PromptPack-sourced jobs must set `prompt_source=pack` and provide a non-empty `prompt_pack_id` before queue submission.
+- NJR snapshots remain the single source of truth for PromptPack provenance (pack id/name) across queue, runner, and history.
+- JobService validation rejects missing pack identifiers gracefully and emits diagnostics rather than raising uncaught exceptions.
+- Tests and helpers construct Jobs from NJRs only; `pipeline_config=` job construction is removed from new paths.
 
 END OF ARCHITECTURE_v2.6.md (Canonical Edition)

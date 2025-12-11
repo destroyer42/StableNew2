@@ -7,6 +7,7 @@ from dataclasses import asdict
 from datetime import datetime
 import logging
 import time
+from threading import Lock
 
 from typing import Any, Callable, Literal, Protocol
 
@@ -19,11 +20,10 @@ from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.job_history_store import JobHistoryStore
 from src.pipeline.job_models_v2 import (
-    JobHistoryItemDTO,
-    JobQueueItemDTO,
     JobStatusV2,
     NormalizedJobRecord,
     UnifiedJobSummary,
+    JobView,
 )
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest
 from src.utils import LogContext, log_with_ctx
@@ -185,6 +185,13 @@ class JobService:
                 run_callable=run_callable,
                 poll_interval=0.05,
             )
+        log_with_ctx(
+            logger,
+            logging.DEBUG,
+            "JobService initialized with runner",
+            ctx=LogContext(subsystem="job_service"),
+            extra_fields={"runner_type": type(self.runner).__name__},
+        )
 
         # PR-0114C-T(x): Support history service injection
         self._history_service = history_service
@@ -209,6 +216,8 @@ class JobService:
         self._job_lifecycle_logger = job_lifecycle_logger
         self._require_normalized_records = bool(require_normalized_records)
         self.job_queue.register_status_callback(self._handle_job_status_change)
+        self._runner_lock = Lock()
+        self._worker_started = False
 
     @property
     def queue(self) -> JobQueue:
@@ -255,7 +264,14 @@ class JobService:
             ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
             extra_fields={"run_mode": mode},
         )
-        self._prepare_job_for_submission(job)
+        record = self._prepare_job_for_submission(job)
+        if job.status == JobStatus.FAILED:
+            # Record the failed submission without attempting execution
+            self.job_queue.submit(job)
+            self._notify_job_submitted(job)
+            self._emit_queue_updated()
+            self._handle_job_status_change(job, JobStatus.FAILED)
+            return
         if mode == "direct":
             self.submit_direct(job)
         else:
@@ -268,11 +284,15 @@ class JobService:
         if record is None and snapshot:
             record = normalized_job_from_snapshot(snapshot)
         if record is None and self._require_normalized_records:
-            raise ValueError("JobService requires normalized job metadata (missing snapshot).")
+            self._fail_job(job, "missing_snapshot", "Job is missing normalized metadata.")
+            return None
         if record is not None:
-            self._validate_normalized_record(record)
-            job.unified_summary = record.to_unified_summary()
-            setattr(job, "_normalized_record", record)
+            ok, details = self._validate_normalized_record(record)
+            if not ok:
+                self._fail_job(job, details.get("code", "validation_failed"), details.get("message", "Validation failed"))
+            else:
+                job.unified_summary = record.to_unified_summary()
+                setattr(job, "_normalized_record", record)
         return record
 
     def _job_from_njr(
@@ -351,18 +371,107 @@ class JobService:
         self.enqueue(job)
         self._notify_job_submitted(job)
         if not self.runner.is_running():
-            self.runner.start()
+            log_with_ctx(
+                logger,
+                logging.INFO,
+                "Queue worker starting",
+                ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                extra_fields={"runner": type(self.runner).__name__},
+            )
+        else:
+            log_with_ctx(
+                logger,
+                logging.DEBUG,
+                "Queue worker already running; job will be picked up by worker loop",
+                ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+            )
+        self._ensure_runner_started()
 
-    def _validate_normalized_record(self, record: NormalizedJobRecord) -> None:
+    def _ensure_runner_started(self) -> None:
+        with self._runner_lock:
+            if self._worker_started or self.runner.is_running():
+                return
+            runner_type = type(self.runner).__name__
+            try:
+                self.runner.start()
+            except Exception as exc:
+                log_with_ctx(
+                    logger,
+                    logging.ERROR,
+                    "Queue worker failed to start",
+                    ctx=LogContext(subsystem="job_service"),
+                    extra_fields={"runner": runner_type, "error": str(exc)},
+                )
+                raise
+            self._worker_started = True
+
+    def _validate_normalized_record(self, record: NormalizedJobRecord) -> tuple[bool, dict[str, str]]:
         """Basic validation of normalized job metadata before queue acceptance."""
-        if not record.prompt_pack_id:
-            raise ValueError(f"Normalized job '{record.job_id}' is missing prompt_pack_id.")
+        if not record.job_id:
+            return False, {"code": "missing_job_id", "message": "Normalized job is missing job_id."}
+        prompt_source = getattr(record, "prompt_source", None) or ""
+        prompt_pack_id = getattr(record, "prompt_pack_id", "")
+        if prompt_source.lower() != "pack" or not prompt_pack_id:
+            log_with_ctx(
+                logger,
+                logging.ERROR,
+                "Normalized job missing pack identity",
+                ctx=LogContext(job_id=record.job_id, subsystem="job_service"),
+                extra_fields={
+                    "prompt_source": prompt_source,
+                    "prompt_pack_id": prompt_pack_id,
+                    "prompt_pack_name": getattr(record, "prompt_pack_name", None),
+                    "sample_prompt": (getattr(record, "positive_prompt", "") or "").strip()[:120],
+                },
+            )
+            return False, {
+                "code": "pack_required",
+                "message": f"Normalized job '{record.job_id}' must declare prompt_source=pack and prompt_pack_id.",
+            }
         if not record.positive_prompt or not record.positive_prompt.strip():
-            raise ValueError(f"Normalized job '{record.job_id}' must include a positive prompt.")
+            return False, {
+                "code": "missing_prompt",
+                "message": f"Normalized job '{record.job_id}' must include a positive prompt.",
+            }
         if record.config is None:
-            raise ValueError(f"Normalized job '{record.job_id}' lacks a merged config payload.")
+            return False, {
+                "code": "missing_config",
+                "message": f"Normalized job '{record.job_id}' lacks a merged config payload.",
+            }
         if not record.stage_chain:
-            raise ValueError(f"Normalized job '{record.job_id}' must have at least one stage in stage_chain.")
+            return False, {
+                "code": "missing_stage_chain",
+                "message": f"Normalized job '{record.job_id}' must have at least one stage in stage_chain.",
+            }
+        return True, {"code": "ok", "message": "ok"}
+
+    def _fail_job(self, job: Job, code: str, message: str) -> None:
+        """Fail a job gracefully with a diagnostic envelope."""
+        job.status = JobStatus.FAILED
+        job.error_message = message
+        job.error_envelope = UnifiedErrorEnvelope(
+            error_type=code,
+            subsystem="job_service",
+            severity="error",
+            message=message,
+            cause=None,
+            stack="",
+            job_id=job.job_id,
+            stage=None,
+            context={"code": code},
+        )
+        job.result = {
+            "status": "failed",
+            "error": message,
+            "code": code,
+        }
+        log_with_ctx(
+            logger,
+            logging.WARNING,
+            "Job validation failed",
+            ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+            extra_fields={"code": code, "message": message},
+        )
 
     def _notify_job_submitted(self, job: Job) -> None:
         """Emit a lifecycle event and log the submission when a job is accepted."""
@@ -384,11 +493,11 @@ class JobService:
             self.submit_job_with_run_mode(job)
 
     def pause(self) -> None:
-        self.runner.stop()
+        self._stop_runner()
         self._set_queue_status("paused")
 
     def resume(self) -> None:
-        self.runner.start()
+        self._ensure_runner_started()
         self._set_queue_status("running")
 
     def cancel_current(self) -> Job | None:
@@ -569,12 +678,22 @@ class JobService:
         """Return diagnostics data surfaced to GUI/diagnostic tooling."""
         jobs = []
         for job in self.job_queue.list_jobs():
+            record = getattr(job, "_normalized_record", None)
+            result_code = None
+            if isinstance(getattr(job, "result", None), dict):
+                result_code = job.result.get("code")
             jobs.append(
                 {
                     "job_id": job.job_id,
                     "status": job.status.value,
                     "priority": job.priority.name,
                     "run_mode": job.run_mode,
+                    "prompt_source": getattr(job, "prompt_source", None),
+                    "prompt_pack_id": getattr(job, "prompt_pack_id", None),
+                    "validation_status": result_code or ("ok" if job.status != JobStatus.FAILED else "failed"),
+                    "legacy_snapshot_mode": bool(getattr(record, "extra_metadata", {}).get("legacy_snapshot_mode"))
+                    if record
+                    else False,
                     "external_pids": list(job.execution_metadata.external_pids),
                     "retry_attempts": [asdict(attempt) for attempt in job.execution_metadata.retry_attempts],
                     "started_at": job.started_at.isoformat() if job.started_at else None,
@@ -612,7 +731,33 @@ class JobService:
             if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
                 self._set_queue_status("idle")
 
+    def _stop_runner(self) -> None:
+        with self._runner_lock:
+            if not self._worker_started:
+                return
+            runner_type = type(self.runner).__name__
+            log_with_ctx(
+                logger,
+                logging.INFO,
+                "Queue worker stopping (runner=%s)",
+                ctx=LogContext(subsystem="job_service"),
+                extra_fields={"runner": runner_type},
+            )
+            self.runner.stop()
+            self._worker_started = False
+
     def _handle_job_status_change(self, job: Job, status: JobStatus) -> None:
+        log_with_ctx(
+            logger,
+            logging.INFO,
+            "Job status change",
+            ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+            extra_fields={
+                "status": status.value,
+                "run_mode": job.run_mode,
+                "prompt_pack_id": getattr(job, "prompt_pack_id", None),
+            },
+        )
         if status == JobStatus.RUNNING:
             self._log_job_started(job.job_id)
             self._emit(self.EVENT_JOB_STARTED, job)
@@ -728,37 +873,71 @@ class JobService:
             for cb in callbacks
         ]
         
-        summary = self._build_unified_summary(job, status)
+        self._build_job_view(job, status)
         for callback in status_callbacks:
             try:
                 callback(job, status)
             except Exception as exc:
                 logger.debug("Status callback failed: %s", exc)
 
-    def _build_unified_summary(self, job: Job, status: JobStatus) -> UnifiedJobSummary:
-        """Build UnifiedJobSummary from NJR snapshot (PR-CORE1-A3).
-        
-        For jobs built via JobBuilderV2, reconstruct from NJR snapshot first.
-        Falls back to Job attributes only for legacy jobs without snapshots.
-        This ensures display DTOs are NJR-driven, not pipeline_config-driven.
-        """
+    def _build_job_view(self, job: Job, status: JobStatus) -> JobView:
+        """Build a JobView derived from the NJR snapshot for UI consumers."""
         try:
             normalized_status = JobStatusV2(status.value)
         except ValueError:
             normalized_status = JobStatusV2.QUEUED
-        # PR-CORE1-A3: Prefer NJR snapshot over Job attributes for display
+
+        created_iso = job.created_at.isoformat() if job.created_at else None
+        started_iso = job.started_at.isoformat() if job.started_at else None
+        completed_iso = job.completed_at.isoformat() if job.completed_at else None
         record = normalized_job_from_snapshot(getattr(job, "snapshot", {}) or {})
+
         if record is not None:
             record.status = normalized_status
             if status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
-                completed = getattr(job, "completed_at", None)
-                if completed:
-                    record.completed_at = completed
+                if completed_iso:
+                    record.completed_at = job.completed_at
+            view = record.to_job_view(
+                status=normalized_status.value,
+                created_at=created_iso,
+                started_at=started_iso,
+                completed_at=completed_iso,
+                is_active=job.status in {JobStatus.QUEUED, JobStatus.RUNNING},
+                last_error=job.error_message,
+                worker_id=getattr(job, "worker_id", None),
+                result=getattr(job, "result", None),
+            )
             summary = record.to_unified_summary()
-        else:
-            summary = UnifiedJobSummary.from_job(job, normalized_status)
-        setattr(job, "unified_summary", summary)
-        return summary
+            setattr(job, "unified_summary", summary)
+            return view
+
+        fallback_label = getattr(job, "label", job.job_id) or job.job_id
+        fallback_summary = UnifiedJobSummary.from_job(job, normalized_status)
+        setattr(job, "unified_summary", fallback_summary)
+        return JobView(
+            job_id=job.job_id,
+            status=normalized_status.value,
+            model="unknown",
+            prompt="",
+            negative_prompt=None,
+            seed=getattr(job, "seed", None),
+            label=fallback_label,
+            positive_preview="",
+            negative_preview=None,
+            stages_display="txt2img",
+            estimated_images=getattr(job, "total_images", 1) or 1,
+            created_at=created_iso or datetime.utcnow().isoformat(),
+            prompt_pack_id=getattr(job, "prompt_pack_id", "") or "",
+            prompt_pack_name="",
+            variant_label=None,
+            batch_label=None,
+            started_at=started_iso,
+            completed_at=completed_iso,
+            is_active=job.status in {JobStatus.QUEUED, JobStatus.RUNNING},
+            last_error=job.error_message,
+            worker_id=getattr(job, "worker_id", None),
+            result=getattr(job, "result", None),
+        )
 
     def _log_job_started(self, job_id: str | None) -> None:
         if not self._job_lifecycle_logger or not job_id:
