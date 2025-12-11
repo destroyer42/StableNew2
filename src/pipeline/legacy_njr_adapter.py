@@ -1,3 +1,30 @@
+"""Legacy NJR Adapter - COMPATIBILITY ONLY (PR-CORE1-12)
+
+This module provides backward compatibility for converting legacy PipelineConfig
+objects to NormalizedJobRecord (NJR).
+
+**STATUS: DEPRECATED - DO NOT USE FOR NEW CODE**
+
+As of PR-CORE1-B2 and PR-CORE1-12:
+- All new execution MUST use JobBuilderV2 to build NJR directly
+- PipelineConfig is NO LONGER a runtime execution payload
+- This adapter exists ONLY for:
+  1. Deprecated controller methods (app_controller.run_pipeline, etc.)
+  2. Historical compatibility during migration period
+  3. Reference implementation for understanding legacy behavior
+
+**FUTURE:** This module will be archived once all legacy execution paths are removed.
+
+**DO NOT:**
+- Use this for new features
+- Create new PipelineConfig → NJR conversion paths
+- Add new functions to this module
+
+**INSTEAD:**
+- Use JobBuilderV2 + ConfigMergerV2 to build NJR from GUI state + PromptPack
+- Follow v2.6 canonical execution path: GUI → Controller → NJR → Queue → Runner
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict

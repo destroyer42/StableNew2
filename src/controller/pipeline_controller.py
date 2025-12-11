@@ -32,7 +32,12 @@ from src.learning.model_defaults_resolver import (
 )
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
+# PR-CORE1-12: Legacy adapter still used by deprecated run_pipeline() method
+# Will be removed when run_pipeline() is fully retired
 from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
+# PR-CORE1-12: PipelineConfigAssembler temporarily re-imported from archive
+# DEFER: Still used by NJR building methods - will be refactored to JobBuilderV2
+from src.controller.archive.pipeline_config_assembler import PipelineConfigAssembler, GuiOverrides
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     NormalizedJobRecord,
@@ -47,7 +52,7 @@ from src.config.app_config import is_queue_execution_enabled
 from src.utils.config import ConfigManager
 from src.controller.job_history_service import JobHistoryService
 from src.queue.job_history_store import JobHistoryEntry
-from src.controller.pipeline_config_assembler import PipelineConfigAssembler, GuiOverrides, RunPlan, PlannedJob
+# PR-CORE1-12: PipelineConfigAssembler, GuiOverrides, RunPlan, PlannedJob removed - NJR-only execution
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.state import PipelineState
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
@@ -1545,7 +1550,19 @@ class PipelineController(_GUIPipelineController):
             return None
 
     def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
-        """Run pipeline synchronously and return result."""
+        """DEPRECATED (PR-CORE1-12): Legacy synchronous pipeline execution.
+        
+        This method converts pipeline_config to NJR using legacy adapter, then
+        executes via run_njr(). Used only by deprecated app_controller paths.
+        
+        PREFER: start_pipeline_v2() which builds NJR + enqueues for async execution.
+        
+        Args:
+            config: Legacy PipelineConfig (converted internally to NJR)
+            
+        Returns:
+            PipelineRunResult
+        """
         if self._pipeline_runner is not None:
             record = build_njr_from_legacy_pipeline_config(config)
             result = self._pipeline_runner.run_njr(record, self.cancel_token)

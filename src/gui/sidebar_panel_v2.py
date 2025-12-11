@@ -870,25 +870,32 @@ class SidebarPanelV2(ttk.Frame):
         return frame
 
     def _build_pipeline_config_section(self, parent: ttk.Frame) -> ttk.Frame:
-        """Build the pipeline configuration section for the sidebar card."""
-        # Import here to avoid circular import
-        from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
+        """DEPRECATED (PR-CORE1-12): Pipeline config section no longer used.
+        
+        This method built a PipelineConfigPanel which is now archived. The panel
+        was wired to pipeline_config execution, which is removed in v2.6.
+        
+        Consider removing this method entirely in future cleanup.
+        """
+        # PR-CORE1-12: PipelineConfigPanel archived - no longer wired
+        # from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
         
         # Create a frame to hold the pipeline config panel
         frame = ttk.Frame(parent)
         
+        # PR-CORE1-12: Stages section and pipeline_config_panel creation disabled
         # Add stages section at the top
-        stages_frame = self._build_stages_section(frame)
-        stages_frame.pack(fill="x", pady=(0, 8))
+        # stages_frame = self._build_stages_section(frame)
+        # stages_frame.pack(fill="x", pady=(0, 8))
         
         # Create the pipeline config panel
-        self.pipeline_config_panel = PipelineConfigPanel(
-            frame,
-            controller=self.controller,
-            app_state=self.app_state,
-            on_change=self._emit_change
-        )
-        self.pipeline_config_panel.pack(fill="both", expand=True)
+        # self.pipeline_config_panel = PipelineConfigPanel(
+        #     frame,
+        #     controller=self.controller,
+        #     app_state=self.app_state,
+        #     on_change=self._emit_change
+        # )
+        # self.pipeline_config_panel.pack(fill="both", expand=True)
         
         return frame
 

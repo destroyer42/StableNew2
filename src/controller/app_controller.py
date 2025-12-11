@@ -1,8 +1,11 @@
 """
 StableNew - App Controller (Skeleton + CancelToken + Worker Thread Stub)
 
-Deprecated: kept only for legacy GUI skeleton in src/gui/main_window_v2.py.
-Use PipelineController + StableNewGUI for the active V2 application.
+PR-CORE1-12: DEPRECATED - Legacy AppController retained only for GUI skeleton compatibility.
+Runtime pipeline execution via pipeline_config has been REMOVED.
+
+Use PipelineController + NJR path for all new code. Do not add pipeline_config-based
+execution logic. All queue/runner execution must use NormalizedJobRecord (NJR) + PromptPack.
 
 It provides:
 - Lifecycle state management (IDLE, RUNNING, STOPPING, ERROR).
@@ -45,7 +48,6 @@ from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
 from src.gui.views.error_modal_v2 import ErrorModalV2
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner, normalize_run_result
-from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
 from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
@@ -1246,6 +1248,11 @@ class AppController:
                 pass
 
     def _validate_pipeline_config(self) -> tuple[bool, str]:
+        """DEPRECATED (PR-CORE1-12): Legacy validation for pipeline_config panel.
+        
+        Use PipelineController + NJR validation instead. This method is retained
+        only for backward compatibility with archived GUI components.
+        """
         cfg = self.app_state.current_config if self.app_state else self.state.current_config
         if not cfg.model_name:
             return False, "Please select a model before running the pipeline."
@@ -1256,6 +1263,7 @@ class AppController:
         return True, ""
 
     def _set_validation_feedback(self, valid: bool, message: str) -> None:
+        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
         panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
         if panel and hasattr(panel, "set_validation_message"):
             try:
@@ -1482,50 +1490,37 @@ class AppController:
             self._append_log("[controller] run_pipeline requested, but pipeline is already running.")
             return None
 
-        self._append_log("[controller] run_pipeline - delegating to PipelineController.")
-        is_valid, message = self._validate_pipeline_config()
-        self._set_validation_feedback(is_valid, message)
-        if not is_valid:
-            self._append_log(f"[controller] Pipeline validation failed: {message}")
-            return None
-
-        self._last_error_envelope = None
-        self._set_lifecycle(LifecycleState.RUNNING)
-        try:
-            result = self._run_via_pipeline_controller()
-            self._set_lifecycle(LifecycleState.IDLE)
-            return result
-        except Exception as exc:  # noqa: BLE001
-            envelope = self._capture_error_envelope(exc, subsystem="controller")
-            self._log_structured_error(envelope, "Pipeline error in run_pipeline")
-            self._append_log(f"[controller] Pipeline error in run_pipeline: {exc!r}")
-            self._set_lifecycle(LifecycleState.ERROR, error=str(exc))
-            self._show_structured_error_modal(envelope)
-            return None
+        self._append_log("[controller] run_pipeline is deprecated; use pipeline_controller.start_pipeline_v2.")
+        return None
 
     def _run_via_pipeline_controller(self) -> Any:
         """Delegate pipeline execution to PipelineController for modern V2 stack."""
         if not hasattr(self, "pipeline_controller") or self.pipeline_controller is None:
             raise RuntimeError("PipelineController not initialized")
 
-        pipeline_config = self.build_pipeline_config_v2()
-        self._append_log("[controller] Delegating to PipelineController for execution.")
-
-        # Run synchronously via PipelineController
-        result = self.pipeline_controller.run_pipeline(pipeline_config)
-        return result
+        raise RuntimeError("run_pipeline is disabled in NJR-only mode")
 
     def _execute_pipeline_via_runner(self, pipeline_config: PipelineConfig) -> Any:
-        """Execute pipeline using the traditional PipelineRunner approach."""
-        runner = getattr(self, "pipeline_runner", None)
-        if runner is None:
-            raise RuntimeError("No pipeline runner configured")
+        """DEPRECATED (PR-CORE1-12): Legacy pipeline_config execution removed.
         
-        # Run the pipeline synchronously
-        result = runner.run(pipeline_config, self.pipeline_controller.cancel_token, self._append_log_threadsafe)
-        return result
+        Execute pipeline using the traditional PipelineRunner approach.
+        
+        This method is DISABLED as of PR-CORE1-B2 (NJR-only execution).
+        Use PipelineController.start_pipeline_v2() which builds NJR + enqueues.
+        
+        Raises:
+            RuntimeError: Always - pipeline_config execution is disabled.
+        """
+        raise RuntimeError("Legacy runner path is disabled in NJR-only mode")
 
     def _run_pipeline_from_tab(self, pipeline_tab: Any, pipeline_config: PipelineConfig) -> Any:
+        """DEPRECATED (PR-CORE1-12): Legacy tab-based pipeline_config execution.
+        
+        This method routed execution based on pipeline_tab flags. No longer used
+        since GUI V2 uses PipelineController for all execution.
+        
+        Consider removing in future cleanup after GUI V1 removal.
+        """
         flags = {
             "txt2img": self._coerce_bool(getattr(pipeline_tab, "txt2img_enabled", None)),
             "img2img": self._coerce_bool(getattr(pipeline_tab, "img2img_enabled", None)),
@@ -1552,7 +1547,7 @@ class AppController:
                 tile_size=tile_size,
             )
 
-        return self._run_pipeline_via_runner_only(pipeline_config)
+        raise RuntimeError("Legacy pipeline tab execution is disabled in NJR-only mode")
 
     def _run_standalone_upscale(
         self,
@@ -1622,14 +1617,21 @@ class AppController:
         }
 
     def _run_pipeline_via_runner_only(self, pipeline_config: PipelineConfig) -> Any:
+        """DEPRECATED (PR-CORE1-12): Legacy fallback execution - NO LONGER USED.
+        
+        As of PR-CORE1-B2, all jobs execute via NJR-only path. This method existed
+        as a fallback for jobs without NJR, but such jobs are no longer created.
+        
+        All execution MUST go through:
+        GUI → PipelineController → JobService → Queue → Runner (NJR only)
+        
+        Raises:
+            RuntimeError: Always - pipeline_config execution is disabled.
+        """
         runner = getattr(self, "pipeline_runner", None)
         if runner is None:
             raise RuntimeError("No pipeline runner configured")
-        self._append_log("[controller] Starting pipeline execution (runner).")
-        executor_config = runner._build_executor_config(pipeline_config)
-        self._cache_last_run_payload(executor_config, pipeline_config)
-        record = build_njr_from_legacy_pipeline_config(pipeline_config)
-        return runner.run_njr(record, None, self._append_log_threadsafe)
+        raise RuntimeError("Legacy runner-only path is disabled in NJR-only mode")
 
     def _get_pipeline_tab_upscale_params(self, pipeline_tab: Any) -> tuple[float, str, int]:
         factor_var = getattr(pipeline_tab, "upscale_factor", None)
@@ -1766,6 +1768,11 @@ class AppController:
             cancel_token.clear_stop_requirement()
 
     def _cache_last_run_payload(self, executor_config: dict[str, Any], pipeline_config: PipelineConfig) -> None:
+        """DEPRECATED (PR-CORE1-12): Legacy payload caching for pipeline_config.
+        
+        This cached pipeline_config for debugging/replay. No longer used since
+        NJR jobs include full snapshots. Consider removing in future cleanup.
+        """
         if not executor_config:
             return
         snapshot = self._run_config_with_lora()
@@ -1853,6 +1860,7 @@ class AppController:
             snapshot["enabled"] = ad_enabled
             self.app_state.set_adetailer_config(snapshot)
 
+        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
         pipeline_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
         if run_snapshot and pipeline_panel and hasattr(pipeline_panel, "apply_run_config"):
             pipeline_panel.apply_run_config(run_snapshot)
@@ -2170,6 +2178,7 @@ class AppController:
                 self._apply_core_overrides(core_overrides)
             
             # Update PipelineConfigPanelV2 if available
+            # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
             pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
             if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
                 try:
@@ -2445,10 +2454,25 @@ class AppController:
         }
 
     def build_pipeline_config_v2(self) -> PipelineConfig:
-        """Build the pipeline configuration structure that drives the runner."""
+        """DEPRECATED (PR-CORE1-12): Legacy pipeline_config builder.
+        
+        Build the pipeline configuration structure that drives the runner.
+        
+        NOTE: This is still called internally by PipelineController during NJR
+        construction, but MUST NOT be used for execution payloads. Will be
+        refactored in future cleanup to remove PipelineConfig dependency.
+        """
         return self._build_pipeline_config()
 
     def _build_pipeline_config(self) -> PipelineConfig:
+        """DEPRECATED (PR-CORE1-12): Internal pipeline_config builder.
+        
+        NOTE: Still used by PipelineController._build_pipeline_config_from_state()
+        during NJR construction. This is INTERNAL ONLY and will be refactored in
+        future to directly build NJR fields without intermediate PipelineConfig.
+        
+        DO NOT use this for execution payloads.
+        """
         current = self.get_current_config()
         pack = self._get_selected_pack()
         prompt = self._get_active_prompt_text() or self._resolve_prompt_from_pack(pack) or current.get("prompt", "")
@@ -2726,6 +2750,7 @@ class AppController:
         self._update_run_config_randomizer(enabled=normalized_enabled, max_variants=normalized_max)
 
     def _get_panel_randomizer_config(self) -> dict[str, Any] | None:
+        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
         panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
         if panel is None or not hasattr(panel, "get_randomizer_config"):
             return None
@@ -2841,6 +2866,7 @@ class AppController:
             self._apply_randomizer_from_config(pack_config)
         
         # Update stage cards if available
+        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
         pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
         if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
             try:
@@ -3072,6 +3098,7 @@ class AppController:
             self._apply_randomizer_from_config(preset_config)
         
         # Update stage cards
+        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
         pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
         if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
             try:

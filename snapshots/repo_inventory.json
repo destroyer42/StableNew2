@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-11T06:39:16",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251211-063914.zip",
-  "file_count": 1621,
-  "total_size_bytes": 28543588,
+  "created_at": "2025-12-11T07:34:40",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251211-073438.zip",
+  "file_count": 1623,
+  "total_size_bytes": 28681360,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -73,6 +73,11 @@
       "path": "package-lock.json",
       "size_bytes": 94,
       "mtime_iso": "2025-11-23T14:37:55"
+    },
+    {
+      "path": "pipeline_config_refs.md",
+      "size_bytes": 137915,
+      "mtime_iso": "2025-12-11T06:57:17"
     },
     {
       "path": "pyproject.toml",
@@ -5240,6 +5245,11 @@
       "mtime_iso": "2025-11-13T16:22:05"
     },
     {
+      "path": "scripts/list_pipeline_config_refs.py",
+      "size_bytes": 1665,
+      "mtime_iso": "2025-12-11T06:57:14"
+    },
+    {
       "path": "scripts/reorg_repo.py",
       "size_bytes": 3108,
       "mtime_iso": "2025-11-13T16:22:05"
@@ -5356,8 +5366,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 133481,
-      "mtime_iso": "2025-12-11T06:27:06"
+      "size_bytes": 131726,
+      "mtime_iso": "2025-12-11T06:44:06"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -5951,18 +5961,18 @@
     },
     {
       "path": "src/history/history_migration_engine.py",
-      "size_bytes": 9071,
-      "mtime_iso": "2025-12-10T20:02:31"
+      "size_bytes": 8662,
+      "mtime_iso": "2025-12-11T06:39:21"
     },
     {
       "path": "src/history/history_record.py",
-      "size_bytes": 4035,
-      "mtime_iso": "2025-12-10T20:02:25"
+      "size_bytes": 4234,
+      "mtime_iso": "2025-12-11T06:39:39"
     },
     {
       "path": "src/history/history_schema_v26.py",
-      "size_bytes": 2641,
-      "mtime_iso": "2025-12-10T20:02:28"
+      "size_bytes": 2886,
+      "mtime_iso": "2025-12-11T06:39:44"
     },
     {
       "path": "src/history/job_history_store.py",
@@ -6206,8 +6216,8 @@
     },
     {
       "path": "src/services/queue_store_v2.py",
-      "size_bytes": 10434,
-      "mtime_iso": "2025-12-10T21:46:19"
+      "size_bytes": 10346,
+      "mtime_iso": "2025-12-11T06:39:59"
     },
     {
       "path": "src/stablenew.egg-info/dependency_links.txt",
@@ -6422,7 +6432,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-11T06:31:59"
+      "mtime_iso": "2025-12-11T06:45:40"
     },
     {
       "path": "tests/conftest.py",

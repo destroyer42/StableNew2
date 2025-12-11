@@ -76,7 +76,9 @@ class JobQueueItemDTO:
     
     For jobs built via JobBuilderV2, this DTO should be constructed from
     the NJR snapshot stored in Job.snapshot, not from Job.pipeline_config.
-    Legacy jobs without NJR snapshots may fall back to pipeline_config.
+    
+    PR-CORE1-12: pipeline_config is DEPRECATED. Legacy jobs without NJR 
+    snapshots may fall back to pipeline_config, but all new jobs use NJR only.
     """
     job_id: str
     label: str
@@ -101,7 +103,9 @@ class JobHistoryItemDTO:
     
     For jobs built via JobBuilderV2, this DTO should be constructed from
     the NJR snapshot stored in history entries, not from pipeline_config.
-    Legacy history entries without NJR snapshots may fall back to pipeline_config.
+    
+    PR-CORE1-12: pipeline_config is DEPRECATED. Legacy history entries without 
+    NJR snapshots may fall back to pipeline_config, but all new jobs use NJR only.
     """
     job_id: str
     label: str
@@ -436,10 +440,12 @@ class NormalizedJobRecord:
     - Job snapshots and provenance tracking
     
     NormalizedJobRecord is the "read model" - used for building and displaying jobs.
+    
+    PR-CORE1-12: pipeline_config is DEPRECATED and removed from runtime execution.
     During early CORE1-A/B hybrid state, Job.pipeline_config was the execution payload,
-    but PR-CORE1-B3 now guarantees new v2.6 jobs never populate this field.
-    Full NJR-only execution is enforced for all new jobs; pipeline_config remains
-    legacy-only (always None for v2.6 jobs).
+    but PR-CORE1-B3 guarantees new v2.6 jobs never populate this field.
+    Full NJR-only execution is enforced for all new jobs; pipeline_config is
+    legacy-only (always None for v2.6 jobs) and will be fully removed in future cleanup.
     PR-CORE1-B5 removed the old Job.payload-driven execution path in favor of NJRs.
     
     All fields are explicit - no hidden defaults or missing values.

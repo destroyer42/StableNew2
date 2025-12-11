@@ -416,6 +416,21 @@ class PipelineRunner:
         return self._execute_with_config(config, cancel_token, log_fn=log_fn)
 
     def _pipeline_config_from_njr(self, record: NormalizedJobRecord) -> PipelineConfig:
+        """INTERNAL ONLY (PR-CORE1-12): Convert NJR to PipelineConfig for execution.
+        
+        This method extracts fields from NormalizedJobRecord and builds a
+        PipelineConfig for internal runner use. This is an INTERNAL conversion
+        for execution machinery, NOT a runtime payload.
+        
+        NOTE: This is a transitional method. Future refactoring will eliminate
+        PipelineConfig entirely and use NJR fields directly in stage execution.
+        
+        Args:
+            record: NormalizedJobRecord with all execution parameters
+            
+        Returns:
+            PipelineConfig for internal runner use
+        """
         prompt = record.positive_prompt or record.prompt_pack_name or "StableNew Run"
         negative = record.negative_prompt or ""
         executor_config = PipelineConfig(
