@@ -53,6 +53,7 @@ def validate_entry(entry: dict[str, Any]) -> tuple[bool, list[str]]:
         - field types conform to expected types
         - history_schema == "2.6"
         - no unknown fields
+        - njr_snapshot contains normalized_job
     """
     errors: list[str] = []
     if not isinstance(entry, dict):
@@ -78,5 +79,9 @@ def validate_entry(entry: dict[str, Any]) -> tuple[bool, list[str]]:
     schema_value = entry.get("history_schema")
     if schema_value != HISTORY_SCHEMA_VERSION:
         errors.append(f"history_schema must be {HISTORY_SCHEMA_VERSION}")
+
+    snapshot = entry.get("njr_snapshot")
+    if not isinstance(snapshot, dict) or "normalized_job" not in snapshot:
+        errors.append("njr_snapshot must include normalized_job (legacy snapshots are view-only)")
 
     return len(errors) == 0, errors

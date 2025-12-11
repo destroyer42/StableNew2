@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
 
-from src.history.history_schema_v26 import HISTORY_SCHEMA_VERSION
+from src.history.history_schema_v26 import HISTORY_SCHEMA_VERSION, InvalidHistoryRecord
 
 _DEFAULT_TIMESTAMP = "1970-01-01T00:00:00Z"
 _LEGACY_KEYS = {
@@ -106,4 +106,7 @@ class HistoryRecord:
     def to_njr(self) -> "NormalizedJobRecord":
         from src.pipeline.job_models_v2 import NormalizedJobRecord  # Local import to avoid cycle
 
-        return NormalizedJobRecord.from_snapshot(self.njr_snapshot)
+        snapshot = self.njr_snapshot or {}
+        if "normalized_job" not in snapshot:
+            raise InvalidHistoryRecord("History record is legacy/view-only (missing normalized_job).")
+        return NormalizedJobRecord.from_snapshot(snapshot)

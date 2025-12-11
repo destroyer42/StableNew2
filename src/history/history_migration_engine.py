@@ -142,15 +142,8 @@ class HistoryMigrationEngine:
                 return _njr_to_snapshot(hydrated)
             return _strip_legacy_keys(deepcopy(snapshot))
 
-        pipeline_config = entry.get("pipeline_config")
-        if isinstance(pipeline_config, PipelineConfig):
-            return _njr_to_snapshot(build_njr_from_legacy_pipeline_config(pipeline_config))
-        if isinstance(pipeline_config, Mapping):
-            config = self._coerce_pipeline_config(pipeline_config)
-            return _njr_to_snapshot(build_njr_from_legacy_pipeline_config(config))
-
-        njr = build_njr_from_history_dict(entry)
-        return _njr_to_snapshot(njr)
+        # Legacy shapes without normalized_job are treated as non-runnable (view-only)
+        return {}
 
     def _hydrate_snapshot(self, snapshot: Mapping[str, Any] | None) -> NormalizedJobRecord | None:
         """Attempt to coerce any snapshot-like mapping into a full NJR."""

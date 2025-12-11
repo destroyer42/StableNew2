@@ -15,7 +15,6 @@ from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.pipeline.legacy_njr_adapter import build_njr_from_history_dict
 from src.utils.jsonl_codec import JSONLCodec
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
@@ -155,13 +154,8 @@ class QueueMigrationEngine:
                 return _strip_snapshot_keys(_njr_to_snapshot(hydrated))
             return _strip_snapshot_keys(source)
 
-        pipeline_config = working.get("pipeline_config")
-        if pipeline_config:
-            record = build_njr_from_history_dict({"pipeline_config": pipeline_config})
-            return _strip_snapshot_keys(_njr_to_snapshot(record))
-
-        record = build_njr_from_history_dict(working)
-        return _strip_snapshot_keys(_njr_to_snapshot(record))
+        # Legacy shapes without normalized_job are non-runnable; return empty snapshot
+        return {}
 
 
 def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
@@ -179,6 +173,10 @@ def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
     metadata = item.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         errors.append("metadata must be dict")
+
+    snapshot = item.get("njr_snapshot")
+    if not isinstance(snapshot, dict) or "normalized_job" not in snapshot:
+        errors.append("njr_snapshot must include normalized_job (legacy entries are view-only)")
 
     return (not errors, errors)
 
@@ -235,6 +233,7 @@ def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | Non
         valid, errs = validate_queue_item(job)
         if not valid:
             logger.warning("Queue job failed validation: %s", errs)
+            continue
         validated_jobs.append(job)
 
     snapshot = QueueSnapshotV1(
