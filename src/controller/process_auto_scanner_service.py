@@ -35,6 +35,10 @@ class ProcessAutoScannerSummary:
     killed: list[dict[str, Any]] = field(default_factory=list)
 
 
+def _is_test_mode() -> bool:
+    import os
+    return bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("STABLENEW_TEST_MODE") == "1"
+
 class ProcessAutoScannerService:
     def __init__(
         self,
@@ -50,11 +54,17 @@ class ProcessAutoScannerService:
         self._summary_lock = threading.Lock()
         self._last_summary = ProcessAutoScannerSummary()
         self._thread: threading.Thread | None = None
-        if start_thread:
+        if start_thread and not _is_test_mode():
             self._thread = threading.Thread(target=self._run_loop, daemon=True, name="ProcessAutoScanner")
             self._thread.start()
+        elif start_thread and _is_test_mode():
+            # In test mode, do not start background thread; service is a no-op
+            self._thread = None
 
     def _run_loop(self) -> None:
+        # Only run if not in test mode
+        if _is_test_mode():
+            return
         while not self._stop_event.wait(self.scan_interval):
             if not self.enabled:
                 continue

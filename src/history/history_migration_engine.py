@@ -15,6 +15,7 @@ from src.pipeline.legacy_njr_adapter import (
     build_njr_from_history_dict,
     build_njr_from_legacy_pipeline_config,
 )
+from src.history.legacy_prompt_hydration_v26 import hydrate_prompt_fields
 from src.pipeline.pipeline_runner import PipelineConfig
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
@@ -67,6 +68,12 @@ class HistoryMigrationEngine:
         raw = dict(entry or {})
         snapshot = self._extract_snapshot(raw)
         snapshot = dict(snapshot or {})
+        # PR-CORE1-D17: Canonical prompt hydration for all legacy→NJR
+        from src.history.legacy_prompt_hydration_v26 import hydrate_prompt_fields
+        if "normalized_job" in snapshot:
+            njr = snapshot["normalized_job"]
+            hydrate_prompt_fields(njr, raw)
+            snapshot["normalized_job"] = njr
         record_id = str(
             raw.get("id")
             or raw.get("job_id")

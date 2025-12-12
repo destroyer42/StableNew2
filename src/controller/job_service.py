@@ -341,6 +341,7 @@ class JobService:
         """Execute a job synchronously (bypasses queue for 'Run Now' semantics).
         
         PR-106: Explicit API for direct execution path.
+        Ensures returned result envelope includes job_id at the top level.
         """
         log_with_ctx(
             logger,
@@ -353,6 +354,10 @@ class JobService:
         self._emit_queue_updated()
         try:
             result = self.runner.run_once(job)
+            # Ensure job_id is present at the top level of the result envelope
+            if isinstance(result, dict):
+                if "job_id" not in result:
+                    result = {**result, "job_id": job.job_id}
             return result
         except Exception:
             raise

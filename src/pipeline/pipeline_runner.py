@@ -64,6 +64,28 @@ class PipelineRunner:
     Adapter that drives the real multi-stage Pipeline executor.
     """
 
+    def run(self, config: PipelineConfig, cancel_token: "CancelToken") -> dict:
+        """
+        Canonical runner entrypoint for tests and learning hooks.
+        Executes the pipeline plan, chains last_image_meta, emits learning records, and returns a stable result dict.
+        """
+        result = self._execute_with_config(config, cancel_token)
+        # Convert to dict with canonical keys expected by tests
+        result_dict = result.to_dict() if hasattr(result, 'to_dict') else dict(result)
+        # Provide stable keys for test compatibility
+        return {
+            "ok": result_dict.get("success", False),
+            "run_id": result_dict.get("run_id"),
+            "artifacts": result_dict.get("variants", []),
+            "outputs": result_dict.get("variants", []),
+            "learning_records": result_dict.get("learning_records", []),
+            "metadata": result_dict.get("metadata", {}),
+            "stage_events": result_dict.get("stage_events", []),
+            "stage_plan": result_dict.get("stage_plan"),
+            # Include all other keys for maximal compatibility
+            **result_dict
+        }
+
     def run_txt2img_once(self, config: dict[str, Any]) -> dict[str, Any]:
         """
         Minimal V2.5 happy path: run txt2img once and return result dict.

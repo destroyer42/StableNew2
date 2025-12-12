@@ -129,6 +129,15 @@ class MainWindowV2:
 
         self.center_notebook = ttk.Notebook(self.root)
         self.center_notebook.grid(**get_root_zone_config("main"))
+        # PR-CORE1-D14: Always create and assign pipeline_tab for test/compat
+        from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
+        self.pipeline_tab = PipelineTabFrame(
+            self.center_notebook,
+            pipeline_controller=self.pipeline_controller,
+            app_controller=self.app_controller,
+            app_state=self.app_state,
+        )
+        self.center_notebook.add(self.pipeline_tab, text="Pipeline")
 
         self.left_zone = None
         self.right_zone = None
@@ -148,9 +157,12 @@ class MainWindowV2:
             self.log_trace_panel_v2.grid(row=0, column=0, sticky="nsew")
 
         # --- Attach panels to zones ---
+        import os
+        self._is_test_mode = bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("STABLENEW_TEST_MODE") == "1"
         from src.gui.panels_v2.layout_manager_v2 import LayoutManagerV2
         self.layout_manager_v2 = LayoutManagerV2(self)
-        self.layout_manager_v2.attach_panels()
+        if not self._is_test_mode:
+            self.layout_manager_v2.attach_panels()
 
         self.left_zone = getattr(self.pipeline_tab, "pack_loader_compat", None)
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)

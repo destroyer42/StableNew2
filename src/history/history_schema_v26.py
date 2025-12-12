@@ -83,5 +83,13 @@ def validate_entry(entry: dict[str, Any]) -> tuple[bool, list[str]]:
     snapshot = entry.get("njr_snapshot")
     if not isinstance(snapshot, dict) or "normalized_job" not in snapshot:
         errors.append("njr_snapshot must include normalized_job (legacy snapshots are view-only)")
+    else:
+        # PR-CORE1-D16: Allow prompt via positive_prompt OR config["prompt"] for migrated legacy
+        njr = snapshot["normalized_job"]
+        prompt = njr.get("positive_prompt") or (njr.get("config", {}) or {}).get("prompt")
+        if not isinstance(prompt, str):
+            prompt = ""
+        if not prompt:
+            errors.append("normalized_job missing prompt (positive_prompt or config['prompt'])")
 
     return len(errors) == 0, errors

@@ -39,7 +39,7 @@ def test_queue_state_snapshot_loads(tmp_path: Path, filename: str, version: str)
         assert njr_snapshot.get("job_id"), f"missing job_id in normalized snapshot ({filename})"
         njr = normalized_job_from_snapshot({"normalized_job": njr_snapshot})
         assert njr.job_id, "NormalizedJobRecord missing job_id"
-        prompt = njr.positive_prompt or njr.config.get("prompt")
+        prompt = njr.positive_prompt or (njr.config.get("prompt") if hasattr(njr, "config") and isinstance(njr.config, dict) else None)
         assert prompt, "NormalizedJobRecord should expose prompt"
 
     if version == "v2.0":

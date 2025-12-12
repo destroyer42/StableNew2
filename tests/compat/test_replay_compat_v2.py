@@ -30,6 +30,7 @@ def test_replay_migrated_entries_can_instantiate_njr(filename: str) -> None:
         njr = normalized_job_from_snapshot({"normalized_job": record.njr_snapshot})
 
         assert njr.job_id, "Replay entry must have job_id"
-        assert njr.positive_prompt or njr.config.get("prompt"), "Replay entry must expose a prompt"
+        prompt = njr.positive_prompt or (njr.config.get("prompt") if hasattr(njr, "config") and isinstance(njr.config, dict) else None)
+        assert prompt, "Replay entry must expose a prompt"
         assert record.history_schema == "2.6"
         assert isinstance(record.result, dict) or record.result is None

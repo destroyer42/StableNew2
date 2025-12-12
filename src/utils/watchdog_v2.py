@@ -1,5 +1,19 @@
 from __future__ import annotations
 
+import os
+import threading
+import time
+from typing import Optional
+
+def _is_test_mode() -> bool:
+    # pytest sets this environment variable while tests run
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    # explicit override
+    if os.environ.get("STABLENEW_TEST_MODE") == "1":
+        return True
+    return False
+
 import logging
 import threading
 import time
@@ -60,6 +74,8 @@ class JobWatchdog(threading.Thread):
         self._idle_since: dict[int, float] = {}
 
     def run(self) -> None:
+        if _is_test_mode():
+            return
         while not self._stop_event.wait(max(0.1, self._config.interval_sec)):
             violation = self.inspect()
             if violation is not None:

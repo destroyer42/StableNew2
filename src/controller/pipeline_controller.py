@@ -35,9 +35,6 @@ from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptRe
 # PR-CORE1-12: Legacy adapter still used by deprecated run_pipeline() method
 # Will be removed when run_pipeline() is fully retired
 from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
-# PR-CORE1-12: PipelineConfigAssembler temporarily re-imported from archive
-# DEFER: Still used by NJR building methods - will be refactored to JobBuilderV2
-from src.controller.archive.pipeline_config_assembler import PipelineConfigAssembler, GuiOverrides
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     NormalizedJobRecord,
@@ -52,7 +49,6 @@ from src.config.app_config import is_queue_execution_enabled
 from src.utils.config import ConfigManager
 from src.controller.job_history_service import JobHistoryService
 from src.queue.job_history_store import JobHistoryEntry
-# PR-CORE1-12: PipelineConfigAssembler, GuiOverrides, RunPlan, PlannedJob removed - NJR-only execution
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.state import PipelineState
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
@@ -83,6 +79,18 @@ class PreviewSummaryDTO:
 
 
 class PipelineController(_GUIPipelineController):
+
+    def _build_njrs_from_pack_bundle(self, pack_entries: list[PackJobEntry]) -> list[NormalizedJobRecord]:
+        """Build NormalizedJobRecord(s) from a bundle of PackJobEntry using the canonical builder pipeline."""
+        from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
+        builder = PromptPackNormalizedJobBuilder(
+            config_manager=self._config_manager,
+            job_builder=self._job_builder,
+            packs_dir=getattr(self._config_manager, "packs_dir", "packs"),
+        )
+        njrs = builder.build_jobs(pack_entries)
+        return njrs
+
     def _normalize_run_mode(self, pipeline_state: PipelineState) -> str:
         mode = getattr(pipeline_state, "run_mode", "") or "queue"
         mode_lower = str(mode).lower()
@@ -132,54 +140,7 @@ class PipelineController(_GUIPipelineController):
             learning_enabled=learning_enabled,
         )
 
-    def _coerce_overrides(self, overrides: GuiOverrides | dict[str, Any] | None) -> GuiOverrides:
-        if isinstance(overrides, GuiOverrides):
-            return overrides
-        if isinstance(overrides, dict):
-            return GuiOverrides(
-                prompt=str(overrides.get("prompt", "")),
-                model=str(overrides.get("model", "")),
-                model_name=str(overrides.get("model_name", overrides.get("model", ""))),
-                vae_name=str(overrides.get("vae_name", "")),
-                sampler=str(overrides.get("sampler", "")),
-                width=int(overrides.get("width", 512) or 512),
-                height=int(overrides.get("height", 512) or 512),
-                steps=int(overrides.get("steps", 20) or 20),
-                cfg_scale=float(overrides.get("cfg_scale", 7.0) or 7.0),
-                resolution_preset=str(overrides.get("resolution_preset", "")),
-                negative_prompt=str(overrides.get("negative_prompt", "")),
-                output_dir=str(overrides.get("output_dir", "")),
-                filename_pattern=str(overrides.get("filename_pattern", "")),
-                image_format=str(overrides.get("image_format", "")),
-                batch_size=int(overrides.get("batch_size", 1) or 1),
-                seed_mode=str(overrides.get("seed_mode", "")),
-                metadata=dict(overrides.get("metadata") or {}),
-            )
-        return GuiOverrides()
 
-    def _extract_state_overrides(self) -> GuiOverrides:
-        overrides: dict[str, Any] | None = None
-        getter = getattr(self, "gui_get_pipeline_overrides", None)
-        if callable(getter):
-            try:
-                overrides = getter()
-            except Exception:
-                overrides = None
-
-        if overrides:
-            try:
-                return self._coerce_overrides(overrides)
-            except Exception:
-                pass
-
-        fallback = getattr(self, "get_gui_overrides", None)
-        if callable(fallback):
-            try:
-                return self._coerce_overrides(fallback())
-            except Exception:
-                pass
-
-        return GuiOverrides()
 
     def get_webui_connection_state(self):
         if hasattr(self, "_webui_connection") and self._webui_connection is not None:
@@ -196,19 +157,7 @@ class PipelineController(_GUIPipelineController):
                 return None
         return None
 
-    def _build_pipeline_config_from_state(self) -> PipelineConfig:
-        overrides = self._extract_state_overrides()
-        learning_metadata = self._extract_metadata("learning_metadata")
-        randomizer_metadata = self._extract_metadata("randomizer_metadata")
 
-        if learning_metadata is None and self._learning_enabled:
-            learning_metadata = {"learning_enabled": True}
-
-        return self._config_assembler.build_from_gui_input(
-            overrides=overrides,
-            learning_metadata=learning_metadata,
-            randomizer_metadata=randomizer_metadata,
-        )
 
     # -------------------------------------------------------------------------
     # V2 Job Building via JobBuilderV2 (PR-204C)
@@ -230,13 +179,7 @@ class PipelineController(_GUIPipelineController):
         Returns:
             List of NormalizedJobRecord instances ready for queue/preview.
         """
-        # Build base config if not provided
-        if base_config is None:
-            try:
-                base_config = self._build_pipeline_config_from_state()
-            except Exception as exc:
-                _logger.warning("Failed to build pipeline config: %s", exc)
-                return []
+
 
         # Extract randomization plan from state if available
         randomization_plan = None
@@ -318,7 +261,6 @@ class PipelineController(_GUIPipelineController):
         # Build jobs via JobBuilderV2
         try:
             jobs = self._job_builder.build_jobs(
-                base_config=base_config,
                 randomization_plan=randomization_plan,
                 batch_settings=batch_settings,
                 output_settings=output_settings,
@@ -349,22 +291,21 @@ class PipelineController(_GUIPipelineController):
             job_draft = getattr(self._app_state, "job_draft", None)
             pack_entries = getattr(job_draft, "packs", None) or []
             if pack_entries:
-                builder = self._get_prompt_pack_builder()
-                if builder:
-                    jobs = builder.build_jobs(pack_entries)
-                    if jobs:
-                        _logger.debug(
-                            "Built %d preview jobs from %d prompt pack entries",
-                            len(jobs),
-                            len(pack_entries),
-                        )
-                        return jobs
+                njrs = self._build_njrs_from_pack_bundle(pack_entries)
+                if njrs:
                     _logger.debug(
-                        "Prompt pack preview builder returned no jobs, falling back to GUI state builder"
+                        "Built %d preview jobs from %d prompt pack entries",
+                        len(njrs),
+                        len(pack_entries),
                     )
-            return self._build_normalized_jobs_from_state()
+                    return njrs
+                _logger.debug(
+                    "Prompt pack preview builder returned no jobs, falling back to empty list"
+                )
+            return []
         except Exception as exc:
             _logger.debug("Failed to build preview jobs: %s", exc)
+            return []
             return []
 
     def _to_queue_job(
@@ -629,7 +570,7 @@ class PipelineController(_GUIPipelineController):
             else GuiDefaultsResolver(config_manager=self._config_manager)
         )
         self._model_defaults_resolver = ModelDefaultsResolver(config_manager=self._config_manager)
-        self._config_assembler = config_assembler if config_assembler is not None else PipelineConfigAssembler()
+        # self._config_assembler = config_assembler if config_assembler is not None else PipelineConfigAssembler()
         self._job_builder = job_builder if job_builder is not None else JobBuilderV2()
         self._webui_connection = webui_conn if webui_conn is not None else WebUIConnectionController()
         self._pipeline_runner = pipeline_runner

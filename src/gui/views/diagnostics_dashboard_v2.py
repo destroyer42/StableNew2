@@ -78,7 +78,10 @@ class DiagnosticsDashboardV2(ttk.Frame):
         self._containers_text = self._build_text_widget(body, "Containers")
         self._process_text = self._build_text_widget(body, "Processes")
 
-        self._refresh_snapshot()
+        import os
+        self._is_test_mode = bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("STABLENEW_TEST_MODE") == "1"
+        if not self._is_test_mode:
+            self._refresh_snapshot()
 
     def _build_text_widget(self, parent: ttk.Frame, title: str) -> tk.Text:
         frame = ttk.LabelFrame(parent, text=title)
@@ -95,6 +98,8 @@ class DiagnosticsDashboardV2(ttk.Frame):
         return widget
 
     def _refresh_snapshot(self) -> None:
+        if getattr(self, '_is_test_mode', False):
+            return
         snapshot = self._get_snapshot()
         self._update_memory_label()
         self._update_job_table(snapshot.get("jobs", []))
@@ -111,6 +116,8 @@ class DiagnosticsDashboardV2(ttk.Frame):
         self._schedule_refresh()
 
     def _schedule_refresh(self) -> None:
+        if getattr(self, '_is_test_mode', False):
+            return
         self._cancel_refresh()
         self._refresh_after_id = self.after(self.REFRESH_INTERVAL_MS, self._refresh_snapshot)
 

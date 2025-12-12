@@ -308,7 +308,7 @@ class AppController:
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
         self._job_history_path = Path("runs") / "job_history.json"
         self.job_service = job_service or self._build_job_service()
-        if self.job_service:
+        if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
             self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
@@ -340,7 +340,8 @@ class AppController:
 
 
         # Wire GUI overrides into PipelineController so config assembler can access GUI state
-        self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
+        if hasattr(self.pipeline_controller, "get_gui_overrides"):
+            self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
 
         # GUI log handler for LogTracePanelV2
         self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
@@ -376,18 +377,20 @@ class AppController:
             self._append_log(f"[controller] PipelineController bridge error: {exc!r}")
             return False
 
-    def start_run_v2(self) -> Any:
+    def start_run_v2(self) -> None:
         """
         Preferred, backward-compatible entrypoint for the V2 pipeline path.
 
         Tries the PipelineController bridge first; on failure, falls back to legacy start_run().
+        Returns None (event handler style).
         """
         self._ensure_run_mode_default("run")
-        return self._start_run_v2(RunMode.DIRECT, RunSource.RUN_BUTTON)
+        self._start_run_v2(RunMode.DIRECT, RunSource.RUN_BUTTON)
+        return None
 
     def _ensure_run_mode_default(self, button_source: str) -> None:
         pipeline_state = getattr(self.app_state, "pipeline_state", None)
-        if pipeline_state is None:
+        if pipeline_state is None or not hasattr(pipeline_state, "run_mode"):
             return
         current = (getattr(pipeline_state, "run_mode", None) or "").strip().lower()
         if current in {"direct", "queue"}:
@@ -524,17 +527,19 @@ class AppController:
         self._append_log("[controller] _start_run_v2 falling back to legacy start_run().")
         return self.start_run()
 
-    def on_run_job_now_v2(self) -> Any:
+    def on_run_job_now_v2(self) -> None:
         """
         V2 entrypoint for "Run Now": use the explicit `on_run_now` API and fall back to legacy run.
         """
         self._ensure_run_mode_default("run_now")
         try:
-            return self.on_run_now()
+            self.on_run_now()
+            return None
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] on_run_job_now_v2 error: {exc!r}")
         self._ensure_run_mode_default("run_now")
-        return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
+        self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
+        return None
 
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint; uses explicit APIs and falls back to legacy run."""

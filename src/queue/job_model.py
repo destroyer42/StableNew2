@@ -91,6 +91,7 @@ class Job:
             self.error_message = error_message
 
     def to_dict(self) -> Dict[str, Any]:
+        # pipeline_config is intentionally excluded for v2.6+ compatibility
         return {
             "job_id": self.job_id,
             "priority": int(self.priority),
@@ -114,6 +115,15 @@ class Job:
             "snapshot": self.snapshot,
             "error_envelope": serialize_envelope(self.error_envelope),
         }
+
+    @property
+    def pipeline_config(self) -> Optional[Dict[str, Any]]:
+        """
+        Deprecated compatibility alias for legacy code/tests.
+        Returns config_snapshot if present, else None.
+        Not included in to_dict().
+        """
+        return self.config_snapshot
 
     def summary(self) -> str:
         snapshot = self.snapshot or {}

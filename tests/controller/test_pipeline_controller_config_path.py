@@ -1,30 +1,32 @@
-from src.controller.webui_connection_controller import WebUIConnectionState
-from unittest import mock
 
+import pytest
 from src.controller.pipeline_controller import PipelineController
-from src.controller.pipeline_config_assembler import PipelineConfigAssembler, GuiOverrides
-from src.queue.job_model import Job
+from src.gui.app_state_v2 import PackJobEntry
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 
-
-def test_controller_uses_assembler_for_runs(monkeypatch):
-    assembler = PipelineConfigAssembler()
-    monkeypatch.setattr("src.controller.pipeline_controller.PipelineConfigAssembler", lambda *args, **kwargs: assembler)
-    controller = PipelineController(config_assembler=assembler)
-    controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
-
-    class JobShim(Job):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-
-    monkeypatch.setattr("src.controller.job_execution_controller.Job", JobShim)
-
-    assembler.build_from_gui_input = mock.Mock(
-        return_value=assembler.build_from_gui_input(overrides=GuiOverrides(prompt="p"))
+def make_minimal_pack_job_entry(prompt="hello", pack_id="pack1"):
+    return PackJobEntry(
+        pack_id=pack_id,
+        pack_name="TestPack",
+        prompt_lines=[prompt],
+        model_name="sdxl",
+        sampler="Euler",
+        width=512,
+        height=512,
+        steps=20,
+        cfg_scale=7.0,
+        loras=[],
+        vae_name="",
+        negative_prompt="",
+        metadata={},
     )
-    controller._queue_execution_enabled = False
 
-    def dummy_pipeline():
-        return {}
-
-    controller.start_pipeline(dummy_pipeline)
-    assembler.build_from_gui_input.assert_called()
+def test_controller_builds_njr_from_pack_bundle():
+    controller = PipelineController()
+    entry = make_minimal_pack_job_entry()
+    njrs = controller._build_njrs_from_pack_bundle([entry])
+    assert len(njrs) >= 1
+    assert all(isinstance(njr, NormalizedJobRecord) for njr in njrs)
+    for njr in njrs:
+        assert hasattr(njr, 'prompt_pack_id')
+        assert isinstance(njr.prompt_pack_id, str)

@@ -125,6 +125,18 @@ class QueueMigrationEngine:
         queue_id = str(working.get("queue_id") or job_id or record_id or uuid4())
 
         snapshot = self._extract_snapshot(working)
+        # Hydrate prompt fields for legacy compat
+        from src.pipeline.job_models_v2 import NormalizedJobRecord
+        from src.history.legacy_prompt_hydration_v26 import hydrate_prompt_fields
+        njr = None
+        if "normalized_job" in snapshot:
+            try:
+                njr = NormalizedJobRecord(**snapshot["normalized_job"])
+            except Exception:
+                pass
+        if njr is not None:
+            hydrate_prompt_fields(working, njr)
+            snapshot["normalized_job"] = njr.__dict__
 
         raw_metadata = working.get("metadata")
         normalized = {
@@ -233,6 +245,12 @@ def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | Non
         valid, errs = validate_queue_item(job)
         if not valid:
             logger.warning("Queue job failed validation: %s", errs)
+            # PR-CORE1-D17: Mark as legacy_view_only and still include
+            if "metadata" in job and isinstance(job["metadata"], dict):
+                job["metadata"]["legacy_view_only"] = True
+            else:
+                job["metadata"] = {"legacy_view_only": True}
+            validated_jobs.append(job)
             continue
         validated_jobs.append(job)
 

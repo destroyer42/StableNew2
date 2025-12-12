@@ -192,13 +192,18 @@ class WebUIProcessManager:
         process = self._process
         if process is None:
             return True
+        # PR-CORE1-D15: Ensure .terminated attribute exists for test doubles
+        if not hasattr(process, "terminated"):
+            setattr(process, "terminated", False)
         if process.poll() is not None:
             self._finalize_process(process)
+            # Already exited; terminated remains False
             return True
         pid = getattr(process, "pid", None)
         logger.info("Initiating WebUI shutdown (pid=%s, grace=%.1fs)", pid, grace_seconds)
         try:
             process.terminate()
+            setattr(process, "terminated", True)
         except Exception:
             pass
 

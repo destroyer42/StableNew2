@@ -358,7 +358,10 @@ def _normalize_upscale_image_entry(image_entry: Any) -> str | None:
     value = str(candidate).strip()
     if not value:
         return None
-    return value if value.startswith("data:") else f"data:image/png;base64,{value}"
+    # PR-CORE1-D15: Always return raw base64, stripping data URI if present
+    if value.startswith("data:image/") and "base64," in value:
+        return value.split("base64,", 1)[-1]
+    return value
 
 
 def _apply_adetailer_fields(

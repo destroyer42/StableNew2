@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-11T18:13:16",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251211-181314.zip",
-  "file_count": 1223,
-  "total_size_bytes": 24316239,
+  "created_at": "2025-12-11T20:40:52",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251211-204050.zip",
+  "file_count": 1245,
+  "total_size_bytes": 30542567,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -386,8 +386,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 559944,
-      "mtime_iso": "2025-12-10T19:32:26"
+      "size_bytes": 561579,
+      "mtime_iso": "2025-12-11T20:14:27"
     },
     {
       "path": "data/webui_cache.json",
@@ -411,8 +411,8 @@
     },
     {
       "path": "docs/ARCHITECTURE_v2.6.md",
-      "size_bytes": 23424,
-      "mtime_iso": "2025-12-11T06:21:18"
+      "size_bytes": 22949,
+      "mtime_iso": "2025-12-11T19:30:24"
     },
     {
       "path": "docs/Builder Pipeline Deep-Dive (v2.6).md",
@@ -441,8 +441,8 @@
     },
     {
       "path": "docs/DOCS_INDEX_v2.6.md",
-      "size_bytes": 7299,
-      "mtime_iso": "2025-12-09T13:04:28"
+      "size_bytes": 7485,
+      "mtime_iso": "2025-12-11T19:32:16"
     },
     {
       "path": "docs/E2E_Golden_Path_Test_Matrix_v2.6.md",
@@ -521,8 +521,8 @@
     },
     {
       "path": "docs/StableNew_Coding_and_Testing_v2.6.md",
-      "size_bytes": 18702,
-      "mtime_iso": "2025-12-10T21:47:45"
+      "size_bytes": 18795,
+      "mtime_iso": "2025-12-11T19:30:51"
     },
     {
       "path": "docs/model_defaults_v2/README.md",
@@ -920,1814 +920,1819 @@
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_implementation/PR-D_Implementation_Summary.md",
-      "size_bytes": 10988,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "docs/pr_templates/index.yaml",
+      "path": "docs/older/pr_templates_pipeline_config/index.yaml",
       "size_bytes": 3146,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PR-CORE1-A — Single Source of Truth Purification(v2.6).md",
+      "path": "docs/older/pr_templates_pipeline_config/PR-CORE1-A — Single Source of Truth Purification(v2.6).md",
       "size_bytes": 8842,
       "mtime_iso": "2025-12-09T19:11:36"
     },
     {
-      "path": "docs/pr_templates/Potential_work/COD-PR-GUI-V2-DROPDOWN-PAYLOAD-LASTRUN-V2_5-001(P1V3)(11-28).md",
+      "path": "docs/older/pr_templates_pipeline_config/README.md",
+      "size_bytes": 287,
+      "mtime_iso": "2025-12-11T19:31:29"
+    },
+    {
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/COD-PR-GUI-V2-DROPDOWN-PAYLOAD-LASTRUN-V2_5-001(P1V3)(11-28).md",
       "size_bytes": 8401,
       "mtime_iso": "2025-11-28T06:36:25"
     },
     {
-      "path": "docs/pr_templates/Potential_work/CODEX-PROMPT-PR-CORE-V2-CLASSIFY-ARCHIVE(P1V3)-11-28-25-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/CODEX-PROMPT-PR-CORE-V2-CLASSIFY-ARCHIVE(P1V3)-11-28-25-001.md",
       "size_bytes": 5365,
       "mtime_iso": "2025-11-28T06:03:43"
     },
     {
-      "path": "docs/pr_templates/Potential_work/FutureRoadmap-PR-3S-PR-3W-V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/FutureRoadmap-PR-3S-PR-3W-V2.md",
       "size_bytes": 2090,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-045-LEARNING-V2-BASELINE-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-045-LEARNING-V2-BASELINE-V2-P1.md",
       "size_bytes": 10382,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-06D_StageCard_Prototype_Cleanup(Optional).md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-06D_StageCard_Prototype_Cleanup(Optional).md",
       "size_bytes": 4758,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-CLEAN-01-V2.5-FileAccessLogger-2025-11-26.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-CLEAN-01-V2.5-FileAccessLogger-2025-11-26.md",
       "size_bytes": 2071,
       "mtime_iso": "2025-11-26T15:00:56"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-CORE-V2-CLASSIFY-ARCHIVE(P1V3)(11-28-2025)-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-CORE-V2-CLASSIFY-ARCHIVE(P1V3)(11-28-2025)-001.md",
       "size_bytes": 10202,
       "mtime_iso": "2025-11-28T06:00:11"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-DROPDOWN-PAYLOAD-LASTRUN-V2_5-001(P1V3)(11-28-25).md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-DROPDOWN-PAYLOAD-LASTRUN-V2_5-001(P1V3)(11-28-25).md",
       "size_bytes": 13424,
       "mtime_iso": "2025-11-28T06:36:28"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3L.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-LEARNING-3L.md",
       "size_bytes": 2310,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3M_VISUAL-CHARTS_2025-11-26_0450.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-LEARNING-3M_VISUAL-CHARTS_2025-11-26_0450.md",
       "size_bytes": 1529,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3N_CACHE-PERSISTENCE_2025-11-26_0450.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-LEARNING-3N_CACHE-PERSISTENCE_2025-11-26_0450.md",
       "size_bytes": 1185,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3O_PIPELINE-AUTO-TUNE_2025-11-26_0450.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-LEARNING-3O_PIPELINE-AUTO-TUNE_2025-11-26_0450.md",
       "size_bytes": 1194,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3P_LEARNING-MODULE-DOCS_2025-11-26_0450.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-LEARNING-3P_LEARNING-MODULE-DOCS_2025-11-26_0450.md",
       "size_bytes": 1224,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3Q_XY-EXPERIMENTS_2025-11-26_0507.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-LEARNING-3Q_XY-EXPERIMENTS_2025-11-26_0507.md",
       "size_bytes": 11106,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-LEARNING-3R_XY-UX-REFINEMENTS_2025-11-26_0512.md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-LEARNING-3R_XY-UX-REFINEMENTS_2025-11-26_0512.md",
       "size_bytes": 3770,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/Potential_work/PR-GUI-V2-SCAFFOLD-ZONEMAP-FIXES-001(P1V3)(11-28-25).md",
+      "path": "docs/older/pr_templates_pipeline_config/Potential_work/PR-GUI-V2-SCAFFOLD-ZONEMAP-FIXES-001(P1V3)(11-28-25).md",
       "size_bytes": 10973,
       "mtime_iso": "2025-11-28T06:10:42"
     },
     {
-      "path": "docs/pr_templates/PR Doc Resources/(Example) PR-022-CONTROLLER-WEBUI-LIFECYCLE-AUTO-LAUNCH-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PR Doc Resources/(Example) PR-022-CONTROLLER-WEBUI-LIFECYCLE-AUTO-LAUNCH-V2-P1.md",
       "size_bytes": 15400,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PR Doc Resources/Codex_Safety_Wrapper_Template.md",
+      "path": "docs/older/pr_templates_pipeline_config/PR Doc Resources/Codex_Safety_Wrapper_Template.md",
       "size_bytes": 137,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PR Doc Resources/ExamplePR-CTRL-LC-001_gui_example PR.md",
+      "path": "docs/older/pr_templates_pipeline_config/PR Doc Resources/ExamplePR-CTRL-LC-001_gui_example PR.md",
       "size_bytes": 14434,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PR Doc Resources/PR-114-StreamOfThought.md",
+      "path": "docs/older/pr_templates_pipeline_config/PR Doc Resources/PR-114-StreamOfThought.md",
       "size_bytes": 115084,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PR Doc Resources/PR-E-SupplementaryWork.md",
+      "path": "docs/older/pr_templates_pipeline_config/PR Doc Resources/PR-E-SupplementaryWork.md",
       "size_bytes": 137416,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/CLASSIFY-FUTURE-SUBSYSTEMS-003_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/CLASSIFY-FUTURE-SUBSYSTEMS-003_V2-P1.md",
       "size_bytes": 8370,
       "mtime_iso": "2025-11-28T15:07:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/CLEANUP-GUI-TEST-QUARANTINE-002_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/CLEANUP-GUI-TEST-QUARANTINE-002_V2-P1.md",
       "size_bytes": 7097,
       "mtime_iso": "2025-11-28T15:07:39"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/CLEANUP-GUI-V1-ARCHIVE-001_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/CLEANUP-GUI-V1-ARCHIVE-001_V2-P1.md",
       "size_bytes": 5820,
       "mtime_iso": "2025-11-28T15:07:35"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/CODEX-PR-GUI-V2-SCAFFOLD-ZONEMAP-FIXES-001(P1V3)(11-28-25).txt",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/CODEX-PR-GUI-V2-SCAFFOLD-ZONEMAP-FIXES-001(P1V3)(11-28-25).txt",
       "size_bytes": 4869,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Execution_Guide_PR-0.1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Execution_Guide_PR-0.1.md",
       "size_bytes": 4463,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Execution_Guide_PR-GUI-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Execution_Guide_PR-GUI-01.md",
       "size_bytes": 4876,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-LEARNING-RUNNER-STUB-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-LEARNING-RUNNER-STUB-001.md",
       "size_bytes": 1639,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-001.md",
       "size_bytes": 4910,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-002.md",
       "size_bytes": 5511,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-003.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-MIGRATION-003.md",
       "size_bytes": 6395,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-RANDOMIZER-UI-EXPANSION-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Run_Sheet_PR-GUI-V2-RANDOMIZER-UI-EXPANSION-002.md",
       "size_bytes": 6117,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-PIPE-DIAG-001_and_PR-CTRL-LC-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Run_Sheet_PR-PIPE-DIAG-001_and_PR-CTRL-LC-001.md",
       "size_bytes": 6445,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Codex_Run_Sheet_PR-PIPE-V2-LEARNING-HOOKS-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Codex_Run_Sheet_PR-PIPE-V2-LEARNING-HOOKS-002.md",
       "size_bytes": 7181,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Dark-Mode-GlobalNeg-11-26-25.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Dark-Mode-GlobalNeg-11-26-25.md",
       "size_bytes": 13698,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/DEFAULT_PRESET_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/DEFAULT_PRESET_IMPLEMENTATION.md",
       "size_bytes": 3323,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/ExamplePR-CTRL-LC-001_gui_example PR.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/ExamplePR-CTRL-LC-001_gui_example PR.md",
       "size_bytes": 14434,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Execution Script for PR-#53 – Advanced Resolution Controls.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Execution Script for PR-#53 – Advanced Resolution Controls.md",
       "size_bytes": 2927,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Full PR-GUI-A (Theming & Control Polish) Spec.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Full PR-GUI-A (Theming & Control Polish) Spec.md",
       "size_bytes": 5501,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/GUI_REVAMP_SUMMARY.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/GUI_REVAMP_SUMMARY.md",
       "size_bytes": 8607,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-01-PromptPack-Authoring-and-Randomization-2025-11-26_1133.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-01-PromptPack-Authoring-and-Randomization-2025-11-26_1133.md",
       "size_bytes": 1744,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-02-LoRA-Embedding-Integration-2025-11-26_1133.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-02-LoRA-Embedding-Integration-2025-11-26_1133.md",
       "size_bytes": 1450,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-03-txt2img-Pipeline-Run-2025-11-26_1133.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-03-txt2img-Pipeline-Run-2025-11-26_1133.md",
       "size_bytes": 1469,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-04-img2img-ADetailer-Run-2025-11-26_1133.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-04-img2img-ADetailer-Run-2025-11-26_1133.md",
       "size_bytes": 1515,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-05-Upscale-Stage-Run-2025-11-26_1134.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-05-Upscale-Stage-Run-2025-11-26_1134.md",
       "size_bytes": 4945,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-06-Video-Pipeline-Run-Placeholder-2025-11-26_1134.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-06-Video-Pipeline-Run-Placeholder-2025-11-26_1134.md",
       "size_bytes": 5728,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-07-Startup-Async-WebUI-Bootstrap-2025-11-26_1134.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-07-Startup-Async-WebUI-Bootstrap-2025-11-26_1134.md",
       "size_bytes": 4970,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-08-Single-Variable-Learning-Plan-2025-11-26_1134.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-08-Single-Variable-Learning-Plan-2025-11-26_1134.md",
       "size_bytes": 3219,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-09-X-Y-Learning-Experiment-2025-11-26_1136.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-09-X-Y-Learning-Experiment-2025-11-26_1136.md",
       "size_bytes": 3949,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-10-Ratings-and-Review-2025-11-26_1136.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-10-Ratings-and-Review-2025-11-26_1136.md",
       "size_bytes": 3519,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-11-Presets-and-Styles-2025-11-26_1136.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-11-Presets-and-Styles-2025-11-26_1136.md",
       "size_bytes": 3471,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-12-Run-Stop-Run-Lifecycle-2025-11-26_1136.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-12-Run-Stop-Run-Lifecycle-2025-11-26_1136.md",
       "size_bytes": 3463,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/JT-13-Logging-and-Error-Surfacing-2025-11-26_1136.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/JT-13-Logging-and-Error-Surfacing-2025-11-26_1136.md",
       "size_bytes": 3432,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Main_Entry_Design_Notes_PR-0.1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Main_Entry_Design_Notes_PR-0.1.md",
       "size_bytes": 1934,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR 1 — GUI V2 Zones & Panel Wiring (Fix Blank Window).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR 1 — GUI V2 Zones & Panel Wiring (Fix Blank Window).md",
       "size_bytes": 7666,
       "mtime_iso": "2025-11-28T11:35:04"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#33-LEARNING-V2-RecordWriterIntegration-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#33-LEARNING-V2-RecordWriterIntegration-001.md",
       "size_bytes": 12760,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#34-GUI-V2-LearningToggleAndReviewDialog-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#34-GUI-V2-LearningToggleAndReviewDialog-001.md",
       "size_bytes": 15490,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#35-QUEUE-V2-JobQueueAndRunnerFoundation-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#35-QUEUE-V2-JobQueueAndRunnerFoundation-001.md",
       "size_bytes": 3599,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#36-CONTROLLER-V2-QueueExecutionBridge-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#36-CONTROLLER-V2-QueueExecutionBridge-001.md",
       "size_bytes": 9171,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#37-API-V2-WebUIProcessAndHealthCheck-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#37-API-V2-WebUIProcessAndHealthCheck-001.md",
       "size_bytes": 10740,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#38-PIPELINE-V2-GUIConfigToPipelineConfig-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#38-PIPELINE-V2-GUIConfigToPipelineConfig-001.md",
       "size_bytes": 11303,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#39-GUI-V2-RunButtonQueueSmoke-001 (1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#39-GUI-V2-RunButtonQueueSmoke-001 (1).md",
       "size_bytes": 8945,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#40-CONTROLLER-V2-QueueExecutionController-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#40-CONTROLLER-V2-QueueExecutionController-001.md",
       "size_bytes": 14592,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#41-QUEUE-V2-JobPersistenceAndHistory-001 (1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#41-QUEUE-V2-JobPersistenceAndHistory-001 (1).md",
       "size_bytes": 10128,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#42-GUI-V2-JobHistoryPanel-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#42-GUI-V2-JobHistoryPanel-001.md",
       "size_bytes": 8558,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#43-GUI-V2-JobActions-QueueControl-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#43-GUI-V2-JobActions-QueueControl-001.md",
       "size_bytes": 9438,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#44-CLUSTER-V2-WorkerRegistryAndLocalWorker-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#44-CLUSTER-V2-WorkerRegistryAndLocalWorker-001.md",
       "size_bytes": 9725,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#45-CONTROLLER-V2-QueueBackedRunIntegration-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#45-CONTROLLER-V2-QueueBackedRunIntegration-001.md",
       "size_bytes": 12712,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#46-PIPELINE-V2-PipelineConfigAssemblerEnforcement-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#46-PIPELINE-V2-PipelineConfigAssemblerEnforcement-001.md",
       "size_bytes": 11438,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#47-PIPELINE-V2-AssemblerEnforcement-Finish-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#47-PIPELINE-V2-AssemblerEnforcement-Finish-001.md",
       "size_bytes": 17395,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#47B-PIPELINE-V2-AssemblerEnforcement-Hotfix-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#47B-PIPELINE-V2-AssemblerEnforcement-Hotfix-001.md",
       "size_bytes": 13026,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#48-GUI-V2-CommandBar-RunStopQueue-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#48-GUI-V2-CommandBar-RunStopQueue-001.md",
       "size_bytes": 13769,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#49-GUI-V2-AdvancedPromptEditor-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#49-GUI-V2-AdvancedPromptEditor-001.md",
       "size_bytes": 12694,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#50-GUI-V2-PromptPackManager-Integration-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#50-GUI-V2-PromptPackManager-Integration-001.md",
       "size_bytes": 10493,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#51-GUI-V2-CoreConfigPanel-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#51-GUI-V2-CoreConfigPanel-001.md",
       "size_bytes": 13454,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#52-GUI-V2-NegativePromptPanel-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#52-GUI-V2-NegativePromptPanel-001.md",
       "size_bytes": 9713,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#53-GUI-V2-ResolutionAdvancedControls-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#53-GUI-V2-ResolutionAdvancedControls-001.md",
       "size_bytes": 9656,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#54-GUI-V2-OutputSettingsPanel-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#54-GUI-V2-OutputSettingsPanel-001.md",
       "size_bytes": 9411,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#55-GUI-V2-ModelManagerPanel-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#55-GUI-V2-ModelManagerPanel-001.md",
       "size_bytes": 9492,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#56-CTRL-WEBUI-BOOTSTRAP-GUIHEALTH-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#56-CTRL-WEBUI-BOOTSTRAP-GUIHEALTH-001.md",
       "size_bytes": 14131,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#57-CTRL-API-WEBUI-AUTODETECT-AUTOLAUNCH-001_webui_autostart_and_gui_controls.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#57-CTRL-API-WEBUI-AUTODETECT-AUTOLAUNCH-001_webui_autostart_and_gui_controls.md",
       "size_bytes": 25083,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#58-MAIN-GUI-WEBUI-BOOTSTRAP-ALIGN-001_webui_startup_and_status_panel_alignment.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#58-MAIN-GUI-WEBUI-BOOTSTRAP-ALIGN-001_webui_startup_and_status_panel_alignment.md",
       "size_bytes": 15386,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#59-GUI-V2-STATUSBAR-COMPOSITE-001_webui_statusbar_combine_api_controls.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#59-GUI-V2-STATUSBAR-COMPOSITE-001_webui_statusbar_combine_api_controls.md",
       "size_bytes": 14320,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-#60-WEBUI-CONNECTION-HARDFIX-001_webui_autostart_and_gating_hardening.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-#60-WEBUI-CONNECTION-HARDFIX-001_webui_autostart_and_gating_hardening.md",
       "size_bytes": 19806,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0.1_Runtime_Entry_Alignment.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0.1_Runtime_Entry_Alignment.md",
       "size_bytes": 11126,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-009-LOG-CORE-CONFIG_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-009-LOG-CORE-CONFIG_V2-P1.md",
       "size_bytes": 8837,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-00A_WebUI_GUI_Controls.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-00A_WebUI_GUI_Controls.md",
       "size_bytes": 9223,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-00_WebUI_Process_Manager_and_Autostart_Separation.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-00_WebUI_Process_Manager_and_Autostart_Separation.md",
       "size_bytes": 9212,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-01 Repo Inventory & Source of Truth(NOV24).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-01 Repo Inventory & Source of Truth(NOV24).md",
       "size_bytes": 3915,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-010-LOG-GUI-HANDLER_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-010-LOG-GUI-HANDLER_V2-P1.md",
       "size_bytes": 6894,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-011-STATUSBAR-ENHANCE_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-011-STATUSBAR-ENHANCE_V2-P1.md",
       "size_bytes": 6442,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0114 — Pipeline Run Controls → Queue-Runner.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0114 — Pipeline Run Controls → Queue-Runner.md",
       "size_bytes": 13302,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0114A – Pack Draft → Normalized Preview Bridge.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0114A – Pack Draft → Normalized Preview Bridge.md",
       "size_bytes": 6298,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0114B – Preview → Queue Submission Path (Queue-First).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0114B – Preview → Queue Submission Path (Queue-First).md",
       "size_bytes": 5397,
       "mtime_iso": "2025-12-08T08:05:46"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0114C – End-to-End Job Execution + Journey Tests.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0114C – End-to-End Job Execution + Journey Tests.md",
       "size_bytes": 4249,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-012-LOG-TRACE-PANEL_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-012-LOG-TRACE-PANEL_V2-P1.md",
       "size_bytes": 7952,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0127–Phase7_RetrySemantics_and_IntelligentRecovery_v2.5.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0127–Phase7_RetrySemantics_and_IntelligentRecovery_v2.5.md",
       "size_bytes": 2889,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0128–Phase8_UnifiedLogging_and_Telemetry_v2.5.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0128–Phase8_UnifiedLogging_and_Telemetry_v2.5.md",
       "size_bytes": 2782,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-013-LOG-TESTS-DOCS_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-013-LOG-TESTS-DOCS_V2-P1.md",
       "size_bytes": 9055,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-014-GUI-ADVANCED-EDITOR-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-014-GUI-ADVANCED-EDITOR-V2-P1.md",
       "size_bytes": 6098,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-015-SETTINGS-DIALOG-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-015-SETTINGS-DIALOG-V2-P1.md",
       "size_bytes": 5107,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-016-PIPELINE-CONFIG-UX-RESTORE-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-016-PIPELINE-CONFIG-UX-RESTORE-V2-P1.md",
       "size_bytes": 5488,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-017-GUI-TOOLTIPS-SCROLL-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-017-GUI-TOOLTIPS-SCROLL-V2-P1.md",
       "size_bytes": 4503,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-018-LEARNING-UX-RESTORE-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-018-LEARNING-UX-RESTORE-V2-P1.md",
       "size_bytes": 5523,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-019-WEBUI-LIFECYCLE-UX-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-019-WEBUI-LIFECYCLE-UX-V2-P1.md",
       "size_bytes": 4961,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-02 — Move LegacyV1Files to Archive(NOV24).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-02 — Move LegacyV1Files to Archive(NOV24).md",
       "size_bytes": 3774,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-020-GUI-V2-PROMPT-PIPELINE-LEARNING-TABS-V2-P1-20251128.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-020-GUI-V2-PROMPT-PIPELINE-LEARNING-TABS-V2-P1-20251128.md",
       "size_bytes": 13286,
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-021-GUI-V2-TABS-THREE-COLUMN-LAYOUT-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-021-GUI-V2-TABS-THREE-COLUMN-LAYOUT-V2-P1.md",
       "size_bytes": 7111,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-022-CONTROLLER-WEBUI-LIFECYCLE-AUTO-LAUNCH-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-022-CONTROLLER-WEBUI-LIFECYCLE-AUTO-LAUNCH-V2-P1.md",
       "size_bytes": 15400,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-023-GUI-V2-FULLWIDTH-SPINE-AND-PACK-LOADER-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-023-GUI-V2-FULLWIDTH-SPINE-AND-PACK-LOADER-V2-P1.md",
       "size_bytes": 15710,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-024-MAIN-WEBUI-LAUNCH-UX-BROWSER-READY-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-024-MAIN-WEBUI-LAUNCH-UX-BROWSER-READY-V2-P1.md",
       "size_bytes": 12923,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-026-PIPELINE-DROPDOWNS-WEBUI-RESOURCES-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-026-PIPELINE-DROPDOWNS-WEBUI-RESOURCES-V2-P1.md",
       "size_bytes": 13880,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-026A-webui-statusbar-sync-V2-20251129-0700.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-026A-webui-statusbar-sync-V2-20251129-0700.md",
       "size_bytes": 8010,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-027A-api-webui_healthcheck-stricter_ready-V2-20251129.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-027A-api-webui_healthcheck-stricter_ready-V2-20251129.md",
       "size_bytes": 14661,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-028-DROPDOWN-REFRESH-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-028-DROPDOWN-REFRESH-V2-P1.md",
       "size_bytes": 5466,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-029-PIPELINE-DROPDOWNS-WEBUI-READY-WIRING-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-029-PIPELINE-DROPDOWNS-WEBUI-READY-WIRING-V2-P1.md",
       "size_bytes": 16421,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-02a_Move_GUI_V1_Tests_To_Archive.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-02a_Move_GUI_V1_Tests_To_Archive.md",
       "size_bytes": 8591,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-02_Move_Legacy_V1_to_Archive.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-02_Move_Legacy_V1_to_Archive.md",
       "size_bytes": 9761,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-03 Create V2 App Spine(NOV24).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-03 Create V2 App Spine(NOV24).md",
       "size_bytes": 3905,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-030-DISCOVERY-PIPELINE-CONFIG-LOGGING-PRESETS-AD-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-030-DISCOVERY-PIPELINE-CONFIG-LOGGING-PRESETS-AD-V2-P1.md",
       "size_bytes": 11665,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-031-PIPELINE-CONFIG-LEFTCOLUMN-WIRING-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-031-PIPELINE-CONFIG-LEFTCOLUMN-WIRING-V2-P1.md",
       "size_bytes": 13944,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-032-BOTTOM-LOGGING-SURFACE-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-032-BOTTOM-LOGGING-SURFACE-V2-P1.md",
       "size_bytes": 13606,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-033-PIPELINE-PRESETS-HOOKUP-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-033-PIPELINE-PRESETS-HOOKUP-V2-P1.md",
       "size_bytes": 14788,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-033A-PIPELINE-LEFT-PANEL-UX-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-033A-PIPELINE-LEFT-PANEL-UX-V2-P1.md",
       "size_bytes": 7089,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-034-PIPELINE-ADetailer-STAGECARD-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-034-PIPELINE-ADetailer-STAGECARD-V2-P1.md",
       "size_bytes": 17055,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-034-PIPELINE-PRESETS-INTEGRATION-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-034-PIPELINE-PRESETS-INTEGRATION-V2-P1.md",
       "size_bytes": 5724,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-035-PIPELINE-PACK-CONFIG-JOB-BUILDER-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-035-PIPELINE-PACK-CONFIG-JOB-BUILDER-V2-P1.md",
       "size_bytes": 11977,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-036-PIPELINE-TAB-3COLUMN-LAYOUT-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-036-PIPELINE-TAB-3COLUMN-LAYOUT-V2-P1.md",
       "size_bytes": 7447,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-037-Pipeline-LoRA-Strengths-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-037-Pipeline-LoRA-Strengths-V2-P1.md",
       "size_bytes": 7834,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-037A-Pipeline-LoRA-Strengths-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-037A-Pipeline-LoRA-Strengths-V2-P1.md",
       "size_bytes": 7839,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-038-Pipeline-Randomizer-Config-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-038-Pipeline-Randomizer-Config-V2-P1.md",
       "size_bytes": 7237,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-038A-Pipeline-Randomizer-Config-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-038A-Pipeline-Randomizer-Config-V2-P1.md",
       "size_bytes": 7238,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-039-PIPELINE-QUEUE-INTEGRATION-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-039-PIPELINE-QUEUE-INTEGRATION-V2-P1.md",
       "size_bytes": 5682,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-03_Create_V2_App_Spine(24NOV).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-03_Create_V2_App_Spine(24NOV).md",
       "size_bytes": 11737,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-040-JOB-HISTORY-INTEGRATION-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-040-JOB-HISTORY-INTEGRATION-V2-P1.md",
       "size_bytes": 3969,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-041-DESIGN-SYSTEM-THEME-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-041-DESIGN-SYSTEM-THEME-V2-P1.md",
       "size_bytes": 14870,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-041-THEME-V2-DESIGN-TOKENS-UNIFICATION-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-041-THEME-V2-DESIGN-TOKENS-UNIFICATION-V2-P1.md",
       "size_bytes": 12156,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-041A — Full V2 GUI Design System.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-041A — Full V2 GUI Design System.md",
       "size_bytes": 11341,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-042-PHASE1-JOURNEY-TEST-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-042-PHASE1-JOURNEY-TEST-V2-P1.md",
       "size_bytes": 13492,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-043-RANDOMIZER-ENGINE-CORE-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-043-RANDOMIZER-ENGINE-CORE-V2-P1.md",
       "size_bytes": 15304,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-044-RANDOMIZER-GUI-INTEGRATION-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-044-RANDOMIZER-GUI-INTEGRATION-V2-P1.md",
       "size_bytes": 15339,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-046 — Robust App Shutdown (D-08 Implementation, V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-046 — Robust App Shutdown (D-08 Implementation, V2-P1).md",
       "size_bytes": 10241,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-047 — Test Suite for Process Cleanup(V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-047 — Test Suite for Process Cleanup(V2-P1).md",
       "size_bytes": 7534,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-048 — V2 Core Classification & Archive System.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-048 — V2 Core Classification & Archive System.md",
       "size_bytes": 2943,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-049 — GUI V2 Dropdowns, Payload Builder, & Last-Run.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-049 — GUI V2 Dropdowns, Payload Builder, & Last-Run.md",
       "size_bytes": 3059,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-04_Theme_Engine_V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-04_Theme_Engine_V2.md",
       "size_bytes": 11898,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-050 — GUI V2 Scaffold & ZoneMap Fixes.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-050 — GUI V2 Scaffold & ZoneMap Fixes.md",
       "size_bytes": 2604,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-051 — Pipeline Tab Layout & Resizing Fixes (V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-051 — Pipeline Tab Layout & Resizing Fixes (V2-P1).md",
       "size_bytes": 2234,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-052 — Stage Card Visual Clean- Dark Theme Alignment-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-052 — Stage Card Visual Clean- Dark Theme Alignment-V2-P1.md",
       "size_bytes": 2406,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-053 — Stage Toggle Controls & ADetailer Visibility(V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-053 — Stage Toggle Controls & ADetailer Visibility(V2-P1).md",
       "size_bytes": 2051,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-054 — Dropdowns & Stage Config Wiring (V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-054 — Dropdowns & Stage Config Wiring (V2-P1).md",
       "size_bytes": 2108,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-055 — Output Directory & Filename Template(V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-055 — Output Directory & Filename Template(V2-P1).md",
       "size_bytes": 1681,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-056 — Run Modes & Payload Integration (V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-056 — Run Modes & Payload Integration (V2-P1).md",
       "size_bytes": 1647,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-05A_Scrollable_Areas_V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-05A_Scrollable_Areas_V2.md",
       "size_bytes": 9650,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-05_Layout_and_Resizing_V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-05_Layout_and_Resizing_V2.md",
       "size_bytes": 10250,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-061 — Deep Shutdown Instrumentation.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-061 — Deep Shutdown Instrumentation.md",
       "size_bytes": 2636,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-062 — Headless Auto-Exit Mode Shutdown Journey(V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-062 — Headless Auto-Exit Mode Shutdown Journey(V2-P1).md",
       "size_bytes": 2425,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-063 — Shutdown Stability Track (Meta-PR) (V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-063 — Shutdown Stability Track (Meta-PR) (V2-P1).md",
       "size_bytes": 5678,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-064 — V2 Single-Instance Guard + Hardened _exit(V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-064 — V2 Single-Instance Guard + Hardened _exit(V2-P1).md",
       "size_bytes": 10770,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-066 — Journey Test Automation (V2-P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-066 — Journey Test Automation (V2-P1).md",
       "size_bytes": 7865,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-068 — Shutdown Diagnostics Log + File Access Trace (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-068 — Shutdown Diagnostics Log + File Access Trace (V2.5).md",
       "size_bytes": 12801,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-069 — Log-Driven Shutdown Fixes (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-069 — Log-Driven Shutdown Fixes (V2.5).md",
       "size_bytes": 13388,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-06A_BaseStageCardV2_and_Components.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-06A_BaseStageCardV2_and_Components.md",
       "size_bytes": 8228,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-06B_Migrate_Txt2Img_To_BaseStageCardV2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-06B_Migrate_Txt2Img_To_BaseStageCardV2.md",
       "size_bytes": 4829,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-06C_Migrate_Img2Img_and_Upscale_To_BaseStageCardV2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-06C_Migrate_Img2Img_and_Upscale_To_BaseStageCardV2.md",
       "size_bytes": 5434,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-071-Pipeline-Execution-Wiring-V2-P1-20251201.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-071-Pipeline-Execution-Wiring-V2-P1-20251201.md",
       "size_bytes": 5589,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-072-RunPipeline-Facade-V2-P1-20251202.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-072-RunPipeline-Facade-V2-P1-20251202.md",
       "size_bytes": 9389,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-073-PipelineTab-Upscale-Compat-V2-P1-20251202.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-073-PipelineTab-Upscale-Compat-V2-P1-20251202.md",
       "size_bytes": 10423,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-074-Upscale-Pipeline-Logic-V2-P1-20251202.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-074-Upscale-Pipeline-Logic-V2-P1-20251202.md",
       "size_bytes": 13600,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-075-PromptPack-Queue-Execution-V2-P1-20251202.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-075-PromptPack-Queue-Execution-V2-P1-20251202.md",
       "size_bytes": 10636,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-078-Journey-Test-API-Shims-V2-P1-20251202.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-078-Journey-Test-API-Shims-V2-P1-20251202.md",
       "size_bytes": 15151,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-079 – Journey Test Harness Adjustments for V2 Pipeline.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-079 – Journey Test Harness Adjustments for V2 Pipeline.md",
       "size_bytes": 9378,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-07A_Test_Safe_GUI_Threading_and_Teardown.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-07A_Test_Safe_GUI_Threading_and_Teardown.md",
       "size_bytes": 15852,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-07_Wire_V2_Panels_and_Controllers_into_MainWindowV2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-07_Wire_V2_Panels_and_Controllers_into_MainWindowV2.md",
       "size_bytes": 16108,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081A – SDXL Refiner & Hires Fix Config Model.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081A – SDXL Refiner & Hires Fix Config Model.md",
       "size_bytes": 8185,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081B – Pipeline Tab Controls for Refiner & Hires Fix.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081B – Pipeline Tab Controls for Refiner & Hires Fix.md",
       "size_bytes": 8499,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081C – Pipeline Base → Refiner → Hires → ADetail.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081C – Pipeline Base → Refiner → Hires → ADetail.md",
       "size_bytes": 11137,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081D-1 — Executor Cancel-Token Test Alignment.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081D-1 — Executor Cancel-Token Test Alignment.md",
       "size_bytes": 4063,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081D-3 — WebUI Process & Resource Test Harness Alignment.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081D-3 — WebUI Process & Resource Test Harness Alignment.md",
       "size_bytes": 4516,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081D-4 — RunConfig Refiner-Hires Fields.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081D-4 — RunConfig Refiner-Hires Fields.md",
       "size_bytes": 4138,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081D-5 — Journey Harness Glue.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081D-5 — Journey Harness Glue.md",
       "size_bytes": 4483,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081D-6 — PipelineRunnerFakePipeline Signature.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081D-6 — PipelineRunnerFakePipeline Signature.md",
       "size_bytes": 3449,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081D-7 — GUI Harness Cleanup Pytest Marker.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081D-7 — GUI Harness Cleanup Pytest Marker.md",
       "size_bytes": 3049,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081D–Tests for Refiner-Hires-ADetailer-Sequencing.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081D–Tests for Refiner-Hires-ADetailer-Sequencing.md",
       "size_bytes": 6164,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081E - Last-Run Integration for Refiner-Hires.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081E - Last-Run Integration for Refiner-Hires.md",
       "size_bytes": 8633,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-081E — Full Sequencing Implementation.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-081E — Full Sequencing Implementation.md",
       "size_bytes": 10799,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-082 — Integrating New Test Helpers Across Journey.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-082 — Integrating New Test Helpers Across Journey.md",
       "size_bytes": 4890,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-083 - Test Coverage Uplift Plan.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-083 - Test Coverage Uplift Plan.md",
       "size_bytes": 4845,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-084 — Docs & Diagrams for V2.5 Stage Sequencing.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-084 — Docs & Diagrams for V2.5 Stage Sequencing.md",
       "size_bytes": 5045,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-085 – Test Coverage Uplift & Triage Plan (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-085 – Test Coverage Uplift & Triage Plan (V2.5).md",
       "size_bytes": 9722,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-086 – Core Contract Repair (Implementation, V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-086 – Core Contract Repair (Implementation, V2.5).md",
       "size_bytes": 10509,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-087 – Controller RunConfig & GUI Entrypoint Wiring (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-087 – Controller RunConfig & GUI Entrypoint Wiring (V2.5).md",
       "size_bytes": 11191,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-089 – Stage Plan Metadata & Canonical Ordering (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-089 – Stage Plan Metadata & Canonical Ordering (V2.5).md",
       "size_bytes": 4815,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-08_V2_Journey_Test_Full_Pipeline.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-08_V2_Journey_Test_Full_Pipeline.md",
       "size_bytes": 12524,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-090 – PipelineRunner Plan Execution.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-090 – PipelineRunner Plan Execution.md",
       "size_bytes": 3454,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-105 Content Part 1 — src-learning-model.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-105 Content Part 1 — src-learning-model.md",
       "size_bytes": 5483,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-106 – RunMode Enforcement in PipelineController.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-106 – RunMode Enforcement in PipelineController.md",
       "size_bytes": 12068,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-107 – StageSequencer + StageExecutionPlan Backbone.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-107 – StageSequencer + StageExecutionPlan Backbone.md",
       "size_bytes": 14594,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-109 – Job History V2 Integration for New Run Path.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-109 – Job History V2 Integration for New Run Path.md",
       "size_bytes": 9715,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-110 – Journey Test Helpers.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-110 – Journey Test Helpers.md",
       "size_bytes": 8671,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-111 – Run Controls UX + Status Feedback.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-111 – Run Controls UX + Status Feedback.md",
       "size_bytes": 8307,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-112 – Prompt Pack + RunConfig Coupling & History.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-112 – Prompt Pack + RunConfig Coupling & History.md",
       "size_bytes": 6373,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-113 – End-to-End Smoke Tests.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-113 – End-to-End Smoke Tests.md",
       "size_bytes": 5637,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-3A_Learning_Tab_Scaffold.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-3A_Learning_Tab_Scaffold.md",
       "size_bytes": 569,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-3B_Learning_Tab_Layout_Skeleton.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-3B_Learning_Tab_Layout_Skeleton.md",
       "size_bytes": 935,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-3C_Learning_State_Controller_Skeleton.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-3C_Learning_State_Controller_Skeleton.md",
       "size_bytes": 1215,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-A — Observability & Debug Harness for Job Lifecycle(V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-A — Observability & Debug Harness for Job Lifecycle(V2.5).md",
       "size_bytes": 15604,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-A-CoreRunPath_and_Runner_DI_v2.5.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-A-CoreRunPath_and_Runner_DI_v2.5.md",
       "size_bytes": 2227,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-AI-V2-SETTINGS-GENERATOR-001_ai_settings_generator_groundwork.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-AI-V2-SETTINGS-GENERATOR-001_ai_settings_generator_groundwork.md",
       "size_bytes": 11111,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-B — Canonical JobPart-JobBundle + Builder (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-B — Canonical JobPart-JobBundle + Builder (V2.5).md",
       "size_bytes": 20513,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-B01-PACK-PREVIEW-STABILITY-V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-B01-PACK-PREVIEW-STABILITY-V2-P1.md",
       "size_bytes": 12585,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-C — Single-Prompt Preview → Queue → Run → History (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-C — Single-Prompt Preview → Queue → Run → History (V2.5).md",
       "size_bytes": 23541,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-A — Single Source of Truth for Jobs.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-A — Single Source of Truth for Jobs.md",
       "size_bytes": 14377,
       "mtime_iso": "2025-12-08T18:01:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-B — Deterministic Job Construction Backbone.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-B — Deterministic Job Construction Backbone.md",
       "size_bytes": 12116,
       "mtime_iso": "2025-12-08T18:02:27"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-C — Queue-Runner Lifecycle Repair.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-C — Queue-Runner Lifecycle Repair.md",
       "size_bytes": 10614,
       "mtime_iso": "2025-12-08T18:01:51"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-CLASSIFY-FUTURE-SUBSYSTEMS-003_V2-P1-ROBUST.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-CLASSIFY-FUTURE-SUBSYSTEMS-003_V2-P1-ROBUST.md",
       "size_bytes": 12493,
       "mtime_iso": "2025-11-28T17:17:39"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-D — GUI V2 Recovery & Alignment with PromptPack.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-D — GUI V2 Recovery & Alignment with PromptPack.md",
       "size_bytes": 10176,
       "mtime_iso": "2025-12-08T18:06:17"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-D_IMPLEMENTATION_ANALYSIS.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-D_IMPLEMENTATION_ANALYSIS.md",
       "size_bytes": 18124,
       "mtime_iso": "2025-12-08T22:12:59"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-D_IMPLEMENTATION_SUMMARY.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-D_IMPLEMENTATION_SUMMARY.md",
       "size_bytes": 12101,
       "mtime_iso": "2025-12-08T22:12:59"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-E — Global Negative Integration + Config Sweep.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-E — Global Negative Integration + Config Sweep.md",
       "size_bytes": 21487,
       "mtime_iso": "2025-12-08T22:28:17"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-PHASE1-COVERAGE-REPORT-008_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-PHASE1-COVERAGE-REPORT-008_V2-P1.md",
       "size_bytes": 8019,
       "mtime_iso": "2025-11-28T17:24:53"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CORE-PHASE1-SYNTAX-AND-TEST-HARNESS-007_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CORE-PHASE1-SYNTAX-AND-TEST-HARNESS-007_V2-P1.md",
       "size_bytes": 15108,
       "mtime_iso": "2025-11-28T17:02:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CTRL-LC-001_gui_lifecycle_run_stop_run_hardening - Copy.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CTRL-LC-001_gui_lifecycle_run_stop_run_hardening - Copy.md",
       "size_bytes": 14434,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-CTRL-LC-001_gui_lifecycle_run_stop_run_hardening.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-CTRL-LC-001_gui_lifecycle_run_stop_run_hardening.md",
       "size_bytes": 14434,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-D — Queue & History Lifecycle Alignment JobBundles (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-D — Queue & History Lifecycle Alignment JobBundles (V2.5).md",
       "size_bytes": 17130,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-DOCS-GUI-V2-UPDATE-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-DOCS-GUI-V2-UPDATE-001.md",
       "size_bytes": 7290,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-E — Unified Prompt & Config Resolution Layer (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-E — Unified Prompt & Config Resolution Layer (V2.5).md",
       "size_bytes": 10531,
       "mtime_iso": "2025-12-08T08:05:46"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-01_Theme_Foundations.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-01_Theme_Foundations.md",
       "size_bytes": 10741,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-031_adetailer_scheduler_persistence.diff.txt",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-031_adetailer_scheduler_persistence.diff.txt",
       "size_bytes": 3929,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-031_adetailer_scheduler_persistence_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-031_adetailer_scheduler_persistence_PRD.md",
       "size_bytes": 8660,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-032_gui_test_noninteractive.diff.txt",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-032_gui_test_noninteractive.diff.txt",
       "size_bytes": 5703,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-032_gui_test_noninteractive_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-032_gui_test_noninteractive_PRD.md",
       "size_bytes": 7996,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-033_thread_safety_and_state.diff.txt",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-033_thread_safety_and_state.diff.txt",
       "size_bytes": 1583,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-033_thread_safety_and_state_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-033_thread_safety_and_state_PRD.md",
       "size_bytes": 6657,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-E – Refiner_Hires Fix_Upscale UX Fixes (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-E – Refiner_Hires Fix_Upscale UX Fixes (V2.5).md",
       "size_bytes": 14523,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-F1 — Queue & Run Controls UI Restructure (V2.5,P1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-F1 — Queue & Run Controls UI Restructure (V2.5,P1).md",
       "size_bytes": 12320,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-F2–Queue(Phase 2-Reordering, Clear Queue, Selection).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-F2–Queue(Phase 2-Reordering, Clear Queue, Selection).md",
       "size_bytes": 14145,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-F3 — Queue Auto-Run, “Send Job”, Running Job(V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-F3 — Queue Auto-Run, “Send Job”, Running Job(V2.5).md",
       "size_bytes": 18028,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-H – Window Management & Layout Fixes (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-H – Window Management & Layout Fixes (V2.5).md",
       "size_bytes": 15662,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-I — GUI Validation Color Normalization.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-I — GUI Validation Color Normalization.md",
       "size_bytes": 10292,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-J — PipelineCard - Visual Normalization (V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-J — PipelineCard - Visual Normalization (V2.5).md",
       "size_bytes": 11091,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-K — CollapsiblePersistence & Behavior Norm(V2.5).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-K — CollapsiblePersistence & Behavior Norm(V2.5).md",
       "size_bytes": 10097,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-THEME-FIX-001_restore_theme_constants_and_theme_class.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-THEME-FIX-001_restore_theme_constants_and_theme_class.md",
       "size_bytes": 9723,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-ADAPTERS-001_gui_v2_adapters_consolidation.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-ADAPTERS-001_gui_v2_adapters_consolidation.md",
       "size_bytes": 17009,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-ADVANCED-PROMPT-TAB-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-ADVANCED-PROMPT-TAB-001.md",
       "size_bytes": 16106,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-ARCHIVE-CORE-LEGACY-006_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-ARCHIVE-CORE-LEGACY-006_V2-P1.md",
       "size_bytes": 89199,
       "mtime_iso": "2025-11-28T16:40:39"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-ENTRYPOINT-002_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-ENTRYPOINT-002_V2-P1.md",
       "size_bytes": 8903,
       "mtime_iso": "2025-11-28T13:22:36"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3A.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3A.md",
       "size_bytes": 2265,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3B.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3B.md",
       "size_bytes": 2148,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3C.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3C.md",
       "size_bytes": 2143,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3D.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3D.md",
       "size_bytes": 2720,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3E.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3E.md",
       "size_bytes": 2288,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3F.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3F.md",
       "size_bytes": 2420,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3G.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3G.md",
       "size_bytes": 1487,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3H.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3H.md",
       "size_bytes": 1385,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3I.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3I.md",
       "size_bytes": 1197,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3J.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3J.md",
       "size_bytes": 2726,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-3K.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-3K.md",
       "size_bytes": 2029,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-ENTRYPOINT-001_gui_learning_mode_and_review_dialog.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-ENTRYPOINT-001_gui_learning_mode_and_review_dialog.md",
       "size_bytes": 6968,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-GROUNDWORK-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-GROUNDWORK-001.md",
       "size_bytes": 2382,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-HOOKS-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-HOOKS-002.md",
       "size_bytes": 10962,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-RUNNER-STUB-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-RUNNER-STUB-001.md",
       "size_bytes": 12226,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEARNING-TAB-003.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEARNING-TAB-003.md",
       "size_bytes": 17457,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-LEFTPANEL-001_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-LEFTPANEL-001_V2-P1.md",
       "size_bytes": 10478,
       "mtime_iso": "2025-11-28T12:57:30"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MAINWINDOW-REDUX-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MAINWINDOW-REDUX-001.md",
       "size_bytes": 13374,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MAINWINDOW-SPLIT-001 (1).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MAINWINDOW-SPLIT-001 (1).md",
       "size_bytes": 17211,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MAINWINDOW-SPLIT-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MAINWINDOW-SPLIT-001.md",
       "size_bytes": 1289,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-001_Archive_Legacy_GUI_Tests_And_Introduce_GUI_V2_Harness.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MIGRATION-001_Archive_Legacy_GUI_Tests_And_Introduce_GUI_V2_Harness.md",
       "size_bytes": 10416,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-002_Introduce_Modular_GUI_V2_Panels.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MIGRATION-002_Introduce_Modular_GUI_V2_Panels.md",
       "size_bytes": 12953,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-003_Real_Pipeline_Config_Behavior.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MIGRATION-003_Real_Pipeline_Config_Behavior.md",
       "size_bytes": 13281,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-004_StatusBarV2_Progress_ETA.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MIGRATION-004_StatusBarV2_Progress_ETA.md",
       "size_bytes": 14453,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-005.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MIGRATION-005.md",
       "size_bytes": 1763,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-MIGRATION-006.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-MIGRATION-006.md",
       "size_bytes": 6375,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-NAMING-003_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-NAMING-003_V2-P1.md",
       "size_bytes": 8085,
       "mtime_iso": "2025-11-28T14:32:12"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPECards into Pipeline Center Panel (2025-11-26).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPECards into Pipeline Center Panel (2025-11-26).md",
       "size_bytes": 14419,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-CONFIG-WIRING-002-(2025-11-26).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-CONFIG-WIRING-002-(2025-11-26).md",
       "size_bytes": 14506,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-IO-001_pipeline_io_contracts.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-IO-001_pipeline_io_contracts.md",
       "size_bytes": 13441,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-PREVIEW-001-2025-11-26.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-PREVIEW-001-2025-11-26.md",
       "size_bytes": 14018,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001A_stage_cards_center_2025-11-26.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001A_stage_cards_center_2025-11-26.md",
       "size_bytes": 4992,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001B_remove_run_tab_2025-11-26.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001B_remove_run_tab_2025-11-26.md",
       "size_bytes": 3772,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001C_tests_runtab_merge_2025-11-26.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-RUNTAB-001C_tests_runtab_merge_2025-11-26.md",
       "size_bytes": 3126,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-STAGECARDS-001-Wire Cards-11-26-2025-0816.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-STAGECARDS-001-Wire Cards-11-26-2025-0816.md",
       "size_bytes": 14483,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-PIPELINE-TAB-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-PIPELINE-TAB-002.md",
       "size_bytes": 18137,
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-RANDOMIZER-INTEGRATION-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-RANDOMIZER-INTEGRATION-001.md",
       "size_bytes": 6733,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-RANDOMIZER-UI-EXPANSION-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-RANDOMIZER-UI-EXPANSION-002.md",
       "size_bytes": 10156,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-RANDOMIZER-UX-002_randomizer_experience_deepening.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-RANDOMIZER-UX-002_randomizer_experience_deepening.md",
       "size_bytes": 10582,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-SHIM-AND-ARCHIVE-005_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-SHIM-AND-ARCHIVE-005_V2-P1.md",
       "size_bytes": 647695,
       "mtime_iso": "2025-11-28T16:40:30"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-STAGE-PANELS-ADVANCED-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-STAGE-PANELS-ADVANCED-001.md",
       "size_bytes": 7359,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-V2-TESTS-THEME-004_V2-P1.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-V2-TESTS-THEME-004_V2-P1.md",
       "size_bytes": 11998,
       "mtime_iso": "2025-11-28T16:25:53"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-LEARN-PROFILES-001-Model & LoRA Profile Sidecars as Priors for Learning.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-LEARN-PROFILES-001-Model & LoRA Profile Sidecars as Priors for Learning.md",
       "size_bytes": 17601,
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-LEARN-V2-RECORDWRITER-001_pipeline_learningrecord_integration.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-LEARN-V2-RECORDWRITER-001_pipeline_learningrecord_integration.md",
       "size_bytes": 9594,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-LEARNING-V2-EXECUTION-001.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-LEARNING-V2-EXECUTION-001.md",
       "size_bytes": 15741,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-023_adetailer_scheduler.diff",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-023_adetailer_scheduler.diff",
       "size_bytes": 8685,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-023_adetailer_scheduler_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-023_adetailer_scheduler_PRD.md",
       "size_bytes": 11801,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-024_sampler_scheduler.diff",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-024_sampler_scheduler.diff",
       "size_bytes": 3821,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-024_sampler_scheduler_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-024_sampler_scheduler_PRD.md",
       "size_bytes": 9082,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-025_tests_sampler_scheduler.diff.txt",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-025_tests_sampler_scheduler.diff.txt",
       "size_bytes": 1370,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-025_tests_sampler_scheduler_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-025_tests_sampler_scheduler_PRD.md",
       "size_bytes": 4174,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-026_cancel_token.diff.txt",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-026_cancel_token.diff.txt",
       "size_bytes": 2507,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-026_cancel_token_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-026_cancel_token_PRD.md",
       "size_bytes": 6022,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-027_pipeline_logging.diff.txt",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-027_pipeline_logging.diff.txt",
       "size_bytes": 1733,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-027_pipeline_logging_PRD.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-027_pipeline_logging_PRD.md",
       "size_bytes": 4807,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-DIAG-001_upscale_hang_repro_and_telemetry.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-DIAG-001_upscale_hang_repro_and_telemetry.md",
       "size_bytes": 15051,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-V2-LEARNING-HOOKS-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-V2-LEARNING-HOOKS-002.md",
       "size_bytes": 10319,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPELINE-V2-EXECUTOR-STAGEEVENTS-003.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPELINE-V2-EXECUTOR-STAGEEVENTS-003.md",
       "size_bytes": 4945,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-QUEUE-V2-JOBMODEL-001_queue_model_and_single_node_runner_skeleton.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-QUEUE-V2-JOBMODEL-001_queue_model_and_single_node_runner_skeleton.md",
       "size_bytes": 6609,
       "mtime_iso": "2025-11-22T14:08:22"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-RAND-SAN-001_randomizer_matrix_sanitization_and_parity.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-RAND-SAN-001_randomizer_matrix_sanitization_and_parity.md",
       "size_bytes": 14809,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-SAFE-ISOLATION-001_codex_safety_wrapper_and_gui_utils_isolation.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-SAFE-ISOLATION-001_codex_safety_wrapper_and_gui_utils_isolation.md",
       "size_bytes": 166,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-V2-PIPELINE-STAGE-SEQUENCER-002.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-V2-PIPELINE-STAGE-SEQUENCER-002.md",
       "size_bytes": 9845,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-WIRE-00-V2.5-11-26-2025.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-WIRE-00-V2.5-11-26-2025.md",
       "size_bytes": 5158,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-WIRE-01-V2.5 – “Minimal Happy Path”-11-26-2025-1918.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-WIRE-01-V2.5 – “Minimal Happy Path”-11-26-2025-1918.md",
       "size_bytes": 11488,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-WIRE-02-V2.5 – Entrypoint Contracts (11-26-2025-1916).md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-WIRE-02-V2.5 – Entrypoint Contracts (11-26-2025-1916).md",
       "size_bytes": 10352,
       "mtime_iso": "2025-12-02T08:03:48"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-WIRE-03-V2.5-11-26-2025.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-WIRE-03-V2.5-11-26-2025.md",
       "size_bytes": 10747,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR_C_D_full_templates.zip",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR_C_D_full_templates.zip",
       "size_bytes": 422,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR_TEMPLATE_v2.5.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR_TEMPLATE_v2.5.md",
       "size_bytes": 5700,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/R-081D-2 — JobQueue Runner Status+Result.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/R-081D-2 — JobQueue Runner Status+Result.md",
       "size_bytes": 3434,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/repo_cleanup_plan.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/repo_cleanup_plan.md",
       "size_bytes": 2335,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Script for PR-#51 – Core Config Panel V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Script for PR-#51 – Core Config Panel V2.md",
       "size_bytes": 3958,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Script for PR-#52 – Negative Prompt Panel V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Script for PR-#52 – Negative Prompt Panel V2.md",
       "size_bytes": 3016,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Script for PR-#54 – Output Settings Panel V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Script for PR-#54 – Output Settings Panel V2.md",
       "size_bytes": 2900,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Script for PR-#55 – Model Manager Panel V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Script for PR-#55 – Model Manager Panel V2.md",
       "size_bytes": 3035,
       "mtime_iso": "2025-11-23T14:37:55"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/StableNew PR-091 – AppController ↔ PipelineController Bridge.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/StableNew PR-091 – AppController ↔ PipelineController Bridge.md",
       "size_bytes": 13306,
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/Theme_Design_Notes_PR-GUI-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/Theme_Design_Notes_PR-GUI-01.md",
       "size_bytes": 1718,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR10_SINGLE_INSTANCE_AND_EXIT.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR10_SINGLE_INSTANCE_AND_EXIT.md",
       "size_bytes": 1591,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR1_CONFIG_BANNER_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR1_CONFIG_BANNER_IMPLEMENTATION.md",
       "size_bytes": 2914,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR2_CONFIG_SERVICE_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR2_CONFIG_SERVICE_IMPLEMENTATION.md",
       "size_bytes": 2729,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR3_LOAD_CONTROLS_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR3_LOAD_CONTROLS_IMPLEMENTATION.md",
       "size_bytes": 2525,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR4_CONFIG_LOCK_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR4_CONFIG_LOCK_IMPLEMENTATION.md",
       "size_bytes": 2561,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR5_APPLY_TO_PACKS_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR5_APPLY_TO_PACKS_IMPLEMENTATION.md",
       "size_bytes": 2241,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR6_PRESET_CRUD_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR6_PRESET_CRUD_IMPLEMENTATION.md",
       "size_bytes": 2273,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR7_LIST_MANAGEMENT_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR7_LIST_MANAGEMENT_IMPLEMENTATION.md",
       "size_bytes": 2676,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR8_PREVIEW_PAYLOAD_IMPLEMENTATION.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR8_PREVIEW_PAYLOAD_IMPLEMENTATION.md",
       "size_bytes": 4866,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/batch_1_10_Complete/PR9_RANDOMIZATION_REFINEMENT.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/batch_1_10_Complete/PR9_RANDOMIZATION_REFINEMENT.md",
       "size_bytes": 1805,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/Codex_Execution_Guide_PR-0.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/Codex_Execution_Guide_PR-0.md",
       "size_bytes": 6137,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/PipelineRunner_Design_Notes.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/PipelineRunner_Design_Notes.md",
       "size_bytes": 2181,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/PR-0_Pipeline_Execution_Hotfix.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/PR-0_Pipeline_Execution_Hotfix.md",
       "size_bytes": 12277,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/tests_controller_test_app_controller_pipeline_flow_pr0.py",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-0_Pipeline_Execution_Hotfix_Bundle/tests_controller_test_app_controller_pipeline_flow_pr0.py",
       "size_bytes": 4665,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/Codex_Execution_Guide_PR-GUI-01b.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/Codex_Execution_Guide_PR-GUI-01b.md",
       "size_bytes": 1354,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/PR-GUI-01b_Theme_Contrast_Touchup.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/PR-GUI-01b_Theme_Contrast_Touchup.md",
       "size_bytes": 1026,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/Theme_Contrast_Notes_PR-GUI-01b.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-01b_Theme_Contrast_Touchup_Bundle/Theme_Contrast_Notes_PR-GUI-01b.md",
       "size_bytes": 485,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/Codex_Execution_Guide_PR-GUI-02.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/Codex_Execution_Guide_PR-GUI-02.md",
       "size_bytes": 1285,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/LeftZone_Layout_Notes_PR-GUI-02.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/LeftZone_Layout_Notes_PR-GUI-02.md",
       "size_bytes": 499,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/PR-GUI-02_LeftZone_Layout_Polish.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-02_LeftZone_Layout_Polish_Bundle/PR-GUI-02_LeftZone_Layout_Polish.md",
       "size_bytes": 794,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/Codex_Execution_Guide_PR-GUI-CENTER-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/Codex_Execution_Guide_PR-GUI-CENTER-01.md",
       "size_bytes": 1668,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/ConfigPanel_Design_Notes_PR-GUI-CENTER-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/ConfigPanel_Design_Notes_PR-GUI-CENTER-01.md",
       "size_bytes": 533,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/PR-GUI-CENTER-01_ConfigPanel_Skeleton.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-CENTER-01_ConfigPanel_Skeleton_Bundle/PR-GUI-CENTER-01_ConfigPanel_Skeleton.md",
       "size_bytes": 1137,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/Codex_Execution_Guide_PR-GUI-LEFT-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/Codex_Execution_Guide_PR-GUI-LEFT-01.md",
       "size_bytes": 6049,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PacksPanel_Design_Notes_PR-GUI-LEFT-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PacksPanel_Design_Notes_PR-GUI-LEFT-01.md",
       "size_bytes": 974,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PR-GUI-LEFT-01_PacksPanel_Wiring.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PR-GUI-LEFT-01_PacksPanel_Wiring.md",
       "size_bytes": 12014,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PR-GUI-LEFT-01_Packs_Presets_Panel.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-LEFT-01_PacksPanel_Wiring_Bundle/PR-GUI-LEFT-01_Packs_Presets_Panel.md",
       "size_bytes": 11432,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-WINDOW-01_Default_Window_Geometry_Bundle/Codex_Execution_Guide_PR-GUI-WINDOW-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-WINDOW-01_Default_Window_Geometry_Bundle/Codex_Execution_Guide_PR-GUI-WINDOW-01.md",
       "size_bytes": 1021,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-GUI-WINDOW-01_Default_Window_Geometry_Bundle/PR-GUI-WINDOW-01_Default_Window_Geometry.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-WINDOW-01_Default_Window_Geometry_Bundle/PR-GUI-WINDOW-01_Default_Window_Geometry.md",
       "size_bytes": 1069,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_Addendum_Bundle/Codex_Clarification_Notes_PR-PIPE-CORE-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-CORE-01_Addendum_Bundle/Codex_Clarification_Notes_PR-PIPE-CORE-01.md",
       "size_bytes": 1382,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_Addendum_Bundle/PR-PIPE-CORE-01_Addendum_PipelineRunner_Location_and_Construction.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-CORE-01_Addendum_Bundle/PR-PIPE-CORE-01_Addendum_PipelineRunner_Location_and_Construction.md",
       "size_bytes": 5747,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/Codex_Execution_Guide_PR-PIPE-CORE-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/Codex_Execution_Guide_PR-PIPE-CORE-01.md",
       "size_bytes": 2471,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/PipelineIntegration_Design_Notes_PR-PIPE-CORE-01.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/PipelineIntegration_Design_Notes_PR-PIPE-CORE-01.md",
       "size_bytes": 956,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration_Bundle/PR-PIPE-CORE-01_ControllerToPipeline_ConfigIntegration.md",
       "size_bytes": 10010,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/PriorWork_complete/PR14_complete/PR-PIPE-014_upscale_tiling.md",
+      "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR14_complete/PR-PIPE-014_upscale_tiling.md",
       "size_bytes": 13667,
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "docs/pr_templates/Work_aborted/PR-06_StageCard_Componentization_V2.md",
+      "path": "docs/older/pr_templates_pipeline_config/Work_aborted/PR-06_StageCard_Componentization_V2.md",
       "size_bytes": 11562,
       "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "docs/pr_implementation/PR-D_Implementation_Summary.md",
+      "size_bytes": 10988,
+      "mtime_iso": "2025-12-08T08:04:45"
     },
     {
       "path": "inventory/stable_v2_inventory.json",
@@ -3275,6 +3280,111 @@
       "mtime_iso": "2025-12-10T08:30:59"
     },
     {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021318_thread_exception.zip",
+      "size_bytes": 320455,
+      "mtime_iso": "2025-12-11T20:13:27"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021327_thread_exception.zip",
+      "size_bytes": 321504,
+      "mtime_iso": "2025-12-11T20:13:28"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021328_thread_exception.zip",
+      "size_bytes": 321651,
+      "mtime_iso": "2025-12-11T20:13:28"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021329_thread_exception.zip",
+      "size_bytes": 322279,
+      "mtime_iso": "2025-12-11T20:13:29"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021329_uncaught_exception.zip",
+      "size_bytes": 321843,
+      "mtime_iso": "2025-12-11T20:13:29"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021330_thread_exception.zip",
+      "size_bytes": 323370,
+      "mtime_iso": "2025-12-11T20:13:30"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021330_uncaught_exception.zip",
+      "size_bytes": 322987,
+      "mtime_iso": "2025-12-11T20:13:31"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021331_thread_exception.zip",
+      "size_bytes": 323601,
+      "mtime_iso": "2025-12-11T20:13:32"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021331_uncaught_exception.zip",
+      "size_bytes": 322745,
+      "mtime_iso": "2025-12-11T20:13:32"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021332_uncaught_exception.zip",
+      "size_bytes": 323149,
+      "mtime_iso": "2025-12-11T20:13:32"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021333_thread_exception.zip",
+      "size_bytes": 323756,
+      "mtime_iso": "2025-12-11T20:13:33"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021333_uncaught_exception.zip",
+      "size_bytes": 323946,
+      "mtime_iso": "2025-12-11T20:13:33"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021334_thread_exception.zip",
+      "size_bytes": 324539,
+      "mtime_iso": "2025-12-11T20:13:34"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021334_uncaught_exception.zip",
+      "size_bytes": 324093,
+      "mtime_iso": "2025-12-11T20:13:35"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021335_uncaught_exception.zip",
+      "size_bytes": 323844,
+      "mtime_iso": "2025-12-11T20:13:36"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021336_uncaught_exception.zip",
+      "size_bytes": 228539,
+      "mtime_iso": "2025-12-11T20:14:20"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021337_uncaught_exception.zip",
+      "size_bytes": 229923,
+      "mtime_iso": "2025-12-11T20:14:20"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021422_uncaught_exception.zip",
+      "size_bytes": 229967,
+      "mtime_iso": "2025-12-11T20:14:22"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021423_uncaught_exception.zip",
+      "size_bytes": 230018,
+      "mtime_iso": "2025-12-11T20:14:23"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021424_uncaught_exception.zip",
+      "size_bytes": 230061,
+      "mtime_iso": "2025-12-11T20:14:24"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021425_uncaught_exception.zip",
+      "size_bytes": 231517,
+      "mtime_iso": "2025-12-11T20:14:26"
+    },
+    {
       "path": "reports/file_access/CLEANHOUSE_REPORT_V2_5_2025_11_26.md",
       "size_bytes": 33355,
       "mtime_iso": "2025-11-26T16:51:07"
@@ -3452,7 +3562,7 @@
     {
       "path": "src/controller/app_controller.py",
       "size_bytes": 135225,
-      "mtime_iso": "2025-12-11T07:54:03"
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -3487,7 +3597,7 @@
     {
       "path": "src/controller/pipeline_controller.py",
       "size_bytes": 66170,
-      "mtime_iso": "2025-12-11T08:08:55"
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/controller/process_auto_scanner_service.py",
@@ -3562,7 +3672,7 @@
     {
       "path": "src/gui/dropdown_loader_v2.py",
       "size_bytes": 2393,
-      "mtime_iso": "2025-12-02T08:04:20"
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/gui/engine_settings_dialog.py",
@@ -3616,8 +3726,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 24573,
-      "mtime_iso": "2025-12-08T20:37:38"
+      "size_bytes": 24641,
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -3651,8 +3761,8 @@
     },
     {
       "path": "src/gui/pipeline_panel_v2.py",
-      "size_bytes": 13553,
-      "mtime_iso": "2025-12-09T05:52:48"
+      "size_bytes": 13873,
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/gui/preview_panel_v2.py",
@@ -3787,7 +3897,7 @@
     {
       "path": "src/gui/panels_v2/layout_manager_v2.py",
       "size_bytes": 2784,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/gui/panels_v2/pipeline_panel_v2.py",
@@ -4096,8 +4206,8 @@
     },
     {
       "path": "src/learning/learning_record_builder.py",
-      "size_bytes": 4559,
-      "mtime_iso": "2025-11-28T18:04:02"
+      "size_bytes": 4563,
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/learning/learning_runner.py",
@@ -4177,7 +4287,7 @@
     {
       "path": "src/pipeline/pipeline_runner.py",
       "size_bytes": 34586,
-      "mtime_iso": "2025-12-11T08:00:04"
+      "mtime_iso": "2025-12-11T20:33:19"
     },
     {
       "path": "src/pipeline/prompt_pack_job_builder.py",
@@ -4236,8 +4346,8 @@
     },
     {
       "path": "src/pipeline/__init__.py",
-      "size_bytes": 577,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 552,
+      "mtime_iso": "2025-12-11T20:00:03"
     },
     {
       "path": "src/queue/job_history_store.py",
@@ -4446,8 +4556,8 @@
     },
     {
       "path": "src/utils/snapshot_builder_v2.py",
-      "size_bytes": 14745,
-      "mtime_iso": "2025-12-11T06:27:22"
+      "size_bytes": 15043,
+      "mtime_iso": "2025-12-11T20:31:13"
     },
     {
       "path": "src/utils/state.py",
@@ -4502,7 +4612,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-11T17:45:16"
+      "mtime_iso": "2025-12-11T20:34:43"
     },
     {
       "path": "tests/conftest.py",
@@ -4702,17 +4812,17 @@
     {
       "path": "tests/controller/test_app_controller_diagnostics.py",
       "size_bytes": 2524,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_job_failure_v2.py",
-      "size_bytes": 1830,
-      "mtime_iso": "2025-12-10T07:51:51"
+      "size_bytes": 1831,
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_lora_runtime.py",
       "size_bytes": 3447,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_njr_exec.py",
@@ -4722,12 +4832,12 @@
     {
       "path": "tests/controller/test_app_controller_packs.py",
       "size_bytes": 3061,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_pipeline_bridge.py",
       "size_bytes": 2254,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_pipeline_draft_v2.py",
@@ -4737,22 +4847,22 @@
     {
       "path": "tests/controller/test_app_controller_pipeline_integration.py",
       "size_bytes": 3925,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_run_bridge_v2.py",
       "size_bytes": 2289,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_run_mode_defaults.py",
       "size_bytes": 1890,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_run_now_bridge.py",
       "size_bytes": 1894,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_settings_v2.py",
@@ -4762,7 +4872,7 @@
     {
       "path": "tests/controller/test_app_controller_shutdown_v2.py",
       "size_bytes": 2250,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_app_controller_start_run_shim.py",
@@ -4796,8 +4906,8 @@
     },
     {
       "path": "tests/controller/test_controller_queue_execution.py",
-      "size_bytes": 957,
-      "mtime_iso": "2025-12-10T06:33:07"
+      "size_bytes": 985,
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_core_run_path_v2.py",
@@ -4817,7 +4927,7 @@
     {
       "path": "tests/controller/test_job_history_controller_v2.py",
       "size_bytes": 2451,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_job_history_service.py",
@@ -4831,8 +4941,8 @@
     },
     {
       "path": "tests/controller/test_job_queue_integration_v2.py",
-      "size_bytes": 3874,
-      "mtime_iso": "2025-12-10T07:50:46"
+      "size_bytes": 3875,
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_job_retry_metadata_v2.py",
@@ -4856,8 +4966,8 @@
     },
     {
       "path": "tests/controller/test_job_service_njr_validation.py",
-      "size_bytes": 2496,
-      "mtime_iso": "2025-12-11T05:37:18"
+      "size_bytes": 2586,
+      "mtime_iso": "2025-12-11T20:33:36"
     },
     {
       "path": "tests/controller/test_job_service_normalized_v2.py",
@@ -4892,37 +5002,37 @@
     {
       "path": "tests/controller/test_pipeline_config_assembler.py",
       "size_bytes": 1347,
-      "mtime_iso": "2025-11-22T18:13:44"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_pipeline_config_assembler_core_fields.py",
       "size_bytes": 1000,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_pipeline_config_assembler_model_fields.py",
       "size_bytes": 468,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_pipeline_config_assembler_negative_prompt.py",
       "size_bytes": 407,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_pipeline_config_assembler_output_settings.py",
       "size_bytes": 780,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_pipeline_config_assembler_resolution.py",
       "size_bytes": 422,
-      "mtime_iso": "2025-11-23T14:37:55"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_pipeline_controller_config_path.py",
-      "size_bytes": 1216,
-      "mtime_iso": "2025-12-11T06:19:36"
+      "size_bytes": 1246,
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/controller/test_pipeline_controller_history_refresh_v2.py",
@@ -5182,7 +5292,7 @@
     {
       "path": "tests/gui_v2/test_pipeline_config_panel_lora_runtime.py",
       "size_bytes": 1761,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/gui_v2/test_pipeline_defaults_v2.py",
@@ -5197,12 +5307,12 @@
     {
       "path": "tests/gui_v2/test_pipeline_layout_scroll_v2.py",
       "size_bytes": 13461,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/gui_v2/test_pipeline_left_column_config_v2.py",
       "size_bytes": 1986,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/gui_v2/test_pipeline_presets_ui_v2.py",
@@ -5242,7 +5352,7 @@
     {
       "path": "tests/gui_v2/test_pipeline_stage_checkbox_order_v2.py",
       "size_bytes": 884,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "mtime_iso": "2025-12-11T20:33:54"
     },
     {
       "path": "tests/gui_v2/test_pipeline_tab_layout_v2.py",
