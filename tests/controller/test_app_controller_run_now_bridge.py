@@ -8,11 +8,11 @@ from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 class DummyQueueController:
     def __init__(self) -> None:
-        self.queue_called = 0
+        self.run_now_called = 0
         self.v2_called = 0
 
-    def on_run_job_now(self) -> str:
-        self.queue_called += 1
+    def on_run_now(self) -> str:
+        self.run_now_called += 1
         return "queue-run"
 
     def start_run_v2(self) -> str:
@@ -40,13 +40,13 @@ def test_on_run_job_now_v2_prefers_queue_handler(monkeypatch):
     dummy = DummyQueueController()
     controller = _build_controller()
 
-    controller.on_run_job_now = dummy.on_run_job_now  # type: ignore[attr-defined]
+    controller.on_run_now = dummy.on_run_now  # type: ignore[attr-defined]
     controller.start_run_v2 = dummy.start_run_v2  # type: ignore[attr-defined]
 
     result = controller.on_run_job_now_v2()
 
     assert result == "queue-run"
-    assert dummy.queue_called == 1
+    assert dummy.run_now_called == 1
     assert dummy.v2_called == 0
 
 
@@ -60,5 +60,5 @@ def test_on_run_job_now_v2_falls_back_to_start_run_v2(monkeypatch):
     result = controller.on_run_job_now_v2()
 
     assert result == "v2-run"
-    assert dummy.queue_called == 0
+    assert dummy.run_now_called == 0
     assert dummy.v2_called == 1

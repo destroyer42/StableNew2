@@ -127,14 +127,14 @@ class UnifiedPromptResolver:
         negative_parts = []
         if negative_override:
             negative_parts.append(negative_override.strip())
-        if pack_negative:
-            negative_parts.append(pack_negative.strip())
-        if preset_negative:
-            negative_parts.append(preset_negative.strip())
         global_applied = False
         if apply_global_negative and global_negative:
             negative_parts.append(global_negative.strip())
             global_applied = True
+        if pack_negative:
+            negative_parts.append(pack_negative.strip())
+        if preset_negative:
+            negative_parts.append(preset_negative.strip())
         if self._safety_negative:
             negative_parts.append(self._safety_negative)
         negative = ", ".join(part for part in negative_parts if part).strip()

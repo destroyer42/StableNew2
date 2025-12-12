@@ -21,7 +21,7 @@ def _build_controller(**kwargs) -> AppController:
     # PR-0114C-Ty: Default to stubbed job_service to prevent real execution
     if "job_service" not in kwargs:
         kwargs["job_service"] = make_stubbed_job_service()
-    return AppController(
+    controller = AppController(
         main_window=None,
         pipeline_runner=None,
         api_client=None,
@@ -31,6 +31,9 @@ def _build_controller(**kwargs) -> AppController:
         resource_service=None,
         **kwargs,
     )
+    if "pipeline_controller" not in kwargs:
+        controller.pipeline_controller = None
+    return controller
 
 
 def test_run_pipeline_v2_bridge_invokes_pipeline_controller():
@@ -43,6 +46,7 @@ def test_run_pipeline_v2_bridge_invokes_pipeline_controller():
 
 def test_run_pipeline_v2_bridge_without_pipeline_controller():
     controller = _build_controller()
+    controller.pipeline_controller = None
 
     assert controller.run_pipeline_v2_bridge() is False
 
@@ -58,7 +62,7 @@ def test_start_run_v2_uses_bridge_and_skips_legacy(monkeypatch):
 
     monkeypatch.setattr(AppController, "start_run", fake_start_run, raising=True)
 
-    assert controller.start_run_v2() is None
+    assert controller.start_run_v2() is True
     assert dummy.start_calls == 1
     assert legacy_called["count"] == 0
 

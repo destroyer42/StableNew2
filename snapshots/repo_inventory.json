@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-12T07:04:03",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251212-070402.zip",
-  "file_count": 1250,
-  "total_size_bytes": 31365878,
+  "created_at": "2025-12-12T17:08:05",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251212-170759.zip",
+  "file_count": 1309,
+  "total_size_bytes": 49165735,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -386,8 +386,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 579564,
-      "mtime_iso": "2025-12-12T06:43:40"
+      "size_bytes": 692988,
+      "mtime_iso": "2025-12-12T09:22:08"
     },
     {
       "path": "data/webui_cache.json",
@@ -3420,6 +3420,371 @@
       "mtime_iso": "2025-12-12T05:55:25"
     },
     {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143200_uncaught_exception.zip",
+      "size_bytes": 250192,
+      "mtime_iso": "2025-12-12T08:32:01"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143201_uncaught_exception.zip",
+      "size_bytes": 253099,
+      "mtime_iso": "2025-12-12T08:32:02"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143202_uncaught_exception.zip",
+      "size_bytes": 254426,
+      "mtime_iso": "2025-12-12T08:32:03"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143203_uncaught_exception.zip",
+      "size_bytes": 255104,
+      "mtime_iso": "2025-12-12T08:32:03"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143219_uncaught_exception.zip",
+      "size_bytes": 251325,
+      "mtime_iso": "2025-12-12T08:32:20"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143220_uncaught_exception.zip",
+      "size_bytes": 261738,
+      "mtime_iso": "2025-12-12T08:32:21"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143221_uncaught_exception.zip",
+      "size_bytes": 269164,
+      "mtime_iso": "2025-12-12T08:32:22"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143222_uncaught_exception.zip",
+      "size_bytes": 273228,
+      "mtime_iso": "2025-12-12T08:32:22"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143645_uncaught_exception.zip",
+      "size_bytes": 204429,
+      "mtime_iso": "2025-12-12T08:36:46"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143646_uncaught_exception.zip",
+      "size_bytes": 211319,
+      "mtime_iso": "2025-12-12T08:36:47"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143647_uncaught_exception.zip",
+      "size_bytes": 220430,
+      "mtime_iso": "2025-12-12T08:36:48"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143648_uncaught_exception.zip",
+      "size_bytes": 225262,
+      "mtime_iso": "2025-12-12T08:36:49"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143753_uncaught_exception.zip",
+      "size_bytes": 247166,
+      "mtime_iso": "2025-12-12T08:37:54"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143754_uncaught_exception.zip",
+      "size_bytes": 249966,
+      "mtime_iso": "2025-12-12T08:37:55"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143755_uncaught_exception.zip",
+      "size_bytes": 251266,
+      "mtime_iso": "2025-12-12T08:37:56"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143756_uncaught_exception.zip",
+      "size_bytes": 251917,
+      "mtime_iso": "2025-12-12T08:37:56"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145133_uncaught_exception.zip",
+      "size_bytes": 245797,
+      "mtime_iso": "2025-12-12T08:51:34"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145134_uncaught_exception.zip",
+      "size_bytes": 248702,
+      "mtime_iso": "2025-12-12T08:51:35"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145135_uncaught_exception.zip",
+      "size_bytes": 250018,
+      "mtime_iso": "2025-12-12T08:51:36"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145136_uncaught_exception.zip",
+      "size_bytes": 250801,
+      "mtime_iso": "2025-12-12T08:51:36"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145255_uncaught_exception.zip",
+      "size_bytes": 265032,
+      "mtime_iso": "2025-12-12T08:52:56"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145256_uncaught_exception.zip",
+      "size_bytes": 267901,
+      "mtime_iso": "2025-12-12T08:52:57"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145257_uncaught_exception.zip",
+      "size_bytes": 269311,
+      "mtime_iso": "2025-12-12T08:52:58"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145258_uncaught_exception.zip",
+      "size_bytes": 269941,
+      "mtime_iso": "2025-12-12T08:52:58"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145823_uncaught_exception.zip",
+      "size_bytes": 236473,
+      "mtime_iso": "2025-12-12T08:58:24"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145824_uncaught_exception.zip",
+      "size_bytes": 239342,
+      "mtime_iso": "2025-12-12T08:58:25"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145825_uncaught_exception.zip",
+      "size_bytes": 240671,
+      "mtime_iso": "2025-12-12T08:58:26"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145826_uncaught_exception.zip",
+      "size_bytes": 241432,
+      "mtime_iso": "2025-12-12T08:58:26"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150339_uncaught_exception.zip",
+      "size_bytes": 197634,
+      "mtime_iso": "2025-12-12T09:03:40"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150340_uncaught_exception.zip",
+      "size_bytes": 200454,
+      "mtime_iso": "2025-12-12T09:03:41"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150341_uncaught_exception.zip",
+      "size_bytes": 201713,
+      "mtime_iso": "2025-12-12T09:03:42"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150342_uncaught_exception.zip",
+      "size_bytes": 202341,
+      "mtime_iso": "2025-12-12T09:03:42"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150443_uncaught_exception.zip",
+      "size_bytes": 281276,
+      "mtime_iso": "2025-12-12T09:04:44"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150444_uncaught_exception.zip",
+      "size_bytes": 282390,
+      "mtime_iso": "2025-12-12T09:04:45"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150445_uncaught_exception.zip",
+      "size_bytes": 285281,
+      "mtime_iso": "2025-12-12T09:04:46"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150446_uncaught_exception.zip",
+      "size_bytes": 286666,
+      "mtime_iso": "2025-12-12T09:04:47"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150447_uncaught_exception.zip",
+      "size_bytes": 287318,
+      "mtime_iso": "2025-12-12T09:04:47"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150815_uncaught_exception.zip",
+      "size_bytes": 216346,
+      "mtime_iso": "2025-12-12T09:08:15"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150816_uncaught_exception.zip",
+      "size_bytes": 225750,
+      "mtime_iso": "2025-12-12T09:08:17"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150817_uncaught_exception.zip",
+      "size_bytes": 227182,
+      "mtime_iso": "2025-12-12T09:08:18"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150818_uncaught_exception.zip",
+      "size_bytes": 227866,
+      "mtime_iso": "2025-12-12T09:08:18"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150927_uncaught_exception.zip",
+      "size_bytes": 275224,
+      "mtime_iso": "2025-12-12T09:09:28"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150928_uncaught_exception.zip",
+      "size_bytes": 276344,
+      "mtime_iso": "2025-12-12T09:09:29"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150929_uncaught_exception.zip",
+      "size_bytes": 279286,
+      "mtime_iso": "2025-12-12T09:09:30"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150930_uncaught_exception.zip",
+      "size_bytes": 280515,
+      "mtime_iso": "2025-12-12T09:09:31"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150931_uncaught_exception.zip",
+      "size_bytes": 281149,
+      "mtime_iso": "2025-12-12T09:09:31"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151421_uncaught_exception.zip",
+      "size_bytes": 261353,
+      "mtime_iso": "2025-12-12T09:14:22"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151422_uncaught_exception.zip",
+      "size_bytes": 264826,
+      "mtime_iso": "2025-12-12T09:14:23"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151423_uncaught_exception.zip",
+      "size_bytes": 271604,
+      "mtime_iso": "2025-12-12T09:14:24"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151424_uncaught_exception.zip",
+      "size_bytes": 272898,
+      "mtime_iso": "2025-12-12T09:14:25"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151425_uncaught_exception.zip",
+      "size_bytes": 273601,
+      "mtime_iso": "2025-12-12T09:14:25"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151702_uncaught_exception.zip",
+      "size_bytes": 294908,
+      "mtime_iso": "2025-12-12T09:17:03"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151703_uncaught_exception.zip",
+      "size_bytes": 297729,
+      "mtime_iso": "2025-12-12T09:17:04"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151704_uncaught_exception.zip",
+      "size_bytes": 299071,
+      "mtime_iso": "2025-12-12T09:17:05"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151705_uncaught_exception.zip",
+      "size_bytes": 299687,
+      "mtime_iso": "2025-12-12T09:17:05"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152859_uncaught_exception.zip",
+      "size_bytes": 199505,
+      "mtime_iso": "2025-12-12T09:29:00"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152900_uncaught_exception.zip",
+      "size_bytes": 202359,
+      "mtime_iso": "2025-12-12T09:29:01"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152901_uncaught_exception.zip",
+      "size_bytes": 203653,
+      "mtime_iso": "2025-12-12T09:29:02"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152902_uncaught_exception.zip",
+      "size_bytes": 205312,
+      "mtime_iso": "2025-12-12T09:29:03"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152903_uncaught_exception.zip",
+      "size_bytes": 206232,
+      "mtime_iso": "2025-12-12T09:29:04"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152904_uncaught_exception.zip",
+      "size_bytes": 206307,
+      "mtime_iso": "2025-12-12T09:29:05"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152905_uncaught_exception.zip",
+      "size_bytes": 206488,
+      "mtime_iso": "2025-12-12T09:29:06"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152906_uncaught_exception.zip",
+      "size_bytes": 206612,
+      "mtime_iso": "2025-12-12T09:29:07"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152907_uncaught_exception.zip",
+      "size_bytes": 206611,
+      "mtime_iso": "2025-12-12T09:29:07"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153102_uncaught_exception.zip",
+      "size_bytes": 202679,
+      "mtime_iso": "2025-12-12T09:31:03"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153103_uncaught_exception.zip",
+      "size_bytes": 205544,
+      "mtime_iso": "2025-12-12T09:31:04"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153104_uncaught_exception.zip",
+      "size_bytes": 206800,
+      "mtime_iso": "2025-12-12T09:31:05"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153105_uncaught_exception.zip",
+      "size_bytes": 208342,
+      "mtime_iso": "2025-12-12T09:31:06"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153106_uncaught_exception.zip",
+      "size_bytes": 209255,
+      "mtime_iso": "2025-12-12T09:31:07"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153107_uncaught_exception.zip",
+      "size_bytes": 209353,
+      "mtime_iso": "2025-12-12T09:31:08"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153108_uncaught_exception.zip",
+      "size_bytes": 209312,
+      "mtime_iso": "2025-12-12T09:31:09"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153109_uncaught_exception.zip",
+      "size_bytes": 209540,
+      "mtime_iso": "2025-12-12T09:31:10"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153110_uncaught_exception.zip",
+      "size_bytes": 209535,
+      "mtime_iso": "2025-12-12T09:31:10"
+    },
+    {
       "path": "reports/file_access/CLEANHOUSE_REPORT_V2_5_2025_11_26.md",
       "size_bytes": 33355,
       "mtime_iso": "2025-11-26T16:51:07"
@@ -3590,19 +3955,14 @@
       "mtime_iso": "2025-11-28T18:06:02"
     },
     {
-      "path": "src/compat/replay_migration_v26.py",
-      "size_bytes": 510,
-      "mtime_iso": "2025-12-12T06:02:39"
-    },
-    {
       "path": "src/config/app_config.py",
       "size_bytes": 19758,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 135632,
-      "mtime_iso": "2025-12-12T06:57:31"
+      "size_bytes": 139116,
+      "mtime_iso": "2025-12-12T09:19:09"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -3611,8 +3971,8 @@
     },
     {
       "path": "src/controller/job_execution_controller.py",
-      "size_bytes": 15162,
-      "mtime_iso": "2025-12-11T06:31:47"
+      "size_bytes": 16487,
+      "mtime_iso": "2025-12-12T08:49:23"
     },
     {
       "path": "src/controller/job_history_service.py",
@@ -3626,8 +3986,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 40444,
-      "mtime_iso": "2025-12-11T23:07:12"
+      "size_bytes": 40545,
+      "mtime_iso": "2025-12-12T09:24:09"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -3636,8 +3996,8 @@
     },
     {
       "path": "src/controller/pipeline_controller.py",
-      "size_bytes": 63402,
-      "mtime_iso": "2025-12-12T06:27:23"
+      "size_bytes": 64929,
+      "mtime_iso": "2025-12-12T08:48:27"
     },
     {
       "path": "src/controller/process_auto_scanner_service.py",
@@ -3761,13 +4121,13 @@
     },
     {
       "path": "src/gui/main_window.py",
-      "size_bytes": 2956,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 3383,
+      "mtime_iso": "2025-12-12T08:30:33"
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 25312,
-      "mtime_iso": "2025-12-12T06:27:23"
+      "size_bytes": 25706,
+      "mtime_iso": "2025-12-12T08:40:56"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -3801,13 +4161,13 @@
     },
     {
       "path": "src/gui/pipeline_panel_v2.py",
-      "size_bytes": 13873,
-      "mtime_iso": "2025-12-11T20:31:13"
+      "size_bytes": 13974,
+      "mtime_iso": "2025-12-12T08:25:29"
     },
     {
       "path": "src/gui/preview_panel_v2.py",
-      "size_bytes": 23221,
-      "mtime_iso": "2025-12-10T22:40:42"
+      "size_bytes": 24190,
+      "mtime_iso": "2025-12-12T08:33:04"
     },
     {
       "path": "src/gui/prompt_pack_adapter_v2.py",
@@ -3851,8 +4211,8 @@
     },
     {
       "path": "src/gui/sidebar_panel_v2.py",
-      "size_bytes": 43051,
-      "mtime_iso": "2025-12-11T08:03:04"
+      "size_bytes": 43305,
+      "mtime_iso": "2025-12-12T08:38:19"
     },
     {
       "path": "src/gui/stage_chooser.py",
@@ -3956,8 +4316,8 @@
     },
     {
       "path": "src/gui/panels_v2/queue_panel_v2.py",
-      "size_bytes": 24672,
-      "mtime_iso": "2025-12-10T20:20:05"
+      "size_bytes": 24484,
+      "mtime_iso": "2025-12-12T08:37:23"
     },
     {
       "path": "src/gui/panels_v2/randomizer_panel_v2.py",
@@ -4180,11 +4540,6 @@
       "mtime_iso": "2025-11-22T07:25:45"
     },
     {
-      "path": "src/history/history_migration_engine.py",
-      "size_bytes": 11200,
-      "mtime_iso": "2025-12-12T06:57:31"
-    },
-    {
       "path": "src/history/history_record.py",
       "size_bytes": 4234,
       "mtime_iso": "2025-12-11T06:39:39"
@@ -4196,13 +4551,8 @@
     },
     {
       "path": "src/history/job_history_store.py",
-      "size_bytes": 3147,
-      "mtime_iso": "2025-12-10T20:02:52"
-    },
-    {
-      "path": "src/history/legacy_prompt_hydration_v26.py",
-      "size_bytes": 2429,
-      "mtime_iso": "2025-12-12T06:57:31"
+      "size_bytes": 3161,
+      "mtime_iso": "2025-12-12T08:04:13"
     },
     {
       "path": "src/learning/dataset_builder.py",
@@ -4356,8 +4706,8 @@
     },
     {
       "path": "src/pipeline/resolution_layer.py",
-      "size_bytes": 10164,
-      "mtime_iso": "2025-12-09T05:49:30"
+      "size_bytes": 9996,
+      "mtime_iso": "2025-12-12T09:21:17"
     },
     {
       "path": "src/pipeline/run_config.py",
@@ -4401,8 +4751,8 @@
     },
     {
       "path": "src/queue/job_model.py",
-      "size_bytes": 5855,
-      "mtime_iso": "2025-12-11T23:04:46"
+      "size_bytes": 5947,
+      "mtime_iso": "2025-12-12T08:22:39"
     },
     {
       "path": "src/queue/job_queue.py",
@@ -4441,8 +4791,8 @@
     },
     {
       "path": "src/services/queue_store_v2.py",
-      "size_bytes": 12498,
-      "mtime_iso": "2025-12-12T06:57:31"
+      "size_bytes": 6617,
+      "mtime_iso": "2025-12-12T08:09:42"
     },
     {
       "path": "src/stablenew.egg-info/dependency_links.txt",
@@ -4541,8 +4891,8 @@
     },
     {
       "path": "src/utils/logger.py",
-      "size_bytes": 18356,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 18427,
+      "mtime_iso": "2025-12-12T09:08:05"
     },
     {
       "path": "src/utils/logging_helpers_v2.py",
@@ -4657,7 +5007,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-12T07:00:27"
+      "mtime_iso": "2025-12-12T17:02:29"
     },
     {
       "path": "tests/conftest.py",
@@ -4790,51 +5140,6 @@
       "mtime_iso": "2025-11-22T18:13:44"
     },
     {
-      "path": "tests/compat/test_history_compat_v2.py",
-      "size_bytes": 2050,
-      "mtime_iso": "2025-12-12T06:57:31"
-    },
-    {
-      "path": "tests/compat/test_queue_compat_v2.py",
-      "size_bytes": 1790,
-      "mtime_iso": "2025-12-11T23:25:09"
-    },
-    {
-      "path": "tests/compat/test_replay_compat_v2.py",
-      "size_bytes": 1358,
-      "mtime_iso": "2025-12-11T23:25:09"
-    },
-    {
-      "path": "tests/compat/data/history_compat_v2/history_v2_0_pre_njr.jsonl",
-      "size_bytes": 1029,
-      "mtime_iso": "2025-12-10T21:13:33"
-    },
-    {
-      "path": "tests/compat/data/history_compat_v2/history_v2_4_hybrid.jsonl",
-      "size_bytes": 1313,
-      "mtime_iso": "2025-12-10T21:13:40"
-    },
-    {
-      "path": "tests/compat/data/history_compat_v2/history_v2_6_core1_pre.jsonl",
-      "size_bytes": 1381,
-      "mtime_iso": "2025-12-10T21:19:25"
-    },
-    {
-      "path": "tests/compat/data/queue_compat_v2/queue_state_v2_0.json",
-      "size_bytes": 612,
-      "mtime_iso": "2025-12-10T21:18:44"
-    },
-    {
-      "path": "tests/compat/data/queue_compat_v2/queue_state_v2_4_hybrid.json",
-      "size_bytes": 858,
-      "mtime_iso": "2025-12-10T21:18:55"
-    },
-    {
-      "path": "tests/compat/data/queue_compat_v2/queue_state_v2_6_core1_pre.json",
-      "size_bytes": 928,
-      "mtime_iso": "2025-12-10T21:19:06"
-    },
-    {
       "path": "tests/controller/conftest.py",
       "size_bytes": 2568,
       "mtime_iso": "2025-12-08T08:04:45"
@@ -4876,13 +5181,13 @@
     },
     {
       "path": "tests/controller/test_app_controller_packs.py",
-      "size_bytes": 3061,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 3225,
+      "mtime_iso": "2025-12-12T08:12:57"
     },
     {
       "path": "tests/controller/test_app_controller_pipeline_bridge.py",
-      "size_bytes": 2254,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 2418,
+      "mtime_iso": "2025-12-12T08:21:19"
     },
     {
       "path": "tests/controller/test_app_controller_pipeline_draft_v2.py",
@@ -4896,8 +5201,8 @@
     },
     {
       "path": "tests/controller/test_app_controller_run_bridge_v2.py",
-      "size_bytes": 2289,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 2330,
+      "mtime_iso": "2025-12-12T08:06:24"
     },
     {
       "path": "tests/controller/test_app_controller_run_mode_defaults.py",
@@ -4906,8 +5211,8 @@
     },
     {
       "path": "tests/controller/test_app_controller_run_now_bridge.py",
-      "size_bytes": 1894,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 1890,
+      "mtime_iso": "2025-12-12T08:08:37"
     },
     {
       "path": "tests/controller/test_app_controller_settings_v2.py",
@@ -4931,8 +5236,8 @@
     },
     {
       "path": "tests/controller/test_builder_pipeline_contract_v2_6.py",
-      "size_bytes": 1712,
-      "mtime_iso": "2025-12-11T22:09:10"
+      "size_bytes": 3234,
+      "mtime_iso": "2025-12-12T08:10:05"
     },
     {
       "path": "tests/controller/test_cluster_controller.py",
@@ -5016,8 +5321,8 @@
     },
     {
       "path": "tests/controller/test_job_service_njr_validation.py",
-      "size_bytes": 2586,
-      "mtime_iso": "2025-12-11T20:33:36"
+      "size_bytes": 2672,
+      "mtime_iso": "2025-12-12T09:24:38"
     },
     {
       "path": "tests/controller/test_job_service_normalized_v2.py",
@@ -5056,8 +5361,8 @@
     },
     {
       "path": "tests/controller/test_pipeline_controller_config_path.py",
-      "size_bytes": 1027,
-      "mtime_iso": "2025-12-11T22:09:10"
+      "size_bytes": 2049,
+      "mtime_iso": "2025-12-12T08:26:18"
     },
     {
       "path": "tests/controller/test_pipeline_controller_history_refresh_v2.py",
@@ -5575,19 +5880,9 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
-      "path": "tests/history/test_history_compaction.py",
-      "size_bytes": 2201,
-      "mtime_iso": "2025-12-10T17:45:16"
-    },
-    {
-      "path": "tests/history/test_history_migration_engine.py",
-      "size_bytes": 4314,
-      "mtime_iso": "2025-12-10T17:45:16"
-    },
-    {
       "path": "tests/history/test_history_replay_integration.py",
-      "size_bytes": 2871,
-      "mtime_iso": "2025-12-10T20:07:59"
+      "size_bytes": 2866,
+      "mtime_iso": "2025-12-12T08:39:29"
     },
     {
       "path": "tests/history/test_history_roundtrip.py",
@@ -5601,8 +5896,8 @@
     },
     {
       "path": "tests/history/test_history_schema_v26.py",
-      "size_bytes": 1675,
-      "mtime_iso": "2025-12-10T17:45:16"
+      "size_bytes": 1857,
+      "mtime_iso": "2025-12-12T08:40:01"
     },
     {
       "path": "tests/history/test_history_store_recording_v2.py",
@@ -5636,8 +5931,8 @@
     },
     {
       "path": "tests/journeys/journey_helpers_v2.py",
-      "size_bytes": 6213,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 6732,
+      "mtime_iso": "2025-12-12T09:13:41"
     },
     {
       "path": "tests/journeys/test_jt01_prompt_pack_authoring.py",
@@ -5651,18 +5946,18 @@
     },
     {
       "path": "tests/journeys/test_jt03_txt2img_pipeline_run.py",
-      "size_bytes": 12700,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 11561,
+      "mtime_iso": "2025-12-12T08:53:49"
     },
     {
       "path": "tests/journeys/test_jt04_img2img_adetailer_run.py",
-      "size_bytes": 16882,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 14735,
+      "mtime_iso": "2025-12-12T09:19:36"
     },
     {
       "path": "tests/journeys/test_jt05_upscale_stage_run.py",
-      "size_bytes": 12692,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 10231,
+      "mtime_iso": "2025-12-12T09:20:06"
     },
     {
       "path": "tests/journeys/test_jt06_prompt_pack_queue_run.py",
@@ -5721,8 +6016,8 @@
     },
     {
       "path": "tests/learning/test_learning_hooks_pipeline_runner.py",
-      "size_bytes": 2341,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 2655,
+      "mtime_iso": "2025-12-12T09:10:27"
     },
     {
       "path": "tests/learning/test_learning_plan_factory.py",
@@ -5731,8 +6026,8 @@
     },
     {
       "path": "tests/learning/test_learning_record_builder.py",
-      "size_bytes": 1882,
-      "mtime_iso": "2025-11-22T14:08:22"
+      "size_bytes": 1895,
+      "mtime_iso": "2025-12-12T09:14:29"
     },
     {
       "path": "tests/learning/test_learning_record_serialization.py",
@@ -5831,8 +6126,8 @@
     },
     {
       "path": "tests/pipeline/test_job_queue_persistence_v2.py",
-      "size_bytes": 13044,
-      "mtime_iso": "2025-12-10T19:30:32"
+      "size_bytes": 11354,
+      "mtime_iso": "2025-12-12T08:09:06"
     },
     {
       "path": "tests/pipeline/test_job_service_njr_validation.py",

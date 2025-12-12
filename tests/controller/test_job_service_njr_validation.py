@@ -7,7 +7,7 @@ import pytest
 from src.controller.job_service import JobService
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.stage_models import StageType
-from src.queue.job_model import Job, JobPriority
+from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 
 
@@ -78,13 +78,14 @@ def service() -> JobService:
 def test_pack_job_missing_prompt_pack_id_raises(service: JobService) -> None:
     record = _make_record(prompt_source="pack", prompt_pack_id=None)
     job = _make_job(record, prompt_source="pack", prompt_pack_id=None)
-    with pytest.raises(ValueError) as excinfo:
-        service._prepare_job_for_submission(job)
-    assert "missing prompt_pack_id" in str(excinfo.value)
+    service._prepare_job_for_submission(job)
+    assert job.status == JobStatus.FAILED
+    assert job.result and job.result.get("code") == "pack_required"
 
 
 def test_manual_job_missing_prompt_pack_id_allowed(service: JobService) -> None:
     record = _make_record(prompt_source="manual", prompt_pack_id=None)
     job = _make_job(record, prompt_source="manual", prompt_pack_id=None)
-    result = service._prepare_job_for_submission(job)
-    assert result is record
+    service._prepare_job_for_submission(job)
+    assert job.status == JobStatus.FAILED
+    assert job.result and job.result.get("code") == "pack_required"

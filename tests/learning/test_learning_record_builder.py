@@ -11,7 +11,7 @@ def _run_result_stub(run_id: str = "run-123") -> PipelineRunResult:
         stages=[
             StageExecution(
                 stage_type="txt2img",
-                config=StageConfig(enabled=True, payload={}),
+                config=StageConfig(enabled=True, payload={}, metadata={}),
                 order_index=0,
                 requires_input_image=False,
                 produces_output_image=True,

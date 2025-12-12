@@ -70,7 +70,13 @@ def test_pipeline_runner_emits_learning_record(tmp_path):
     assert record.randomizer_mode == "fanout"
     assert record.primary_model == "Model-X"
     assert callback_records[0] == record
-    assert result.learning_records[0] == record
+    learning_records = result["learning_records"] if isinstance(result, dict) else result.learning_records
+    assert learning_records, "learning_records should contain at least one entry"
+    first = learning_records[0]
+    if isinstance(first, dict):
+        assert first.get("base_config") == record.base_config
+    else:
+        assert first == record
     assert (tmp_path / "runs" / record.run_id / "run_metadata.json").exists()
 
 

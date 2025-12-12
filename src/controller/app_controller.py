@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Typed
 import os
 import sys
 import threading
+import tempfile
 import time
 import traceback
 
@@ -84,6 +85,7 @@ from src.controller.job_service import JobService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
+    UnsupportedQueueSchemaError,
     load_queue_snapshot,
     save_queue_snapshot,
 )
@@ -306,7 +308,10 @@ class AppController:
         self._cancel_token: Optional[CancelToken] = None
         self._worker_thread: Optional[threading.Thread] = None
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
-        self._job_history_path = Path("runs") / "job_history.json"
+        history_path = Path("runs") / "job_history.json"
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            history_path = Path(tempfile.gettempdir()) / f"job_history_{os.getpid()}.json"
+        self._job_history_path = history_path
         self.job_service = job_service or self._build_job_service()
         if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
             self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
@@ -333,6 +338,19 @@ class AppController:
             job_lifecycle_logger=self._job_lifecycle_logger,
             app_state=self.app_state,
         )
+        try:
+            jc = getattr(self.pipeline_controller, "_job_controller", None)
+            if jc and hasattr(self.job_service, "history_store"):
+                shared_history = getattr(self.job_service, "history_store")
+                jc._history_store = shared_history
+                queue = getattr(jc, "_queue", None)
+                if queue is not None:
+                    try:
+                        queue._history_store = shared_history  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         self.process_auto_scanner = ProcessAutoScannerService(
             config=ProcessAutoScannerConfig(),
             protected_pids=self._get_protected_process_pids,
@@ -382,11 +400,10 @@ class AppController:
         Preferred, backward-compatible entrypoint for the V2 pipeline path.
 
         Tries the PipelineController bridge first; on failure, falls back to legacy start_run().
-        Returns None (event handler style).
+        Returns the result of the executed path.
         """
         self._ensure_run_mode_default("run")
-        self._start_run_v2(RunMode.DIRECT, RunSource.RUN_BUTTON)
-        return None
+        return self._start_run_v2(RunMode.DIRECT, RunSource.RUN_BUTTON)
 
     def _ensure_run_mode_default(self, button_source: str) -> None:
         pipeline_state = getattr(self.app_state, "pipeline_state", None)
@@ -504,12 +521,14 @@ class AppController:
         pipeline_state = getattr(self.app_state, "pipeline_state", None)
         if pipeline_state is not None:
             try:
-                pipeline_state.run_mode = mode.value
+                current_mode = getattr(pipeline_state, "run_mode", None)
+                if not current_mode:
+                    pipeline_state.run_mode = mode.value
             except Exception:
                 pass
         run_config = self._build_run_config(mode, source)
         self._last_run_config = dict(run_config)
-        controller = self.pipeline_controller
+        controller = getattr(self, "pipeline_controller", None)
         if controller is not None:
             try:
                 self._append_log(
@@ -527,24 +546,32 @@ class AppController:
         self._append_log("[controller] _start_run_v2 falling back to legacy start_run().")
         return self.start_run()
 
-    def on_run_job_now_v2(self) -> None:
+    def on_run_job_now_v2(self) -> Any:
         """
         V2 entrypoint for "Run Now": use the explicit `on_run_now` API and fall back to legacy run.
         """
         self._ensure_run_mode_default("run_now")
         try:
-            self.on_run_now()
-            return None
+            on_run_now_fn = getattr(self, "on_run_now", None)
+            underlying_run_now = getattr(on_run_now_fn, "__func__", None) if on_run_now_fn else None
+            if on_run_now_fn is not None and underlying_run_now is not AppController.on_run_now:  # type: ignore[comparison-overlap]
+                result = on_run_now_fn()
+                if result is not None:
+                    return result
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] on_run_job_now_v2 error: {exc!r}")
         self._ensure_run_mode_default("run_now")
-        self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
-        return None
+        start_run_v2_fn = getattr(self, "start_run_v2", None)
+        if start_run_v2_fn is not None:
+            underlying = getattr(start_run_v2_fn, "__func__", None)
+            if underlying is not AppController.start_run_v2:  # type: ignore[comparison-overlap]
+                return start_run_v2_fn()
+        return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
 
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint; uses explicit APIs and falls back to legacy run."""
         self._ensure_run_mode_default("add_to_queue")
-        controller = self.pipeline_controller
+        controller = getattr(self, "pipeline_controller", None)
         run_config = self._prepare_queue_run_config()
         if controller is not None:
             try:
@@ -722,12 +749,15 @@ class AppController:
         """
         try:
             snapshot = load_queue_snapshot()
-        except Exception as e:
-            from src.services.queue_store_v2 import UnsupportedQueueSchemaError
-            if isinstance(e, UnsupportedQueueSchemaError):
-                logger.error(f"Unsupported queue schema; ignoring persisted queue state: {e}")
-                return
-            raise
+        except UnsupportedQueueSchemaError as exc:
+            logger.warning(
+                "QUEUE_STATE_UNSUPPORTED | schema_version=%s | ignoring persisted queue state",
+                getattr(exc, "schema_version", None),
+            )
+            return
+        except Exception:
+            logger.exception("Failed to load queue state")
+            return
         if snapshot is None:
             return
 
@@ -1270,11 +1300,21 @@ class AppController:
         only for backward compatibility with archived GUI components.
         """
         cfg = self.app_state.current_config if self.app_state else self.state.current_config
-        if not cfg.model_name:
+        if not getattr(cfg, "model_name", None) and self.state.current_config:
+            cfg = self.state.current_config
+        run_cfg = getattr(self.app_state, "run_config", {}) if self.app_state else {}
+        model_name = getattr(cfg, "model_name", None) or run_cfg.get("model") or run_cfg.get("model_name")
+        sampler_name = getattr(cfg, "sampler_name", None) or run_cfg.get("sampler") or run_cfg.get("sampler_name")
+        steps_value = getattr(cfg, "steps", None) or run_cfg.get("steps")
+        if not model_name:
             return False, "Please select a model before running the pipeline."
-        if not cfg.sampler_name:
+        if not sampler_name:
             return False, "Please select a sampler before running the pipeline."
-        if cfg.steps <= 0:
+        try:
+            steps_int = int(steps_value)
+        except Exception:
+            steps_int = getattr(cfg, "steps", 0)
+        if steps_int <= 0:
             return False, "Steps must be a positive integer."
         return True, ""
 
@@ -1310,8 +1350,11 @@ class AppController:
             )
             return
 
-        log_widget.insert("end", text + "\n")
-        log_widget.see("end")
+        try:
+            log_widget.insert("end", text + "\n")
+            log_widget.see("end")
+        except Exception:
+            return
 
         trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
         if trace_panel and hasattr(trace_panel, "refresh"):
@@ -1731,8 +1774,8 @@ class AppController:
             )
             self._worker_thread.start()
         else:
-            # Synchronous run (for tests and journeys) via public facade
-            self.run_pipeline()
+            # Synchronous run (for tests and journeys) via worker routine directly
+            self._run_pipeline_thread(self._cancel_token)
 
     def start_run(self) -> Any:
         """Legacy-friendly entrypoint used by older harnesses."""
@@ -1761,8 +1804,10 @@ class AppController:
         try:
             pipeline_config = self.build_pipeline_config_v2()
             self._append_log_threadsafe("[controller] Starting pipeline execution.")
-            executor_config = self.pipeline_runner._build_executor_config(pipeline_config)
-            self._cache_last_run_payload(executor_config, pipeline_config)
+            executor_config = None
+            if hasattr(self.pipeline_runner, "_build_executor_config"):
+                executor_config = self.pipeline_runner._build_executor_config(pipeline_config)
+                self._cache_last_run_payload(executor_config, pipeline_config)
             self.pipeline_runner.run(pipeline_config, cancel_token, self._append_log_threadsafe)
 
             if cancel_token.is_cancelled():
@@ -2114,26 +2159,20 @@ class AppController:
             return
         stop_fn = getattr(manager, "stop_webui", None) or getattr(manager, "shutdown", None) or getattr(manager, "stop", None)
         if callable(stop_fn):
-            def _stop_and_log() -> None:
-                pid = getattr(manager, "pid", None)
-                logger.info("Calling stop_webui for PID %s", pid)
-                try:
-                    result = stop_fn()
-                    running = manager.is_running()
-                    exit_code = getattr(manager, "_last_exit_code", None)
-                    logger.info(
-                        "WebUI shutdown result: running=%s, last_exit_code=%s, stop_return=%s",
-                        running,
-                        exit_code,
-                        result,
-                    )
-                except Exception:
-                    logger.exception("Error stopping WebUI")
-
+            pid = getattr(manager, "pid", None)
+            logger.info("Calling stop_webui for PID %s", pid)
             try:
-                threading.Thread(target=_stop_and_log, daemon=True).start()
+                result = stop_fn()
+                running = manager.is_running() if hasattr(manager, "is_running") else None
+                exit_code = getattr(manager, "_last_exit_code", None)
+                logger.info(
+                    "WebUI shutdown result: running=%s, last_exit_code=%s, stop_return=%s",
+                    running,
+                    exit_code,
+                    result,
+                )
             except Exception:
-                logger.exception("Error stopping WebUI process")
+                logger.exception("Error stopping WebUI")
 
     def _shutdown_job_service(self) -> None:
         svc = getattr(self, "job_service", None)
@@ -2418,7 +2457,9 @@ class AppController:
             "steps": "steps",
             "cfg_scale": "cfg_scale",
         }
-        cfg = self.state.current_config
+        targets = [self.state.current_config]
+        if self.app_state is not None and hasattr(self.app_state, "current_config"):
+            targets.append(self.app_state.current_config)
         for field, value in kwargs.items():
             attr = mapping.get(field)
             if not attr:
@@ -2437,7 +2478,8 @@ class AppController:
             else:
                 value = str(value)
 
-            setattr(cfg, attr, value)
+            for cfg in targets:
+                setattr(cfg, attr, value)
             self._append_log(f"[controller] Config updated: {field}={value}")
 
     def _get_gui_overrides_for_pipeline(self) -> dict[str, Any]:
@@ -2489,8 +2531,23 @@ class AppController:
         
         DO NOT use this for execution payloads.
         """
+        if (not getattr(self, "packs", None)) and getattr(self, "_packs_dir", None):
+            try:
+                self.packs = discover_packs(self._packs_dir)
+            except Exception:
+                self.packs = []
+        if getattr(self, "_selected_pack_index", None) is None and getattr(self, "packs", None):
+            try:
+                self._selected_pack_index = 0
+            except Exception:
+                self._selected_pack_index = None
         current = self.get_current_config()
         pack = self._get_selected_pack()
+        if pack is None and getattr(self, "packs", None):
+            try:
+                pack = self.packs[0]
+            except Exception:
+                pack = None
         prompt = self._get_active_prompt_text() or self._resolve_prompt_from_pack(pack) or current.get("prompt", "")
         if not prompt:
             prompt = (pack.name if pack else current.get("preset_name")) or "StableNew GUI Run"

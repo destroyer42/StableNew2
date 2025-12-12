@@ -591,6 +591,16 @@ class QueuePanelV2(ttk.Frame):
         # Fallback to queue_jobs if available
         self._on_queue_jobs_changed()
 
+    def _refresh_display(self) -> None:
+        """Refresh the queue list using the current app_state snapshot."""
+        if not self.app_state:
+            return
+        queue_jobs = getattr(self.app_state, "queue_jobs", None) or []
+        try:
+            self.update_jobs(queue_jobs)
+        except Exception as exc:
+            print(f"[QueuePanelV2] Failed to refresh display: {exc}")
+
     def _on_running_summary_changed(self) -> None:
         """Handle running job summary changes (legacy compatibility)."""
         if not self.app_state:

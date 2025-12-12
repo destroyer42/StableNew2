@@ -29,7 +29,7 @@ def test_replay_invokes_njr_path() -> None:
     )
     record = HistoryRecord(
         id=njr.job_id,
-        njr_snapshot=asdict(njr),
+        njr_snapshot={"normalized_job": asdict(njr)},
         timestamp="2025-01-01T00:00:00Z",
         status="completed",
         history_schema=HISTORY_SCHEMA_VERSION,

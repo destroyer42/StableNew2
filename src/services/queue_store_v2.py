@@ -6,33 +6,18 @@ Every job entry stores exactly one NormalizedJobRecord snapshot plus metadata.
 
 from __future__ import annotations
 
-import json
 import logging
-from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping
-from uuid import uuid4
+from typing import Any, Mapping
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.utils.jsonl_codec import JSONLCodec
-from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_QUEUE_STATE_PATH = Path("state") / "queue_state_v2.json"
 
 SCHEMA_VERSION = "2.6"
-
-QUEUE_JOB_DEPRECATED_FIELDS = {
-    "_normalized_record",
-    "pipeline_config",
-    "legacy_config_blob",
-    "job_bundle_summary",
-    "draft_bundle_summary",
-    "bundle",
-    "config_blob",
-}
 
 REQUIRED_QUEUE_FIELDS = {
     "queue_id": str,
@@ -45,20 +30,13 @@ REQUIRED_QUEUE_FIELDS = {
 
 OPTIONAL_QUEUE_FIELDS = {"metadata": dict}
 
-LEGACY_SNAPSHOT_FIELDS = {
-    "pipeline_config",
-    "legacy_config_blob",
-    "config_blob",
-    "job_bundle_summary",
-    "draft_bundle_summary",
-    "bundle",
-    "draft",
-    "job_bundle",
-    "bundle_summary",
-    "normalized_job",
-    "snapshot",
-    "_normalized_record",
-}
+
+class UnsupportedQueueSchemaError(Exception):
+    """Raised when a persisted queue snapshot uses an unsupported schema."""
+
+    def __init__(self, schema_version: Any) -> None:
+        super().__init__(f"Unsupported queue schema version: {schema_version!r}")
+        self.schema_version = schema_version
 
 
 @dataclass
@@ -76,117 +54,6 @@ QueueSnapshotV1 = QueueSnapshot
 _QUEUE_CODEC = JSONLCodec(logger=logger.warning)
 
 
-def _read_legacy_queue_state(path: Path) -> dict[str, Any] | None:
-    try:
-        with path.open("r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except Exception as exc:
-        logger.warning("Failed to parse legacy queue state: %s", exc)
-        return None
-
-def _coerce_iso_timestamp(value: str | datetime | None) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, str) and value:
-        return value
-    return datetime.utcnow().isoformat()
-
-
-def _coerce_int(value: Any, default: int) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _strip_snapshot_keys(snapshot: Mapping[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in dict(snapshot or {}).items() if k not in LEGACY_SNAPSHOT_FIELDS}
-
-
-def _njr_to_snapshot(record: NormalizedJobRecord) -> dict[str, Any]:
-    snapshot = asdict(record)
-    status = getattr(record, "status", None)
-    if status is not None and hasattr(status, "value"):
-        snapshot["status"] = status.value
-    completed_at = snapshot.get("completed_at")
-    if isinstance(completed_at, datetime):
-        snapshot["completed_at"] = completed_at.isoformat()
-    return snapshot
-
-
-class QueueMigrationEngine:
-    """Normalizes legacy queue entries to the v2.6 NJR-only schema."""
-
-    def migrate_item(self, item: Mapping[str, Any]) -> dict[str, Any]:
-        working = dict(item or {})
-        job_id = working.get("job_id") or working.get("id") or str(uuid4())
-        queue_id = str(working.get("queue_id") or job_id)
-        snapshot = self._extract_snapshot(working)
-        from src.pipeline.job_models_v2 import NormalizedJobRecord
-        from src.history.legacy_prompt_hydration_v26 import hydrate_prompt_fields
-        njr = None
-        # Always synthesize a dict-based NJR for legacy jobs
-        if "normalized_job" in snapshot:
-            try:
-                njr = NormalizedJobRecord(**snapshot["normalized_job"])
-                hydrate_prompt_fields(working, njr)
-                njr_dict = njr.__dict__ if hasattr(njr, "__dict__") else dict(njr)
-            except Exception:
-                # Synthesize a minimal dict-based NJR for legacy jobs
-                njr_dict = {
-                    "job_id": job_id,
-                    "config": {"prompt": ""},
-                    "positive_prompt": "",
-                    "path_output_dir": "outputs",
-                    "filename_template": f"{job_id}_{{i}}.png",
-                }
-                hydrate_prompt_fields(working, njr_dict)
-            # Always set job_id and positive_prompt
-            njr_dict["job_id"] = job_id or njr_dict.get("job_id", "")
-            if "positive_prompt" not in njr_dict or not njr_dict["positive_prompt"] or not njr_dict["positive_prompt"].strip():
-                hydrate_prompt_fields(working, njr_dict)
-            # Ensure non-empty prompt for compat
-            if not njr_dict["positive_prompt"] or not njr_dict["positive_prompt"].strip():
-                njr_dict["positive_prompt"] = "MIGRATED_LEGACY_NO_PROMPT"
-                cfg = njr_dict.get("config", {})
-                cfg["prompt"] = "MIGRATED_LEGACY_NO_PROMPT"
-                njr_dict["config"] = cfg
-            snapshot["normalized_job"] = njr_dict
-            # Also set at top-level for compat
-            snapshot["job_id"] = njr_dict.get("job_id", job_id)
-            snapshot["positive_prompt"] = njr_dict.get("positive_prompt", "")
-            snapshot["compat_hydrated"] = True
-        raw_metadata = working.get("metadata")
-        normalized = {
-            "queue_id": queue_id,
-            "njr_snapshot": snapshot,
-            "priority": _coerce_int(working.get("priority"), 0),
-            "status": str(working.get("status") or "queued"),
-            "created_at": _coerce_iso_timestamp(working.get("created_at")),
-            "queue_schema": SCHEMA_VERSION,
-            "metadata": dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {},
-        }
-        return normalized
-
-    def migrate_all(self, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-        return [self.migrate_item(item) for item in items or []]
-
-    def _extract_snapshot(self, working: Mapping[str, Any]) -> dict[str, Any]:
-        source = working.get("njr_snapshot") or working.get("snapshot") or working.get("_normalized_record")
-
-        if isinstance(source, NormalizedJobRecord):
-            return _strip_snapshot_keys(_njr_to_snapshot(source))
-
-        if isinstance(source, Mapping):
-            hydrated = normalized_job_from_snapshot(source)
-            if hydrated:
-                return _strip_snapshot_keys(_njr_to_snapshot(hydrated))
-            return _strip_snapshot_keys(source)
-
-        # Legacy shapes without normalized_job are non-runnable; return empty snapshot
-        return {}
-
-
 def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
     """Ensure a normalized queue job matches schema v2.6."""
     errors: list[str] = []
@@ -198,6 +65,8 @@ def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
         value = item[field]
         if not isinstance(value, expected):
             errors.append(f"{field} must be {expected.__name__}, got {type(value).__name__}")
+        if field == "queue_schema" and isinstance(value, str) and value != SCHEMA_VERSION:
+            errors.append(f"queue_schema must be {SCHEMA_VERSION}, got {value}")
 
     metadata = item.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
@@ -205,69 +74,44 @@ def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
 
     snapshot = item.get("njr_snapshot")
     if not isinstance(snapshot, dict) or "normalized_job" not in snapshot:
-        errors.append("njr_snapshot must include normalized_job (legacy entries are view-only)")
+        errors.append("njr_snapshot must include normalized_job")
 
     return (not errors, errors)
 
 
 def get_queue_state_path(base_dir: Path | str | None = None) -> Path:
-    """Get the path for the queue state file.
-    
-    Args:
-        base_dir: Optional base directory. If None, uses current working directory.
-        
-    Returns:
-        Path to the queue state JSON file.
-    """
+    """Get the path for the queue state file."""
     if base_dir:
         return Path(base_dir) / "queue_state_v2.json"
     return DEFAULT_QUEUE_STATE_PATH
 
 
 def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | None:
-    """Load queue state from disk.
-    
-    Args:
-        path: Optional path to the queue state file. Uses default if not provided.
-        
-    Returns:
-        QueueSnapshotV1 if loaded successfully, None if file missing or invalid.
-    """
+    """Load queue state from disk using the strict v2.6 schema."""
     state_path = Path(path) if path else get_queue_state_path()
-    
+
     if not state_path.exists():
-        logger.debug(f"Queue state file not found: {state_path}")
+        logger.debug("Queue state file not found: %s", state_path)
         return None
 
     entries = _QUEUE_CODEC.read_jsonl(state_path)
     data: dict[str, Any] | None = entries[-1] if entries else None
-    if data is None:
-        data = _read_legacy_queue_state(state_path)
     if not data:
         return None
 
-    schema_version_raw = data.get("schema_version", SCHEMA_VERSION)
-    schema_version = str(schema_version_raw)
+    schema_version = str(data.get("schema_version", ""))
     if schema_version != SCHEMA_VERSION:
-        logger.warning(
-            "Queue state schema version %s detected, normalizing to %s",
-            schema_version,
-            SCHEMA_VERSION,
-        )
+        raise UnsupportedQueueSchemaError(schema_version)
 
-    engine = QueueMigrationEngine()
-    migrated_jobs = engine.migrate_all(data.get("jobs", []))
     validated_jobs: list[dict[str, Any]] = []
-    for job in migrated_jobs:
+    for raw in data.get("jobs", []):
+        if not isinstance(raw, Mapping):
+            logger.warning("Dropping queue job with invalid shape (not a mapping)")
+            continue
+        job = dict(raw)
         valid, errs = validate_queue_item(job)
         if not valid:
-            logger.warning("Queue job failed validation: %s", errs)
-            # PR-CORE1-D17: Mark as legacy_view_only and still include
-            if "metadata" in job and isinstance(job["metadata"], dict):
-                job["metadata"]["legacy_view_only"] = True
-            else:
-                job["metadata"] = {"legacy_view_only": True}
-            validated_jobs.append(job)
+            logger.warning("Dropping invalid queue job: %s", errs)
             continue
         validated_jobs.append(job)
 
@@ -288,25 +132,26 @@ def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | Non
 
 
 def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = None) -> bool:
-    """Save queue state to disk.
-    
-    Args:
-        snapshot: The queue snapshot to save.
-        path: Optional path to the queue state file. Uses default if not provided.
-        
-    Returns:
-        True if saved successfully, False on error.
-    """
+    """Save queue state to disk using the strict v2.6 schema."""
     state_path = Path(path) if path else get_queue_state_path()
-    
+
     try:
         state_path.parent.mkdir(parents=True, exist_ok=True)
 
-        engine = QueueMigrationEngine()
-        normalized_jobs = engine.migrate_all(snapshot.jobs)
+        validated_jobs: list[dict[str, Any]] = []
+        for raw in snapshot.jobs:
+            if not isinstance(raw, Mapping):
+                logger.warning("Skipping non-mapping queue job during save")
+                continue
+            job = dict(raw)
+            valid, errs = validate_queue_item(job)
+            if not valid:
+                logger.warning("Skipping invalid queue job during save: %s", errs)
+                continue
+            validated_jobs.append(job)
 
         data = {
-            "jobs": normalized_jobs,
+            "jobs": validated_jobs,
             "auto_run_enabled": bool(snapshot.auto_run_enabled),
             "paused": bool(snapshot.paused),
             "schema_version": SCHEMA_VERSION,
@@ -316,11 +161,11 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
         _QUEUE_CODEC.write_jsonl(temp_path, [data])
         temp_path.replace(state_path)
 
-        logger.debug(f"Saved queue state: {len(normalized_jobs)} jobs")
+        logger.debug("Saved queue state: %d jobs", len(validated_jobs))
         logger.info(
             "QUEUE_STATE_SAVED | Persisted queue state",
             extra={
-                "job_count": len(normalized_jobs),
+                "job_count": len(validated_jobs),
                 "auto_run": snapshot.auto_run_enabled,
                 "paused": snapshot.paused,
                 "path": str(state_path),
@@ -328,36 +173,29 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
             },
         )
         return True
-        
-    except Exception as e:
-        logger.error(f"Failed to save queue state: {e}")
+
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("Failed to save queue state: %s", e)
         return False
 
 
 def delete_queue_snapshot(path: Path | str | None = None) -> bool:
-    """Delete the queue state file.
-    
-    Args:
-        path: Optional path to the queue state file. Uses default if not provided.
-        
-    Returns:
-        True if deleted or didn't exist, False on error.
-    """
+    """Delete the queue state file."""
     state_path = Path(path) if path else get_queue_state_path()
-    
+
     try:
         if state_path.exists():
             state_path.unlink()
-            logger.info(f"Deleted queue state file: {state_path}")
+            logger.info("Deleted queue state file: %s", state_path)
         return True
-    except Exception as e:
-        logger.error(f"Failed to delete queue state: {e}")
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error("Failed to delete queue state: %s", e)
         return False
 
 
 __all__ = [
     "QueueSnapshotV1",
-    "QueueMigrationEngine",
+    "UnsupportedQueueSchemaError",
     "validate_queue_item",
     "load_queue_snapshot",
     "save_queue_snapshot",

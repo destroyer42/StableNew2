@@ -7,17 +7,19 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from src.controller.job_execution_controller import JobExecutionController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job, JobPriority
 from src.queue.job_history_store import JSONLJobHistoryStore
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
-    QueueMigrationEngine,
     SCHEMA_VERSION,
     delete_queue_snapshot,
     load_queue_snapshot,
     save_queue_snapshot,
+    UnsupportedQueueSchemaError,
     validate_queue_item,
 )
 
@@ -42,7 +44,7 @@ class TestQueueSnapshot:
     def test_snapshot_with_values(self) -> None:
         job_entry = {
             "queue_id": "job-1",
-            "njr_snapshot": {"job_id": "job-1"},
+            "njr_snapshot": {"normalized_job": {"job_id": "job-1"}},
             "priority": 1,
             "status": "queued",
             "created_at": "2025-01-01T00:00:00Z",
@@ -60,44 +62,7 @@ class TestQueueSnapshot:
         assert snapshot.schema_version == SCHEMA_VERSION
 
 
-class TestQueueMigrationEngine:
-    def test_migrate_legacy_entry(self) -> None:
-        engine = QueueMigrationEngine()
-        legacy_njr = _make_normalized_record("legacy-job")
-        now = datetime.utcnow().isoformat()
-        migrated = engine.migrate_item(
-            {
-                "job_id": "legacy-job",
-                "_normalized_record": legacy_njr,
-                "priority": "5",
-                "status": "running",
-                "created_at": now,
-                "metadata": {"source": "legacy"},
-                "pipeline_config": {"model": "old"},
-            }
-        )
-        assert migrated["queue_schema"] == SCHEMA_VERSION
-        assert migrated["priority"] == 5
-        assert migrated["metadata"]["source"] == "legacy"
-        assert migrated["status"] == "running"
-        assert migrated["created_at"] == now
-        assert "pipeline_config" not in migrated["njr_snapshot"]
-        assert migrated["njr_snapshot"]["job_id"] == "legacy-job"
-
-    def test_migrate_idempotent(self) -> None:
-        engine = QueueMigrationEngine()
-        legacy_njr = _make_normalized_record("legacy-job")
-        raw = {
-            "job_id": "legacy-job",
-            "_normalized_record": legacy_njr,
-            "priority": 1,
-            "status": "queued",
-            "created_at": "2025-01-01T00:00:00Z",
-        }
-        first = engine.migrate_all([raw])
-        second = engine.migrate_all(first)
-        assert first == second
-
+class TestQueueValidation:
     def test_validate_detects_missing_fields(self) -> None:
         valid, errors = validate_queue_item({"queue_id": "missing"})
         assert valid is False
@@ -106,7 +71,7 @@ class TestQueueMigrationEngine:
     def test_validate_metadata_type(self) -> None:
         payload = {
             "queue_id": "job-1",
-            "njr_snapshot": {"job_id": "job-1"},
+            "njr_snapshot": {"normalized_job": {"job_id": "job-1"}},
             "priority": 0,
             "status": "queued",
             "created_at": "2025-01-01T00:00:00Z",
@@ -121,17 +86,16 @@ class TestQueueMigrationEngine:
 class TestQueuePersistence:
     def test_save_and_load_roundtrip(self, tmp_path: Path) -> None:
         state_file = tmp_path / "queue_state.json"
-        engine = QueueMigrationEngine()
-        job = engine.migrate_item(
-            {
-                "job_id": "job-1",
-                "_normalized_record": _make_normalized_record("job-1"),
-                "priority": 3,
-                "status": "running",
-                "created_at": "2025-12-10T00:00:00Z",
-                "metadata": {"source": "test"},
-            }
-        )
+        record = _make_normalized_record("job-1")
+        job = {
+            "queue_id": "job-1",
+            "njr_snapshot": {"normalized_job": asdict(record)},
+            "priority": 3,
+            "status": "running",
+            "created_at": "2025-12-10T00:00:00Z",
+            "queue_schema": SCHEMA_VERSION,
+            "metadata": {"source": "test"},
+        }
 
         snapshot = QueueSnapshotV1(
             jobs=[job],
@@ -173,16 +137,8 @@ class TestQueuePersistence:
         }
         state_file.write_text(json.dumps(payload))
 
-        loaded = load_queue_snapshot(state_file)
-        assert loaded is not None
-        assert loaded.schema_version == SCHEMA_VERSION
-        assert len(loaded.jobs) == 1
-        job = loaded.jobs[0]
-        assert job["queue_schema"] == SCHEMA_VERSION
-        assert job["priority"] == 2
-        assert job["status"] == "paused"
-        assert job["metadata"]["legacy"] is True
-        assert "pipeline_config" not in job["njr_snapshot"]
+        with pytest.raises(UnsupportedQueueSchemaError):
+            load_queue_snapshot(state_file)
 
     def test_save_creates_directory(self, tmp_path: Path) -> None:
         state_file = tmp_path / "subdir" / "nested" / "queue_state.json"
@@ -215,7 +171,7 @@ class TestQueuePersistence:
             jobs=[
                 {
                     "queue_id": "jsonl-job",
-                    "njr_snapshot": {"job_id": "jsonl-job"},
+                    "njr_snapshot": {"normalized_job": {"job_id": "jsonl-job"}},
                     "priority": 0,
                     "status": "queued",
                     "created_at": "2025-01-01T00:00:00Z",
@@ -266,7 +222,7 @@ class TestQueuePersistenceFlags:
             jobs=[
                 {
                     "queue_id": "j1",
-                    "njr_snapshot": {"job_id": "j1"},
+                    "njr_snapshot": {"normalized_job": {"job_id": "j1"}},
                     "priority": 0,
                     "status": "queued",
                     "created_at": "2025-01-01T00:00:00Z",
@@ -293,18 +249,17 @@ def test_queue_history_snapshots_share_njr(tmp_path: Path) -> None:
     history_entry = history_store.list_jobs()[0]
     history_njr = history_entry.snapshot.get("normalized_job") if history_entry.snapshot else {}
 
-    queue_entry = QueueMigrationEngine().migrate_item(
-        {
-            "job_id": job.job_id,
-            "_normalized_record": record,
-            "priority": 1,
-            "status": "queued",
-            "created_at": job.created_at.isoformat(),
-            "metadata": {"source": "test"},
-        }
-    )
+    queue_entry = {
+        "queue_id": job.job_id,
+        "njr_snapshot": {"normalized_job": asdict(record)},
+        "priority": 1,
+        "status": "queued",
+        "created_at": job.created_at.isoformat(),
+        "queue_schema": SCHEMA_VERSION,
+        "metadata": {"source": "test"},
+    }
 
-    assert queue_entry["njr_snapshot"] == history_njr
+    assert queue_entry["njr_snapshot"]["normalized_job"] == history_njr
     assert "pipeline_config" not in queue_entry["njr_snapshot"]
     assert "pipeline_config" not in history_njr
 

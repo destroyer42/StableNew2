@@ -129,6 +129,9 @@ class MainWindowV2:
 
         self.center_notebook = ttk.Notebook(self.root)
         self.center_notebook.grid(**get_root_zone_config("main"))
+        # Prompt tab (compatibility for journey tests / prompt workspace access)
+        self.prompt_tab = PromptTabFrame(self.center_notebook, app_state=self.app_state)
+        self.center_notebook.add(self.prompt_tab, text="Prompt")
         # PR-CORE1-D14: Always create and assign pipeline_tab for test/compat
         from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
         self.pipeline_tab = PipelineTabFrame(self.center_notebook)
@@ -142,6 +145,7 @@ class MainWindowV2:
 
         self.bottom_zone = BottomZone(self.root, controller=self.app_controller, app_state=self.app_state)
         self.bottom_zone.grid(**get_root_zone_config("status"))
+        self.status_bar_v2 = getattr(self.bottom_zone, "status_bar_v2", None)
 
         gui_log_handler = getattr(self, "gui_log_handler", None)
         self.log_trace_panel_v2: LogTracePanelV2 | None = None
@@ -164,6 +168,7 @@ class MainWindowV2:
 
         self.left_zone = getattr(self.pipeline_tab, "pack_loader_compat", None)
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)
+        self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
 
         # Provide delegation helpers expected by controllers/tests
         self.after = self.root.after  # type: ignore[attr-defined]

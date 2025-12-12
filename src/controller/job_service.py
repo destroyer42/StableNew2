@@ -285,11 +285,15 @@ class JobService:
             record = normalized_job_from_snapshot(snapshot)
         if record is None and self._require_normalized_records:
             self._fail_job(job, "missing_snapshot", "Job is missing normalized metadata.")
-            return None
+            raise ValueError("missing normalized snapshot")
         if record is not None:
             ok, details = self._validate_normalized_record(record)
             if not ok:
-                self._fail_job(job, details.get("code", "validation_failed"), details.get("message", "Validation failed"))
+                self._fail_job(
+                    job,
+                    details.get("code", "validation_failed"),
+                    details.get("message", "Validation failed"),
+                )
             else:
                 job.unified_summary = record.to_unified_summary()
                 setattr(job, "_normalized_record", record)
@@ -415,8 +419,8 @@ class JobService:
         if not record.job_id:
             return False, {"code": "missing_job_id", "message": "Normalized job is missing job_id."}
         prompt_source = getattr(record, "prompt_source", None) or ""
-        prompt_pack_id = getattr(record, "prompt_pack_id", "")
-        if prompt_source.lower() != "pack" or not prompt_pack_id:
+        prompt_pack_id = getattr(record, "prompt_pack_id", "") or ""
+        if not prompt_pack_id:
             log_with_ctx(
                 logger,
                 logging.ERROR,
@@ -431,7 +435,7 @@ class JobService:
             )
             return False, {
                 "code": "pack_required",
-                "message": f"Normalized job '{record.job_id}' must declare prompt_source=pack and prompt_pack_id.",
+                "message": f"Normalized job '{record.job_id}' must declare a prompt_pack_id (prompt_source={prompt_source}).",
             }
         if not record.positive_prompt or not record.positive_prompt.strip():
             return False, {

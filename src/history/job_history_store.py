@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from src.history.history_migration_engine import HistoryMigrationEngine
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import (
     ALLOWED_FIELDS,
@@ -19,24 +18,29 @@ logger = logging.getLogger(__name__)
 
 
 class JobHistoryStore:
-    """NJR-only JSONL history store with automatic legacy migration."""
+    """NJR-only JSONL history store (strict v2.6 schema)."""
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._migration = HistoryMigrationEngine()
         self._codec = JSONLCodec(schema_validator=validate_entry, logger=logger.warning)
 
     def load(self) -> list[HistoryRecord]:
         raw_entries = self._codec.read_jsonl(self._path)
-        migrated_entries = self._migration.migrate_all(raw_entries)
-        return [self._hydrate_record(entry) for entry in migrated_entries]
+        hydrated: list[HistoryRecord] = []
+        for entry in raw_entries:
+            ok, errors = validate_entry(entry)
+            if not ok:
+                logger.warning("Dropping invalid history entry: %s", errors)
+                continue
+            hydrated.append(self._hydrate_record(entry))
+        return hydrated
 
     def save(self, entries: Iterable[HistoryRecord | Mapping[str, Any]]) -> None:
         serializable: list[dict[str, Any]] = []
         for entry in entries:
             record = entry if isinstance(entry, HistoryRecord) else HistoryRecord.from_dict(entry)
-            normalized = self._migration.normalize_schema(record.to_dict())
+            normalized = record.to_dict()
             ok, errors = validate_entry(normalized)
             if not ok:
                 raise HistorySchemaError(errors)

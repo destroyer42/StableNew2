@@ -16,6 +16,7 @@ class DummyController(AppController):
         self._log: list[str] = []
         self.start_run = lambda: None
         self.run_pipeline_v2_bridge = lambda: True
+        self.pipeline_controller = None
 
     def _append_log(self, message: str) -> None:
         self._log.append(message)

@@ -82,7 +82,10 @@ class JsonlFileHandler(RotatingFileHandler):
         record = copy.copy(record)
         record.msg = json_line
         record.args = ()
-        super().emit(record)
+        try:
+            super().emit(record)
+        except PermissionError:
+            return
 
 
 def attach_jsonl_log_handler(

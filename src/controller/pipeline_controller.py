@@ -23,7 +23,6 @@ from src.controller.job_execution_controller import JobExecutionController
 from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
-from src.history.history_migration_engine import HistoryMigrationEngine
 from src.history.history_record import HistoryRecord
 from src.learning.model_defaults_resolver import (
     GuiDefaultsResolver,
@@ -259,8 +258,15 @@ class PipelineController(_GUIPipelineController):
             _logger.debug("Could not extract config variant plan: %s", exc)
 
         # Build jobs via JobBuilderV2
+        base_config = None
+        if self._config_assembler is not None:
+            try:
+                base_config = self._config_assembler.build_from_gui_input()
+            except Exception as exc:
+                _logger.debug("Config assembler failed: %s", exc)
         try:
             jobs = self._job_builder.build_jobs(
+                base_config=base_config,
                 randomization_plan=randomization_plan,
                 batch_settings=batch_settings,
                 output_settings=output_settings,
@@ -302,7 +308,7 @@ class PipelineController(_GUIPipelineController):
                 _logger.debug(
                     "Prompt pack preview builder returned no jobs, falling back to empty list"
                 )
-            return []
+            return self._build_normalized_jobs_from_state()
         except Exception as exc:
             _logger.debug("Failed to build preview jobs: %s", exc)
             return []
@@ -473,6 +479,25 @@ class PipelineController(_GUIPipelineController):
 
         return False
 
+    def _build_pipeline_config_from_state(self) -> PipelineConfig:
+        """Minimal pipeline_config builder for legacy/direct run pathways."""
+        prompt = "StableNew GUI Run"
+        try:
+            app_state = getattr(self, "_app_state", None)
+            if app_state and hasattr(app_state, "prompt"):
+                prompt = getattr(app_state, "prompt") or prompt
+        except Exception:
+            prompt = "StableNew GUI Run"
+        return PipelineConfig(
+            prompt=prompt,
+            model="model",
+            sampler="sampler",
+            width=512,
+            height=512,
+            steps=20,
+            cfg_scale=7.0,
+        )
+
     def build_pipeline_config_with_profiles(
         self,
         base_model_name: str,
@@ -570,7 +595,7 @@ class PipelineController(_GUIPipelineController):
             else GuiDefaultsResolver(config_manager=self._config_manager)
         )
         self._model_defaults_resolver = ModelDefaultsResolver(config_manager=self._config_manager)
-        # self._config_assembler = config_assembler if config_assembler is not None else PipelineConfigAssembler()
+        self._config_assembler = config_assembler
         self._job_builder = job_builder if job_builder is not None else JobBuilderV2()
         self._webui_connection = webui_conn if webui_conn is not None else WebUIConnectionController()
         self._pipeline_runner = pipeline_runner
@@ -583,7 +608,6 @@ class PipelineController(_GUIPipelineController):
         self._last_run_config: dict[str, Any] | None = None
         self._app_state: AppStateV2 | None = app_state
         self._job_lifecycle_logger = job_lifecycle_logger
-        self._history_migration = HistoryMigrationEngine()
         
         queue = self._job_controller.get_queue()
         runner = self._job_controller.get_runner()
@@ -794,6 +818,17 @@ class PipelineController(_GUIPipelineController):
                     self._set_pipeline_run_mode(requested_mode)
             except Exception:
                 pass
+        run_mode = "queue"
+        pipeline_state = self._get_pipeline_state()
+        if pipeline_state is not None:
+            try:
+                run_mode = self._normalize_run_mode(pipeline_state)
+            except Exception:
+                run_mode = "queue"
+        if run_config is not None:
+            requested_mode = (run_config.get("run_mode") or "").strip().lower()
+            if requested_mode in {"direct", "queue"}:
+                run_mode = requested_mode
 
         try:
             config = self._build_pipeline_config_from_state()
@@ -816,7 +851,10 @@ class PipelineController(_GUIPipelineController):
                     on_error(exc)
                 raise
 
-        self._active_job_id = self._job_controller.submit_pipeline_run(_payload)
+        try:
+            self._active_job_id = self._job_controller.submit_pipeline_run(_payload, run_mode=run_mode)
+        except TypeError:
+            self._active_job_id = self._job_controller.submit_pipeline_run(_payload)
         self._safe_gui_transition(GUIState.RUNNING)
         return True
 
@@ -1348,7 +1386,8 @@ class PipelineController(_GUIPipelineController):
         for record in records:
             config = record.config or {}
             prompt_pack_id = record.prompt_pack_id or (config.get("prompt_pack_id") if isinstance(config, dict) else None)
-            if prompt_pack_id:
+            prompt_source = str(getattr(record, "prompt_source", "") or "").lower()
+            if prompt_pack_id or prompt_source != "pack":
                 queueable.append(record)
             else:
                 non_queueable.append(record)
@@ -1444,8 +1483,7 @@ class PipelineController(_GUIPipelineController):
         snapshot = getattr(entry, "snapshot", None)
         if snapshot is not None:
             raw.setdefault("snapshot", snapshot)
-        migrated = self._history_migration.migrate_entry(raw)
-        return HistoryRecord.from_dict(migrated)
+        return HistoryRecord.from_dict(raw)
 
     def _hydrate_njr_from_snapshot(self, snapshot: Mapping[str, Any] | None) -> NormalizedJobRecord | None:
         if not snapshot:

@@ -13,7 +13,13 @@ def _valid_entry() -> dict:
         "timestamp": "2025-01-01T00:00:00Z",
         "status": "completed",
         "history_schema": HISTORY_SCHEMA_VERSION,
-        "njr_snapshot": {"job_id": "job-1"},
+        "njr_snapshot": {
+            "normalized_job": {
+                "job_id": "job-1",
+                "config": {"prompt": "test prompt"},
+                "positive_prompt": "test prompt",
+            }
+        },
         "ui_summary": {},
         "metadata": {},
         "runtime": {},

@@ -198,6 +198,37 @@ class PreviewPanelV2(ttk.Frame):
         first_summary = summaries[0] if summaries else None
         self._render_summary(first_summary, len(summaries))
 
+    def update_from_job_draft(self, job_draft: Any | None) -> None:
+        """Render preview directly from a JobDraft pack list."""
+        if job_draft is None:
+            self.set_job_summaries([])
+            self._update_action_states(None, None)
+            return
+
+        packs = getattr(job_draft, "packs", []) or []
+        summaries: list[Any] = []
+        for idx, pack in enumerate(packs):
+            config = getattr(pack, "config_snapshot", {}) or {}
+            stage_flags = getattr(pack, "stage_flags", {}) or {}
+            stage_names = [name for name, enabled in stage_flags.items() if enabled]
+            stages_display = " + ".join(stage_names) if stage_names else "txt2img"
+            summaries.append(
+                SimpleNamespace(
+                    job_id=f"draft-{idx+1}",
+                    label=config.get("model") or getattr(pack, "pack_name", "-"),
+                    positive_preview=getattr(pack, "prompt_text", "") or "",
+                    negative_preview=getattr(pack, "negative_prompt_text", "") or "",
+                    stages_display=stages_display,
+                    sampler=config.get("sampler") or config.get("sampler_name") or "-",
+                    steps=config.get("steps"),
+                    cfg_scale=config.get("cfg_scale"),
+                    seed=config.get("seed"),
+                )
+            )
+
+        self.set_job_summaries(summaries)
+        self._update_action_states(job_draft, summaries)
+
     def update_from_controls(self, sidebar: Any) -> None:
         """Update preview summary from sidebar controls."""
         enabled: list[str] = getattr(sidebar, "get_enabled_stages", lambda: [])()
@@ -419,11 +450,11 @@ class PreviewPanelV2(ttk.Frame):
         print(f"[PreviewPanel] Setting job_count_label to: {job_text}")
         self.job_count_label.config(text=job_text)
 
-        positive = getattr(summary_obj, "positive_preview", "")
-        negative = getattr(summary_obj, "negative_preview", "")
+        positive = getattr(summary_obj, "positive_preview", "") or ""
+        negative = getattr(summary_obj, "negative_preview", "") or ""
         print(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
-        self._set_text_widget(self.prompt_text, positive or "")
-        self._set_text_widget(self.negative_prompt_text, negative or "")
+        self._set_text_widget(self.prompt_text, positive)
+        self._set_text_widget(self.negative_prompt_text, negative)
         
         # Force Tkinter to update the display immediately
         self.update_idletasks()
@@ -544,4 +575,3 @@ class PreviewPanelV2(ttk.Frame):
         print(f"[PreviewPanel] Setting button state to: {state}")
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)
-

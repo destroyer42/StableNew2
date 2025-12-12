@@ -123,6 +123,8 @@ class Job:
         Returns config_snapshot if present, else None.
         Not included in to_dict().
         """
+        if getattr(self, "_normalized_record", None) is not None:
+            return None
         return self.config_snapshot
 
     def summary(self) -> str:

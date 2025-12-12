@@ -53,6 +53,17 @@ class StableNewGUI(MainWindowV2):
         except Exception:
             pass
         try:
+            from src.gui.preview_panel_v2 import PreviewPanelV2
+
+            self.preview_panel_v2 = PreviewPanelV2(
+                self.root,
+                controller=getattr(self, "app_controller", None),
+                app_state=getattr(self, "app_state", None),
+                theme=getattr(self, "theme", None),
+            )
+        except Exception:
+            self.preview_panel_v2 = None
+        try:
             self.pipeline_controls_panel = ttk.Frame(self.root)
         except Exception:
             self.pipeline_controls_panel = None

@@ -563,7 +563,12 @@ class SidebarPanelV2(ttk.Frame):
         
         # PromptPack-only: This should not execute if button state is correct, but guard anyway
         if not selection:
-            print("[SidebarPanel] No selection, returning")
+            print("[SidebarPanel] No selection, falling back to single prompt handler")
+            if controller and hasattr(controller, "add_single_prompt_to_draft"):
+                try:
+                    controller.add_single_prompt_to_draft()
+                except Exception:
+                    pass
             return
         
         # Add selected pack(s) to job draft

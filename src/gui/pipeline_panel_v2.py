@@ -314,6 +314,9 @@ def format_queue_job_summary(job: Any) -> str:
         summary_parts.append(str(status))
     if prompt_preview:
         summary_parts.append(f'prompt="{prompt_preview}"')
+    job_id = getattr(job, "job_id", "") or ""
+    if job_id:
+        summary_parts.append(job_id)
     return " | ".join(summary_parts)
 
 
