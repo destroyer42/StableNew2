@@ -119,25 +119,43 @@ class QueueMigrationEngine:
 
     def migrate_item(self, item: Mapping[str, Any]) -> dict[str, Any]:
         working = dict(item or {})
-
-        job_id = working.get("job_id")
-        record_id = working.get("id")
-        queue_id = str(working.get("queue_id") or job_id or record_id or uuid4())
-
+        job_id = working.get("job_id") or working.get("id") or str(uuid4())
+        queue_id = str(working.get("queue_id") or job_id)
         snapshot = self._extract_snapshot(working)
-        # Hydrate prompt fields for legacy compat
         from src.pipeline.job_models_v2 import NormalizedJobRecord
         from src.history.legacy_prompt_hydration_v26 import hydrate_prompt_fields
         njr = None
+        # Always synthesize a dict-based NJR for legacy jobs
         if "normalized_job" in snapshot:
             try:
                 njr = NormalizedJobRecord(**snapshot["normalized_job"])
+                hydrate_prompt_fields(working, njr)
+                njr_dict = njr.__dict__ if hasattr(njr, "__dict__") else dict(njr)
             except Exception:
-                pass
-        if njr is not None:
-            hydrate_prompt_fields(working, njr)
-            snapshot["normalized_job"] = njr.__dict__
-
+                # Synthesize a minimal dict-based NJR for legacy jobs
+                njr_dict = {
+                    "job_id": job_id,
+                    "config": {"prompt": ""},
+                    "positive_prompt": "",
+                    "path_output_dir": "outputs",
+                    "filename_template": f"{job_id}_{{i}}.png",
+                }
+                hydrate_prompt_fields(working, njr_dict)
+            # Always set job_id and positive_prompt
+            njr_dict["job_id"] = job_id or njr_dict.get("job_id", "")
+            if "positive_prompt" not in njr_dict or not njr_dict["positive_prompt"] or not njr_dict["positive_prompt"].strip():
+                hydrate_prompt_fields(working, njr_dict)
+            # Ensure non-empty prompt for compat
+            if not njr_dict["positive_prompt"] or not njr_dict["positive_prompt"].strip():
+                njr_dict["positive_prompt"] = "MIGRATED_LEGACY_NO_PROMPT"
+                cfg = njr_dict.get("config", {})
+                cfg["prompt"] = "MIGRATED_LEGACY_NO_PROMPT"
+                njr_dict["config"] = cfg
+            snapshot["normalized_job"] = njr_dict
+            # Also set at top-level for compat
+            snapshot["job_id"] = njr_dict.get("job_id", job_id)
+            snapshot["positive_prompt"] = njr_dict.get("positive_prompt", "")
+            snapshot["compat_hydrated"] = True
         raw_metadata = working.get("metadata")
         normalized = {
             "queue_id": queue_id,
@@ -148,7 +166,6 @@ class QueueMigrationEngine:
             "queue_schema": SCHEMA_VERSION,
             "metadata": dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {},
         }
-
         return normalized
 
     def migrate_all(self, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:

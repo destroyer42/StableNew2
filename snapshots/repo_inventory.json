@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-11T20:40:52",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251211-204050.zip",
-  "file_count": 1245,
-  "total_size_bytes": 30542567,
+  "created_at": "2025-12-12T07:04:03",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251212-070402.zip",
+  "file_count": 1250,
+  "total_size_bytes": 31365878,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -96,8 +96,8 @@
     },
     {
       "path": "pytest.ini",
-      "size_bytes": 303,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 907,
+      "mtime_iso": "2025-12-11T22:14:00"
     },
     {
       "path": "README.md",
@@ -386,8 +386,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 561579,
-      "mtime_iso": "2025-12-11T20:14:27"
+      "size_bytes": 579564,
+      "mtime_iso": "2025-12-12T06:43:40"
     },
     {
       "path": "data/webui_cache.json",
@@ -460,6 +460,11 @@
       "mtime_iso": "2025-12-06T18:21:18"
     },
     {
+      "path": "docs/Juggernaut_MedievalHeroes_RandomizerAligned_v1b.json",
+      "size_bytes": 8773,
+      "mtime_iso": "2025-12-06T18:21:18"
+    },
+    {
       "path": "docs/KNOWN_PITFALLS_QUEUE_TESTING.md",
       "size_bytes": 2220,
       "mtime_iso": "2025-12-08T08:04:45"
@@ -478,6 +483,11 @@
       "path": "docs/PR Template — StableNew v2.6.md",
       "size_bytes": 5202,
       "mtime_iso": "2025-12-09T13:04:28"
+    },
+    {
+      "path": "docs/PR TEMPLATE — v2.6-E (Executor-Safe Edition).md",
+      "size_bytes": 5946,
+      "mtime_iso": "2025-12-11T21:56:01"
     },
     {
       "path": "docs/PROJECT_INSTRUCTIONS_CHATGPT_v2.6.md",
@@ -503,6 +513,11 @@
       "path": "docs/Randomizer_Spec_v2.5.md",
       "size_bytes": 11928,
       "mtime_iso": "2025-12-06T18:21:18"
+    },
+    {
+      "path": "docs/SDXL_female_fantasy_heroes_Fantasy.txt",
+      "size_bytes": 7455,
+      "mtime_iso": "2025-11-22T07:25:45"
     },
     {
       "path": "docs/StableNew Executive Summary_v2.6.md",
@@ -2730,6 +2745,11 @@
       "mtime_iso": "2025-11-26T14:31:47"
     },
     {
+      "path": "docs/pr_implementation/PR-CORE1-D11.md",
+      "size_bytes": 4192,
+      "mtime_iso": "2025-12-11T22:05:20"
+    },
+    {
       "path": "docs/pr_implementation/PR-D_Implementation_Summary.md",
       "size_bytes": 10988,
       "mtime_iso": "2025-12-08T08:04:45"
@@ -2917,7 +2937,7 @@
     {
       "path": "presets/Juggernaut_MedievalHeroes_RandomizerAligned_v1b.json",
       "size_bytes": 8773,
-      "mtime_iso": "2025-12-06T18:21:18"
+      "mtime_iso": "2025-12-11T22:14:32"
     },
     {
       "path": "presets/Landscape_Scenery_Juggernaut_SDXL.json",
@@ -3385,6 +3405,21 @@
       "mtime_iso": "2025-12-11T20:14:26"
     },
     {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_050314_uncaught_exception.zip",
+      "size_bytes": 271948,
+      "mtime_iso": "2025-12-11T23:03:14"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_050425_uncaught_exception.zip",
+      "size_bytes": 257144,
+      "mtime_iso": "2025-12-11T23:04:26"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251212_115525_uncaught_exception.zip",
+      "size_bytes": 238522,
+      "mtime_iso": "2025-12-12T05:55:25"
+    },
+    {
       "path": "reports/file_access/CLEANHOUSE_REPORT_V2_5_2025_11_26.md",
       "size_bytes": 33355,
       "mtime_iso": "2025-11-26T16:51:07"
@@ -3521,8 +3556,8 @@
     },
     {
       "path": "src/api/webui_process_manager.py",
-      "size_bytes": 13395,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 13678,
+      "mtime_iso": "2025-12-11T23:22:00"
     },
     {
       "path": "src/api/webui_resources.py",
@@ -3555,14 +3590,19 @@
       "mtime_iso": "2025-11-28T18:06:02"
     },
     {
+      "path": "src/compat/replay_migration_v26.py",
+      "size_bytes": 510,
+      "mtime_iso": "2025-12-12T06:02:39"
+    },
+    {
       "path": "src/config/app_config.py",
       "size_bytes": 19758,
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 135225,
-      "mtime_iso": "2025-12-11T20:31:13"
+      "size_bytes": 135632,
+      "mtime_iso": "2025-12-12T06:57:31"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -3586,8 +3626,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 39807,
-      "mtime_iso": "2025-12-11T06:27:17"
+      "size_bytes": 40444,
+      "mtime_iso": "2025-12-11T23:07:12"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -3596,13 +3636,13 @@
     },
     {
       "path": "src/controller/pipeline_controller.py",
-      "size_bytes": 66170,
-      "mtime_iso": "2025-12-11T20:31:13"
+      "size_bytes": 63402,
+      "mtime_iso": "2025-12-12T06:27:23"
     },
     {
       "path": "src/controller/process_auto_scanner_service.py",
-      "size_bytes": 6304,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 6729,
+      "mtime_iso": "2025-12-11T22:34:41"
     },
     {
       "path": "src/controller/settings_suggestion_controller.py",
@@ -3726,8 +3766,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 24641,
-      "mtime_iso": "2025-12-11T20:31:13"
+      "size_bytes": 25312,
+      "mtime_iso": "2025-12-12T06:27:23"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -3986,8 +4026,8 @@
     },
     {
       "path": "src/gui/views/diagnostics_dashboard_v2.py",
-      "size_bytes": 8220,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 8543,
+      "mtime_iso": "2025-12-11T22:34:41"
     },
     {
       "path": "src/gui/views/error_modal_v2.py",
@@ -4141,8 +4181,8 @@
     },
     {
       "path": "src/history/history_migration_engine.py",
-      "size_bytes": 8662,
-      "mtime_iso": "2025-12-11T06:39:21"
+      "size_bytes": 11200,
+      "mtime_iso": "2025-12-12T06:57:31"
     },
     {
       "path": "src/history/history_record.py",
@@ -4151,13 +4191,18 @@
     },
     {
       "path": "src/history/history_schema_v26.py",
-      "size_bytes": 2886,
-      "mtime_iso": "2025-12-11T06:39:44"
+      "size_bytes": 3347,
+      "mtime_iso": "2025-12-11T23:25:09"
     },
     {
       "path": "src/history/job_history_store.py",
       "size_bytes": 3147,
       "mtime_iso": "2025-12-10T20:02:52"
+    },
+    {
+      "path": "src/history/legacy_prompt_hydration_v26.py",
+      "size_bytes": 2429,
+      "mtime_iso": "2025-12-12T06:57:31"
     },
     {
       "path": "src/learning/dataset_builder.py",
@@ -4281,13 +4326,13 @@
     },
     {
       "path": "src/pipeline/payload_builder.py",
-      "size_bytes": 15490,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 15610,
+      "mtime_iso": "2025-12-11T23:22:00"
     },
     {
       "path": "src/pipeline/pipeline_runner.py",
-      "size_bytes": 34586,
-      "mtime_iso": "2025-12-11T20:33:19"
+      "size_bytes": 37892,
+      "mtime_iso": "2025-12-12T06:57:31"
     },
     {
       "path": "src/pipeline/prompt_pack_job_builder.py",
@@ -4356,8 +4401,8 @@
     },
     {
       "path": "src/queue/job_model.py",
-      "size_bytes": 5453,
-      "mtime_iso": "2025-12-10T05:52:20"
+      "size_bytes": 5855,
+      "mtime_iso": "2025-12-11T23:04:46"
     },
     {
       "path": "src/queue/job_queue.py",
@@ -4396,8 +4441,8 @@
     },
     {
       "path": "src/services/queue_store_v2.py",
-      "size_bytes": 10346,
-      "mtime_iso": "2025-12-11T06:39:59"
+      "size_bytes": 12498,
+      "mtime_iso": "2025-12-12T06:57:31"
     },
     {
       "path": "src/stablenew.egg-info/dependency_links.txt",
@@ -4571,8 +4616,8 @@
     },
     {
       "path": "src/utils/watchdog_v2.py",
-      "size_bytes": 6977,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 7378,
+      "mtime_iso": "2025-12-11T22:46:47"
     },
     {
       "path": "src/utils/webui_discovery.py",
@@ -4612,7 +4657,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-11T20:34:43"
+      "mtime_iso": "2025-12-12T07:00:27"
     },
     {
       "path": "tests/conftest.py",
@@ -4746,18 +4791,18 @@
     },
     {
       "path": "tests/compat/test_history_compat_v2.py",
-      "size_bytes": 1999,
-      "mtime_iso": "2025-12-10T21:18:28"
+      "size_bytes": 2050,
+      "mtime_iso": "2025-12-12T06:57:31"
     },
     {
       "path": "tests/compat/test_queue_compat_v2.py",
-      "size_bytes": 1719,
-      "mtime_iso": "2025-12-10T21:18:32"
+      "size_bytes": 1790,
+      "mtime_iso": "2025-12-11T23:25:09"
     },
     {
       "path": "tests/compat/test_replay_compat_v2.py",
-      "size_bytes": 1263,
-      "mtime_iso": "2025-12-10T21:18:36"
+      "size_bytes": 1358,
+      "mtime_iso": "2025-12-11T23:25:09"
     },
     {
       "path": "tests/compat/data/history_compat_v2/history_v2_0_pre_njr.jsonl",
@@ -4885,6 +4930,11 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
+      "path": "tests/controller/test_builder_pipeline_contract_v2_6.py",
+      "size_bytes": 1712,
+      "mtime_iso": "2025-12-11T22:09:10"
+    },
+    {
       "path": "tests/controller/test_cluster_controller.py",
       "size_bytes": 532,
       "mtime_iso": "2025-11-22T18:13:44"
@@ -5000,39 +5050,14 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
-      "path": "tests/controller/test_pipeline_config_assembler.py",
-      "size_bytes": 1347,
-      "mtime_iso": "2025-12-11T20:33:54"
-    },
-    {
-      "path": "tests/controller/test_pipeline_config_assembler_core_fields.py",
-      "size_bytes": 1000,
-      "mtime_iso": "2025-12-11T20:33:54"
-    },
-    {
-      "path": "tests/controller/test_pipeline_config_assembler_model_fields.py",
-      "size_bytes": 468,
-      "mtime_iso": "2025-12-11T20:33:54"
-    },
-    {
-      "path": "tests/controller/test_pipeline_config_assembler_negative_prompt.py",
-      "size_bytes": 407,
-      "mtime_iso": "2025-12-11T20:33:54"
-    },
-    {
       "path": "tests/controller/test_pipeline_config_assembler_output_settings.py",
-      "size_bytes": 780,
-      "mtime_iso": "2025-12-11T20:33:54"
-    },
-    {
-      "path": "tests/controller/test_pipeline_config_assembler_resolution.py",
-      "size_bytes": 422,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 58,
+      "mtime_iso": "2025-12-11T22:09:10"
     },
     {
       "path": "tests/controller/test_pipeline_controller_config_path.py",
-      "size_bytes": 1246,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 1027,
+      "mtime_iso": "2025-12-11T22:09:10"
     },
     {
       "path": "tests/controller/test_pipeline_controller_history_refresh_v2.py",
@@ -5291,8 +5316,8 @@
     },
     {
       "path": "tests/gui_v2/test_pipeline_config_panel_lora_runtime.py",
-      "size_bytes": 1761,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 1982,
+      "mtime_iso": "2025-12-11T22:11:15"
     },
     {
       "path": "tests/gui_v2/test_pipeline_defaults_v2.py",
@@ -5351,8 +5376,8 @@
     },
     {
       "path": "tests/gui_v2/test_pipeline_stage_checkbox_order_v2.py",
-      "size_bytes": 884,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 1041,
+      "mtime_iso": "2025-12-11T22:11:15"
     },
     {
       "path": "tests/gui_v2/test_pipeline_tab_layout_v2.py",
@@ -5591,8 +5616,8 @@
     },
     {
       "path": "tests/integration/test_end_to_end_pipeline_v2.py",
-      "size_bytes": 23479,
-      "mtime_iso": "2025-12-11T06:19:03"
+      "size_bytes": 24202,
+      "mtime_iso": "2025-12-12T06:44:46"
     },
     {
       "path": "tests/integration/test_golden_path_suite_v2_6.py",

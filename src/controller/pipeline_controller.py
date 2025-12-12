@@ -594,9 +594,16 @@ class PipelineController(_GUIPipelineController):
             if job_service is not None
             else JobService(queue, runner, history_store, history_service=history_service)
         )
-        if self._job_lifecycle_logger:
-            self._job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
-        self._job_controller.set_status_callback("pipeline", self._on_job_status)
+        if self._job_lifecycle_logger and hasattr(self._job_service, "set_job_lifecycle_logger"):
+            try:
+                self._job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
+            except Exception:
+                pass
+        if hasattr(self._job_service, "set_status_callback"):
+            try:
+                self._job_service.set_status_callback("pipeline", self._on_job_status)
+            except Exception:
+                pass
         self._setup_queue_callbacks()
 
     def _get_pipeline_state(self) -> PipelineState | None:

@@ -256,16 +256,26 @@ def job_service(
     """Provide a job service with stub runner."""
 
     def run_job(job: Job) -> dict[str, Any]:
-        """Execute job using stub runner."""
-        config = job.pipeline_config
-        if config is None:
-            return {"error": "No pipeline config"}
+        """Execute job using stub runner, normalizing pipeline_config and returning stable contract keys."""
+        config_obj = job.pipeline_config
+        if config_obj is None:
+            return {"job_id": job.job_id, "success": False, "error": "No pipeline config"}
+
+        # compat: pipeline_config may be a dict snapshot now
+        if isinstance(config_obj, dict):
+            config = PipelineConfig(**config_obj)
+        else:
+            config = config_obj  # already PipelineConfig
 
         result = stub_runner.run(config)
+        # Always return stable runner contract keys
+        outputs = [img for v in result.variants for img in (v.get("images") or [])]
         return {
             "job_id": job.job_id,
             "success": result.success,
             "variants": result.variants,
+            "outputs": outputs,
+            "artifacts": {"variants": result.variants},
             "run_mode": job.run_mode,
             "source": job.source,
         }

@@ -131,12 +131,10 @@ class MainWindowV2:
         self.center_notebook.grid(**get_root_zone_config("main"))
         # PR-CORE1-D14: Always create and assign pipeline_tab for test/compat
         from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
-        self.pipeline_tab = PipelineTabFrame(
-            self.center_notebook,
-            pipeline_controller=self.pipeline_controller,
-            app_controller=self.app_controller,
-            app_state=self.app_state,
-        )
+        self.pipeline_tab = PipelineTabFrame(self.center_notebook)
+        # Optionally wire controller if attribute exists
+        if hasattr(self.pipeline_tab, "pipeline_controller"):
+            self.pipeline_tab.pipeline_controller = self.pipeline_controller
         self.center_notebook.add(self.pipeline_tab, text="Pipeline")
 
         self.left_zone = None

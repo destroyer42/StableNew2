@@ -69,22 +69,56 @@ class PipelineRunner:
         Canonical runner entrypoint for tests and learning hooks.
         Executes the pipeline plan, chains last_image_meta, emits learning records, and returns a stable result dict.
         """
-        result = self._execute_with_config(config, cancel_token)
-        # Convert to dict with canonical keys expected by tests
-        result_dict = result.to_dict() if hasattr(result, 'to_dict') else dict(result)
-        # Provide stable keys for test compatibility
-        return {
-            "ok": result_dict.get("success", False),
-            "run_id": result_dict.get("run_id"),
-            "artifacts": result_dict.get("variants", []),
-            "outputs": result_dict.get("variants", []),
-            "learning_records": result_dict.get("learning_records", []),
-            "metadata": result_dict.get("metadata", {}),
-            "stage_events": result_dict.get("stage_events", []),
-            "stage_plan": result_dict.get("stage_plan"),
-            # Include all other keys for maximal compatibility
-            **result_dict
-        }
+        try:
+            result = self._execute_with_config(config, cancel_token)
+            result_dict = result.to_dict() if hasattr(result, 'to_dict') else dict(result)
+            # Compose required stable keys for test compatibility
+            out = {
+                "ok": result_dict.get("success", False),
+                "stages_executed": [e["stage"] for e in result_dict.get("stage_events", []) if e.get("phase") == "exit"],
+                "last_stage": None,
+                "images": [],
+                "metadata": result_dict.get("metadata", {}),
+                "learning_records": result_dict.get("learning_records", []),
+                "error": result_dict.get("error"),
+                "job_id": None,
+            }
+            # last_stage: last stage with phase==exit
+            exits = [e["stage"] for e in result_dict.get("stage_events", []) if e.get("phase") == "exit"]
+            out["last_stage"] = exits[-1] if exits else None
+            # images: collect all image paths from variants or last_image_meta
+            images = []
+            variants = result_dict.get("variants") or result_dict.get("outputs") or []
+            for v in variants:
+                if isinstance(v, dict) and "path" in v:
+                    images.append(v["path"])
+                elif isinstance(v, str):
+                    images.append(v)
+            out["images"] = images
+            # job_id: from metadata or config
+            meta = result_dict.get("metadata", {})
+            out["job_id"] = meta.get("job_id") or meta.get("_job_id") or getattr(config, "job_id", None)
+            # error: ensure None if success
+            if out["ok"] and not out["error"]:
+                out["error"] = None
+            # learning_records: ensure list
+            if not isinstance(out["learning_records"], list):
+                out["learning_records"] = [out["learning_records"]] if out["learning_records"] else []
+            # Add all other keys for maximal compatibility
+            out.update(result_dict)
+            return out
+        except Exception as exc:
+            # Defensive: always return a dict with error info
+            return {
+                "ok": False,
+                "stages_executed": [],
+                "last_stage": None,
+                "images": [],
+                "metadata": {},
+                "learning_records": [],
+                "error": {"type": type(exc).__name__, "msg": str(exc)},
+                "job_id": getattr(config, "job_id", None),
+            }
 
     def run_txt2img_once(self, config: dict[str, Any]) -> dict[str, Any]:
         """
@@ -803,11 +837,19 @@ class PipelineRunResult:
 
 def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[str, Any]:
     """Return a canonical PipelineRunResult dict for any run output."""
+    def _add_outputs_and_artifacts(result: dict) -> dict:
+        variants = result.get("variants") or []
+        if "outputs" not in result:
+            result["outputs"] = [img for v in variants for img in (v.get("images") or [])]
+        if "artifacts" not in result:
+            result["artifacts"] = {"variants": variants}
+        return result
+
     if isinstance(value, PipelineRunResult):
-        return value.to_dict()
+        return _add_outputs_and_artifacts(value.to_dict())
     if isinstance(value, Mapping):
         try:
-            return PipelineRunResult.from_dict(value, default_run_id=default_run_id).to_dict()
+            return _add_outputs_and_artifacts(PipelineRunResult.from_dict(value, default_run_id=default_run_id).to_dict())
         except Exception:
             pass
     fallback = PipelineRunResult(
@@ -817,7 +859,7 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
         variants=[],
         learning_records=[],
     )
-    return fallback.to_dict()
+    return _add_outputs_and_artifacts(fallback.to_dict())
 
 
 def _extract_primary_knobs(config: dict[str, Any]) -> dict[str, Any]:

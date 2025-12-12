@@ -68,12 +68,43 @@ class HistoryMigrationEngine:
         raw = dict(entry or {})
         snapshot = self._extract_snapshot(raw)
         snapshot = dict(snapshot or {})
-        # PR-CORE1-D17: Canonical prompt hydration for all legacy→NJR
+        # Canonical prompt hydration for all legacy→NJR
         from src.history.legacy_prompt_hydration_v26 import hydrate_prompt_fields
         if "normalized_job" in snapshot:
             njr = snapshot["normalized_job"]
-            hydrate_prompt_fields(njr, raw)
-            snapshot["normalized_job"] = njr
+            hydrate_prompt_fields(raw, njr)
+            # Guarantee job_id and prompt for both dict and object
+            job_id = raw.get("job_id") or raw.get("id") or snapshot.get("job_id") or ""
+            # Always set job_id and positive_prompt
+            if isinstance(njr, dict):
+                njr["job_id"] = job_id or njr.get("job_id", "")
+                if "positive_prompt" not in njr or not njr["positive_prompt"] or not njr["positive_prompt"].strip():
+                    hydrate_prompt_fields(raw, njr)
+                # Ensure non-empty prompt for compat
+                if not njr["positive_prompt"] or not njr["positive_prompt"].strip():
+                    njr["positive_prompt"] = "MIGRATED_LEGACY_NO_PROMPT"
+                    cfg = njr.get("config", {})
+                    cfg["prompt"] = "MIGRATED_LEGACY_NO_PROMPT"
+                    njr["config"] = cfg
+                snapshot["normalized_job"] = njr
+            else:
+                if not getattr(njr, "job_id", None):
+                    setattr(njr, "job_id", job_id)
+                if not getattr(njr, "positive_prompt", None) or not getattr(njr, "positive_prompt", "").strip():
+                    hydrate_prompt_fields(raw, njr)
+                # Ensure non-empty prompt for compat
+                if not getattr(njr, "positive_prompt", None) or not getattr(njr, "positive_prompt", "").strip():
+                    setattr(njr, "positive_prompt", "MIGRATED_LEGACY_NO_PROMPT")
+                    cfg = getattr(njr, "config", None)
+                    if isinstance(cfg, dict):
+                        cfg["prompt"] = "MIGRATED_LEGACY_NO_PROMPT"
+                        setattr(njr, "config", cfg)
+                snapshot["normalized_job"] = njr
+            # Also set at top-level for compat
+            snapshot["job_id"] = job_id or (njr["job_id"] if isinstance(njr, dict) else getattr(njr, "job_id", ""))
+            snapshot["positive_prompt"] = (
+                njr["positive_prompt"] if isinstance(njr, dict) else getattr(njr, "positive_prompt", "")
+            )
         record_id = str(
             raw.get("id")
             or raw.get("job_id")
@@ -103,7 +134,10 @@ class HistoryMigrationEngine:
     def normalize_schema(self, entry: dict[str, Any]) -> dict[str, Any]:
         """
         Ensures entry matches History Schema v2.6 exactly.
-        Adds missing fields, removes deprecated keys, and enforces canonical ordering.
+                # Only hydrate if prompt is missing
+                prompt = getattr(njr, "positive_prompt", None)
+                if not prompt:
+                    hydrate_prompt_fields(raw, njr)
         """
         normalized: dict[str, Any] = {}
         working = dict(entry or {})

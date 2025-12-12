@@ -33,7 +33,7 @@ def test_history_migration_engine_hydrates_legacy_entries(filename: str, version
         assert record.history_schema == "2.6"
         assert record.njr_snapshot
 
-        njr = normalized_job_from_snapshot({"normalized_job": record.njr_snapshot})
+        njr = normalized_job_from_snapshot(record.njr_snapshot)
         assert njr is not None
         assert njr.job_id
         prompt = njr.positive_prompt or (njr.config.get("prompt") if hasattr(njr, "config") and isinstance(njr.config, dict) else None)

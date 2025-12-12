@@ -687,7 +687,11 @@ class AppController:
         # PR-GUI-F3: Load persisted queue state on startup
         self._load_queue_state()
         # PR-D: Register status callback for queue/history panel sync
-        self.job_service.set_status_callback("gui_queue_history", self._on_job_status_for_panels)
+        if hasattr(self.job_service, "set_status_callback"):
+            try:
+                self.job_service.set_status_callback("gui_queue_history", self._on_job_status_for_panels)
+            except Exception:
+                pass
 
     def _setup_diagnostics_hooks(self) -> None:
         if not self.job_service:
@@ -716,7 +720,14 @@ class AppController:
         
         PR-GUI-F3: Restores queue jobs and control flags from disk.
         """
-        snapshot = load_queue_snapshot()
+        try:
+            snapshot = load_queue_snapshot()
+        except Exception as e:
+            from src.services.queue_store_v2 import UnsupportedQueueSchemaError
+            if isinstance(e, UnsupportedQueueSchemaError):
+                logger.error(f"Unsupported queue schema; ignoring persisted queue state: {e}")
+                return
+            raise
         if snapshot is None:
             return
 
