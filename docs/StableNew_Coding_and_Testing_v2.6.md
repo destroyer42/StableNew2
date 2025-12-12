@@ -377,7 +377,7 @@ Any reference to “manual prompt mode”
 Before removal, tests must be updated.
 
 Controller-focused tests must construct controllers without injecting `StateManager`/`GUIState`; GUI state machinery belongs in `tests/gui` (see `tests/gui/test_state_manager_legacy.py` for the legacy coverage removed from controller specs). These tests must also avoid JobBundle/JobBundleSummaryDTO assertions—coverage should rely on AppStateV2.job_draft + `NormalizedJobRecord` outputs instead of legacy bundles.
-Tests must not assert against legacy job DTOs (`JobUiSummary`, `JobQueueItemDTO`, `JobHistoryItemDTO`); controller and history tests should derive summaries via `JobView.from_njr()` (or `JobHistoryService.summarize_history_record()`) and never reconstruct pipeline_config fragments.
+Tests must not assert against legacy job DTOs (`JobUiSummary`, `JobQueueItemDTO`, `JobHistoryItemDTO`); controller and history tests should derive summaries via `JobView.from_njr()` (or `JobHistoryService.summarize_history_record()`) and never reconstruct legacy configuration fragments.
 
 5. Controller Integration Rules
 
@@ -434,11 +434,11 @@ New rules for queue execution path after B2:
 
 **REQUIRED:** If a Job has `normalized_record`, the queue execution path MUST use `run_njr` via `_run_job`.
 
-**FORBIDDEN:** Controllers, JobService, and Queue/Runner MUST NOT reference `pipeline_config` on `Job` instances; the field no longer exists in the queue model (PR-CORE1-C2).
+**FORBIDDEN:** Controllers, JobService, and Queue/Runner MUST NOT reference legacy configuration fields on `Job` instances; the queue model removed them in PR-CORE1-C2.
 
-**FORBIDDEN:** If NJR execution fails for an NJR-backed job, the execution path MUST NOT fall back to `pipeline_config`. The job should be marked as failed.
+**FORBIDDEN:** If NJR execution fails for an NJR-backed job, the execution path MUST NOT fall back to legacy configuration payloads. The job should be marked as failed.
 
-**LEGACY-ONLY:** `pipeline_config` execution branch is allowed ONLY for jobs without `_normalized_record` (imported from old history, pre-v2.6 jobs).
+**PROHIBITED:** No legacy configuration execution branch exists; imported history must be migrated to NJR before enqueueing.
 
 AppController._execute_job MUST check for `_normalized_record` FIRST. If present, use NJR path exclusively.
 
@@ -446,9 +446,9 @@ AppController._execute_job MUST check for `_normalized_record` FIRST. If present
 
 All jobs created via `PipelineController._to_queue_job` MUST have `_normalized_record` attached.
 
-`pipeline_config` field no longer exists on Job objects created via JobBuilderV2; new jobs rely solely on NJR snapshots (PR-CORE1-C2). Legacy pipeline_config data lives only in history entries and is rehydrated via `legacy_njr_adapter.build_njr_from_legacy_pipeline_config()`.
+Legacy configuration fields no longer exist on Job objects created via JobBuilderV2; new jobs rely solely on NJR snapshots (PR-CORE1-C2). Historical configuration blobs live only in history entries and are rehydrated through `legacy_njr_adapter` when migrating old data.
 
-**PR-CORE1-B4:** `PipelineRunner.run(config)` no longer exists. Tests (both unit and integration) must exercise `run_njr()` exclusively and may rely on the legacy adapter if they need to replay pipeline_config-only data.
+**PR-CORE1-B4:** `PipelineRunner.run(config)` no longer exists. Tests (both unit and integration) must exercise `run_njr()` exclusively and may rely on the legacy adapter only when replaying archival configuration-only data.
 
 **Testing Requirements:**
 
@@ -456,11 +456,11 @@ All golden-path E2E tests MUST assert NJR execution is used for new queue jobs.
 
 Tests MUST verify that `_run_job` is called when `_normalized_record` is present.
 
-Tests MUST verify that NJR execution failures result in job error status (NO fallback to pipeline_config).
-Tests MUST verify that new queue jobs do not expose a `pipeline_config` field (PR-CORE1-C2); any legacy coverage should work through history data only.
-Tests covering queue persistence (`tests/queue/test_job_queue_persistence_v2.py`, `tests/queue/test_job_history_store.py`) must inspect `state/queue_state_v2.json` and assert every entry ships with `njr_snapshot` plus queue metadata only (`queue_id`, `priority`, `status`, `created_at`, optional auto-run/paused flags) and that forbidden keys like `pipeline_config`, `_normalized_record`, or `draft`/`bundle` blobs never survive serialization; this proves queue I/O already matches history’s NJR semantics until D6 unifies the queue file with history’s JSONL codec.
+Tests MUST verify that NJR execution failures result in job error status (NO fallback to legacy configuration payloads).
+Tests MUST verify that new queue jobs do not expose legacy configuration fields (PR-CORE1-C2); any legacy coverage should work through history data only.
+Tests covering queue persistence (`tests/queue/test_job_queue_persistence_v2.py`, `tests/queue/test_job_history_store.py`) must inspect `state/queue_state_v2.json` and assert every entry ships with `njr_snapshot` plus queue metadata only (`queue_id`, `priority`, `status`, `created_at`, optional auto-run/paused flags) and that forbidden keys like legacy configuration blobs, `_normalized_record`, or `draft`/`bundle` blobs never survive serialization; this proves queue I/O already matches history’s NJR semantics until D6 unifies the queue file with history’s JSONL codec.
 Tests covering any JSONL persistence must leverage `JSONLCodec` (`src.utils.jsonl_codec`) and the accompanying `tests/utils/test_jsonl_codec.py` helpers to verify deterministic serialization, sorted keys, trailing newlines, and standardized skipping/logging of corrupt lines, instead of reimplementing ad-hoc JSONL readers or writers.
-Tests MUST NOT reference `pipeline_config` or legacy job dicts in persistence/replay suites; all history-oriented tests hydrate NJRs from snapshots.
+Tests MUST NOT reference legacy configuration blobs or legacy job dicts in persistence/replay suites; all history-oriented tests hydrate NJRs from snapshots.
 Tests covering history persistence/replay MUST exercise `HistoryMigrationEngine` (legacy → NJR) and assert `history_schema == "2.6"` with no deprecated/draft-bundle fields present in persisted snapshots. History JSONL writes must be deterministic (key ordering stable); tests SHOULD compare `json.dumps(entry, sort_keys=True)` across saves to enforce determinism.
 
 Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
@@ -471,7 +471,7 @@ Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(
 - Replay vs fresh runs MUST produce identical RunPlans for the same NJR.
 - Tests MUST NOT construct alternate replay payloads or bypass the unified NJR → RunPlan → Runner path.
 
-Tests for legacy jobs (without NJR) MUST verify `pipeline_config` branch still works.
+Tests for legacy jobs (without NJR) MUST verify they are migrated to NJR or rejected; no legacy configuration branch remains.
 
 6. GUI Integration Rules
 

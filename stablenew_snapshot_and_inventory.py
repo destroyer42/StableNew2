@@ -41,7 +41,12 @@ DEFAULT_EXCLUDES = {
     "node_modules",
     ".DS_Store",
     "snapshots",
+    "logs",
+    "output",
     "archive_tmp",
+    "runs",
+    "htmlcov",
+    "archive",
 }
 
 # File extensions to skip (log files, big binaries, etc.) — tweak as needed

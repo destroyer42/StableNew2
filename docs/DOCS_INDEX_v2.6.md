@@ -141,6 +141,8 @@ These should be moved to:
 
 docs/archive/v2.0–v2.5/
 
+Any template or design doc describing the legacy pipeline configuration era is archived under `docs/older/pr_templates_pipeline_config/README.md` and must not be used for v2.6+ work.
+
 3. Required Document Reading Order
 
 New contributors and agents must follow this exact order:

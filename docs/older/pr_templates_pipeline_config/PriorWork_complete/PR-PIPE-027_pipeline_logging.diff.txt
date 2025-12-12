@@ -1,0 +1,36 @@
+PR: PR-PIPE-027 — Pipeline early-out consistency and cancellation logging polish
+NOTE: Only apply this PR after PR-PIPE-026 has been merged.
+
+1) File: src/pipeline/executor.py
+
+   - Replace ad-hoc cancellation log messages added in PR-PIPE-026 with a standardized format. For example:
+
+       logger.info("✋ Pipeline cancelled during %s; aborting remaining stages.", phase)
+
+     where `phase` might be "txt2img", "img2img", or "full pipeline".
+   - Ensure all `except CancellationError` blocks use the same wording and log level (INFO is recommended).
+
+2) File: src/utils/structured_logger.py (or equivalent, if present)
+
+   - If a status field already exists in pipeline manifests, ensure that when a CancellationError is caught at the pipeline boundary, the manifest records a status of "cancelled".
+   - For successful runs, keep the existing status (e.g. "success").
+   - For hard failures (non-cancellation exceptions), keep the existing "error" or equivalent status.
+   - Do not change the schema; only the values written.
+
+3) Tests
+
+   - Add or update tests to assert cancellation logging and status. For example:
+
+       def test_pipeline_cancel_logging_and_status(caplog, pipeline_factory, cancel_token):
+           pipeline = pipeline_factory()
+           cancel_token.cancel()
+
+           with caplog.at_level(logging.INFO):
+               results = pipeline.run_full_pipeline(config, cancel_token)
+
+           assert results == []
+           assert any("Pipeline cancelled" in msg for msg in caplog.messages)
+
+           # If there is a manifest or structured logger output, assert status == "cancelled".
+
+   - Keep these tests focused; do not re-test all pipeline behavior here.

@@ -1,0 +1,121 @@
+PR-GUI-V2-SCAFFOLD-ZONEMAP-FIXES-001(P1V3)(11-28-25)
+
+
+---
+
+## 2) Codex / GPT-Max Prompt to Implement This PR
+```text
+You are implementing PR-GUI-V2-SCAFFOLD-ZONEMAP-FIXES-001(P1V3)(11-28-25) in the StableNew repo.
+
+GOAL
+Stabilize the V2 GUI scaffold so that:
+- MainWindowV2 exposes consistent zone attributes (header_zone, left_zone, bottom_zone, main_zone).
+- AppController can attach to those zones without crashes.
+- Tkinter no longer throws errors for unknown widget options like "-config_manager".
+Do NOT redesign the UI. This is about wiring and robustness, not aesthetics.
+
+PRECONDITIONS (I will handle)
+- I will run the snapshot script before you make changes.
+
+SCOPE (what you MAY touch)
+- src/gui/main_window_v2.py
+- src/controller/app_controller.py
+- src/app_factory.py (or equivalent V2 app factory)
+- src/gui/base_stage_card_v2.py
+- src/gui/advanced_txt2img_stage_card_v2.py
+- Optionally add: src/gui/layout/zone_map_v2.py
+
+OUT OF SCOPE (do NOT touch)
+- src/pipeline/executor.py
+- WebUI API client behavior
+- Any *_v1 GUI files (read-only if needed)
+- Randomization, learning, or advanced prompt features
+- Dropdown wiring to discovery/payload (handled in later PRs)
+
+TASKS
+
+1) Add a small declarative zone map for V2 GUI.
+
+If there is no existing equivalent, create:
+- src/gui/layout/zone_map_v2.py
+
+Implement something like:
+- ZoneName enum (HEADER, LEFT, BOTTOM, MAIN)
+- ZoneSpec dataclass with:
+  - attr_name: the attribute name expected on MainWindowV2 (e.g. "header_zone")
+  - description: short human-readable description
+- ZONE_MAP_V2: dict[ZoneName, ZoneSpec]
+
+Example (you can adjust names as needed, but keep them consistent):
+
+- HEADER -> "header_zone"
+- LEFT -> "left_zone"
+- BOTTOM -> "bottom_zone"
+- MAIN -> "main_zone"
+
+2) Ensure MainWindowV2 creates and owns its zones.
+
+In src/gui/main_window_v2.py:
+
+- In MainWindowV2.__init__ (or equivalent constructor):
+  - Create attributes:
+    - self.header_zone = ttk.Frame(self, ...)
+    - self.left_zone = ttk.Frame(self, ...)
+    - self.bottom_zone = ttk.Frame(self, ...)
+    - self.main_zone = ttk.Frame(self, ...)
+  - Pack/grid them into a reasonable layout (existing layout patterns are fine; keep it minimal).
+  - The key is: by the time MainWindowV2 is constructed, these attributes exist and are valid Tk/ttk containers.
+
+3) Fix AppController wiring to use the zones safely.
+
+In src/controller/app_controller.py:
+
+- In __init__:
+  - It is okay to call a helper like self._attach_to_gui(), but do NOT assume zones exist without checks.
+
+- In _attach_to_gui (or similar method):
+  - Read zone attributes from self.main_window:
+    - header_zone = getattr(self.main_window, "header_zone", None)
+    - left_zone = getattr(self.main_window, "left_zone", None)
+    - bottom_zone = getattr(self.main_window, "bottom_zone", None)
+    - main_zone = getattr(self.main_window, "main_zone", None)
+  - If any required zones are missing:
+    - Log a warning listing which ones are missing.
+    - Return early to avoid crashes.
+  - If they are present:
+    - Attach panels to the correct zones, following existing design intent (e.g., status panel goes into bottom_zone, pipeline controls into left_zone, etc.).
+  - Ensure no code path in _attach_to_gui or _update_status raises AttributeError due to missing zone attributes or missing status labels.
+
+- In _update_status (or equivalent):
+  - Access bottom_zone and its status_label only after verifying they exist.
+  - If not wired yet, log and skip instead of raising.
+
+4) Ensure build_v2_app uses the correct construction order.
+
+In src/app_factory.py (or equivalent file that defines build_v2_app for V2):
+
+- Ensure the order is:
+  - root = tk.Tk()
+  - window = MainWindowV2(root, ...)
+  - pipeline_runner = ...
+  - app_controller = AppController(window, pipeline_runner=pipeline_runner, threaded=threaded)
+- The important invariant:
+  - MainWindowV2 (and its zones) must exist BEFORE AppController tries to attach GUI elements.
+- If necessary, you may:
+  - Move the attach_to_gui call out of AppController.__init__ and call it explicitly in build_v2_app, but keep this change minimal and consistent.
+
+5) Fix Tkinter/Ttk widget kwarg misuse (e.g., config_manager).
+
+In src/gui/base_stage_card_v2.py:
+
+- Identify where ttk.Frame (or similar) is initialized with non-Tk kwargs, especially:
+  - config_manager
+- Ensure that only valid Tk/Ttk kwargs are passed into super().__init__.
+- Pattern to use:
+
+  ```python
+  class BaseStageCardV2(ttk.Frame):
+      def __init__(self, parent, config_manager: ConfigManagerV2 | None = None, **kwargs):
+          self.config_manager = config_manager
+          frame_kwargs = {k: v for k, v in kwargs.items() if k not in ("config_manager",)}
+          super().__init__(parent, **frame_kwargs)
