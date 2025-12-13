@@ -182,6 +182,16 @@ class MainWindowV2:
         except Exception:
             pass
 
+        # --- UI Heartbeat: Tk thread liveness signal ---
+        self._install_ui_heartbeat()
+
+    def _install_ui_heartbeat(self):
+        def _tick():
+            if self.app_controller and hasattr(self.app_controller, "update_ui_heartbeat"):
+                self.app_controller.update_ui_heartbeat()
+            self.root.after(250, _tick)
+        self.root.after(250, _tick)
+
     # Compatibility hook for controllers
     def connect_controller(self, controller) -> None:
         self.controller = controller

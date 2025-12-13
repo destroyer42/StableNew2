@@ -59,66 +59,97 @@ class PipelineConfig:
     hires_fix: dict[str, Any] = field(default_factory=dict)
 
 
+
 class PipelineRunner:
     """
     Adapter that drives the real multi-stage Pipeline executor.
     """
 
-    def run(self, config: PipelineConfig, cancel_token: "CancelToken") -> dict:
+    def run_njr(
+        self,
+        njr: NormalizedJobRecord,
+        cancel_token: "CancelToken" | None = None,
+        log_fn: Optional[Callable[[str], None]] = None,
+        run_plan: Any | None = None,
+    ) -> "PipelineRunResult":
         """
-        Canonical runner entrypoint for tests and learning hooks.
-        Executes the pipeline plan, chains last_image_meta, emits learning records, and returns a stable result dict.
+        Execute the pipeline using a NormalizedJobRecord (NJR-only, v2.6+ contract).
+        This is the ONLY supported production entrypoint.
         """
+        # Build run plan directly from NJR
+        from src.pipeline.run_plan import build_run_plan_from_njr
+        plan = build_run_plan_from_njr(njr)
+        # Prepare output dir and metadata
+        run_id = str(uuid4())
+        run_dir = Path(self._runs_base_dir) / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stage_events: list[dict[str, Any]] = []
+        success = False
+        error = None
+        variants = []
+        learning_records = []
+        metadata = dict(njr.config or {})
         try:
-            result = self._execute_with_config(config, cancel_token)
-            result_dict = result.to_dict() if hasattr(result, 'to_dict') else dict(result)
-            # Compose required stable keys for test compatibility
-            out = {
-                "ok": result_dict.get("success", False),
-                "stages_executed": [e["stage"] for e in result_dict.get("stage_events", []) if e.get("phase") == "exit"],
-                "last_stage": None,
-                "images": [],
-                "metadata": result_dict.get("metadata", {}),
-                "learning_records": result_dict.get("learning_records", []),
-                "error": result_dict.get("error"),
-                "job_id": None,
-            }
-            # last_stage: last stage with phase==exit
-            exits = [e["stage"] for e in result_dict.get("stage_events", []) if e.get("phase") == "exit"]
-            out["last_stage"] = exits[-1] if exits else None
-            # images: collect all image paths from variants or last_image_meta
-            images = []
-            variants = result_dict.get("variants") or result_dict.get("outputs") or []
-            for v in variants:
-                if isinstance(v, dict) and "path" in v:
-                    images.append(v["path"])
-                elif isinstance(v, str):
-                    images.append(v)
-            out["images"] = images
-            # job_id: from metadata or config
-            meta = result_dict.get("metadata", {})
-            out["job_id"] = meta.get("job_id") or meta.get("_job_id") or getattr(config, "job_id", None)
-            # error: ensure None if success
-            if out["ok"] and not out["error"]:
-                out["error"] = None
-            # learning_records: ensure list
-            if not isinstance(out["learning_records"], list):
-                out["learning_records"] = [out["learning_records"]] if out["learning_records"] else []
-            # Add all other keys for maximal compatibility
-            out.update(result_dict)
-            return out
+            # For each stage in the plan, execute and collect results
+            last_image_meta = None
+            prompt = getattr(njr, "positive_prompt", "") or ""
+            negative_prompt = getattr(njr, "negative_prompt", "") or ""
+            for stage in plan.jobs:
+                # Build payload for this stage
+                payload = {
+                    "prompt": stage.prompt_text,
+                    "negative_prompt": negative_prompt,
+                    "model": stage.model,
+                    "sampler_name": stage.sampler,
+                    "steps": njr.steps or 20,
+                    "cfg_scale": stage.cfg_scale or njr.cfg_scale or 7.5,
+                    "width": njr.width or 1024,
+                    "height": njr.height or 1024,
+                }
+                # Call the appropriate pipeline stage
+                result = self._pipeline.run_txt2img_stage(
+                    payload["prompt"],
+                    payload["negative_prompt"],
+                    payload,
+                    run_dir,
+                    image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
+                    cancel_token=cancel_token,
+                )
+                variants.append(result)
+                stage_events.append({
+                    "stage": stage.stage_name,
+                    "phase": "exit",
+                    "image_index": 1,
+                    "total_images": 1,
+                    "cancelled": False,
+                })
+            success = True
         except Exception as exc:
-            # Defensive: always return a dict with error info
-            return {
-                "ok": False,
-                "stages_executed": [],
-                "last_stage": None,
-                "images": [],
-                "metadata": {},
-                "learning_records": [],
-                "error": {"type": type(exc).__name__, "msg": str(exc)},
-                "job_id": getattr(config, "job_id", None),
-            }
+            error = str(exc)
+            stage_events.append({
+                "stage": stage.stage_name if 'stage' in locals() else "pipeline",
+                "phase": "error",
+                "image_index": 1,
+                "total_images": 1,
+                "cancelled": True,
+                "error_message": str(exc),
+            })
+        result = PipelineRunResult(
+            run_id=run_id,
+            success=success,
+            error=error,
+            variants=variants,
+            learning_records=learning_records,
+            randomizer_mode=getattr(njr, "randomizer_mode", ""),
+            randomizer_plan_size=getattr(njr, "variant_total", 1),
+            metadata=metadata,
+            stage_plan=plan,
+            stage_events=stage_events,
+        )
+        self._last_run_result = result
+        return result
+
+    # Remove legacy run() and _pipeline_config_from_njr from production path
 
     def run_txt2img_once(self, config: dict[str, Any]) -> dict[str, Any]:
         """
@@ -836,20 +867,15 @@ class PipelineRunResult:
 
 
 def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[str, Any]:
-    """Return a canonical PipelineRunResult dict for any run output."""
-    def _add_outputs_and_artifacts(result: dict) -> dict:
-        variants = result.get("variants") or []
-        if "outputs" not in result:
-            result["outputs"] = [img for v in variants for img in (v.get("images") or [])]
-        if "artifacts" not in result:
-            result["artifacts"] = {"variants": variants}
-        return result
-
+    """
+    Return a canonical PipelineRunResult dict for any run output.
+    Ensures all execution metadata (including run_mode, source) is present in the metadata dict.
+    """
     if isinstance(value, PipelineRunResult):
-        return _add_outputs_and_artifacts(value.to_dict())
+        return value.to_dict()
     if isinstance(value, Mapping):
         try:
-            return _add_outputs_and_artifacts(PipelineRunResult.from_dict(value, default_run_id=default_run_id).to_dict())
+            return PipelineRunResult.from_dict(dict(value), default_run_id=default_run_id).to_dict()
         except Exception:
             pass
     fallback = PipelineRunResult(
@@ -859,7 +885,7 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
         variants=[],
         learning_records=[],
     )
-    return _add_outputs_and_artifacts(fallback.to_dict())
+    return fallback.to_dict()
 
 
 def _extract_primary_knobs(config: dict[str, Any]) -> dict[str, Any]:

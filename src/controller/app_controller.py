@@ -205,8 +205,64 @@ class CancelToken:
 
 
 class AppController:
-    from src.api.webui_resources import WebUIResource
-    from src.pipeline.last_run_store_v2_5 import LastRunConfigV2_5
+    _queue_submit_in_progress: bool = False
+
+    def on_add_to_queue_clicked(self) -> None:
+        """Fire-and-forget async boundary for Add to Queue."""
+        if getattr(self, '_queue_submit_in_progress', False):
+            self._append_log("[D21] Queue submit already in progress; ignoring duplicate request.")
+            return
+        self._queue_submit_in_progress = True
+        jobs = getattr(self, '_draft_job_bundle', [])
+        self._draft_job_bundle = []
+        import threading
+        threading.Thread(
+            target=self._submit_jobs_async,
+            args=(jobs,),
+            daemon=True
+        ).start()
+
+    def _submit_jobs_async(self, jobs):
+        try:
+            for job in jobs:
+                self.job_service.submit_queued(job)
+        finally:
+            self._queue_submit_in_progress = False
+
+    def __init__(
+        self,
+        main_window: MainWindow | None,
+        pipeline_runner: Optional[PipelineRunner] = None,
+        threaded: bool = True,
+        packs_dir: Path | str | None = None,
+        api_client: SDWebUIClient | None = None,
+        structured_logger: StructuredLogger | None = None,
+        webui_process_manager: WebUIProcessManager | None = None,
+        config_manager: ConfigManager | None = None,
+        resource_service: WebUIResourceService | None = None,
+        job_service: JobService | None = None,
+        pipeline_controller: PipelineController | None = None,
+        ui_scheduler: callable = None,
+    ) -> None:
+        import threading
+        self._ui_thread_id = threading.get_ident()
+        self._ui_scheduler = ui_scheduler
+        # ...existing code...
+
+    def _ui_dispatch(self, fn):
+        import threading
+        if threading.get_ident() == self._ui_thread_id:
+            fn()
+            return
+        if self._ui_scheduler:
+            self._ui_scheduler(fn)
+            return
+        root = getattr(self.main_window, "root", None) or getattr(self.main_window, "master", None)
+        if root is not None and hasattr(root, "after"):
+            root.after(0, fn)
+            return
+        # fallback: run directly (test mode)
+        fn()
 
     def list_models(self) -> list[WebUIResource]:
         return self.resource_service.list_models()
@@ -271,7 +327,12 @@ class AppController:
         resource_service: WebUIResourceService | None = None,
         job_service: JobService | None = None,
         pipeline_controller: PipelineController | None = None,
+        ui_scheduler: callable = None,
     ) -> None:
+        import time
+        self.last_ui_heartbeat_ts = time.monotonic()
+        self.last_queue_activity_ts = time.monotonic()
+        self.last_runner_activity_ts = time.monotonic()
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
         if self.app_state is None:
@@ -279,6 +340,9 @@ class AppController:
             if main_window is not None:
                 setattr(main_window, "app_state", self.app_state)
         self._job_lifecycle_logger = JobLifecycleLogger(app_state=self.app_state)
+        import threading
+        self._ui_thread_id = threading.get_ident()
+        self._ui_scheduler = ui_scheduler
         self.state = AppState()
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
@@ -288,6 +352,17 @@ class AppController:
         self._last_run_auto_restored = False
         self._last_run_store = LastRunStoreV2_5()
         self._last_run_config: RunConfigDict | None = None
+    def update_ui_heartbeat(self):
+        import time
+        self.last_ui_heartbeat_ts = time.monotonic()
+
+    def notify_queue_activity(self):
+        import time
+        self.last_queue_activity_ts = time.monotonic()
+
+    def notify_runner_activity(self):
+        import time
+        self.last_runner_activity_ts = time.monotonic()
 
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
@@ -570,6 +645,9 @@ class AppController:
 
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint; uses explicit APIs and falls back to legacy run."""
+        import threading
+        thread_name = threading.current_thread().name
+        self._append_log(f"[D21] on_add_job_to_queue_v2 ENTRY (thread={thread_name})")
         self._ensure_run_mode_default("add_to_queue")
         controller = getattr(self, "pipeline_controller", None)
         run_config = self._prepare_queue_run_config()
@@ -577,19 +655,22 @@ class AppController:
             try:
                 count = controller.enqueue_draft_jobs(run_config=run_config)
                 if count > 0:
-                    self._append_log(f"[controller] Submitted {count} job(s) from preview to queue")
+                    self._append_log(f"[controller] Submitted {count} job(s) from preview to queue (thread={thread_name})")
+                    self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
                     return
             except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[controller] enqueue_draft_jobs error: {exc!r}")
+                self._append_log(f"[controller] enqueue_draft_jobs error: {exc!r} (thread={thread_name})")
         handler = getattr(self, "on_add_job_to_queue", None)
         if callable(handler):
             try:
                 handler()
+                self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
                 return
             except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[controller] fallback add job to queue error: {exc!r}")
+                self._append_log(f"[controller] fallback add job to queue error: {exc!r} (thread={thread_name})")
         self._ensure_run_mode_default("add_to_queue")
         self._start_run_v2(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
+        self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
 
     def _prepare_queue_run_config(self) -> dict[str, Any]:
         run_config = self._build_run_config(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
@@ -832,36 +913,7 @@ class AppController:
         except Exception:
             return default
 
-    def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
-        """Schedule fn to run on the Tk main thread if a dispatcher exists."""
-        if not self.main_window or fn is None:
-            return
-        log_with_ctx(
-            logger,
-            logging.DEBUG,
-            "gui_controller_scheduler | Scheduling callback on GUI thread",
-            ctx=LogContext(subsystem="gui_controller"),
-        )
-        try:
-            dispatcher = getattr(self.main_window, "run_in_main_thread", None)
-            if callable(dispatcher):
-                dispatcher(fn)
-                return
-        except Exception:
-            pass
-
-        try:
-            root = getattr(self.main_window, "root", None) or getattr(self.main_window, "master", None)
-            if root is not None and hasattr(root, "after"):
-                root.after(0, fn)
-                return
-        except Exception:
-            pass
-
-        try:
-            fn()
-        except Exception:
-            pass
+    # _run_in_gui_thread is now replaced by _ui_dispatch everywhere
 
     def _on_job_status_for_panels(self, job: Job, status: JobStatus | str) -> None:
         """Update queue/history panels when job status changes (PR-D callback)."""
@@ -930,7 +982,7 @@ class AppController:
                     except Exception as exc:
                         self._append_log(f"[controller] History panel append error: {exc!r}")
 
-        self._run_in_gui_thread(_apply_panel_updates)
+        self._ui_dispatch(_apply_panel_updates)
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self.app_state:
@@ -1258,32 +1310,38 @@ class AppController:
 
     def _update_status(self, text: str) -> None:
         """Update status bar text if the bottom zone is ready; otherwise cache it."""
+        import threading
         self._pending_status_text = text
-
+        thread_name = threading.current_thread().name
         status_bar = getattr(self.main_window, "status_bar_v2", None)
-        if status_bar and hasattr(status_bar, "update_status"):
-            try:
-                status_bar.update_status(text=text)
-            except Exception:
-                pass
-
-        bottom_zone = getattr(self.main_window, "bottom_zone", None)
-        if bottom_zone is None:
-            logger.debug(
-                "AppController._update_status(%s) called before bottom_zone exists; deferring",
-                text,
-            )
-            return
-
-        status_label = getattr(bottom_zone, "status_label", None)
-        if status_label is None:
-            logger.debug(
-                "AppController._update_status(%s) called before status_label exists on bottom_zone; deferring",
-                text,
-            )
-            return
-
-        status_label.configure(text=f"Status: {text}")
+        def do_update():
+            if status_bar and hasattr(status_bar, "update_status"):
+                try:
+                    status_bar.update_status(text=text)
+                except Exception:
+                    pass
+            bottom_zone = getattr(self.main_window, "bottom_zone", None)
+            if bottom_zone is None:
+                logger.debug(
+                    "AppController._update_status(%s) called before bottom_zone exists; deferring",
+                    text,
+                )
+                return
+            status_label = getattr(bottom_zone, "status_label", None)
+            if status_label is None:
+                logger.debug(
+                    "AppController._update_status(%s) called before status_label exists on bottom_zone; deferring",
+                    text,
+                )
+                return
+            status_label.configure(text=f"Status: {text}")
+        # Only update UI on main thread; otherwise, dispatch via root.after
+        root = getattr(self.main_window, "root", None)
+        if thread_name != "MainThread" and root is not None:
+            logger.debug(f"[D21] _update_status dispatching to UI thread (from {thread_name})")
+            root.after(0, do_update)
+        else:
+            do_update()
 
     def _update_webui_state(self, state: str) -> None:
         status_bar = getattr(self.main_window, "status_bar_v2", None)
@@ -3037,6 +3095,7 @@ class AppController:
             self.app_state.add_packs_to_job_draft(entries)
             self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
             self._refresh_preview_from_state()
+        # D21: Do NOT submit jobs to the queue here. Only update draft and preview. No queue interaction.
 
     def add_single_prompt_to_draft(self) -> None:
         """Capture the current prompt/negative pair in the pipeline draft summary."""

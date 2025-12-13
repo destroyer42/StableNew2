@@ -56,8 +56,8 @@ class JobQueue:
     def mark_completed(self, job_id: str, result: dict | None = None) -> None:
         self._update_status(job_id, JobStatus.COMPLETED, result=result)
 
-    def mark_failed(self, job_id: str, error_message: str) -> None:
-        job = self._update_status(job_id, JobStatus.FAILED, error_message)
+    def mark_failed(self, job_id: str, error_message: str, result: dict | None = None) -> None:
+        job = self._update_status(job_id, JobStatus.FAILED, error_message, result=result)
         if job:
             job.error_message = error_message
 

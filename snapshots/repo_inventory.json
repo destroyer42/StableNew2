@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-12T17:08:05",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251212-170759.zip",
-  "file_count": 1309,
-  "total_size_bytes": 49165735,
+  "created_at": "2025-12-13T08:33:49",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251213-083348.zip",
+  "file_count": 1160,
+  "total_size_bytes": 11643917,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -386,8 +386,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 692988,
-      "mtime_iso": "2025-12-12T09:22:08"
+      "size_bytes": 701163,
+      "mtime_iso": "2025-12-13T08:04:12"
     },
     {
       "path": "data/webui_cache.json",
@@ -488,6 +488,11 @@
       "path": "docs/PR TEMPLATE — v2.6-E (Executor-Safe Edition).md",
       "size_bytes": 5946,
       "mtime_iso": "2025-12-11T21:56:01"
+    },
+    {
+      "path": "docs/PR TEMPLATE — v2.7-X.md",
+      "size_bytes": 4188,
+      "mtime_iso": "2025-12-13T08:32:47"
     },
     {
       "path": "docs/PROJECT_INSTRUCTIONS_CHATGPT_v2.6.md",
@@ -3010,778 +3015,8 @@
       "mtime_iso": "2025-12-09T05:29:21"
     },
     {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251207_183428_manual_request.zip",
-      "size_bytes": 6538,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251207_223810_manual_request.zip",
-      "size_bytes": 14871,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033300_thread_exception.zip",
-      "size_bytes": 92735,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033308_thread_exception.zip",
-      "size_bytes": 94721,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033309_thread_exception.zip",
-      "size_bytes": 97556,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033310_uncaught_exception.zip",
-      "size_bytes": 95106,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033320_thread_exception.zip",
-      "size_bytes": 106775,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033331_thread_exception.zip",
-      "size_bytes": 107232,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033332_thread_exception.zip",
-      "size_bytes": 107540,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033332_uncaught_exception.zip",
-      "size_bytes": 107367,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033333_thread_exception.zip",
-      "size_bytes": 108164,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033333_uncaught_exception.zip",
-      "size_bytes": 107998,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033334_thread_exception.zip",
-      "size_bytes": 108274,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033334_uncaught_exception.zip",
-      "size_bytes": 108105,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033336_thread_exception.zip",
-      "size_bytes": 108388,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033336_uncaught_exception.zip",
-      "size_bytes": 108208,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033337_uncaught_exception.zip",
-      "size_bytes": 109283,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033347_uncaught_exception.zip",
-      "size_bytes": 109578,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033348_uncaught_exception.zip",
-      "size_bytes": 109876,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033349_uncaught_exception.zip",
-      "size_bytes": 109933,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033351_uncaught_exception.zip",
-      "size_bytes": 109982,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033637_thread_exception.zip",
-      "size_bytes": 169781,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033823_thread_exception.zip",
-      "size_bytes": 189510,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251208_033824_thread_exception.zip",
-      "size_bytes": 191696,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_002727_uncaught_exception.zip",
-      "size_bytes": 341464,
-      "mtime_iso": "2025-12-08T18:27:27"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_003807_uncaught_exception.zip",
-      "size_bytes": 286495,
-      "mtime_iso": "2025-12-08T18:38:07"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_003936_uncaught_exception.zip",
-      "size_bytes": 286556,
-      "mtime_iso": "2025-12-08T18:39:36"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033630_uncaught_exception.zip",
-      "size_bytes": 325975,
-      "mtime_iso": "2025-12-08T21:36:31"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033802_uncaught_exception.zip",
-      "size_bytes": 338062,
-      "mtime_iso": "2025-12-08T21:38:03"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033803_uncaught_exception.zip",
-      "size_bytes": 338650,
-      "mtime_iso": "2025-12-08T21:38:04"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033804_uncaught_exception.zip",
-      "size_bytes": 338831,
-      "mtime_iso": "2025-12-08T21:38:06"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033806_uncaught_exception.zip",
-      "size_bytes": 339533,
-      "mtime_iso": "2025-12-08T21:38:07"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033807_uncaught_exception.zip",
-      "size_bytes": 339878,
-      "mtime_iso": "2025-12-08T21:38:37"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033837_uncaught_exception.zip",
-      "size_bytes": 340264,
-      "mtime_iso": "2025-12-08T21:38:38"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033838_uncaught_exception.zip",
-      "size_bytes": 341103,
-      "mtime_iso": "2025-12-08T21:38:39"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033839_uncaught_exception.zip",
-      "size_bytes": 342174,
-      "mtime_iso": "2025-12-08T21:38:41"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033841_uncaught_exception.zip",
-      "size_bytes": 342406,
-      "mtime_iso": "2025-12-08T21:38:42"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033842_uncaught_exception.zip",
-      "size_bytes": 342539,
-      "mtime_iso": "2025-12-08T21:38:43"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033843_uncaught_exception.zip",
-      "size_bytes": 342700,
-      "mtime_iso": "2025-12-08T21:38:44"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033844_uncaught_exception.zip",
-      "size_bytes": 342969,
-      "mtime_iso": "2025-12-08T21:38:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033845_uncaught_exception.zip",
-      "size_bytes": 343078,
-      "mtime_iso": "2025-12-08T21:38:54"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033854_uncaught_exception.zip",
-      "size_bytes": 344749,
-      "mtime_iso": "2025-12-08T21:38:55"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033855_uncaught_exception.zip",
-      "size_bytes": 344820,
-      "mtime_iso": "2025-12-08T21:38:55"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033858_uncaught_exception.zip",
-      "size_bytes": 344888,
-      "mtime_iso": "2025-12-08T21:38:59"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_033859_uncaught_exception.zip",
-      "size_bytes": 288617,
-      "mtime_iso": "2025-12-08T21:39:00"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_034054_uncaught_exception.zip",
-      "size_bytes": 340885,
-      "mtime_iso": "2025-12-08T21:40:55"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_034055_uncaught_exception.zip",
-      "size_bytes": 344376,
-      "mtime_iso": "2025-12-08T21:40:56"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_034056_uncaught_exception.zip",
-      "size_bytes": 344529,
-      "mtime_iso": "2025-12-08T21:40:57"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251209_034057_uncaught_exception.zip",
-      "size_bytes": 344662,
-      "mtime_iso": "2025-12-08T21:40:57"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_141344_uncaught_exception.zip",
-      "size_bytes": 238995,
-      "mtime_iso": "2025-12-10T08:13:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_141345_uncaught_exception.zip",
-      "size_bytes": 238995,
-      "mtime_iso": "2025-12-10T08:13:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_142649_uncaught_exception.zip",
-      "size_bytes": 227452,
-      "mtime_iso": "2025-12-10T08:26:50"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_142650_uncaught_exception.zip",
-      "size_bytes": 229096,
-      "mtime_iso": "2025-12-10T08:26:51"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_142651_uncaught_exception.zip",
-      "size_bytes": 233235,
-      "mtime_iso": "2025-12-10T08:26:51"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_143056_uncaught_exception.zip",
-      "size_bytes": 228282,
-      "mtime_iso": "2025-12-10T08:30:57"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_143057_uncaught_exception.zip",
-      "size_bytes": 228421,
-      "mtime_iso": "2025-12-10T08:30:58"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_143058_uncaught_exception.zip",
-      "size_bytes": 236472,
-      "mtime_iso": "2025-12-10T08:30:59"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251210_143059_uncaught_exception.zip",
-      "size_bytes": 236489,
-      "mtime_iso": "2025-12-10T08:30:59"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021318_thread_exception.zip",
-      "size_bytes": 320455,
-      "mtime_iso": "2025-12-11T20:13:27"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021327_thread_exception.zip",
-      "size_bytes": 321504,
-      "mtime_iso": "2025-12-11T20:13:28"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021328_thread_exception.zip",
-      "size_bytes": 321651,
-      "mtime_iso": "2025-12-11T20:13:28"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021329_thread_exception.zip",
-      "size_bytes": 322279,
-      "mtime_iso": "2025-12-11T20:13:29"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021329_uncaught_exception.zip",
-      "size_bytes": 321843,
-      "mtime_iso": "2025-12-11T20:13:29"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021330_thread_exception.zip",
-      "size_bytes": 323370,
-      "mtime_iso": "2025-12-11T20:13:30"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021330_uncaught_exception.zip",
-      "size_bytes": 322987,
-      "mtime_iso": "2025-12-11T20:13:31"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021331_thread_exception.zip",
-      "size_bytes": 323601,
-      "mtime_iso": "2025-12-11T20:13:32"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021331_uncaught_exception.zip",
-      "size_bytes": 322745,
-      "mtime_iso": "2025-12-11T20:13:32"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021332_uncaught_exception.zip",
-      "size_bytes": 323149,
-      "mtime_iso": "2025-12-11T20:13:32"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021333_thread_exception.zip",
-      "size_bytes": 323756,
-      "mtime_iso": "2025-12-11T20:13:33"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021333_uncaught_exception.zip",
-      "size_bytes": 323946,
-      "mtime_iso": "2025-12-11T20:13:33"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021334_thread_exception.zip",
-      "size_bytes": 324539,
-      "mtime_iso": "2025-12-11T20:13:34"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021334_uncaught_exception.zip",
-      "size_bytes": 324093,
-      "mtime_iso": "2025-12-11T20:13:35"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021335_uncaught_exception.zip",
-      "size_bytes": 323844,
-      "mtime_iso": "2025-12-11T20:13:36"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021336_uncaught_exception.zip",
-      "size_bytes": 228539,
-      "mtime_iso": "2025-12-11T20:14:20"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021337_uncaught_exception.zip",
-      "size_bytes": 229923,
-      "mtime_iso": "2025-12-11T20:14:20"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021422_uncaught_exception.zip",
-      "size_bytes": 229967,
-      "mtime_iso": "2025-12-11T20:14:22"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021423_uncaught_exception.zip",
-      "size_bytes": 230018,
-      "mtime_iso": "2025-12-11T20:14:23"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021424_uncaught_exception.zip",
-      "size_bytes": 230061,
-      "mtime_iso": "2025-12-11T20:14:24"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_021425_uncaught_exception.zip",
-      "size_bytes": 231517,
-      "mtime_iso": "2025-12-11T20:14:26"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_050314_uncaught_exception.zip",
-      "size_bytes": 271948,
-      "mtime_iso": "2025-12-11T23:03:14"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_050425_uncaught_exception.zip",
-      "size_bytes": 257144,
-      "mtime_iso": "2025-12-11T23:04:26"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_115525_uncaught_exception.zip",
-      "size_bytes": 238522,
-      "mtime_iso": "2025-12-12T05:55:25"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143200_uncaught_exception.zip",
-      "size_bytes": 250192,
-      "mtime_iso": "2025-12-12T08:32:01"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143201_uncaught_exception.zip",
-      "size_bytes": 253099,
-      "mtime_iso": "2025-12-12T08:32:02"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143202_uncaught_exception.zip",
-      "size_bytes": 254426,
-      "mtime_iso": "2025-12-12T08:32:03"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143203_uncaught_exception.zip",
-      "size_bytes": 255104,
-      "mtime_iso": "2025-12-12T08:32:03"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143219_uncaught_exception.zip",
-      "size_bytes": 251325,
-      "mtime_iso": "2025-12-12T08:32:20"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143220_uncaught_exception.zip",
-      "size_bytes": 261738,
-      "mtime_iso": "2025-12-12T08:32:21"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143221_uncaught_exception.zip",
-      "size_bytes": 269164,
-      "mtime_iso": "2025-12-12T08:32:22"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143222_uncaught_exception.zip",
-      "size_bytes": 273228,
-      "mtime_iso": "2025-12-12T08:32:22"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143645_uncaught_exception.zip",
-      "size_bytes": 204429,
-      "mtime_iso": "2025-12-12T08:36:46"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143646_uncaught_exception.zip",
-      "size_bytes": 211319,
-      "mtime_iso": "2025-12-12T08:36:47"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143647_uncaught_exception.zip",
-      "size_bytes": 220430,
-      "mtime_iso": "2025-12-12T08:36:48"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143648_uncaught_exception.zip",
-      "size_bytes": 225262,
-      "mtime_iso": "2025-12-12T08:36:49"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143753_uncaught_exception.zip",
-      "size_bytes": 247166,
-      "mtime_iso": "2025-12-12T08:37:54"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143754_uncaught_exception.zip",
-      "size_bytes": 249966,
-      "mtime_iso": "2025-12-12T08:37:55"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143755_uncaught_exception.zip",
-      "size_bytes": 251266,
-      "mtime_iso": "2025-12-12T08:37:56"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_143756_uncaught_exception.zip",
-      "size_bytes": 251917,
-      "mtime_iso": "2025-12-12T08:37:56"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145133_uncaught_exception.zip",
-      "size_bytes": 245797,
-      "mtime_iso": "2025-12-12T08:51:34"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145134_uncaught_exception.zip",
-      "size_bytes": 248702,
-      "mtime_iso": "2025-12-12T08:51:35"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145135_uncaught_exception.zip",
-      "size_bytes": 250018,
-      "mtime_iso": "2025-12-12T08:51:36"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145136_uncaught_exception.zip",
-      "size_bytes": 250801,
-      "mtime_iso": "2025-12-12T08:51:36"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145255_uncaught_exception.zip",
-      "size_bytes": 265032,
-      "mtime_iso": "2025-12-12T08:52:56"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145256_uncaught_exception.zip",
-      "size_bytes": 267901,
-      "mtime_iso": "2025-12-12T08:52:57"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145257_uncaught_exception.zip",
-      "size_bytes": 269311,
-      "mtime_iso": "2025-12-12T08:52:58"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145258_uncaught_exception.zip",
-      "size_bytes": 269941,
-      "mtime_iso": "2025-12-12T08:52:58"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145823_uncaught_exception.zip",
-      "size_bytes": 236473,
-      "mtime_iso": "2025-12-12T08:58:24"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145824_uncaught_exception.zip",
-      "size_bytes": 239342,
-      "mtime_iso": "2025-12-12T08:58:25"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145825_uncaught_exception.zip",
-      "size_bytes": 240671,
-      "mtime_iso": "2025-12-12T08:58:26"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_145826_uncaught_exception.zip",
-      "size_bytes": 241432,
-      "mtime_iso": "2025-12-12T08:58:26"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150339_uncaught_exception.zip",
-      "size_bytes": 197634,
-      "mtime_iso": "2025-12-12T09:03:40"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150340_uncaught_exception.zip",
-      "size_bytes": 200454,
-      "mtime_iso": "2025-12-12T09:03:41"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150341_uncaught_exception.zip",
-      "size_bytes": 201713,
-      "mtime_iso": "2025-12-12T09:03:42"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150342_uncaught_exception.zip",
-      "size_bytes": 202341,
-      "mtime_iso": "2025-12-12T09:03:42"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150443_uncaught_exception.zip",
-      "size_bytes": 281276,
-      "mtime_iso": "2025-12-12T09:04:44"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150444_uncaught_exception.zip",
-      "size_bytes": 282390,
-      "mtime_iso": "2025-12-12T09:04:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150445_uncaught_exception.zip",
-      "size_bytes": 285281,
-      "mtime_iso": "2025-12-12T09:04:46"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150446_uncaught_exception.zip",
-      "size_bytes": 286666,
-      "mtime_iso": "2025-12-12T09:04:47"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150447_uncaught_exception.zip",
-      "size_bytes": 287318,
-      "mtime_iso": "2025-12-12T09:04:47"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150815_uncaught_exception.zip",
-      "size_bytes": 216346,
-      "mtime_iso": "2025-12-12T09:08:15"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150816_uncaught_exception.zip",
-      "size_bytes": 225750,
-      "mtime_iso": "2025-12-12T09:08:17"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150817_uncaught_exception.zip",
-      "size_bytes": 227182,
-      "mtime_iso": "2025-12-12T09:08:18"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150818_uncaught_exception.zip",
-      "size_bytes": 227866,
-      "mtime_iso": "2025-12-12T09:08:18"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150927_uncaught_exception.zip",
-      "size_bytes": 275224,
-      "mtime_iso": "2025-12-12T09:09:28"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150928_uncaught_exception.zip",
-      "size_bytes": 276344,
-      "mtime_iso": "2025-12-12T09:09:29"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150929_uncaught_exception.zip",
-      "size_bytes": 279286,
-      "mtime_iso": "2025-12-12T09:09:30"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150930_uncaught_exception.zip",
-      "size_bytes": 280515,
-      "mtime_iso": "2025-12-12T09:09:31"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_150931_uncaught_exception.zip",
-      "size_bytes": 281149,
-      "mtime_iso": "2025-12-12T09:09:31"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151421_uncaught_exception.zip",
-      "size_bytes": 261353,
-      "mtime_iso": "2025-12-12T09:14:22"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151422_uncaught_exception.zip",
-      "size_bytes": 264826,
-      "mtime_iso": "2025-12-12T09:14:23"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151423_uncaught_exception.zip",
-      "size_bytes": 271604,
-      "mtime_iso": "2025-12-12T09:14:24"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151424_uncaught_exception.zip",
-      "size_bytes": 272898,
-      "mtime_iso": "2025-12-12T09:14:25"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151425_uncaught_exception.zip",
-      "size_bytes": 273601,
-      "mtime_iso": "2025-12-12T09:14:25"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151702_uncaught_exception.zip",
-      "size_bytes": 294908,
-      "mtime_iso": "2025-12-12T09:17:03"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151703_uncaught_exception.zip",
-      "size_bytes": 297729,
-      "mtime_iso": "2025-12-12T09:17:04"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151704_uncaught_exception.zip",
-      "size_bytes": 299071,
-      "mtime_iso": "2025-12-12T09:17:05"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_151705_uncaught_exception.zip",
-      "size_bytes": 299687,
-      "mtime_iso": "2025-12-12T09:17:05"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152859_uncaught_exception.zip",
-      "size_bytes": 199505,
-      "mtime_iso": "2025-12-12T09:29:00"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152900_uncaught_exception.zip",
-      "size_bytes": 202359,
-      "mtime_iso": "2025-12-12T09:29:01"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152901_uncaught_exception.zip",
-      "size_bytes": 203653,
-      "mtime_iso": "2025-12-12T09:29:02"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152902_uncaught_exception.zip",
-      "size_bytes": 205312,
-      "mtime_iso": "2025-12-12T09:29:03"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152903_uncaught_exception.zip",
-      "size_bytes": 206232,
-      "mtime_iso": "2025-12-12T09:29:04"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152904_uncaught_exception.zip",
-      "size_bytes": 206307,
-      "mtime_iso": "2025-12-12T09:29:05"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152905_uncaught_exception.zip",
-      "size_bytes": 206488,
-      "mtime_iso": "2025-12-12T09:29:06"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152906_uncaught_exception.zip",
-      "size_bytes": 206612,
-      "mtime_iso": "2025-12-12T09:29:07"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_152907_uncaught_exception.zip",
-      "size_bytes": 206611,
-      "mtime_iso": "2025-12-12T09:29:07"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153102_uncaught_exception.zip",
-      "size_bytes": 202679,
-      "mtime_iso": "2025-12-12T09:31:03"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153103_uncaught_exception.zip",
-      "size_bytes": 205544,
-      "mtime_iso": "2025-12-12T09:31:04"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153104_uncaught_exception.zip",
-      "size_bytes": 206800,
-      "mtime_iso": "2025-12-12T09:31:05"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153105_uncaught_exception.zip",
-      "size_bytes": 208342,
-      "mtime_iso": "2025-12-12T09:31:06"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153106_uncaught_exception.zip",
-      "size_bytes": 209255,
-      "mtime_iso": "2025-12-12T09:31:07"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153107_uncaught_exception.zip",
-      "size_bytes": 209353,
-      "mtime_iso": "2025-12-12T09:31:08"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153108_uncaught_exception.zip",
-      "size_bytes": 209312,
-      "mtime_iso": "2025-12-12T09:31:09"
-    },
-    {
       "path": "reports/diagnostics/stablenew_diagnostics_20251212_153109_uncaught_exception.zip",
       "size_bytes": 209540,
-      "mtime_iso": "2025-12-12T09:31:10"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251212_153110_uncaught_exception.zip",
-      "size_bytes": 209535,
       "mtime_iso": "2025-12-12T09:31:10"
     },
     {
@@ -3961,8 +3196,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 139116,
-      "mtime_iso": "2025-12-12T09:19:09"
+      "size_bytes": 142099,
+      "mtime_iso": "2025-12-13T07:33:38"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -4126,8 +3361,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 25706,
-      "mtime_iso": "2025-12-12T08:40:56"
+      "size_bytes": 26097,
+      "mtime_iso": "2025-12-13T07:33:38"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -4681,8 +3916,8 @@
     },
     {
       "path": "src/pipeline/pipeline_runner.py",
-      "size_bytes": 37892,
-      "mtime_iso": "2025-12-12T06:57:31"
+      "size_bytes": 38185,
+      "mtime_iso": "2025-12-13T08:05:14"
     },
     {
       "path": "src/pipeline/prompt_pack_job_builder.py",
@@ -4756,8 +3991,8 @@
     },
     {
       "path": "src/queue/job_queue.py",
-      "size_bytes": 10561,
-      "mtime_iso": "2025-12-10T19:00:25"
+      "size_bytes": 10709,
+      "mtime_iso": "2025-12-12T22:04:02"
     },
     {
       "path": "src/queue/single_node_runner.py",
@@ -4793,6 +4028,11 @@
       "path": "src/services/queue_store_v2.py",
       "size_bytes": 6617,
       "mtime_iso": "2025-12-12T08:09:42"
+    },
+    {
+      "path": "src/services/watchdog_system_v2.py",
+      "size_bytes": 1467,
+      "mtime_iso": "2025-12-13T07:35:10"
     },
     {
       "path": "src/stablenew.egg-info/dependency_links.txt",
@@ -4856,8 +4096,8 @@
     },
     {
       "path": "src/utils/diagnostics_bundle_v2.py",
-      "size_bytes": 4385,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 5100,
+      "mtime_iso": "2025-12-13T07:38:48"
     },
     {
       "path": "src/utils/error_envelope_v2.py",
@@ -4967,7 +4207,7 @@
     {
       "path": "src/utils/watchdog_v2.py",
       "size_bytes": 7378,
-      "mtime_iso": "2025-12-11T22:46:47"
+      "mtime_iso": "2025-12-13T07:31:23"
     },
     {
       "path": "src/utils/webui_discovery.py",
@@ -5007,7 +4247,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-12T17:02:29"
+      "mtime_iso": "2025-12-13T08:11:26"
     },
     {
       "path": "tests/conftest.py",
@@ -5280,6 +4520,11 @@
       "mtime_iso": "2025-12-10T21:48:51"
     },
     {
+      "path": "tests/controller/test_job_execution_controller_ui_dispatch.py",
+      "size_bytes": 2449,
+      "mtime_iso": "2025-12-12T22:04:02"
+    },
+    {
       "path": "tests/controller/test_job_history_controller_v2.py",
       "size_bytes": 2451,
       "mtime_iso": "2025-12-11T20:33:54"
@@ -5463,6 +4708,11 @@
       "path": "tests/controller/test_stage_sequencer_controller_integration.py",
       "size_bytes": 750,
       "mtime_iso": "2025-11-22T07:25:45"
+    },
+    {
+      "path": "tests/controller/test_ui_dispatch_threading.py",
+      "size_bytes": 977,
+      "mtime_iso": "2025-12-13T06:13:18"
     },
     {
       "path": "tests/controller/test_webui_connection_controller.py",
@@ -5911,8 +5161,8 @@
     },
     {
       "path": "tests/integration/test_end_to_end_pipeline_v2.py",
-      "size_bytes": 24202,
-      "mtime_iso": "2025-12-12T06:44:46"
+      "size_bytes": 26202,
+      "mtime_iso": "2025-12-13T06:40:37"
     },
     {
       "path": "tests/integration/test_golden_path_suite_v2_6.py",
@@ -6393,6 +5643,11 @@
       "path": "tests/state/test_prompt_workspace_state.py",
       "size_bytes": 1356,
       "mtime_iso": "2025-11-26T14:31:47"
+    },
+    {
+      "path": "tests/system/test_watchdog_ui_stall.py",
+      "size_bytes": 2417,
+      "mtime_iso": "2025-12-13T07:35:10"
     },
     {
       "path": "tests/tools/test_v2_classify_and_archive.py",

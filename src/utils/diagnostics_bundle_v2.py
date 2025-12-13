@@ -1,4 +1,3 @@
-"""Utilities for building diagnostics crash bundles."""
 
 from __future__ import annotations
 
@@ -6,20 +5,36 @@ import json
 import logging
 import threading
 import zipfile
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from src.config.app_config import get_jsonl_log_config
 from src.utils.logger import InMemoryLogHandler
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 from src.utils.system_info_v2 import collect_system_snapshot
 
+"""Utilities for building diagnostics crash bundles."""
+
 logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 HOME = Path.home()
 DEFAULT_BUNDLE_DIR = Path("reports") / "diagnostics"
 _BUNDLE_LOCK = threading.Lock()
+
+
+def build_async(*, reason: str, log_handler: InMemoryLogHandler | None = None, job_service: Any | None = None, extra_context: Mapping[str, Any] | None = None, output_dir: Path | None = None, include_process_state: bool = False, include_queue_state: bool = False) -> None:
+    """Create a diagnostics bundle asynchronously in a background thread."""
+    def _worker():
+        build_crash_bundle(
+            reason=reason,
+            log_handler=log_handler,
+            job_service=job_service,
+            extra_context=extra_context,
+            output_dir=output_dir,
+        )
+    threading.Thread(target=_worker, daemon=True, name=f"DiagBundle-{reason}").start()
 
 
 def build_crash_bundle(

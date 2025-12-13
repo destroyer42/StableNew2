@@ -18,7 +18,7 @@ import pytest
 from src.controller.job_service import JobService
 from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunResult
 from src.pipeline.payload_builder import build_sdxl_payload
-from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
+from tests.helpers.job_helpers import make_test_njr
 from src.pipeline.stage_sequencer import StageSequencer
 from src.pipeline.run_config import PromptSource, RunConfig
 from src.queue.job_history_store import (
@@ -30,6 +30,7 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from tests.helpers.job_helpers import make_test_job_from_njr
+
 
 
 def wait_for_job_completion(
@@ -50,17 +51,35 @@ def wait_for_job_completion(
 
 
 def _job_from_config(
-    cfg: PipelineConfig,
+    prompt: str,
     *,
     run_mode: str,
     source: str,
     prompt_source: str = "manual",
     prompt_pack_id: str | None = None,
+    base_model: str = "test-model-v1",
+    sampler: str = "Euler",
+    steps: int = 5,
+    cfg_scale: float = 7.0,
+    width: int = 256,
+    height: int = 256,
 ) -> Job:
-    njr = build_njr_from_legacy_pipeline_config(cfg)
-    njr.prompt_source = prompt_source
-    if prompt_source == "pack":
-        njr.prompt_pack_id = prompt_pack_id or "pack-auto"
+    njr = make_test_njr(
+        prompt=prompt,
+        prompt_source=prompt_source,
+        prompt_pack_id=prompt_pack_id or "pack-auto" if prompt_source == "pack" else None,
+        base_model=base_model,
+        config={
+            "model": base_model,
+            "prompt": prompt,
+            "prompt_pack_id": prompt_pack_id or "pack-auto" if prompt_source == "pack" else None,
+            "sampler": sampler,
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "width": width,
+            "height": height,
+        },
+    )
     return make_test_job_from_njr(njr, run_mode=run_mode, source=source, prompt_source=prompt_source)
 
 
@@ -256,29 +275,31 @@ def job_service(
     """Provide a job service with stub runner."""
 
     def run_job(job: Job) -> dict[str, Any]:
-        """Execute job using stub runner, normalizing pipeline_config and returning stable contract keys."""
-        config_obj = job.pipeline_config
-        if config_obj is None:
-            return {"job_id": job.job_id, "success": False, "error": "No pipeline config"}
-
-        # compat: pipeline_config may be a dict snapshot now
-        if isinstance(config_obj, dict):
-            config = PipelineConfig(**config_obj)
-        else:
-            config = config_obj  # already PipelineConfig
-
-        result = stub_runner.run(config)
-        # Always return stable runner contract keys
-        outputs = [img for v in result.variants for img in (v.get("images") or [])]
-        return {
-            "job_id": job.job_id,
-            "success": result.success,
-            "variants": result.variants,
-            "outputs": outputs,
-            "artifacts": {"variants": result.variants},
-            "run_mode": job.run_mode,
-            "source": job.source,
+        """Execute job using stub runner, supporting NJR-only jobs (no pipeline_config)."""
+        config_dict = job.config_snapshot or {}
+        # Only keep fields valid for PipelineConfig
+        valid_fields = {
+            "prompt", "model", "sampler", "width", "height", "steps", "cfg_scale", "negative_prompt",
+            "pack_name", "preset_name", "variant_configs", "randomizer_mode", "randomizer_plan_size",
+            "lora_settings", "metadata", "refiner_enabled", "refiner_model_name", "refiner_switch_at", "hires_fix"
         }
+        filtered = {k: v for k, v in config_dict.items() if k in valid_fields}
+        config = PipelineConfig(**filtered)
+        result = stub_runner.run(config)
+        # If result is a PipelineRunResult, convert to dict
+        if hasattr(result, 'to_dict'):
+            result_dict = result.to_dict()
+        else:
+            result_dict = dict(result)
+        outputs = [img for v in result_dict.get("variants", []) for img in (v.get("images") or [])]
+        # Re-inject run_mode and source after canonicalization (for test assertion)
+        patched = dict(result_dict)
+        patched["run_mode"] = job.run_mode
+        patched["source"] = job.source
+        patched["job_id"] = job.job_id
+        patched["outputs"] = outputs
+        patched["artifacts"] = {"variants": result_dict.get("variants", [])}
+        return patched
 
     runner = SingleNodeJobRunner(
         job_queue,
@@ -325,10 +346,16 @@ class TestDirectRunNowEndToEnd:
         """DIRECT run completes and writes JobRecord with stub images."""
         # Build a Job with direct run_mode
         job = _job_from_config(
-            small_pipeline_config,
+            prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
             prompt_source="manual",
+            base_model="test-model-v1",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
 
         # Execute job synchronously (direct run)
@@ -337,8 +364,8 @@ class TestDirectRunNowEndToEnd:
         # Verify job completed
         assert result is not None
         assert result.get("success") is True
-        assert result.get("run_mode") == "direct"
-        assert result.get("source") == "run_now"
+        assert result["metadata"]["run_mode"] == "direct"
+        assert result["metadata"]["source"] == "run_now"
 
         # Verify StubApiClient was called
         assert len(stub_api_client.calls) >= 1
@@ -363,10 +390,16 @@ class TestDirectRunNowEndToEnd:
     ) -> None:
         """DIRECT run records completed_at timestamp."""
         job = _job_from_config(
-            small_pipeline_config,
+            prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
             prompt_source="manual",
+            base_model="test-model-v1",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
 
         before_run = datetime.utcnow()
@@ -388,10 +421,16 @@ class TestDirectRunNowEndToEnd:
     ) -> None:
         """DIRECT run with manual prompt source is recorded correctly."""
         job = _job_from_config(
-            small_pipeline_config,
+            prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
             prompt_source="manual",
+            base_model="test-model-v1",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
 
         job_service.submit_direct(job)
@@ -423,11 +462,17 @@ class TestQueueRunEndToEnd:
         """QUEUE run is enqueued, processed, and recorded."""
         # Build a Job with queue run_mode
         job = _job_from_config(
-            small_pipeline_config,
+            prompt="A beautiful test image",
             run_mode="queue",
             source="add_to_queue",
             prompt_source="pack",
             prompt_pack_id="pack-123",
+            base_model="test-model-v1",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
 
         # Submit to queue (starts background runner automatically)
@@ -456,11 +501,17 @@ class TestQueueRunEndToEnd:
     ) -> None:
         """QUEUE run with pack source records prompt origin."""
         job = _job_from_config(
-            small_pipeline_config,
+            prompt="A beautiful test image",
             run_mode="queue",
             source="run",
             prompt_source="pack",
             prompt_pack_id="test-pack-xyz",
+            base_model="test-model-v1",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
 
         job_service.submit_queued(job)
@@ -477,27 +528,20 @@ class TestQueueRunEndToEnd:
         history_store: JSONLJobHistoryStore,
     ) -> None:
         """Multiple queued jobs are processed in order."""
-        configs = [
-            PipelineConfig(
-                prompt=f"Test prompt {i}",
-                model="test-model",
-                sampler="Euler",
-                width=256,
-                height=256,
-                steps=5,
-                cfg_scale=7.0,
-            )
-            for i in range(3)
-        ]
-
         job_ids = []
-        for config in configs:
+        for i in range(3):
             job = _job_from_config(
-                config,
+                prompt=f"Test prompt {i}",
                 run_mode="queue",
                 source="add_to_queue",
                 prompt_source="pack",
                 prompt_pack_id="pack-batch",
+                base_model="test-model",
+                sampler="Euler",
+                steps=5,
+                cfg_scale=7.0,
+                width=256,
+                height=256,
             )
             job_ids.append(job.job_id)
             job_service.submit_queued(job)
@@ -527,11 +571,17 @@ class TestQueueRunEndToEnd:
     ) -> None:
         """QUEUE run records started_at and completed_at timestamps."""
         job = _job_from_config(
-            small_pipeline_config,
+            prompt="A beautiful test image",
             run_mode="queue",
             source="run",
             prompt_source="pack",
             prompt_pack_id="pack-queue-ts",
+            base_model="test-model-v1",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
 
         before_run = datetime.utcnow()
@@ -569,28 +619,32 @@ class TestMixedRunModes:
         """Direct run followed by queue run both complete successfully."""
         # Direct run first
         direct_job = _job_from_config(
-            small_pipeline_config,
+            prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
             prompt_source="manual",
+            base_model="test-model-v1",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
         job_service.submit_direct(direct_job)
 
         # Queue run second
         queue_job = _job_from_config(
-            PipelineConfig(
-                prompt="Queue test prompt",
-                model="test-model",
-                sampler="Euler",
-                width=256,
-                height=256,
-                steps=5,
-                cfg_scale=7.0,
-            ),
+            prompt="Queue test prompt",
             run_mode="queue",
             source="add_to_queue",
             prompt_source="pack",
             prompt_pack_id="pack-555",
+            base_model="test-model",
+            sampler="Euler",
+            steps=5,
+            cfg_scale=7.0,
+            width=256,
+            height=256,
         )
         job_service.submit_queued(queue_job)
 
