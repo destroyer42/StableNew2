@@ -14,14 +14,16 @@ if TYPE_CHECKING:
     from src.controller.job_service import JobService
 
 
+from typing import Any
+
 def build_v2_app(
     *,
     root: Optional[tk.Tk] = None,
-    pipeline_runner=None,
-    webui_manager: WebUIProcessManager | None = None,
+    pipeline_runner: Optional[Any] = None,
+    webui_manager: Optional[WebUIProcessManager] = None,
     threaded: bool = False,
-    config_manager: ConfigManager | None = None,
-    job_service: "JobService | None" = None,
+    config_manager: Optional[ConfigManager] = None,
+    job_service: Optional["JobService"] = None,
 ) -> Tuple[tk.Tk, AppStateV2, AppController, MainWindowV2]:
     """
     Build the V2 application stack with injectable runner for tests.
@@ -57,14 +59,19 @@ def build_v2_app(
         config_manager=config_manager,
         job_service=job_service,  # PR-0114C-Ty: DI for tests
     )
+    # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
+    # DiagnosticsServiceV2 and SystemWatchdogV2 are now initialized in AppController
+    # --- END PR-CORE1-D21A ---
 
+    # Ensure pipeline_controller is set before constructing MainWindowV2
+    pipeline_controller = getattr(app_controller, "pipeline_controller", None)
     window = MainWindowV2(
         root=root,
         app_state=app_state,
         webui_manager=webui_manager,
         app_controller=app_controller,
         packs_controller=None,
-        pipeline_controller=app_controller.pipeline_controller,
+        pipeline_controller=pipeline_controller,
         gui_log_handler=app_controller.get_gui_log_handler(),
     )
 

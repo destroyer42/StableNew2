@@ -242,19 +242,137 @@ class AppController:
         resource_service: WebUIResourceService | None = None,
         job_service: JobService | None = None,
         pipeline_controller: PipelineController | None = None,
-        ui_scheduler: callable = None,
+        ui_scheduler: Callable[[Callable[[], None]], None] = None,
     ) -> None:
+        import time
         import threading
         self._ui_thread_id = threading.get_ident()
         self._ui_scheduler = ui_scheduler
-        # ...existing code...
+        # --- BEGIN PR-CORE1-D21A: Watchdog/Diagnostics wiring ---
+        from pathlib import Path
+        from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
+        from src.services.watchdog_system_v2 import SystemWatchdogV2
+        self.diagnostics_service = DiagnosticsServiceV2(output_dir=Path("reports/diagnostics"))
+        self._system_watchdog = SystemWatchdogV2(self, self.diagnostics_service)
+        self._system_watchdog.start()
+        # --- END PR-CORE1-D21A ---
+        self._is_shutting_down = False
+        self.job_service = job_service  # Ensure job_service is always set, even if None
+        self.last_ui_heartbeat_ts = time.monotonic()
+        self.last_queue_activity_ts = time.monotonic()
+        self.last_runner_activity_ts = time.monotonic()
+        self.main_window = main_window
+        self.app_state = getattr(main_window, "app_state", None)
+        if self.app_state is None:
+            self.app_state = AppStateV2()
+            if main_window is not None:
+                setattr(main_window, "app_state", self.app_state)
+        self._job_lifecycle_logger = JobLifecycleLogger(app_state=self.app_state)
+        self.state = AppState()
+        self.threaded = threaded
+        self._config_manager = config_manager or ConfigManager()
+        self._dropdown_loader = DropdownLoader(self._config_manager)
+        self._last_executor_config: dict[str, Any] | None = None
+        self._last_run_snapshot: dict[str, Any] | None = None
+        self._last_run_auto_restored = False
+        self._last_run_store = LastRunStoreV2_5()
+        self._last_run_config: RunConfigDict | None = None
+        # GUI log handler for LogTracePanelV2 (must be set before any access)
+        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
+        root_logger = logging.getLogger()
+        if root_logger.level > logging.INFO or root_logger.level == logging.NOTSET:
+            root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(self.gui_log_handler)
+        json_config = get_jsonl_log_config()
+        self.json_log_handler = attach_jsonl_log_handler(json_config, level=logging.INFO)
+        # Pipeline runner and controller setup
+        if pipeline_runner is not None:
+            self.pipeline_runner = pipeline_runner
+            self._api_client = api_client or SDWebUIClient()
+            self._structured_logger = structured_logger or StructuredLogger()
+        else:
+            self._api_client = api_client or SDWebUIClient()
+            self._structured_logger = structured_logger or StructuredLogger()
+            self.pipeline_runner = PipelineRunner(self._api_client, self._structured_logger)
+        self._webui_api: WebUIAPI | None = None
+        client = getattr(self, "_api_client", None)
+        self.resource_service = resource_service or WebUIResourceService(client=client)
+        self.state.resources = self._empty_resource_map()
+        self.webui_process_manager = webui_process_manager
+        self._cancel_token: Optional[CancelToken] = None
+        self._worker_thread: Optional[threading.Thread] = None
+        self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
+        history_path = Path("runs") / "job_history.json"
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            history_path = Path(tempfile.gettempdir()) / f"job_history_{os.getpid()}.json"
+        self._job_history_path = history_path
+        if self.job_service is None:
+            self.job_service = self._build_job_service()
+        if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
+            self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
+        self._last_diagnostics_bundle: Path | None = None
+        self._last_diagnostics_bundle_reason: str | None = None
+        self._diagnostics_lock = threading.Lock()
+        self._last_error_envelope: UnifiedErrorEnvelope | None = None
+        self._error_modal: ErrorModalV2 | None = None
+        self._original_excepthook = sys.excepthook
+        self._original_threading_excepthook = getattr(threading, "excepthook", None)
+        self._original_tk_report_callback_exception: Callable[..., Any] | None = None
+        self._shutdown_started_at: float | None = None
+        self._shutdown_completed = False
+        self.packs: list[PromptPackInfo] = []
+        self._selected_pack_index: Optional[int] = None
+        # Initialize PipelineController for modern pipeline execution (bridge)
+        if pipeline_controller is not None:
+            self.pipeline_controller = pipeline_controller
+        else:
+            self.pipeline_controller = PipelineController(
+                api_client=self._api_client,
+                structured_logger=self._structured_logger,
+                job_service=self.job_service,
+                pipeline_runner=self.pipeline_runner,
+                job_lifecycle_logger=self._job_lifecycle_logger,
+                app_state=self.app_state,
+            )
+        try:
+            jc = getattr(self.pipeline_controller, "_job_controller", None)
+            if jc and hasattr(self.job_service, "history_store"):
+                shared_history = getattr(self.job_service, "history_store")
+                queue = getattr(jc, "_queue", None)
+                if queue is not None:
+                    try:
+                        queue._history_store = shared_history  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        self.process_auto_scanner = ProcessAutoScannerService(
+            config=ProcessAutoScannerConfig(),
+            protected_pids=self._get_protected_process_pids,
+        )
+        # Wire GUI overrides into PipelineController so config assembler can access GUI state
+        if hasattr(self.pipeline_controller, "get_gui_overrides"):
+            self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
+        # Let the GUI wire its callbacks to us
+        if self.main_window is not None:
+            self._attach_to_gui()
+            if hasattr(self.main_window, "connect_controller"):
+                self.main_window.connect_controller(self)
+        self._setup_queue_callbacks()
+        self._setup_diagnostics_hooks()
+    def shutdown(self) -> None:
+        """Shutdown the AppController and all background services cleanly."""
+        self._is_shutting_down = True
+        if hasattr(self, '_system_watchdog') and self._system_watchdog:
+            self._system_watchdog.stop()
+        # ...existing shutdown logic if any...
 
-    def _ui_dispatch(self, fn):
+    def _ui_dispatch(self, fn: Callable[[], None]) -> None:
         import threading
         if threading.get_ident() == self._ui_thread_id:
             fn()
             return
-        if self._ui_scheduler:
+        if callable(self._ui_scheduler):
             self._ui_scheduler(fn)
             return
         root = getattr(self.main_window, "root", None) or getattr(self.main_window, "master", None)
@@ -302,156 +420,15 @@ class AppController:
             self._append_log(f"Pipeline error: {exc!r}")
             self._update_status(f"Error: {exc!r}")
 
-    """
-    Orchestrates GUI events and (eventually) pipeline execution.
-
-    Responsibilities:
-        - Maintain lifecycle state (IDLE/RUNNING/STOPPING/ERROR).
-        - Bridge GUI interactions to the pipeline, config, and randomizer.
-        - Provide high-level methods for GUI callbacks.
-
-    'threaded' controls whether runs happen in a worker thread (True, default)
-    or synchronously (False, ideal for tests).
-    """
-
-    def __init__(
-        self,
-        main_window: MainWindow | None,
-        pipeline_runner: Optional[PipelineRunner] = None,
-        threaded: bool = True,
-        packs_dir: Path | str | None = None,
-        api_client: SDWebUIClient | None = None,
-        structured_logger: StructuredLogger | None = None,
-        webui_process_manager: WebUIProcessManager | None = None,
-        config_manager: ConfigManager | None = None,
-        resource_service: WebUIResourceService | None = None,
-        job_service: JobService | None = None,
-        pipeline_controller: PipelineController | None = None,
-        ui_scheduler: callable = None,
-    ) -> None:
-        import time
-        self.last_ui_heartbeat_ts = time.monotonic()
-        self.last_queue_activity_ts = time.monotonic()
-        self.last_runner_activity_ts = time.monotonic()
-        self.main_window = main_window
-        self.app_state = getattr(main_window, "app_state", None)
-        if self.app_state is None:
-            self.app_state = AppStateV2()
-            if main_window is not None:
-                setattr(main_window, "app_state", self.app_state)
-        self._job_lifecycle_logger = JobLifecycleLogger(app_state=self.app_state)
-        import threading
-        self._ui_thread_id = threading.get_ident()
-        self._ui_scheduler = ui_scheduler
-        self.state = AppState()
-        self.threaded = threaded
-        self._config_manager = config_manager or ConfigManager()
-        self._dropdown_loader = DropdownLoader(self._config_manager)
-        self._last_executor_config: dict[str, Any] | None = None
-        self._last_run_snapshot: dict[str, Any] | None = None
-        self._last_run_auto_restored = False
-        self._last_run_store = LastRunStoreV2_5()
-        self._last_run_config: RunConfigDict | None = None
-    def update_ui_heartbeat(self):
+    
+    def update_ui_heartbeat(self) -> None:
         import time
         self.last_ui_heartbeat_ts = time.monotonic()
 
-    def notify_queue_activity(self):
+    def notify_queue_activity(self) -> None:
         import time
         self.last_queue_activity_ts = time.monotonic()
 
-    def notify_runner_activity(self):
-        import time
-        self.last_runner_activity_ts = time.monotonic()
-
-        if pipeline_runner is not None:
-            self.pipeline_runner = pipeline_runner
-            # Still set api_client and structured_logger for PipelineController
-            self._api_client = api_client or SDWebUIClient()
-            self._structured_logger = structured_logger or StructuredLogger()
-        else:
-            self._api_client = api_client or SDWebUIClient()
-            self._structured_logger = structured_logger or StructuredLogger()
-            self.pipeline_runner = PipelineRunner(self._api_client, self._structured_logger)
-
-        self._webui_api: WebUIAPI | None = None
-
-        client = getattr(self, "_api_client", None)
-        self.resource_service = resource_service or WebUIResourceService(client=client)
-        self.state.resources = self._empty_resource_map()
-        self.webui_process_manager = webui_process_manager
-        self._cancel_token: Optional[CancelToken] = None
-        self._worker_thread: Optional[threading.Thread] = None
-        self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
-        history_path = Path("runs") / "job_history.json"
-        if os.environ.get("PYTEST_CURRENT_TEST"):
-            history_path = Path(tempfile.gettempdir()) / f"job_history_{os.getpid()}.json"
-        self._job_history_path = history_path
-        self.job_service = job_service or self._build_job_service()
-        if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
-            self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
-        self._last_diagnostics_bundle: Path | None = None
-        self._last_diagnostics_bundle_reason: str | None = None
-        self._diagnostics_lock = threading.Lock()
-        self._last_error_envelope: UnifiedErrorEnvelope | None = None
-        self._error_modal: ErrorModalV2 | None = None
-        self._original_excepthook = sys.excepthook
-        self._original_threading_excepthook = getattr(threading, "excepthook", None)
-        self._original_tk_report_callback_exception: Callable[..., Any] | None = None
-        self._is_shutting_down = False
-        self._shutdown_started_at: float | None = None
-        self._shutdown_completed = False
-        self.packs: list[PromptPackInfo] = []
-        self._selected_pack_index: Optional[int] = None
-
-        # Initialize PipelineController for modern pipeline execution (bridge)
-        self.pipeline_controller = pipeline_controller or PipelineController(
-            api_client=self._api_client,
-            structured_logger=self._structured_logger,
-            job_service=self.job_service,
-            pipeline_runner=self.pipeline_runner,
-            job_lifecycle_logger=self._job_lifecycle_logger,
-            app_state=self.app_state,
-        )
-        try:
-            jc = getattr(self.pipeline_controller, "_job_controller", None)
-            if jc and hasattr(self.job_service, "history_store"):
-                shared_history = getattr(self.job_service, "history_store")
-                jc._history_store = shared_history
-                queue = getattr(jc, "_queue", None)
-                if queue is not None:
-                    try:
-                        queue._history_store = shared_history  # type: ignore[attr-defined]
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        self.process_auto_scanner = ProcessAutoScannerService(
-            config=ProcessAutoScannerConfig(),
-            protected_pids=self._get_protected_process_pids,
-        )
-
-
-        # Wire GUI overrides into PipelineController so config assembler can access GUI state
-        if hasattr(self.pipeline_controller, "get_gui_overrides"):
-            self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
-
-        # GUI log handler for LogTracePanelV2
-        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
-        root_logger = logging.getLogger()
-        if root_logger.level > logging.INFO or root_logger.level == logging.NOTSET:
-            root_logger.setLevel(logging.INFO)
-        root_logger.addHandler(self.gui_log_handler)
-        json_config = get_jsonl_log_config()
-        self.json_log_handler = attach_jsonl_log_handler(json_config, level=logging.INFO)
-
-        # Let the GUI wire its callbacks to us
-        if self.main_window is not None:
-            self._attach_to_gui()
-            if hasattr(self.main_window, "connect_controller"):
-                self.main_window.connect_controller(self)
-        self._setup_queue_callbacks()
-        self._setup_diagnostics_hooks()
 
     def run_pipeline_v2_bridge(self) -> bool:
         """

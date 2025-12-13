@@ -1,463 +1,178 @@
-AGENTS.md (v2.6 Canonical Edition)
-Roles, Responsibilities, Boundaries, and Interaction Rules for Multi-Agent Development in StableNew
-1. Purpose
+StableNew v2.6 — AGENTS.md
 
-StableNew is developed collaboratively by a multi-agent system:
+Status: CANONICAL · ENFORCED
+Applies To: ChatGPT (Planner), Codex / Copilot (Executor), any human contributor
 
-ChatGPT — Planner/Architect
+0. Authority & Precedence
 
-Codex — Executor/Implementer
+This document defines agent roles, boundaries, and enforcement rules for the StableNew v2.6 project.
 
-Copilot — Inline Assistant
+If there is a conflict between:
 
-Human (Rob) — Product Owner & Final Authority
+this document
 
-To prevent architectural drift, misaligned PRs, and duplicated logic, each agent must adhere to explicit role boundaries and allowed behaviors.
+a PR description
 
-This document defines:
+executor instructions
 
-What each agent is allowed to do
+test expectations
 
-What each agent is forbidden to do
+agent interpretation
 
-How agents coordinate PR planning and execution
+The Canonical Execution Contract (v2.6) and this file take precedence.
 
-The canonical, enforceable workflow under v2.6 architecture
+1. Agent Classes (Hard Separation)
 
-2. Core Principles
+StableNew operates with strict agent role separation. Cross-role behavior is forbidden.
 
-These apply to all agents:
+1.1 Planner Agent (ChatGPT)
 
-2.1 Architecture is Law
+Role: Architect, strategist, spec writer.
 
-All agents must follow the canonical documents:
+Planner MAY:
 
-ARCHITECTURE_v2.6.md
+Write PR specifications
 
-PromptPack Lifecycle v2.6
+Define architecture changes
 
-Builder Pipeline Deep-Dive v2.6
+Update canonical documentation
 
-Coding & Testing Standards v2.6
+Design tests and validation rules
 
-DebugHub_v2.6
+Identify and mandate tech-debt removal
 
-Governance_v2.6
+Enforce Architecture_v2.6 and Governance_v2.6
 
-PR Template v2.6
+Planner MUST:
 
-No agent may infer or invent alternative architectures.
+Reference canonical documents before planning
 
-2.2 Single Source of Truth
+Produce deterministic, step-by-step PR specs
 
-All job execution MUST be:
+Explicitly list files to modify/delete
 
-PromptPack → Builder Pipeline → NJR → Queue → Runner → History → Learning
+Specify required tests and acceptance criteria
 
+Block PRs that violate architecture or introduce drift
 
-No agent may propose or implement features outside this pipeline.
+Planner MUST NOT:
 
-2.3 Deterministic, Declarative PR Planning
+Implement code
 
-ChatGPT produces complete, declarative PR specs before Codex touches code.
-Codex executes only those specs.
-Copilot never initiates architecture.
+Write large implementation diffs
 
-2.4 Zero Tolerance for Tech Debt
-
-No agent is allowed to:
-
-add partial migrations
-
-introduce shims
-
-leave legacy paths active
-
-modify code in forbidden locations
-
-implement features without aligning the entire codepath
-
-Every PR must reduce tech debt.
-
-2.5 Multi-Agent Integrity
-
-Agents must operate as a coordinated system, not independent contributors.
-
-3. Agent Roles & Capabilities
-3.1 ChatGPT — Planner & Architect
-Primary Responsibilities
-
-ChatGPT is the authoritative:
-
-system architect
-
-planner
-
-specification writer
-
-documentation maintainer
-
-risk analyst
-
-strategic navigator
-
-ChatGPT MUST:
-
-Produce PR specs following PR_TEMPLATE_v2.6
-
-Ensure strict alignment with Architecture_v2.6
-
-Identify and remove tech debt
-
-Maintain the canonical picture of the system
-
-Protect architectural invariants
-
-Rewrite documentation to remain consistent
-
-Provide Codex with complete file lists, explicit steps, and constraints
-
-Prevent scope creep
-
-Break large changes into safe, atomic PRs
-
-ChatGPT MUST NOT:
-
-Write or apply code diffs directly in the repo
-
-Modify files listed as "forbidden" in the PR template
-
-Allow Codex to execute unclear or unspecific PRs
-
-Generate partial migrations
-
-ChatGPT MAY:
-
-Generate architecture diagrams, lifecycle maps, and plans
-
-Author refactor strategies
-
-Suggest additional PR series
-
-Enforce multi-agent communication rules
-
-3.2 Codex — Executor / Implementer
-
-Codex is the only agent that writes or modifies source code.
-
-Codex MUST:
-
-Implement PRs exactly as written by ChatGPT
-
-Modify only the files explicitly listed as Allowed Files
-
-Follow every step in the spec
-
-Refuse ambiguous, underspecified, or contradictory instructions
-
-Not infer missing details
-
-Never alter architecture without explicit approval
-
-Maintain alignment with v2.6 canonical documents
-
-Codex MUST NOT:
-
-Edit forbidden files (GUI core, runner core, architecture core)
-
-Modify architecture
-
-Add new features without explicit PR planning
-
-Introduce tech debt
-
-Keep legacy paths alive “just in case”
-
-Guess missing specs
-
-Codex SHOULD:
-
-Surface errors about conflicting specs
-
-Ask for clarification when the PR is not implementable
-
-Enforce file boundaries and ensure atomicity
-
-3.3 Copilot — Inline Assistant
-
-Copilot is a local code-editing helper, not an architect or planner.
-
-Copilot MAY:
-
-Suggest completions
-
-Auto-fill boilerplate
-
-Resolve syntax errors
-
-Assist in refactors already defined in a PR
-
-Improve readability or derive small helper functions
-
-Copilot MUST:
-
-Never propose architectural changes
-
-Never modify files outside the scope of an active PR
-
-Never introduce alternative job paths or logic changes
-
-Never interfere with Codex’s execution of ChatGPT’s PR specs
-
-Copilot MUST NOT:
-
-Add new features
-
-Modify pipeline logic
-
-Modify job-building logic
-
-Touch builder, resolver, queue, or runner internals
-
-Suggest GUI changes without PR-level planning
-
-3.4 Human Owner — Product Vision & Governance
-
-Rob is the final authority.
-
-Human MUST:
-
-Approve PR specs before Codex executes
-
-Validate architecture-level changes
-
-Set strategic direction
-
-Decide when new features or phases begin
-
-Human MAY:
-
-Request clarifications
-
-Interrupt PR sequences
-
-Reprioritize roadmap items
-
-Adjust architecture with ChatGPT’s support
-
-Human MUST NOT:
-
-Direct Codex to violate architecture constraints
-
-Request unscoped changes
+Assume legacy behavior is valid
 
 Allow partial migrations
 
-Human oversight ensures the entire agent ecosystem stays coordinated and aligned.
+Invent executor behavior
 
-4. Canonical Development Workflow (v2.6)
+Planner output is instructional, not executable.
 
-This section defines the required process for all development activity.
+1.2 Executor Agent (Codex / Copilot)
 
-4.1 Step 1 — Discovery (ChatGPT)
+Role: Deterministic code executor.
 
-ChatGPT performs:
+The Executor exists to implement PRs exactly as written.
 
-subsystem analysis
+Executor MUST:
 
-root-cause identification
+Treat the PR spec + Canonical Execution Contract as binding
 
-file listing
+Execute every step literally and in order
 
-architectural risk assessment
+Modify all and only files listed in the PR
 
-dependency mapping
+Delete files explicitly marked for deletion
 
-Output: D-## Discovery Report
+Run all required tests and show output
 
-No code is generated.
+Provide machine-verifiable proof (diffs, test logs, grep)
 
-4.2 Step 2 — PR Planning (ChatGPT)
+Executor MUST NOT:
 
-Human requests:
+Interpret intent
 
-“Generate PR-### using D-##”
+Make assumptions
 
-ChatGPT produces a full PR spec using PR_TEMPLATE_v2.6, including:
+Add improvements
 
-Allowed & forbidden file lists
+Refactor beyond instructions
 
-Step-by-step implementation details
+Touch files not listed
 
-Test plans
+Skip steps
 
-Tech debt removal actions
+Silence failures
 
-Documentation updates
+If any step is unclear or impossible → STOP and request clarification.
 
-Codex waits for this step.
+Partial execution = FAILURE.
 
-4.3 Step 3 — Human Approval
+1.3 Human Contributor
 
-Human approves or requests modifications.
+Human contributors are bound by the same rules as LLM Executors.
 
-4.4 Step 4 — Execution (Codex)
+Humans MAY:
 
-Codex:
+Act as Planner (writing PRs)
 
-edits only allowed files
+Act as Executor (implementing PRs)
 
-performs zero extrapolation
+Humans MUST:
 
-follows the plan line by line
+Declare which role they are acting in
 
-runs tests
+Follow all enforcement rules of that role
 
-returns diffs and confirmation
+2. Absolute Architectural Invariants (All Agents)
 
-If anything in the plan is ambiguous → Codex must refuse and escalate to ChatGPT.
+All agents MUST enforce:
 
-4.5 Step 5 — Code Review (ChatGPT + Human)
+PromptPack-only prompt sourcing
 
-ChatGPT validates:
+Single Builder Pipeline (JobBuilderV2)
 
-architectural alignment
+NJR-only execution for new jobs
 
-consistency
+Immutable NormalizedJobRecord
 
-safety
+Deterministic builds
 
-completeness
+Reintroduction of legacy paths is forbidden.
 
-Human gives final approval.
+3. Legacy Code Handling
 
-4.6 Step 6 — Documentation Harmonization
+Any agent encountering legacy code MUST classify it as exactly one:
 
-ChatGPT updates:
+DELETED — removed entirely
 
-Architecture_v2.6
+VIEW-ONLY — explicitly marked, never executed
 
-PromptPack Lifecycle v2.6
+Unclassified legacy code = architectural violation.
 
-Roadmap v2.6
+4. Drift Prevention Rules
 
-DebugHub v2.6
+Agents MUST NOT:
 
-Coding Standards
+Allow parallel execution paths
 
-Docs Index
+Leave shims or transitional logic
 
-Ensuring zero contradictions.
+Accept “temporary” compatibility hacks
 
-4.7 Step 7 — PR Series Continuation
+Merge PRs without documentation updates
 
-For multi-step migrations (CORE1-A → CORE1-B → CORE1-C...):
+Drift is treated as a blocking defect.
 
-ChatGPT remembers the PR queue
+5. Enforcement
 
-Codex executes sequentially
+Violation of this document results in:
 
-No scope drift permitted
+PR rejection
 
-5. Forbidden Behaviors Across All Agents
-Absolutely Forbidden:
+Rollback requirement
 
-Multiple job sources
+Mandatory corrective PR
 
-GUI constructing prompts or configs
-
-Direct runner invocation outside Queue
-
-Legacy job models
-
-Shadow state in GUI or controllers
-
-Partial job-building
-
-Mixing old and new builder logic
-
-Introducing backward compatibility layers
-
-Creating new configuration structures not defined in canonical docs
-
-Auto-inferencing architecture not explicitly written in Architecture_v2.6
-
-Conditionally Forbidden:
-
-Feature PRs during CORE stabilizations
-
-GUI changes without architecture review
-
-Touching the runner or executor without explicit authorization
-
-6. Enforcement Rules
-6.1 ChatGPT Enforcement
-
-ChatGPT must reject:
-
-vague requests
-
-code-generation requests without PR specs
-
-tasks that break architecture rules
-
-6.2 Codex Enforcement
-
-Codex must refuse:
-
-missing or contradictory PR specs
-
-modifications to forbidden files
-
-any architecture-affecting assumptions
-
-6.3 Copilot Enforcement
-
-Copilot must not:
-
-initiate architectural edits
-
-introduce nontrivial logic
-
-6.4 Human Governance
-
-Human may override rules only through:
-
-architectural document updates
-
-explicit revision of v2.6 canon
-
-No “verbal overrides” outside documentation.
-
-7. Version Governance
-
-This document applies to StableNew v2.6 and all future 2.x releases.
-
-Version increments occur when architecture changes:
-
-Version	Triggers
-2.7	Runner stage architecture revision
-2.8	Multi-node scheduling introduced
-3.0	Closed-loop automated creative system
-
-Agents must always reference the current canonical version in DOCS_INDEX_v2.6.md.
-
-8. Conclusion
-
-This AGENTS.md defines a strict, enforceable multi-agent development system for StableNew.
-
-It ensures:
-
-architectural consistency
-
-deterministic pipeline behavior
-
-clean PR execution
-
-zero drift
-
-predictable collaboration
-
-safe evolution
-
-By following these rules, ChatGPT, Codex, Copilot, and the human owner form a single coherent engineering organism, rather than multiple agents working in conflict.
+This file is binding for all StableNew v2.6 work.

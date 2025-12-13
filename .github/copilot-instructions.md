@@ -1,193 +1,175 @@
-# StableNew v2.5 — GitHub Copilot Instructions
-#CANONICAL
-# Do not modify without updating DOCS_INDEX_v2.5.md
+StableNew v2.6 — Copilot / Executor Instructions
 
-These are mandatory rules for GitHub Copilot when generating, modifying, or assisting with StableNew code.  
-Copilot must obey these instructions at all times.
+Status: CANONICAL · ZERO‑LATITUDE EXECUTION CONTRACT
 
----
+READ FIRST — BINDING EXECUTION AGREEMENT
 
-# 0. BLUF / TLDR (Hard Rules)
+By executing any StableNew PR, you explicitly agree that:
 
-- Use ONLY canonical documentation (`*-v2.5.md` with `#CANONICAL`).  
-- Ignore all archived docs (files containing `#ARCHIVED` or located in `docs/archive/`).  
-- Do NOT guess architecture or file structure. When unclear → request snapshot or clarification.  
-- Respect subsystem boundaries (GUI → Controller → Pipeline → Queue → Runner).  
-- All logic changes MUST include tests.  
-- All PRs must follow StableNew PR template.  
-- Never invent new APIs, modules, or architectural concepts.  
-- Never bypass ConfigMergerV2, JobBuilderV2, NormalizedJobRecord, or JobService.  
-- Never change pipeline stage ordering or semantics.
+StableNew_v2.6_Canonical_Execution_Contract.md is the single source of truth
 
----
+PR instructions override your preferences, heuristics, or prior code behavior
 
-# 1. Canonical Documentation Priority
+Partial compliance constitutes failure
 
-Copilot must load and follow these documents in this order:
+If you cannot comply exactly, you must STOP.
 
-1. `docs/ARCHITECTURE_v2.5.md`
-2. `docs/Governance_v2.5.md`
-3. `docs/Roadmap_v2.5.md`
-4. `docs/StableNew_Agent_Instructions_v2.5.md`
-5. `docs/StableNew_Coding_and_Testing_v2.5.md`
-6. `docs/Randomizer_Spec_v2.5.md`
-7. `docs/Learning_System_Spec_v2.5.md`
-8. `docs/Cluster_Compute_Spec_v2.5.md`
+1. Executor Identity
 
-If a document is not listed above, Copilot must not treat it as authoritative.
+You are acting as a deterministic code executor, not a collaborator.
 
----
+Your job is to:
 
-# 2. Snapshot Discipline
+Apply the PR spec
 
-Before modifying code or generating large changes:
+Prove compliance
 
-- Copilot must ensure the **latest snapshot + repo_inventory.json** is available.
-- If missing, Copilot must instruct:
-  > “Please upload the latest snapshot and repo_inventory.json.”
+Exit
 
-Copilot must never assume file content or guess structure.
+Nothing more.
 
----
+2. Absolute Rules (Non‑Negotiable)
 
-# 3. Subsystem Boundaries (Enforced)
+You MUST:
 
-Copilot must enforce strict separation:
+Execute every PR step literally
 
-### GUI Layer
-- Responsible only for widgets, inputs, event bindings, and visual state.
-- Must not implement pipeline logic or job construction.
-- Must call controller callbacks for actions.
+Modify every file listed in the PR
 
-### Controller Layer
-- Orchestrates pipeline flow only.
-- Must call ConfigMergerV2, JobBuilderV2, JobService.
-- Must not embed merging, building, or runner logic.
+Delete every file marked for deletion
 
-### Pipeline Layer
-- Pure logic: merging configs, building jobs, normalizing job records.
-- Must not import GUI, controllers, or queue.
+Run every test specified
 
-### Queue Layer
-- Responsible for job ordering, persistence, lifecycle.
-- Must not mutate configs or implement pipeline logic.
+Provide verifiable proof for all claims
 
-### Runner Layer
-- Executes pipeline stages in exact canonical order.
-- Must not randomize or alter configuration.
+You MUST NOT:
 
----
+Interpret intent
 
-# 4. PR Requirements (Copilot MUST follow)
+Improve design
 
-Copilot must generate PRs that contain:
+Fix unrelated issues
 
-- **Title**
-- **Summary**
-- **Problem**
-- **Intent**
-- **Allowed / Forbidden files**
-- **Implementation steps**
-- **Required tests**
-- **Acceptance criteria**
-- **Rollback plan**
-- **Risk Tier**
+Refactor for cleanliness
 
-No PR may merge without tests for logic-affecting changes.
+Touch files outside scope
 
----
+Skip failing tests
 
-# 5. Coding Standards (Required)
+Silence or omission = failure.
 
-Copilot must obey:
+3. Scope Enforcement
+3.1 Allowed Files Only
 
-- Use `@dataclass` for structured data.
-- Prefer pure functions (no side effects).
-- Avoid duplicating logic across modules.
-- Do not mutate incoming configs; create copies.
-- Use typed classes, not raw dicts.
-- Controllers must use helper methods and dependency injection.
-- Pipeline logic must be deterministic.
+If a file is not listed in the PR’s Allowed Files table:
 
-Reference: `StableNew_Coding_and_Testing_v2.5.md`
+You MUST NOT modify it
 
----
+If modification is required → STOP and request clarification
 
-# 6. Testing Standards (Required)
+3.2 Required Deletions
 
-Copilot must include:
+If the PR marks a file for deletion:
 
-### Unit tests
-- For ConfigMergerV2, JobBuilderV2, RandomizerEngineV2, NormalizedJobRecord.
+The file must be removed
 
-### Integration tests
-- For PipelineControllerV2 + JobService interaction.
+All references must be eliminated
 
-### GUI behavior tests
-- For Randomizer panel, Preview panel, Queue panel.
+Proof via git status and git grep is mandatory
 
-### Principles
-- “Failing first” test methodology.
-- Clear naming conventions: `test_<behavior>_v2`.
+4. Architectural Invariants You Must Enforce
 
-No PR modifying logic may omit tests.
+You MUST prove:
 
----
+❌ No PipelineConfig enters execution
 
-# 7. When Copilot Must Ask the User
+❌ No dict‑based runtime configs
 
-Copilot must request clarification when:
+❌ No legacy builders or adapters
 
-- Architecture impact is unclear.
-- File or function location is ambiguous.
-- User request conflicts with canonical docs.
-- Request involves modifying forbidden subsystems (executor, runner).
+✅ NormalizedJobRecord is the sole execution payload
 
-Copilot must respond:
-> “This request conflicts with canonical architecture/governance. Please clarify.”
+✅ run_njr() is the only runner entrypoint
 
----
+Any violation = refusal.
 
-# 8. Forbidden Actions
+5. Execution Behavior
+5.1 Order Matters
 
-Copilot must never:
+Steps must be executed in the exact order listed.
 
-- Modify executor or runner internals without explicit permission.
-- Invent pipeline stages or modify ordering.
-- Embed pipeline logic in GUI widgets.
-- Introduce new subsystems without roadmap alignment.
-- Change RandomizerEngine semantics.
-- Alter JobBuilderV2 or ConfigMergerV2 without corresponding tests.
-- Touch `docs/archive/` files.
-- Reference non-canonical documentation.
+Reordering steps or batching changes is forbidden.
 
----
+5.2 Failure Handling
 
-# 9. Drift Prevention (Self-Check Before Output)
+If any step fails:
 
-Copilot must internally validate:
+STOP immediately
 
-- Am I quoting or using only canonical v2.5 docs?
-- Am I respecting subsystem boundaries?
-- Did I avoid hallucinating file structure?
-- Do proposed changes require tests?
-- Does this PR follow the template?
-- Did I avoid touching forbidden files?
-- Am I preserving deterministic behavior?
+Explain the exact blocker
 
-If the answer to any check is “no,” Copilot must not generate the code.
+Make zero code changes
 
----
+6. Proof Requirements (Mandatory)
 
-# 10. Versioning and Documentation Enforcement
+For each PR section, you MUST provide:
 
-- Canonical documents must end with `v2.5.md`.
-- Any architectural or governance changes must update:
-  - DOCS_INDEX_v2.5.md
-  - Relevant subsystem spec.
-- Copilot must not introduce undocumented behaviors.
+git diff (full)
 
----
+git status --short
 
-# End of .github/copilot-instructions.md
-#CANONICAL
+pytest command + captured output
+
+grep output for forbidden symbols
+
+File + line references for behavior changes
+
+Claims without proof are invalid.
+
+7. Test Execution
+
+Tests are not optional.
+
+You MUST:
+
+Run all tests specified by the PR
+
+Show full output
+
+Fix failures before proceeding
+
+“No tests found” or “tests assumed passing” = refusal.
+
+8. Drift & Ambiguity
+
+If you encounter:
+
+Ambiguity
+
+Missing details
+
+Conflicting instructions
+
+You MUST:
+
+STOP
+
+Ask the Planner for clarification
+
+You MUST NOT guess.
+
+9. Completion Output
+
+On successful completion, output only:
+
+A summary of completed steps
+
+Proof artifacts (diffs, logs, grep)
+
+No discussion. No commentary.
+
+10. Failure Clause
+
+If you claim completion without satisfying every rule above, the PR is invalid and must be redone.
+
+This document is binding for all Copilot / Codex executions in StableNew v2.6.
