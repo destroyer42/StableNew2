@@ -34,32 +34,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from src.controller.app_controller import CancelToken
 
 
-@dataclass
-class PipelineConfig:
-    """Controller-facing configuration passed into the pipeline runner."""
-
-    prompt: str
-    model: str
-    sampler: str
-    width: int
-    height: int
-    steps: int
-    cfg_scale: float
-    negative_prompt: str = ""
-    pack_name: Optional[str] = None
-    preset_name: Optional[str] = None
-    variant_configs: Optional[List[dict[str, Any]]] = None
-    randomizer_mode: Optional[str] = None
-    randomizer_plan_size: int = 0
-    lora_settings: Optional[Dict[str, dict[str, Any]]] = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    refiner_enabled: bool = False
-    refiner_model_name: str | None = None
-    refiner_switch_at: float = 0.8
-    hires_fix: dict[str, Any] = field(default_factory=dict)
-
-
-
 class PipelineRunner:
     """
     Adapter that drives the real multi-stage Pipeline executor.
@@ -227,317 +201,13 @@ class PipelineRunner:
 
         self._learning_enabled = bool(enabled)
 
-    def _execute_with_config(
-        self,
-        config: PipelineConfig,
-        cancel_token: "CancelToken",
-        log_fn: Optional[Callable[[str], None]] = None,
-    ) -> "PipelineRunResult":
-        """Execute the pipeline using a PipelineConfig (LEGACY-ONLY, PR-CORE1-B2)."""
+    # Legacy controller config-based execution paths removed per v2.6 contract.
+    # See build_run_plan_from_njr() + run_njr() for canonical NJR-only execution.
 
-        if log_fn:
-            log_fn("[pipeline] PipelineRunner starting execution.")
+    # Note: canonical NJR entrypoint defined earlier in this module. Do not define
+    # a secondary run_njr conversion path that converts NJR -> legacy config.
 
-        executor_config = self._build_executor_config(config)
-        prompt = config.prompt.strip() or config.pack_name or config.preset_name or "StableNew GUI Run"
-        success = False
-        record: LearningRecord | None = None
-        last_image_meta: dict[str, Any] | None = None
-        stage_plan: StageExecutionPlan | None = None
-        run_id = str(uuid4())
-        stage_events: list[dict[str, Any]] = []
-        current_stage: StageTypeEnum | None = None
-
-        try:
-            reset_events = getattr(self._pipeline, "reset_stage_events", None)
-            if callable(reset_events):
-                reset_events()
-            stage_plan = build_stage_execution_plan(executor_config)
-            self._validate_stage_plan(stage_plan)
-            if not stage_plan.stages:
-                raise ValueError("No pipeline stages enabled")
-            metadata = executor_config.get("metadata") or {}
-            job_id = metadata.get("_job_id", "unknown")
-            prompt_pack_id = metadata.get("_prompt_pack_id")
-            log_with_ctx(
-                get_logger(__name__),
-                logging.INFO,
-                "NJR_EXEC_START | Starting NJR pipeline run",
-                ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
-                extra_fields={
-                    "stage_count": len(stage_plan.stages),
-                    "prompt_pack_id": prompt_pack_id,
-                },
-            )
-            log_with_ctx(
-                get_logger(__name__),
-                logging.INFO,
-                "PIPELINE_JOB_START | Starting pipeline execution",
-                ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
-                extra_fields={
-                    "run_mode": getattr(record, "run_mode", "QUEUE"),
-                    "job_id": job_id,
-                },
-            )
-            self._ensure_not_cancelled(cancel_token, "pipeline start")
-            
-            # Use pack output dir from config metadata if provided, otherwise fallback
-            pack_output_dir = (config.metadata or {}).get("_pack_output_dir")
-            if pack_output_dir:
-                run_dir = Path(pack_output_dir)
-            else:
-                run_dir = Path(self._runs_base_dir) / run_id
-            run_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Get prompt index for image naming
-            prompt_index = (config.metadata or {}).get("_prompt_index", 1)
-            job_date = (config.metadata or {}).get("_job_date", "")
-
-            prev_image_path: Path | None = None
-            prompt = config.prompt
-            negative_prompt = getattr(config, "negative_prompt", "") or ""
-            for stage in stage_plan.stages:
-                current_stage = StageTypeEnum(stage.stage_type)
-                self._apply_stage_metadata(executor_config, stage)
-                self._ensure_not_cancelled(cancel_token, f"{current_stage.value} start")
-                log_with_ctx(
-                    get_logger(__name__),
-                    logging.INFO,
-                    "NJR_STAGE_START | Executing stage",
-                    ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
-                    extra_fields={
-                        "stage_index": stage.order_index,
-                        "stage_type": current_stage.value,
-                        "prompt_pack_id": prompt_pack_id,
-                    },
-                )
-                stage_events.append(
-                    {
-                        "stage": current_stage.value,
-                        "phase": "enter",
-                        "image_index": 1,
-                        "total_images": 1,
-                        "cancelled": False,
-                    }
-                )
-                input_image_path = None
-                if last_image_meta and last_image_meta.get("path"):
-                    input_image_path = Path(last_image_meta["path"])
-                payload = self._build_stage_payload(
-                    stage,
-                    config,
-                    executor_config,
-                    prompt,
-                    negative_prompt,
-                    input_image_path,
-                )
-                last_image_meta = self._call_stage(
-                    stage,
-                    payload,
-                    run_dir,
-                    cancel_token,
-                    input_image_path,
-                    prompt_index=prompt_index,
-                    job_date=job_date,
-                    job_id=job_id,
-                )
-                log_with_ctx(
-                    get_logger(__name__),
-                    logging.INFO,
-                    "NJR_STAGE_DONE | Stage completed",
-                    ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
-                    extra_fields={
-                        "stage_index": stage.order_index,
-                        "stage_type": current_stage.value,
-                        "prompt_pack_id": prompt_pack_id,
-                    },
-                )
-                log_with_ctx(
-                    get_logger(__name__),
-                    logging.INFO,
-                    "PIPELINE_STAGE_COMPLETED | Stage finished",
-                    ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
-                    extra_fields={"stage_type": current_stage.value, "job_id": job_id},
-                )
-                if last_image_meta and last_image_meta.get("path"):
-                    prev_image_path = Path(last_image_meta["path"])
-                self._ensure_not_cancelled(cancel_token, f"{current_stage.value} post")
-                stage_events.append(
-                    {
-                        "stage": current_stage.value,
-                        "phase": "exit",
-                        "image_index": 1,
-                        "total_images": 1,
-                        "cancelled": False,
-                    }
-                )
-            success = True
-        except CancellationError:
-            stage_events.append(
-                {
-                    "stage": current_stage.value if current_stage else "pipeline",
-                    "phase": "cancelled",
-                    "image_index": 1,
-                    "total_images": 1,
-                    "cancelled": True,
-                }
-            )
-        except PipelineStageError as exc:
-            stage_events.append(
-                {
-                    "stage": exc.error.stage or "pipeline",
-                    "phase": "error",
-                    "image_index": 1,
-                    "total_images": 1,
-                    "cancelled": True,
-                    "error_code": exc.error.code.value,
-                    "error_message": exc.error.message,
-                }
-            )
-            if get_attached_envelope(exc) is None:
-                wrap_exception(
-                    exc,
-                    subsystem="pipeline",
-                    stage=exc.error.stage or (current_stage.value if current_stage else "pipeline"),
-                    context={"error_code": exc.error.code.value},
-                )
-            envelope = get_attached_envelope(exc)
-            log_with_ctx(
-                get_logger(__name__),
-                logging.ERROR,
-                f"Pipeline stage failed: {exc.error.stage} ({exc.error.code}) {exc.error.message}",
-                ctx=LogContext(subsystem="pipeline"),
-                extra_fields={"error_envelope": serialize_envelope(envelope)},
-            )
-            raise
-        except Exception as exc:  # pragma: no cover - best effort logging
-            if get_attached_envelope(exc) is None:
-                wrap_exception(
-                    exc,
-                    subsystem="pipeline",
-                    stage=current_stage.value if current_stage else None,
-                )
-            envelope = get_attached_envelope(exc)
-            log_with_ctx(
-                get_logger(__name__),
-                logging.ERROR,
-                f"Pipeline runner failed during {current_stage.value if current_stage else 'pipeline setup'}: {exc}",
-                ctx=LogContext(subsystem="pipeline"),
-                extra_fields={"error_envelope": serialize_envelope(envelope)},
-            )
-        finally:
-            record = None
-
-        if success:
-            log_with_ctx(
-                get_logger(__name__),
-                logging.INFO,
-                "PIPELINE_JOB_COMPLETED | All stages done",
-                ctx=LogContext(job_id=job_id, subsystem="pipeline_runner"),
-                extra_fields={"job_id": job_id},
-            )
-        if log_fn:
-            log_fn("[pipeline] PipelineRunner completed execution.")
-
-        variants = config.variant_configs or [executor_config]
-        if record:
-            run_id = record.run_id
-        metadata_payload = dict(config.metadata or {})
-        metadata_payload.setdefault("stage_outputs", [])
-        packs: list[dict[str, Any]] = []
-        if config.pack_name:
-            pack_entry: dict[str, Any] = {"pack_name": config.pack_name, "prompt": config.prompt}
-            pack_path = (config.metadata or {}).get("pack_path")
-            if pack_path:
-                pack_entry["pack_path"] = pack_path
-            packs.append(pack_entry)
-        write_run_metadata(
-            run_id,
-            executor_config,
-            packs=packs,
-            one_click_action=(config.metadata or {}).get("one_click_action"),
-            stage_outputs=[],
-            base_dir=self._runs_base_dir,
-        )
-        get_events = getattr(self._pipeline, "get_stage_events", None)
-        if callable(get_events):
-            stage_events = get_events() or stage_events
-        result = PipelineRunResult(
-            run_id=run_id,
-            success=success,
-            error=None,
-            variants=deepcopy(variants),
-            learning_records=[record] if record else [],
-            randomizer_mode=config.randomizer_mode or "",
-            randomizer_plan_size=config.randomizer_plan_size or len(variants),
-            metadata=metadata_payload,
-            stage_plan=stage_plan,
-            stage_events=stage_events,
-        )
-        if success and self._learning_enabled:
-            record = self._emit_learning_record(config, result)
-            if record:
-                result.learning_records = [record]
-        self._last_run_result = result
-        return result
-
-    def run_njr(
-        self,
-        record: NormalizedJobRecord,
-        cancel_token: "CancelToken" | None = None,
-        log_fn: Optional[Callable[[str], None]] = None,
-        run_plan: Any | None = None,
-    ) -> "PipelineRunResult":
-        """Execute the pipeline using a NormalizedJobRecord (PR-CORE1-B2).
-        
-        This is the PRIMARY execution method for all new jobs in v2.6+.
-        For jobs created via the core queue pipeline, this is the only execution path.
-        
-        Converts NJR to PipelineConfig and delegates to _execute_with_config().
-        Uses same executor logic as run() but with data from NormalizedJobRecord.
-        
-        See also:
-        - run(config, ...): Legacy-only execution for old history replay and direct tests.
-        """
-        config = self._pipeline_config_from_njr(record)
-        return self._execute_with_config(config, cancel_token, log_fn=log_fn)
-
-    def _pipeline_config_from_njr(self, record: NormalizedJobRecord) -> PipelineConfig:
-        """INTERNAL ONLY (PR-CORE1-12): Convert NJR to PipelineConfig for execution.
-        
-        This method extracts fields from NormalizedJobRecord and builds a
-        PipelineConfig for internal runner use. This is an INTERNAL conversion
-        for execution machinery, NOT a runtime payload.
-        
-        NOTE: This is a transitional method. Future refactoring will eliminate
-        PipelineConfig entirely and use NJR fields directly in stage execution.
-        
-        Args:
-            record: NormalizedJobRecord with all execution parameters
-            
-        Returns:
-            PipelineConfig for internal runner use
-        """
-        prompt = record.positive_prompt or record.prompt_pack_name or "StableNew Run"
-        negative = record.negative_prompt or ""
-        executor_config = PipelineConfig(
-            prompt=prompt,
-            negative_prompt=negative,
-            model=record.base_model or "unknown",
-            sampler=record.sampler_name or "Euler a",
-            width=record.width or 1024,
-            height=record.height or 1024,
-            steps=record.steps or 20,
-            cfg_scale=record.cfg_scale or 7.5,
-            pack_name=record.prompt_pack_name or None,
-            metadata={
-                "_pack_output_dir": record.path_output_dir,
-                "_config_variant_label": record.config_variant_label,
-            },
-        )
-        executor_config.metadata["_job_id"] = record.job_id
-        executor_config.metadata["_prompt_pack_id"] = record.prompt_pack_id
-        return executor_config
+    pass
 
     def _call_stage(
         self,
@@ -653,8 +323,8 @@ class PipelineRunner:
                 except Exception:
                     pass
 
-    def _build_executor_config(self, config: PipelineConfig) -> dict[str, Any]:
-        """Prepare the executor configuration dict from PipelineConfig."""
+    def _build_executor_config(self, config: Any) -> dict[str, Any]:
+        """Prepare the executor configuration dict from a legacy controller config."""
 
         base = deepcopy(self._config_manager.get_default_config())
 
@@ -703,7 +373,7 @@ class PipelineRunner:
     def _build_stage_payload(
         self,
         stage: StageExecution,
-        config: PipelineConfig,
+        config: Any,
         executor_config: dict[str, Any],
         prompt: str,
         negative_prompt: str,
@@ -771,7 +441,7 @@ class PipelineRunner:
         return payload
 
     def _emit_learning_record(
-        self, config: PipelineConfig, run_result: PipelineRunResult
+        self, config: Any, run_result: PipelineRunResult
     ) -> LearningRecord | None:
         if not (self._learning_record_writer or self._learning_record_callback):
             return None
@@ -899,4 +569,4 @@ def _extract_primary_knobs(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["PipelineConfig", "PipelineRunner", "PipelineRunResult", "normalize_run_result"]
+__all__ = ["PipelineRunner", "PipelineRunResult", "normalize_run_result"]

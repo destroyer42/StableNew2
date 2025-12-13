@@ -241,8 +241,16 @@ class JobService:
     def set_job_lifecycle_logger(self, logger: JobLifecycleLogger | None) -> None:
         self._job_lifecycle_logger = logger
 
+    def set_activity_hooks(self, *, on_queue_activity=None, on_runner_activity=None) -> None:
+        """Optional hooks called on queue/runner activity for external observers."""
+        self._on_queue_activity = on_queue_activity
+        self._on_runner_activity = on_runner_activity
+
     def enqueue(self, job: Job) -> None:
         self.job_queue.submit(job)
+        # PR-CORE1-D21B: Activity hook for queue
+        if hasattr(self, "_on_queue_activity") and self._on_queue_activity:
+            self._on_queue_activity()
         self._emit_queue_updated()
 
     def run_now(self, job: Job) -> None:
@@ -793,6 +801,10 @@ class JobService:
         self._emit_queue_updated()
         if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
             self._emit(self.EVENT_QUEUE_EMPTY)
+
+        # PR-CORE1-D21B: Activity hook for runner
+        if hasattr(self, "_on_runner_activity") and self._on_runner_activity:
+            self._on_runner_activity()
 
     def _start_watchdog(self, job: Job) -> None:
         if not self._watchdog_config.enabled or psutil is None:

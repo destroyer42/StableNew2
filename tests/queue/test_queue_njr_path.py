@@ -16,7 +16,7 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_history_store import JSONLJobHistoryStore
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.pipeline.pipeline_runner import PipelineConfig
+from src.controller.archive.pipeline_config_types import PipelineConfig
 
 
 def _make_dummy_njr() -> NormalizedJobRecord:

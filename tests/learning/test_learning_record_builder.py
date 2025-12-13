@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from src.learning.learning_record_builder import build_learning_record
-from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunResult
+from src.pipeline.pipeline_runner import PipelineRunResult
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.pipeline.stage_sequencer import StageExecutionPlan, StageExecution, StageConfig
 from src.learning.learning_record import LearningRecord
 

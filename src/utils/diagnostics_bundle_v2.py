@@ -40,10 +40,11 @@ def build_async(*, reason: str, log_handler: InMemoryLogHandler | None = None, j
 def build_crash_bundle(
     *,
     reason: str,
-    log_handler: InMemoryLogHandler | None,
+    log_handler: InMemoryLogHandler | None = None,
     job_service: Any | None = None,
     extra_context: Mapping[str, Any] | None = None,
     output_dir: Path | None = None,
+    context: dict | None = None,
 ) -> Path | None:
     """Create a diagnostics zip bundle for the given reason."""
 
@@ -66,7 +67,10 @@ def build_crash_bundle(
                 "timestamp": timestamp,
                 "system": collect_system_snapshot(),
             }
-            if extra_context:
+            # Accept context from new argument (overrides extra_context if both given)
+            if context is not None:
+                metadata["context"] = _anonymize(context)
+            elif extra_context:
                 metadata["context"] = _anonymize(extra_context)
             if job_snapshot:
                 metadata["job_snapshot"] = _anonymize(job_snapshot)

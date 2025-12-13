@@ -46,6 +46,7 @@ class SingleNodeJobRunner:
         run_callable: Callable[[Job], dict] | None,
         poll_interval: float = 0.1,
         on_status_change: Callable[[Job, JobStatus], None] | None = None,
+        on_activity=None,
     ) -> None:
         self.job_queue = job_queue
         self.run_callable = run_callable
@@ -55,6 +56,8 @@ class SingleNodeJobRunner:
         self._on_status_change = on_status_change
         self._current_job: Job | None = None
         self._cancel_current = threading.Event()
+        # PR-CORE1-D21B: Activity callback
+        self._on_activity = on_activity
 
     def start(self) -> None:
         if self._worker and self._worker.is_alive():
@@ -189,6 +192,9 @@ class SingleNodeJobRunner:
 
     def run_once(self, job: Job) -> dict | None:
         """Synchronously execute a single job (used by Run Now)."""
+        # PR-CORE1-D21B: Activity after dequeue
+        if self._on_activity:
+            self._on_activity()
         if job is None:
             return None
         self.job_queue.mark_running(job.job_id)
@@ -196,6 +202,9 @@ class SingleNodeJobRunner:
         self._current_job = job
         self._cancel_current.clear()
         try:
+            # PR-CORE1-D21B: Activity before running job
+            if self._on_activity:
+                self._on_activity()
             if self.run_callable:
                 logger.debug("Running job via run_once", extra={"job_id": job.job_id})
                 result = self.run_callable(job)
@@ -222,9 +231,15 @@ class SingleNodeJobRunner:
                 ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
                 extra_fields={"status": notify_status.value},
             )
+            # PR-CORE1-D21B: Activity after running job
+            if self._on_activity:
+                self._on_activity()
             self._notify(job, notify_status)
             return canonical_result
         except Exception as exc:  # noqa: BLE001
+            # PR-CORE1-D21B: Activity on exception
+            if self._on_activity:
+                self._on_activity()
             logger.error("Job %s failed with error: %s", job.job_id, exc, exc_info=True)
             _ensure_job_envelope(job, exc)
             self.job_queue.mark_failed(job.job_id, error_message=str(exc))

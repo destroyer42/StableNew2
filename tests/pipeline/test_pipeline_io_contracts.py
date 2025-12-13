@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner, PipelineRunResult
+from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from tests.helpers.pipeline_fakes import FakePipeline
 
 

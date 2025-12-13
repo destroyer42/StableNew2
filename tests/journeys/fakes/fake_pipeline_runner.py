@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, List
 
-from src.pipeline.pipeline_runner import PipelineConfig
+from src.controller.archive.pipeline_config_types import PipelineConfig
 
 
 @dataclass
@@ -24,4 +24,3 @@ class FakePipelineRunner:
         self.run_calls.append(RunCall(config=config, options={"cancel_token": cancel_token, "log_fn": log_fn}))
         if self.should_raise:
             raise RuntimeError("Fake pipeline failure")
-

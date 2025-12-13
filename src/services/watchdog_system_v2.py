@@ -41,9 +41,11 @@ class SystemWatchdogV2:
         )
 
     def _trigger(self, reason: str) -> None:
-        # diagnostics_service must provide build_async()
-        self.diagnostics.build_async(
-            reason=reason,
-            include_process_state=True,
-            include_queue_state=True
-        )
+        # Synchronous diagnostics emission with context
+        context = {
+            "ui_heartbeat_age_s": time.monotonic() - getattr(self.app, 'last_ui_heartbeat_ts', 0),
+            "queue_activity_age_s": None,  # Not tracked in DummyAppController
+            "runner_activity_age_s": time.monotonic() - getattr(self.app, 'last_runner_activity_ts', 0),
+            "queue_state": getattr(self.app, 'get_queue_state', lambda: None)(),
+        }
+        self.diagnostics.build(reason=reason, context=context)

@@ -23,6 +23,25 @@ You MUST follow this PR document **exactly**. No shortcuts. No substitutions.
 - Editing files not in scope
 - Leaving legacy bridge paths active (unless explicitly marked VIEW-ONLY)
 
+FORBIDDEN IN THIS PR
+
+Creating compat.py (or any new module) that defines PipelineConfig.
+
+Reintroducing PipelineRunner.run(config, …) or any runner entrypoint that accepts PipelineConfig/dicts.
+
+Re-exporting PipelineConfig anywhere.
+
+“Making tests pass” by restoring legacy APIs.
+
+REQUIRED IN THIS PR
+
+Update tests to call run_njr() only.
+
+Replace PipelineConfig fixtures with NJR builders (make_test_njr / prompt_pack_job_builder helpers).
+
+Ensure PipelineRunner returns PipelineRunResult in all execution paths.
+
+If the executor claims “tests require PipelineConfig,” that’s a test migration task, not a runtime change.
 Now execute the PR steps exactly as written below.
 
 

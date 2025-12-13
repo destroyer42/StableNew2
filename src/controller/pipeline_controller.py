@@ -22,7 +22,10 @@ from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.controller.job_execution_controller import JobExecutionController
 from src.queue.job_model import JobStatus, Job, JobPriority
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
-from src.pipeline.pipeline_runner import PipelineRunResult, PipelineConfig, PipelineRunner
+from src.pipeline.pipeline_runner import PipelineRunResult, PipelineRunner
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:  # pragma: no cover - type-only import
+    from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.history.history_record import HistoryRecord
 from src.learning.model_defaults_resolver import (
     GuiDefaultsResolver,

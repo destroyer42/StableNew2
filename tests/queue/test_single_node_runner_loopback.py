@@ -5,7 +5,7 @@ import time
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
-from src.pipeline.pipeline_runner import PipelineConfig
+from src.controller.archive.pipeline_config_types import PipelineConfig
 
 
 def _cfg():

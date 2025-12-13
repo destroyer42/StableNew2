@@ -11,7 +11,7 @@ from typing import Any, Optional, TYPE_CHECKING
 from src.learning.learning_record import LearningRecord, _now_iso
 
 if TYPE_CHECKING:  # pragma: no cover
-    from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunResult
+    from src.pipeline.pipeline_runner import PipelineRunResult
 
 
 def _extract_primary_knobs(config: dict[str, Any]) -> dict[str, Any]:
@@ -37,7 +37,7 @@ def _stage_plan_list(run_result: PipelineRunResult) -> list[str]:
 
 
 def build_learning_record(
-    pipeline_config: PipelineConfig,
+    pipeline_config: Any,
     run_result: PipelineRunResult,
     learning_context: Optional[dict[str, Any]] = None,
 ) -> LearningRecord:

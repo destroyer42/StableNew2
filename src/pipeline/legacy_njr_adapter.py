@@ -37,7 +37,7 @@ from src.pipeline.job_models_v2 import (
     NormalizedJobRecord,
     StageConfig,
 )
-from src.pipeline.pipeline_runner import PipelineConfig
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 

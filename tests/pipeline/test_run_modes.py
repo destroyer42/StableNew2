@@ -173,7 +173,7 @@ class TestPipelineControllerBuildJob:
     def test_build_job_creates_config_snapshot(self):
         """_build_job should create config_snapshot from PipelineConfig."""
         from src.controller.pipeline_controller import PipelineController
-        from src.pipeline.pipeline_runner import PipelineConfig
+        from src.controller.archive.pipeline_config_types import PipelineConfig
 
         controller = PipelineController(app_state=AppStateV2())
 

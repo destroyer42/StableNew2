@@ -1,7 +1,7 @@
 """Pipeline module"""
 
 from .executor import Pipeline
-from .pipeline_runner import PipelineConfig, PipelineRunResult, PipelineRunner
+from .pipeline_runner import PipelineRunResult, PipelineRunner
 from .stage_sequencer import (
     StageConfig,
     StageExecution,
@@ -14,7 +14,6 @@ from .video import VideoCreator
 __all__ = [
     "Pipeline",
     "VideoCreator",
-    "PipelineConfig",
     "PipelineRunner",
     "PipelineRunResult",
     "StageConfig",

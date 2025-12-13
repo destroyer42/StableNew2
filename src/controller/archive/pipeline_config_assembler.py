@@ -5,7 +5,12 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from src.pipeline.pipeline_runner import PipelineConfig
+from src.controller.archive.pipeline_config_types import PipelineConfig
+"""
+# VIEW-ONLY (v2.6)
+This module is archive-only and may import legacy PipelineConfig types from
+src.controller.archive.pipeline_config_types for reference.
+"""
 from src.utils.config import ConfigManager
 from src.utils.randomizer import PromptRandomizer
 from src.gui.prompt_workspace_state import PromptWorkspaceState

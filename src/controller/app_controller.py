@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, TypedDict
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, TypedDict, TYPE_CHECKING
 import os
 import sys
 import threading
@@ -48,7 +48,9 @@ from src.gui.main_window_v2 import MainWindow
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
 from src.gui.views.error_modal_v2 import ErrorModalV2
-from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunner, normalize_run_result
+from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
+if TYPE_CHECKING:  # pragma: no cover - type-only import
+    from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
 from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
@@ -333,6 +335,12 @@ class AppController:
                 pipeline_runner=self.pipeline_runner,
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
+            )
+        # PR-CORE1-D21B: Wire activity hooks for queue/runner heartbeats
+        if hasattr(self.pipeline_controller, "job_service") and self.pipeline_controller.job_service is not None:
+            self.pipeline_controller.job_service.set_activity_hooks(
+                on_queue_activity=self.notify_queue_activity,
+                on_runner_activity=self.notify_runner_activity,
             )
         try:
             jc = getattr(self.pipeline_controller, "_job_controller", None)

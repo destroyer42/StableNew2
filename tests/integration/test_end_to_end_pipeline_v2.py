@@ -16,7 +16,8 @@ from typing import Any
 import pytest
 
 from src.controller.job_service import JobService
-from src.pipeline.pipeline_runner import PipelineConfig, PipelineRunResult
+from src.pipeline.pipeline_runner import PipelineRunResult
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.pipeline.payload_builder import build_sdxl_payload
 from tests.helpers.job_helpers import make_test_njr
 from src.pipeline.stage_sequencer import StageSequencer

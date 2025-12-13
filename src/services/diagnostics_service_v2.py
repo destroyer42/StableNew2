@@ -8,24 +8,16 @@ from src.utils.diagnostics_bundle_v2 import build_crash_bundle
 
 
 class DiagnosticsServiceV2:
+
     def __init__(self, output_dir: Path):
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def build(
-        self,
-        *,
-        reason: str,
-        log_handler: Any = None,
-        job_service: Any = None,
-        extra_context: Optional[Mapping[str, Any]] = None,
-    ) -> Optional[Path]:
+    def build(self, *, reason: str, context: dict | None = None) -> Path:
         return build_crash_bundle(
             output_dir=self.output_dir,
             reason=reason,
-            log_handler=log_handler,
-            job_service=job_service,
-            extra_context=extra_context or {},
+            context=context or {}
         )
 
     def build_async(
