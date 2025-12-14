@@ -40,35 +40,65 @@ class ProcessInfo:
 
 def iter_python_processes() -> Iterator[ProcessInfo]:
     """Yield lightweight info for every Python process psutil can observe."""
-
     if psutil is None:
         return
 
-    attrs = ("pid", "name", "cmdline", "cwd", "create_time", "environ")
-    for proc in psutil.process_iter(attrs=attrs):
+    # Keep attrs minimal/safe. Do NOT include "cmdline" or "environ" here.
+    safe_attrs = ("pid", "name", "cwd", "create_time")
+
+    for proc in psutil.process_iter(attrs=safe_attrs):
         try:
             info = proc.info
         except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):  # type: ignore[attr-defined]
             continue
-        except Exception:  # pragma: no cover - defensive fallback
+        except Exception:
             continue
 
-        name = (info.get("name") or "").lower()
-        if name not in _PYTHON_EXECUTABLES:
+        # Name check (best-effort)
+        raw_name = (info.get("name") or "")
+        name_lower = raw_name.lower()
+        if name_lower not in _PYTHON_EXECUTABLES:
             continue
 
-        raw_cmd = info.get("cmdline") or []
-        cmdline = tuple(str(part) for part in raw_cmd if part)
+        pid = int(info.get("pid") or 0)
+
+        # cmdline (guarded; may throw WinError 87 / AccessDenied)
+        cmdline: tuple[str, ...]
+        try:
+            raw_cmd = proc.cmdline()
+            cmdline = tuple(str(part) for part in (raw_cmd or []) if part)
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
+            continue
+        except Exception:
+            continue
+
         if not cmdline:
             continue
 
-        env_markers = _collect_env_markers(info.get("environ"))
+        # cwd/create_time from safe info (guarded conversion)
+        cwd_val = info.get("cwd")
+        cwd = str(cwd_val) if cwd_val else None
+        create_time = _safe_float(info.get("create_time"))
+
+        # Decide whether to attempt environ().
+        # Only do this if cwd/cmdline already looks like it might be ours.
+        env_markers: tuple[str, ...] = ()
+        looks_stablenew = _shares_repo_path(cwd) or _matches_known_script(cmdline)
+        if looks_stablenew:
+            try:
+                env = proc.environ()
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
+                env = None
+            except Exception:
+                env = None
+            env_markers = _collect_env_markers(env)
+
         yield ProcessInfo(
-            pid=int(info.get("pid") or 0),
-            name=info.get("name"),
+            pid=pid,
+            name=raw_name or None,
             cmdline=cmdline,
-            cwd=str(info.get("cwd")) if info.get("cwd") else None,
-            create_time=_safe_float(info.get("create_time")),
+            cwd=cwd,
+            create_time=create_time,
             env_markers=env_markers,
         )
 
@@ -107,7 +137,13 @@ def format_process_brief(process: ProcessInfo) -> str:
 def _collect_env_markers(env: Mapping[str, str] | None) -> tuple[str, ...]:
     if not env:
         return ()
-    markers = [f"{key}={value}" for key, value in env.items() if key.startswith(_ENV_PREFIX)]
+    markers: list[str] = []
+    for key, value in env.items():
+        try:
+            if str(key).startswith(_ENV_PREFIX):
+                markers.append(f"{key}={value}")
+        except Exception:
+            continue
     return tuple(markers)
 
 

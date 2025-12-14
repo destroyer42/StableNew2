@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.pipeline.pipeline_runner import PipelineRunner, PipelineConfig
+from src.pipeline.pipeline_runner import PipelineRunner
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.pipeline.stage_sequencer import build_stage_execution_plan
 from src.utils import StructuredLogger
 

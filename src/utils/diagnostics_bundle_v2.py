@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 import zipfile
+import time
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -23,18 +24,52 @@ HOME = Path.home()
 DEFAULT_BUNDLE_DIR = Path("reports") / "diagnostics"
 _BUNDLE_LOCK = threading.Lock()
 
+# Single-flight / cooldown guards for async bundle creation
+_LAST_BUNDLE_TS: dict[str, float] = {}
+_IN_FLIGHT: set[str] = set()
+def build_async(
+    *,
+    reason: str,
+    log_handler: InMemoryLogHandler | None = None,
+    job_service: Any | None = None,
+    extra_context: Mapping[str, Any] | None = None,
+    output_dir: Path | None = None,
+    include_process_state: bool = False,
+    include_queue_state: bool = False,
+    cooldown_s: float = 30.0,
+    on_done: callable | None = None,
+) -> None:
+    """Create a diagnostics bundle asynchronously (single-flight per reason)."""
+    now = time.monotonic()
+    with _BUNDLE_LOCK:
+        last = _LAST_BUNDLE_TS.get(reason, 0.0)
+        if reason in _IN_FLIGHT:
+            return
+        if (now - last) < float(cooldown_s):
+            return
+        _IN_FLIGHT.add(reason)
+        _LAST_BUNDLE_TS[reason] = now
 
-def build_async(*, reason: str, log_handler: InMemoryLogHandler | None = None, job_service: Any | None = None, extra_context: Mapping[str, Any] | None = None, output_dir: Path | None = None, include_process_state: bool = False, include_queue_state: bool = False) -> None:
-    """Create a diagnostics bundle asynchronously in a background thread."""
     def _worker():
-        build_crash_bundle(
-            reason=reason,
-            log_handler=log_handler,
-            job_service=job_service,
-            extra_context=extra_context,
-            output_dir=output_dir,
-        )
+        try:
+            build_crash_bundle(
+                reason=reason,
+                log_handler=log_handler,
+                job_service=job_service,
+                extra_context=extra_context,
+                output_dir=output_dir,
+            )
+        finally:
+            with _BUNDLE_LOCK:
+                _IN_FLIGHT.discard(reason)
+            if on_done:
+                try:
+                    on_done()
+                except Exception:
+                    pass
+
     threading.Thread(target=_worker, daemon=True, name=f"DiagBundle-{reason}").start()
+    
 
 
 def build_crash_bundle(
@@ -91,7 +126,10 @@ def build_crash_bundle(
 
 
 def _collect_process_inspector_lines() -> list[str]:
-    return [format_process_brief(proc) for proc in iter_stablenew_like_processes()]
+    try:
+        return [format_process_brief(proc) for proc in iter_stablenew_like_processes()]
+    except Exception:
+        return []
 
 
 def _include_jsonl_logs(zf: zipfile.ZipFile) -> None:

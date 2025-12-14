@@ -4,7 +4,7 @@ from pathlib import Path
 import threading
 from typing import Any, Mapping, Optional
 
-from src.utils.diagnostics_bundle_v2 import build_crash_bundle
+from src.utils.diagnostics_bundle_v2 import build_crash_bundle, build_async as bundle_build_async
 
 
 class DiagnosticsServiceV2:
@@ -17,7 +17,7 @@ class DiagnosticsServiceV2:
         return build_crash_bundle(
             output_dir=self.output_dir,
             reason=reason,
-            context=context or {}
+            context=context or {},
         )
 
     def build_async(
@@ -31,12 +31,23 @@ class DiagnosticsServiceV2:
         include_queue_state: bool = False,
         **kwargs: Any,
     ) -> None:
-        def worker() -> None:
-            self.build(
+        # Delegate to central bundle async with repo-specific output_dir.
+        try:
+            bundle_build_async(
                 reason=reason,
                 log_handler=log_handler,
                 job_service=job_service,
                 extra_context=extra_context,
+                include_process_state=include_process_state,
+                include_queue_state=include_queue_state,
+                output_dir=self.output_dir,
+                on_done=kwargs.get("on_done"),
             )
-
-        threading.Thread(target=worker, daemon=True, name="DiagnosticsServiceV2-build").start()
+        except TypeError:
+            # Fall back to a thread that calls the sync build
+            def _worker() -> None:
+                try:
+                    self.build(reason=reason, context=extra_context or {})
+                except Exception:
+                    pass
+            threading.Thread(target=_worker, daemon=True, name="DiagnosticsServiceV2-build").start()

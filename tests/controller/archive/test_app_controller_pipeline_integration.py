@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from src.controller.app_controller import AppController, LifecycleState
-from src.pipeline.pipeline_runner import PipelineConfig
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.utils.prompt_packs import PromptPackInfo
 from tests.controller.test_app_controller_config import DummyWindow
 from tests.helpers.factories import make_run_config
