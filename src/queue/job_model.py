@@ -54,6 +54,8 @@ def _utcnow() -> datetime:
 @dataclass
 class Job:
     job_id: str
+    # Backwards-compatible positional arg: allow Job(job_id, pipeline_config)
+    pipeline_config: Optional[Dict[str, Any]] = None
     priority: JobPriority = JobPriority.NORMAL
     status: JobStatus = JobStatus.QUEUED
     created_at: datetime = field(default_factory=_utcnow)
@@ -79,6 +81,7 @@ class Job:
     variant_total: Optional[int] = None
     snapshot: Optional[Dict[str, Any]] = None
     execution_metadata: JobExecutionMetadata = field(default_factory=JobExecutionMetadata)
+    # Note: `pipeline_config` is a compat field and is excluded from `to_dict`.
 
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
         self.status = status
@@ -118,14 +121,22 @@ class Job:
 
     @property
     def pipeline_config(self) -> Optional[Dict[str, Any]]:
-        """
-        Deprecated compatibility alias for legacy code/tests.
-        Returns config_snapshot if present, else None.
-        Not included in to_dict().
+        """Compatibility property for legacy code expecting `job.pipeline_config`.
+
+        Returns the legacy pipeline config if present and no normalized record
+        is attached. If a normalized record (`_normalized_record`) exists,
+        this returns None to emphasize NJR-first execution semantics.
         """
         if getattr(self, "_normalized_record", None) is not None:
             return None
-        return self.config_snapshot
+        # Prefer explicit `pipeline_config` init value if set, else fall back to config_snapshot
+        pc = self.__dict__.get("pipeline_config", None)
+        return pc if pc is not None else self.config_snapshot
+
+    @pipeline_config.setter
+    def pipeline_config(self, value: Optional[Dict[str, Any]]) -> None:
+        # Store compat payload without affecting NJR execution paths.
+        self.__dict__["pipeline_config"] = value
 
     def summary(self) -> str:
         snapshot = self.snapshot or {}

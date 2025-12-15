@@ -25,6 +25,31 @@ from src.utils.retry_policy_v2 import (
 logger = get_logger(__name__)
 
 
+class WebUIUnavailableError(Exception):
+    """Raised when the WebUI cannot be reached after retrying a POST."""
+
+    def __init__(
+        self,
+        endpoint: str,
+        method: str,
+        *,
+        stage: str | None = None,
+        reason: str | None = None,
+        original_exception: Exception | None = None,
+    ) -> None:
+        message = f"WebUI unavailable for {method.upper()} {endpoint}"
+        if stage:
+            message = f"{message} (stage={stage})"
+        if reason:
+            message = f"{message}: {reason}"
+        super().__init__(message)
+        self.endpoint = endpoint
+        self.method = method
+        self.stage = stage
+        self.reason = reason
+        self.original_exception = original_exception
+
+
 def _format_as_data_url(image_value: str | None) -> str | None:
     """Return a data URL for the provided base64 string."""
     if not image_value:
@@ -277,6 +302,18 @@ class SDWebUIClient:
                     "attempts": retries,
                 },
             )
+            if (
+                stage_key
+                and method.upper() == "POST"
+                and isinstance(last_exception, (requests.ConnectionError, requests.Timeout))
+            ):
+                raise WebUIUnavailableError(
+                    endpoint=url,
+                    method=method.upper(),
+                    stage=stage_key,
+                    reason=str(last_exception),
+                    original_exception=last_exception,
+                )
 
         return None
 

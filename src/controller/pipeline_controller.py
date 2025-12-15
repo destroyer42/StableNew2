@@ -26,6 +26,13 @@ from src.pipeline.pipeline_runner import PipelineRunResult, PipelineRunner
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover - type-only import
     from src.controller.archive.pipeline_config_types import PipelineConfig
+# At runtime, some legacy code still constructs a PipelineConfig instance.
+# Import the archive-only legacy dataclass when available so runtime calls
+# that create `PipelineConfig(...)` continue to work in tests.
+try:  # pragma: no cover - best-effort runtime import
+    from src.controller.archive.pipeline_config_types import PipelineConfig  # type: ignore
+except Exception:
+    PipelineConfig = None  # type: ignore
 from src.history.history_record import HistoryRecord
 from src.learning.model_defaults_resolver import (
     GuiDefaultsResolver,

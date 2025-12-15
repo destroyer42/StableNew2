@@ -218,6 +218,9 @@ class JobService:
         self.job_queue.register_status_callback(self._handle_job_status_change)
         self._runner_lock = Lock()
         self._worker_started = False
+        # Optional dispatcher used to schedule event delivery (e.g., onto UI thread).
+        # Signature: dispatch_fn(callable_zero_arg) -> None
+        self._event_dispatcher: Callable[[Callable[[], None]], None] | None = None
 
     @property
     def queue(self) -> JobQueue:
@@ -226,6 +229,15 @@ class JobService:
 
     def register_callback(self, event: str, callback: Callable[..., None]) -> None:
         self._listeners.setdefault(event, []).append(callback)
+
+    def set_event_dispatcher(self, dispatch_fn: Callable[[Callable[[], None]], None]) -> None:
+        """Set an optional dispatcher used to schedule listener callbacks.
+
+        The dispatcher receives a zero-argument callable and is responsible for
+        executing or scheduling it (for example, via Tk `root.after` or a test
+        `ui_scheduler`). If not set, callbacks are invoked inline (existing behavior).
+        """
+        self._event_dispatcher = dispatch_fn
 
     def set_status_callback(self, name: str, callback: Callable[[Job, JobStatus], None]) -> None:
         """PR-D: Register a callback for job status changes with full job + status info.
@@ -807,10 +819,17 @@ class JobService:
             self._on_runner_activity()
 
     def _start_watchdog(self, job: Job) -> None:
-        if not self._watchdog_config.enabled or psutil is None:
+        if not self._watchdog_config.enabled:
             return
         if job.job_id in self._active_watchdogs:
             return
+        if psutil is None:
+            log_with_ctx(
+                logger,
+                logging.DEBUG,
+                "Watchdog enabled without psutil; proceeding with configured watchdog",
+                ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+            )
         watchdog = JobWatchdog(
             job_id=job.job_id,
             metadata=job.execution_metadata,
@@ -880,8 +899,20 @@ class JobService:
     def _emit(self, event: str, *args: Any) -> None:
         for callback in self._listeners.get(event, []):
             try:
-                callback(*args)
+                if self._event_dispatcher:
+                    # schedule via dispatcher to preserve caller thread
+                    def _call(cb=callback, a=args):
+                        cb(*a)
+
+                    try:
+                        self._event_dispatcher(_call)
+                    except Exception:
+                        # If dispatcher fails, fall back to direct call to avoid silent loss
+                        callback(*args)
+                else:
+                    callback(*args)
             except Exception:
+                # Preserve existing behavior: swallow listener exceptions
                 continue
 
     def _emit_status_callbacks(self, job: Job, status: JobStatus) -> None:
@@ -897,7 +928,16 @@ class JobService:
         self._build_job_view(job, status)
         for callback in status_callbacks:
             try:
-                callback(job, status)
+                if self._event_dispatcher:
+                    def _call(cb=callback, j=job, s=status):
+                        cb(j, s)
+
+                    try:
+                        self._event_dispatcher(_call)
+                    except Exception:
+                        callback(job, status)
+                else:
+                    callback(job, status)
             except Exception as exc:
                 logger.debug("Status callback failed: %s", exc)
 

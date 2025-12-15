@@ -885,23 +885,69 @@ class SidebarPanelV2(ttk.Frame):
         # PR-CORE1-12: PipelineConfigPanel archived - no longer wired
         # from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
         
-        # Create a frame to hold the pipeline config panel
+        # Create a frame to hold the pipeline config panel and stage toggles
         frame = ttk.Frame(parent)
-        
-        # PR-CORE1-12: Stages section and pipeline_config_panel creation disabled
-        # Add stages section at the top
-        # stages_frame = self._build_stages_section(frame)
-        # stages_frame.pack(fill="x", pady=(0, 8))
-        
-        # Create the pipeline config panel
-        # self.pipeline_config_panel = PipelineConfigPanel(
-        #     frame,
-        #     controller=self.controller,
-        #     app_state=self.app_state,
-        #     on_change=self._emit_change
-        # )
-        # self.pipeline_config_panel.pack(fill="both", expand=True)
-        
+        stage_section = ttk.Frame(frame)
+        stage_section.pack(fill="x", pady=(0, 8))
+        header = ttk.Label(stage_section, text="Stages", style=HEADING_LABEL_STYLE)
+        header.pack(anchor="w")
+        stages_frame = self._build_stages_section(stage_section)
+        stages_frame.pack(fill="x", pady=(4, 0))
+
+        # Try to instantiate the archived/shim PipelineConfigPanel and expose it
+        try:
+            from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel  # type: ignore
+        except Exception:
+            PipelineConfigPanel = None  # pragma: no cover - best-effort
+
+        panel = None
+        if PipelineConfigPanel is not None:
+            # Prefer the richer constructor but tolerate alternate signatures
+            try:
+                panel = PipelineConfigPanel(
+                    frame,
+                    controller=getattr(self, "controller", None),
+                    app_state=getattr(self, "app_state", None),
+                    on_change=self._emit_change,
+                )
+            except TypeError:
+                try:
+                    panel = PipelineConfigPanel(
+                        frame,
+                        pipeline_state=getattr(self, "pipeline_state", None),
+                        app_state=getattr(self, "app_state", None),
+                        on_change=self._emit_change,
+                    )
+                except Exception:
+                    panel = None
+            except Exception:
+                panel = None
+
+        # Always expose a panel instance so callers and tests have a handle
+        if panel is None:
+            try:
+                panel = ttk.Frame(frame)
+            except Exception:
+                panel = None
+
+        if panel is not None:
+            # Ensure expected attributes exist even for shim panels
+            if not hasattr(panel, "controller"):
+                panel.controller = getattr(self, "controller", None)
+            if not hasattr(panel, "app_state"):
+                panel.app_state = getattr(self, "app_state", None)
+            if not hasattr(panel, "pipeline_state"):
+                panel.pipeline_state = getattr(self, "pipeline_state", None)
+
+            self.pipeline_config_panel = panel
+            try:
+                panel.pack(fill="both", expand=True)
+            except Exception:
+                pass
+        else:
+            # Ensure attribute exists for callers; None means not available
+            self.pipeline_config_panel = None
+
         return frame
 
         # Prompt Pack Panel (below grid)

@@ -32,6 +32,7 @@ class WebUIConnectionController:
         self._logger = logger or logging.getLogger(__name__)
         self._base_url_provider = base_url_provider or (lambda: app_config._env_default("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"))
         self._ready_callbacks: list[Callable[[], None]] = list(ready_callbacks or [])
+        self._on_resources_updated: Callable[[dict[str, list[object]]], None] | None = None
 
     def get_state(self) -> WebUIConnectionState:
         return self._state
@@ -46,6 +47,19 @@ class WebUIConnectionController:
                 callback()
             except Exception as exc:
                 self._logger.debug("WebUI ready callback failed: %s", exc)
+
+    def set_on_resources_updated(self, callback: Callable[[dict[str, list[object]]], None] | None) -> None:
+        """Register a single callback invoked when resources are refreshed."""
+        self._on_resources_updated = callback
+
+    def notify_resources_updated(self, resources: dict[str, list[object]] | None) -> None:
+        """Invoke the registered resources callback when a refresh completes."""
+        if self._on_resources_updated is None or resources is None:
+            return
+        try:
+            self._on_resources_updated(resources)
+        except Exception as exc:
+            self._logger.debug("WebUI resources callback failed: %s", exc)
 
     def register_on_ready(self, callback: Callable[[], None]) -> None:
         if callback in self._ready_callbacks:

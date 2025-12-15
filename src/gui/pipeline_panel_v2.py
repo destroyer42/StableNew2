@@ -11,6 +11,7 @@ from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2Im
 from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 from src.gui.stage_cards_v2.advanced_upscale_stage_card_v2 import AdvancedUpscaleStageCardV2
 from src.gui.stage_cards_v2.validation_result import ValidationResult
+from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from .widgets.scrollable_frame_v2 import ScrollableFrame
 from .widgets.config_sweep_widget_v2 import ConfigSweepWidgetV2
 from src.gui.theme_v2 import STATUS_LABEL_STYLE
@@ -31,11 +32,20 @@ class PipelinePanelV2(ttk.Frame):
         config_manager: object = None,
         **kwargs,
     ) -> None:
+        # Pop GUI-only kwargs that ttk.Frame doesn't accept (sanitization).
+        # These kwargs may be passed by tests or GUI wiring; store them on self
+        # for later use and remove them before calling ttk.Frame.__init__.
+        on_change = kwargs.pop("on_change", None)
+        pipeline_state = kwargs.pop("pipeline_state", None)
+
         self.sidebar: object | None = None
         self.controller = controller
         self.app_state = app_state
         self.theme = theme
         self.config_manager = config_manager
+        # expose sanitized kwargs for panels/tests
+        self._on_change = on_change
+        self.pipeline_state = pipeline_state
 
         style_name = getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
         super().__init__(master, style=style_name, padding=theme_mod.PADDING_MD, **kwargs)
@@ -289,6 +299,10 @@ class PipelinePanelV2(ttk.Frame):
             Dict with enabled, variants, and global negative flags.
         """
         return self.config_sweep_widget.get_sweep_config()
+
+    def apply_webui_resources(self, resources: dict[str, list[Any]] | None) -> None:
+        loader = DropdownLoaderV2(self.config_manager)
+        loader.apply(resources, pipeline_tab=self)
 
 
 def format_queue_job_summary(job: Any) -> str:

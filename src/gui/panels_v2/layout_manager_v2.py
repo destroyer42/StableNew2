@@ -28,28 +28,34 @@ class LayoutManagerV2:
         prompt_workspace_state = getattr(mw, "prompt_workspace_state", None)
         theme = getattr(mw, "theme", None)
 
-        mw.prompt_tab = PromptTabFrame(
-            notebook,
-            app_state=app_state,
-        )
-        notebook.add(mw.prompt_tab, text="Prompt")
+        # Use main window registry when available to avoid duplicate tabs
+        if hasattr(mw, "get_tab") and mw.get_tab("prompt") is not None:
+            mw.prompt_tab = mw.get_tab("prompt")
+        else:
+            def _make_prompt(parent):
+                return PromptTabFrame(parent, app_state=app_state)
+            mw.prompt_tab = mw.add_tab("prompt", "Prompt", _make_prompt) if hasattr(mw, "add_tab") else PromptTabFrame(notebook, app_state=app_state)
 
-        mw.pipeline_tab = PipelineTabFrame(
-            notebook,
-            prompt_workspace_state=prompt_workspace_state,
-            app_state=app_state,
-            app_controller=app_controller,
-            pipeline_controller=pipeline_controller,
-            theme=theme,
-        )
-        notebook.add(mw.pipeline_tab, text="Pipeline")
+        if hasattr(mw, "get_tab") and mw.get_tab("pipeline") is not None:
+            mw.pipeline_tab = mw.get_tab("pipeline")
+        else:
+            def _make_pipeline(parent):
+                return PipelineTabFrame(
+                    parent,
+                    prompt_workspace_state=prompt_workspace_state,
+                    app_state=app_state,
+                    app_controller=app_controller,
+                    pipeline_controller=pipeline_controller,
+                    theme=theme,
+                )
+            mw.pipeline_tab = mw.add_tab("pipeline", "Pipeline", _make_pipeline) if hasattr(mw, "add_tab") else PipelineTabFrame(notebook, prompt_workspace_state=prompt_workspace_state, app_state=app_state, app_controller=app_controller, pipeline_controller=pipeline_controller, theme=theme)
 
-        mw.learning_tab = LearningTabFrame(
-            notebook,
-            app_state=app_state,
-            pipeline_controller=pipeline_controller,
-        )
-        notebook.add(mw.learning_tab, text="Learning")
+        if hasattr(mw, "get_tab") and mw.get_tab("learning") is not None:
+            mw.learning_tab = mw.get_tab("learning")
+        else:
+            def _make_learning(parent):
+                return LearningTabFrame(parent, app_state=app_state, pipeline_controller=pipeline_controller)
+            mw.learning_tab = mw.add_tab("learning", "Learning", _make_learning) if hasattr(mw, "add_tab") else LearningTabFrame(notebook, app_state=app_state, pipeline_controller=pipeline_controller)
 
         notebook.select(mw.pipeline_tab)
 

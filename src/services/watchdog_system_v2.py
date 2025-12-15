@@ -47,19 +47,23 @@ class SystemWatchdogV2:
 
     def _check(self) -> None:
         now = time.monotonic()
-
-        ui_age = now - float(getattr(self.app, "last_ui_heartbeat_ts", 0) or 0)
-        if ui_age > self.UI_STALL_S:
-            self._trigger("ui_heartbeat_stall", now)
+        heartbeat_ts = getattr(self.app, "last_ui_heartbeat_ts", None)
+        if heartbeat_ts:
+            ui_age = now - float(heartbeat_ts)
+            if ui_age > self.UI_STALL_S:
+                self._trigger("ui_heartbeat_stall", now)
 
         if self._queue_running_but_stalled(now):
             self._trigger("queue_runner_stall", now)
 
     def _queue_running_but_stalled(self, now: float) -> bool:
+        runner_ts = getattr(self.app, "last_runner_activity_ts", None)
+        if not runner_ts:
+            return False
         return (
             hasattr(self.app, "has_running_jobs")
             and bool(self.app.has_running_jobs())
-            and (now - float(getattr(self.app, "last_runner_activity_ts", 0) or 0)) > self.RUNNER_STALL_S
+            and (now - float(runner_ts)) > self.RUNNER_STALL_S
         )
 
     def _trigger(self, reason: str, now: float) -> None:

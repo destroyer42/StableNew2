@@ -245,7 +245,17 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                         sync_state(state)
                         last_logged_state = state
                         if state == WebUIConnectionState.READY and not core_config_refreshed:
+                            # Notify both the sidebar (UI) and the AppController so resources/dropdowns are refreshed
                             trigger_sidebar_refresh()
+                            try:
+                                controller = getattr(window, "app_controller", None)
+                                if controller and hasattr(controller, "on_webui_ready"):
+                                    try:
+                                        controller.on_webui_ready()
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
                             core_config_refreshed = True
                     except Exception as e:
                         if not error_logged:

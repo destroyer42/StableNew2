@@ -107,6 +107,7 @@ class JobExecutionController:
         self._started = False
         self._lock = threading.Lock()
         self._callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
+        self._status_dispatcher: Callable[[Callable[[], None]], None] | None = None
         self._restore_queue_state()
         self._queue_persistence = QueuePersistenceManager(self)
         self._persist_queue_state()
@@ -181,10 +182,23 @@ class JobExecutionController:
     def clear_status_callback(self, key: str) -> None:
         self._callbacks.pop(key, None)
 
+    def set_status_dispatcher(self, dispatcher: Callable[[Callable[[], None]], None] | None) -> None:
+        """Set dispatcher used to marshal status callbacks onto the GUI thread."""
+        self._status_dispatcher = dispatcher
+
     def _on_status(self, job: Job, status: JobStatus) -> None:
         for cb in list(self._callbacks.values()):
             try:
-                cb(job, status)
+                if self._status_dispatcher:
+                    def _call(callback=cb, j=job, s=status):
+                        callback(j, s)
+
+                    try:
+                        self._status_dispatcher(_call)
+                    except Exception:
+                        cb(job, status)
+                else:
+                    cb(job, status)
             except Exception:
                 pass
 

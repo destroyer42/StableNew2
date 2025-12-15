@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Any
+from typing import Any, Callable
+import threading
 
 from src.gui.theme_v2 import (
     ACCENT_GOLD,
@@ -201,6 +202,16 @@ class QueuePanelV2(ttk.Frame):
             self._on_queue_summaries_changed()
             self._on_running_summary_changed()
 
+    def _dispatch_to_ui(self, fn: Callable[[], None]) -> bool:
+        """Ensure widget mutations occur on the Tk main thread."""
+        if threading.current_thread().name != "MainThread" and hasattr(self, "after"):
+            try:
+                self.after(0, fn)
+                return True
+            except Exception:
+                return False
+        return False
+
     def _on_selection_changed(self, event: tk.Event[tk.Listbox] | None = None) -> None:
         """Handle selection change in the listbox."""
         self._update_button_states()
@@ -289,6 +300,8 @@ class QueuePanelV2(ttk.Frame):
         
         PR-GUI-F2: Displays order numbers and highlights the running job.
         """
+        if self._dispatch_to_ui(lambda: self.update_jobs(jobs)):
+            return
         # Remember selection
         old_selection = self._get_selected_index()
         old_job_id = self._jobs[old_selection].job_id if old_selection is not None and old_selection < len(self._jobs) else None
@@ -446,6 +459,8 @@ class QueuePanelV2(ttk.Frame):
         
         This provides an API compatible with the old PreviewPanelV2.update_queue_status().
         """
+        if self._dispatch_to_ui(lambda: self.update_queue_status(status)):
+            return
         normalized = (status or "idle").lower()
         if normalized == "running":
             color = ACCENT_GOLD
@@ -475,6 +490,8 @@ class QueuePanelV2(ttk.Frame):
         Args:
             job: The running QueueJobV2, or None if no job is running.
         """
+        if self._dispatch_to_ui(lambda: self.set_running_job(job)):
+            return
         new_id = job.job_id if job else None
         if new_id != self._running_job_id:
             self._running_job_id = new_id
@@ -506,6 +523,8 @@ class QueuePanelV2(ttk.Frame):
         Args:
             dto: JobQueueItemDTO with current job state
         """
+        if self._dispatch_to_ui(lambda: self.upsert_job(dto)):
+            return
         # Check if job already exists
         for i, job in enumerate(self._jobs):
             if job.job_id == dto.job_id:
@@ -542,6 +561,8 @@ class QueuePanelV2(ttk.Frame):
         Args:
             job_id: The job ID to remove
         """
+        if self._dispatch_to_ui(lambda: self.remove_job(job_id)):
+            return
         self._jobs = [job for job in self._jobs if job.job_id != job_id]
         self.update_jobs(self._jobs)
 

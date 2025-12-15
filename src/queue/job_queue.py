@@ -24,12 +24,15 @@ if TYPE_CHECKING:  # pragma: no cover
 class JobQueue:
     """Thread-safe in-memory job queue."""
 
+    _FINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
+
     def __init__(self, *, history_store: JobHistoryStore | None = None) -> None:
         self._queue: list[tuple[int, int, str]] = []
         self._jobs: Dict[str, Job] = {}
         self._counter = 0
         self._lock = Lock()
         self._history_store = history_store
+        self._finalized_jobs: dict[str, Job] = {}
         self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
         self._state_listeners: list[Callable[[], None]] = []
 
@@ -72,7 +75,10 @@ class JobQueue:
 
     def get_job(self, job_id: str) -> Optional[Job]:
         with self._lock:
-            return self._jobs.get(job_id)
+            job = self._jobs.get(job_id)
+            if job is not None:
+                return job
+            return self._finalized_jobs.get(job_id)
 
     def _update_status(
         self,
@@ -89,6 +95,10 @@ class JobQueue:
             if result is not None:
                 job.result = result
             ts = job.updated_at
+            should_prune = status in self._FINAL_STATUSES and self._history_store is not None
+            if should_prune:
+                self._finalized_jobs[job_id] = job
+                self._prune_job(job_id)
         self._record_status(job_id, status, ts, error_message, result=result)
         self._notify_status(job, status)
         self._notify_state_listeners()
@@ -192,6 +202,10 @@ class JobQueue:
         """
         with self._lock:
             job = self._jobs.pop(job_id, None)
+            if job is None:
+                job = self._finalized_jobs.pop(job_id, None)
+            else:
+                self._finalized_jobs.pop(job_id, None)
             if job:
                 # Remove from heap by marking as cancelled
                 job.status = JobStatus.CANCELLED
@@ -219,6 +233,7 @@ class JobQueue:
             # Remove from jobs dict
             for jid in queued_ids:
                 self._jobs.pop(jid, None)
+                self._finalized_jobs.pop(jid, None)
             # Rebuild queue without queued jobs
             self._queue = [
                 (p, c, jid) for (p, c, jid) in self._queue
@@ -254,6 +269,12 @@ class JobQueue:
             else:
                 new_queue.append((priority, counter, jid))
         self._queue = new_queue
+        heapq.heapify(self._queue)
+
+    def _prune_job(self, job_id: str) -> None:
+        """Remove a terminal job from the queue heap."""
+        self._jobs.pop(job_id, None)
+        self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != job_id]
         heapq.heapify(self._queue)
 
     def register_state_listener(self, callback: Callable[[], None]) -> None:

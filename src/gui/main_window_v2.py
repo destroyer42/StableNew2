@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Dict
 
 from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.gui_invoker import GuiInvoker
 from src.gui.layout_v2 import configure_root_grid
+from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.theme_v2 import apply_theme, BACKGROUND_ELEVATED, TEXT_PRIMARY, ACCENT_GOLD
 from src.gui.log_trace_panel_v2 import LogTracePanelV2
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
@@ -129,16 +130,62 @@ class MainWindowV2:
 
         self.center_notebook = ttk.Notebook(self.root)
         self.center_notebook.grid(**get_root_zone_config("main"))
+        # Registry to ensure a single authoritative tab instance per id
+        self._tab_registry: Dict[str, tk.Widget] = {}
+
         # Prompt tab (compatibility for journey tests / prompt workspace access)
         self.prompt_tab = PromptTabFrame(self.center_notebook, app_state=self.app_state)
-        self.center_notebook.add(self.prompt_tab, text="Prompt")
+        self.add_tab("prompt", "Prompt", self.prompt_tab)
+
         # PR-CORE1-D14: Always create and assign pipeline_tab for test/compat
         from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
-        self.pipeline_tab = PipelineTabFrame(self.center_notebook)
-        # Optionally wire controller if attribute exists
-        if hasattr(self.pipeline_tab, "pipeline_controller"):
-            self.pipeline_tab.pipeline_controller = self.pipeline_controller
-        self.center_notebook.add(self.pipeline_tab, text="Pipeline")
+        # Use the registry to prevent duplicate pipeline tabs
+        def _make_pipeline(parent):
+            # Construct the richer PipelineTabFrame with available context so dropdowns and panels populate
+            try:
+                tab = PipelineTabFrame(
+                    parent,
+                    prompt_workspace_state=getattr(self, "prompt_workspace_state", None),
+                    app_state=self.app_state,
+                    app_controller=self.app_controller,
+                    pipeline_controller=self.pipeline_controller,
+                    theme=getattr(self, "theme", None),
+                )
+            except Exception:
+                # Fallback to minimal constructor
+                tab = PipelineTabFrame(parent)
+            # Also ensure pipeline_controller attribute is set if present
+            if hasattr(tab, "pipeline_controller") and getattr(tab, "pipeline_controller", None) is None:
+                try:
+                    tab.pipeline_controller = self.pipeline_controller
+                except Exception:
+                    pass
+            return tab
+
+        existing_pipeline_tab = self._tab_registry.get("pipeline")
+        if existing_pipeline_tab is not None:
+            self.pipeline_tab = existing_pipeline_tab
+        else:
+            self.pipeline_tab = self.add_tab("pipeline", "Pipeline", _make_pipeline)
+
+        # Learning tab (optional; attach via registry)
+        def _make_learning(parent):
+            try:
+                tab = LearningTabFrame(parent)
+            except Exception:
+                try:
+                    tab = LearningTabFrame(parent, app_state=self.app_state)
+                except Exception:
+                    tab = LearningTabFrame(parent)
+            # Wire controller if present
+            if hasattr(tab, "controller"):
+                try:
+                    tab.controller = self.app_controller or self.pipeline_controller
+                except Exception:
+                    pass
+            return tab
+
+        self.learning_tab = self.add_tab("learning", "Learning", _make_learning)
 
         self.left_zone = None
         self.right_zone = None
@@ -175,6 +222,16 @@ class MainWindowV2:
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
 
+        self._dropdown_loader_v2 = DropdownLoaderV2(getattr(self.app_controller, "_config_manager", None))
+        if not hasattr(self.pipeline_tab, "apply_webui_resources"):
+            def _apply_pipeline_resources(resources: dict[str, list[Any]] | None) -> None:
+                self._dropdown_loader_v2.apply(resources, pipeline_tab=self.pipeline_tab)
+
+            try:
+                self.pipeline_tab.apply_webui_resources = _apply_pipeline_resources
+            except Exception:
+                pass
+
         # Provide delegation helpers expected by controllers/tests
         self.after = self.root.after  # type: ignore[attr-defined]
 
@@ -189,6 +246,42 @@ class MainWindowV2:
 
         # --- UI Heartbeat: Tk thread liveness signal ---
         self._install_ui_heartbeat()
+
+    def run_in_main_thread(self, cb: Callable[[], None]) -> None:
+        """Schedule the callback on the Tk main thread (safe from any thread)."""
+        if getattr(self, "root", None) is not None:
+            try:
+                self.root.after(0, cb)
+                return
+            except Exception:
+                pass
+        cb()
+
+    def add_tab(self, tab_id: str, title: str, frame_or_factory: Any) -> tk.Widget:
+        """Add a tab only if not already present. Accepts a frame instance or a factory(parent)->frame."""
+        if tab_id in self._tab_registry:
+            return self._tab_registry[tab_id]
+        # Create the frame if a factory was provided
+        try:
+            if callable(frame_or_factory):
+                frame = frame_or_factory(self.center_notebook)
+            else:
+                frame = frame_or_factory
+        except Exception:
+            # Best-effort: fall back to a simple empty frame
+            try:
+                frame = ttk.Frame(self.center_notebook)
+            except Exception:
+                frame = tk.Frame(self.center_notebook)
+        try:
+            self.center_notebook.add(frame, text=title)
+        except Exception:
+            pass
+        self._tab_registry[tab_id] = frame
+        return frame
+
+    def get_tab(self, tab_id: str) -> Any:
+        return self._tab_registry.get(tab_id)
 
     def _install_ui_heartbeat(self):
         def _tick():

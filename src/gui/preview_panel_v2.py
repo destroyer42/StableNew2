@@ -9,7 +9,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
+import threading
 
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.gui.design_system_v2 import DANGER_BUTTON
@@ -148,12 +149,24 @@ class PreviewPanelV2(ttk.Frame):
         self._update_action_states(None)
         self._bind_app_state_previews()
 
+    def _dispatch_to_ui(self, fn: Callable[[], None]) -> bool:
+        """Run panel updates on the Tk main thread when invoked off-thread."""
+        if threading.current_thread().name != "MainThread" and hasattr(self, "after"):
+            try:
+                self.after(0, fn)
+                return True
+            except Exception:
+                return False
+        return False
+
     def set_jobs(self, jobs: list[Any]) -> None:
         """Update preview from a list of NormalizedJobRecord objects."""
         self.set_preview_jobs(jobs)
 
     def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
         """Render previews from NormalizedJobRecord objects."""
+        if self._dispatch_to_ui(lambda: self.set_preview_jobs(jobs)):
+            return
         summary_entries: list[Any] = []
         for job in jobs or []:
             summary_entries.append(self._summary_from_normalized_job(job))
@@ -194,12 +207,16 @@ class PreviewPanelV2(ttk.Frame):
 
     def set_job_summaries(self, summaries: list[Any]) -> None:
         """Render one or more JobUiSummary entries."""
+        if self._dispatch_to_ui(lambda: self.set_job_summaries(summaries)):
+            return
         self._job_summaries = list(summaries)
         first_summary = summaries[0] if summaries else None
         self._render_summary(first_summary, len(summaries))
 
     def update_from_job_draft(self, job_draft: Any | None) -> None:
         """Render preview directly from a JobDraft pack list."""
+        if self._dispatch_to_ui(lambda: self.update_from_job_draft(job_draft)):
+            return
         if job_draft is None:
             self.set_job_summaries([])
             self._update_action_states(None, None)

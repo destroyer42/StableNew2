@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Any
+from typing import Any, Callable
+import threading
 
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
@@ -145,6 +146,16 @@ class RunningJobPanelV2(ttk.Frame):
 
         # Initial state
         self._update_display()
+
+    def _dispatch_to_ui(self, fn: Callable[[], None]) -> bool:
+        """Reschedule updates to the Tk main thread when invoked off-thread."""
+        if threading.current_thread().name != "MainThread" and hasattr(self, "after"):
+            try:
+                self.after(0, fn)
+                return True
+            except Exception:
+                return False
+        return False
 
     def _format_eta(self, seconds: float | None) -> str:
         """Format ETA seconds to a human-readable string."""
@@ -292,6 +303,8 @@ class RunningJobPanelV2(ttk.Frame):
             job: The running job, or None if no job is running.
             queue_origin: 1-based queue position the job came from, or None.
         """
+        if self._dispatch_to_ui(lambda: self.update_job(job, queue_origin)):
+            return
         self._current_job = job
         self._queue_origin = queue_origin
         self._update_display()
@@ -309,6 +322,8 @@ class RunningJobPanelV2(ttk.Frame):
             summary: UnifiedJobSummary with PromptPack metadata.
             queue_origin: 1-based queue position the job came from, or None.
         """
+        if self._dispatch_to_ui(lambda: self.update_job_with_summary(job, summary, queue_origin)):
+            return
         self._current_job = job
         self._current_job_summary = summary
         self._queue_origin = queue_origin
@@ -316,6 +331,8 @@ class RunningJobPanelV2(ttk.Frame):
 
     def update_progress(self, progress: float, eta_seconds: float | None = None) -> None:
         """Update just the progress display (more efficient than full update)."""
+        if self._dispatch_to_ui(lambda: self.update_progress(progress, eta_seconds)):
+            return
         if self._current_job:
             self._current_job.progress = progress
             self._current_job.eta_seconds = eta_seconds
@@ -327,6 +344,8 @@ class RunningJobPanelV2(ttk.Frame):
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update panel from app state."""
+        if self._dispatch_to_ui(lambda: self.update_from_app_state(app_state)):
+            return
         if app_state is None:
             app_state = self.app_state
         if app_state is None:
