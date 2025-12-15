@@ -120,6 +120,10 @@ class PipelineRunner:
             stage_plan=plan,
             stage_events=stage_events,
         )
+        try:
+            write_run_metadata(run_id, metadata, base_dir=self._runs_base_dir)
+        except Exception:
+            pass
         self._last_run_result = result
         return result
 
@@ -443,14 +447,21 @@ class PipelineRunner:
     def _emit_learning_record(
         self, config: Any, run_result: PipelineRunResult
     ) -> LearningRecord | None:
+        if not self._learning_enabled:
+            return None
         if not (self._learning_record_writer or self._learning_record_callback):
             return None
         try:
-            metadata = dict(config.metadata or {})
-            if config.pack_name:
-                metadata["pack_name"] = config.pack_name
-            if config.preset_name:
-                metadata["preset_name"] = config.preset_name
+            metadata: dict[str, Any] = {}
+            for candidate in (getattr(config, "metadata", None), getattr(config, "extra_metadata", None)):
+                if isinstance(candidate, dict):
+                    metadata.update(candidate)
+            pack_name = getattr(config, "pack_name", None) or getattr(config, "prompt_pack_name", None)
+            if pack_name:
+                metadata["pack_name"] = pack_name
+            preset_name = getattr(config, "preset_name", None)
+            if preset_name:
+                metadata["preset_name"] = preset_name
             record = build_learning_record(config, run_result, learning_context=metadata)
         except Exception:
             return None

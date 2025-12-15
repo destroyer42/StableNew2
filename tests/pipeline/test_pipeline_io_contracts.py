@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult
-from src.controller.archive.pipeline_config_types import PipelineConfig
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.pipeline_fakes import FakePipeline
 
 
@@ -50,30 +50,36 @@ def test_pipeline_runner_returns_result_and_learning_record(tmp_path):
         {"txt2img": {"model": "A", "sampler_name": "Euler", "steps": 10}},
         {"txt2img": {"model": "B", "sampler_name": "Euler a", "steps": 20}},
     ]
-    config = PipelineConfig(
-        prompt="prompt",
-        model="Base",
-        sampler="Euler",
-        width=512,
-        height=512,
+    njr = make_pipeline_njr(
+        config={
+            "prompt": "prompt",
+            "model": "Base",
+            "variant_configs": variant_cfgs,
+            "pack_name": "pack-one",
+            "preset_name": "preset-one",
+            "metadata": {"run_label": "test"},
+        },
+        randomizer_mode="fanout",
+        variant_total=len(variant_cfgs),
+        stage_chain=[make_stage_config()],
+        base_model="Base",
+        sampler_name="Euler",
         steps=20,
         cfg_scale=7.5,
-        pack_name="pack-one",
-        preset_name="preset-one",
-        randomizer_mode="fanout",
-        randomizer_plan_size=len(variant_cfgs),
-        variant_configs=variant_cfgs,
-        metadata={"run_label": "test"},
     )
 
-    result = runner.run(config, cancel_token=_cancel_token())
+    result = runner.run_njr(njr, cancel_token=_cancel_token())
+    learning_record = runner._emit_learning_record(njr, result)
+    assert learning_record is not None
+    result.learning_records.append(learning_record)
 
     assert isinstance(result, PipelineRunResult)
     assert result.success is True
     assert result.error is None
     assert result.run_id
-    assert result.variant_count == len(variant_cfgs)
-    assert result.variants == variant_cfgs
+    assert result.randomizer_plan_size == len(variant_cfgs)
+    assert result.metadata.get("variant_configs") == variant_cfgs
+    assert result.randomizer_mode == "fanout"
     assert len(result.learning_records) == 1
     assert result.learning_records[0] in writer.records
     assert callback_records[0] == result.learning_records[0]

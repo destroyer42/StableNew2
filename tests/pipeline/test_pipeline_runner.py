@@ -32,20 +32,13 @@ def test_run_njr_is_only_public_entrypoint() -> None:
 def test_run_njr_delegates_to_executor() -> None:
     runner = PipelineRunner(Mock(), Mock())
     record = _minimal_normalized_record()
-    expected = PipelineRunResult(
-        run_id="test-run",
-        success=True,
-        error=None,
-        variants=[],
-        learning_records=[],
-        metadata={},
-        stage_plan=None,
-        stage_events=[],
-    )
-    runner._execute_with_config = Mock(return_value=expected)
+    pipeline = Mock()
+    pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
+    runner._pipeline = pipeline
     result = runner.run_njr(record, cancel_token=None)
-    assert result is expected
-    runner._execute_with_config.assert_called_once()
+    pipeline.run_txt2img_stage.assert_called_once()
+    assert result.success is True
+    assert result.variants == [{"path": "output.png"}]
 
 
 def test_pipeline_run_result_to_dict_and_back() -> None:

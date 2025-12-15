@@ -36,7 +36,7 @@ def _setup_retry_requests(failures: int) -> tuple[list[str], callable]:
     attempts: list[str] = []
     calls = {"count": 0}
 
-    def _fake_request(method: str, url: str, **kwargs: object) -> requests.Response:
+    def _fake_request(self, method: str, url: str, **kwargs: object) -> requests.Response:
         calls["count"] += 1
         attempts.append(method)
         if calls["count"] <= failures:
@@ -50,7 +50,7 @@ def test_txt2img_retries_with_stage_policy(monkeypatch: pytest.MonkeyPatch) -> N
     """TXT2IMG requests honor the stage policy, calling the API multiple times."""
 
     attempts, stub_request = _setup_retry_requests(failures=2)
-    monkeypatch.setattr("src.api.client.requests.request", stub_request)
+    monkeypatch.setattr("src.api.client.requests.Session.request", stub_request)
     client = SDWebUIClient()
     client._sleep = lambda _: None
 
@@ -63,7 +63,7 @@ def test_retry_callback_records_attempts(monkeypatch: pytest.MonkeyPatch) -> Non
     """Retry callback receives stage details for each failed attempt."""
 
     attempts, stub_request = _setup_retry_requests(failures=1)
-    monkeypatch.setattr("src.api.client.requests.request", stub_request)
+    monkeypatch.setattr("src.api.client.requests.Session.request", stub_request)
     logged: list[tuple[str, int, int, str]] = []
 
     client = SDWebUIClient(retry_callback=lambda stage, attempt_index, max_attempts, reason: logged.append((stage, attempt_index, max_attempts, reason)))

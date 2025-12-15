@@ -35,7 +35,7 @@ import traceback
 from src.api.client import SDWebUIClient
 from src.api.webui_api import WebUIAPI
 from src.api.webui_resource_service import WebUIResourceService
-from src.controller.webui_connection_controller import WebUIConnectionController
+from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 from src.api.webui_resources import WebUIResource
 from src.api.webui_process_manager import WebUIProcessManager
 from src.pipeline.last_run_store_v2_5 import (
@@ -347,6 +347,11 @@ class AppController:
             self.webui_connection_controller.set_on_resources_updated(self._on_webui_resources_updated)
         except Exception:
             pass
+        if hasattr(self._api_client, "set_options_readiness_provider") and self.webui_connection_controller is not None:
+            try:
+                self._api_client.set_options_readiness_provider(self.webui_connection_controller.is_webui_ready_strict)
+            except Exception:
+                pass
         # PR-CORE1-D21B: Wire activity hooks for queue/runner heartbeats
         if hasattr(self.pipeline_controller, "job_service") and self.pipeline_controller.job_service is not None:
             self.pipeline_controller.job_service.set_activity_hooks(
@@ -1082,6 +1087,27 @@ class AppController:
     def _execute_job(self, job: Job) -> dict[str, Any]:
         """Execute a job via NJR only (PR-CORE1-D11 pack-only path)."""
         self._append_log(f"[queue] Executing job {job.job_id}")
+
+        webui_ctrl = getattr(self, "webui_connection_controller", None)
+        if (
+            webui_ctrl is not None
+            and webui_ctrl.get_state() == WebUIConnectionState.READY
+            and not webui_ctrl.is_webui_ready_strict()
+        ):
+            reason = webui_ctrl.last_readiness_error or "unknown"
+            message = f"WebUI not ready: {reason}"
+            self._append_log(f"[queue] {message}")
+            try:
+                job.mark_status(JobStatus.FAILED, error_message=message)
+            except Exception:
+                pass
+            result_payload: dict[str, Any] = {"error": message}
+            canonical_result = normalize_run_result(result_payload, default_run_id=job.job_id)
+            metadata = canonical_result.get("metadata") or {}
+            metadata.setdefault("execution_path", "ready_gate")
+            metadata["ready_gate_reason"] = reason
+            canonical_result["metadata"] = metadata
+            return canonical_result
 
         execution_path = "missing"
         result_payload: Any | None = None

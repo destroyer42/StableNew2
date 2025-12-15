@@ -242,7 +242,7 @@ class ConfigManager:
                 "hr_resize_y": 0,  # 0 = automatic based on hr_scale
                 "denoising_strength": 0.7,  # For hires.fix second pass
                 "clip_skip": 2,  # CLIP layers to skip
-                "model": "",  # SD model checkpoint (empty = use current)
+                "model": "juggernautXL_ragnarokBy.safetensors",  # SD model checkpoint (empty = use current)
                 "vae": "",  # VAE model (empty = use model default)
                 "hypernetwork": "None",
                 "hypernetwork_strength": 1.0,
@@ -262,7 +262,7 @@ class ConfigManager:
                 "denoising_strength": 0.3,
                 "seed": -1,  # -1 for random
                 "clip_skip": 2,
-                "model": "",  # SD model checkpoint (empty = use current)
+                "model": "juggernautXL_ragnarokBy.safetensors",  # SD model checkpoint (empty = use current)
                 "vae": "",  # VAE model (empty = use model default)
                 "hypernetwork": "None",
                 "hypernetwork_strength": 1.0,
@@ -297,6 +297,7 @@ class ConfigManager:
                 },
             "video": {"fps": 24, "codec": "libx264", "quality": "medium"},
             "api": {"base_url": "http://127.0.0.1:7860", "timeout": 300},
+            "webui_options_write_enabled": False,
             "randomization": {
                 "enabled": False,
                 # Optional seed for deterministic randomization.

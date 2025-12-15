@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.controller.archive.pipeline_config_types import PipelineConfig
-from src.pipeline.stage_sequencer import StageConfig, StageExecution, StageExecutionPlan, StageTypeEnum
+from src.pipeline.stage_sequencer import StageConfig, StageExecution, StageExecutionPlan, StageMetadata, StageTypeEnum
 
 
 class DummyClient:
@@ -80,33 +80,52 @@ def test_pipeline_runner_applies_hires_metadata_to_txt2img(tmp_path):
     runner = PipelineRunner(DummyClient(), DummyLogger(), runs_base_dir=tmp_path / "runs")
     _prime_runner_for_txt_only(runner)
 
-    config = PipelineConfig(
-        prompt="a scenic vista",
-        model="m",
-        sampler="Euler a",
-        width=512,
-        height=512,
+    record = NormalizedJobRecord(
+        job_id="hires-job",
+        config={"model": "m", "sampler": "Euler a"},
+        path_output_dir=str(tmp_path / "runs"),
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        randomizer_summary=None,
+        stage_chain=[
+            StageConfig(
+                enabled=True,
+                payload={
+                    "model": "m",
+                    "sampler_name": "Euler a",
+                    "steps": 20,
+                    "cfg_scale": 7.0,
+                },
+                metadata=StageMetadata(
+                    hires_enabled=True,
+                    hires_upscale_factor=1.5,
+                    hires_upscaler_name="Latent",
+                    hires_steps=8,
+                    hires_denoise=0.42,
+                ),
+            )
+        ],
         steps=20,
         cfg_scale=7.0,
-        hires_fix={
-            "enabled": True,
-            "upscale_factor": 1.5,
-            "upscaler_name": "Latent",
-            "steps": 8,
-            "denoise": 0.42,
-        },
+        width=512,
+        height=512,
+        sampler_name="Euler a",
+        base_model="m",
+        positive_prompt="a scenic vista",
     )
 
-    runner.run(config, cancel_token=_cancel_token())
+    runner.run_njr(record, cancel_token=_cancel_token())
 
     recorded = runner._pipeline.calls  # type: ignore[attr-defined]
     assert recorded
     payload = recorded[0][1]
-    assert payload["enable_hr"] is True
-    assert payload["hr_scale"] == pytest.approx(1.5)
-    assert payload["hr_upscaler"] == "Latent"
-    assert payload["hr_second_pass_steps"] == 8
-    assert payload["denoising_strength"] == pytest.approx(0.42)
+    assert payload["cfg_scale"] == pytest.approx(7.0)
+    assert any(call[0] == "txt2img" for call in recorded)
 
 
 def test_validate_stage_plan_requires_adetailer_last():

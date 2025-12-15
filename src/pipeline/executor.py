@@ -66,6 +66,7 @@ class Pipeline:
         self._current_vae: str | None = None
         self._current_hypernetwork: str | None = None
         self._current_hn_strength: float | None = None
+        self._model_discovery_attempted = False
         self._webui_defaults_applied = False
         self._last_txt2img_results: list[dict[str, Any]] = []
         self._last_img2img_result: dict[str, Any] | None = None
@@ -126,20 +127,49 @@ class Pipeline:
         except Exception as exc:
             logger.warning("Could not apply WebUI defaults: %s", exc)
 
+    def _normalize_model_name(self, raw: str | None) -> str | None:
+        if not raw:
+            return None
+        cleaned = str(raw).strip()
+        return cleaned.lower() if cleaned else None
+
+    def _discover_current_model_if_needed(self) -> None:
+        if self._model_discovery_attempted or self._current_model is not None:
+            return
+        self._model_discovery_attempted = True
+        try:
+            model = self.client.get_current_model()
+            if model:
+                self._current_model = model
+        except Exception:
+            logger.debug("Failed to detect WebUI current model for no-op switching", exc_info=True)
+
     # ------------------------------------------------------------------
     # Internal helpers for throughput improvements
     # ------------------------------------------------------------------
 
     def _ensure_model_and_vae(self, model_name: str | None, vae_name: str | None) -> None:
         """Only call into WebUI when the requested weights change."""
-        try:
-            if model_name and model_name != self._current_model:
+        desired_normalized = self._normalize_model_name(model_name)
+        if desired_normalized:
+            self._discover_current_model_if_needed()
+            current_normalized = self._normalize_model_name(self._current_model)
+            if desired_normalized == current_normalized:
+                return
+            if not self.client.options_write_enabled:
+                logger.warning(
+                    "Model switch to %s requested but options writes are disabled (SafeMode); keeping %s",
+                    model_name,
+                    self._current_model or "current WebUI model",
+                )
+                return
+            try:
                 logger.info(f"Switching to model: {model_name}")
                 self.client.set_model(model_name)
                 self._current_model = model_name
-        except Exception:
-            self._current_model = None
-            raise
+            except Exception:
+                self._current_model = None
+                raise
 
         try:
             if vae_name and vae_name != self._current_vae:

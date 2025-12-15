@@ -47,7 +47,12 @@ def build_learning_record(
 
     config_dict = asdict(pipeline_config)
     variant_configs = config_dict.get("variant_configs") or []
-    randomizer_mode = config_dict.get("randomizer_mode") or ""
+    randomizer_mode = (
+        config_dict.get("randomizer_mode")
+        or config_dict.get("variant_mode")
+        or getattr(pipeline_config, "randomizer_mode", "")
+        or getattr(pipeline_config, "variant_mode", "")
+    ) or ""
     randomizer_plan_size = config_dict.get("randomizer_plan_size") or len(variant_configs)
     metadata = dict(config_dict.get("metadata") or {})
     if learning_context:
@@ -58,13 +63,27 @@ def build_learning_record(
     base_config: dict[str, Any] = (variant_configs[0] if variant_configs else config_dict) or {}
     if isinstance(base_config, dict) and "txt2img" not in base_config:
         base_config = dict(base_config)
+        config_payload = config_dict.get("config") or {}
         base_config["txt2img"] = {
-            "model": config_dict.get("model", ""),
-            "sampler_name": config_dict.get("sampler", ""),
-            "steps": config_dict.get("steps", 0),
-            "cfg_scale": config_dict.get("cfg_scale", 0.0),
-            "width": config_dict.get("width", 0),
-            "height": config_dict.get("height", 0),
+            "model": config_payload.get("model")
+            or getattr(pipeline_config, "base_model", "")
+            or config_dict.get("model", ""),
+            "sampler_name": config_payload.get("sampler_name")
+            or getattr(pipeline_config, "sampler_name", "")
+            or config_payload.get("sampler")
+            or config_dict.get("sampler", ""),
+            "steps": config_payload.get("steps")
+            or getattr(pipeline_config, "steps", 0)
+            or config_dict.get("steps", 0),
+            "cfg_scale": config_payload.get("cfg_scale")
+            or getattr(pipeline_config, "cfg_scale", 0.0)
+            or config_dict.get("cfg_scale", 0.0),
+            "width": config_payload.get("width")
+            or getattr(pipeline_config, "width", 0)
+            or config_dict.get("width", 0),
+            "height": config_payload.get("height")
+            or getattr(pipeline_config, "height", 0)
+            or config_dict.get("height", 0),
         }
     primary_knobs = _extract_primary_knobs(base_config if isinstance(base_config, dict) else {})
     # Discover sidecar priors for model and LoRA

@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import logging
+import socket
 import time
 from enum import Enum
 from typing import Callable
+from urllib.parse import urlparse
+
+import psutil
+import requests
 
 from src.api.healthcheck import wait_for_webui_ready, WebUIHealthCheckTimeout
 from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager, build_default_webui_process_config
 from src.config import app_config
+
+STRICT_READY_CACHE_TTL = 2.5
+HEALTH_PROBE_TIMEOUT = (0.25, 1.0)
 
 
 class WebUIConnectionState(Enum):
@@ -33,6 +41,13 @@ class WebUIConnectionController:
         self._base_url_provider = base_url_provider or (lambda: app_config._env_default("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"))
         self._ready_callbacks: list[Callable[[], None]] = list(ready_callbacks or [])
         self._on_resources_updated: Callable[[dict[str, list[object]]], None] | None = None
+        self._process_manager: WebUIProcessManager | None = None
+        self._process_pid: int | None = None
+        self._health_session = requests.Session()
+        self._last_strict_check_ts: float | None = None
+        self._last_strict_status = False
+        self._last_strict_reason: str | None = None
+        self._strict_cache_ttl = STRICT_READY_CACHE_TTL
 
     def get_state(self) -> WebUIConnectionState:
         return self._state
@@ -94,7 +109,10 @@ class WebUIConnectionController:
             proc_cfg = build_default_webui_process_config()
             if proc_cfg is None:
                 raise RuntimeError("No WebUI process config available")
-            WebUIProcessManager(proc_cfg).start()
+            manager = WebUIProcessManager(proc_cfg)
+            self._process_manager = manager
+            manager.start()
+            self._process_pid = manager.pid
         except Exception as exc:  # pragma: no cover - surface as error state
             self._logger.warning("WebUI autostart failed: %s", exc)
             self._set_state(WebUIConnectionState.ERROR)
@@ -153,6 +171,84 @@ class WebUIConnectionController:
             self._logger.warning("WebUI reconnect failed: %s", exc)
             self._set_state(WebUIConnectionState.ERROR)
             return self._state
+
+    def is_process_alive(self) -> bool:
+        """Return True if the last-launched WebUI process is still running."""
+
+        pid = self._process_pid
+        if pid is None:
+            return False
+        try:
+            alive = psutil.pid_exists(pid)
+        except Exception:
+            alive = False
+        if not alive:
+            self._process_pid = None
+            self._process_manager = None
+        return alive
+
+    def is_port_listening(self, host: str, port: int) -> bool:
+        """Probe the configured host/port using a short socket connect."""
+
+        try:
+            with socket.create_connection((host, port), timeout=HEALTH_PROBE_TIMEOUT[0]):
+                return True
+        except OSError:
+            return False
+
+    def _extract_host_port(self) -> tuple[str | None, int | None]:
+        base_url = self.get_base_url().rstrip("/")
+        parsed = urlparse(base_url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        return host, port
+
+    def _probe_endpoint(self, path: str) -> tuple[bool, str | None]:
+        response = None
+        try:
+            url = f"{self.get_base_url().rstrip('/')}{path}"
+            response = self._health_session.get(url, timeout=HEALTH_PROBE_TIMEOUT)
+            response.raise_for_status()
+            return True, None
+        except requests.RequestException as exc:
+            return False, f"{path} probe failed: {exc}"
+        finally:
+            if response is not None:
+                response.close()
+
+    def _evaluate_strict_readiness(self) -> tuple[bool, str | None]:
+        if not self.is_process_alive():
+            return False, "process not alive"
+        host, port = self._extract_host_port()
+        if not host or port is None:
+            return False, "invalid base URL"
+        if not self.is_port_listening(host, port):
+            return False, f"port {host}:{port} not listening"
+        for endpoint in ("/sdapi/v1/options", "/sdapi/v1/sd-models"):
+            ok, reason = self._probe_endpoint(endpoint)
+            if not ok:
+                return False, reason
+        return True, None
+
+    def is_webui_ready_strict(self) -> bool:
+        """Return True only if process alive, port listening, and API probes succeed."""
+
+        now = time.monotonic()
+        if self._last_strict_check_ts and now - self._last_strict_check_ts < self._strict_cache_ttl:
+            return self._last_strict_status
+        ready, reason = self._evaluate_strict_readiness()
+        self._last_strict_status = ready
+        self._last_strict_reason = reason
+        self._last_strict_check_ts = now
+        if not ready:
+            self._logger.debug("Strict readiness check failed: %s", reason)
+        return ready
+
+    @property
+    def last_readiness_error(self) -> str | None:
+        """Expose the most recent strict readiness failure reason."""
+
+        return self._last_strict_reason
 
 
 __all__ = ["WebUIConnectionController", "WebUIConnectionState"]

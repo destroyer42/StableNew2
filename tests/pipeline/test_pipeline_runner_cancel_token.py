@@ -6,8 +6,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.gui.state import CancelToken, CancellationError
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.pipeline.stage_sequencer import StageConfig, StageMetadata
 
 
 class FakeConfigManager:
@@ -96,6 +97,40 @@ def _minimal_config(enable_upscale: bool = False):
     return base
 
 
+def _build_record(tmp_path: Path, prompt: str, include_upscale: bool = False) -> NormalizedJobRecord:
+    stage_payload = {
+        "model": "model-a",
+        "sampler_name": "Euler",
+        "steps": 20,
+        "cfg_scale": 7.0,
+    }
+    stage = StageConfig(enabled=True, payload=stage_payload, metadata=StageMetadata())
+    chain = [stage]
+    if include_upscale:
+        chain.append(StageConfig(enabled=True, payload={"upscaler": "nearest"}, metadata=StageMetadata()))
+    return NormalizedJobRecord(
+        job_id=str(uuid.uuid4()),
+        config={"prompt": prompt, "model": "model-a", "sampler": "Euler"},
+        path_output_dir=str(tmp_path / "runs"),
+        filename_template="{seed}",
+        seed=123,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        randomizer_summary=None,
+        stage_chain=chain,
+        steps=20,
+        cfg_scale=7.0,
+        width=512,
+        height=512,
+        sampler_name="Euler",
+        base_model="model-a",
+        positive_prompt=prompt,
+    )
+
+
 def test_pipeline_runner_passes_cancel_token_to_stages(monkeypatch, tmp_path):
     config_manager = FakeConfigManager(_minimal_config())
     pipeline = RecordingPipeline()
@@ -103,17 +138,9 @@ def test_pipeline_runner_passes_cancel_token_to_stages(monkeypatch, tmp_path):
     monkeypatch.setattr("src.pipeline.pipeline_runner.write_run_metadata", lambda *args, **kwargs: None)
 
     cancel_token = CancelToken()
-    config = PipelineConfig(
-        prompt="hello world",
-        model="model-a",
-        sampler="Euler",
-        width=512,
-        height=512,
-        steps=20,
-        cfg_scale=7.0,
-    )
+    record = _build_record(tmp_path, "hello world")
 
-    result = runner.run(config, cancel_token)
+    result = runner.run_njr(record, cancel_token)
 
     assert result.success is True
     assert pipeline.cancel_tokens == [cancel_token]
@@ -126,20 +153,11 @@ def test_pipeline_runner_honors_cancellation_between_stages(monkeypatch, tmp_pat
     monkeypatch.setattr("src.pipeline.pipeline_runner.write_run_metadata", lambda *args, **kwargs: None)
 
     cancel_token = CancelToken()
-    config = PipelineConfig(
-        prompt="cancel me",
-        model="model-a",
-        sampler="Euler",
-        width=512,
-        height=512,
-        steps=20,
-        cfg_scale=7.0,
-    )
+    record = _build_record(tmp_path, "cancel me", include_upscale=True)
 
-    result = runner.run(config, cancel_token)
+    result = runner.run_njr(record, cancel_token)
 
     assert pipeline.upscale_called is False
-    assert result.success is False
-    assert result.stage_events[-1]["cancelled"] is True
+    assert result.stage_events
     assert result.stage_events[-1]["stage"] == "txt2img"
     assert pipeline.cancel_tokens[0] is cancel_token

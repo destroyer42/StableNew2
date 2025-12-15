@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-14T17:03:45",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251214-170341.zip",
-  "file_count": 1233,
-  "total_size_bytes": 20343615,
+  "created_at": "2025-12-15T06:27:21",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251215-062719.zip",
+  "file_count": 1214,
+  "total_size_bytes": 15356979,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -391,8 +391,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 707703,
-      "mtime_iso": "2025-12-14T14:33:19"
+      "size_bytes": 710973,
+      "mtime_iso": "2025-12-14T22:50:41"
     },
     {
       "path": "data/webui_cache.json",
@@ -488,16 +488,6 @@
       "path": "docs/PR Template — StableNew v2.6.md",
       "size_bytes": 5202,
       "mtime_iso": "2025-12-09T13:04:28"
-    },
-    {
-      "path": "docs/PR TEMPLATE — v2.6-E (Executor-Safe Edition).md",
-      "size_bytes": 5946,
-      "mtime_iso": "2025-12-11T21:56:01"
-    },
-    {
-      "path": "docs/PR TEMPLATE — v2.7-X.md",
-      "size_bytes": 4188,
-      "mtime_iso": "2025-12-13T08:32:47"
     },
     {
       "path": "docs/PR TEMPLATE — v2.7.1-X.md",
@@ -2775,6 +2765,21 @@
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
+      "path": "docs/pr_templates/PR-API-0121-WebUI-Crash-Guard.md",
+      "size_bytes": 4574,
+      "mtime_iso": "2025-12-14T20:15:37"
+    },
+    {
+      "path": "docs/pr_templates/PR-API-D27 — HTTP Connection Lifecycle.md",
+      "size_bytes": 7593,
+      "mtime_iso": "2025-12-14T18:15:57"
+    },
+    {
+      "path": "docs/pr_templates/PR-CORE1-0123 — WebUI Crash Mitigation.md",
+      "size_bytes": 7706,
+      "mtime_iso": "2025-12-14T21:28:22"
+    },
+    {
       "path": "docs/pr_templates/PR-CORE1-D21A.md",
       "size_bytes": 8425,
       "mtime_iso": "2025-12-13T11:11:02"
@@ -2808,6 +2813,21 @@
       "path": "docs/pr_templates/PR-GUI-D25-WebUI-Resource-Hydration.md",
       "size_bytes": 10735,
       "mtime_iso": "2025-12-14T14:29:35"
+    },
+    {
+      "path": "docs/pr_templates/PR-GUI-D26 — Dropdown Normalization.md",
+      "size_bytes": 8225,
+      "mtime_iso": "2025-12-14T17:14:53"
+    },
+    {
+      "path": "docs/pr_templates/PR-GUI-D26A — Dropdown NormalizationV2.md",
+      "size_bytes": 4309,
+      "mtime_iso": "2025-12-14T17:28:50"
+    },
+    {
+      "path": "docs/pr_templates/PR-QUEUE-D26B — Queue Completion.md",
+      "size_bytes": 3950,
+      "mtime_iso": "2025-12-14T17:27:58"
     },
     {
       "path": "inventory/stable_v2_inventory.json",
@@ -3110,244 +3130,84 @@
       "mtime_iso": "2025-12-14T12:34:05"
     },
     {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_192749_ui_heartbeat_stall.zip",
-      "size_bytes": 232028,
-      "mtime_iso": "2025-12-14T13:27:49"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_192819_ui_heartbeat_stall.zip",
-      "size_bytes": 160927,
-      "mtime_iso": "2025-12-14T13:28:19"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_192849_ui_heartbeat_stall.zip",
-      "size_bytes": 160927,
-      "mtime_iso": "2025-12-14T13:28:50"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_192920_ui_heartbeat_stall.zip",
-      "size_bytes": 160926,
-      "mtime_iso": "2025-12-14T13:29:20"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_192950_ui_heartbeat_stall.zip",
-      "size_bytes": 160923,
-      "mtime_iso": "2025-12-14T13:29:50"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193021_ui_heartbeat_stall.zip",
-      "size_bytes": 160926,
-      "mtime_iso": "2025-12-14T13:30:21"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193051_ui_heartbeat_stall.zip",
-      "size_bytes": 160926,
-      "mtime_iso": "2025-12-14T13:30:51"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193121_ui_heartbeat_stall.zip",
-      "size_bytes": 160925,
-      "mtime_iso": "2025-12-14T13:31:21"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193152_ui_heartbeat_stall.zip",
-      "size_bytes": 160927,
-      "mtime_iso": "2025-12-14T13:31:52"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193222_ui_heartbeat_stall.zip",
-      "size_bytes": 160928,
-      "mtime_iso": "2025-12-14T13:32:22"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193246_ui_heartbeat_stall.zip",
-      "size_bytes": 160926,
-      "mtime_iso": "2025-12-14T13:32:46"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193252_ui_heartbeat_stall.zip",
-      "size_bytes": 160926,
-      "mtime_iso": "2025-12-14T13:32:52"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_193323_ui_heartbeat_stall.zip",
-      "size_bytes": 160922,
-      "mtime_iso": "2025-12-14T13:33:23"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_200859_ui_heartbeat_stall.zip",
-      "size_bytes": 246974,
-      "mtime_iso": "2025-12-14T14:08:59"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_200929_ui_heartbeat_stall.zip",
-      "size_bytes": 175953,
-      "mtime_iso": "2025-12-14T14:09:30"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_200932_ui_heartbeat_stall.zip",
-      "size_bytes": 175948,
-      "mtime_iso": "2025-12-14T14:09:32"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_201002_ui_heartbeat_stall.zip",
-      "size_bytes": 175953,
-      "mtime_iso": "2025-12-14T14:10:02"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_201008_ui_heartbeat_stall.zip",
-      "size_bytes": 175952,
-      "mtime_iso": "2025-12-14T14:10:08"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_201033_ui_heartbeat_stall.zip",
-      "size_bytes": 175953,
-      "mtime_iso": "2025-12-14T14:10:33"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_202811_ui_heartbeat_stall.zip",
-      "size_bytes": 93824,
-      "mtime_iso": "2025-12-14T14:28:11"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_202841_ui_heartbeat_stall.zip",
-      "size_bytes": 97615,
-      "mtime_iso": "2025-12-14T14:28:41"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_202911_ui_heartbeat_stall.zip",
-      "size_bytes": 107052,
-      "mtime_iso": "2025-12-14T14:29:12"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_202942_ui_heartbeat_stall.zip",
-      "size_bytes": 110154,
-      "mtime_iso": "2025-12-14T14:29:42"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203012_ui_heartbeat_stall.zip",
-      "size_bytes": 115871,
-      "mtime_iso": "2025-12-14T14:30:12"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203042_ui_heartbeat_stall.zip",
-      "size_bytes": 123246,
-      "mtime_iso": "2025-12-14T14:30:43"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203113_ui_heartbeat_stall.zip",
-      "size_bytes": 127578,
-      "mtime_iso": "2025-12-14T14:31:13"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203143_ui_heartbeat_stall.zip",
-      "size_bytes": 130583,
-      "mtime_iso": "2025-12-14T14:31:43"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203156_ui_heartbeat_stall.zip",
-      "size_bytes": 155097,
-      "mtime_iso": "2025-12-14T14:31:56"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203213_ui_heartbeat_stall.zip",
-      "size_bytes": 164191,
-      "mtime_iso": "2025-12-14T14:32:13"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203226_ui_heartbeat_stall.zip",
-      "size_bytes": 205925,
-      "mtime_iso": "2025-12-14T14:32:26"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203243_ui_heartbeat_stall.zip",
-      "size_bytes": 229449,
-      "mtime_iso": "2025-12-14T14:32:43"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203314_ui_heartbeat_stall.zip",
-      "size_bytes": 168173,
-      "mtime_iso": "2025-12-14T14:33:14"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_203344_ui_heartbeat_stall.zip",
-      "size_bytes": 213965,
-      "mtime_iso": "2025-12-14T14:33:44"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_211220_ui_heartbeat_stall.zip",
-      "size_bytes": 0,
-      "mtime_iso": "2025-12-14T15:12:20"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_211242_ui_heartbeat_stall.zip",
-      "size_bytes": 227683,
-      "mtime_iso": "2025-12-14T15:12:42"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_211330_ui_heartbeat_stall.zip",
-      "size_bytes": 234724,
-      "mtime_iso": "2025-12-14T15:13:31"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_211424_ui_heartbeat_stall.zip",
-      "size_bytes": 241646,
-      "mtime_iso": "2025-12-14T15:14:24"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_211852_ui_heartbeat_stall.zip",
-      "size_bytes": 216675,
-      "mtime_iso": "2025-12-14T15:18:53"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_211935_ui_heartbeat_stall.zip",
-      "size_bytes": 206874,
-      "mtime_iso": "2025-12-14T15:19:35"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_212005_ui_heartbeat_stall.zip",
-      "size_bytes": 224320,
-      "mtime_iso": "2025-12-14T15:20:05"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_222845_ui_heartbeat_stall.zip",
-      "size_bytes": 229788,
-      "mtime_iso": "2025-12-14T16:28:45"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_223004_ui_heartbeat_stall.zip",
-      "size_bytes": 192075,
-      "mtime_iso": "2025-12-14T16:30:04"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_223437_ui_heartbeat_stall.zip",
-      "size_bytes": 205901,
-      "mtime_iso": "2025-12-14T16:34:37"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_223458_ui_heartbeat_stall.zip",
-      "size_bytes": 208615,
-      "mtime_iso": "2025-12-14T16:34:58"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_223716_ui_heartbeat_stall.zip",
-      "size_bytes": 216206,
-      "mtime_iso": "2025-12-14T16:37:16"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_223829_ui_heartbeat_stall.zip",
-      "size_bytes": 183592,
-      "mtime_iso": "2025-12-14T16:38:29"
-    },
-    {
-      "path": "reports/diagnostics/stablenew_diagnostics_20251214_224521_ui_heartbeat_stall.zip",
-      "size_bytes": 201064,
-      "mtime_iso": "2025-12-14T16:45:21"
-    },
-    {
       "path": "reports/diagnostics/stablenew_diagnostics_20251214_225142_ui_heartbeat_stall.zip",
       "size_bytes": 203148,
       "mtime_iso": "2025-12-14T16:51:42"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_004908_ui_heartbeat_stall.zip",
+      "size_bytes": 264630,
+      "mtime_iso": "2025-12-14T18:49:08"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_004938_ui_heartbeat_stall.zip",
+      "size_bytes": 188240,
+      "mtime_iso": "2025-12-14T18:49:39"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_012218_ui_heartbeat_stall.zip",
+      "size_bytes": 199267,
+      "mtime_iso": "2025-12-14T19:22:18"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_012431_ui_heartbeat_stall.zip",
+      "size_bytes": 200354,
+      "mtime_iso": "2025-12-14T19:24:31"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_013131_ui_heartbeat_stall.zip",
+      "size_bytes": 202292,
+      "mtime_iso": "2025-12-14T19:31:31"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_021055_ui_heartbeat_stall.zip",
+      "size_bytes": 254806,
+      "mtime_iso": "2025-12-14T20:10:55"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_021125_ui_heartbeat_stall.zip",
+      "size_bytes": 269406,
+      "mtime_iso": "2025-12-14T20:11:25"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_021228_ui_heartbeat_stall.zip",
+      "size_bytes": 228999,
+      "mtime_iso": "2025-12-14T20:12:28"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_021440_ui_heartbeat_stall.zip",
+      "size_bytes": 204076,
+      "mtime_iso": "2025-12-14T20:14:40"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_041929_ui_heartbeat_stall.zip",
+      "size_bytes": 175496,
+      "mtime_iso": "2025-12-14T22:19:29"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_041959_ui_heartbeat_stall.zip",
+      "size_bytes": 203402,
+      "mtime_iso": "2025-12-14T22:19:59"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_042029_ui_heartbeat_stall.zip",
+      "size_bytes": 171594,
+      "mtime_iso": "2025-12-14T22:20:30"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_042100_ui_heartbeat_stall.zip",
+      "size_bytes": 181142,
+      "mtime_iso": "2025-12-14T22:21:00"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_042130_ui_heartbeat_stall.zip",
+      "size_bytes": 156456,
+      "mtime_iso": "2025-12-14T22:21:30"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251215_042200_ui_heartbeat_stall.zip",
+      "size_bytes": 157588,
+      "mtime_iso": "2025-12-14T22:22:00"
     },
     {
       "path": "reports/file_access/CLEANHOUSE_REPORT_V2_5_2025_11_26.md",
@@ -3476,8 +3336,8 @@
     },
     {
       "path": "src/api/client.py",
-      "size_bytes": 36233,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 46109,
+      "mtime_iso": "2025-12-14T21:48:39"
     },
     {
       "path": "src/api/healthcheck.py",
@@ -3491,13 +3351,13 @@
     },
     {
       "path": "src/api/webui_api.py",
-      "size_bytes": 784,
-      "mtime_iso": "2025-12-02T08:04:20"
+      "size_bytes": 6763,
+      "mtime_iso": "2025-12-14T21:48:39"
     },
     {
       "path": "src/api/webui_process_manager.py",
-      "size_bytes": 13678,
-      "mtime_iso": "2025-12-11T23:22:00"
+      "size_bytes": 14892,
+      "mtime_iso": "2025-12-14T21:48:39"
     },
     {
       "path": "src/api/webui_resources.py",
@@ -3506,8 +3366,8 @@
     },
     {
       "path": "src/api/webui_resource_service.py",
-      "size_bytes": 2813,
-      "mtime_iso": "2025-12-02T08:04:20"
+      "size_bytes": 2831,
+      "mtime_iso": "2025-12-14T21:04:34"
     },
     {
       "path": "src/api/__init__.py",
@@ -3536,8 +3396,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 154852,
-      "mtime_iso": "2025-12-14T16:42:47"
+      "size_bytes": 156198,
+      "mtime_iso": "2025-12-14T20:14:57"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -3586,8 +3446,8 @@
     },
     {
       "path": "src/controller/webui_connection_controller.py",
-      "size_bytes": 6956,
-      "mtime_iso": "2025-12-14T14:39:43"
+      "size_bytes": 10641,
+      "mtime_iso": "2025-12-14T20:12:31"
     },
     {
       "path": "src/controller/__init__.py",
@@ -3646,8 +3506,8 @@
     },
     {
       "path": "src/gui/dropdown_loader_v2.py",
-      "size_bytes": 7142,
-      "mtime_iso": "2025-12-14T15:22:23"
+      "size_bytes": 10073,
+      "mtime_iso": "2025-12-14T17:39:41"
     },
     {
       "path": "src/gui/engine_settings_dialog.py",
@@ -3786,8 +3646,8 @@
     },
     {
       "path": "src/gui/sidebar_panel_v2.py",
-      "size_bytes": 44951,
-      "mtime_iso": "2025-12-14T14:14:05"
+      "size_bytes": 45296,
+      "mtime_iso": "2025-12-14T17:39:41"
     },
     {
       "path": "src/gui/stage_chooser.py",
@@ -3872,7 +3732,7 @@
     {
       "path": "src/gui/panels_v2/layout_manager_v2.py",
       "size_bytes": 3842,
-      "mtime_iso": "2025-12-14T12:17:32"
+      "mtime_iso": "2025-12-14T18:05:37"
     },
     {
       "path": "src/gui/panels_v2/pipeline_config_panel_v2.py",
@@ -4221,8 +4081,8 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 110276,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 111610,
+      "mtime_iso": "2025-12-14T21:48:39"
     },
     {
       "path": "src/pipeline/job_builder_v2.py",
@@ -4261,8 +4121,8 @@
     },
     {
       "path": "src/pipeline/pipeline_runner.py",
-      "size_bytes": 24019,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 24313,
+      "mtime_iso": "2025-12-15T06:23:12"
     },
     {
       "path": "src/pipeline/prompt_pack_job_builder.py",
@@ -4336,8 +4196,8 @@
     },
     {
       "path": "src/queue/job_queue.py",
-      "size_bytes": 10709,
-      "mtime_iso": "2025-12-12T22:04:02"
+      "size_bytes": 11663,
+      "mtime_iso": "2025-12-14T17:54:07"
     },
     {
       "path": "src/queue/single_node_runner.py",
@@ -4436,8 +4296,8 @@
     },
     {
       "path": "src/utils/config.py",
-      "size_bytes": 32198,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 32319,
+      "mtime_iso": "2025-12-14T21:48:39"
     },
     {
       "path": "src/utils/debug_shutdown_inspector.py",
@@ -4597,7 +4457,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-14T16:53:46"
+      "mtime_iso": "2025-12-14T22:50:41"
     },
     {
       "path": "tests/conftest.py",
@@ -4666,8 +4526,13 @@
     },
     {
       "path": "tests/api/test_client_generate_images.py",
-      "size_bytes": 1110,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 1659,
+      "mtime_iso": "2025-12-14T18:44:11"
+    },
+    {
+      "path": "tests/api/test_client_options_throttling_v2.py",
+      "size_bytes": 912,
+      "mtime_iso": "2025-12-14T20:12:31"
     },
     {
       "path": "tests/api/test_healthcheck_v2.py",
@@ -4680,6 +4545,16 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
+      "path": "tests/api/test_webui_api_options_safemode.py",
+      "size_bytes": 831,
+      "mtime_iso": "2025-12-14T21:48:39"
+    },
+    {
+      "path": "tests/api/test_webui_api_options_throttle.py",
+      "size_bytes": 2451,
+      "mtime_iso": "2025-12-14T21:04:34"
+    },
+    {
       "path": "tests/api/test_webui_api_upscale_payload.py",
       "size_bytes": 1632,
       "mtime_iso": "2025-12-08T08:04:45"
@@ -4688,6 +4563,11 @@
       "path": "tests/api/test_webui_healthcheck.py",
       "size_bytes": 1160,
       "mtime_iso": "2025-11-29T11:22:13"
+    },
+    {
+      "path": "tests/api/test_webui_options_throttle_v2.py",
+      "size_bytes": 2213,
+      "mtime_iso": "2025-12-14T18:44:11"
     },
     {
       "path": "tests/api/test_webui_process_manager.py",
@@ -4711,8 +4591,8 @@
     },
     {
       "path": "tests/api/test_webui_retry_policy_v2.py",
-      "size_bytes": 2873,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 2895,
+      "mtime_iso": "2025-12-14T18:44:11"
     },
     {
       "path": "tests/app/test_bootstrap_webui_autostart.py",
@@ -5100,6 +4980,11 @@
       "mtime_iso": "2025-11-29T11:22:13"
     },
     {
+      "path": "tests/controller/test_webui_readiness_gate_v2.py",
+      "size_bytes": 1096,
+      "mtime_iso": "2025-12-14T20:14:57"
+    },
+    {
       "path": "tests/gui/test_gui_controller_bindings.py",
       "size_bytes": 7423,
       "mtime_iso": "2025-12-10T20:19:57"
@@ -5256,8 +5141,8 @@
     },
     {
       "path": "tests/gui_v2/test_pipeline_left_column_config_v2.py",
-      "size_bytes": 1986,
-      "mtime_iso": "2025-12-11T20:33:54"
+      "size_bytes": 2301,
+      "mtime_iso": "2025-12-14T17:39:44"
     },
     {
       "path": "tests/gui_v2/test_pipeline_presets_ui_v2.py",
@@ -5475,6 +5360,11 @@
       "mtime_iso": "2025-12-08T08:04:45"
     },
     {
+      "path": "tests/helpers/njr_factory.py",
+      "size_bytes": 3170,
+      "mtime_iso": "2025-12-15T06:23:12"
+    },
+    {
       "path": "tests/helpers/pipeline_fakes.py",
       "size_bytes": 3402,
       "mtime_iso": "2025-12-06T18:21:19"
@@ -5491,8 +5381,8 @@
     },
     {
       "path": "tests/helpers/__init__.py",
-      "size_bytes": 225,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 245,
+      "mtime_iso": "2025-12-15T06:23:12"
     },
     {
       "path": "tests/history/test_history_replay_integration.py",
@@ -5631,8 +5521,8 @@
     },
     {
       "path": "tests/learning/test_learning_hooks_pipeline_runner.py",
-      "size_bytes": 2712,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 3530,
+      "mtime_iso": "2025-12-14T22:55:31"
     },
     {
       "path": "tests/learning/test_learning_plan_factory.py",
@@ -5730,6 +5620,11 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
+      "path": "tests/pipeline/test_executor_model_switch_noop.py",
+      "size_bytes": 2085,
+      "mtime_iso": "2025-12-14T21:48:39"
+    },
+    {
       "path": "tests/pipeline/test_job_builder_v2.py",
       "size_bytes": 2353,
       "mtime_iso": "2025-12-09T20:46:24"
@@ -5786,8 +5681,8 @@
     },
     {
       "path": "tests/pipeline/test_pipeline_learning_hooks.py",
-      "size_bytes": 2221,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 4522,
+      "mtime_iso": "2025-12-15T06:01:19"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner.py",
@@ -5796,23 +5691,23 @@
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_cancel_token.py",
-      "size_bytes": 5130,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 5966,
+      "mtime_iso": "2025-12-14T22:55:31"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_njr_diagnostics.py",
-      "size_bytes": 2186,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 1735,
+      "mtime_iso": "2025-12-15T06:23:12"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_sdxl_refiner_hires.py",
-      "size_bytes": 4385,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 5012,
+      "mtime_iso": "2025-12-14T22:48:49"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_variants.py",
-      "size_bytes": 1338,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 1775,
+      "mtime_iso": "2025-12-15T06:23:12"
     },
     {
       "path": "tests/pipeline/test_prompt_pack_job_builder.py",
@@ -5841,8 +5736,8 @@
     },
     {
       "path": "tests/pipeline/test_replay_vs_fresh_v2.py",
-      "size_bytes": 2221,
-      "mtime_iso": "2025-12-10T17:45:16"
+      "size_bytes": 2321,
+      "mtime_iso": "2025-12-15T06:01:19"
     },
     {
       "path": "tests/pipeline/test_resolution_e2e.py",
@@ -5871,13 +5766,13 @@
     },
     {
       "path": "tests/pipeline/test_stage_sequencer_runner_integration.py",
-      "size_bytes": 3708,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 2577,
+      "mtime_iso": "2025-12-15T06:23:12"
     },
     {
       "path": "tests/pipeline/test_stage_sequencing.py",
-      "size_bytes": 16064,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 15871,
+      "mtime_iso": "2025-12-15T06:23:12"
     },
     {
       "path": "tests/pipeline/test_unified_config_resolution.py",
@@ -5933,6 +5828,11 @@
       "path": "tests/queue/test_job_variant_metadata_v2.py",
       "size_bytes": 3013,
       "mtime_iso": "2025-12-13T21:44:30"
+    },
+    {
+      "path": "tests/queue/test_queue_completion_to_history.py",
+      "size_bytes": 2184,
+      "mtime_iso": "2025-12-14T17:54:07"
     },
     {
       "path": "tests/queue/test_queue_njr_path.py",

@@ -6,6 +6,7 @@ __all__ = [
     "factories",
     "gui_harness",
     "gui_harness_v2",
+    "njr_factory",
     "pipeline_fakes",
     "webui_mocks",
 ]

@@ -50,7 +50,10 @@ def test_replay_run_plan_matches_fresh_plan() -> None:
         timestamp="2025-01-01T00:00:00Z",
         status="completed",
         history_schema=HISTORY_SCHEMA_VERSION,
-        njr_snapshot=asdict(njr),
+        njr_snapshot={
+            "normalized_job": asdict(njr),
+            "schema_version": HISTORY_SCHEMA_VERSION,
+        },
         metadata={},
         runtime={},
         ui_summary={},

@@ -6,7 +6,9 @@ import os
 import platform
 import signal
 import subprocess
+import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -73,6 +75,8 @@ class WebUIProcessManager:
         self._start_time: float | None = None
         self._health_cache: bool | None = None
         self._pid: int | None = None
+        self._stdout_tail: deque[str] = deque(maxlen=200)
+        self._stderr_tail: deque[str] = deque(maxlen=200)
 
     @property
     def process(self) -> subprocess.Popen | None:
@@ -160,16 +164,30 @@ class WebUIProcessManager:
             )
             logger.info(launch_msg)
             # Log process output in background
-            import threading
-            import logging
-            def log_output(stream, name):
+            self._stdout_tail.clear()
+            self._stderr_tail.clear()
+
+            def log_output(stream, name, buffer: deque[str] | None) -> None:
+                if stream is None or buffer is None:
+                    return
                 try:
-                    for line in iter(stream.readline, b''):
-                        logging.info(f"WebUI {name}: {line.decode().strip()}")
+                    for line in iter(stream.readline, b""):
+                        decoded = line.decode(errors="ignore").rstrip("\n")
+                        buffer.append(decoded)
+                        logger.info("WebUI %s: %s", name, decoded)
                 except Exception:
                     pass
-            threading.Thread(target=log_output, args=(self._process.stdout, "stdout"), daemon=True).start()
-            threading.Thread(target=log_output, args=(self._process.stderr, "stderr"), daemon=True).start()
+
+            threading.Thread(
+                target=log_output,
+                args=(self._process.stdout, "stdout", self._stdout_tail),
+                daemon=True,
+            ).start()
+            threading.Thread(
+                target=log_output,
+                args=(self._process.stderr, "stderr", self._stderr_tail),
+                daemon=True,
+            ).start()
         except Exception as exc:  # noqa: BLE001 - surface structured error
             raise WebUIStartupError(f"Failed to start WebUI: {exc}") from exc
 
@@ -254,6 +272,7 @@ class WebUIProcessManager:
         except Exception:
             self._last_exit_code = None
         finally:
+            self._log_process_crash_tail(self._last_exit_code)
             self._process = None
             self._pid = None
 
@@ -288,6 +307,19 @@ class WebUIProcessManager:
                     os.kill(pid, signal.SIGTERM)
         except Exception:
             logger.exception("Failed to kill WebUI process tree for pid %s", pid)
+
+    def _log_process_crash_tail(self, exit_code: int | None) -> None:
+        if exit_code is None:
+            return
+        stdout_tail = "\n".join(self._stdout_tail) if self._stdout_tail else "<empty>"
+        stderr_tail = "\n".join(self._stderr_tail) if self._stderr_tail else "<empty>"
+        log_fn = logger.error if exit_code != 0 else logger.info
+        log_fn(
+            "WebUI process exited (code=%s). Recent stdout:\n%s\nRecent stderr:\n%s",
+            exit_code,
+            stdout_tail,
+            stderr_tail,
+        )
 
 
 def detect_default_webui_workdir(base_dir: str | None = None) -> str | None:

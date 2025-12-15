@@ -1,58 +1,47 @@
 from __future__ import annotations
 
-import logging
+from typing import Any
 from types import SimpleNamespace
 
-import pytest
-
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.controller.archive.pipeline_config_types import PipelineConfig
-from src.pipeline.stage_models import StageExecution, StageExecutionPlan, StageTypeEnum
 from src.utils.logger import StructuredLogger
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
 
-def test_pipeline_runner_logs_stage_events(monkeypatch, tmp_path, caplog) -> None:
+def test_pipeline_runner_records_stage_events(monkeypatch, tmp_path) -> None:
     class DummyPipeline:
         def __init__(self, api_client, structured_logger):
             self.api_client = api_client
             self.logger = structured_logger
 
+        def run_txt2img_stage(
+            self,
+            prompt: str,
+            negative_prompt: str,
+            payload: dict[str, Any],
+            run_dir,
+            *,
+            image_name: str | None = None,
+            cancel_token: Any | None = None,
+            **_kwargs: Any,
+        ) -> dict[str, Any]:
+            output_path = run_dir / (image_name or "txt2img.png")
+            return {"path": str(output_path), "images": [str(output_path)]}
+
     monkeypatch.setattr("src.pipeline.pipeline_runner.Pipeline", DummyPipeline)
     runner = PipelineRunner(
         api_client=SimpleNamespace(),
         structured_logger=StructuredLogger(output_dir=str(tmp_path)),
+        runs_base_dir=str(tmp_path / "runs"),
     )
 
-    stage = StageExecution(stage_type=StageTypeEnum.TXT2IMG, config_key="txt2img")
-    stage.config = SimpleNamespace(metadata={})
-    plan = StageExecutionPlan(stages=[stage])
+    njr = make_pipeline_njr(stage_chain=[make_stage_config()])
+    cancel_token = SimpleNamespace(is_cancelled=lambda: False)
 
-    monkeypatch.setattr(
-        "src.pipeline.pipeline_runner.build_stage_execution_plan",
-        lambda config: plan,
-    )
-    monkeypatch.setattr(
-        PipelineRunner,
-        "_call_stage",
-        lambda self, stage, payload, run_dir, cancel_token, input_image_path, **kwargs: {"path": str(run_dir / "stage.png")},
-    )
-    monkeypatch.setattr(PipelineRunner, "_apply_stage_metadata", lambda self, executor_config, stage: None)
+    result = runner.run_njr(njr, cancel_token=cancel_token)
 
-    config = PipelineConfig(
-        prompt="test prompt",
-        model="model",
-        sampler="sampler",
-        width=64,
-        height=64,
-        steps=1,
-        cfg_scale=1.0,
-        metadata={"_job_id": "job123", "_prompt_pack_id": "pack123"},
-    )
-
-    caplog.set_level(logging.INFO)
-    runner._execute_with_config(config, cancel_token=SimpleNamespace(is_cancelled=lambda: False))
-
-    messages = [record.getMessage() for record in caplog.records]
-    assert any("NJR_EXEC_START" in message for message in messages)
-    assert any("NJR_STAGE_START" in message for message in messages)
-    assert any("NJR_STAGE_DONE" in message for message in messages)
+    assert result.stage_plan is not None
+    assert result.stage_plan.enabled_stages == ["txt2img"]
+    assert result.stage_events
+    assert result.stage_events[0]["stage"] == "txt2img"
+    assert result.stage_events[0]["phase"] == "exit"

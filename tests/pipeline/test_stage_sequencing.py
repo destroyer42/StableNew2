@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.pipeline.pipeline_runner import PipelineRunner
 from src.pipeline.stage_models import (
     InvalidStagePlanError,
     StageType,
@@ -25,6 +26,7 @@ from src.pipeline.stage_sequencer import (
     StageSequencer,
     build_stage_execution_plan,
 )
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
 
 # -----------------------------------------------------------------------------
@@ -329,54 +331,45 @@ class StubPipeline:
 
 
 class TestPipelineRunnerWithPlan:
-    """Smoke tests for PipelineRunner executing StageExecutionPlan."""
+    """Smoke tests for PipelineRunner executing NJR-based plans."""
 
     @pytest.fixture
     def mock_api_client(self):
-        """Create a mock SDWebUIClient."""
         return MagicMock()
 
     @pytest.fixture
     def mock_logger(self):
-        """Create a mock StructuredLogger."""
         return MagicMock()
 
     def test_runner_executes_full_plan_in_order(self, mock_api_client, mock_logger, tmp_path):
-        """Runner should execute all stages in plan order."""
-        from src.pipeline.pipeline_runner import PipelineRunner, PipelineConfig
-
-        # Create runner with stub pipeline
+        """Runner should honor the enabled stage chain."""
         runner = PipelineRunner(mock_api_client, mock_logger, runs_base_dir=str(tmp_path))
         stub_pipeline = StubPipeline()
         runner._pipeline = stub_pipeline
 
-        # Create config enabling multiple stages
-        config = PipelineConfig(
-            prompt="a beautiful sunset",
-            model="sd_xl_base_1.0",
-            sampler="Euler a",
-            width=1024,
-            height=1024,
-            steps=20,
-            cfg_scale=7.0,
-            metadata={"adetailer_enabled": True},
+        stage_chain = [
+            make_stage_config(stage_type=StageType.TXT2IMG),
+            make_stage_config(stage_type=StageType.UPSCALE),
+            make_stage_config(stage_type=StageType.ADETAILER),
+        ]
+        njr = make_pipeline_njr(
+            stage_chain=stage_chain,
+            positive_prompt="a beautiful sunset",
+            base_model="sd_xl_base_1.0",
+            config={"prompt": "a beautiful sunset", "model": "sd_xl_base_1.0"},
         )
 
-        # Mock cancel token
         cancel_token = MagicMock()
         cancel_token.is_cancelled.return_value = False
 
-        # Run pipeline
-        result = runner.run(config, cancel_token)
+        result = runner.run_njr(njr, cancel_token)
 
-        # Verify txt2img was called (default stage)
-        assert len(stub_pipeline.calls) >= 1
         assert stub_pipeline.calls[0][0] == "txt2img"
+        assert result.stage_plan is not None
+        assert result.stage_plan.enabled_stages == ["txt2img", "upscale", "adetailer"]
 
     def test_runner_with_sequencer_injection(self, mock_api_client, mock_logger, tmp_path):
         """Runner should use injected StageSequencer."""
-        from src.pipeline.pipeline_runner import PipelineRunner, PipelineConfig
-
         sequencer = StageSequencer()
         runner = PipelineRunner(
             mock_api_client,
@@ -388,33 +381,29 @@ class TestPipelineRunnerWithPlan:
         assert runner._sequencer is sequencer
 
     def test_runner_last_image_meta_chaining(self, mock_api_client, mock_logger, tmp_path):
-        """Each stage should receive last_image_meta from previous stage."""
-        from src.pipeline.pipeline_runner import PipelineRunner, PipelineConfig
-
         runner = PipelineRunner(mock_api_client, mock_logger, runs_base_dir=str(tmp_path))
         stub_pipeline = StubPipeline()
         runner._pipeline = stub_pipeline
 
-        # Config with upscale enabled
-        config = PipelineConfig(
-            prompt="test",
-            model="model",
-            sampler="Euler",
-            width=512,
-            height=512,
-            steps=10,
-            cfg_scale=7.0,
+        stage_chain = [
+            make_stage_config(stage_type=StageType.TXT2IMG),
+            make_stage_config(stage_type=StageType.UPSCALE),
+        ]
+        njr = make_pipeline_njr(
+            stage_chain=stage_chain,
+            positive_prompt="test",
+            base_model="model",
+            config={"prompt": "test", "model": "model"},
         )
 
         cancel_token = MagicMock()
         cancel_token.is_cancelled.return_value = False
 
-        # We can't easily test the chaining without exposing internals,
-        # but we can verify that multiple stages execute when enabled
-        result = runner.run(config, cancel_token)
+        result = runner.run_njr(njr, cancel_token)
 
-        # At minimum, txt2img should run
         assert any(call[0] == "txt2img" for call in stub_pipeline.calls)
+        assert result.stage_plan is not None
+        assert result.stage_plan.enabled_stages == ["txt2img", "upscale"]
 
 
 class TestStageModelsIntegration:

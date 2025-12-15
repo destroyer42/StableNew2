@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import requests
+from typing import Any
 
-import pytest
+import requests
 
 from src.api.client import SDWebUIClient
 from src.api.types import GenerateErrorCode
@@ -36,3 +36,25 @@ def test_generate_images_connection_error(monkeypatch):
     assert outcome.error is not None
     assert outcome.error.code == GenerateErrorCode.CONNECTION
     assert "network fail" in outcome.error.message
+
+
+class _FakeResponse:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def json(self) -> dict[str, Any]:
+        raise ValueError("parse failure")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_txt2img_closes_response(monkeypatch):
+    client = SDWebUIClient()
+    fake_response = _FakeResponse()
+    monkeypatch.setattr(client, "_perform_request", lambda *args, **kwargs: fake_response)
+
+    result = client.txt2img({})
+
+    assert result is None
+    assert fake_response.closed
