@@ -62,6 +62,10 @@ class WebUIUnavailableError(Exception):
         self.original_exception = original_exception
 
 
+class WebUIPayloadValidationError(ValueError):
+    """Raised when a payload cannot be serialized or violates safety checks."""
+
+
 def _format_as_data_url(image_base64: str) -> str:
     if image_base64.startswith("data:"):
         return image_base64
@@ -137,6 +141,8 @@ class SDWebUIClient:
             "WebUI options writes %s",
             "enabled" if self._options_write_enabled else "disabled (SafeMode)",
         )
+        self._session_id = id(self._session)
+        self._last_http_500_summary: dict[str, Any] | None = None
 
     def close(self) -> None:
         """Close the shared HTTP session if still open."""
@@ -235,6 +241,48 @@ class SDWebUIClient:
         connect_timeout = max(connect_timeout, 0.1)
         return (connect_timeout, read_timeout)
 
+    def _build_request_summary(
+        self,
+        *,
+        endpoint: str,
+        method: str,
+        stage: str | None,
+        status: int | None = None,
+        response_snippet: str | None = None,
+    ) -> dict[str, Any]:
+        summary: dict[str, Any] = {
+            "endpoint": endpoint,
+            "stage": stage,
+            "method": method.upper(),
+            "session_id": self._session_id,
+        }
+        if status is not None:
+            summary["status"] = status
+        if response_snippet:
+            summary["response_snippet"] = response_snippet
+        return summary
+
+    def _attach_diagnostics_context(
+        self,
+        exc: Exception,
+        *,
+        summary: dict[str, Any],
+        webui_unavailable: bool,
+        crash_suspected: bool,
+        previous_http_error: dict[str, Any] | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        context: dict[str, Any] = {
+            "request_summary": summary,
+            "webui_unavailable": webui_unavailable,
+            "crash_suspected": crash_suspected,
+        }
+        if previous_http_error:
+            context["previous_http_error"] = previous_http_error
+        if error_message:
+            context["error_message"] = error_message
+        exc.diagnostics_context = context
+
     def _perform_request(
         self,
         method: str,
@@ -277,6 +325,15 @@ class SDWebUIClient:
         if isinstance(payload_capture, dict):
             payload_capture = dict(payload_capture)
 
+        json_payload = kwargs.get("json")
+        if json_payload is not None:
+            try:
+                json.dumps(json_payload, ensure_ascii=False)
+            except (TypeError, ValueError) as json_exc:
+                raise WebUIPayloadValidationError(
+                    f"Failed to serialize payload for {method.upper()} {endpoint}: {json_exc}"
+                ) from json_exc
+
         def _log_api_failure(
             *, error_text: str, status: int | None = None, response_text: str | None = None
         ) -> None:
@@ -304,9 +361,30 @@ class SDWebUIClient:
                 except requests.HTTPError as http_exc:
                     status_code = getattr(response, "status_code", None)
                     resp_text = getattr(response, "text", None)
-                    truncated_text = None
-                    if resp_text:
-                        truncated_text = resp_text[:4000] + ("..." if len(resp_text) > 4000 else "")
+                    truncated_text = (
+                        resp_text[:4000] + ("..." if len(resp_text) > 4000 else "")
+                        if resp_text
+                        else None
+                    )
+                    summary = self._build_request_summary(
+                        endpoint=endpoint,
+                        method=method,
+                        stage=stage_key,
+                        status=status_code,
+                        response_snippet=truncated_text,
+                    )
+                    self._attach_diagnostics_context(
+                        http_exc,
+                        summary=summary,
+                        webui_unavailable=False,
+                        crash_suspected=False,
+                    )
+                    if (
+                        status_code == 500
+                        and method.upper() == "POST"
+                        and endpoint.endswith("/txt2img")
+                    ):
+                        self._last_http_500_summary = dict(summary)
                     log_with_ctx(
                         logger,
                         logging.WARNING,
@@ -315,7 +393,7 @@ class SDWebUIClient:
                         extra_fields={
                             "response_text": truncated_text,
                             "timeout": timeout_value,
-                            "session_id": id(self._session),
+                            "session_id": self._session_id,
                         },
                     )
                     _log_api_failure(
@@ -324,11 +402,43 @@ class SDWebUIClient:
                         response_text=truncated_text,
                     )
                     raise
+                self._last_http_500_summary = None
                 return response
             except Exception as exc:  # noqa: BLE001 - broad to ensure retries
                 if response is not None:
                     response.close()
                 last_exception = exc
+                existing_context = getattr(exc, "diagnostics_context", None)
+                if existing_context and existing_context.get("request_summary"):
+                    summary = existing_context["request_summary"]
+                else:
+                    status_code = getattr(response, "status_code", None) if response else None
+                    response_snippet = None
+                    if not isinstance(exc, requests.HTTPError):
+                        response_snippet = str(exc)
+                    summary = self._build_request_summary(
+                        endpoint=endpoint,
+                        method=method,
+                        stage=stage_key,
+                        status=status_code,
+                        response_snippet=response_snippet,
+                    )
+                webui_unavailable = isinstance(exc, requests.ConnectionError)
+                crash_suspected = webui_unavailable and bool(self._last_http_500_summary)
+                if existing_context is None:
+                    previous_summary = (
+                        dict(self._last_http_500_summary) if crash_suspected else None
+                    )
+                    self._attach_diagnostics_context(
+                        exc,
+                        summary=summary,
+                        webui_unavailable=webui_unavailable,
+                        crash_suspected=crash_suspected,
+                        previous_http_error=previous_summary,
+                        error_message=str(exc),
+                    )
+                if crash_suspected:
+                    self._last_http_500_summary = None
                 attempt_index = attempt + 1
                 log_with_ctx(
                     logger,
@@ -341,7 +451,7 @@ class SDWebUIClient:
                         "attempt": attempt_index,
                         "max_attempts": retries,
                         "timeout": timeout_value,
-                        "session_id": id(self._session),
+                        "session_id": self._session_id,
                         "reuse_session": True,
                     },
                 )
@@ -894,10 +1004,14 @@ class SDWebUIClient:
         return GenerateResult(images=images, info=info, stage=stage, timings=timings)
 
     def _generate_error_outcome(
-        self, stage: str, message: str, code: GenerateErrorCode
+        self,
+        stage: str,
+        message: str,
+        code: GenerateErrorCode,
+        details: dict[str, Any] | None = None,
     ) -> GenerateOutcome:
         return GenerateOutcome(
-            error=GenerateError(code=code, message=message, stage=stage),
+            error=GenerateError(code=code, message=message, stage=stage, details=details),
         )
 
     def generate_images(
@@ -925,12 +1039,22 @@ class SDWebUIClient:
                 )
             return GenerateOutcome(result=result)
         except requests.RequestException as exc:
+            diag = getattr(exc, "diagnostics_context", None)
+            details = {"diagnostics": diag} if diag else None
             return self._generate_error_outcome(
-                stage_normalized, str(exc), GenerateErrorCode.CONNECTION
+                stage_normalized,
+                str(exc),
+                GenerateErrorCode.CONNECTION,
+                details=details,
             )
         except Exception as exc:
+            diag = getattr(exc, "diagnostics_context", None)
+            details = {"diagnostics": diag} if diag else None
             return self._generate_error_outcome(
-                stage_normalized, str(exc), GenerateErrorCode.UNKNOWN
+                stage_normalized,
+                str(exc),
+                GenerateErrorCode.UNKNOWN,
+                details=details,
             )
 
     def get_models(self) -> list[dict[str, Any]]:

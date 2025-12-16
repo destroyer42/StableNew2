@@ -66,6 +66,35 @@ class WebUIAPI:
         logger.debug("WebUI client readiness check reported not ready")
         return False
 
+    def _sleep(self, seconds: float) -> None:
+        """Sleep for the given number of seconds."""
+        time.sleep(seconds)
+
+    def wait_until_ready(
+        self,
+        *,
+        max_attempts: int = 6,
+        base_delay: float = 1.0,
+        max_delay: float = 8.0,
+    ) -> bool:
+        """Wait until the WebUI API reports ready with exponential backoff."""
+
+        delay = max(base_delay, 0.0)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if self._client.check_api_ready():
+                    logger.info("WebUI API confirmed ready after %s attempt(s)", attempt)
+                    return True
+            except Exception as exc:
+                logger.debug("WebUI readiness probe attempt %s raised: %s", attempt, exc)
+            if attempt >= max_attempts:
+                break
+            self._sleep(min(delay, max_delay))
+            delay = min(delay * 2, max_delay)
+
+        logger.warning("WebUI API did not become ready after %s attempts", max_attempts)
+        return False
+
     def _finalize_options_result(
         self, status: OptionsApplyResult, *, return_status: bool
     ) -> bool | OptionsApplyResult:

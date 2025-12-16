@@ -16,6 +16,7 @@ class TestSDWebUIClient:
     def setup_method(self):
         """Setup for each test"""
         self.client = SDWebUIClient()
+        self.client.set_options_write_enabled(True)
 
     def test_init(self):
         """Test client initialization"""
@@ -103,6 +104,7 @@ class TestSDWebUIClient:
     def test_apply_upscale_performance_defaults_posts_options(self):
         """Ensure upscale defaults call POST /options exactly once."""
         client = SDWebUIClient()
+        client.set_options_write_enabled(True)
         client._perform_request = MagicMock(return_value=object())
 
         client.apply_upscale_performance_defaults()
@@ -119,6 +121,7 @@ class TestSDWebUIClient:
     def test_ensure_safe_upscale_defaults_clamps_values(self):
         """ensure_safe_upscale_defaults should clamp oversized values and POST payload."""
         client = SDWebUIClient()
+        client.set_options_write_enabled(True)
 
         with requests_mock.Mocker() as m:
             m.get(
@@ -145,6 +148,7 @@ class TestSDWebUIClient:
     def test_ensure_safe_upscale_defaults_no_changes_skips_post(self):
         """When values already safe, ensure_safe_upscale_defaults should not POST."""
         client = SDWebUIClient()
+        client.set_options_write_enabled(True)
 
         with requests_mock.Mocker() as m:
             m.get(
@@ -162,3 +166,31 @@ class TestSDWebUIClient:
             client.ensure_safe_upscale_defaults(max_img_mp=8.0, max_tile=768, max_overlap=128)
 
             assert post_mock.called is False
+
+
+def test_generate_images_surfaces_crash_diagnostics_context():
+    client = SDWebUIClient()
+    client.set_options_write_enabled(True)
+    session_id = client._session_id
+
+    with requests_mock.Mocker() as m:
+        m.post(
+            f"{API_BASE_URL}/sdapi/v1/txt2img",
+            [
+                {"status_code": 500, "text": "server fatal error"},
+                {"exc": requests.exceptions.ConnectionError("Connection refused")},
+            ],
+        )
+
+        outcome = client.generate_images(stage="txt2img", payload={})
+
+    assert outcome.error is not None
+    diagnostics = outcome.error.details.get("diagnostics") if outcome.error.details else None
+    assert diagnostics is not None
+    assert diagnostics.get("webui_unavailable") is True
+    assert diagnostics.get("crash_suspected") is True
+    request_summary = diagnostics.get("request_summary")
+    assert request_summary is not None
+    assert request_summary.get("endpoint") == "/sdapi/v1/txt2img"
+    assert request_summary.get("session_id") == session_id
+    assert diagnostics.get("previous_http_error") is not None

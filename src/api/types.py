@@ -15,6 +15,7 @@ class GenerateErrorCode(str, Enum):
     INVALID_SAMPLER = "invalid_sampler"
     INVALID_SCHEDULER = "invalid_scheduler"
     ADETAILER_CONFIG = "adetailer_config_error"
+    PAYLOAD_VALIDATION = "payload_validation_error"
     UNKNOWN = "unknown_error"
 
 

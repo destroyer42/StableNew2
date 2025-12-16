@@ -77,6 +77,8 @@ class WebUIProcessManager:
         self._pid: int | None = None
         self._stdout_tail: deque[str] = deque(maxlen=200)
         self._stderr_tail: deque[str] = deque(maxlen=200)
+        global _GLOBAL_WEBUI_PROCESS_MANAGER
+        _GLOBAL_WEBUI_PROCESS_MANAGER = self
 
     @property
     def process(self) -> subprocess.Popen | None:
@@ -256,6 +258,83 @@ class WebUIProcessManager:
         )
         return not self.is_running()
 
+    def restart_webui(
+        self,
+        *,
+        wait_ready: bool = True,
+        max_attempts: int = 6,
+        base_delay: float = 1.0,
+        max_delay: float = 8.0,
+    ) -> bool:
+        """Restart the WebUI process and wait for its API to become available."""
+
+        ctx = LogContext(subsystem="api")
+        log_with_ctx(logger, logging.INFO, "Restarting WebUI process", ctx=ctx)
+        self.stop_webui()
+        try:
+            self.start()
+        except Exception as exc:
+            log_with_ctx(
+                logger,
+                logging.ERROR,
+                "Failed to restart WebUI process",
+                ctx=ctx,
+                extra_fields={"error": str(exc)} if exc else {},
+            )
+            return False
+
+        if not wait_ready:
+            return True
+
+        client = None
+        ready = False
+        base_url = self._configured_base_url()
+        try:
+            from src.api.client import SDWebUIClient
+            from src.api.webui_api import WebUIAPI
+
+            client = SDWebUIClient(base_url=base_url)
+            helper = WebUIAPI(client=client)
+            ready = helper.wait_until_ready(
+                max_attempts=max_attempts,
+                base_delay=base_delay,
+                max_delay=max_delay,
+            )
+        except Exception as exc:  # pragma: no cover - best effort
+            log_with_ctx(
+                logger,
+                logging.ERROR,
+                "WebUI readiness check failed after restart",
+                ctx=ctx,
+                extra_fields={
+                    "error": str(exc),
+                    "base_url": base_url,
+                    "max_attempts": max_attempts,
+                    "base_delay": base_delay,
+                    "max_delay": max_delay,
+                } if exc else {},
+            )
+            ready = False
+        finally:
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+        log_with_ctx(
+            logger,
+            logging.INFO if ready else logging.ERROR,
+            "WebUI restart readiness",
+            ctx=ctx,
+            extra_fields={
+                "ready": ready,
+                "base_url": base_url,
+                "max_attempts": max_attempts,
+            },
+        )
+        return ready
+
     def _finalize_process(self, process: subprocess.Popen) -> None:
         try:
             if process.stdout:
@@ -285,6 +364,11 @@ class WebUIProcessManager:
             "command": list(self._config.command),
             "working_dir": self._config.working_dir,
         }
+
+    def _configured_base_url(self) -> str:
+        if self._config.base_url:
+            return self._config.base_url
+        return os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
 
     @property
     def pid(self) -> int | None:
@@ -320,6 +404,24 @@ class WebUIProcessManager:
             stdout_tail,
             stderr_tail,
         )
+
+    def get_recent_output_tail(self, max_lines: int = 200) -> dict[str, Any]:
+        """Return the latest stdout/stderr tail plus process metadata."""
+
+        def _join_tail(buffer: deque[str]) -> str:
+            if not buffer:
+                return ""
+            lines = list(buffer)
+            if max_lines > 0 and len(lines) > max_lines:
+                lines = lines[-max_lines:]
+            return "\n".join(lines)
+
+        return {
+            "stdout_tail": _join_tail(self._stdout_tail),
+            "stderr_tail": _join_tail(self._stderr_tail),
+            "pid": self.pid,
+            "running": self.is_running(),
+        }
 
 
 def detect_default_webui_workdir(base_dir: str | None = None) -> str | None:
@@ -397,7 +499,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             command = ["webui-user.bat", "--api", "--xformers"]
         else:
             command = ["bash", "webui.sh", "--api"]
-            
+
         # Verify command exists
         command_path = workdir_path / command[0]
         if command_path.exists():
@@ -416,3 +518,10 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             )
 
     return None
+
+
+_GLOBAL_WEBUI_PROCESS_MANAGER: WebUIProcessManager | None = None
+
+
+def get_global_webui_process_manager() -> WebUIProcessManager | None:
+    return _GLOBAL_WEBUI_PROCESS_MANAGER

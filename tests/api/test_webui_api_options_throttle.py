@@ -8,10 +8,19 @@ class _CountingClient:
     def __init__(self) -> None:
         self.update_calls = 0
         self.payloads: list[dict[str, Any]] = []
+        self._options_write_enabled = True
+
+    @property
+    def options_write_enabled(self) -> bool:
+        return self._options_write_enabled
+
+    def set_options_write_enabled(self, enabled: bool) -> None:
+        self._options_write_enabled = bool(enabled)
 
     def update_options(self, payload: dict[str, Any]) -> None:
         self.update_calls += 1
         self.payloads.append(dict(payload))
+        return {"status": "ok"}
 
 
 def test_concurrent_apply_options_only_updates_once() -> None:

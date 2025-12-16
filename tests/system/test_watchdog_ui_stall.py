@@ -17,7 +17,7 @@ def test_ui_heartbeat_stall_triggers_diagnostics(tmp_path):
     bundle_dir.mkdir()
     app = DummyAppController()
     diag = DiagnosticsServiceV2(bundle_dir)
-    watchdog = SystemWatchdogV2(app, diag)
+    watchdog = SystemWatchdogV2(app, diag, check_interval_s=0.25)
     watchdog.start()
     # Simulate UI freeze by not updating heartbeat
     app.last_ui_heartbeat_ts -= 5.0
@@ -32,7 +32,7 @@ def test_queue_runner_stall_triggers_diagnostics(tmp_path):
     bundle_dir.mkdir()
     app = DummyAppController()
     diag = DiagnosticsServiceV2(bundle_dir)
-    watchdog = SystemWatchdogV2(app, diag)
+    watchdog = SystemWatchdogV2(app, diag, check_interval_s=0.25)
     watchdog.start()
     # Simulate running job with no runner activity
     app.last_runner_activity_ts -= 15.0

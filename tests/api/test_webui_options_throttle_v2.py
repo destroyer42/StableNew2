@@ -14,6 +14,8 @@ class _StubResult(GenerateResult):
 
 def test_options_payload_is_deduped(monkeypatch):
     client = SDWebUIClient()
+    client.set_options_write_enabled(True)
+    monkeypatch.setattr(client, "check_api_ready", lambda: True)
     calls: list[dict[str, Any]] = []
 
     def fake_update(payload: dict[str, Any]) -> dict[str, Any]:
@@ -42,6 +44,8 @@ def test_options_payload_is_deduped(monkeypatch):
 
 def test_stage_call_not_blocked(monkeypatch):
     client = SDWebUIClient()
+    client.set_options_write_enabled(True)
+    monkeypatch.setattr(client, "check_api_ready", lambda: True)
     applied: list[dict[str, Any]] = []
     stages: list[str] = []
 

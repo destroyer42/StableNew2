@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-15T06:27:21",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251215-062719.zip",
-  "file_count": 1214,
-  "total_size_bytes": 15356979,
+  "created_at": "2025-12-15T20:41:20",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251215-204115.zip",
+  "file_count": 1224,
+  "total_size_bytes": 15780210,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -391,8 +391,8 @@
     },
     {
       "path": "data/job_history.jsonl",
-      "size_bytes": 710973,
-      "mtime_iso": "2025-12-14T22:50:41"
+      "size_bytes": 717513,
+      "mtime_iso": "2025-12-15T06:51:44"
     },
     {
       "path": "data/webui_cache.json",
@@ -2780,6 +2780,26 @@
       "mtime_iso": "2025-12-14T21:28:22"
     },
     {
+      "path": "docs/pr_templates/PR-CORE1-D11 – WebUI Crash Recovery + Stage Retry Gate.md",
+      "size_bytes": 8761,
+      "mtime_iso": "2025-12-15T07:59:45"
+    },
+    {
+      "path": "docs/pr_templates/PR-CORE1-D11A-WEBUI-FAILURE-DIAGNOSTICS.md",
+      "size_bytes": 4013,
+      "mtime_iso": "2025-12-15T18:48:16"
+    },
+    {
+      "path": "docs/pr_templates/PR-CORE1-D11B-WEBUI-CRASH-RECOVERY-RETRY.md",
+      "size_bytes": 3507,
+      "mtime_iso": "2025-12-15T18:48:36"
+    },
+    {
+      "path": "docs/pr_templates/PR-CORE1-D11C-TXT2IMG-PAYLOAD-SANITY-GUARDS.md",
+      "size_bytes": 2695,
+      "mtime_iso": "2025-12-15T18:49:15"
+    },
+    {
       "path": "docs/pr_templates/PR-CORE1-D21A.md",
       "size_bytes": 8425,
       "mtime_iso": "2025-12-13T11:11:02"
@@ -3210,6 +3230,16 @@
       "mtime_iso": "2025-12-14T22:22:00"
     },
     {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251216_020235_ui_heartbeat_stall.zip",
+      "size_bytes": 173432,
+      "mtime_iso": "2025-12-15T20:02:35"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251216_023723_ui_heartbeat_stall.zip",
+      "size_bytes": 174476,
+      "mtime_iso": "2025-12-15T20:37:23"
+    },
+    {
       "path": "reports/file_access/CLEANHOUSE_REPORT_V2_5_2025_11_26.md",
       "size_bytes": 33355,
       "mtime_iso": "2025-11-26T16:51:07"
@@ -3336,8 +3366,8 @@
     },
     {
       "path": "src/api/client.py",
-      "size_bytes": 46109,
-      "mtime_iso": "2025-12-14T21:48:39"
+      "size_bytes": 51187,
+      "mtime_iso": "2025-12-15T20:05:08"
     },
     {
       "path": "src/api/healthcheck.py",
@@ -3346,18 +3376,18 @@
     },
     {
       "path": "src/api/types.py",
-      "size_bytes": 1295,
-      "mtime_iso": "2025-12-06T18:21:19"
+      "size_bytes": 1348,
+      "mtime_iso": "2025-12-15T20:05:08"
     },
     {
       "path": "src/api/webui_api.py",
-      "size_bytes": 6763,
-      "mtime_iso": "2025-12-14T21:48:39"
+      "size_bytes": 7834,
+      "mtime_iso": "2025-12-15T20:39:03"
     },
     {
       "path": "src/api/webui_process_manager.py",
-      "size_bytes": 14892,
-      "mtime_iso": "2025-12-14T21:48:39"
+      "size_bytes": 18472,
+      "mtime_iso": "2025-12-15T20:39:03"
     },
     {
       "path": "src/api/webui_resources.py",
@@ -4041,8 +4071,8 @@
     },
     {
       "path": "src/learning/learning_record_builder.py",
-      "size_bytes": 4536,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 5434,
+      "mtime_iso": "2025-12-15T06:41:40"
     },
     {
       "path": "src/learning/learning_runner.py",
@@ -4081,8 +4111,8 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 111610,
-      "mtime_iso": "2025-12-14T21:48:39"
+      "size_bytes": 118040,
+      "mtime_iso": "2025-12-15T20:05:08"
     },
     {
       "path": "src/pipeline/job_builder_v2.py",
@@ -4121,8 +4151,8 @@
     },
     {
       "path": "src/pipeline/pipeline_runner.py",
-      "size_bytes": 24313,
-      "mtime_iso": "2025-12-15T06:23:12"
+      "size_bytes": 24560,
+      "mtime_iso": "2025-12-15T06:53:19"
     },
     {
       "path": "src/pipeline/prompt_pack_job_builder.py",
@@ -4201,8 +4231,8 @@
     },
     {
       "path": "src/queue/single_node_runner.py",
-      "size_bytes": 11422,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 17163,
+      "mtime_iso": "2025-12-15T19:57:40"
     },
     {
       "path": "src/queue/stub_runner.py",
@@ -4231,8 +4261,8 @@
     },
     {
       "path": "src/services/diagnostics_service_v2.py",
-      "size_bytes": 1861,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 2211,
+      "mtime_iso": "2025-12-15T19:03:18"
     },
     {
       "path": "src/services/queue_store_v2.py",
@@ -4241,8 +4271,8 @@
     },
     {
       "path": "src/services/watchdog_system_v2.py",
-      "size_bytes": 4656,
-      "mtime_iso": "2025-12-13T22:19:18"
+      "size_bytes": 4813,
+      "mtime_iso": "2025-12-15T07:26:27"
     },
     {
       "path": "src/stablenew.egg-info/dependency_links.txt",
@@ -4306,8 +4336,8 @@
     },
     {
       "path": "src/utils/diagnostics_bundle_v2.py",
-      "size_bytes": 6219,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 7020,
+      "mtime_iso": "2025-12-15T19:03:18"
     },
     {
       "path": "src/utils/error_envelope_v2.py",
@@ -4457,7 +4487,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-14T22:50:41"
+      "mtime_iso": "2025-12-15T20:37:47"
     },
     {
       "path": "tests/conftest.py",
@@ -4481,8 +4511,8 @@
     },
     {
       "path": "tests/test_api_client.py",
-      "size_bytes": 6641,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 7964,
+      "mtime_iso": "2025-12-15T19:03:18"
     },
     {
       "path": "tests/test_cancel_token.py",
@@ -4531,8 +4561,8 @@
     },
     {
       "path": "tests/api/test_client_options_throttling_v2.py",
-      "size_bytes": 912,
-      "mtime_iso": "2025-12-14T20:12:31"
+      "size_bytes": 1000,
+      "mtime_iso": "2025-12-15T07:00:49"
     },
     {
       "path": "tests/api/test_healthcheck_v2.py",
@@ -4551,13 +4581,18 @@
     },
     {
       "path": "tests/api/test_webui_api_options_throttle.py",
-      "size_bytes": 2451,
-      "mtime_iso": "2025-12-14T21:04:34"
+      "size_bytes": 2755,
+      "mtime_iso": "2025-12-15T07:00:49"
     },
     {
       "path": "tests/api/test_webui_api_upscale_payload.py",
       "size_bytes": 1632,
       "mtime_iso": "2025-12-08T08:04:45"
+    },
+    {
+      "path": "tests/api/test_webui_api_wait_until_ready.py",
+      "size_bytes": 7228,
+      "mtime_iso": "2025-12-15T20:39:03"
     },
     {
       "path": "tests/api/test_webui_healthcheck.py",
@@ -4566,13 +4601,18 @@
     },
     {
       "path": "tests/api/test_webui_options_throttle_v2.py",
-      "size_bytes": 2213,
-      "mtime_iso": "2025-12-14T18:44:11"
+      "size_bytes": 2433,
+      "mtime_iso": "2025-12-15T07:00:49"
     },
     {
       "path": "tests/api/test_webui_process_manager.py",
       "size_bytes": 3825,
       "mtime_iso": "2025-12-06T18:21:19"
+    },
+    {
+      "path": "tests/api/test_webui_process_manager_restart_ready.py",
+      "size_bytes": 9281,
+      "mtime_iso": "2025-12-15T20:39:03"
     },
     {
       "path": "tests/api/test_webui_process_manager_shutdown_v2.py",
@@ -5521,8 +5561,8 @@
     },
     {
       "path": "tests/learning/test_learning_hooks_pipeline_runner.py",
-      "size_bytes": 3530,
-      "mtime_iso": "2025-12-14T22:55:31"
+      "size_bytes": 3544,
+      "mtime_iso": "2025-12-15T06:41:40"
     },
     {
       "path": "tests/learning/test_learning_plan_factory.py",
@@ -5625,6 +5665,11 @@
       "mtime_iso": "2025-12-14T21:48:39"
     },
     {
+      "path": "tests/pipeline/test_executor_webui_crash.py",
+      "size_bytes": 2527,
+      "mtime_iso": "2025-12-15T19:03:18"
+    },
+    {
       "path": "tests/pipeline/test_job_builder_v2.py",
       "size_bytes": 2353,
       "mtime_iso": "2025-12-09T20:46:24"
@@ -5670,14 +5715,19 @@
       "mtime_iso": "2025-12-06T18:21:19"
     },
     {
+      "path": "tests/pipeline/test_payload_validation.py",
+      "size_bytes": 1390,
+      "mtime_iso": "2025-12-15T20:05:08"
+    },
+    {
       "path": "tests/pipeline/test_pipeline_adetailer_config.py",
       "size_bytes": 2243,
       "mtime_iso": "2025-12-13T21:44:30"
     },
     {
       "path": "tests/pipeline/test_pipeline_io_contracts.py",
-      "size_bytes": 2193,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 2533,
+      "mtime_iso": "2025-12-15T06:53:19"
     },
     {
       "path": "tests/pipeline/test_pipeline_learning_hooks.py",
@@ -5686,8 +5736,8 @@
     },
     {
       "path": "tests/pipeline/test_pipeline_runner.py",
-      "size_bytes": 2589,
-      "mtime_iso": "2025-12-10T20:08:22"
+      "size_bytes": 2478,
+      "mtime_iso": "2025-12-15T06:53:19"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_cancel_token.py",
@@ -5751,8 +5801,8 @@
     },
     {
       "path": "tests/pipeline/test_run_modes.py",
-      "size_bytes": 7823,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 7863,
+      "mtime_iso": "2025-12-15T19:57:40"
     },
     {
       "path": "tests/pipeline/test_stage_plan_builder_v2_5.py",
@@ -5850,6 +5900,11 @@
       "mtime_iso": "2025-12-13T21:44:30"
     },
     {
+      "path": "tests/queue/test_single_node_runner_webui_retry.py",
+      "size_bytes": 3301,
+      "mtime_iso": "2025-12-15T19:57:40"
+    },
+    {
       "path": "tests/randomizer/test_randomizer_engine_v2.py",
       "size_bytes": 2644,
       "mtime_iso": "2025-12-02T08:03:48"
@@ -5911,8 +5966,8 @@
     },
     {
       "path": "tests/system/test_watchdog_ui_stall.py",
-      "size_bytes": 1577,
-      "mtime_iso": "2025-12-13T21:44:30"
+      "size_bytes": 1623,
+      "mtime_iso": "2025-12-15T07:26:27"
     },
     {
       "path": "tests/tools/test_v2_classify_and_archive.py",

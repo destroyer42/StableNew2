@@ -12,8 +12,9 @@ from dataclasses import asdict
 from typing import Callable, Optional
 
 from src.pipeline.pipeline_runner import normalize_run_result
-from src.queue.job_model import JobStatus, Job
+from src.queue.job_model import JobStatus, Job, RetryAttempt
 from src.queue.job_queue import JobQueue
+from src.api.webui_process_manager import get_global_webui_process_manager
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
 
@@ -37,6 +38,103 @@ def _ensure_job_envelope(job: Job | None, exc: Exception) -> None:
             }
 
 
+_MAX_WEBUI_CRASH_RETRIES = 1
+_QUEUE_JOB_WEBUI_CRASH_SUSPECTED = "QUEUE_JOB_WEBUI_CRASH_SUSPECTED"
+_QUEUE_JOB_WEBUI_RETRY_EXHAUSTED = "QUEUE_JOB_WEBUI_RETRY_EXHAUSTED"
+_CRASH_ELIGIBLE_STAGES = {"txt2img", "img2img", "upscale"}
+_CRASH_MESSAGE_KEYWORDS = ("connection refused", "actively refused", "webui unavailable")
+
+
+def _select_request_summary_stage(summary: dict[str, Any] | None) -> str | None:
+    if not summary:
+        return None
+    stage = summary.get("stage")
+    if stage:
+        return str(stage)
+    endpoint = summary.get("endpoint")
+    if endpoint and "/txt2img" in endpoint:
+        return "txt2img"
+    if endpoint and "/img2img" in endpoint:
+        return "img2img"
+    if endpoint and "/upscale" in endpoint:
+        return "upscale"
+    return None
+
+
+def _get_diagnostics_context(exc: Exception) -> dict[str, Any] | None:
+    envelope = get_attached_envelope(exc)
+    if envelope and envelope.context:
+        diagnostics = envelope.context.get("diagnostics")
+        if isinstance(diagnostics, dict):
+            return diagnostics
+    diagnostics = getattr(exc, "diagnostics_context", None)
+    if isinstance(diagnostics, dict):
+        return diagnostics
+    return None
+
+
+def _is_webui_crash_exception(exc: Exception) -> tuple[bool, str | None]:
+    diag = _get_diagnostics_context(exc)
+    if not diag:
+        return False, None
+    summary = diag.get("request_summary") or {}
+    status = summary.get("status")
+    method = (summary.get("method") or "").upper()
+    attempt_stage = _select_request_summary_stage(summary)
+    stage_name = attempt_stage or (getattr(exc, "stage", None) or summary.get("stage"))
+    try:
+        status_code = int(status)
+    except (TypeError, ValueError):
+        status_code = None
+    if (
+        status_code == 500
+        and method == "POST"
+        and stage_name
+        and stage_name.lower() in _CRASH_ELIGIBLE_STAGES
+    ):
+        return True, stage_name
+    if diag.get("webui_unavailable"):
+        error_message = str(diag.get("error_message") or exc).lower()
+        if any(keyword in error_message for keyword in _CRASH_MESSAGE_KEYWORDS):
+            return True, stage_name
+    message = str(exc).lower()
+    if "webui unavailable" in message:
+        return True, stage_name
+    return False, stage_name
+
+
+def _record_retry_attempt(job: Job, *, stage: str | None, attempt_index: int, reason: str, max_attempts: int) -> None:
+    job.execution_metadata.retry_attempts.append(
+        RetryAttempt(stage=stage or "pipeline", attempt_index=attempt_index, max_attempts=max_attempts, reason=reason)
+    )
+
+
+def _restart_webui_process(job_id: str) -> bool:
+    manager = get_global_webui_process_manager()
+    if manager is None:
+        logger.debug("No WebUI process manager available for restart", extra={"job_id": job_id})
+        return False
+    try:
+        return manager.restart_webui()
+    except Exception as exc:  # pragma: no cover - best effort
+        log_with_ctx(
+            logger,
+            logging.ERROR,
+            "Failed to restart WebUI process",
+            ctx=LogContext(job_id=job_id, subsystem="queue_runner"),
+            extra_fields={"error": str(exc)},
+        )
+        return False
+
+
+def _log_retry_exhausted(job: Job, stage: str | None, reason: str) -> None:
+    log_with_ctx(
+        logger,
+        logging.ERROR,
+        f"{_QUEUE_JOB_WEBUI_RETRY_EXHAUSTED} | WebUI crash retry exhausted",
+        ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
+        extra_fields={"stage": stage, "reason": reason},
+    )
 class SingleNodeJobRunner:
     """Background worker that executes jobs from a JobQueue."""
 
@@ -58,6 +156,52 @@ class SingleNodeJobRunner:
         self._cancel_current = threading.Event()
         # PR-CORE1-D21B: Activity callback
         self._on_activity = on_activity
+
+    def _run_with_webui_retry(self, job: Job) -> dict | None:
+        if self.run_callable is None:
+            return None
+        max_attempts = _MAX_WEBUI_CRASH_RETRIES + 1
+        attempt = 1
+        while attempt <= max_attempts:
+            try:
+                return self.run_callable(job)
+            except Exception as exc:  # noqa: BLE001
+                crash_eligible, stage = _is_webui_crash_exception(exc)
+                if not crash_eligible:
+                    raise
+                if attempt >= max_attempts:
+                    _log_retry_exhausted(job, stage, _QUEUE_JOB_WEBUI_CRASH_SUSPECTED)
+                    raise
+                next_attempt = attempt + 1
+                _record_retry_attempt(
+                    job,
+                    stage=stage,
+                    attempt_index=next_attempt,
+                    reason=_QUEUE_JOB_WEBUI_CRASH_SUSPECTED,
+                    max_attempts=max_attempts,
+                )
+                log_with_ctx(
+                    logger,
+                    logging.WARNING,
+                    f"{_QUEUE_JOB_WEBUI_CRASH_SUSPECTED} | Suspected WebUI crash, restarting",
+                    ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
+                    extra_fields={
+                        "stage": stage,
+                        "attempt": next_attempt,
+                        "max_attempts": max_attempts,
+                    },
+                )
+                restarted = _restart_webui_process(job.job_id)
+                if not restarted:
+                    log_with_ctx(
+                        logger,
+                        logging.ERROR,
+                        "WebUI restart failed during retry",
+                        ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
+                        extra_fields={"stage": stage, "attempt": next_attempt},
+                    )
+                attempt += 1
+        return None
 
     def start(self) -> None:
         if self._worker and self._worker.is_alive():
@@ -121,7 +265,7 @@ class SingleNodeJobRunner:
                         extra_fields=job_log,
                     )
                     logger.debug("Running job via run_callable", extra={"job_id": job.job_id})
-                    result = self.run_callable(job)
+                    result = self._run_with_webui_retry(job)
                 else:
                     result = None
                 canonical_result = normalize_run_result(result, default_run_id=job.job_id)
@@ -207,7 +351,7 @@ class SingleNodeJobRunner:
                 self._on_activity()
             if self.run_callable:
                 logger.debug("Running job via run_once", extra={"job_id": job.job_id})
-                result = self.run_callable(job)
+                result = self._run_with_webui_retry(job)
             else:
                 result = None
             canonical_result = normalize_run_result(result, default_run_id=job.job_id)

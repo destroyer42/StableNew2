@@ -6,6 +6,7 @@ from src.api.client import SDWebUIClient
 
 def test_options_post_skipped_when_readiness_false(monkeypatch):
     client = SDWebUIClient()
+    client.set_options_write_enabled(True)
     client.set_options_readiness_provider(lambda: False)
     ctx_mock = mock.Mock(return_value=contextlib.nullcontext(mock.Mock()))
     monkeypatch.setattr(SDWebUIClient, "_request_context", ctx_mock)
@@ -16,6 +17,7 @@ def test_options_post_skipped_when_readiness_false(monkeypatch):
 
 def test_options_post_throttled(monkeypatch):
     client = SDWebUIClient()
+    client.set_options_write_enabled(True)
     client._options_min_interval_seconds = 60.0
     client.set_options_readiness_provider(lambda: True)
     ctx_mock = mock.Mock(return_value=contextlib.nullcontext(mock.Mock()))

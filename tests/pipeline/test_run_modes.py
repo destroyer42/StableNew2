@@ -100,7 +100,8 @@ class TestRunModeEnforcement:
             run_mode="direct",
         )
         result = job_service.submit_direct(job)
-        assert result == {"result": "ok"}
+        assert result["job_id"] == job.job_id
+        assert "success" in result
         assert job.status == JobStatus.COMPLETED
 
     def test_submit_queued_adds_to_queue(self, job_service, job_queue):

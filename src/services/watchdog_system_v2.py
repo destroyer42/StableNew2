@@ -15,7 +15,7 @@ class SystemWatchdogV2:
         "queue_runner_stall": 30.0,
     }
 
-    def __init__(self, app_controller, diagnostics_service):
+    def __init__(self, app_controller, diagnostics_service, *, check_interval_s: float | None = None):
         self.app = app_controller
         self.diagnostics = diagnostics_service
         self._stop = threading.Event()
@@ -24,6 +24,7 @@ class SystemWatchdogV2:
         self._lock = threading.Lock()
         self._last_trigger_ts: dict[str, float] = defaultdict(lambda: 0.0)
         self._in_flight: dict[str, bool] = defaultdict(lambda: False)
+        self._loop_period = float(check_interval_s) if check_interval_s is not None else float(self.LOOP_PERIOD_S)
 
     def start(self) -> None:
         t = threading.Thread(target=self._loop, daemon=True, name="SystemWatchdogV2")
@@ -43,7 +44,7 @@ class SystemWatchdogV2:
             except Exception:
                 # watchdog must never crash the app
                 pass
-            time.sleep(self.LOOP_PERIOD_S)
+            time.sleep(self._loop_period)
 
     def _check(self) -> None:
         now = time.monotonic()

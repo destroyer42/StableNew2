@@ -24,6 +24,16 @@ HOME = Path.home()
 DEFAULT_BUNDLE_DIR = Path("reports") / "diagnostics"
 _BUNDLE_LOCK = threading.Lock()
 
+
+def _resolve_output_dir(output_dir: Path | None) -> Path:
+    if output_dir:
+        candidate = Path(output_dir).expanduser()
+        try:
+            return candidate.resolve(strict=False)
+        except Exception:
+            return candidate
+    return DEFAULT_BUNDLE_DIR
+
 # Single-flight / cooldown guards for async bundle creation
 _LAST_BUNDLE_TS: dict[str, float] = {}
 _IN_FLIGHT: set[str] = set()
@@ -38,6 +48,7 @@ def build_async(
     include_queue_state: bool = False,
     cooldown_s: float = 30.0,
     on_done: callable | None = None,
+    webui_tail: Mapping[str, Any] | None = None,
 ) -> None:
     """Create a diagnostics bundle asynchronously (single-flight per reason)."""
     now = time.monotonic()
@@ -57,6 +68,7 @@ def build_async(
                 log_handler=log_handler,
                 job_service=job_service,
                 extra_context=extra_context,
+                    webui_tail=webui_tail,
                 output_dir=output_dir,
             )
         finally:
@@ -79,13 +91,14 @@ def build_crash_bundle(
     job_service: Any | None = None,
     extra_context: Mapping[str, Any] | None = None,
     output_dir: Path | None = None,
+    webui_tail: Mapping[str, Any] | None = None,
     context: dict | None = None,
 ) -> Path | None:
     """Create a diagnostics zip bundle for the given reason."""
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_reason = _sanitize_filename(reason) or "diagnostic"
-    directory = Path(output_dir or DEFAULT_BUNDLE_DIR)
+    directory = _resolve_output_dir(output_dir)
 
     with _BUNDLE_LOCK:
         try:
@@ -109,6 +122,9 @@ def build_crash_bundle(
                 metadata["context"] = _anonymize(extra_context)
             if job_snapshot:
                 metadata["job_snapshot"] = _anonymize(job_snapshot)
+            sanitized_tail = _anonymize(webui_tail) if webui_tail else None
+            if sanitized_tail:
+                metadata["webui_tail"] = sanitized_tail
 
             inspector_lines = _collect_process_inspector_lines()
             with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -118,6 +134,11 @@ def build_crash_bundle(
                 if inspector_lines:
                     zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
                 _include_jsonl_logs(zf)
+                if sanitized_tail:
+                    zf.writestr(
+                        "artifacts/webui_tail.json",
+                        json.dumps(sanitized_tail, indent=2),
+                    )
             logger.info("Crash bundle saved to %s", bundle_path)
             return bundle_path
         except Exception as exc:  # pragma: no cover - best effort

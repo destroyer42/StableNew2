@@ -1,7 +1,10 @@
 """Pipeline execution module"""
 
+from __future__ import annotations
+
 import base64
 import json
+import math
 import logging
 import re
 import time
@@ -10,7 +13,7 @@ from datetime import datetime
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from PIL import Image
 
@@ -26,9 +29,14 @@ from ..utils import (
     merge_global_negative,
     save_image_from_base64,
 )
+from src.api.client import WebUIPayloadValidationError
 from src.api.types import GenerateError, GenerateErrorCode
+from src.api.webui_process_manager import get_global_webui_process_manager
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
-from src.utils.error_envelope_v2 import wrap_exception
+
+
+if TYPE_CHECKING:
+    from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
 
 
 @lru_cache(maxsize=128)
@@ -38,6 +46,105 @@ def _cached_image_base64(path_str: str) -> str | None:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _capture_webui_tail() -> dict[str, Any] | None:
+    manager = get_global_webui_process_manager()
+    if manager is None:
+        return None
+    return manager.get_recent_output_tail()
+
+
+_MAX_IMAGE_DIMENSION = 4096
+_MAX_STAGE_STEPS = 150
+_ALLOWED_TEXT_CONTROL_CODES = {9, 10}
+
+
+def _strip_control_chars(value: str) -> str:
+    return "".join(
+        ch for ch in value if ord(ch) >= 32 or ord(ch) in _ALLOWED_TEXT_CONTROL_CODES
+    )
+
+
+def _raise_payload_error(stage: str, message: str) -> None:
+    raise WebUIPayloadValidationError(f"Stage {stage} payload invalid: {message}")
+
+
+def _sanitize_text_field(payload: dict[str, Any], field: str) -> None:
+    value = payload.get(field)
+    if not isinstance(value, str):
+        return
+    sanitized = _strip_control_chars(value)
+    if sanitized != value:
+        payload[field] = sanitized
+
+
+def _ensure_int_range(
+    stage: str,
+    payload: dict[str, Any],
+    field: str,
+    *,
+    max_value: int,
+) -> None:
+    value = payload.get(field)
+    if value is None:
+        return
+    if isinstance(value, bool):
+        _raise_payload_error(stage, f"{field} must be a positive integer")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        _raise_payload_error(stage, f"{field} must be numeric")
+    if not numeric.is_integer():
+        _raise_payload_error(stage, f"{field} must be an integer")
+    integer = int(numeric)
+    if integer <= 0 or integer > max_value:
+        _raise_payload_error(stage, f"{field} must be between 1 and {max_value}")
+    payload[field] = integer
+
+
+def _ensure_cfg_scale(stage: str, payload: dict[str, Any]) -> None:
+    value = payload.get("cfg_scale")
+    if value is None:
+        return
+    try:
+        cfg_value = float(value)
+    except (TypeError, ValueError):
+        _raise_payload_error(stage, "cfg_scale must be numeric")
+    if not math.isfinite(cfg_value):
+        _raise_payload_error(stage, "cfg_scale must be finite")
+    payload["cfg_scale"] = cfg_value
+
+
+def _validate_webui_payload(stage: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        _raise_payload_error(stage, "payload must be a dictionary")
+    sanitized = dict(payload)
+    _sanitize_text_field(sanitized, "prompt")
+    _sanitize_text_field(sanitized, "negative_prompt")
+    _ensure_int_range(stage, sanitized, "width", max_value=_MAX_IMAGE_DIMENSION)
+    _ensure_int_range(stage, sanitized, "height", max_value=_MAX_IMAGE_DIMENSION)
+    _ensure_int_range(stage, sanitized, "steps", max_value=_MAX_STAGE_STEPS)
+    _ensure_cfg_scale(stage, sanitized)
+    try:
+        json.dumps(sanitized, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        raise WebUIPayloadValidationError(
+            f"Stage {stage} payload contains non-serializable values: {exc}"
+        ) from exc
+    return sanitized
+
+
+_DIAGNOSTICS_SERVICE_INSTANCE: DiagnosticsServiceV2 | None = None
+
+
+def _get_diagnostics_service() -> DiagnosticsServiceV2:
+    global _DIAGNOSTICS_SERVICE_INSTANCE
+    if _DIAGNOSTICS_SERVICE_INSTANCE is None:
+        from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
+
+        _DIAGNOSTICS_SERVICE_INSTANCE = DiagnosticsServiceV2(Path("reports") / "diagnostics")
+    return _DIAGNOSTICS_SERVICE_INSTANCE
 
 
 class PipelineStageError(Exception):
@@ -266,6 +373,16 @@ class Pipeline:
     def _generate_images(self, stage: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Call the shared generate_images API for the requested stage."""
 
+        try:
+            payload = _validate_webui_payload(stage, payload)
+        except WebUIPayloadValidationError as exc:
+            validation_error = GenerateError(
+                code=GenerateErrorCode.PAYLOAD_VALIDATION,
+                message=str(exc),
+                stage=stage,
+                details={"stage": stage, "error": str(exc)},
+            )
+            raise PipelineStageError(validation_error) from exc
         outcome = self.client.generate_images(stage=stage, payload=payload)
         if not outcome.ok or outcome.result is None:
             error = outcome.error or GenerateError(
@@ -280,11 +397,53 @@ class Pipeline:
                 error.message,
             )
             exc = PipelineStageError(error)
+            diag_details = (error.details or {}).get("diagnostics")
+            request_summary = diag_details.get("request_summary") if diag_details else None
+            envelope_context: dict[str, Any] = {"error_code": error.code.value}
+            if diag_details:
+                envelope_context["diagnostics"] = diag_details
+                if request_summary:
+                    envelope_context.update(
+                        {
+                            "webui_endpoint": request_summary.get("endpoint"),
+                            "webui_stage": request_summary.get("stage"),
+                            "webui_method": request_summary.get("method"),
+                            "webui_status": request_summary.get("status"),
+                            "webui_session_id": request_summary.get("session_id"),
+                        }
+                    )
+                    response_snippet = request_summary.get("response_snippet")
+                    if response_snippet:
+                        envelope_context["webui_response_snippet"] = response_snippet
+                envelope_context["webui_unavailable"] = diag_details.get("webui_unavailable")
+            tail_data = _capture_webui_tail()
+            if tail_data:
+                envelope_context.update(
+                    {
+                        "webui_stdout_tail": tail_data.get("stdout_tail"),
+                        "webui_stderr_tail": tail_data.get("stderr_tail"),
+                        "webui_pid": tail_data.get("pid"),
+                        "webui_running": tail_data.get("running"),
+                    }
+                )
+            if diag_details and diag_details.get("crash_suspected"):
+                extra_context: dict[str, Any] = {"diagnostics": diag_details}
+                if request_summary:
+                    extra_context["request_summary"] = request_summary
+                try:
+                    _get_diagnostics_service().build_async(
+                        reason="webui_crash_suspected",
+                        extra_context=extra_context,
+                        webui_tail=tail_data,
+                    )
+                    logger.info("Triggered WebUI crash diagnostics bundle")
+                except Exception:
+                    logger.debug("Failed to schedule WebUI diagnostics bundle", exc_info=True)
             envelope = wrap_exception(
                 exc,
                 subsystem="executor",
                 stage=stage,
-                context={"error_code": error.code.value},
+                context=envelope_context,
             )
             log_with_ctx(
                 logger,
