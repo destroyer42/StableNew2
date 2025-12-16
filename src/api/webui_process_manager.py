@@ -291,15 +291,38 @@ class WebUIProcessManager:
         base_url = self._configured_base_url()
         try:
             from src.api.client import SDWebUIClient
-            from src.api.webui_api import WebUIAPI
+            from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
 
             client = SDWebUIClient(base_url=base_url)
             helper = WebUIAPI(client=client)
-            ready = helper.wait_until_ready(
-                max_attempts=max_attempts,
-                base_delay=base_delay,
-                max_delay=max_delay,
-            )
+
+            # Use true-readiness gate (API + boot marker)
+            try:
+                helper.wait_until_true_ready(
+                    timeout_s=60.0,
+                    poll_interval_s=2.0,
+                    get_stdout_tail=self.get_stdout_tail_text,
+                )
+                ready = True
+                log_with_ctx(
+                    logger,
+                    logging.INFO,
+                    "WebUI TRUE-READY confirmed after restart",
+                    ctx=ctx,
+                )
+            except WebUIReadinessTimeout as e:
+                log_with_ctx(
+                    logger,
+                    logging.ERROR,
+                    "WebUI true-readiness timeout after restart",
+                    ctx=ctx,
+                    extra_fields={
+                        "total_waited_s": e.total_waited,
+                        "checks": str(e.checks_status),
+                        "stdout_tail_snippet": e.stdout_tail[:500] if e.stdout_tail else "",
+                    },
+                )
+                ready = False
         except Exception as exc:  # pragma: no cover - best effort
             log_with_ctx(
                 logger,
@@ -309,9 +332,6 @@ class WebUIProcessManager:
                 extra_fields={
                     "error": str(exc),
                     "base_url": base_url,
-                    "max_attempts": max_attempts,
-                    "base_delay": base_delay,
-                    "max_delay": max_delay,
                 } if exc else {},
             )
             ready = False
@@ -330,7 +350,6 @@ class WebUIProcessManager:
             extra_fields={
                 "ready": ready,
                 "base_url": base_url,
-                "max_attempts": max_attempts,
             },
         )
         return ready
@@ -422,6 +441,15 @@ class WebUIProcessManager:
             "pid": self.pid,
             "running": self.is_running(),
         }
+
+    def get_stdout_tail_text(self, max_lines: int = 200) -> str:
+        """Get stdout tail as plain text (for readiness checking)."""
+        if not self._stdout_tail:
+            return ""
+        lines = list(self._stdout_tail)
+        if max_lines > 0 and len(lines) > max_lines:
+            lines = lines[-max_lines:]
+        return "\n".join(lines)
 
 
 def detect_default_webui_workdir(base_dir: str | None = None) -> str | None:

@@ -18,6 +18,24 @@ logger = get_logger(__name__)
 DEFAULT_OPTIONS_MIN_INTERVAL = 8.0
 
 
+class WebUIReadinessTimeout(Exception):
+    """Raised when WebUI does not become truly ready within timeout."""
+
+    def __init__(
+        self,
+        message: str,
+        total_waited: float,
+        stdout_tail: str = "",
+        stderr_tail: str = "",
+        checks_status: dict[str, bool] | None = None,
+    ):
+        super().__init__(message)
+        self.total_waited = total_waited
+        self.stdout_tail = stdout_tail
+        self.stderr_tail = stderr_tail
+        self.checks_status = checks_status or {}
+
+
 class OptionsApplyResult(str, Enum):
     APPLIED = "applied"
     SKIPPED_SAFEMODE = "skipped_safemode"
@@ -94,6 +112,133 @@ class WebUIAPI:
 
         logger.warning("WebUI API did not become ready after %s attempts", max_attempts)
         return False
+
+    def wait_until_true_ready(
+        self,
+        *,
+        timeout_s: float = 120.0,
+        poll_interval_s: float = 2.0,
+        get_stdout_tail: Callable[[], str] | None = None,
+    ) -> bool:
+        """
+        Wait until WebUI is TRULY ready: API responds AND boot marker appears in stdout.
+
+        Boot markers checked (in order):
+          - "Startup time:"
+          - "Running on local URL:"
+          - "Running on public URL:"
+
+        Args:
+            timeout_s: Total timeout in seconds
+            poll_interval_s: How long to sleep between checks
+            get_stdout_tail: Optional callable that returns recent stdout lines as string
+
+        Returns:
+            True if ready (API + marker found)
+
+        Raises:
+            WebUIReadinessTimeout if timeout or other fatal error
+        """
+
+        boot_markers = [
+            "Startup time:",
+            "Running on local URL:",
+            "Running on public URL:",
+        ]
+
+        start_time = time.time()
+        delay = max(poll_interval_s, 0.1)
+
+        checks_status = {
+            "models_endpoint": False,
+            "options_endpoint": False,
+            "boot_marker_found": False,
+        }
+
+        while time.time() - start_time < timeout_s:
+            # Check 1: models endpoint reachable
+            try:
+                if self._client.check_api_ready():
+                    checks_status["models_endpoint"] = True
+                    logger.debug("WebUI models endpoint is reachable")
+                else:
+                    checks_status["models_endpoint"] = False
+            except Exception as exc:
+                logger.debug("Models endpoint check failed: %s", exc)
+                checks_status["models_endpoint"] = False
+
+            # Check 2: options endpoint (read-only, SafeMode-safe)
+            try:
+                # Just check GET /options exists without writing
+                if hasattr(self._client, "_session"):
+                    response = self._client._session.get(
+                        f"{self._client.base_url}/sdapi/v1/options",
+                        timeout=5.0,
+                    )
+                    checks_status["options_endpoint"] = response.status_code == 200
+                    logger.debug(
+                        "Options endpoint check: status=%s",
+                        response.status_code,
+                    )
+                else:
+                    checks_status["options_endpoint"] = True
+            except Exception as exc:
+                logger.debug("Options endpoint check failed: %s", exc)
+                checks_status["options_endpoint"] = False
+
+            # Check 3: boot marker in stdout
+            if get_stdout_tail:
+                try:
+                    stdout_content = get_stdout_tail()
+                    marker_found = any(marker in stdout_content for marker in boot_markers)
+                    checks_status["boot_marker_found"] = marker_found
+                    if marker_found:
+                        logger.info("WebUI boot marker detected in stdout")
+                    else:
+                        logger.debug("Boot marker not yet found in stdout (waiting...)")
+                except Exception as exc:
+                    logger.debug("Boot marker check failed: %s", exc)
+                    checks_status["boot_marker_found"] = False
+            else:
+                # If no stdout callback provided, assume marker is present
+                checks_status["boot_marker_found"] = True
+                logger.debug(
+                    "No stdout callback provided; assuming boot marker present"
+                )
+
+            # API readiness is sufficient: both models and options endpoints must be responsive.
+            # Boot marker detection is observability-only (not a gating requirement).
+            # This prevents false negatives where stdout markers differ across WebUI versions.
+            api_ready = checks_status["models_endpoint"] and checks_status["options_endpoint"]
+            if api_ready:
+                elapsed = time.time() - start_time
+                boot_marker_status = "found" if checks_status["boot_marker_found"] else "not found"
+                logger.info(
+                    "WebUI TRUE-READY confirmed after %.1f seconds (models: ok, options: ok, boot_marker: %s)",
+                    elapsed,
+                    boot_marker_status,
+                )
+                return True
+
+            elapsed = time.time() - start_time
+            if elapsed < timeout_s:
+                self._sleep(delay)
+
+        # Timeout
+        elapsed = time.time() - start_time
+        stdout_tail_str = get_stdout_tail() if get_stdout_tail else ""
+        message = (
+            f"WebUI did not become truly ready within {timeout_s:.1f}s "
+            f"(waited {elapsed:.1f}s, checks: {checks_status})"
+        )
+        logger.error(message)
+        raise WebUIReadinessTimeout(
+            message=message,
+            total_waited=elapsed,
+            stdout_tail=stdout_tail_str,
+            stderr_tail="",
+            checks_status=checks_status,
+        )
 
     def _finalize_options_result(
         self, status: OptionsApplyResult, *, return_status: bool

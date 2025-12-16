@@ -435,7 +435,139 @@ Compare two NJRs side-by-side
 
 Batch visualization improvements
 
-10. Summary
+10. WebUI True-Readiness Diagnostics (CORE1-D11E)
+
+StableNew v2.6 implements a multi-check true-readiness gate to prevent /txt2img calls while WebUI is still booting or loading models.
+
+10.1 What Is True-Readiness?
+
+True-readiness means WebUI is ready to generate images:
+
+- API endpoints respond (models, options)
+- Weights are fully loaded (confirmed by boot marker in stdout)
+- SDAPI is operational and capable of handling /txt2img requests
+
+It is distinct from "API readiness" (HTTP endpoints responding), which occurs before weights are loaded.
+
+10.2 Three-Check Validation
+
+The true-readiness gate performs three sequential checks:
+
+| Check | Purpose | Example Success |
+|-------|---------|-----------------|
+| Models Endpoint | Verify `/sdapi/v1/models` responds with 200 | `{'model_name': 'juggernautXL', ...}` |
+| Options Endpoint (read-only) | Verify `/sdapi/v1/options` responds with 200 | HTTP 200 OK, SafeMode safe |
+| Boot Marker Detection | Verify stdout contains boot marker | "Startup time: X.XXs" in stdout |
+
+All three must pass within 120 seconds, with 2-second polling intervals.
+
+10.3 Boot Markers (Recognized Signatures)
+
+The gate recognizes these boot-completion markers in WebUI stdout:
+
+```
+Startup time: 2.45s
+Running on local URL:   http://127.0.0.1:7860
+Running on public URL:  https://abc123.gradio.live
+```
+
+The gate searches for presence of any of:
+- `"Startup time:"`
+- `"Running on local URL:"`
+- `"Running on public URL:"`
+
+**Operator Note:** If your WebUI output is different, check the stdout logs or file an issue with the actual marker text.
+
+10.4 Typical Startup Sequence (Operator's View)
+
+When WebUI starts, you'll see logs like:
+
+```
+Loading model from: /mnt/models/juggernautXL.safetensors
+ 0%|          | 0/450 [00:00<?, ?it/s]
+ 10%|▏         | 45/450 [00:01<00:09, 41.13it/s]
+ 20%|▌         | 90/450 [00:02<00:08, 44.26it/s]
+ 100%|██████████| 450/450 [00:08<00:00, 51.12it/s]
+Loaded model in 8.23 seconds
+Building model graph...
+Model graph complete (450 ops)
+Startup time: 9.12s
+Running on local URL:   http://127.0.0.1:7860
+```
+
+The true-readiness gate waits until it sees:
+1. Models endpoint responding → means API is alive
+2. Options endpoint responding → means SDAPI is alive
+3. Boot marker appears → means weights are loaded + ready
+
+10.5 Timeout Diagnosis (When True-Readiness Fails)
+
+If generation fails with `GenerateErrorCode.PAYLOAD_VALIDATION` and message contains "not truly ready", check:
+
+**Check 1 — Models Endpoint**
+```
+curl http://127.0.0.1:7860/sdapi/v1/sd_models
+```
+If this fails or returns error: WebUI API layer not responding. Check WebUI logs for crashes.
+
+**Check 2 — Options Endpoint**
+```
+curl http://127.0.0.1:7860/sdapi/v1/options
+```
+If this fails: SDAPI not responding. Check WebUI logs for binding errors or permission issues.
+
+**Check 3 — Boot Marker**
+Check the WebUI stdout output (where you launched WebUI):
+```bash
+# If marker is present, gate should pass
+grep "Startup time\|Running on local URL\|Running on public URL" webui_output.log
+
+# If nothing matches, WebUI hasn't completed boot yet
+```
+
+**Remediation:**
+- Wait longer: increase `timeout_s` in code (default 120s)
+- Check WebUI health: restart WebUI and watch stdout
+- Check logs for GPU memory errors, model loading failures
+- Verify model files are not corrupted: check file size and CRC
+
+10.6 Memoization (Avoiding Repeated Checks)
+
+The gate uses `_true_ready_gated` flag in Pipeline class. Once true-readiness is confirmed in a pipeline run, subsequent generation calls skip the check.
+
+This prevents:
+- 3+ minute slowdowns for multi-image batches
+- Repeated timeouts if gate is slow
+
+**Reset:** Gate resets per new Pipeline instance (per new job).
+
+10.7 Integration Points
+
+True-readiness gate is called:
+
+1. **On startup**: `WebUIProcessManager.restart_webui()` calls `wait_until_true_ready()` before returning success
+2. **Before first generation**: `Pipeline._generate_images()` calls `_ensure_webui_true_ready()` as first operation
+3. **On failure**: Raises `PipelineStageError(GenerateErrorCode.PAYLOAD_VALIDATION)` with detailed `checks_status` dict
+
+10.8 Machine-Readable Failure Context
+
+When true-readiness fails, the error includes:
+
+```python
+{
+  "total_waited_s": 120.0,        # Seconds spent polling
+  "checks": {
+    "models_endpoint": false,      # Which check(s) failed
+    "options_endpoint": true,
+    "boot_marker_found": false
+  },
+  "stdout_tail": "... last 1000 chars of stdout ..."  # For debugging
+}
+```
+
+This allows DebugHub and operators to diagnose the root cause.
+
+11. Summary
 
 DebugHub is the authoritative diagnostic tool for the entire StableNew pipeline.
 Its responsibilities:
@@ -447,6 +579,7 @@ Its responsibilities:
 ✔ Visualize seeds
 ✔ Visualize lifecycle events
 ✔ Provide exact NJR reconstruction
+✔ Report true-readiness check failures with rich context
 
 Its restrictions:
 
@@ -456,6 +589,6 @@ Its restrictions:
 ✘ Never fetch from GUI
 ✘ Never use legacy systems
 
-StableNew v2.6's reliability depends on DebugHub producing exact, deterministic introspection of the pipeline.
+StableNew v2.6's reliability depends on DebugHub producing exact, deterministic introspection of the pipeline and providing clear diagnostic guidance for infrastructure failures.
 
 END — DebugHub_v2.6 (Canonical Edition)

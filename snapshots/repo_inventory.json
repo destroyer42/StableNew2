@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2025-12-15T20:41:20",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251215-204115.zip",
-  "file_count": 1224,
-  "total_size_bytes": 15780210,
+  "created_at": "2025-12-15T22:39:48",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20251215-223943.zip",
+  "file_count": 1229,
+  "total_size_bytes": 16377908,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -441,8 +441,8 @@
     },
     {
       "path": "docs/DEBUG HUB v2.6.md",
-      "size_bytes": 9295,
-      "mtime_iso": "2025-12-09T13:04:28"
+      "size_bytes": 14135,
+      "mtime_iso": "2025-12-15T21:08:44"
     },
     {
       "path": "docs/DOCS_INDEX_v2.6.md",
@@ -548,11 +548,6 @@
       "path": "docs/StableNew_v2.6_Canonical_Execution_Contract.md",
       "size_bytes": 5442,
       "mtime_iso": "2025-12-13T09:41:27"
-    },
-    {
-      "path": "docs/model_defaults_v2/README.md",
-      "size_bytes": 1369,
-      "mtime_iso": "2025-12-06T18:21:18"
     },
     {
       "path": "docs/older/ACTIVE_MODULES.md",
@@ -2850,6 +2845,11 @@
       "mtime_iso": "2025-12-14T17:27:58"
     },
     {
+      "path": "docs/pr_templates/Work Summaries/PR-CORE1-D11E-COMPLETION-SUMMARY.md",
+      "size_bytes": 16252,
+      "mtime_iso": "2025-12-15T21:08:44"
+    },
+    {
       "path": "inventory/stable_v2_inventory.json",
       "size_bytes": 485649,
       "mtime_iso": "2025-12-06T18:21:18"
@@ -3240,6 +3240,21 @@
       "mtime_iso": "2025-12-15T20:37:23"
     },
     {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251216_032300_manual_request.zip",
+      "size_bytes": 188499,
+      "mtime_iso": "2025-12-15T21:23:00"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251216_032317_ui_heartbeat_stall.zip",
+      "size_bytes": 180705,
+      "mtime_iso": "2025-12-15T21:23:17"
+    },
+    {
+      "path": "reports/diagnostics/stablenew_diagnostics_20251216_032418_ui_heartbeat_stall.zip",
+      "size_bytes": 181640,
+      "mtime_iso": "2025-12-15T21:24:18"
+    },
+    {
       "path": "reports/file_access/CLEANHOUSE_REPORT_V2_5_2025_11_26.md",
       "size_bytes": 33355,
       "mtime_iso": "2025-11-26T16:51:07"
@@ -3381,13 +3396,13 @@
     },
     {
       "path": "src/api/webui_api.py",
-      "size_bytes": 7834,
-      "mtime_iso": "2025-12-15T20:39:03"
+      "size_bytes": 13128,
+      "mtime_iso": "2025-12-15T21:08:44"
     },
     {
       "path": "src/api/webui_process_manager.py",
-      "size_bytes": 18472,
-      "mtime_iso": "2025-12-15T20:39:03"
+      "size_bytes": 19575,
+      "mtime_iso": "2025-12-15T21:08:44"
     },
     {
       "path": "src/api/webui_resources.py",
@@ -4111,8 +4126,8 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 118040,
-      "mtime_iso": "2025-12-15T20:05:08"
+      "size_bytes": 120809,
+      "mtime_iso": "2025-12-15T21:08:44"
     },
     {
       "path": "src/pipeline/job_builder_v2.py",
@@ -4487,7 +4502,7 @@
     {
       "path": "state/queue_state_v2.json",
       "size_bytes": 75,
-      "mtime_iso": "2025-12-15T20:37:47"
+      "mtime_iso": "2025-12-15T21:28:32"
     },
     {
       "path": "tests/conftest.py",
@@ -4633,6 +4648,11 @@
       "path": "tests/api/test_webui_retry_policy_v2.py",
       "size_bytes": 2895,
       "mtime_iso": "2025-12-14T18:44:11"
+    },
+    {
+      "path": "tests/api/test_webui_true_readiness.py",
+      "size_bytes": 13834,
+      "mtime_iso": "2025-12-15T21:08:44"
     },
     {
       "path": "tests/app/test_bootstrap_webui_autostart.py",
@@ -5668,6 +5688,11 @@
       "path": "tests/pipeline/test_executor_webui_crash.py",
       "size_bytes": 2527,
       "mtime_iso": "2025-12-15T19:03:18"
+    },
+    {
+      "path": "tests/pipeline/test_executor_webui_true_ready_gate.py",
+      "size_bytes": 4131,
+      "mtime_iso": "2025-12-15T21:08:44"
     },
     {
       "path": "tests/pipeline/test_job_builder_v2.py",

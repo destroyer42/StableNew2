@@ -126,6 +126,15 @@ class ProcessAutoScannerService:
                 continue
             if "python" not in name:
                 continue
+            # REPO-SCOPING: Only scan processes inside REPO_ROOT
+            # This prevents killing external processes like WebUI that happen to be Python
+            if not self._is_repo_process(proc):
+                continue
+            
+            # VS CODE ALLOWLIST: Never terminate VS Code / extension worker processes
+            if self._is_vscode_related(proc):
+                continue
+            
             scanned += 1
             try:
                 create_time = proc.create_time()
@@ -138,8 +147,28 @@ class ProcessAutoScannerService:
                 rss = 0.0
             if idle < self._config.idle_threshold_sec and rss < self._config.memory_threshold_mb:
                 continue
-            if self._is_repo_process(proc):
-                continue
+            # At this point: process is repo-local, meets thresholds, and not protected
+            try:
+                cmdline_str = " ".join(proc.cmdline()) if hasattr(proc, "cmdline") else "<unknown>"
+            except Exception:
+                cmdline_str = "<unavailable>"
+            try:
+                cwd_str = proc.cwd() if hasattr(proc, "cwd") else "<unknown>"
+            except Exception:
+                cwd_str = "<unavailable>"
+            logger.warning(
+                "AUTO_SCANNER_TERMINATE: pid=%s name=%s cwd=%s memory_mb=%.1f idle_sec=%.1f "
+                "idle_threshold=%s memory_threshold=%s protected_count=%d cmdline=%s",
+                pid,
+                name,
+                cwd_str,
+                rss,
+                idle,
+                self._config.idle_threshold_sec,
+                self._config.memory_threshold_mb,
+                len(protected),
+                cmdline_str,
+            )
             killed = self._terminate_process(proc)
             if killed:
                 killed_details.append(
@@ -172,6 +201,63 @@ class ProcessAutoScannerService:
             return REPO_ROOT in Path(cwd).resolve().parents or Path(cwd).resolve() == REPO_ROOT
         except Exception:
             return False
+
+    def _is_vscode_related(self, proc: Any) -> bool:
+        """Best-effort check for VS Code / extension worker processes (never terminate).
+        
+        Returns True if process is likely a VS Code editor or extension (e.g., MyPy LSP, Pylance, debugpy).
+        These should never be terminated even if they meet scanner thresholds.
+        """
+        # Check process name
+        try:
+            name = (proc.name() or "").lower()
+            if name in ("code.exe", "code"):
+                return True
+        except Exception:
+            pass
+
+        # Check parent process name
+        try:
+            parent = proc.parent()
+            if parent is not None:
+                pname = (parent.name() or "").lower()
+                if pname in ("code.exe", "code"):
+                    return True
+        except Exception:
+            pass
+
+        # Check command line for VS Code / extension markers
+        cmdline_str = ""
+        try:
+            cmdline = proc.cmdline() or []
+            cmdline_str = " ".join(cmdline).lower()
+        except Exception:
+            pass
+
+        if cmdline_str:
+            vscode_markers = (
+                ".vscode\\extensions",
+                ".vscode/extensions",
+                "ms-python.",
+                "pylance",
+                "mypy-type-checker",
+                "lsp_server.py",
+                "debugpy",
+                "pythonfiles/lib/python/debugpy",
+                "pythonfiles\\lib\\python\\debugpy",
+            )
+            if any(marker in cmdline_str for marker in vscode_markers):
+                return True
+
+        # Check cwd for VS Code extensions directory
+        try:
+            cwd = (proc.cwd() or "").lower()
+            if ".vscode\\extensions" in cwd or ".vscode/extensions" in cwd:
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def _terminate_process(self, proc: Any) -> bool:
         try:

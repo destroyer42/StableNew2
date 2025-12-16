@@ -1713,15 +1713,25 @@ class AppController:
         return getattr(self, "process_auto_scanner", None)
 
     def _get_protected_process_pids(self) -> Iterable[int]:
-        if not self.job_service:
-            return ()
-        snapshot = self.job_service.get_diagnostics_snapshot()
-        jobs = snapshot.get("jobs") or []
         pids: set[int] = set()
-        for entry in jobs:
-            for pid in entry.get("external_pids", []) or []:
-                if isinstance(pid, int):
-                    pids.add(pid)
+        
+        # Always protect WebUI PID (if running)
+        # This is critical to prevent ProcessAutoScannerService from killing WebUI
+        # even if protected_pids callback logic changes in the future
+        if hasattr(self, "webui_process_manager") and self.webui_process_manager:
+            webui_pid = getattr(self.webui_process_manager, "pid", None)
+            if webui_pid and isinstance(webui_pid, int):
+                pids.add(webui_pid)
+        
+        # Protect PIDs from running jobs
+        if self.job_service:
+            snapshot = self.job_service.get_diagnostics_snapshot()
+            jobs = snapshot.get("jobs") or []
+            for entry in jobs:
+                for pid in entry.get("external_pids", []) or []:
+                    if isinstance(pid, int):
+                        pids.add(pid)
+        
         return pids
 
     def _generate_diagnostics_bundle(

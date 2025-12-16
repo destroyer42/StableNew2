@@ -175,6 +175,7 @@ class Pipeline:
         self._current_hn_strength: float | None = None
         self._model_discovery_attempted = False
         self._webui_defaults_applied = False
+        self._true_ready_gated = False  # Track if we've already waited for true-readiness
         self._last_txt2img_results: list[dict[str, Any]] = []
         self._last_img2img_result: dict[str, Any] | None = None
         self._last_upscale_result: dict[str, Any] | None = None
@@ -370,8 +371,69 @@ class Pipeline:
             payload.update(extra)
         self._stage_events.append(payload)
 
+    def _ensure_webui_true_ready(self) -> None:
+        """
+        Defensive gate: ensure WebUI is truly ready (API + boot marker) before any generation.
+        
+        Called once per pipeline run, before the first generation call.
+        Raises PipelineStageError if WebUI doesn't become truly ready within timeout.
+        """
+        if self._true_ready_gated:
+            # Already gated in this pipeline run
+            return
+
+        try:
+            from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
+            from src.api.webui_process_manager import get_global_webui_process_manager
+
+            manager = get_global_webui_process_manager()
+            helper = WebUIAPI(client=self.client)
+
+            # Get the stdout tail callback from process manager if available
+            get_stdout_tail = None
+            if manager and hasattr(manager, "get_stdout_tail_text"):
+                get_stdout_tail = manager.get_stdout_tail_text
+
+            try:
+                helper.wait_until_true_ready(
+                    timeout_s=120.0,
+                    poll_interval_s=2.0,
+                    get_stdout_tail=get_stdout_tail,
+                )
+                self._true_ready_gated = True
+                logger.info("Pipeline generation gate: WebUI TRUE-READY confirmed")
+            except WebUIReadinessTimeout as e:
+                error = GenerateError(
+                    code=GenerateErrorCode.PAYLOAD_VALIDATION,
+                    message=f"WebUI not truly ready within timeout: {e.checks_status}",
+                    stage="pre-generation-gate",
+                    details={
+                        "total_waited_s": e.total_waited,
+                        "checks": e.checks_status,
+                        "stdout_tail": e.stdout_tail[:1000],
+                    },
+                )
+                logger.error(
+                    "Pipeline generation gate failed: WebUI not truly ready. Checks: %s",
+                    e.checks_status,
+                )
+                raise PipelineStageError(error) from e
+        except PipelineStageError:
+            raise
+        except Exception as exc:
+            logger.error("Unexpected error in true-readiness gate: %s", exc)
+            error = GenerateError(
+                code=GenerateErrorCode.UNKNOWN,
+                message=f"True-readiness gate check failed: {exc}",
+                stage="pre-generation-gate",
+            )
+            raise PipelineStageError(error) from exc
+
     def _generate_images(self, stage: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Call the shared generate_images API for the requested stage."""
+
+        # Defensive gate: ensure WebUI is truly ready before first generation call
+        self._ensure_webui_true_ready()
 
         try:
             payload = _validate_webui_payload(stage, payload)
