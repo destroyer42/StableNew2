@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
-
 
 EMBEDDING_TAG_RE = re.compile(r"<embedding:([^>]+)>")
 LORA_TAG_RE = re.compile(r"<lora:([^:>]+):([^>]+)>")
@@ -12,20 +11,20 @@ MATRIX_TOKEN_RE = re.compile(r"\[\[([a-zA-Z0-9_]+)\]\]")
 
 @dataclass(frozen=True)
 class PackRow:
-    embeddings: Tuple[str, ...]
+    embeddings: tuple[str, ...]
     quality_line: str
     subject_template: str
-    lora_tags: Tuple[Tuple[str, float], ...]
-    negative_embeddings: Tuple[str, ...]
-    negative_phrases: Tuple[str, ...]
+    lora_tags: tuple[tuple[str, float], ...]
+    negative_embeddings: tuple[str, ...]
+    negative_phrases: tuple[str, ...]
 
 
-def _parse_line_embeddings(line: str) -> List[str]:
+def _parse_line_embeddings(line: str) -> list[str]:
     return [match.group(1) for match in EMBEDDING_TAG_RE.finditer(line)]
 
 
-def _parse_lora_tags(line: str) -> List[Tuple[str, float]]:
-    tags: List[Tuple[str, float]] = []
+def _parse_lora_tags(line: str) -> list[tuple[str, float]]:
+    tags: list[tuple[str, float]] = []
     for match in LORA_TAG_RE.finditer(line):
         name = match.group(1)
         weight_text = match.group(2)
@@ -37,30 +36,35 @@ def _parse_lora_tags(line: str) -> List[Tuple[str, float]]:
     return tags
 
 
-def _split_negative_line(line: str) -> Tuple[List[str], List[str]]:
-    entries = [entry.strip() for entry in line.split() if entry.strip()]
+def _split_negative_line(line: str) -> tuple[list[str], list[str]]:
     embeddings = [match.group(1) for match in EMBEDDING_TAG_RE.finditer(line)]
     removed = EMBEDDING_TAG_RE.sub("", line)
-    phrases = [phrase.strip() for phrase in removed.replace("neg:", "").split(",") if phrase.strip()]
+    phrases = [
+        phrase.strip() for phrase in removed.replace("neg:", "").split(",") if phrase.strip()
+    ]
     return embeddings, phrases
 
 
-def _extract_blocks(content: str) -> Iterable[List[str]]:
+def _extract_blocks(content: str) -> Iterable[list[str]]:
     for block in re.split(r"\n\s*\n", content):
-        lines = [line.strip() for line in block.splitlines() if line.strip() and not line.strip().startswith("#")]
+        lines = [
+            line.strip()
+            for line in block.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
         if lines:
             yield lines
 
 
-def parse_prompt_pack_text(content: str) -> List[PackRow]:
-    rows: List[PackRow] = []
+def parse_prompt_pack_text(content: str) -> list[PackRow]:
+    rows: list[PackRow] = []
     for lines in _extract_blocks(content):
-        embeddings: List[str] = []
+        embeddings: list[str] = []
         quality_line = ""
         subject_template = ""
-        lora_tags: List[Tuple[str, float]] = []
-        negative_embeddings: List[str] = []
-        negative_phrases: List[str] = []
+        lora_tags: list[tuple[str, float]] = []
+        negative_embeddings: list[str] = []
+        negative_phrases: list[str] = []
         for index, line in enumerate(lines):
             if index == 0:
                 embeddings.extend(_parse_line_embeddings(line))

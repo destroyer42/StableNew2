@@ -75,10 +75,12 @@ class TestWaitUntilTrueReadyRelaxedGate:
             with patch("src.api.webui_api.time") as mock_time:
                 # Use a lambda to simulate time advancing: start at 0, increment by 2 each call
                 current_time = [0.0]
+
                 def time_side_effect():
                     result = current_time[0]
                     current_time[0] += 2.0
                     return result
+
                 mock_time.time.side_effect = time_side_effect
                 with patch("src.api.webui_api.logger"):
                     try:

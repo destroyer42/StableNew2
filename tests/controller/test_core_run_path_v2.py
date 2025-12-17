@@ -7,16 +7,16 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-from unittest.mock import Mock
+from typing import Any
 
 import pytest
 
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
-from src.pipeline.job_models_v2 import JobStatusV2, NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import Job, JobStatus
 from src.queue.single_node_runner import SingleNodeJobRunner
@@ -63,7 +63,9 @@ def _make_dummy_record() -> NormalizedJobRecord:
         negative_prompt="neg: bad",
         positive_embeddings=["stub"],
         stage_chain=[
-            StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a")
+            StageConfig(
+                stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a"
+            )
         ],
         steps=20,
         cfg_scale=7.5,
@@ -77,7 +79,9 @@ def _make_dummy_record() -> NormalizedJobRecord:
     )
 
 
-def _canonical_run_result(job_id: str, *, success: bool = True, error: str | None = None) -> dict[str, Any]:
+def _canonical_run_result(
+    job_id: str, *, success: bool = True, error: str | None = None
+) -> dict[str, Any]:
     return PipelineRunResult(
         run_id=job_id,
         success=success,
@@ -86,6 +90,7 @@ def _canonical_run_result(job_id: str, *, success: bool = True, error: str | Non
         learning_records=[],
         metadata={},
     ).to_dict()
+
 
 def test_app_controller_builds_job_service_with_execute_callable(tmp_path: Path) -> None:
     """JobService gets constructed through the runner factory using _execute_job."""
@@ -120,18 +125,18 @@ def test_pipeline_controller_routes_jobs_through_job_service(
     controller._build_normalized_jobs_from_state = lambda *_: [_make_dummy_record()]
 
     controller._last_run_config = {"prompt_pack_id": "test-pack-core"}
-    result = controller.start_pipeline_v2()
+    controller.start_pipeline_v2()
 
 
 def test_njr_backed_job_uses_njr_execution_path(tmp_path: Path) -> None:
     """Job with _normalized_record should execute via PipelineController._run_job (PR-CORE1-B1)."""
-    
+
     controller = RecordingAppController(
         main_window=None,
         threaded=False,
         tmp_history=tmp_path / "job_history.json",
     )
-    
+
     # Create job with NJR
     njr = _make_dummy_record()
     job = Job(job_id="njr-test-1", priority=None)
@@ -149,24 +154,24 @@ def test_njr_backed_job_uses_njr_execution_path(tmp_path: Path) -> None:
 
 def test_njr_job_failure_returns_error_no_fallback_b2(tmp_path: Path) -> None:
     """PR-CORE1-B2: Job with NJR that fails execution returns error (no pipeline_config fallback)."""
-    
+
     controller = RecordingAppController(
         main_window=None,
         threaded=False,
         tmp_history=tmp_path / "job_history.json",
     )
-    
+
     # Create job with NJR
     njr = _make_dummy_record()
     job = Job(job_id="njr-test-fail", priority=None)
     job._normalized_record = njr
-    
+
     # Mock pipeline_controller._run_job to raise exception
     def failing_run_job(j):
         raise RuntimeError("NJR execution failed")
-    
+
     controller.pipeline_controller._run_job = failing_run_job
-    
+
     result = controller._execute_job(job)
 
     # PR-CORE1-B2: Should return error status, not fall back to pipeline_config
@@ -178,17 +183,17 @@ def test_njr_job_failure_returns_error_no_fallback_b2(tmp_path: Path) -> None:
 
 def test_queue_jobs_have_normalized_record_b2(tmp_path: Path) -> None:
     """PR-CORE1-B2: Jobs submitted through normal queue path should have _normalized_record."""
-    
+
     controller = RecordingAppController(
         main_window=None,
         threaded=False,
         tmp_history=tmp_path / "job_history.json",
     )
-    
+
     # Create NJR and convert to queue job via pipeline_controller
     njr = _make_dummy_record()
     queue_job = controller.pipeline_controller._to_queue_job(njr)
-    
+
     # PR-CORE1-B2: Queue jobs created from NJR must have _normalized_record attached
     assert hasattr(queue_job, "_normalized_record")
     assert queue_job._normalized_record is not None

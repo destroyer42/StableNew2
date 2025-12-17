@@ -1,4 +1,8 @@
-from src.learning.model_defaults_resolver import GuiDefaultsResolver, ModelDefaultsContext, ModelDefaultsResolver
+from src.learning.model_defaults_resolver import (
+    GuiDefaultsResolver,
+    ModelDefaultsContext,
+    ModelDefaultsResolver,
+)
 from src.utils.config import ConfigManager
 
 

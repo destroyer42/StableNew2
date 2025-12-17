@@ -37,7 +37,9 @@ class StubPipelineConfigPanel:
         return dict(self.randomizer_config)
 
 
-def _make_controller(config: dict[str, Any]) -> tuple[AppController, DummyConfigManager, StubPipelineConfigPanel]:
+def _make_controller(
+    config: dict[str, Any],
+) -> tuple[AppController, DummyConfigManager, StubPipelineConfigPanel]:
     config_manager = DummyConfigManager(config)
     controller = AppController(
         None,

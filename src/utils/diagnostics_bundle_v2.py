@@ -1,11 +1,10 @@
-
 from __future__ import annotations
 
 import json
 import logging
 import threading
-import zipfile
 import time
+import zipfile
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -34,9 +33,12 @@ def _resolve_output_dir(output_dir: Path | None) -> Path:
             return candidate
     return DEFAULT_BUNDLE_DIR
 
+
 # Single-flight / cooldown guards for async bundle creation
 _LAST_BUNDLE_TS: dict[str, float] = {}
 _IN_FLIGHT: set[str] = set()
+
+
 def build_async(
     *,
     reason: str,
@@ -68,7 +70,7 @@ def build_async(
                 log_handler=log_handler,
                 job_service=job_service,
                 extra_context=extra_context,
-                    webui_tail=webui_tail,
+                webui_tail=webui_tail,
                 output_dir=output_dir,
             )
         finally:
@@ -81,7 +83,6 @@ def build_async(
                     pass
 
     threading.Thread(target=_worker, daemon=True, name=f"DiagBundle-{reason}").start()
-    
 
 
 def build_crash_bundle(

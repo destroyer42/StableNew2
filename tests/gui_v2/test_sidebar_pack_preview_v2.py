@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tkinter as tk
-from typing import Iterable, List
+from collections.abc import Iterable
+from pathlib import Path
 
 import pytest
 
@@ -37,7 +37,9 @@ def test_single_selection_preview_shows_full_block(tmp_path):
     try:
         pack_path = tmp_path / "pack_alpha.txt"
         pack_path.write_text("Positive prompt line\n\nNegative prompt")
-        summary = PromptPackSummary(name="alpha", description="desc", prompt_count=1, path=pack_path)
+        summary = PromptPackSummary(
+            name="alpha", description="desc", prompt_count=1, path=pack_path
+        )
         panel = _build_panel(root, [summary])
 
         panel.pack_listbox.selection_clear(0, "end")
@@ -61,8 +63,12 @@ def test_multi_selection_hides_preview(tmp_path):
         pytest.skip(f"Tk not available: {exc}")
     root.withdraw()
     try:
-        summary = PromptPackSummary(name="alpha", description="", prompt_count=1, path=Path(tmp_path / "alpha.txt"))
-        summary_b = PromptPackSummary(name="beta", description="", prompt_count=1, path=Path(tmp_path / "beta.txt"))
+        summary = PromptPackSummary(
+            name="alpha", description="", prompt_count=1, path=Path(tmp_path / "alpha.txt")
+        )
+        summary_b = PromptPackSummary(
+            name="beta", description="", prompt_count=1, path=Path(tmp_path / "beta.txt")
+        )
         panel = _build_panel(root, [summary, summary_b])
 
         panel.pack_listbox.selection_set(0)
@@ -92,8 +98,12 @@ def test_preview_selection_changes_only_regenerate_when_pack_changes(tmp_path):
             return f"Pack: {summary.name}\nPrompts: {summary.prompt_count}\n"
 
     summaries = [
-        PromptPackSummary(name="alpha", description="", prompt_count=1, path=Path(tmp_path / "alpha.txt")),
-        PromptPackSummary(name="beta", description="", prompt_count=1, path=Path(tmp_path / "beta.txt")),
+        PromptPackSummary(
+            name="alpha", description="", prompt_count=1, path=Path(tmp_path / "alpha.txt")
+        ),
+        PromptPackSummary(
+            name="beta", description="", prompt_count=1, path=Path(tmp_path / "beta.txt")
+        ),
     ]
     adapter = DummyPromptPackAdapter(summaries)
     try:
@@ -129,7 +139,9 @@ def test_preview_truncation_keeps_text_bounded(tmp_path):
             raw = "A" * (self._MAX_PREVIEW_CHARS + 1000)
             return self._limit_preview_text(raw)
 
-    summary = PromptPackSummary(name="alpha", description="", prompt_count=1, path=Path(tmp_path / "alpha.txt"))
+    summary = PromptPackSummary(
+        name="alpha", description="", prompt_count=1, path=Path(tmp_path / "alpha.txt")
+    )
     adapter = DummyPromptPackAdapter([summary])
     try:
         root = tk.Tk()

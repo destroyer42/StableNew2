@@ -1,7 +1,5 @@
 from unittest import mock
 
-import pytest
-
 from src.api.healthcheck import WebUIHealthCheckTimeout
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
@@ -19,7 +17,9 @@ def _build_controller(monkeypatch, results, *, retry_count=1):
             raise outcome
         return outcome
 
-    monkeypatch.setattr("src.controller.webui_connection_controller.wait_for_webui_ready", fake_wait)
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.wait_for_webui_ready", fake_wait
+    )
     fake_pm = mock.Mock()
     fake_pm.return_value.start.return_value = True
     monkeypatch.setattr("src.controller.webui_connection_controller.WebUIProcessManager", fake_pm)
@@ -47,7 +47,9 @@ def _build_controller(monkeypatch, results, *, retry_count=1):
         "src.controller.webui_connection_controller.app_config.get_webui_health_total_timeout_seconds",
         lambda: 0.01,
     )
-    monkeypatch.setattr("src.controller.webui_connection_controller.time.sleep", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.time.sleep", lambda *args, **kwargs: None
+    )
     ctrl = WebUIConnectionController(base_url_provider=lambda: "http://test")
     return ctrl, calls, fake_pm
 
@@ -67,7 +69,9 @@ def test_ensure_connected_uses_strict_healthcheck(monkeypatch):
 
 
 def test_ensure_connected_does_not_mark_ready_when_healthcheck_times_out(monkeypatch):
-    ctrl, calls, fake_pm = _build_controller(monkeypatch, [WebUIHealthCheckTimeout("timeout")], retry_count=0)
+    ctrl, calls, fake_pm = _build_controller(
+        monkeypatch, [WebUIHealthCheckTimeout("timeout")], retry_count=0
+    )
 
     state = ctrl.ensure_connected(autostart=False)
 

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable
 
 from src.gui.theme_v2 import (
     EXPANDER_ICON_COLLAPSED,
     EXPANDER_ICON_EXPANDED,
-    TEXT_PRIMARY,
 )
 
 

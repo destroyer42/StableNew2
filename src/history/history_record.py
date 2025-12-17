@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 from src.history.history_schema_v26 import HISTORY_SCHEMA_VERSION, InvalidHistoryRecord
 
@@ -52,18 +56,13 @@ class HistoryRecord:
     history_version: str | None = None  # transitional compatibility
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "HistoryRecord":
+    def from_dict(cls, data: Mapping[str, Any]) -> HistoryRecord:
         record_id = str(data.get("id") or data.get("job_id") or data.get("jobId") or "")
         snapshot = _clean_snapshot(
-            data.get("njr_snapshot")
-            or data.get("snapshot")
-            or data.get("normalized_job")
-            or {}
+            data.get("njr_snapshot") or data.get("snapshot") or data.get("normalized_job") or {}
         )
         timestamp = _coerce_timestamp(
-            data.get("timestamp")
-            or data.get("created_at")
-            or data.get("recorded_at")
+            data.get("timestamp") or data.get("created_at") or data.get("recorded_at")
         )
         status = str(data.get("status") or data.get("job_status") or "unknown")
         raw_metadata = data.get("metadata") or data.get("run_config") or {}
@@ -84,7 +83,9 @@ class HistoryRecord:
             runtime=runtime,
             ui_summary=ui_summary,
             result=result,
-            history_version=str(data.get("history_version") or data.get("history_schema") or HISTORY_SCHEMA_VERSION),
+            history_version=str(
+                data.get("history_version") or data.get("history_schema") or HISTORY_SCHEMA_VERSION
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -103,10 +104,10 @@ class HistoryRecord:
             base["result"] = dict(self.result)
         return base
 
-    def to_njr(self) -> "NormalizedJobRecord":
-        from src.pipeline.job_models_v2 import NormalizedJobRecord  # Local import to avoid cycle
-
+    def to_njr(self) -> NormalizedJobRecord:
         snapshot = self.njr_snapshot or {}
         if "normalized_job" not in snapshot:
-            raise InvalidHistoryRecord("History record is legacy/view-only (missing normalized_job).")
+            raise InvalidHistoryRecord(
+                "History record is legacy/view-only (missing normalized_job)."
+            )
         return NormalizedJobRecord.from_snapshot(snapshot)

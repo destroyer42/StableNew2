@@ -6,8 +6,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.utils.watchdog_v2 import WatchdogConfig
 from src.utils.process_container_v2 import ProcessContainerConfig
+from src.utils.watchdog_v2 import WatchdogConfig
 
 _learning_enabled: bool | None = None
 _job_history_path: str | None = None
@@ -31,13 +31,13 @@ _webui_health_initial_timeout: float | None = None
 _webui_health_retry_count: int | None = None
 _webui_health_retry_interval: float | None = None
 _webui_health_total_timeout: float | None = None
-STABLENEW_WEBUI_ROOT=""
-STABLENEW_WEBUI_COMMAND=""
+STABLENEW_WEBUI_ROOT = ""
+STABLENEW_WEBUI_COMMAND = ""
 
 
 _watchdog_config: WatchdogConfig | None = None
 _process_container_config: ProcessContainerConfig | None = None
-_jsonl_log_config: "JsonlFileLogConfig" | None = None
+_jsonl_log_config: JsonlFileLogConfig | None = None
 
 
 def _bool_env_flag(name: str, default: bool) -> bool:
@@ -145,6 +145,7 @@ def set_jsonl_log_config(config: JsonlFileLogConfig) -> None:
     global _jsonl_log_config
     _jsonl_log_config = config
 
+
 def learning_enabled_default() -> bool:
     """Return default for learning toggle (opt-in by default)."""
 
@@ -249,6 +250,7 @@ def set_debug_shutdown_inspector_enabled(enabled: bool) -> None:
 
 
 # --- Core config defaults for GUI V2 -----------------------------------------------------------
+
 
 def _env_default(name: str, default: str) -> str:
     value = os.environ.get(name)
@@ -480,6 +482,7 @@ def set_seed_mode(value: str) -> None:
 
 # --- WebUI process config defaults -----------------------------------------------------------
 
+
 def webui_workdir_default() -> str | None:
     """Best-effort detection of WebUI working directory (non-fatal)."""
 
@@ -487,18 +490,22 @@ def webui_workdir_default() -> str | None:
     if _webui_workdir is None:
         try:
             from src.api.webui_process_manager import detect_default_webui_workdir
+
             _webui_workdir = detect_default_webui_workdir()
         except Exception:
             _webui_workdir = None
     return _webui_workdir
 
+
 def get_webui_workdir() -> str | None:
     global _webui_workdir
     return _webui_workdir if _webui_workdir is not None else webui_workdir_default()
 
+
 def set_webui_workdir(path: str | None) -> None:
     global _webui_workdir
     _webui_workdir = path
+
 
 def webui_command_default() -> list[str]:
     """Default WebUI launch command based on platform."""
@@ -506,15 +513,18 @@ def webui_command_default() -> list[str]:
         return ["webui-user.bat", "--api", "--xformers"]
     return ["bash", "webui.sh", "--api"]
 
+
 def get_webui_command() -> list[str]:
     global _webui_command
     if _webui_command is None:
         return list(webui_command_default())
     return list(_webui_command)
 
+
 def set_webui_command(cmd: list[str]) -> None:
     global _webui_command
     _webui_command = list(cmd) if cmd is not None else list(webui_command_default())
+
 
 def webui_autostart_enabled_default() -> bool:
     """Default autostart: env override else enabled when detection succeeds."""
@@ -523,23 +533,17 @@ def webui_autostart_enabled_default() -> bool:
         return env_flag.lower() in {"1", "true", "yes", "on"}
     return webui_workdir_default() is not None
 
+
 def get_webui_autostart_enabled() -> bool:
     global _webui_autostart_enabled
     if _webui_autostart_enabled is None:
         _webui_autostart_enabled = webui_autostart_enabled_default()
     return bool(_webui_autostart_enabled)
 
+
 def set_webui_autostart_enabled(value: bool) -> None:
     global _webui_autostart_enabled
     _webui_autostart_enabled = bool(value)
-
-
-# --- WebUI health / connection defaults -------------------------------------------------------
-
-
-def webui_autostart_enabled_default() -> bool:
-    flag = os.environ.get("STABLENEW_WEBUI_AUTOSTART", "true").lower()
-    return flag in {"1", "true", "yes", "on"}
 
 
 def webui_health_initial_timeout_seconds_default() -> float:

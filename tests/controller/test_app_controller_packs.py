@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import tkinter as tk
+from pathlib import Path
 
 import pytest
 
@@ -85,7 +85,7 @@ def test_load_and_edit_pack_require_selection(tmp_path: Path, tk_root):
     )
     controller._packs_dir = packs_dir
     controller.load_packs()
-    expected_path = str((packs_dir / "alpha.txt"))
+    expected_path = str(packs_dir / "alpha.txt")
 
     controller.on_load_pack()
     controller.on_edit_pack()
@@ -98,6 +98,8 @@ def test_load_and_edit_pack_require_selection(tmp_path: Path, tk_root):
     log = _get_log_text(controller)
     assert "Load Pack -> alpha" in log
     assert expected_path in log
+
+
 class NoopRunner:
     def run(self, config, cancel_token, log_fn=None):
         return

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable
 
 from src.gui.state import PipelineState
 from src.gui.views.stage_cards_panel import StageCardsPanel
@@ -40,7 +40,10 @@ class RunControlBar(ttk.Frame):
             toggle_frame, text="txt2img", variable=self.txt2img_var, command=self._on_stage_toggle
         ).pack(side="left", padx=2)
         ttk.Checkbutton(
-            toggle_frame, text="img2img/adetailer", variable=self.img2img_var, command=self._on_stage_toggle
+            toggle_frame,
+            text="img2img/adetailer",
+            variable=self.img2img_var,
+            command=self._on_stage_toggle,
         ).pack(side="left", padx=2)
         ttk.Checkbutton(
             toggle_frame, text="upscale", variable=self.upscale_var, command=self._on_stage_toggle
@@ -51,16 +54,26 @@ class RunControlBar(ttk.Frame):
         scope_frame.pack(fill="x", pady=(0, 4))
         ttk.Label(scope_frame, text="Run Scope:").pack(side="left", padx=(0, 6))
         self.scope_var = tk.StringVar(value=getattr(self.state, "run_scope", "full"))
-        scope_options = [("Selected only", "selected"), ("From selected", "from_selected"), ("Full pipeline", "full")]
+        scope_options = [
+            ("Selected only", "selected"),
+            ("From selected", "from_selected"),
+            ("Full pipeline", "full"),
+        ]
         for text, val in scope_options:
-            ttk.Radiobutton(scope_frame, text=text, value=val, variable=self.scope_var, command=self._on_scope_change).pack(
-                side="left", padx=2
-            )
+            ttk.Radiobutton(
+                scope_frame,
+                text=text,
+                value=val,
+                variable=self.scope_var,
+                command=self._on_scope_change,
+            ).pack(side="left", padx=2)
 
         # Run buttons
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill="x", pady=(0, 4))
-        ttk.Button(btn_frame, text="Run Now", command=self._on_run_clicked).pack(side="left", padx=(0, 4))
+        ttk.Button(btn_frame, text="Run Now", command=self._on_run_clicked).pack(
+            side="left", padx=(0, 4)
+        )
         ttk.Button(btn_frame, text="Add to Queue", command=self._on_queue_clicked).pack(side="left")
 
         # Summary label

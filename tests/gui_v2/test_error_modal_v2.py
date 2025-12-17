@@ -35,7 +35,6 @@ def test_error_modal_displays_details() -> None:
     modal = ErrorModalV2(root, envelope=envelope)
     try:
         assert "Run Failed" in modal.title()
-        content = modal.children.values()
         assert envelope.error_type
     finally:
         modal.destroy()

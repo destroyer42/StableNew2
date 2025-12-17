@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Any, Dict, Tuple
+from typing import Any
 
 __all__ = [
     "ConfigManager",
@@ -18,6 +18,8 @@ __all__ = [
     "JsonlFileHandler",
     "JsonlFileLogConfig",
     "attach_jsonl_log_handler",
+    "close_all_structured_loggers",
+    "get_structured_logger_registry_count",
     "PreferencesManager",
     "save_image_from_base64",
     "load_image_to_base64",
@@ -31,7 +33,7 @@ __all__ = [
     "wait_for_webui_ready",
 ]
 
-_LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ConfigManager": ("src.utils.config", "ConfigManager"),
     "build_sampler_scheduler_payload": ("src.utils.config", "build_sampler_scheduler_payload"),
     "StructuredLogger": ("src.utils.logger", "StructuredLogger"),
@@ -48,7 +50,6 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "find_webui_api_port": ("src.utils.webui_discovery", "find_webui_api_port"),
     # 🔴 OLD (remove this)
     # "wait_for_webui_ready": ("src.utils.webui_discovery", "wait_for_webui_ready"),
-
     # 🟢 NEW – route all utils.wait_for_webui_ready calls to the V2.5 healthcheck
     "wait_for_webui_ready": ("src.api.healthcheck", "wait_for_webui_ready"),
     "get_logger": ("src.utils.logger", "get_logger"),
@@ -59,6 +60,11 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "JsonlFileHandler": ("src.utils.logger", "JsonlFileHandler"),
     "JsonlFileLogConfig": ("src.utils.logger", "JsonlFileLogConfig"),
     "attach_jsonl_log_handler": ("src.utils.logger", "attach_jsonl_log_handler"),
+    "close_all_structured_loggers": ("src.utils.logger", "close_all_structured_loggers"),
+    "get_structured_logger_registry_count": (
+        "src.utils.logger",
+        "get_structured_logger_registry_count",
+    ),
 }
 
 
@@ -77,4 +83,3 @@ def __dir__() -> list[str]:
     base_dir = list(globals().keys())
     base_dir.extend(_LAZY_IMPORTS.keys())
     return sorted(set(base_dir))
-

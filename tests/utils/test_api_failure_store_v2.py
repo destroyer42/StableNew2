@@ -1,11 +1,7 @@
-import json
-
 from src.utils.api_failure_store_v2 import clear_api_failures, get_api_failures, record_api_failure
 
-
 SAMPLE_IMAGE_BASE64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMA"
-    "AQAABQABDQottAAAAABJRU5ErkJggg=="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
 )
 
 

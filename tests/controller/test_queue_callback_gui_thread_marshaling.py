@@ -1,5 +1,5 @@
 import threading
-import time
+
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 
@@ -21,7 +21,12 @@ def test_event_marshaling():
     main_thread_id = threading.get_ident()
     stub = StubJobService()
 
-    ac = AppController(main_window=None, job_service=stub, ui_scheduler=lambda fn: scheduled.append(fn), threaded=False)
+    ac = AppController(
+        main_window=None,
+        job_service=stub,
+        ui_scheduler=lambda fn: scheduled.append(fn),
+        threaded=False,
+    )
 
     ran = {"flag": False, "thread": None}
 
@@ -59,7 +64,12 @@ def test_status_callback_marshaling():
     main_thread_id = threading.get_ident()
     stub = StubJobService()
 
-    ac = AppController(main_window=None, job_service=stub, ui_scheduler=lambda fn: scheduled.append(fn), threaded=False)
+    ac = AppController(
+        main_window=None,
+        job_service=stub,
+        ui_scheduler=lambda fn: scheduled.append(fn),
+        threaded=False,
+    )
 
     ran = {"flag": False, "thread": None}
 

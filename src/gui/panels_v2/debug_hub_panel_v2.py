@@ -16,10 +16,10 @@ from src.gui.log_trace_panel_v2 import LogTracePanelV2
 from src.gui.panels_v2.api_failure_visualizer_v2 import ApiFailureVisualizerV2
 from src.gui.views.diagnostics_dashboard_v2 import DiagnosticsDashboardV2
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.utils import InMemoryLogHandler
 from src.utils.diagnostics_bundle_v2 import DEFAULT_BUNDLE_DIR
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 from src.utils.system_info_v2 import collect_system_snapshot
-from src.utils import InMemoryLogHandler
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class DebugHubPanelV2(tk.Toplevel):
 
     MIN_WIDTH = 960
     MIN_HEIGHT = 640
-    _active_instance: "DebugHubPanelV2" | None = None
+    _active_instance: DebugHubPanelV2 | None = None
 
     @classmethod
     def open(
@@ -39,12 +39,14 @@ class DebugHubPanelV2(tk.Toplevel):
         controller: Any | None = None,
         app_state: Any | None = None,
         log_handler: InMemoryLogHandler | None = None,
-    ) -> "DebugHubPanelV2":
+    ) -> DebugHubPanelV2:
         """Create or focus the singleton debug hub."""
         if cls._active_instance and cls._active_instance.winfo_exists():
             cls._active_instance.lift()
             return cls._active_instance
-        instance = cls(master=master, controller=controller, app_state=app_state, log_handler=log_handler)
+        instance = cls(
+            master=master, controller=controller, app_state=app_state, log_handler=log_handler
+        )
         cls._active_instance = instance
         return instance
 
@@ -109,7 +111,9 @@ class DebugHubPanelV2(tk.Toplevel):
 
 
 class _PipelineTab(ttk.Frame):
-    def __init__(self, master: tk.Misc, controller: Any | None = None, app_state: Any | None = None) -> None:
+    def __init__(
+        self, master: tk.Misc, controller: Any | None = None, app_state: Any | None = None
+    ) -> None:
         super().__init__(master)
         self.controller = controller
         self.app_state = app_state
@@ -119,7 +123,9 @@ class _PipelineTab(ttk.Frame):
         action_bar.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(action_bar, text="Explain a job").pack(side=tk.LEFT)
         self._job_var = tk.StringVar(value="")
-        self._job_combo = ttk.Combobox(action_bar, textvariable=self._job_var, state="readonly", width=30)
+        self._job_combo = ttk.Combobox(
+            action_bar, textvariable=self._job_var, state="readonly", width=30
+        )
         self._job_combo.pack(side=tk.LEFT, padx=(4, 4))
         self._job_combo.bind("<<ComboboxSelected>>", lambda *_: self._on_job_selected())
         self._explain_btn = ttk.Button(
@@ -165,10 +171,13 @@ class _PipelineTab(ttk.Frame):
             except Exception:
                 pass
 
+
 class _PromptTab(ttk.Frame):
     REFRESH_INTERVAL_MS = 3000
 
-    def __init__(self, master: tk.Misc, controller: Any | None = None, app_state: Any | None = None) -> None:
+    def __init__(
+        self, master: tk.Misc, controller: Any | None = None, app_state: Any | None = None
+    ) -> None:
         super().__init__(master)
         self._controller = controller
         self._app_state = app_state
@@ -226,7 +235,7 @@ class _PromptTab(ttk.Frame):
         if not value:
             return ""
         text = value.strip()
-        return text if len(text) <= limit else text[:limit - 3] + "..."
+        return text if len(text) <= limit else text[: limit - 3] + "..."
 
     def _extract_prompts(self, job: NormalizedJobRecord) -> tuple[str, str]:
         prompt_info = job.txt2img_prompt_info or job.img2img_prompt_info
@@ -258,7 +267,9 @@ class _PromptTab(ttk.Frame):
 
 
 class _ApiTab(ttk.Frame):
-    def __init__(self, master: tk.Misc, log_handler: InMemoryLogHandler | None, controller: Any | None) -> None:
+    def __init__(
+        self, master: tk.Misc, log_handler: InMemoryLogHandler | None, controller: Any | None
+    ) -> None:
         super().__init__(master)
         if log_handler is None:
             ttk.Label(
@@ -287,7 +298,9 @@ class _ProcessTab(ttk.Frame):
         header.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(header, text="StableNew-like processes").pack(side=tk.LEFT)
         ttk.Button(header, text="Refresh", command=self.refresh).pack(side=tk.RIGHT)
-        self._scanner_enabled_var = tk.BooleanVar(value=bool(getattr(auto_scanner, "enabled", False)))
+        self._scanner_enabled_var = tk.BooleanVar(
+            value=bool(getattr(auto_scanner, "enabled", False))
+        )
         ttk.Checkbutton(
             header,
             text="Auto-scan strays",
@@ -362,7 +375,9 @@ class _CrashTab(ttk.Frame):
 
         footer = ttk.Frame(self)
         footer.pack(fill=tk.X, pady=(4, 0))
-        ttk.Button(footer, text="Open folder", command=self._open_folder).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(footer, text="Open folder", command=self._open_folder).pack(
+            side=tk.LEFT, padx=(0, 4)
+        )
         ttk.Button(footer, text="Open selected", command=self._open_selected).pack(side=tk.LEFT)
 
         self._paths: dict[str, Path] = {}
@@ -373,7 +388,9 @@ class _CrashTab(ttk.Frame):
         self._paths.clear()
         if not self._bundle_dir.exists():
             return
-        entries = sorted(self._bundle_dir.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+        entries = sorted(
+            self._bundle_dir.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
         for bundle in entries:
             modified = bundle.stat().st_mtime
             label = bundle.name

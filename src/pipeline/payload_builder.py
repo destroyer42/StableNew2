@@ -166,7 +166,9 @@ def _apply_refiner_fields(payload: dict[str, Any], stage: StageExecutionLike) ->
                 if hasattr(metadata, "refiner_switch_at"):
                     refiner_switch = getattr(metadata, "refiner_switch_at", None)
                 elif isinstance(metadata, dict):
-                    refiner_switch = metadata.get("refiner_switch_at") or metadata.get("refiner_switch_step")
+                    refiner_switch = metadata.get("refiner_switch_at") or metadata.get(
+                        "refiner_switch_step"
+                    )
 
         if refiner_switch is not None:
             payload["refiner_switch_step"] = refiner_switch
@@ -231,7 +233,9 @@ def _apply_hires_fields(
                 if hasattr(metadata, "hires_denoise"):
                     denoise = getattr(metadata, "hires_denoise", None)
                 elif isinstance(metadata, dict):
-                    denoise = metadata.get("hires_denoise") or metadata.get("hires_denoise_strength")
+                    denoise = metadata.get("hires_denoise") or metadata.get(
+                        "hires_denoise_strength"
+                    )
         if denoise is None:
             denoise = config.get("denoising_strength") or config.get("hires_denoise")
 
@@ -247,7 +251,9 @@ def _apply_hires_fields(
                 if hasattr(metadata, "hires_upscale_factor"):
                     scale_factor = getattr(metadata, "hires_upscale_factor", None)
                 elif isinstance(metadata, dict):
-                    scale_factor = metadata.get("hires_upscale_factor") or metadata.get("hires_scale_factor")
+                    scale_factor = metadata.get("hires_upscale_factor") or metadata.get(
+                        "hires_scale_factor"
+                    )
         if scale_factor is None:
             scale_factor = config.get("hr_scale") or config.get("hires_scale_factor")
 
@@ -377,9 +383,15 @@ def _apply_adetailer_fields(
 
     # ADetailer configuration
     payload["adetailer_enabled"] = True
-    payload["adetailer_model"] = config.get("adetailer_model") or config.get("ad_model", "face_yolov8n.pt")
-    payload["adetailer_denoise"] = config.get("adetailer_denoise") or config.get("ad_denoising_strength", 0.4)
-    payload["adetailer_confidence"] = config.get("adetailer_confidence") or config.get("ad_confidence", 0.3)
+    payload["adetailer_model"] = config.get("adetailer_model") or config.get(
+        "ad_model", "face_yolov8n.pt"
+    )
+    payload["adetailer_denoise"] = config.get("adetailer_denoise") or config.get(
+        "ad_denoising_strength", 0.4
+    )
+    payload["adetailer_confidence"] = config.get("adetailer_confidence") or config.get(
+        "ad_confidence", 0.3
+    )
 
     # Use prior images as input
     if last_image_meta:

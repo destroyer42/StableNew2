@@ -7,10 +7,11 @@ Panel consumers must only invoke its API from the Tk main thread (e.g., via `App
 
 from __future__ import annotations
 
-import tkinter as tk
-from tkinter import ttk
-from typing import Any, Callable
 import threading
+import tkinter as tk
+from collections.abc import Callable
+from tkinter import ttk
+from typing import Any
 
 from src.gui.theme_v2 import (
     ACCENT_GOLD,
@@ -22,18 +23,17 @@ from src.gui.theme_v2 import (
     TEXT_PRIMARY,
 )
 from src.pipeline.job_models_v2 import (
-    JobStatusV2,
+    JobQueueItemDTO,
     NormalizedJobRecord,
     QueueJobV2,
     UnifiedJobSummary,
-    JobQueueItemDTO,
 )
 
 
 class QueuePanelV2(ttk.Frame):
     """
     Queue panel displaying ordered list of queued jobs.
-    
+
     Features:
     - Selectable job list
     - Move Up/Down buttons to reorder
@@ -297,14 +297,18 @@ class QueuePanelV2(ttk.Frame):
 
     def update_jobs(self, jobs: list[QueueJobV2]) -> None:
         """Update the job list display.
-        
+
         PR-GUI-F2: Displays order numbers and highlights the running job.
         """
         if self._dispatch_to_ui(lambda: self.update_jobs(jobs)):
             return
         # Remember selection
         old_selection = self._get_selected_index()
-        old_job_id = self._jobs[old_selection].job_id if old_selection is not None and old_selection < len(self._jobs) else None
+        old_job_id = (
+            self._jobs[old_selection].job_id
+            if old_selection is not None and old_selection < len(self._jobs)
+            else None
+        )
 
         self._jobs = list(jobs)
         self.job_listbox.delete(0, tk.END)
@@ -313,13 +317,13 @@ class QueuePanelV2(ttk.Frame):
             # PR-GUI-F2: Add 1-based order number prefix
             order_num = i + 1
             base_summary = job.get_display_summary()
-            
+
             # PR-GUI-F2: Mark running job with indicator
             if self._running_job_id and job.job_id == self._running_job_id:
                 display_text = f"#{order_num} ▶ {base_summary}"
             else:
                 display_text = f"#{order_num}  {base_summary}"
-            
+
             self.job_listbox.insert(tk.END, display_text)
 
         # Update count label
@@ -383,9 +387,7 @@ class QueuePanelV2(ttk.Frame):
         else:
             queue_items = getattr(app_state, "queue_items", None)
             if queue_items is not None:
-                placeholders = [
-                    QueueJobV2.create({"prompt": str(item)}) for item in queue_items
-                ]
+                placeholders = [QueueJobV2.create({"prompt": str(item)}) for item in queue_items]
                 self.update_jobs(placeholders)
 
         # Update queue control states
@@ -400,9 +402,7 @@ class QueuePanelV2(ttk.Frame):
         queue_count = len(self._jobs)
 
         # Update pause/resume button
-        self.pause_resume_button.configure(
-            text="Resume Queue" if is_paused else "Pause Queue"
-        )
+        self.pause_resume_button.configure(text="Resume Queue" if is_paused else "Pause Queue")
 
         # Update status label
         self._update_queue_status_display(is_paused, running_job, queue_count)
@@ -429,7 +429,7 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_send_job(self) -> None:
         """Handle Send Job button click.
-        
+
         PR-GUI-F3: Dispatches the top job from the queue immediately.
         Respects pause state (JobService handles this).
         """
@@ -456,7 +456,7 @@ class QueuePanelV2(ttk.Frame):
 
     def update_queue_status(self, status: str | None) -> None:
         """Update the queue status from a status string.
-        
+
         This provides an API compatible with the old PreviewPanelV2.update_queue_status().
         """
         if self._dispatch_to_ui(lambda: self.update_queue_status(status)):
@@ -483,10 +483,10 @@ class QueuePanelV2(ttk.Frame):
 
     def set_running_job(self, job: QueueJobV2 | None) -> None:
         """Set the currently running job for highlighting in the queue list.
-        
+
         PR-GUI-F2: When a job is running, its entry in the queue list
         is visually distinguished with a ▶ indicator.
-        
+
         Args:
             job: The running QueueJobV2, or None if no job is running.
         """
@@ -500,7 +500,7 @@ class QueuePanelV2(ttk.Frame):
 
     def get_running_job_queue_position(self) -> int | None:
         """Get the 1-based queue position of the running job, if present.
-        
+
         PR-GUI-F2: Returns the order number of the running job in the queue,
         or None if the running job is not in the queue list.
         """
@@ -517,9 +517,9 @@ class QueuePanelV2(ttk.Frame):
 
     def upsert_job(self, dto: JobQueueItemDTO) -> None:
         """Add or update a job in the queue based on DTO.
-        
+
         PR-D: Core method for queue panel updates via JobService callbacks.
-        
+
         Args:
             dto: JobQueueItemDTO with current job state
         """
@@ -540,7 +540,7 @@ class QueuePanelV2(ttk.Frame):
                 )
                 self.update_jobs(self._jobs)
                 return
-        
+
         # Add new job
         new_job = QueueJobV2(
             job_id=dto.job_id,
@@ -555,9 +555,9 @@ class QueuePanelV2(ttk.Frame):
 
     def remove_job(self, job_id: str) -> None:
         """Remove a job from the queue by ID.
-        
+
         PR-D: Core method for removing completed/cancelled jobs.
-        
+
         Args:
             job_id: The job ID to remove
         """
@@ -572,22 +572,22 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_lifecycle_event(self) -> None:
         """Handle lifecycle events from app_state (PR-CORE-D).
-        
+
         Responds to SUBMITTED, QUEUED, RUNNING, CANCELLED events.
         """
         if not self.app_state:
             return
-        
+
         log_events = getattr(self.app_state, "log_events", None)
         if not log_events:
             return
-        
+
         # Process the most recent event
         if log_events:
             latest_event = log_events[-1]
             event_type = getattr(latest_event, "event_type", None)
             job_id = getattr(latest_event, "job_id", None)
-            
+
             if event_type == "RUNNING" and job_id:
                 self._running_job_id = job_id
                 self._refresh_display()
@@ -602,7 +602,7 @@ class QueuePanelV2(ttk.Frame):
         """Handle queue_jobs changes from app_state (PR-CORE-D)."""
         if not self.app_state:
             return
-        
+
         queue_jobs = getattr(self.app_state, "queue_jobs", None)
         if queue_jobs is not None:
             self.update_jobs(queue_jobs)
@@ -626,7 +626,7 @@ class QueuePanelV2(ttk.Frame):
         """Handle running job summary changes (legacy compatibility)."""
         if not self.app_state:
             return
-        
+
         running_job = getattr(self.app_state, "running_job", None)
         if running_job:
             self._running_job_id = getattr(running_job, "job_id", None)
@@ -635,25 +635,25 @@ class QueuePanelV2(ttk.Frame):
     @staticmethod
     def _format_queue_item_with_pack_metadata(summary: UnifiedJobSummary) -> str:
         """PR-CORE-D: Format queue item with PromptPack metadata.
-        
+
         Args:
             summary: UnifiedJobSummary with PromptPack provenance
-            
+
         Returns:
             Formatted string like "Angelic Warriors [Row 3] v2/b1 Seed: 12345"
         """
         parts = []
-        
+
         # Pack name
         pack_name = getattr(summary, "prompt_pack_name", None)
         if pack_name:
             parts.append(pack_name)
-        
+
         # Row index
         row_idx = getattr(summary, "prompt_pack_row_index", None)
         if row_idx is not None:
             parts.append(f"[Row {row_idx + 1}]")
-        
+
         # Variant/batch indices
         variant_idx = getattr(summary, "variant_index", None)
         batch_idx = getattr(summary, "batch_index", None)
@@ -661,12 +661,12 @@ class QueuePanelV2(ttk.Frame):
             v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
             b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
             parts.append(f"{v_text}/{b_text}")
-        
+
         # Seed
         seed = getattr(summary, "seed", None)
         if seed is not None:
             parts.append(f"Seed: {seed}")
-        
+
         return " ".join(parts) if parts else "Unknown Job"
 
 

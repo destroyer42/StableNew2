@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
-import logging
 
 from src.api.client import SDWebUIClient
+from src.gui.state import CancellationError
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
-from src.gui.state import CancellationError
-from src.pipeline.executor import Pipeline, PipelineStageError
+from src.pipeline.executor import Pipeline
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.stage_sequencer import (
     StageExecution,
@@ -22,14 +24,10 @@ from src.pipeline.stage_sequencer import (
     StageMetadata,
     StageSequencer,
     StageTypeEnum,
-    build_stage_execution_plan,
 )
-from src.pipeline.stage_models import InvalidStagePlanError
-from src.utils import StructuredLogger, get_logger, LogContext, log_with_ctx
+from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
-from src.utils.error_envelope_v2 import get_attached_envelope, serialize_envelope, wrap_exception
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 if TYPE_CHECKING:  # pragma: no cover
     from src.controller.app_controller import CancelToken
 
@@ -42,16 +40,17 @@ class PipelineRunner:
     def run_njr(
         self,
         njr: NormalizedJobRecord,
-        cancel_token: "CancelToken" | None = None,
-        log_fn: Optional[Callable[[str], None]] = None,
+        cancel_token: CancelToken | None = None,
+        log_fn: Callable[[str], None] | None = None,
         run_plan: Any | None = None,
-    ) -> "PipelineRunResult":
+    ) -> PipelineRunResult:
         """
         Execute the pipeline using a NormalizedJobRecord (NJR-only, v2.6+ contract).
         This is the ONLY supported production entrypoint.
         """
         # Build run plan directly from NJR
         from src.pipeline.run_plan import build_run_plan_from_njr
+
         plan = build_run_plan_from_njr(njr)
         # Prepare output dir and metadata
         run_id = str(uuid4())
@@ -90,24 +89,28 @@ class PipelineRunner:
                     cancel_token=cancel_token,
                 )
                 variants.append(result)
-                stage_events.append({
-                    "stage": stage.stage_name,
-                    "phase": "exit",
-                    "image_index": 1,
-                    "total_images": 1,
-                    "cancelled": False,
-                })
+                stage_events.append(
+                    {
+                        "stage": stage.stage_name,
+                        "phase": "exit",
+                        "image_index": 1,
+                        "total_images": 1,
+                        "cancelled": False,
+                    }
+                )
             success = True
         except Exception as exc:
             error = str(exc)
-            stage_events.append({
-                "stage": stage.stage_name if 'stage' in locals() else "pipeline",
-                "phase": "error",
-                "image_index": 1,
-                "total_images": 1,
-                "cancelled": True,
-                "error_message": str(exc),
-            })
+            stage_events.append(
+                {
+                    "stage": stage.stage_name if "stage" in locals() else "pipeline",
+                    "phase": "error",
+                    "image_index": 1,
+                    "total_images": 1,
+                    "cancelled": True,
+                    "error_message": str(exc),
+                }
+            )
         result = PipelineRunResult(
             run_id=run_id,
             success=success,
@@ -159,9 +162,9 @@ class PipelineRunner:
         api_client: SDWebUIClient,
         structured_logger: StructuredLogger,
         *,
-        config_manager: Optional[ConfigManager] = None,
-        learning_record_writer: Optional[LearningRecordWriter] = None,
-        on_learning_record: Optional[Callable[[LearningRecord], None]] = None,
+        config_manager: ConfigManager | None = None,
+        learning_record_writer: LearningRecordWriter | None = None,
+        on_learning_record: Callable[[LearningRecord], None] | None = None,
         runs_base_dir: str | None = None,
         learning_enabled: bool = False,
         sequencer: StageSequencer | None = None,
@@ -177,8 +180,12 @@ class PipelineRunner:
         self._learning_enabled = bool(learning_enabled)
         self._sequencer = sequencer or StageSequencer()
 
-    def _ensure_not_cancelled(self, cancel_token: "CancelToken" | None, context: str) -> None:
-        if cancel_token and getattr(cancel_token, "is_cancelled", None) and cancel_token.is_cancelled():
+    def _ensure_not_cancelled(self, cancel_token: CancelToken | None, context: str) -> None:
+        if (
+            cancel_token
+            and getattr(cancel_token, "is_cancelled", None)
+            and cancel_token.is_cancelled()
+        ):
             raise CancellationError(f"Cancelled during {context}")
 
     def _is_generative_stage_type(self, stage_type: str) -> bool:
@@ -192,12 +199,16 @@ class PipelineRunner:
         stages = plan.stages or []
         if not stages:
             raise ValueError("Pipeline plan contains no enabled stages.")
-        adetailers = [stage for stage in stages if stage.stage_type == StageTypeEnum.ADETAILER.value]
+        adetailers = [
+            stage for stage in stages if stage.stage_type == StageTypeEnum.ADETAILER.value
+        ]
         if len(adetailers) > 1:
             raise ValueError("Multiple ADetailer stages are not supported.")
         if adetailers and stages[-1].stage_type != StageTypeEnum.ADETAILER.value:
             raise ValueError("ADetailer stage must be the final stage.")
-        if adetailers and not any(self._is_generative_stage_type(stage.stage_type) for stage in stages):
+        if adetailers and not any(
+            self._is_generative_stage_type(stage.stage_type) for stage in stages
+        ):
             raise ValueError("ADetailer stage requires a preceding generation stage.")
 
     def set_learning_enabled(self, enabled: bool) -> None:
@@ -218,7 +229,7 @@ class PipelineRunner:
         stage: StageExecution,
         payload: dict[str, Any],
         run_dir: Path,
-        cancel_token: "CancelToken" | None,
+        cancel_token: CancelToken | None,
         input_image_path: Path | None,
         prompt_index: int = 1,
         job_date: str = "",
@@ -453,10 +464,15 @@ class PipelineRunner:
             return None
         try:
             metadata: dict[str, Any] = {}
-            for candidate in (getattr(config, "metadata", None), getattr(config, "extra_metadata", None)):
+            for candidate in (
+                getattr(config, "metadata", None),
+                getattr(config, "extra_metadata", None),
+            ):
                 if isinstance(candidate, dict):
                     metadata.update(candidate)
-            pack_name = getattr(config, "pack_name", None) or getattr(config, "prompt_pack_name", None)
+            pack_name = getattr(config, "pack_name", None) or getattr(
+                config, "prompt_pack_name", None
+            )
             if pack_name:
                 metadata["pack_name"] = pack_name
             preset_name = getattr(config, "preset_name", None)
@@ -526,7 +542,9 @@ class PipelineRunResult:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any], default_run_id: str | None = None) -> "PipelineRunResult":
+    def from_dict(
+        cls, data: Mapping[str, Any], default_run_id: str | None = None
+    ) -> PipelineRunResult:
         run_id = str(data.get("run_id") or default_run_id or "")
         learning_records: list[LearningRecord] = []
         for record in data.get("learning_records") or []:

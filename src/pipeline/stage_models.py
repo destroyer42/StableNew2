@@ -120,9 +120,7 @@ class StageExecutionPlan:
 
     def has_generation_stage(self) -> bool:
         """Return True if the plan contains at least one generation stage."""
-        return any(
-            s.stage_type in (StageType.TXT2IMG, StageType.IMG2IMG) for s in self.stages
-        )
+        return any(s.stage_type in (StageType.TXT2IMG, StageType.IMG2IMG) for s in self.stages)
 
     def get_stage_types(self) -> list[StageType]:
         """Return the ordered list of stage types in this plan."""

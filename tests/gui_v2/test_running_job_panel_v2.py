@@ -260,7 +260,9 @@ class TestRunningJobPanelV2ButtonStates:
 class TestRunningJobPanelV2ControllerInvocation:
     """Tests for controller method calls."""
 
-    def test_pause_calls_controller_when_running(self, root, mock_controller, mock_app_state) -> None:
+    def test_pause_calls_controller_when_running(
+        self, root, mock_controller, mock_app_state
+    ) -> None:
         panel = RunningJobPanelV2(
             root,
             controller=mock_controller,
@@ -272,7 +274,9 @@ class TestRunningJobPanelV2ControllerInvocation:
         panel._on_pause_resume()
         mock_controller.on_pause_job_v2.assert_called_once()
 
-    def test_resume_calls_controller_when_paused(self, root, mock_controller, mock_app_state) -> None:
+    def test_resume_calls_controller_when_paused(
+        self, root, mock_controller, mock_app_state
+    ) -> None:
         panel = RunningJobPanelV2(
             root,
             controller=mock_controller,

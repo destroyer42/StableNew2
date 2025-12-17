@@ -32,7 +32,9 @@ class _DummyController:
         self.pack_calls.append(list(pack_ids))
 
 
-def test_add_to_job_with_no_pack_selection_uses_single_prompt_handler(monkeypatch, tk_root: tk.Tk) -> None:
+def test_add_to_job_with_no_pack_selection_uses_single_prompt_handler(
+    monkeypatch, tk_root: tk.Tk
+) -> None:
     monkeypatch.setattr("src.gui.sidebar_panel_v2.PromptPackListManager", _FakePackListManager)
     controller = _DummyController()
     panel = SidebarPanelV2(tk_root, controller=controller, app_state=AppStateV2())

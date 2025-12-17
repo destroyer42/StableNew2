@@ -14,7 +14,9 @@ from src.gui.theme_v2 import BODY_LABEL_STYLE
 class AdvancedUpscaleStageCardV2(BaseStageCardV2):
     panel_header = "Upscale Configuration"
 
-    def __init__(self, master: tk.Misc, *, controller: Any = None, theme: Any = None, **kwargs: Any) -> None:
+    def __init__(
+        self, master: tk.Misc, *, controller: Any = None, theme: Any = None, **kwargs: Any
+    ) -> None:
         self.controller = controller
         self.theme = theme
         self.current_input_width = 512
@@ -33,7 +35,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         self.tile_size_var = tk.IntVar(value=0)
         self.face_restore_var = tk.BooleanVar(value=False)
 
-        ttk.Label(parent, text="Upscaler", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(parent, text="Upscaler", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", padx=(0, 4)
+        )
         self.upscaler_combo = ttk.Combobox(
             parent,
             textvariable=self.upscaler_var,
@@ -44,7 +48,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         )
         self.upscaler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
-        ttk.Label(parent, text="Mode", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(parent, text="Mode", style=BODY_LABEL_STYLE).grid(
+            row=0, column=2, sticky="w", padx=(0, 4)
+        )
         ttk.Combobox(
             parent,
             textvariable=self.mode_var,
@@ -54,7 +60,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         ).grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", pady=(6, 2)
+        )
         ttk.Spinbox(
             parent,
             from_=1,
@@ -64,7 +72,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=1, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(parent, text="Denoise", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Denoise", style=BODY_LABEL_STYLE).grid(
+            row=1, column=2, sticky="w", pady=(6, 2)
+        )
         ttk.Spinbox(
             parent,
             from_=0.0,
@@ -75,7 +85,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TSpinbox",
         ).grid(row=1, column=3, sticky="ew")
 
-        ttk.Label(parent, text="Scale", style=BODY_LABEL_STYLE).grid(row=2, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Scale", style=BODY_LABEL_STYLE).grid(
+            row=2, column=0, sticky="w", pady=(6, 2)
+        )
         self._scale_spinbox = ttk.Spinbox(
             parent,
             from_=1.0,
@@ -86,7 +98,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TSpinbox",
         )
         self._scale_spinbox.grid(row=2, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(parent, text="Tile size", style=BODY_LABEL_STYLE).grid(row=2, column=2, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Tile size", style=BODY_LABEL_STYLE).grid(
+            row=2, column=2, sticky="w", pady=(6, 2)
+        )
         ttk.Spinbox(
             parent,
             from_=0,
@@ -105,7 +119,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         # Final dimensions display
-        ttk.Label(parent, text="Final size", style=BODY_LABEL_STYLE).grid(row=4, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(parent, text="Final size", style=BODY_LABEL_STYLE).grid(
+            row=4, column=0, sticky="w", pady=(6, 2)
+        )
         self.final_dimensions_label = ttk.Label(
             parent,
             text=self._compute_final_size_text(),
@@ -120,17 +136,27 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         section = (cfg or {}).get("upscale", {}) or {}
         upscaler_name = section.get("upscaler", "")
         # Find display name for the stored upscaler name
-        upscaler_display = next((d for d, n in self._upscaler_name_map.items() if n == upscaler_name), upscaler_name)
+        upscaler_display = next(
+            (d for d, n in self._upscaler_name_map.items() if n == upscaler_name), upscaler_name
+        )
         self.upscaler_var.set(upscaler_display)
         self.mode_var.set(section.get("upscale_mode", "single"))
         self.steps_var.set(int(self._safe_int(section.get("steps", 20), 20)))
         self.denoise_var.set(float(self._safe_float(section.get("denoising_strength", 0.35), 0.35)))
-        self.factor_var.set(float(self._safe_float(section.get("upscaling_resize", section.get("upscale_factor", 2.0)), 2.0)))
+        self.factor_var.set(
+            float(
+                self._safe_float(
+                    section.get("upscaling_resize", section.get("upscale_factor", 2.0)), 2.0
+                )
+            )
+        )
         self.tile_size_var.set(int(self._safe_int(section.get("tile_size", 0), 0)))
         self.face_restore_var.set(bool(section.get("face_restore", False)))
 
     def to_config_dict(self) -> dict[str, Any]:
-        upscaler_name = self._upscaler_name_map.get(self.upscaler_var.get(), self.upscaler_var.get().strip())
+        upscaler_name = self._upscaler_name_map.get(
+            self.upscaler_var.get(), self.upscaler_var.get().strip()
+        )
         return {
             "upscale": {
                 "upscaler": upscaler_name,
@@ -166,7 +192,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         values: list[str] = []
         mapping: dict[str, str] = {}
         for entry in entries:
-            display = getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
+            display = (
+                getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
+            )
             display = str(display).strip()
             if not display or display in seen:
                 continue

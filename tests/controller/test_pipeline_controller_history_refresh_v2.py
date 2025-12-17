@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from src.gui.app_state_v2 import AppStateV2
 from src.controller.pipeline_controller import PipelineController
+from src.gui.app_state_v2 import AppStateV2
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 

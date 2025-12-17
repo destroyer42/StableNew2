@@ -1,8 +1,7 @@
-
 import ast
 import pathlib
-import pytest
 
+import pytest
 
 UTILS_ROOT = pathlib.Path(__file__).resolve().parents[2] / "src" / "utils"
 
@@ -18,9 +17,7 @@ GUI_IMPORT_BLOCKLIST = {
 def iter_utils_python_files():
     if not UTILS_ROOT.is_dir():
         pytest.skip(f"Utils root not found at {UTILS_ROOT}")
-    for path in UTILS_ROOT.rglob("*.py"):
-        # Allow __init__.py and similar, but still scan them
-        yield path
+    yield from UTILS_ROOT.rglob("*.py")
 
 
 def extract_import_targets(module_path: pathlib.Path):

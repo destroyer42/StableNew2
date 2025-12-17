@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Iterable, List
+from typing import Any
 
 from src.learning.learning_record import LearningRecord
 
@@ -31,7 +32,7 @@ class StageSuggestion:
         return asdict(self)
 
     @staticmethod
-    def from_dict(payload: dict[str, Any]) -> "StageSuggestion":
+    def from_dict(payload: dict[str, Any]) -> StageSuggestion:
         return StageSuggestion(
             stage_name=payload.get("stage_name", ""),
             config_overrides=payload.get("config_overrides", {}) or {},
@@ -45,7 +46,7 @@ class SettingsSuggestionRequest:
     prompt_text: str
     pack_id: str | None
     baseline_config: dict[str, object]
-    recent_runs: List[LearningRecord] = field(default_factory=list)
+    recent_runs: list[LearningRecord] = field(default_factory=list)
     available_capabilities: dict[str, object] = field(default_factory=dict)
     version: str = "v1"
 
@@ -56,7 +57,7 @@ class SettingsSuggestionRequest:
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
-    def from_json(text: str) -> "SettingsSuggestionRequest":
+    def from_json(text: str) -> SettingsSuggestionRequest:
         payload = json.loads(text)
         runs = payload.get("recent_runs", []) or []
         return SettingsSuggestionRequest(
@@ -72,7 +73,7 @@ class SettingsSuggestionRequest:
 
 @dataclass
 class SettingsSuggestion:
-    stages: List[StageSuggestion]
+    stages: list[StageSuggestion]
     global_notes: str | None = None
     internal_metadata: dict[str, object] = field(default_factory=dict)
     version: str = "v1"
@@ -87,7 +88,7 @@ class SettingsSuggestion:
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
-    def from_json(text: str) -> "SettingsSuggestion":
+    def from_json(text: str) -> SettingsSuggestion:
         payload = json.loads(text)
         stages_iter: Iterable[dict[str, Any]] = payload.get("stages", []) or []
         return SettingsSuggestion(

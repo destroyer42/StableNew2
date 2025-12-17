@@ -21,7 +21,6 @@ from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.stage_models import StageType
 from src.pipeline.stage_sequencer import StageConfig, StageExecution, StageMetadata
 
-
 # -----------------------------------------------------------------------------
 # Test Helpers
 # -----------------------------------------------------------------------------
@@ -100,9 +99,13 @@ def make_stage(
         (False, False),
     ],
 )
-def test_build_sdxl_payload_generation_refiner_and_hires(refiner_enabled: bool, hires_enabled: bool):
+def test_build_sdxl_payload_generation_refiner_and_hires(
+    refiner_enabled: bool, hires_enabled: bool
+):
     """Test payload builder with various refiner/hires combinations."""
-    stage = make_stage(StageType.TXT2IMG, refiner_enabled=refiner_enabled, hires_enabled=hires_enabled)
+    stage = make_stage(
+        StageType.TXT2IMG, refiner_enabled=refiner_enabled, hires_enabled=hires_enabled
+    )
 
     payload = build_sdxl_payload(stage, last_image_meta=None)
 

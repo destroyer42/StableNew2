@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.gui.gui_invoker import GuiInvoker
 from src.pipeline.job_models_v2 import (
@@ -21,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 # Type aliases for listeners
 Listener = Callable[[], None]
-ResourceListener = Callable[[Dict[str, List[Any]]], None]
+ResourceListener = Callable[[dict[str, list[Any]]], None]
+
 
 @dataclass
 class PackJobEntry:
@@ -35,6 +37,7 @@ class PackJobEntry:
     pack_row_index: int | None = None
     pack_version: str | None = None
     matrix_slot_values: dict[str, str] = field(default_factory=dict)
+
 
 @dataclass
 class JobDraftPart:
@@ -101,29 +104,29 @@ class CurrentConfig:
 class AppStateV2:
     """Central GUI-facing state container for the V2 application."""
 
-    _listeners: Dict[str, List[Listener]] = field(default_factory=dict)
-    _invoker: Optional[GuiInvoker] = None
+    _listeners: dict[str, list[Listener]] = field(default_factory=dict)
+    _invoker: GuiInvoker | None = None
     _notifications_enabled: bool = True
 
     # Legacy prompt fields (deprecated - use PromptPack instead)
     prompt: str = ""  # DEPRECATED: Use selected_prompt_pack_id instead
     negative_prompt: str = ""  # DEPRECATED: Use selected_prompt_pack_id instead
-    current_pack: Optional[str] = None  # DEPRECATED: Use selected_prompt_pack_id instead
-    
+    current_pack: str | None = None  # DEPRECATED: Use selected_prompt_pack_id instead
+
     # PR-CORE-D: PromptPack-Only tracking fields
-    selected_prompt_pack_id: Optional[str] = None
-    selected_prompt_pack_name: Optional[str] = None
-    selected_config_snapshot_id: Optional[str] = None
-    last_unified_job_summary: Optional[UnifiedJobSummary] = None
-    
+    selected_prompt_pack_id: str | None = None
+    selected_prompt_pack_name: str | None = None
+    selected_config_snapshot_id: str | None = None
+    last_unified_job_summary: UnifiedJobSummary | None = None
+
     is_running: bool = False
-    controller: Optional[Any] = None
+    controller: Any | None = None
     status_text: str = "Idle"
-    last_error: Optional[str] = None
+    last_error: str | None = None
     webui_state: str = "disconnected"
     learning_enabled: bool = False
-    prompt_workspace_state: Optional["PromptWorkspaceState"] = None
-    resources: Dict[str, List[Any]] = field(
+    prompt_workspace_state: PromptWorkspaceState | None = None
+    resources: dict[str, list[Any]] = field(
         default_factory=lambda: {
             "models": [],
             "vaes": [],
@@ -132,14 +135,14 @@ class AppStateV2:
             "upscalers": [],
         }
     )
-    queue_items: List[str] = field(default_factory=list)
-    queue_jobs: List[QueueJobV2] = field(default_factory=list)
+    queue_items: list[str] = field(default_factory=list)
+    queue_jobs: list[QueueJobV2] = field(default_factory=list)
     running_job: QueueJobV2 | None = None
     queue_status: str = "idle"
     history_items: list[JobHistoryEntry] = field(default_factory=list)
-    run_config: Dict[str, Any] = field(default_factory=dict)
+    run_config: dict[str, Any] = field(default_factory=dict)
     current_config: CurrentConfig = field(default_factory=CurrentConfig)
-    _resource_listeners: List[Callable[[Dict[str, List[Any]]], None]] = field(default_factory=list)
+    _resource_listeners: list[Callable[[dict[str, list[Any]]], None]] = field(default_factory=list)
     # Canonical PromptPack-first draft state used by controllers (CORE1-A1)
     job_draft: JobDraft = field(default_factory=JobDraft)
     preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
@@ -156,8 +159,8 @@ class AppStateV2:
     is_run_in_progress: bool = False
     is_direct_run_in_progress: bool = False
     is_queue_paused: bool = False
-    last_run_job_id: Optional[str] = None
-    last_error_message: Optional[str] = None
+    last_run_job_id: str | None = None
+    last_error_message: str | None = None
 
     # PR-203: Auto-run queue flag
     auto_run_queue: bool = False
@@ -216,14 +219,14 @@ class AppStateV2:
             self.negative_prompt = value
             self._notify("negative_prompt")
 
-    def set_current_pack(self, value: Optional[str]) -> None:
+    def set_current_pack(self, value: str | None) -> None:
         """DEPRECATED: Use set_selected_prompt_pack instead."""
         if self.current_pack != value:
             self.current_pack = value
             self._notify("current_pack")
-    
+
     # PR-CORE-D: PromptPack-Only setters
-    def set_selected_prompt_pack(self, pack_id: Optional[str], pack_name: Optional[str] = None) -> None:
+    def set_selected_prompt_pack(self, pack_id: str | None, pack_name: str | None = None) -> None:
         """Set the selected PromptPack (PR-CORE-D PromptPack-only enforcement)."""
         changed = False
         if self.selected_prompt_pack_id != pack_id:
@@ -234,14 +237,14 @@ class AppStateV2:
             changed = True
         if changed:
             self._notify("selected_prompt_pack")
-    
-    def set_selected_config_snapshot(self, snapshot_id: Optional[str]) -> None:
+
+    def set_selected_config_snapshot(self, snapshot_id: str | None) -> None:
         """Set the selected config snapshot ID (PR-CORE-D)."""
         if self.selected_config_snapshot_id != snapshot_id:
             self.selected_config_snapshot_id = snapshot_id
             self._notify("selected_config_snapshot")
-    
-    def set_last_unified_job_summary(self, summary: Optional[UnifiedJobSummary]) -> None:
+
+    def set_last_unified_job_summary(self, summary: UnifiedJobSummary | None) -> None:
         """Set the last unified job summary for preview display (PR-CORE-D)."""
         if self.last_unified_job_summary != summary:
             self.last_unified_job_summary = summary
@@ -257,14 +260,16 @@ class AppStateV2:
             self.status_text = value
             self._notify("status_text")
 
-    def set_last_error(self, value: Optional[str]) -> None:
+    def set_last_error(self, value: str | None) -> None:
         if self.last_error != value:
             self.last_error = value
             self._notify("last_error")
+
     def set_learning_enabled(self, value: bool) -> None:
         if self.learning_enabled != value:
             self.learning_enabled = value
             self._notify("learning_enabled")
+
     def set_webui_state(self, value: str) -> None:
         if self.webui_state != value:
             self.webui_state = value
@@ -448,12 +453,12 @@ class AppStateV2:
             self.auto_run_queue = value
             self._notify("auto_run_queue")
 
-    def set_last_run_job_id(self, value: Optional[str]) -> None:
+    def set_last_run_job_id(self, value: str | None) -> None:
         if self.last_run_job_id != value:
             self.last_run_job_id = value
             self._notify("last_run_job_id")
 
-    def set_last_error_message(self, value: Optional[str]) -> None:
+    def set_last_error_message(self, value: str | None) -> None:
         if self.last_error_message != value:
             self.last_error_message = value
             self._notify("last_error_message")

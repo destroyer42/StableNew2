@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Optional, Any
+from typing import Any
 
 from src.gui.controllers.learning_controller import LearningController
 
@@ -10,7 +10,13 @@ from src.gui.controllers.learning_controller import LearningController
 class ExperimentDesignPanel(ttk.Frame):
     """Left panel for experiment design controls."""
 
-    def __init__(self, master: tk.Misc, learning_controller: Optional[LearningController] = None, *args, **kwargs) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        learning_controller: LearningController | None = None,
+        *args,
+        **kwargs,
+    ) -> None:
         super().__init__(master, *args, **kwargs)
         self.learning_controller = learning_controller
 
@@ -55,7 +61,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self,
             textvariable=self.stage_var,
             values=["txt2img", "img2img", "upscale"],
-            state="readonly"
+            state="readonly",
         )
         self.stage_combo.grid(row=6, column=0, sticky="ew", pady=(0, 10))
 
@@ -65,8 +71,16 @@ class ExperimentDesignPanel(ttk.Frame):
         self.variable_combo = ttk.Combobox(
             self,
             textvariable=self.variable_var,
-            values=["CFG Scale", "Steps", "Sampler", "Scheduler", "LoRA Strength", "Denoise Strength", "Upscale Factor"],
-            state="readonly"
+            values=[
+                "CFG Scale",
+                "Steps",
+                "Sampler",
+                "Scheduler",
+                "LoRA Strength",
+                "Denoise Strength",
+                "Upscale Factor",
+            ],
+            state="readonly",
         )
         self.variable_combo.grid(row=8, column=0, sticky="ew", pady=(0, 10))
 
@@ -80,17 +94,23 @@ class ExperimentDesignPanel(ttk.Frame):
         # Numeric range inputs
         ttk.Label(value_frame, text="Start:").grid(row=0, column=0, sticky="w", pady=2)
         self.start_var = tk.DoubleVar(value=1.0)
-        self.start_spin = tk.Spinbox(value_frame, from_=0.1, to=100.0, increment=0.1, textvariable=self.start_var)
+        self.start_spin = tk.Spinbox(
+            value_frame, from_=0.1, to=100.0, increment=0.1, textvariable=self.start_var
+        )
         self.start_spin.grid(row=1, column=0, sticky="ew", padx=(0, 2))
 
         ttk.Label(value_frame, text="End:").grid(row=0, column=1, sticky="w", pady=2)
         self.end_var = tk.DoubleVar(value=10.0)
-        self.end_spin = tk.Spinbox(value_frame, from_=0.1, to=100.0, increment=0.1, textvariable=self.end_var)
+        self.end_spin = tk.Spinbox(
+            value_frame, from_=0.1, to=100.0, increment=0.1, textvariable=self.end_var
+        )
         self.end_spin.grid(row=1, column=1, sticky="ew", padx=2)
 
         ttk.Label(value_frame, text="Step:").grid(row=0, column=2, sticky="w", pady=2)
         self.step_var = tk.DoubleVar(value=1.0)
-        self.step_spin = tk.Spinbox(value_frame, from_=0.1, to=10.0, increment=0.1, textvariable=self.step_var)
+        self.step_spin = tk.Spinbox(
+            value_frame, from_=0.1, to=10.0, increment=0.1, textvariable=self.step_var
+        )
         self.step_spin.grid(row=1, column=2, sticky="ew", padx=(2, 0))
 
         # Images per Variant
@@ -109,14 +129,14 @@ class ExperimentDesignPanel(ttk.Frame):
             prompt_frame,
             text="Use current Prompt Workspace slot",
             variable=self.prompt_source_var,
-            value="workspace"
+            value="workspace",
         ).grid(row=0, column=0, sticky="w", pady=2)
 
         ttk.Radiobutton(
             prompt_frame,
             text="Custom prompt text:",
             variable=self.prompt_source_var,
-            value="custom"
+            value="custom",
         ).grid(row=1, column=0, sticky="w", pady=2)
 
         self.custom_prompt_var = tk.StringVar(value="")
@@ -129,10 +149,14 @@ class ExperimentDesignPanel(ttk.Frame):
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
 
-        self.build_button = ttk.Button(button_frame, text="Build Preview Only", command=self._on_build_preview)
+        self.build_button = ttk.Button(
+            button_frame, text="Build Preview Only", command=self._on_build_preview
+        )
         self.build_button.grid(row=0, column=0, sticky="ew", padx=(0, 5))
 
-        self.run_button = ttk.Button(button_frame, text="Run Experiment", command=self._on_run_experiment)
+        self.run_button = ttk.Button(
+            button_frame, text="Run Experiment", command=self._on_run_experiment
+        )
         self.run_button.grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
         # Feedback
@@ -157,7 +181,9 @@ class ExperimentDesignPanel(ttk.Frame):
             "step_value": self.step_var.get(),
             "images_per_value": self.images_var.get(),
             "prompt_source": self.prompt_source_var.get(),
-            "custom_prompt": self.custom_prompt_text.get("1.0", tk.END).strip() if self.prompt_source_var.get() == "custom" else "",
+            "custom_prompt": self.custom_prompt_text.get("1.0", tk.END).strip()
+            if self.prompt_source_var.get() == "custom"
+            else "",
         }
 
         # Validate
@@ -172,7 +198,9 @@ class ExperimentDesignPanel(ttk.Frame):
 
             # Build the learning plan
             if self.learning_controller.learning_state.current_experiment:
-                self.learning_controller.build_plan(self.learning_controller.learning_state.current_experiment)
+                self.learning_controller.build_plan(
+                    self.learning_controller.learning_state.current_experiment
+                )
                 self.feedback_var.set("Experiment definition and plan built successfully")
             else:
                 self.feedback_var.set("Experiment definition updated successfully")
@@ -191,7 +219,7 @@ class ExperimentDesignPanel(ttk.Frame):
         except Exception as e:
             self.feedback_var.set(f"Error running experiment: {str(e)}")
 
-    def _validate_experiment_data(self, data: dict[str, Any]) -> Optional[str]:
+    def _validate_experiment_data(self, data: dict[str, Any]) -> str | None:
         """Validate experiment data and return error message if invalid."""
         if not data["name"]:
             return "Experiment name is required"

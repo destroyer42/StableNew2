@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Any, Callable
+from typing import Any
 
+from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_upscale_stage_card_v2 import AdvancedUpscaleStageCardV2
-from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 
 
@@ -28,7 +29,12 @@ class StageCardsPanel(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self._on_change = on_change
         self.app_state = app_state
-        self._stage_order = get_pipeline_stage_order() or ["txt2img", "adetailer", "img2img", "upscale"]
+        self._stage_order = get_pipeline_stage_order() or [
+            "txt2img",
+            "adetailer",
+            "img2img",
+            "upscale",
+        ]
         self.stage_order: list[str] = []
         self._stage_builders: dict[str, Callable[[tk.Misc], ttk.Frame]] = {
             "txt2img": lambda parent: AdvancedTxt2ImgStageCardV2(
@@ -177,7 +183,11 @@ class StageCardsPanel(ttk.Frame):
         width, height = 512, 512  # defaults
 
         txt2img_card = getattr(self, "txt2img_card", None)
-        if txt2img_card is not None and hasattr(txt2img_card, "width_var") and hasattr(txt2img_card, "height_var"):
+        if (
+            txt2img_card is not None
+            and hasattr(txt2img_card, "width_var")
+            and hasattr(txt2img_card, "height_var")
+        ):
             try:
                 width = int(txt2img_card.width_var.get())
                 height = int(txt2img_card.height_var.get())
@@ -185,7 +195,11 @@ class StageCardsPanel(ttk.Frame):
                 pass
 
         img2img_card = getattr(self, "img2img_card", None)
-        if img2img_card is not None and hasattr(img2img_card, "width_var") and hasattr(img2img_card, "height_var"):
+        if (
+            img2img_card is not None
+            and hasattr(img2img_card, "width_var")
+            and hasattr(img2img_card, "height_var")
+        ):
             try:
                 width = int(img2img_card.width_var.get())
                 height = int(img2img_card.height_var.get())
@@ -289,7 +303,9 @@ class StageCardsPanel(ttk.Frame):
                 except Exception:
                     pass
 
-    def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None = None) -> None:
+    def _on_app_state_resources_changed(
+        self, resources: dict[str, list[Any]] | None = None
+    ) -> None:
         if resources is None and self.app_state is not None:
             try:
                 resources = self.app_state.resources

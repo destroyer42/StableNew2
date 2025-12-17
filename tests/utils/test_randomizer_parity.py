@@ -2,9 +2,7 @@
 
 import copy
 
-import pytest
-
-from src.utils.randomizer import sanitize_prompt, RandomizerError
+from src.utils.randomizer import sanitize_prompt
 
 
 def _simple_matrix_config():

@@ -16,7 +16,6 @@ import pytest
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 
-
 # -----------------------------------------------------------------------------
 # JobQueue Method Tests
 # -----------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
-from typing import Any, Dict, Iterable, Sequence
-
 import tkinter as tk
+from collections.abc import Iterable, Sequence
+from pathlib import Path
 from tkinter import ttk
+from typing import Any
 
 from src.utils.config import ConfigManager
 
@@ -26,7 +26,7 @@ class DropdownLoader:
 
     def __init__(self, config_manager: ConfigManager | None = None) -> None:
         self._config_manager = config_manager or ConfigManager()
-        self._last_dropdowns: Dict[str, list[Any]] | None = None
+        self._last_dropdowns: dict[str, list[Any]] | None = None
         self._pipeline_tab: Any | None = None
 
     @staticmethod
@@ -55,7 +55,9 @@ class DropdownLoader:
         app_state: Any | None,
         resources: dict[str, list[Any]] | None = None,
     ) -> dict[str, list[Any]]:
-        resources = resources if resources is not None else (getattr(app_state, "resources", None) or {})
+        resources = (
+            resources if resources is not None else (getattr(app_state, "resources", None) or {})
+        )
         defaults = self._config_manager.get_default_config()
         dropdowns: dict[str, list[Any]] = {}
         for key in self._RESOURCE_KEYS:
@@ -73,7 +75,9 @@ class DropdownLoader:
         self._last_dropdowns = dropdowns
         return dropdowns
 
-    def apply(self, resources: dict[str, list[Any]] | None = None, *, pipeline_tab: Any | None = None) -> None:
+    def apply(
+        self, resources: dict[str, list[Any]] | None = None, *, pipeline_tab: Any | None = None
+    ) -> None:
         target_tab = pipeline_tab or self._pipeline_tab
         if target_tab is None and pipeline_tab is not None:
             self._pipeline_tab = pipeline_tab
@@ -96,7 +100,9 @@ class DropdownLoader:
     def _normalize_resources(self, resources: dict[str, list[Any]] | None) -> dict[str, list[Any]]:
         if resources is None:
             return self._last_dropdowns or {key: [] for key in self._RESOURCE_KEYS}
-        normalized: dict[str, list[Any]] = {key: list(resources.get(key) or []) for key in self._RESOURCE_KEYS}
+        normalized: dict[str, list[Any]] = {
+            key: list(resources.get(key) or []) for key in self._RESOURCE_KEYS
+        }
         self._last_dropdowns = normalized
         return normalized
 
@@ -154,10 +160,14 @@ class DropdownLoader:
             )
 
     def _apply_sidebar(self, pipeline_tab: Any, resources: dict[str, list[Any]]) -> None:
-        sidebar = getattr(pipeline_tab, "sidebar", None) or getattr(pipeline_tab, "sidebar_panel_v2", None)
+        sidebar = getattr(pipeline_tab, "sidebar", None) or getattr(
+            pipeline_tab, "sidebar_panel_v2", None
+        )
         if sidebar is None:
             sidebar = getattr(pipeline_tab, "sidebar_panel", None)
-        target_panel = getattr(sidebar, "pipeline_config_panel", None) or getattr(pipeline_tab, "pipeline_config_panel", None)
+        target_panel = getattr(sidebar, "pipeline_config_panel", None) or getattr(
+            pipeline_tab, "pipeline_config_panel", None
+        )
         if target_panel and hasattr(target_panel, "apply_resources"):
             try:
                 target_panel.apply_resources(resources)
@@ -250,7 +260,9 @@ class DropdownLoader:
             except Exception:
                 pass
 
-    def _combo_options(self, values: Iterable[Any], resource_key: str | None = None) -> tuple[str, ...]:
+    def _combo_options(
+        self, values: Iterable[Any], resource_key: str | None = None
+    ) -> tuple[str, ...]:
         options: list[str] = []
         seen: set[str] = set()
         for entry in values or []:

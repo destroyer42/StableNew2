@@ -2,11 +2,10 @@
 # Legacy StableNewGUI implementation has been archived under archive/gui_v1/.
 
 import sys
-
-import src.gui.main_window_v2 as main_window_v2_module
 import tkinter as tk  # noqa: WPS300  (We only alias tkinter for legacy tests)
 from tkinter import ttk
 
+import src.gui.main_window_v2 as main_window_v2_module
 from src.gui.main_window_v2 import MainWindowV2
 from src.utils import StructuredLogger
 

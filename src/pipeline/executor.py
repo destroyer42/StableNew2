@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import base64
 import json
-import math
 import logging
+import math
 import re
 import time
 from copy import deepcopy
@@ -13,27 +13,26 @@ from datetime import datetime
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
-from ..api import SDWebUIClient
-from ..gui.state import CancelToken, CancellationError
-from ..utils import (
-    ConfigManager,
-    StructuredLogger,
-    LogContext,
-    build_sampler_scheduler_payload,
-    load_image_to_base64,
-    log_with_ctx,
-    merge_global_negative,
-    save_image_from_base64,
-)
 from src.api.client import WebUIPayloadValidationError
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 
+from ..api import SDWebUIClient
+from ..gui.state import CancellationError, CancelToken
+from ..utils import (
+    ConfigManager,
+    LogContext,
+    StructuredLogger,
+    load_image_to_base64,
+    log_with_ctx,
+    merge_global_negative,
+    save_image_from_base64,
+)
 
 if TYPE_CHECKING:
     from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
@@ -61,9 +60,7 @@ _ALLOWED_TEXT_CONTROL_CODES = {9, 10}
 
 
 def _strip_control_chars(value: str) -> str:
-    return "".join(
-        ch for ch in value if ord(ch) >= 32 or ord(ch) in _ALLOWED_TEXT_CONTROL_CODES
-    )
+    return "".join(ch for ch in value if ord(ch) >= 32 or ord(ch) in _ALLOWED_TEXT_CONTROL_CODES)
 
 
 def _raise_payload_error(stage: str, message: str) -> None:
@@ -205,10 +202,13 @@ class Pipeline:
             cleaned[key] = value
         return cleaned
 
-
-    def _merge_stage_negative(self, base_negative: str, apply_global: bool) -> tuple[str, str, bool, str]:
+    def _merge_stage_negative(
+        self, base_negative: str, apply_global: bool
+    ) -> tuple[str, str, bool, str]:
         """Compute original/final negative prompts plus metadata."""
-        global_terms = self.config_manager.get_global_negative_prompt().strip() if apply_global else ""
+        global_terms = (
+            self.config_manager.get_global_negative_prompt().strip() if apply_global else ""
+        )
         return merge_global_negative(base_negative, global_terms)
 
     def set_progress_controller(self, controller: Any | None) -> None:
@@ -374,7 +374,7 @@ class Pipeline:
     def _ensure_webui_true_ready(self) -> None:
         """
         Defensive gate: ensure WebUI is truly ready (API + boot marker) before any generation.
-        
+
         Called once per pipeline run, before the first generation call.
         Raises PipelineStageError if WebUI doesn't become truly ready within timeout.
         """
@@ -445,6 +445,20 @@ class Pipeline:
                 details={"stage": stage, "error": str(exc)},
             )
             raise PipelineStageError(validation_error) from exc
+        
+        # Log sanitized payload for debugging HTTP 500 errors
+        logger.info(
+            "Sending %s request to WebUI | payload keys: %s | prompt length: %d | negative length: %d | size: %dx%d | steps: %d | cfg: %.1f",
+            stage,
+            list(payload.keys()),
+            len(payload.get("prompt", "")),
+            len(payload.get("negative_prompt", "")),
+            payload.get("width", 0),
+            payload.get("height", 0),
+            payload.get("steps", 0),
+            payload.get("cfg_scale", 0.0),
+        )
+        
         outcome = self.client.generate_images(stage=stage, payload=payload)
         if not outcome.ok or outcome.result is None:
             error = outcome.error or GenerateError(
@@ -541,7 +555,9 @@ class Pipeline:
         """
 
         try:
-            return self._run_upscale_impl(input_image_path, config, run_dir, cancel_token=cancel_token)
+            return self._run_upscale_impl(
+                input_image_path, config, run_dir, cancel_token=cancel_token
+            )
         except CancellationError as exc:
             if isinstance(cancel_token, CancelToken):
                 self._log_pipeline_cancellation("upscale", exc)
@@ -2154,7 +2170,9 @@ class Pipeline:
             if global_applied:
                 logger.info(
                     "dY>нЛ,? Applied global NSFW prevention (txt2img stage) - Enhanced: '%s'",
-                    (enhanced_negative[:100] + "...") if len(enhanced_negative) > 100 else enhanced_negative,
+                    (enhanced_negative[:100] + "...")
+                    if len(enhanced_negative) > 100
+                    else enhanced_negative,
                 )
 
             # Check if refiner is configured for SDXL (native API support via override_settings)
@@ -2557,7 +2575,12 @@ class Pipeline:
             return None
 
     def run_upscale_stage(
-        self, input_image_path: Path, config: dict[str, Any], output_dir: Path, image_name: str, cancel_token=None
+        self,
+        input_image_path: Path,
+        config: dict[str, Any],
+        output_dir: Path,
+        image_name: str,
+        cancel_token=None,
     ) -> dict[str, Any] | None:
         """
         Run upscale stage for image enhancement.
@@ -2662,7 +2685,9 @@ class Pipeline:
                         if global_applied:
                             logger.info(
                                 "Applied global NSFW prevention (upscale img2img) - Enhanced: '%s'",
-                                (enhanced_neg[:120] + "...") if len(enhanced_neg) > 120 else enhanced_neg,
+                                (enhanced_neg[:120] + "...")
+                                if len(enhanced_neg) > 120
+                                else enhanced_neg,
                             )
                         else:
                             logger.info("Global negative skipped for upscale(img2img) stage")
@@ -2740,8 +2765,12 @@ class Pipeline:
                     "timestamp": timestamp,
                     "input_image": str(input_image_path),
                     "final_negative_prompt": payload.get("negative_prompt"),
-                    "global_negative_applied": global_applied if 'global_applied' in locals() else False,
-                    "global_negative_terms": global_terms if 'global_terms' in locals() and global_applied else "",
+                    "global_negative_applied": global_applied
+                    if "global_applied" in locals()
+                    else False,
+                    "global_negative_terms": global_terms
+                    if "global_terms" in locals() and global_applied
+                    else "",
                     "config": self._clean_metadata_payload(payload),
                     "path": str(image_path),
                 }
@@ -2800,7 +2829,9 @@ class Pipeline:
             self._ensure_not_cancelled(cancel_token, "adetailer stage start")
             output_dir.mkdir(parents=True, exist_ok=True)
             adetailer_cfg = dict(config or {})
-            adetailer_cfg.setdefault("pipeline", config.get("pipeline", {}) if isinstance(config, dict) else {})
+            adetailer_cfg.setdefault(
+                "pipeline", config.get("pipeline", {}) if isinstance(config, dict) else {}
+            )
             prompt_text = prompt or adetailer_cfg.get("adetailer_prompt", "")
             result = self.run_adetailer(
                 input_image_path, prompt_text, adetailer_cfg, output_dir, cancel_token=cancel_token

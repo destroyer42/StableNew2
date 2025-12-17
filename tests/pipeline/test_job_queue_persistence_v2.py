@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from src.controller.job_execution_controller import JobExecutionController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_model import Job, JobPriority
 from src.queue.job_history_store import JSONLJobHistoryStore
+from src.queue.job_model import Job, JobPriority
 from src.services.queue_store_v2 import (
-    QueueSnapshotV1,
     SCHEMA_VERSION,
+    QueueSnapshotV1,
+    UnsupportedQueueSchemaError,
     delete_queue_snapshot,
     load_queue_snapshot,
     save_queue_snapshot,
-    UnsupportedQueueSchemaError,
     validate_queue_item,
 )
 

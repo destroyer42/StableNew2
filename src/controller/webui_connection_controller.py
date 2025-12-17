@@ -3,15 +3,18 @@ from __future__ import annotations
 import logging
 import socket
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable
 from urllib.parse import urlparse
 
 import psutil
 import requests
 
-from src.api.healthcheck import wait_for_webui_ready, WebUIHealthCheckTimeout
-from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager, build_default_webui_process_config
+from src.api.healthcheck import WebUIHealthCheckTimeout, wait_for_webui_ready
+from src.api.webui_process_manager import (
+    WebUIProcessManager,
+    build_default_webui_process_config,
+)
 from src.config import app_config
 
 STRICT_READY_CACHE_TTL = 2.5
@@ -38,7 +41,9 @@ class WebUIConnectionController:
     ) -> None:
         self._state = WebUIConnectionState.DISCONNECTED
         self._logger = logger or logging.getLogger(__name__)
-        self._base_url_provider = base_url_provider or (lambda: app_config._env_default("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"))
+        self._base_url_provider = base_url_provider or (
+            lambda: app_config._env_default("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
+        )
         self._ready_callbacks: list[Callable[[], None]] = list(ready_callbacks or [])
         self._on_resources_updated: Callable[[dict[str, list[object]]], None] | None = None
         self._process_manager: WebUIProcessManager | None = None
@@ -63,7 +68,9 @@ class WebUIConnectionController:
             except Exception as exc:
                 self._logger.debug("WebUI ready callback failed: %s", exc)
 
-    def set_on_resources_updated(self, callback: Callable[[dict[str, list[object]]], None] | None) -> None:
+    def set_on_resources_updated(
+        self, callback: Callable[[dict[str, list[object]]], None] | None
+    ) -> None:
         """Register a single callback invoked when resources are refreshed."""
         self._on_resources_updated = callback
 
@@ -92,7 +99,9 @@ class WebUIConnectionController:
         # fast probe
         self._set_state(WebUIConnectionState.CONNECTING)
         try:
-            if wait_for_webui_ready(base_url, timeout=initial_timeout, poll_interval=retry_interval):
+            if wait_for_webui_ready(
+                base_url, timeout=initial_timeout, poll_interval=retry_interval
+            ):
                 self._set_state(WebUIConnectionState.READY)
                 self._logger.info("WebUI models/options are ready at %s", base_url)
                 self._notify_ready()
@@ -123,7 +132,9 @@ class WebUIConnectionController:
 
         for _ in range(max(retry_count, 0)):
             try:
-                if wait_for_webui_ready(base_url, timeout=retry_interval, poll_interval=retry_interval):
+                if wait_for_webui_ready(
+                    base_url, timeout=retry_interval, poll_interval=retry_interval
+                ):
                     self._set_state(WebUIConnectionState.READY)
                     self._logger.info("WebUI models/options are ready at %s", base_url)
                     self._notify_ready()
@@ -137,6 +148,7 @@ class WebUIConnectionController:
         # If still not ready, try to find WebUI on other ports
         self._logger.info("Trying to auto-detect WebUI on other ports...")
         from src.api.healthcheck import find_webui_port
+
         detected_url = find_webui_port()
         if detected_url and detected_url != base_url:
             self._logger.info(f"Found WebUI on different port: {detected_url}")
@@ -157,6 +169,7 @@ class WebUIConnectionController:
     def get_base_url(self) -> str:
         """Return the current base URL used for WebUI health checks."""
         return self._base_url_provider()
+
     def set_base_url(self, url: str) -> None:
         """Manually set the base URL for WebUI connection."""
         self._base_url_provider = lambda: url

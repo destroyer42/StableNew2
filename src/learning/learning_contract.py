@@ -35,4 +35,7 @@ def get_current_best_defaults() -> dict[str, Any]:
 def propose_new_defaults(dataset: Any) -> dict[str, Any]:
     """Return placeholder proposed defaults based on dataset."""
 
-    return {"proposed": True, "source_rows": len(dataset.get("runs", [])) if isinstance(dataset, dict) else 0}
+    return {
+        "proposed": True,
+        "source_rows": len(dataset.get("runs", [])) if isinstance(dataset, dict) else 0,
+    }

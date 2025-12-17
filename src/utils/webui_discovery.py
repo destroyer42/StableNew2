@@ -1,12 +1,8 @@
 # NOTE: WebUI readiness checks have moved to src.api.healthcheck.wait_for_webui_ready.
 # This module is kept only as a compatibility shim and is a candidate for archive/.
 
-from src.api.healthcheck import wait_for_webui_ready  # use the new unified contract
 # --- Compatibility shim class for GUI code expecting a service object ---
-
-
 # --- Compatibility shim class for GUI code expecting a service object ---
-
 import logging
 import os
 import subprocess
@@ -15,6 +11,9 @@ import time
 from pathlib import Path
 
 import requests
+
+from src.api.healthcheck import wait_for_webui_ready  # use the new unified contract
+from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 
 # --- Compatibility shim class for GUI code expecting a service object ---
 
@@ -71,16 +70,6 @@ class WebUIDiscovery:
             return True
         return launch_webui_safely(webui_path, timeout=wait_time)
 
-
-"""Utility functions for WebUI API discovery"""
-
-import logging
-import subprocess
-import time
-from pathlib import Path
-
-import requests
-from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 
 logger = logging.getLogger(__name__)
 

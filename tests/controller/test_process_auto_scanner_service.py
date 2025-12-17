@@ -11,7 +11,6 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerService,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -41,7 +40,9 @@ class TestProcessAutoScannerRepoScoping:
         fake_proc.name.return_value = "python.exe"
         fake_proc.cwd.return_value = r"C:\Users\rob\stable-diffusion-webui"  # Outside repo
         fake_proc.memory_info.return_value = Mock(rss=2000 * 1024 * 1024)  # 2000 MB
-        fake_proc.create_time.return_value = time.time() - 300.0  # 300 seconds old (exceeds threshold)
+        fake_proc.create_time.return_value = (
+            time.time() - 300.0
+        )  # 300 seconds old (exceeds threshold)
 
         # Spy on _terminate_process
         scanner._terminate_process = Mock(return_value=False)
@@ -79,7 +80,9 @@ class TestProcessAutoScannerRepoScoping:
         fake_proc.pid = 88888
         fake_proc.name.return_value = "python.exe"
         fake_proc.cwd.return_value = str(REPO_ROOT / "tmp" / "some_stray_job")  # Inside repo
-        fake_proc.memory_info.return_value = Mock(rss=2000 * 1024 * 1024)  # 2000 MB (exceeds threshold)
+        fake_proc.memory_info.return_value = Mock(
+            rss=2000 * 1024 * 1024
+        )  # 2000 MB (exceeds threshold)
         fake_proc.create_time.return_value = time.time() - 300.0  # 300 seconds old
         fake_proc.cmdline.return_value = ["python", "stray_script.py"]
 
@@ -166,13 +169,16 @@ class TestProcessAutoScannerRepoScoping:
 
             # Capture logs
             import logging
+
             with caplog.at_level(logging.WARNING):
                 summary = scanner.scan_once()
 
         # Assert: log contains all context
         assert len(summary.killed) == 1
         # Check that warning was logged with expected keys
-        log_messages = [rec.message for rec in caplog.records if "AUTO_SCANNER_TERMINATE" in rec.message]
+        log_messages = [
+            rec.message for rec in caplog.records if "AUTO_SCANNER_TERMINATE" in rec.message
+        ]
         assert len(log_messages) >= 1
         log_msg = log_messages[0]
         assert "66666" in log_msg  # pid
@@ -203,7 +209,9 @@ class TestProcessAutoScannerRepoScoping:
         fake_proc.name.return_value = "python.exe"
         fake_proc.cwd.return_value = str(REPO_ROOT / "src")
         fake_proc.memory_info.return_value = Mock(rss=100 * 1024 * 1024)  # 100 MB (below threshold)
-        fake_proc.create_time.return_value = time.time() - 30.0  # 30 seconds old (below idle threshold)
+        fake_proc.create_time.return_value = (
+            time.time() - 30.0
+        )  # 30 seconds old (below idle threshold)
         fake_proc.cmdline.return_value = ["python", "active_script.py"]
 
         scanner._terminate_process = Mock(return_value=False)

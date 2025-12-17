@@ -567,28 +567,151 @@ When true-readiness fails, the error includes:
 
 This allows DebugHub and operators to diagnose the root cause.
 
-11. Summary
+11. Memory Leak / Lifecycle Snapshot Diagnostics
+
+D-014 (Memory Leak Investigation) established that resource leaks arise from:
+
+- Orphan threads left after shutdown (queue workers, logging monitors)
+- Unclosed logging handlers accumulating across runs
+- Global process manager references preventing cleanup
+- HTTP connection pools lingering after client closure
+
+Lifecycle Snapshot Tool
+-----------------------
+
+A small diagnostic script captures resource state before/after a run cycle:
+
+```bash
+python tools/lifecycle_snapshot.py [output_dir]
+```
+
+Output:
+
+- JSON file: `lifecycle_snapshot.json`
+- Includes snapshots at:
+  - **initial**: App startup
+  - **post_operation**: After simulated job cycle
+  - **post_shutdown**: After full cleanup
+- Analysis delta showing resource growth/shrinkage
+
+Example output:
+
+```json
+{
+  "snapshots": {
+    "initial": {
+      "timestamp": "2025-12-16T19:59:25.598155",
+      "thread_count": 1,
+      "thread_names": ["MainThread"],
+      "structured_logger_registry_count": 0
+    },
+    "post_shutdown": {
+      "timestamp": "2025-12-16T19:59:26.123456",
+      "thread_count": 1,
+      "thread_names": ["MainThread"],
+      "structured_logger_registry_count": 0
+    }
+  },
+  "analysis": {
+    "thread_count_delta": 0,
+    "logger_registry_delta": 0
+  }
+}
+```
+
+What to Look For
+----------------
+
+Healthy sign (all zeros):
+
+- `thread_count_delta == 0` → No orphan threads
+- `logger_registry_delta == 0` → All loggers cleaned up
+- Thread names are stable (no new names appear)
+
+Warning signs (leak indicators):
+
+- `thread_count_delta > 0` → Threads not joined on shutdown
+- `logger_registry_delta > 0` → Loggers not closed
+- Growing thread names list after each run
+
+Usage Workflow
+--------------
+
+```bash
+# Check for leaks after a single run
+python tools/lifecycle_snapshot.py ./reports
+
+# Check JSON output
+cat ./reports/lifecycle_snapshot.json | jq '.analysis'
+
+# Expected clean output:
+# {
+#   "thread_count_delta": 0,
+#   "logger_registry_delta": 0
+# }
+```
+
+Integration with DiagnosticsServiceV2
+-------------------------------------
+
+The snapshot is powered by `DiagnosticsServiceV2.lifecycle_snapshot()`:
+
+```python
+from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
+
+service = DiagnosticsServiceV2(Path("./reports"))
+snapshot = service.lifecycle_snapshot()
+print(snapshot)
+# {
+#   "timestamp": "...",
+#   "thread_count": 1,
+#   "thread_names": ["MainThread"],
+#   "structured_logger_registry_count": 0,
+# }
+```
+
+This method is:
+
+- **Pure/read-only**: no side effects
+- **Fast**: reads thread state and logger count only
+- **Safe**: can be called anytime without risk
+
+Lifecycle Cleanup Validation
+----------------------------
+
+Use this to verify PR-040, PR-041, PR-042 lifecycle cleanup:
+
+- PR-040: StructuredLogger registry tracking + close()
+- PR-041: WebUI process manager stop() + client close()
+- PR-042: Queue worker thread stop() + join()
+
+Run the snapshot tool before/after merging to confirm zero delta.
+
+Summary
+-------
 
 DebugHub is the authoritative diagnostic tool for the entire StableNew pipeline.
 Its responsibilities:
 
-✔ Visualize prompt layering
-✔ Visualize config layering
-✔ Visualize stage chain
-✔ Visualize sweep/matrix expansion
-✔ Visualize seeds
-✔ Visualize lifecycle events
-✔ Provide exact NJR reconstruction
-✔ Report true-readiness check failures with rich context
+- Visualize prompt layering
+- Visualize config layering
+- Visualize stage chain
+- Visualize sweep/matrix expansion
+- Visualize seeds
+- Visualize lifecycle events
+- Provide exact NJR reconstruction
+- Report true-readiness check failures with rich context
+- Capture lifecycle snapshots for memory leak diagnosis
 
 Its restrictions:
 
-✘ Never mutate
-✘ Never build
-✘ Never guess values
-✘ Never fetch from GUI
-✘ Never use legacy systems
+- Never mutate
+- Never build
+- Never guess values
+- Never fetch from GUI
+- Never use legacy systems
 
 StableNew v2.6's reliability depends on DebugHub producing exact, deterministic introspection of the pipeline and providing clear diagnostic guidance for infrastructure failures.
 
 END — DebugHub_v2.6 (Canonical Edition)
+

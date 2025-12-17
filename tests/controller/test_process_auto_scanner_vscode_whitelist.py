@@ -5,14 +5,13 @@ Tests that VS Code / extension worker processes are never terminated by the scan
 
 from __future__ import annotations
 
-from unittest.mock import Mock
 from pathlib import Path
+from unittest.mock import Mock
 
 from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,7 +40,9 @@ class TestProcessAutoScannerVSCodeAllowlist:
         fake_proc.pid = 99999
         fake_proc.name.return_value = "python.exe"
         fake_proc.parent.return_value = None
-        fake_proc.cwd.return_value = str(REPO_ROOT / "tmp")  # repo-local (but still protected by allowlist)
+        fake_proc.cwd.return_value = str(
+            REPO_ROOT / "tmp"
+        )  # repo-local (but still protected by allowlist)
         fake_proc.cmdline.return_value = [
             "C:\\Users\\rob\\.vscode\\extensions\\ms-python.mypy-type-checker-2025.2.0\\bundled\\tool\\lsp_server.py"
         ]
@@ -106,7 +107,9 @@ class TestProcessAutoScannerVSCodeAllowlist:
         fake_proc.pid = 77777
         fake_proc.name.return_value = "python.exe"
         fake_proc.parent.return_value = None
-        fake_proc.cwd.return_value = "C:\\Users\\rob\\.vscode\\extensions\\ms-python.pylance-1.1.0\\pythonFiles"
+        fake_proc.cwd.return_value = (
+            "C:\\Users\\rob\\.vscode\\extensions\\ms-python.pylance-1.1.0\\pythonFiles"
+        )
         fake_proc.cmdline.return_value = ["python.exe", "some_script.py"]
         fake_proc.memory_info.return_value = Mock(rss=100 * 1024 * 1024)
         fake_proc.create_time.return_value = 1.0
@@ -238,7 +241,10 @@ class TestProcessAutoScannerVSCodeAllowlist:
         fake_proc1.name.return_value = "python.exe"
         fake_proc1.parent.return_value = None
         fake_proc1.cwd.return_value = str(REPO_ROOT)
-        fake_proc1.cmdline.return_value = ["python", "C:/.vscode/extensions/ms-python.tool/script.py"]
+        fake_proc1.cmdline.return_value = [
+            "python",
+            "C:/.vscode/extensions/ms-python.tool/script.py",
+        ]
         fake_proc1.memory_info.return_value = Mock(rss=100 * 1024 * 1024)
         fake_proc1.create_time.return_value = 1.0
 
@@ -249,7 +255,10 @@ class TestProcessAutoScannerVSCodeAllowlist:
         fake_proc2.name.return_value = "python.exe"
         fake_proc2.parent.return_value = None
         fake_proc2.cwd.return_value = str(REPO_ROOT)
-        fake_proc2.cmdline.return_value = ["python", "C:\\.vscode\\extensions\\ms-python.tool\\script.py"]
+        fake_proc2.cmdline.return_value = [
+            "python",
+            "C:\\.vscode\\extensions\\ms-python.tool\\script.py",
+        ]
         fake_proc2.memory_info.return_value = Mock(rss=100 * 1024 * 1024)
         fake_proc2.create_time.return_value = 1.0
 

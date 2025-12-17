@@ -26,9 +26,7 @@ class FakeHistoryStore(JobHistoryStore):
     ) -> None:
         pass
 
-    def list_jobs(
-        self, status: JobStatus | None = None, limit: int = 50, offset: int = 0
-    ) -> list:
+    def list_jobs(self, status: JobStatus | None = None, limit: int = 50, offset: int = 0) -> list:
         return []
 
     def get_job(self, job_id: str):

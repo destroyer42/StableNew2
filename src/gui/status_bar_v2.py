@@ -7,9 +7,18 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
-from src.gui.theme_v2 import SURFACE_FRAME_STYLE, STATUS_LABEL_STYLE, STATUS_STRONG_LABEL_STYLE, PADDING_SM
+from src.controller.webui_connection_controller import (
+    WebUIConnectionController,
+    WebUIConnectionState,
+)
+from src.gui.theme_v2 import (
+    PADDING_SM,
+    STATUS_LABEL_STYLE,
+    STATUS_STRONG_LABEL_STYLE,
+    SURFACE_FRAME_STYLE,
+)
+
 from .api_status_panel import APIStatusPanel, resolve_webui_state_display
-from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 
 
 class StatusBarV2(ttk.Frame):
@@ -166,7 +175,9 @@ class StatusBarV2(ttk.Frame):
             except Exception:
                 pass
 
-    def attach_webui_connection_controller(self, connection_controller: WebUIConnectionController | None) -> None:
+    def attach_webui_connection_controller(
+        self, connection_controller: WebUIConnectionController | None
+    ) -> None:
         if connection_controller is None:
             return
         self._webui_controller = connection_controller

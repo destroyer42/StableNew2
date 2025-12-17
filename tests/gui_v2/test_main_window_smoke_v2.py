@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import pytest
 import tkinter as tk
+
+import pytest
 
 from tests.helpers.gui_harness_v2 import GuiV2Harness
 

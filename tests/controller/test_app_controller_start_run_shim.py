@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import tkinter as tk
 from typing import Any
 
 import pytest
-import tkinter as tk
 
 from src.controller.app_controller import AppController, LifecycleState
 from src.gui.main_window_v2 import MainWindow

@@ -32,13 +32,20 @@ class LayoutManagerV2:
         if hasattr(mw, "get_tab") and mw.get_tab("prompt") is not None:
             mw.prompt_tab = mw.get_tab("prompt")
         else:
+
             def _make_prompt(parent):
                 return PromptTabFrame(parent, app_state=app_state)
-            mw.prompt_tab = mw.add_tab("prompt", "Prompt", _make_prompt) if hasattr(mw, "add_tab") else PromptTabFrame(notebook, app_state=app_state)
+
+            mw.prompt_tab = (
+                mw.add_tab("prompt", "Prompt", _make_prompt)
+                if hasattr(mw, "add_tab")
+                else PromptTabFrame(notebook, app_state=app_state)
+            )
 
         if hasattr(mw, "get_tab") and mw.get_tab("pipeline") is not None:
             mw.pipeline_tab = mw.get_tab("pipeline")
         else:
+
             def _make_pipeline(parent):
                 return PipelineTabFrame(
                     parent,
@@ -48,14 +55,36 @@ class LayoutManagerV2:
                     pipeline_controller=pipeline_controller,
                     theme=theme,
                 )
-            mw.pipeline_tab = mw.add_tab("pipeline", "Pipeline", _make_pipeline) if hasattr(mw, "add_tab") else PipelineTabFrame(notebook, prompt_workspace_state=prompt_workspace_state, app_state=app_state, app_controller=app_controller, pipeline_controller=pipeline_controller, theme=theme)
+
+            mw.pipeline_tab = (
+                mw.add_tab("pipeline", "Pipeline", _make_pipeline)
+                if hasattr(mw, "add_tab")
+                else PipelineTabFrame(
+                    notebook,
+                    prompt_workspace_state=prompt_workspace_state,
+                    app_state=app_state,
+                    app_controller=app_controller,
+                    pipeline_controller=pipeline_controller,
+                    theme=theme,
+                )
+            )
 
         if hasattr(mw, "get_tab") and mw.get_tab("learning") is not None:
             mw.learning_tab = mw.get_tab("learning")
         else:
+
             def _make_learning(parent):
-                return LearningTabFrame(parent, app_state=app_state, pipeline_controller=pipeline_controller)
-            mw.learning_tab = mw.add_tab("learning", "Learning", _make_learning) if hasattr(mw, "add_tab") else LearningTabFrame(notebook, app_state=app_state, pipeline_controller=pipeline_controller)
+                return LearningTabFrame(
+                    parent, app_state=app_state, pipeline_controller=pipeline_controller
+                )
+
+            mw.learning_tab = (
+                mw.add_tab("learning", "Learning", _make_learning)
+                if hasattr(mw, "add_tab")
+                else LearningTabFrame(
+                    notebook, app_state=app_state, pipeline_controller=pipeline_controller
+                )
+            )
 
         notebook.select(mw.pipeline_tab)
 
@@ -65,7 +94,9 @@ class LayoutManagerV2:
 
         mw.sidebar_panel_v2 = getattr(mw.pipeline_tab, "sidebar", None)
         stage_panel = getattr(mw.pipeline_tab, "stage_cards_panel", None)
-        mw.pipeline_config_panel_v2 = getattr(getattr(mw.pipeline_tab, "sidebar", None), "pipeline_config_panel", None)
+        mw.pipeline_config_panel_v2 = getattr(
+            getattr(mw.pipeline_tab, "sidebar", None), "pipeline_config_panel", None
+        )
         mw.pipeline_panel_v2 = stage_panel
         mw.randomizer_panel_v2 = getattr(mw.pipeline_tab, "randomizer_panel", None)
         mw.preview_panel_v2 = getattr(mw.pipeline_tab, "preview_panel", None)

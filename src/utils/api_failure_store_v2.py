@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import time
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Any, Deque, Iterable, List
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,7 @@ class ApiFailureStore:
 
     def __init__(self, max_entries: int = 20):
         self._max_entries = max_entries
-        self._records: Deque[ApiFailureRecord] = deque(maxlen=max_entries)
+        self._records: deque[ApiFailureRecord] = deque(maxlen=max_entries)
 
     def record(
         self,
@@ -87,7 +86,7 @@ class ApiFailureStore:
         self._records.append(record)
         logger.debug("Recorded API failure %s %s", method, endpoint)
 
-    def get_recent(self, limit: int | None = None) -> List[ApiFailureRecord]:
+    def get_recent(self, limit: int | None = None) -> list[ApiFailureRecord]:
         records = list(self._records)
         if limit is not None:
             records = records[-limit:]

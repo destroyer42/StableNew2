@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
-from src.api.webui_process_manager import WebUIProcessManager, WebUIProcessConfig
+from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager
 
 
 class TestRestartWebuiSuccess:
@@ -19,11 +19,12 @@ class TestRestartWebuiSuccess:
         manager = WebUIProcessManager(config)
 
         # Stub start/stop/is_running
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False), \
-             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class:
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+        ):
             mock_api_instance = Mock()
             mock_api_instance.wait_until_ready = Mock(return_value=True)
             mock_webui_api_class.return_value = mock_api_instance
@@ -43,11 +44,12 @@ class TestRestartWebuiSuccess:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False), \
-             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class:
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+        ):
             mock_api_instance = Mock()
             mock_api_instance.wait_until_ready = Mock(return_value=False)
             mock_webui_api_class.return_value = mock_api_instance
@@ -67,10 +69,11 @@ class TestRestartWebuiSuccess:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False):
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+        ):
             result = manager.restart_webui(wait_ready=False)
 
         assert result is True
@@ -87,15 +90,14 @@ class TestRestartWebuiExceptionHandling:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False), \
-             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class:
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+        ):
             mock_api_instance = Mock()
-            mock_api_instance.wait_until_ready = Mock(
-                side_effect=RuntimeError("API check failed")
-            )
+            mock_api_instance.wait_until_ready = Mock(side_effect=RuntimeError("API check failed"))
             mock_webui_api_class.return_value = mock_api_instance
 
             result = manager.restart_webui(wait_ready=True, max_attempts=6)
@@ -110,9 +112,10 @@ class TestRestartWebuiExceptionHandling:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start", side_effect=RuntimeError("Start failed")):
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start", side_effect=RuntimeError("Start failed")),
+        ):
             result = manager.restart_webui(wait_ready=True, max_attempts=6)
 
         assert result is False
@@ -129,11 +132,12 @@ class TestRestartWebuiParameterPassing:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False), \
-             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class:
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+        ):
             mock_api_instance = Mock()
             mock_api_instance.wait_until_ready = Mock(return_value=True)
             mock_webui_api_class.return_value = mock_api_instance
@@ -155,11 +159,12 @@ class TestRestartWebuiParameterPassing:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False), \
-             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class:
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+        ):
             mock_api_instance = Mock()
             mock_api_instance.wait_until_ready = Mock(return_value=True)
             mock_webui_api_class.return_value = mock_api_instance
@@ -185,12 +190,13 @@ class TestRestartWebuiClientManagement:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False), \
-             patch("src.api.client.SDWebUIClient") as mock_client_class, \
-             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class:
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+            patch("src.api.client.SDWebUIClient") as mock_client_class,
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+        ):
             mock_client = Mock()
             mock_client.close = Mock()
             mock_client_class.return_value = mock_client
@@ -212,12 +218,13 @@ class TestRestartWebuiClientManagement:
         )
         manager = WebUIProcessManager(config)
 
-        with patch.object(manager, "stop_webui"), \
-             patch.object(manager, "start"), \
-             patch.object(manager, "is_running", return_value=False), \
-             patch("src.api.client.SDWebUIClient") as mock_client_class, \
-             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class:
-
+        with (
+            patch.object(manager, "stop_webui"),
+            patch.object(manager, "start"),
+            patch.object(manager, "is_running", return_value=False),
+            patch("src.api.client.SDWebUIClient") as mock_client_class,
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+        ):
             mock_client = Mock()
             mock_client.close = Mock()
             mock_client_class.return_value = mock_client

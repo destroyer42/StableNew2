@@ -12,7 +12,6 @@ from typing import Any
 
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
-    STATUS_LABEL_STYLE,
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
@@ -21,10 +20,10 @@ from src.pipeline.job_models_v2 import JobHistoryItemDTO
 
 class HistoryPanelV2(ttk.Frame):
     """History panel displaying completed jobs (NJR-driven).
-    
+
     Receives completed jobs from JobService callbacks.
     All display data derived from NJR snapshots via JobHistoryItemDTO.
-    
+
     Features:
     - Display list of completed jobs
     - Show completion time and image count
@@ -51,7 +50,9 @@ class HistoryPanelV2(ttk.Frame):
         title = ttk.Label(title_frame, text="History", style=STATUS_STRONG_LABEL_STYLE)
         title.pack(side="left")
 
-        self.count_label = ttk.Label(title_frame, text="(0 completed)", style=STATUS_STRONG_LABEL_STYLE)
+        self.count_label = ttk.Label(
+            title_frame, text="(0 completed)", style=STATUS_STRONG_LABEL_STYLE
+        )
         self.count_label.pack(side="left", padx=(8, 0))
 
         # History listbox
@@ -93,41 +94,41 @@ class HistoryPanelV2(ttk.Frame):
 
     def append_history_item(self, dto: JobHistoryItemDTO) -> None:
         """Add a completed job to the history.
-        
+
         PR-D: Core method for history panel updates via JobService callbacks.
-        
+
         Args:
             dto: JobHistoryItemDTO with completed job info
         """
         self._history_items.append(dto)
-        
+
         # PR-CORE-D: Format display text with PromptPack metadata
         timestamp = dto.completed_at.strftime("%H:%M:%S") if dto.completed_at else "??:??:??"
-        
+
         # Extract metadata for richer display
         pack_name = getattr(dto, "prompt_pack_name", None)
         row_idx = getattr(dto, "prompt_pack_row_index", None)
         variant_idx = getattr(dto, "variant_index", None)
         batch_idx = getattr(dto, "batch_index", None)
-        
+
         # PR-CORE-E: Extract config variant metadata
         config_variant_label = getattr(dto, "config_variant_label", None)
         config_variant_index = getattr(dto, "config_variant_index", None)
-        
+
         # Build display text with metadata
         parts = [f"[{timestamp}]"]
-        
+
         if pack_name:
             pack_text = pack_name
             if row_idx is not None:
                 pack_text += f" R{row_idx + 1}"
-            
+
             # PR-CORE-E: Add config variant label if present
             if config_variant_label and config_variant_label != "base":
                 pack_text += f" [{config_variant_label}]"
             elif config_variant_index is not None and config_variant_index > 0:
                 pack_text += f" [cfg_v{config_variant_index}]"
-            
+
             if variant_idx is not None or batch_idx is not None:
                 v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
                 b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
@@ -135,17 +136,17 @@ class HistoryPanelV2(ttk.Frame):
             parts.append(pack_text)
         else:
             parts.append(dto.label)
-        
+
         parts.append(f"({dto.total_images} img{'s' if dto.total_images != 1 else ''})")
-        
+
         display_text = " ".join(parts)
-        
+
         self.history_listbox.insert(tk.END, display_text)
-        
+
         # Update count
         count = len(self._history_items)
         self.count_label.configure(text=f"({count} completed)")
-        
+
         # Auto-scroll to bottom
         self.history_listbox.see(tk.END)
 

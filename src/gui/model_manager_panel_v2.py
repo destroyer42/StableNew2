@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Iterable
 from tkinter import ttk
-from typing import Iterable
 
 from src.config import app_config
 from src.gui.model_list_adapter_v2 import ModelListAdapterV2
@@ -35,21 +35,23 @@ class ModelManagerPanelV2(ttk.Frame):
         self.vae_combo = self._build_combo(self.vae_var, vaes or [])
         self._build_row("VAE", self.vae_combo)
 
-        refresh_btn = ttk.Button(self, text="Refresh", command=self.refresh_lists, style="Primary.TButton")
+        refresh_btn = ttk.Button(
+            self, text="Refresh", command=self.refresh_lists, style="Primary.TButton"
+        )
         # Place the button in the next available row, right-aligned
-        row_idx = getattr(self, '_row_idx', 0)
+        row_idx = getattr(self, "_row_idx", 0)
         refresh_btn.grid(row=row_idx, column=1, sticky="e", pady=(4, 0))
-        setattr(self, '_row_idx', row_idx + 1)
+        self._row_idx = row_idx + 1
 
     def _build_row(self, label: str, widget: tk.Widget) -> None:
-        row_idx = getattr(self, '_row_idx', 0)
+        row_idx = getattr(self, "_row_idx", 0)
         label_widget = ttk.Label(self, text=label, style="TLabel")
         label_widget.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
         if isinstance(widget, ttk.Combobox):
             widget.config(width=12)
         widget.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
         self.columnconfigure(1, weight=1)
-        setattr(self, '_row_idx', row_idx + 1)
+        self._row_idx = row_idx + 1
 
     def _build_combo(self, variable: tk.StringVar, values: Iterable[str]) -> ttk.Combobox:
         combo = ttk.Combobox(
@@ -57,7 +59,7 @@ class ModelManagerPanelV2(ttk.Frame):
             textvariable=variable,
             values=tuple(values),
             state="normal",
-            style="Dark.TCombobox"
+            style="Dark.TCombobox",
         )
         return combo
 

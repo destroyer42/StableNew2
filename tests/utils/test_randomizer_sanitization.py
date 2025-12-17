@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.utils.randomizer import sanitize_prompt, RandomizerError
+from src.utils.randomizer import RandomizerError, sanitize_prompt
 
 
 def test_matrix_tokens_removed_after_expansion():

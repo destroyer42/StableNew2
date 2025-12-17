@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
 from PIL import Image
 
 from scripts.a1111_batch_run import BatchRunClient
@@ -43,7 +42,7 @@ def test_batch_run_closes_buffers_and_runs_gc(tmp_path, monkeypatch) -> None:
     posts: list[tuple[str, dict[str, Any]]] = []
 
     class DummySession:
-        def __enter__(self) -> "DummySession":
+        def __enter__(self) -> DummySession:
             return self
 
         def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:

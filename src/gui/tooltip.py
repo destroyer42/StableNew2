@@ -33,7 +33,15 @@ class Tooltip:
         tw.withdraw()
         tw.overrideredirect(True)
         tw.attributes("-topmost", True)
-        label = ttk.Label(tw, text=self.text, background="#222", foreground="#fff", relief="solid", borderwidth=1, padding=(4, 2))
+        label = ttk.Label(
+            tw,
+            text=self.text,
+            background="#222",
+            foreground="#fff",
+            relief="solid",
+            borderwidth=1,
+            padding=(4, 2),
+        )
         label.pack()
         x = self.widget.winfo_rootx() + 10
         y = self.widget.winfo_rooty() + self.widget.winfo_height() + 2

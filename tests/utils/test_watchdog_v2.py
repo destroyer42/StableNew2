@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Callable
 
 from src.queue.job_model import JobExecutionMetadata
 from src.utils.watchdog_v2 import JobWatchdog, WatchdogConfig, WatchdogViolation

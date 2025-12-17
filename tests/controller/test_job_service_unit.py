@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, List
+from collections.abc import Callable
 
 import pytest
 
@@ -45,9 +45,7 @@ class FakeQueue:
             for callback in self._status_callbacks:
                 callback(updated, status)
 
-    def register_status_callback(
-        self, callback: Callable[[Job, JobStatus], None]
-    ) -> None:
+    def register_status_callback(self, callback: Callable[[Job, JobStatus], None]) -> None:
         self._status_callbacks.append(callback)
 
     def get_job(self, job_id: str) -> Job | None:
@@ -106,7 +104,7 @@ def service() -> JobService:
 
 
 def test_enqueue_emits_queue_update(service: JobService) -> None:
-    received: List[list[str]] = []
+    received: list[list[str]] = []
 
     def on_queue_update(items: list[str]) -> None:
         received.append(items)
@@ -126,7 +124,7 @@ def test_run_now_starts_runner(service: JobService) -> None:
 
 
 def test_pause_resume_toggle_status(service: JobService) -> None:
-    statuses: List[QueueStatus] = []
+    statuses: list[QueueStatus] = []
 
     service.register_callback(JobService.EVENT_QUEUE_STATUS, statuses.append)
     service.pause()
@@ -135,7 +133,7 @@ def test_pause_resume_toggle_status(service: JobService) -> None:
 
 
 def test_cancel_current_triggers_failed_event(service: JobService) -> None:
-    failures: List[Job] = []
+    failures: list[Job] = []
 
     def on_failed(job: Job) -> None:
         failures.append(job)
@@ -169,7 +167,7 @@ def test_job_service_emits_started_and_finished(service: JobService) -> None:
 
 
 def test_job_service_emits_failed_event_on_queue_failure(service: JobService) -> None:
-    failures: List[str] = []
+    failures: list[str] = []
 
     service.register_callback(
         JobService.EVENT_JOB_FAILED,

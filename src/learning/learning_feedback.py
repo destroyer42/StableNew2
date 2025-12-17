@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, List
+from dataclasses import asdict, dataclass
+from typing import Any
 
 from .learning_plan import LearningPlan
 
@@ -26,10 +26,10 @@ class FeedbackBundle:
     """Aggregated feedback for a learning plan."""
 
     plan: LearningPlan
-    items: List[UserFeedbackItem]
+    items: list[UserFeedbackItem]
 
 
-def package_feedback_for_llm(bundle: FeedbackBundle) -> Dict[str, Any]:
+def package_feedback_for_llm(bundle: FeedbackBundle) -> dict[str, Any]:
     """Return a deterministic dict suitable for downstream LLM usage."""
 
     packaged_items = [

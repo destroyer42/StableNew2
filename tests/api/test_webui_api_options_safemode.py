@@ -29,4 +29,3 @@ def test_apply_options_skips_updates_during_safemode() -> None:
 
     assert result == OptionsApplyResult.SKIPPED_SAFEMODE
     assert client.update_calls == 0
-

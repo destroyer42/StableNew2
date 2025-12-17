@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_builder_v2 import JobBuilderV2
@@ -13,9 +14,9 @@ from src.pipeline.job_models_v2 import (
     BatchSettings,
     LoRATag,
     NormalizedJobRecord,
+    OutputSettings,
     PackUsageInfo,
     StageConfig,
-    OutputSettings,
 )
 from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
@@ -62,14 +63,20 @@ class PromptPackNormalizedJobBuilder:
 
         runtime_params = dict(entry.config_snapshot or {})
         merged_config = copy.deepcopy(
-            self._config_manager.resolve_config(pack_overrides=pack_config, runtime_params=runtime_params)
+            self._config_manager.resolve_config(
+                pack_overrides=pack_config, runtime_params=runtime_params
+            )
         )
-        stage_flags = self._normalize_stage_flags(merged_config.get("pipeline", {}), entry.stage_flags or {})
+        stage_flags = self._normalize_stage_flags(
+            merged_config.get("pipeline", {}), entry.stage_flags or {}
+        )
         randomizer_metadata = entry.randomizer_metadata or {}
 
         stage_chain = self._build_stage_chain(merged_config, stage_flags)
         prompt_resolution = self._resolve_prompt(entry, merged_config)
-        config_for_builder = self._build_config_payload(entry, merged_config, prompt_resolution, stage_chain)
+        config_for_builder = self._build_config_payload(
+            entry, merged_config, prompt_resolution, stage_chain
+        )
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
         batch_settings = self._build_batch_settings(merged_config)
@@ -96,7 +103,9 @@ class PromptPackNormalizedJobBuilder:
             record.negative_prompt = prompt_resolution.negative
             record.positive_embeddings = list(prompt_resolution.positive_embeddings)
             record.negative_embeddings = list(prompt_resolution.negative_embeddings)
-            record.lora_tags = [LoRATag(name=name, weight=weight) for name, weight in prompt_resolution.lora_tags]
+            record.lora_tags = [
+                LoRATag(name=name, weight=weight) for name, weight in prompt_resolution.lora_tags
+            ]
             record.matrix_slot_values = dict(entry.matrix_slot_values or {})
             record.stage_chain = copy.deepcopy(stage_chain)
             record.steps = int(txt2img.get("steps") or 0)
@@ -200,13 +209,19 @@ class PromptPackNormalizedJobBuilder:
             "aesthetic": merged_config.get("aesthetic"),
         }
         payload["pack_name"] = entry.pack_name or entry.pack_id
-        payload["pack_path"] = str(self._resolve_pack_text_path(entry.pack_id)) if self._resolve_pack_text_path(entry.pack_id) else None
+        payload["pack_path"] = (
+            str(self._resolve_pack_text_path(entry.pack_id))
+            if self._resolve_pack_text_path(entry.pack_id)
+            else None
+        )
         payload["prompt_pack_id"] = entry.pack_id
         payload["prompt_pack_row_index"] = entry.pack_row_index or 0
         payload["matrix_slot_values"] = dict(entry.matrix_slot_values or {})
         return payload
 
-    def _build_stage_chain(self, merged_config: dict[str, Any], stage_flags: dict[str, bool]) -> list[StageConfig]:
+    def _build_stage_chain(
+        self, merged_config: dict[str, Any], stage_flags: dict[str, bool]
+    ) -> list[StageConfig]:
         stage_sections = {
             "txt2img": merged_config.get("txt2img", {}),
             "img2img": merged_config.get("img2img", {}),
@@ -229,7 +244,9 @@ class PromptPackNormalizedJobBuilder:
                     }
                 )
             if stage in {"img2img", "adetailer"}:
-                extra["denoising_strength"] = data.get("denoising_strength") or data.get("adetailer_denoise")
+                extra["denoising_strength"] = data.get("denoising_strength") or data.get(
+                    "adetailer_denoise"
+                )
             if stage == "adetailer":
                 extra["prompt"] = data.get("adetailer_prompt")
                 extra["negative_prompt"] = data.get("adetailer_negative_prompt")
@@ -262,7 +279,9 @@ class PromptPackNormalizedJobBuilder:
         batch_runs = int(pipeline_section.get("loop_count", 1) or 1)
         return BatchSettings(batch_size=batch_size, batch_runs=batch_runs)
 
-    def _build_randomizer_plan(self, entry: PackJobEntry, merged_config: dict[str, Any]) -> RandomizationPlanV2:
+    def _build_randomizer_plan(
+        self, entry: PackJobEntry, merged_config: dict[str, Any]
+    ) -> RandomizationPlanV2:
         matrix_config = merged_config.get("randomization", {})
         metadata = entry.randomizer_metadata or {}
         enabled = bool(metadata.get("enabled") or matrix_config.get("enabled"))
@@ -312,7 +331,9 @@ class PromptPackNormalizedJobBuilder:
             _logger.error("Failed to load pack config for '%s': %s", pack_id, exc)
             return None
 
-    def _normalize_stage_flags(self, pipeline_section: dict[str, Any], overrides: dict[str, bool]) -> dict[str, bool]:
+    def _normalize_stage_flags(
+        self, pipeline_section: dict[str, Any], overrides: dict[str, bool]
+    ) -> dict[str, bool]:
         defaults = {
             "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
             "img2img": bool(pipeline_section.get("img2img_enabled", False)),

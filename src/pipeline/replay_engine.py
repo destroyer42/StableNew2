@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.pipeline.run_plan import RunPlan, build_run_plan_from_njr
+from src.pipeline.run_plan import build_run_plan_from_njr
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 

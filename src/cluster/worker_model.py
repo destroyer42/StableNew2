@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 WorkerId = str
 
@@ -27,10 +27,10 @@ class WorkerDescriptor:
     is_local: bool = False
     gpus: int = 0
     vram_gb: float = 0.0
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     status: WorkerStatus = WorkerStatus.ONLINE
-    last_heartbeat: Optional[datetime] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    last_heartbeat: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def default_local_worker() -> WorkerDescriptor:

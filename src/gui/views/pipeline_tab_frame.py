@@ -4,14 +4,15 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from src.gui.preview_panel_v2 import PreviewPanelV2
+from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
-from src.gui.sidebar_panel_v2 import SidebarPanelV2
-from src.gui.preview_panel_v2 import PreviewPanelV2
 
 
 class PipelineTabFrame(ttk.Frame):
     """Layout scaffold for the Pipeline tab."""
+
     # Panel width variables for easy adjustment
     SIDEBAR_MIN_WIDTH = 320
     CENTRAL_MIN_WIDTH = 480
@@ -67,7 +68,9 @@ class PipelineTabFrame(ttk.Frame):
         self.stage_scroll.grid(row=0, column=1, sticky="nsew", padx=4)
         self.stage_scroll.inner.update_idletasks()
 
-        self.preview_panel = PreviewPanelV2(self.body_frame, controller=self.pipeline_controller, theme=self.theme)
+        self.preview_panel = PreviewPanelV2(
+            self.body_frame, controller=self.pipeline_controller, theme=self.theme
+        )
         self.preview_panel.grid(row=0, column=2, sticky="nsew", padx=(4, 0))
 
         self.stage_cards_panel = StageCardsPanel(
@@ -111,7 +114,11 @@ class PipelineTabFrame(ttk.Frame):
                     pass
 
     def _apply_stage_visibility(self) -> None:
-        enabled = set(self.sidebar.get_enabled_stages()) if hasattr(self, "sidebar") else {"txt2img", "img2img", "upscale"}
+        enabled = (
+            set(self.sidebar.get_enabled_stages())
+            if hasattr(self, "sidebar")
+            else {"txt2img", "img2img", "upscale"}
+        )
         if "txt2img" in enabled:
             self.stage_cards_panel.txt2img_card.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
         else:

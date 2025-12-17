@@ -26,20 +26,22 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-
 # ---------------------------------------------------------------------------
 # Protocols for type safety without importing concrete types
 # ---------------------------------------------------------------------------
 
+
 @runtime_checkable
 class StageConfigLike(Protocol):
     """Protocol for stage config objects that have an enabled flag."""
+
     enabled: bool
 
 
 @runtime_checkable
 class HasRefinerConfig(Protocol):
     """Protocol for configs that have refiner sub-config."""
+
     refiner_enabled: bool
     refiner_model_name: str | None
     refiner_switch_at: float
@@ -48,6 +50,7 @@ class HasRefinerConfig(Protocol):
 @runtime_checkable
 class HasHiresConfig(Protocol):
     """Protocol for configs that have hires fix sub-config."""
+
     hires_fix: dict[str, Any]
 
 
@@ -55,13 +58,15 @@ class HasHiresConfig(Protocol):
 # Data classes for override structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class StageOverrideFlags:
     """Flags indicating which stage overrides should be applied.
-    
+
     When a flag is True, the corresponding stage card settings will override
     the PromptPack/base config. When False, base config is used unchanged.
     """
+
     txt2img_override_enabled: bool = False
     img2img_override_enabled: bool = False
     upscale_override_enabled: bool = False
@@ -73,6 +78,7 @@ class StageOverrideFlags:
 @dataclass
 class RefinerOverrides:
     """Refiner-specific override settings."""
+
     enabled: bool | None = None
     model_name: str | None = None
     switch_at: float | None = None
@@ -81,6 +87,7 @@ class RefinerOverrides:
 @dataclass
 class HiresOverrides:
     """Hires fix override settings."""
+
     enabled: bool | None = None
     upscaler_name: str | None = None
     denoise_strength: float | None = None
@@ -91,6 +98,7 @@ class HiresOverrides:
 @dataclass
 class ADetailerOverrides:
     """ADetailer override settings."""
+
     enabled: bool | None = None
     model: str | None = None
     confidence: float | None = None
@@ -101,6 +109,7 @@ class ADetailerOverrides:
 @dataclass
 class Txt2ImgOverrides:
     """Override settings for txt2img stage."""
+
     enabled: bool | None = None
     model: str | None = None
     vae: str | None = None
@@ -121,6 +130,7 @@ class Txt2ImgOverrides:
 @dataclass
 class Img2ImgOverrides:
     """Override settings for img2img stage."""
+
     enabled: bool | None = None
     model: str | None = None
     vae: str | None = None
@@ -139,6 +149,7 @@ class Img2ImgOverrides:
 @dataclass
 class UpscaleOverrides:
     """Override settings for upscale stage."""
+
     enabled: bool | None = None
     upscaler_name: str | None = None
     scale_factor: float | None = None
@@ -149,10 +160,11 @@ class UpscaleOverrides:
 @dataclass
 class StageOverridesBundle:
     """Container for all stage-specific overrides.
-    
+
     This bundle is passed to ConfigMergerV2.merge_pipeline along with
     StageOverrideFlags to indicate which overrides should be applied.
     """
+
     txt2img: Txt2ImgOverrides | None = None
     img2img: Img2ImgOverrides | None = None
     upscale: UpscaleOverrides | None = None
@@ -188,57 +200,47 @@ class ConfigMergerV2:
         override_flags: StageOverrideFlags,
     ) -> dict[str, Any]:
         """Merge base pipeline config with stage overrides.
-        
+
         Args:
             base_config: PromptPack-derived base configuration dict.
             stage_overrides: Container with per-stage override configs.
             override_flags: Flags indicating which overrides to apply.
-            
+
         Returns:
             A NEW merged config dict; base_config is not mutated.
         """
         # Start with a deep copy of base config
         merged = deepcopy(base_config)
-        
+
         if stage_overrides is None:
             return merged
-        
+
         # Merge txt2img stage
         if override_flags.txt2img_override_enabled and stage_overrides.txt2img is not None:
             merged = ConfigMergerV2._merge_txt2img_into_config(
                 merged, stage_overrides.txt2img, override_flags
             )
-        
+
         # Merge img2img stage
         if override_flags.img2img_override_enabled and stage_overrides.img2img is not None:
-            merged = ConfigMergerV2._merge_img2img_into_config(
-                merged, stage_overrides.img2img
-            )
-        
+            merged = ConfigMergerV2._merge_img2img_into_config(merged, stage_overrides.img2img)
+
         # Merge upscale stage
         if override_flags.upscale_override_enabled and stage_overrides.upscale is not None:
-            merged = ConfigMergerV2._merge_upscale_into_config(
-                merged, stage_overrides.upscale
-            )
-        
+            merged = ConfigMergerV2._merge_upscale_into_config(merged, stage_overrides.upscale)
+
         # Merge refiner settings (can be overridden independently)
         if override_flags.refiner_override_enabled and stage_overrides.refiner is not None:
-            merged = ConfigMergerV2._merge_refiner_into_config(
-                merged, stage_overrides.refiner
-            )
-        
+            merged = ConfigMergerV2._merge_refiner_into_config(merged, stage_overrides.refiner)
+
         # Merge hires settings (can be overridden independently)
         if override_flags.hires_override_enabled and stage_overrides.hires is not None:
-            merged = ConfigMergerV2._merge_hires_into_config(
-                merged, stage_overrides.hires
-            )
-        
+            merged = ConfigMergerV2._merge_hires_into_config(merged, stage_overrides.hires)
+
         # Merge adetailer settings
         if override_flags.adetailer_override_enabled and stage_overrides.adetailer is not None:
-            merged = ConfigMergerV2._merge_adetailer_into_config(
-                merged, stage_overrides.adetailer
-            )
-        
+            merged = ConfigMergerV2._merge_adetailer_into_config(merged, stage_overrides.adetailer)
+
         return merged
 
     @staticmethod
@@ -248,33 +250,31 @@ class ConfigMergerV2:
         override_enabled: bool,
     ) -> dict[str, Any]:
         """Merge a single stage config with field-level precedence rules.
-        
+
         Args:
             base_stage_config: Base stage configuration dict.
             override_stage_config: Override values (or None).
             override_enabled: Whether overrides should be applied.
-            
+
         Returns:
             A NEW merged stage config dict.
         """
         # If override disabled or no overrides, return deep copy of base
         if not override_enabled or override_stage_config is None:
             return deepcopy(base_stage_config)
-        
+
         # Start with deep copy of base
         merged = deepcopy(base_stage_config)
-        
+
         # Apply overrides: override field wins if not None
         for key, value in override_stage_config.items():
             if value is not None:
                 # Handle nested dicts (like hires_fix, refiner settings)
                 if isinstance(value, dict) and isinstance(merged.get(key), dict):
-                    merged[key] = ConfigMergerV2._merge_nested_dict(
-                        merged[key], value
-                    )
+                    merged[key] = ConfigMergerV2._merge_nested_dict(merged[key], value)
                 else:
                     merged[key] = value
-        
+
         return merged
 
     @staticmethod
@@ -284,28 +284,28 @@ class ConfigMergerV2:
         override_enabled: bool,
     ) -> dict[str, Any]:
         """Merge refiner sub-config with precedence rules.
-        
+
         If override.enabled is False, the entire refiner stage is disabled.
         If override.enabled is True, individual fields are merged.
         """
         if not override_enabled or override_refiner is None:
             return deepcopy(base_refiner)
-        
+
         merged = deepcopy(base_refiner)
-        
+
         # Check enable flag first - if override explicitly disables, disable entirely
         if override_refiner.enabled is not None:
             merged["enabled"] = override_refiner.enabled
             if not override_refiner.enabled:
                 # Disabled - return with enabled=False
                 return merged
-        
+
         # Merge individual fields (override wins if not None)
         if override_refiner.model_name is not None:
             merged["model_name"] = override_refiner.model_name
         if override_refiner.switch_at is not None:
             merged["switch_at"] = override_refiner.switch_at
-        
+
         return merged
 
     @staticmethod
@@ -315,21 +315,21 @@ class ConfigMergerV2:
         override_enabled: bool,
     ) -> dict[str, Any]:
         """Merge hires fix sub-config with precedence rules.
-        
+
         If override.enabled is False, the entire hires stage is disabled.
         If override.enabled is True, individual fields are merged.
         """
         if not override_enabled or override_hires is None:
             return deepcopy(base_hires)
-        
+
         merged = deepcopy(base_hires)
-        
+
         # Check enable flag first
         if override_hires.enabled is not None:
             merged["enabled"] = override_hires.enabled
             if not override_hires.enabled:
                 return merged
-        
+
         # Merge individual fields
         if override_hires.upscaler_name is not None:
             merged["upscaler_name"] = override_hires.upscaler_name
@@ -339,7 +339,7 @@ class ConfigMergerV2:
             merged["scale_factor"] = override_hires.scale_factor
         if override_hires.steps is not None:
             merged["steps"] = override_hires.steps
-        
+
         return merged
 
     @staticmethod
@@ -351,14 +351,14 @@ class ConfigMergerV2:
         """Merge ADetailer sub-config with precedence rules."""
         if not override_enabled or override_adetailer is None:
             return deepcopy(base_adetailer)
-        
+
         merged = deepcopy(base_adetailer)
-        
+
         if override_adetailer.enabled is not None:
             merged["enabled"] = override_adetailer.enabled
             if not override_adetailer.enabled:
                 return merged
-        
+
         if override_adetailer.model is not None:
             merged["model"] = override_adetailer.model
         if override_adetailer.confidence is not None:
@@ -367,7 +367,7 @@ class ConfigMergerV2:
             merged["mask_blur"] = override_adetailer.mask_blur
         if override_adetailer.denoise_strength is not None:
             merged["denoise_strength"] = override_adetailer.denoise_strength
-        
+
         return merged
 
     # ---------------------------------------------------------------------------
@@ -419,7 +419,7 @@ class ConfigMergerV2:
             config["negative_prompt"] = overrides.negative_prompt
         if overrides.seed is not None:
             config["seed"] = overrides.seed
-        
+
         # Handle nested refiner config within txt2img overrides
         if overrides.refiner is not None:
             base_refiner = config.get("refiner", {}) or {}
@@ -430,15 +430,13 @@ class ConfigMergerV2:
             # Also set top-level refiner_enabled flag
             if overrides.refiner.enabled is not None:
                 config["refiner_enabled"] = overrides.refiner.enabled
-        
+
         # Handle nested hires config within txt2img overrides
         if overrides.hires is not None:
             base_hires = config.get("hires_fix", {}) or {}
-            merged_hires = ConfigMergerV2.merge_hires_config(
-                base_hires, overrides.hires, True
-            )
+            merged_hires = ConfigMergerV2.merge_hires_config(base_hires, overrides.hires, True)
             config["hires_fix"] = merged_hires
-        
+
         return config
 
     @staticmethod
@@ -448,7 +446,7 @@ class ConfigMergerV2:
     ) -> dict[str, Any]:
         """Apply img2img overrides to the merged config."""
         img2img = config.get("img2img", {}) or {}
-        
+
         if overrides.enabled is not None:
             img2img["enabled"] = overrides.enabled
         if overrides.model is not None:
@@ -475,7 +473,7 @@ class ConfigMergerV2:
             img2img["negative_prompt"] = overrides.negative_prompt
         if overrides.seed is not None:
             img2img["seed"] = overrides.seed
-        
+
         config["img2img"] = img2img
         return config
 
@@ -486,7 +484,7 @@ class ConfigMergerV2:
     ) -> dict[str, Any]:
         """Apply upscale overrides to the merged config."""
         upscale = config.get("upscale", {}) or {}
-        
+
         if overrides.enabled is not None:
             upscale["enabled"] = overrides.enabled
         if overrides.upscaler_name is not None:
@@ -497,7 +495,7 @@ class ConfigMergerV2:
             upscale["denoise_strength"] = overrides.denoise_strength
         if overrides.tile_size is not None:
             upscale["tile_size"] = overrides.tile_size
-        
+
         config["upscale"] = upscale
         return config
 
@@ -510,11 +508,11 @@ class ConfigMergerV2:
         base_refiner = config.get("refiner", {}) or {}
         merged = ConfigMergerV2.merge_refiner_config(base_refiner, overrides, True)
         config["refiner"] = merged
-        
+
         # Also update top-level refiner_enabled flag
         if overrides.enabled is not None:
             config["refiner_enabled"] = overrides.enabled
-        
+
         return config
 
     @staticmethod

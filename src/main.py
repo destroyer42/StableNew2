@@ -1,6 +1,3 @@
-
-
-
 # --- Standard library imports ---
 import builtins
 import importlib
@@ -25,20 +22,22 @@ except Exception:  # pragma: no cover - Tk not ready
 # --- Local imports ---
 
 
-
-
-from .app_factory import build_v2_app
-from .api.webui_process_manager import WebUIProcessConfig
-from .api.webui_process_manager import WebUIProcessManager
-from .api.webui_process_manager import build_default_webui_process_config
-from .utils import setup_logging
-from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
 from src.gui import main_window
 from src.utils.graceful_exit import graceful_exit
 from src.utils.single_instance import SingleInstanceLock
 
+from .api.webui_process_manager import (
+    WebUIProcessConfig,
+    WebUIProcessManager,
+    build_default_webui_process_config,
+)
+from .app_factory import build_v2_app
+from .utils import setup_logging
+from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
+
 # Used by tests and entrypoint contract
 ENTRYPOINT_GUI_CLASS = main_window.StableNewGUI
+
 
 # --- Thin wrapper for healthcheck ---
 def wait_for_webui_ready(
@@ -55,11 +54,14 @@ def wait_for_webui_ready(
       global src.api.healthcheck function.
     """
     from .api.healthcheck import wait_for_webui_ready as _healthcheck_wait_for_webui_ready
+
     return _healthcheck_wait_for_webui_ready(
         base_url,
         timeout=timeout,
         poll_interval=poll_interval,
     )
+
+
 ENTRYPOINT_GUI_CLASS = main_window.StableNewGUI
 
 # --- Thin wrapper for healthcheck ---
@@ -71,7 +73,9 @@ def _acquire_single_instance_lock() -> socket.socket | None:
     """Attempt to bind a localhost TCP port as a simple process lock."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     if os.name == "nt":
-        sock.setsockopt(socket.SOL_SOCKET, getattr(socket, "SO_EXCLUSIVEADDRUSE", socket.SO_REUSEADDR), 1)
+        sock.setsockopt(
+            socket.SOL_SOCKET, getattr(socket, "SO_EXCLUSIVEADDRUSE", socket.SO_REUSEADDR), 1
+        )
     else:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
@@ -80,6 +84,7 @@ def _acquire_single_instance_lock() -> socket.socket | None:
     except OSError:
         return None
     return sock
+
 
 def bootstrap_webui(config: dict[str, Any]) -> WebUIProcessManager | None:
     """Bootstrap WebUI using the proper connection controller framework."""
@@ -105,7 +110,9 @@ def bootstrap_webui(config: dict[str, Any]) -> WebUIProcessManager | None:
     manager = WebUIProcessManager(proc_config)
     if proc_config.autostart_enabled:
         manager.start()
-    wait_for_webui_ready(config.get("webui_base_url"), timeout=proc_config.startup_timeout_seconds, poll_interval=0.5)
+    wait_for_webui_ready(
+        config.get("webui_base_url"), timeout=proc_config.startup_timeout_seconds, poll_interval=0.5
+    )
     return manager
 
 
@@ -135,11 +142,10 @@ def _load_webui_config() -> dict[str, Any]:
     return cfg
 
 
-
 def _async_bootstrap_webui(root: Any, app_state, window) -> None:
     """Asynchronously bootstrap WebUI after GUI is loaded."""
     import threading
-    
+
     def _bootstrap_worker():
         try:
             config = _load_webui_config()
@@ -150,7 +156,7 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
                 logging.info("WebUI bootstrap completed asynchronously")
         except Exception as e:
             logging.warning(f"Async WebUI bootstrap failed: {e}")
-    
+
     # Start bootstrap in background thread
     thread = threading.Thread(target=_bootstrap_worker, daemon=True)
     thread.start()
@@ -162,15 +168,17 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
     controller = getattr(window, "app_controller", None)
     if controller:
         controller.webui_process_manager = webui_manager
-    
+
     # Set up WebUI status monitoring using the proper framework
-    if hasattr(window, 'status_bar_v2') and window.status_bar_v2:
+    if hasattr(window, "status_bar_v2") and window.status_bar_v2:
         try:
-            webui_panel = getattr(window.status_bar_v2, 'webui_panel', None)
+            webui_panel = getattr(window.status_bar_v2, "webui_panel", None)
             if webui_panel:
                 # Create a proper WebUI connection controller
-                from src.controller.webui_connection_controller import WebUIConnectionController
-                from src.controller.webui_connection_controller import WebUIConnectionState
+                from src.controller.webui_connection_controller import (
+                    WebUIConnectionController,
+                    WebUIConnectionState,
+                )
 
                 connection_controller = WebUIConnectionController()
 
@@ -211,7 +219,11 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
 
                 def update_status(log_changes: bool = True) -> None:
                     """Update the status panel with current connection state."""
-                    nonlocal last_logged_state, consecutive_failures, error_logged, core_config_refreshed
+                    nonlocal \
+                        last_logged_state, \
+                        consecutive_failures, \
+                        error_logged, \
+                        core_config_refreshed
                     try:
                         state = connection_controller.get_state()
                         if state != last_logged_state and log_changes:
@@ -237,7 +249,9 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                                     last_logged_state = None  # force log on change
                             except Exception as exc:
                                 if not error_logged:
-                                    logging.warning("WebUI autostart retry failed after 3 disconnects: %s", exc)
+                                    logging.warning(
+                                        "WebUI autostart retry failed after 3 disconnects: %s", exc
+                                    )
                                     error_logged = True
                                 state = WebUIConnectionState.ERROR
                                 consecutive_failures = 0
@@ -307,12 +321,13 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                     window.after(5000, periodic_check)  # Check every 5 seconds
 
                 window.after(1000, periodic_check)  # Start checking after 1 second
-                
+
         except Exception as e:
             logging.debug(f"Failed to set up WebUI status monitoring: {e}")
 
+
 # --- File Access Logger V2.5 hooks ---
-def _install_file_access_hooks(logger: 'FileAccessLogger') -> None:
+def _install_file_access_hooks(logger: "FileAccessLogger") -> None:
     """
     Monkeypatch open / Path.open / importlib.import_module so that we can
     record which files are touched at runtime.
@@ -376,6 +391,8 @@ def _install_file_access_hooks(logger: 'FileAccessLogger') -> None:
         return module
 
     importlib.import_module = tracking_import_module  # type: ignore[assignment]
+
+
 # --- logging bypass ---
 
 
@@ -434,7 +451,9 @@ def main() -> None:
         except Exception:
             auto_exit_seconds = 0.0
 
-    root, app_state, app_controller, window = build_v2_app(root=tk.Tk(), webui_manager=webui_manager)
+    root, app_state, app_controller, window = build_v2_app(
+        root=tk.Tk(), webui_manager=webui_manager
+    )
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
             app_controller,
@@ -459,7 +478,9 @@ def main() -> None:
     except BaseException as exc:
         logger = logging.getLogger(__name__)
         logger.exception("Fatal exception in main loop", exc_info=exc)
-        graceful_exit(app_controller, root, single_instance_lock, logger, window=window, reason="fatal-error")
+        graceful_exit(
+            app_controller, root, single_instance_lock, logger, window=window, reason="fatal-error"
+        )
     finally:
         if single_instance_lock.is_acquired():
             single_instance_lock.release()

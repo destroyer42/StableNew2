@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Tuple
+from typing import Any
 
 from src.pipeline.prompt_pack_parser import PackRow
-
 
 MAX_PREVIEW_PROMPT_LENGTH = 120
 
@@ -32,8 +32,14 @@ class ResolvedPrompt:
     global_negative_applied: bool
 
     @classmethod
-    def empty(cls) -> "ResolvedPrompt":
-        return cls(positive="", negative="", positive_preview="", negative_preview="", global_negative_applied=False)
+    def empty(cls) -> ResolvedPrompt:
+        return cls(
+            positive="",
+            negative="",
+            positive_preview="",
+            negative_preview="",
+            global_negative_applied=False,
+        )
 
 
 @dataclass(frozen=True)
@@ -42,9 +48,9 @@ class PromptResolution:
     negative: str
     positive_preview: str
     negative_preview: str
-    positive_embeddings: Tuple[str, ...]
-    negative_embeddings: Tuple[str, ...]
-    lora_tags: Tuple[Tuple[str, float], ...]
+    positive_embeddings: tuple[str, ...]
+    negative_embeddings: tuple[str, ...]
+    lora_tags: tuple[tuple[str, float], ...]
     global_negative_applied: bool
 
 
@@ -68,7 +74,7 @@ class ResolvedPipelineConfig:
     cfg_scale: float
     width: int
     height: int
-    final_size: Tuple[int, int]
+    final_size: tuple[int, int]
     seed: int | None
     batch_size: int
     batch_count: int
@@ -92,7 +98,10 @@ class ResolvedPipelineConfig:
             "seed": self.seed,
             "batch_size": self.batch_size,
             "batch_count": self.batch_count,
-            "stages": {name: {"enabled": stage.enabled, **(stage.details or {})} for name, stage in self.stages.items()},
+            "stages": {
+                name: {"enabled": stage.enabled, **(stage.details or {})}
+                for name, stage in self.stages.items()
+            },
             "randomizer_summary": self.randomizer_summary,
         }
 
@@ -100,7 +109,9 @@ class ResolvedPipelineConfig:
 class UnifiedPromptResolver:
     """Deterministic merger for GUI prompt inputs, pack prompts, and negatives."""
 
-    def __init__(self, *, max_preview_length: int = MAX_PREVIEW_PROMPT_LENGTH, safety_negative: str = "") -> None:
+    def __init__(
+        self, *, max_preview_length: int = MAX_PREVIEW_PROMPT_LENGTH, safety_negative: str = ""
+    ) -> None:
         self._max_preview_length = max_preview_length
         self._safety_negative = safety_negative.strip()
 
@@ -154,9 +165,11 @@ class UnifiedPromptResolver:
     def _substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:
         if not template or not slots:
             return template
+
         def replace(match: re.Match[str]) -> str:
             name = match.group(1)
             return slots.get(name, match.group(0))
+
         return MATRIX_TOKEN_RE.sub(replace, template)
 
     def resolve_from_pack(
@@ -229,7 +242,7 @@ class UnifiedConfigResolver:
         batch_count: int | None = None,
         seed_value: int | None = None,
         randomizer_summary: dict[str, Any] | None = None,
-        final_size_override: Tuple[int, int] | None = None,
+        final_size_override: tuple[int, int] | None = None,
     ) -> ResolvedPipelineConfig:
         flags = dict(self.DEFAULT_FLAGS)
         if stage_flags:
@@ -241,8 +254,12 @@ class UnifiedConfigResolver:
         height = getattr(config_snapshot, "height", 512) if config_snapshot else 512
         final_size = final_size_override or (width, height)
         batch_size = getattr(config_snapshot, "batch_size", 1) if config_snapshot else 1
-        batch_runs = batch_count if batch_count is not None else getattr(config_snapshot, "batch_count", 1)
-        seed = seed_value if seed_value is not None else getattr(config_snapshot, "seed_value", None)
+        batch_runs = (
+            batch_count if batch_count is not None else getattr(config_snapshot, "batch_count", 1)
+        )
+        seed = (
+            seed_value if seed_value is not None else getattr(config_snapshot, "seed_value", None)
+        )
         randomizer = randomizer_summary or getattr(config_snapshot, "randomizer_config", None)
 
         stages: dict[str, StageResolution] = {}

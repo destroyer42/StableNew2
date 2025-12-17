@@ -198,18 +198,41 @@ def _configure_treeview_styles(style: ttk.Style) -> None:
         foreground=design_system.Colors.TEXT_PRIMARY,
         borderwidth=0,
     )
-    style.configure("Treeview.Heading", background=BACKGROUND_DARK, foreground=design_system.Colors.TEXT_PRIMARY)
+    style.configure(
+        "Treeview.Heading", background=BACKGROUND_DARK, foreground=design_system.Colors.TEXT_PRIMARY
+    )
 
 
 def _configure_statusbar_styles(style: ttk.Style) -> None:
-    style.configure("StatusBar.TFrame", background=BACKGROUND_ELEVATED, borderwidth=1, relief="solid", bordercolor=BORDER_SUBTLE)
-    style.configure("StatusBar.TLabel", background=BACKGROUND_ELEVATED, foreground=design_system.Colors.TEXT_MUTED)
-    style.configure("Status.TLabel", background=BACKGROUND_ELEVATED, foreground=design_system.Colors.TEXT_MUTED)
-    style.configure("StatusStrong.TLabel", background=BACKGROUND_ELEVATED, foreground=ACCENT_GOLD, font=(design_system.Typography.FAMILY, design_system.Typography.MD, "bold"))
+    style.configure(
+        "StatusBar.TFrame",
+        background=BACKGROUND_ELEVATED,
+        borderwidth=1,
+        relief="solid",
+        bordercolor=BORDER_SUBTLE,
+    )
+    style.configure(
+        "StatusBar.TLabel",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_MUTED,
+    )
+    style.configure(
+        "Status.TLabel", background=BACKGROUND_ELEVATED, foreground=design_system.Colors.TEXT_MUTED
+    )
+    style.configure(
+        "StatusStrong.TLabel",
+        background=BACKGROUND_ELEVATED,
+        foreground=ACCENT_GOLD,
+        font=(design_system.Typography.FAMILY, design_system.Typography.MD, "bold"),
+    )
 
 
 def _configure_progress_styles(style: ttk.Style) -> None:
-    style.configure("Horizontal.TProgressbar", troughcolor=BACKGROUND_ELEVATED, background=design_system.Colors.PRIMARY_ACCENT)
+    style.configure(
+        "Horizontal.TProgressbar",
+        troughcolor=BACKGROUND_ELEVATED,
+        background=design_system.Colors.PRIMARY_ACCENT,
+    )
 
 
 VALIDATION_STATE_PALETTE: dict[str, dict[str, str]] = {

@@ -8,13 +8,14 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import asdict
-from typing import Callable, Optional
+from typing import Any
 
-from src.pipeline.pipeline_runner import normalize_run_result
-from src.queue.job_model import JobStatus, Job, RetryAttempt
-from src.queue.job_queue import JobQueue
 from src.api.webui_process_manager import get_global_webui_process_manager
+from src.pipeline.pipeline_runner import normalize_run_result
+from src.queue.job_model import Job, JobStatus, RetryAttempt
+from src.queue.job_queue import JobQueue
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
 
@@ -103,9 +104,16 @@ def _is_webui_crash_exception(exc: Exception) -> tuple[bool, str | None]:
     return False, stage_name
 
 
-def _record_retry_attempt(job: Job, *, stage: str | None, attempt_index: int, reason: str, max_attempts: int) -> None:
+def _record_retry_attempt(
+    job: Job, *, stage: str | None, attempt_index: int, reason: str, max_attempts: int
+) -> None:
     job.execution_metadata.retry_attempts.append(
-        RetryAttempt(stage=stage or "pipeline", attempt_index=attempt_index, max_attempts=max_attempts, reason=reason)
+        RetryAttempt(
+            stage=stage or "pipeline",
+            attempt_index=attempt_index,
+            max_attempts=max_attempts,
+            reason=reason,
+        )
     )
 
 
@@ -135,6 +143,8 @@ def _log_retry_exhausted(job: Job, stage: str | None, reason: str) -> None:
         ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
         extra_fields={"stage": stage, "reason": reason},
     )
+
+
 class SingleNodeJobRunner:
     """Background worker that executes jobs from a JobQueue."""
 
@@ -150,7 +160,7 @@ class SingleNodeJobRunner:
         self.run_callable = run_callable
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
-        self._worker: Optional[threading.Thread] = None
+        self._worker: threading.Thread | None = None
         self._on_status_change = on_status_change
         self._current_job: Job | None = None
         self._cancel_current = threading.Event()
@@ -256,7 +266,9 @@ class SingleNodeJobRunner:
                     self._notify(job, JobStatus.CANCELLED)
                     continue
                 if self.run_callable:
-                    job_log = job.to_log_dict() if hasattr(job, "to_log_dict") else {"job_id": job.job_id}
+                    job_log = (
+                        job.to_log_dict() if hasattr(job, "to_log_dict") else {"job_id": job.job_id}
+                    )
                     log_with_ctx(
                         logger,
                         logging.INFO,
@@ -285,7 +297,9 @@ class SingleNodeJobRunner:
                     notify_status = JobStatus.COMPLETED
                 else:
                     error_msg = error_message or "Job failed without error message"
-                    self.job_queue.mark_failed(job.job_id, error_message=error_msg, result=canonical_result)
+                    self.job_queue.mark_failed(
+                        job.job_id, error_message=error_msg, result=canonical_result
+                    )
                     status_value = "failed"
                     notify_status = JobStatus.FAILED
                 log_with_ctx(
@@ -366,7 +380,9 @@ class SingleNodeJobRunner:
                 notify_status = JobStatus.COMPLETED
             else:
                 error_msg = error_message or "Job failed without error message"
-                self.job_queue.mark_failed(job.job_id, error_message=error_msg, result=canonical_result)
+                self.job_queue.mark_failed(
+                    job.job_id, error_message=error_msg, result=canonical_result
+                )
                 notify_status = JobStatus.FAILED
             log_with_ctx(
                 logger,

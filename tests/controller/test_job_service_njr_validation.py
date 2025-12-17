@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import pytest
 
 from src.controller.job_service import JobService
@@ -38,7 +36,7 @@ def _make_stage() -> StageConfig:
     )
 
 
-def _make_record(prompt_source: str, prompt_pack_id: Optional[str]) -> NormalizedJobRecord:
+def _make_record(prompt_source: str, prompt_pack_id: str | None) -> NormalizedJobRecord:
     stage = _make_stage()
     record = NormalizedJobRecord(
         job_id="record",
@@ -54,8 +52,7 @@ def _make_record(prompt_source: str, prompt_pack_id: Optional[str]) -> Normalize
     return record
 
 
-
-def _make_job(record: NormalizedJobRecord, prompt_source: str, prompt_pack_id: Optional[str]) -> Job:
+def _make_job(record: NormalizedJobRecord, prompt_source: str, prompt_pack_id: str | None) -> Job:
     job = Job(
         job_id="job",
         priority=JobPriority.NORMAL,

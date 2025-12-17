@@ -144,7 +144,9 @@ class TestQueuePanelV2ButtonStates:
         # Clear should be enabled when jobs exist
         assert "disabled" not in panel.clear_button.state()
 
-    def test_move_up_disabled_at_first_position(self, root, mock_controller, mock_app_state) -> None:
+    def test_move_up_disabled_at_first_position(
+        self, root, mock_controller, mock_app_state
+    ) -> None:
         panel = QueuePanelV2(
             root,
             controller=mock_controller,
@@ -156,7 +158,9 @@ class TestQueuePanelV2ButtonStates:
         panel._on_selection_changed()
         assert "disabled" in panel.move_up_button.state()
 
-    def test_move_down_disabled_at_last_position(self, root, mock_controller, mock_app_state) -> None:
+    def test_move_down_disabled_at_last_position(
+        self, root, mock_controller, mock_app_state
+    ) -> None:
         panel = QueuePanelV2(
             root,
             controller=mock_controller,
@@ -183,7 +187,9 @@ class TestQueuePanelV2ControllerInvocation:
         panel._on_clear()
         mock_controller.on_queue_clear_v2.assert_called_once()
 
-    def test_on_remove_calls_controller_with_job_id(self, root, mock_controller, mock_app_state) -> None:
+    def test_on_remove_calls_controller_with_job_id(
+        self, root, mock_controller, mock_app_state
+    ) -> None:
         panel = QueuePanelV2(
             root,
             controller=mock_controller,
@@ -196,7 +202,9 @@ class TestQueuePanelV2ControllerInvocation:
         panel._on_remove()
         mock_controller.on_queue_remove_job_v2.assert_called_once_with(job.job_id)
 
-    def test_on_move_up_calls_controller_with_job_id(self, root, mock_controller, mock_app_state) -> None:
+    def test_on_move_up_calls_controller_with_job_id(
+        self, root, mock_controller, mock_app_state
+    ) -> None:
         panel = QueuePanelV2(
             root,
             controller=mock_controller,
@@ -209,7 +217,9 @@ class TestQueuePanelV2ControllerInvocation:
         panel._on_move_up()
         mock_controller.on_queue_move_up_v2.assert_called_once_with(jobs[1].job_id)
 
-    def test_on_move_down_calls_controller_with_job_id(self, root, mock_controller, mock_app_state) -> None:
+    def test_on_move_down_calls_controller_with_job_id(
+        self, root, mock_controller, mock_app_state
+    ) -> None:
         panel = QueuePanelV2(
             root,
             controller=mock_controller,

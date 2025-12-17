@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any
 
 from src.app_factory import build_v2_app
 from tests.journeys.utils.tk_root_factory import create_root
@@ -26,7 +27,13 @@ def pipeline_harness(*, threaded: bool = False) -> Iterator[PipelineHarness]:
     try:
         root, app_state, controller, window = build_v2_app(root=root, threaded=threaded)
         pipeline_tab = getattr(window, "pipeline_tab", None)
-        harness = PipelineHarness(root=root, app_state=app_state, controller=controller, window=window, pipeline_tab=pipeline_tab)
+        harness = PipelineHarness(
+            root=root,
+            app_state=app_state,
+            controller=controller,
+            window=window,
+            pipeline_tab=pipeline_tab,
+        )
         yield harness
     finally:
         if window is not None and hasattr(window, "cleanup"):

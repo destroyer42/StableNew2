@@ -9,7 +9,6 @@ from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.utils.config import ConfigManager
 
-
 BASE_PACK_CONFIG: dict[str, Any] = {
     "pipeline": {
         "images_per_prompt": 1,

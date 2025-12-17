@@ -1,10 +1,9 @@
-
 import importlib
+import pathlib
 import sys
 import types
-import pathlib
-import pytest
 
+import pytest
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 SRC_ROOT = PROJECT_ROOT / "src"
@@ -40,7 +39,9 @@ def test_randomizer_import_does_not_pull_gui_modules(module_name):
         gui_loaded = [
             name
             for name in sys.modules
-            if any(name == prefix or name.startswith(prefix + ".") for prefix in GUI_MODULE_PREFIXES)
+            if any(
+                name == prefix or name.startswith(prefix + ".") for prefix in GUI_MODULE_PREFIXES
+            )
         ]
 
         if gui_loaded:

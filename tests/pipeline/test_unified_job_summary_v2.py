@@ -1,15 +1,15 @@
 from datetime import datetime
 
 from src.pipeline.job_models_v2 import (
+    JobStatusV2,
     LoRATag,
+    NormalizedJobRecord,
     PackUsageInfo,
     StageConfig,
     StagePromptInfo,
-    NormalizedJobRecord,
     UnifiedJobSummary,
-    JobStatusV2,
 )
-from src.queue.job_model import Job, JobStatus
+from src.queue.job_model import Job
 
 
 def _make_stage_info() -> StagePromptInfo:

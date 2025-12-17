@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 from src.ai.settings_generator_contract import SettingsSuggestionRequest, SuggestionIntent
 from src.learning.dataset_builder import build_learning_dataset
@@ -22,8 +22,8 @@ def summarize_capabilities_for_request() -> dict[str, object]:
 def build_request_from_learning_data(
     intent: SuggestionIntent,
     pack_id: str | None,
-    baseline_config: Dict[str, Any],
-    dataset_snapshot: Dict[str, Any] | None = None,
+    baseline_config: dict[str, Any],
+    dataset_snapshot: dict[str, Any] | None = None,
 ) -> SettingsSuggestionRequest:
     dataset = dataset_snapshot or build_learning_dataset()
     runs = dataset.get("runs", []) if isinstance(dataset, dict) else []

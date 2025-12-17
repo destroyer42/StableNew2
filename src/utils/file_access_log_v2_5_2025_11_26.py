@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
-from typing import Optional
 
 _DEFAULT_LOG_PATH = Path("logs/file_access_v2_5.log")
 
@@ -30,7 +29,7 @@ class FileAccessLogger:
         """Return the path of the log file."""
         return self._log_path
 
-    def record(self, path: Path, reason: str, stack: Optional[str] = None) -> None:
+    def record(self, path: Path, reason: str, stack: str | None = None) -> None:
         """
         Record a single file access.
 
@@ -69,7 +68,7 @@ class FileAccessLogger:
 _LOGGER = FileAccessLogger(_DEFAULT_LOG_PATH)
 
 
-def log_file_access(path: Path | str, reason: str, stack: Optional[str] = None) -> None:
+def log_file_access(path: Path | str, reason: str, stack: str | None = None) -> None:
     """Log a file access using the shared logger."""
 
     _LOGGER.record(Path(path), reason, stack)

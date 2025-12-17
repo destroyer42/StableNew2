@@ -53,7 +53,9 @@ def _make_learning_record(tmp_path):
         config={
             "prompt": "Test prompt",
             "model": "Model-X",
-            "variant_configs": [{"txt2img": {"model": "Model-X", "sampler_name": "Euler", "steps": 30}}],
+            "variant_configs": [
+                {"txt2img": {"model": "Model-X", "sampler_name": "Euler", "steps": 30}}
+            ],
         },
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",

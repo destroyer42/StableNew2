@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from src.pipeline.executor import _validate_webui_payload, WebUIPayloadValidationError
+from src.pipeline.executor import WebUIPayloadValidationError, _validate_webui_payload
 
 
 class _CustomObject:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.controller.learning_execution_controller import LearningExecutionController
+from src.controller.pipeline_controller import PipelineController
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 
 
@@ -45,8 +46,7 @@ def test_learning_execution_controller_saves_feedback(tmp_path: Path):
 
 
 def test_learning_execution_controller_toggle_syncs_pipeline_controller():
-    controller = PipelineController()
+    PipelineController()
     learning = LearningExecutionController(run_callable=None)
     learning.set_learning_enabled(True)
     assert learning.get_learning_enabled() is True
-from src.controller.pipeline_controller import PipelineController

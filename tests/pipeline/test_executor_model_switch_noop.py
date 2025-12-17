@@ -61,4 +61,3 @@ def test_model_switch_is_avoided_when_safemode_blocks_changes() -> None:
 
     assert client.set_model_calls == []
     assert pipeline._current_model == "stable_default.safetensors"
-

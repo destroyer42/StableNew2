@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from src.controller.pipeline_controller import PipelineController
-from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 pytest_plugins = ["tests.controller.conftest"]
 
@@ -19,6 +18,7 @@ def snapshot_loader():
         path = SNAPSHOT_DIR / f"{name}.json"
         with path.open("r", encoding="utf-8") as fh:
             return json.load(fh)
+
     return _load
 
 

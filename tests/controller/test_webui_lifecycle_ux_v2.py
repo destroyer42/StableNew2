@@ -34,6 +34,7 @@ class DummyWindow:
 
     def after(self, _delay, callback):
         callback()
+
     def update_pack_list(self, _names):
         return None
 

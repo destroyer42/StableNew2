@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from src.gui.state import CancellationError
 from src.pipeline.executor import Pipeline
 from src.utils.logger import StructuredLogger
-from src.gui.state import CancellationError
 
 
 class DummyClient:
@@ -50,9 +50,7 @@ def test_multi_image_run_upscale_is_serial_and_honors_cancel(tmp_path, monkeypat
     def fake_stage_event(self, stage, phase, image_index, total_images, cancelled):
         stage_events.append((stage, phase, image_index, total_images, cancelled))
 
-    monkeypatch.setattr(
-        Pipeline, "_record_stage_event", fake_stage_event, raising=False
-    )
+    monkeypatch.setattr(Pipeline, "_record_stage_event", fake_stage_event, raising=False)
 
     def fake_run_txt2img(self, prompt, cfg, run_dir, batch_size, cancel_token):
         return [
@@ -97,9 +95,7 @@ def test_multi_image_run_upscale_is_serial_and_honors_cancel(tmp_path, monkeypat
 
     assert ("upscale", "enter", 1, len(image_paths), False) in stage_events
     assert ("upscale", "exit", 1, len(image_paths), False) in stage_events
-    cancel_events = [
-        evt for evt in stage_events if evt[:2] == ("upscale", "cancelled")
-    ]
+    cancel_events = [evt for evt in stage_events if evt[:2] == ("upscale", "cancelled")]
     assert cancel_events, "expected a cancelled event for second image"
     assert cancel_events[-1][2] == 2
 
@@ -112,9 +108,7 @@ def test_upscale_stage_logs_stage_and_image_progress(tmp_path, monkeypatch):
     def fake_stage_event(self, stage, phase, image_index, total_images, cancelled):
         stage_events.append((stage, phase, image_index, total_images, cancelled))
 
-    monkeypatch.setattr(
-        Pipeline, "_record_stage_event", fake_stage_event, raising=False
-    )
+    monkeypatch.setattr(Pipeline, "_record_stage_event", fake_stage_event, raising=False)
 
     def fake_run_txt2img(self, prompt, cfg, run_dir, batch_size, cancel_token):
         return [

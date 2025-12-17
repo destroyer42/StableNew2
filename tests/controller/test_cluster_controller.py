@@ -1,5 +1,5 @@
-from src.controller.cluster_controller import ClusterController
 from src.cluster.worker_model import WorkerStatus
+from src.controller.cluster_controller import ClusterController
 
 
 def test_cluster_controller_initializes_registry():

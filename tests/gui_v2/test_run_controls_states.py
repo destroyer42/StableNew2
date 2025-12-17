@@ -15,7 +15,6 @@ import pytest
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 
-
 # ---------------------------------------------------------------------------
 # AppStateV2 Run State Field Tests
 # ---------------------------------------------------------------------------
@@ -162,7 +161,9 @@ class MockAppState:
 
 
 @pytest.mark.gui
-@pytest.mark.skip(reason="PR-GUI-F1: PipelineRunControlsV2 buttons removed, controls moved to QueuePanelV2")
+@pytest.mark.skip(
+    reason="PR-GUI-F1: PipelineRunControlsV2 buttons removed, controls moved to QueuePanelV2"
+)
 class TestPipelineRunControlsRefreshStates:
     """Tests for refresh_states() button enable/disable logic (PR-203 simplified version)."""
 
@@ -261,4 +262,3 @@ class TestPipelineRunControlsRefreshStates:
 
         status_text = controls.status_label.cget("text")
         assert "Running" in status_text
-

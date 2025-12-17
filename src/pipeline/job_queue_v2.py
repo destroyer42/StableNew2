@@ -168,7 +168,9 @@ class JobQueueV2:
         self._notify_listeners()
         return job
 
-    def complete_running_job(self, success: bool = True, error_message: str | None = None) -> QueueJobV2 | None:
+    def complete_running_job(
+        self, success: bool = True, error_message: str | None = None
+    ) -> QueueJobV2 | None:
         """Mark the running job as completed or failed."""
         if self._running_job is None:
             return None

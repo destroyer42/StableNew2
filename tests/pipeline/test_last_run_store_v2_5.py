@@ -1,10 +1,12 @@
+import json
+
 from src.gui.app_state_v2 import CurrentConfig
 from src.pipeline.last_run_store_v2_5 import (
     LastRunConfigV2_5,
     LastRunStoreV2_5,
     current_config_to_last_run,
 )
-import json
+
 
 def test_save_and_load_roundtrip(tmp_path):
     store_path = tmp_path / "last_run.json"
@@ -28,11 +30,13 @@ def test_save_and_load_roundtrip(tmp_path):
     assert loaded.width == 640
     assert loaded.prompt == "prompt text"
 
+
 def test_missing_file(tmp_path):
     store_path = tmp_path / "missing.json"
     store = LastRunStoreV2_5(path=store_path)
     loaded = store.load()
     assert loaded is None
+
 
 def test_corrupted_file(tmp_path):
     store_path = tmp_path / "corrupt.json"
@@ -40,6 +44,7 @@ def test_corrupted_file(tmp_path):
     store = LastRunStoreV2_5(path=store_path)
     loaded = store.load()
     assert loaded is None
+
 
 def test_extra_fields_ignored(tmp_path):
     store_path = tmp_path / "extra.json"
@@ -52,7 +57,7 @@ def test_extra_fields_ignored(tmp_path):
         "cfg_scale": 2.0,
         "negative_prompt": "neg",
         "prompt": "p",
-        "extra_field": "should be ignored"
+        "extra_field": "should be ignored",
     }
     store_path.write_text(json.dumps(data))
     store = LastRunStoreV2_5(path=store_path)

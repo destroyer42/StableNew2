@@ -6,13 +6,13 @@ All display data comes from NJR snapshots, never from pipeline_config.
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
 from types import SimpleNamespace
-from typing import Any, Callable
-import threading
+from typing import Any
 
-from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.gui.design_system_v2 import DANGER_BUTTON
 from src.gui.theme_v2 import (
     BACKGROUND_ELEVATED,
@@ -24,6 +24,7 @@ from src.gui.theme_v2 import (
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
+from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 
 
 class PreviewPanelV2(ttk.Frame):
@@ -61,7 +62,9 @@ class PreviewPanelV2(ttk.Frame):
         self.body = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         self.body.pack(fill=tk.BOTH, expand=True)
 
-        self.job_count_label = ttk.Label(self.body, text="No job selected", style=STATUS_LABEL_STYLE)
+        self.job_count_label = ttk.Label(
+            self.body, text="No job selected", style=STATUS_LABEL_STYLE
+        )
         self.job_count_label.pack(anchor=tk.W, pady=(0, 4))
 
         self.prompt_label = ttk.Label(self.body, text="Prompt (+)", style=STATUS_LABEL_STYLE)
@@ -77,7 +80,9 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.prompt_text.pack(fill=tk.X, pady=(0, 4))
 
-        self.negative_prompt_label = ttk.Label(self.body, text="Prompt (–)", style=STATUS_LABEL_STYLE)
+        self.negative_prompt_label = ttk.Label(
+            self.body, text="Prompt (–)", style=STATUS_LABEL_STYLE
+        )
         self.negative_prompt_label.pack(anchor=tk.W)
         self.negative_prompt_text = tk.Text(
             self.body,
@@ -116,7 +121,9 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.stage_flags_label.pack(anchor=tk.W, pady=(0, 4))
 
-        self.randomizer_label = ttk.Label(self.body, text="Randomizer: OFF", style=STATUS_LABEL_STYLE)
+        self.randomizer_label = ttk.Label(
+            self.body, text="Randomizer: OFF", style=STATUS_LABEL_STYLE
+        )
         self.randomizer_label.pack(anchor=tk.W, pady=(0, 4))
 
         self.learning_metadata_label = ttk.Label(
@@ -231,7 +238,7 @@ class PreviewPanelV2(ttk.Frame):
             stages_display = " + ".join(stage_names) if stage_names else "txt2img"
             summaries.append(
                 SimpleNamespace(
-                    job_id=f"draft-{idx+1}",
+                    job_id=f"draft-{idx + 1}",
                     label=config.get("model") or getattr(pack, "pack_name", "-"),
                     positive_preview=getattr(pack, "prompt_text", "") or "",
                     negative_preview=getattr(pack, "negative_prompt_text", "") or "",
@@ -282,15 +289,15 @@ class PreviewPanelV2(ttk.Frame):
 
     def _summary_from_pack_entry(self, entry: Any) -> Any:
         """PR-CORE-D/E: Convert PackJobEntry to display summary with all metadata.
-        
+
         Returns SimpleNamespace with all fields needed for _render_summary.
         """
         config = entry.config_snapshot or {}
         prompt_text = entry.prompt_text or str(config.get("prompt") or "")
         negative = entry.negative_prompt_text or str(config.get("negative_prompt", "") or "")
-        
+
         print(f"[PreviewPanel] _summary_from_pack_entry: prompt_text length={len(prompt_text)}")
-        
+
         stage_flags = entry.stage_flags or {}
         stages = []
         stage_labels = {
@@ -308,16 +315,24 @@ class PreviewPanelV2(ttk.Frame):
 
         # Extract settings from txt2img config if available
         txt2img_config = config.get("txt2img", {})
-        
-        model = txt2img_config.get("model") or config.get("model") or config.get("model_name") or entry.pack_name or "unknown"
+
+        model = (
+            txt2img_config.get("model")
+            or config.get("model")
+            or config.get("model_name")
+            or entry.pack_name
+            or "unknown"
+        )
         sampler = txt2img_config.get("sampler_name") or config.get("sampler") or "DPM++ 2M"
         steps = txt2img_config.get("steps") or config.get("steps") or 20
         cfg_scale = txt2img_config.get("cfg_scale") or config.get("cfg_scale") or 7.0
         seed = txt2img_config.get("seed") or config.get("seed") or -1
-        
+
         label = f"{model}"
-        
-        print(f"[PreviewPanel] Created summary: label={label}, sampler={sampler}, steps={steps}, cfg={cfg_scale}, stages={stages_display}")
+
+        print(
+            f"[PreviewPanel] Created summary: label={label}, sampler={sampler}, steps={steps}, cfg={cfg_scale}, stages={stages_display}"
+        )
 
         # Return SimpleNamespace so _render_summary can access all fields
         return SimpleNamespace(
@@ -356,63 +371,64 @@ class PreviewPanelV2(ttk.Frame):
     @staticmethod
     def _format_stage_chain(summary: UnifiedJobSummary | None) -> str:
         """PR-CORE-D: Format stage chain as human-friendly labels.
-        
+
         Args:
             summary: UnifiedJobSummary with stage_chain_labels
-            
+
         Returns:
             Formatted string like "txt2img → img2img → adetailer → upscale"
         """
         if not summary or not hasattr(summary, "stage_chain_labels"):
             return "-"
-        
+
         labels = getattr(summary, "stage_chain_labels", None)
         if not labels:
             return "-"
-        
+
         return " → ".join(labels)
-    
+
     @staticmethod
     def _format_matrix_slots(summary: UnifiedJobSummary | None) -> str:
         """PR-CORE-D: Format matrix slot values for display.
-        
+
         Args:
             summary: UnifiedJobSummary with matrix_slot_values
-            
+
         Returns:
             Formatted string like "env: volcanic lair, lighting: hellish"
         """
         if not summary or not hasattr(summary, "matrix_slot_values"):
             return ""
-        
+
         slots = getattr(summary, "matrix_slot_values", None)
         if not slots or not isinstance(slots, dict):
             return ""
-        
+
         # Format as "key: value" pairs
         pairs = [f"{key}: {value}" for key, value in slots.items()]
         return ", ".join(pairs) if pairs else ""
-    
+
     @staticmethod
     def _format_pack_provenance(summary: UnifiedJobSummary | None) -> str:
         """PR-CORE-D: Format PromptPack provenance for display.
-        
+
         Args:
             summary: UnifiedJobSummary with prompt_pack_name and row_index
-            
+
         Returns:
             Formatted string like "Pack: Angelic Warriors (Row 3)"
         """
         if not summary:
             return "Pack: -"
-        
+
         pack_name = getattr(summary, "prompt_pack_name", None) or "Unknown"
         row_index = getattr(summary, "prompt_pack_row_index", None)
-        
+
         if row_index is not None:
             return f"Pack: {pack_name} (Row {row_index + 1})"
         else:
             return f"Pack: {pack_name}"
+
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update action button availability based on app_state."""
         if app_state is None:
@@ -438,9 +454,9 @@ class PreviewPanelV2(ttk.Frame):
 
     def _render_summary(self, summary: Any | None, total: int) -> None:
         print(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
-        
+
         if summary is None:
-            print(f"[PreviewPanel] Rendering empty state")
+            print("[PreviewPanel] Rendering empty state")
             self.job_count_label.config(text="No job selected")
             self._set_text_widget(self.prompt_text, "")
             self._set_text_widget(self.negative_prompt_text, "")
@@ -459,7 +475,7 @@ class PreviewPanelV2(ttk.Frame):
 
         summary_obj = self._normalize_summary(summary)
         if summary_obj is None:
-            print(f"[PreviewPanel] _normalize_summary returned None")
+            print("[PreviewPanel] _normalize_summary returned None")
             self.job_count_label.config(text="No job selected")
             return
 
@@ -472,7 +488,7 @@ class PreviewPanelV2(ttk.Frame):
         print(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
         self._set_text_widget(self.prompt_text, positive)
         self._set_text_widget(self.negative_prompt_text, negative)
-        
+
         # Force Tkinter to update the display immediately
         self.update_idletasks()
 
@@ -495,8 +511,10 @@ class PreviewPanelV2(ttk.Frame):
 
         stages_text = getattr(summary_obj, "stages_display", "-")
         self.stage_summary_label.config(text=f"Stages: {stages_text}")
-        self.stage_flags_label.config(text=self._format_flags(refiner=False, hires=False, upscale=False))
-        
+        self.stage_flags_label.config(
+            text=self._format_flags(refiner=False, hires=False, upscale=False)
+        )
+
         # PR-CORE-D: Display randomization/matrix metadata if available
         randomizer_text = "Randomizer: OFF"
         if isinstance(summary, UnifiedJobSummary):
@@ -509,7 +527,7 @@ class PreviewPanelV2(ttk.Frame):
                 variant_text = f"v{variant_idx}" if variant_idx is not None else "-"
                 batch_text = f"b{batch_idx}" if batch_idx is not None else "-"
                 randomizer_text += f" [{variant_text}/{batch_text}]"
-        
+
         self.randomizer_label.config(text=randomizer_text)
         self.learning_metadata_label.config(text="Learning metadata: N/A")
 
@@ -573,7 +591,7 @@ class PreviewPanelV2(ttk.Frame):
     def _update_action_states(
         self,
         job_draft: Any | None,
-        preview_jobs: list["NormalizedJobRecord"] | None = None,
+        preview_jobs: list[NormalizedJobRecord] | None = None,
     ) -> None:
         """Enable/disable action buttons based on draft content."""
         has_draft = False
@@ -586,7 +604,9 @@ class PreviewPanelV2(ttk.Frame):
             has_parts = bool(getattr(part_summary, "part_count", 0))
             has_draft = bool(packs) or has_parts
         has_preview = bool(preview_jobs) and has_draft
-        print(f"[PreviewPanel] _update_action_states: packs={len(packs)}, has_parts={has_parts}, has_draft={has_draft}")
+        print(
+            f"[PreviewPanel] _update_action_states: packs={len(packs)}, has_parts={has_parts}, has_draft={has_draft}"
+        )
         can_queue = has_draft and has_preview
         state = ["!disabled"] if can_queue else ["disabled"]
         print(f"[PreviewPanel] Setting button state to: {state}")

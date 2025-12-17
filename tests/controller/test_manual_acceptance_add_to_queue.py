@@ -1,4 +1,5 @@
 import time
+
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.queue.job_queue import JobQueue
@@ -22,7 +23,13 @@ def test_add_to_queue_does_not_block_and_enqueues():
 
     job_service = JobService(JobQueue())
     pipeline_controller = DummyPipelineController()
-    controller = AppController(main_window=None, job_service=job_service, pipeline_controller=pipeline_controller, ui_scheduler=ui_scheduler, threaded=False)
+    controller = AppController(
+        main_window=None,
+        job_service=job_service,
+        pipeline_controller=pipeline_controller,
+        ui_scheduler=ui_scheduler,
+        threaded=False,
+    )
 
     start = time.time()
     controller.on_add_job_to_queue_v2()

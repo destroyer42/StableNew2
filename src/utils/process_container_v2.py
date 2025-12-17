@@ -6,9 +6,13 @@ import logging
 import platform
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.utils import LogContext, log_with_ctx
+
+if TYPE_CHECKING:
+    from src.utils.cgroup_v2 import LinuxCGroupV2
+    from src.utils.win_jobobject import WindowsJobObject
 
 logger = logging.getLogger(__name__)
 PROCESS_CONTAINER_LOG_PREFIX = "[CONTAINER]"
@@ -33,11 +37,11 @@ class ProcessContainer(ABC):
 
     def kill_all(self) -> None:
         """Kill all processes managed by this container."""
-        pass
+        raise NotImplementedError
 
     def teardown(self) -> None:
         """Release container resources."""
-        pass
+        raise NotImplementedError
 
     def inspect(self) -> dict[str, Any]:
         """Return debugging info."""
@@ -66,6 +70,7 @@ def build_process_container(job_id: str, config: ProcessContainerConfig) -> Proc
     if system.startswith("windows"):
         try:
             from .win_jobobject import WindowsJobObject
+
             container = WindowsJobObject(
                 name=f"StableNewJob-{job_id}",
                 memory_limit_mb=config.memory_limit_mb,
@@ -108,7 +113,7 @@ class WindowsContainerAdapter(ProcessContainer):
         self,
         job_id: str,
         config: ProcessContainerConfig,
-        inner: "WindowsJobObject",
+        inner: WindowsJobObject,
     ) -> None:
         super().__init__(job_id, config)
         self._inner = inner
@@ -133,7 +138,7 @@ class LinuxContainerAdapter(ProcessContainer):
         self,
         job_id: str,
         config: ProcessContainerConfig,
-        inner: "LinuxCGroupV2",
+        inner: LinuxCGroupV2,
     ) -> None:
         super().__init__(job_id, config)
         self._inner = inner

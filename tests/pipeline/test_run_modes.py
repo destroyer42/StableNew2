@@ -10,11 +10,11 @@ from unittest.mock import patch
 
 import pytest
 
+from src.controller.job_service import JobService
+from src.gui.app_state_v2 import AppStateV2
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
-from src.controller.job_service import JobService
-from src.gui.app_state_v2 import AppStateV2
 
 
 class TestJobMetadataFields:
@@ -155,7 +155,7 @@ class TestPipelineControllerBuildJob:
         from src.controller.pipeline_controller import PipelineController
 
         controller = PipelineController(app_state=AppStateV2())
-        
+
         job = controller._build_job(
             config=None,
             run_mode="direct",
@@ -163,7 +163,7 @@ class TestPipelineControllerBuildJob:
             prompt_source="pack",
             prompt_pack_id="test-pack-1",
         )
-        
+
         assert job.run_mode == "direct"
         assert job.source == "gui"
         assert job.prompt_source == "pack"
@@ -173,8 +173,8 @@ class TestPipelineControllerBuildJob:
 
     def test_build_job_creates_config_snapshot(self):
         """_build_job should create config_snapshot from PipelineConfig."""
-        from src.controller.pipeline_controller import PipelineController
         from src.controller.archive.pipeline_config_types import PipelineConfig
+        from src.controller.pipeline_controller import PipelineController
 
         controller = PipelineController(app_state=AppStateV2())
 
@@ -189,7 +189,7 @@ class TestPipelineControllerBuildJob:
         )
 
         job = controller._build_job(config=config, source="test")
-        
+
         assert job.config_snapshot is not None
         assert job.config_snapshot.get("prompt") == "a beautiful sunset"
         assert job.config_snapshot.get("model") == "sd_xl_base_1.0"
@@ -200,9 +200,9 @@ class TestPipelineControllerBuildJob:
         from src.controller.pipeline_controller import PipelineController
 
         controller = PipelineController(app_state=AppStateV2())
-        
+
         job = controller._build_job(config=None)
-        
+
         assert job.run_mode == "queue"
         assert job.source == "gui"
         assert job.prompt_source == "manual"

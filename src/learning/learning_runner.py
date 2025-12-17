@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any
 
 from .learning_plan import LearningPlan, LearningRunResult, LearningRunStep
 
@@ -18,13 +18,13 @@ class LearningRunner:
         self._base_config = deepcopy(base_config) if base_config else {}
         self._last_plan: LearningPlan | None = None
 
-    def prepare_learning_batches(self, plan: LearningPlan) -> List[LearningRunStep]:
+    def prepare_learning_batches(self, plan: LearningPlan) -> list[LearningRunStep]:
         """Return placeholder LearningRunStep entries for sweep values."""
 
         self._last_plan = plan
-        steps: List[LearningRunStep] = []
+        steps: list[LearningRunStep] = []
         for idx, value in enumerate(plan.sweep_values):
-            config_snapshot: Dict[str, Any] = deepcopy(self._base_config)
+            config_snapshot: dict[str, Any] = deepcopy(self._base_config)
             stage_cfg = config_snapshot.setdefault(plan.stage, {})
             if isinstance(stage_cfg, dict):
                 stage_cfg[plan.target_variable] = value
@@ -42,7 +42,7 @@ class LearningRunner:
             )
         return steps
 
-    def run_learning_batches(self, steps: List[LearningRunStep]) -> LearningRunResult:
+    def run_learning_batches(self, steps: list[LearningRunStep]) -> LearningRunResult:
         """Return deterministic placeholder artifacts for provided steps."""
 
         plan = self._last_plan or LearningPlan(
@@ -75,7 +75,7 @@ class LearningRunner:
             summary=summary,
         )
 
-    def summarize_results(self, result: LearningRunResult) -> Dict[str, Any]:
+    def summarize_results(self, result: LearningRunResult) -> dict[str, Any]:
         """Produce a deterministic summary dict."""
 
         values = [step.value for step in result.steps]

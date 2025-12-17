@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
 from src.gui.app_state_v2 import AppStateV2
 from src.pipeline.job_models_v2 import JobLifecycleLogEvent
@@ -57,7 +56,9 @@ class JobLifecycleLogger:
             message="Runner picked up job.",
         )
 
-    def log_job_finished(self, *, source: str, job_id: str | None, status: str, message: str) -> None:
+    def log_job_finished(
+        self, *, source: str, job_id: str | None, status: str, message: str
+    ) -> None:
         self._log(
             source=source,
             event_type=f"job_{status}",

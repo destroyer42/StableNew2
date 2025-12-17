@@ -25,13 +25,17 @@ from tools.test_helpers.process_inspection import (
 
 @pytest.mark.journey
 @pytest.mark.slow
-@pytest.mark.skipif(sys.platform != "win32" and sys.platform != "linux", reason="Platform-specific stability test")
+@pytest.mark.skipif(
+    sys.platform != "win32" and sys.platform != "linux", reason="Platform-specific stability test"
+)
 @pytest.mark.journey
 @pytest.mark.slow
 def test_shutdown_relaunch_leaves_no_processes() -> None:
     attempts = int(os.environ.get("STABLENEW_SHUTDOWN_LEAK_ATTEMPTS", "3"))
     auto_exit_seconds = float(
-        os.environ.get("STABLENEW_AUTO_EXIT_SECONDS", os.environ.get("STABLENEW_SHUTDOWN_LEAK_UPTIME", "3"))
+        os.environ.get(
+            "STABLENEW_AUTO_EXIT_SECONDS", os.environ.get("STABLENEW_SHUTDOWN_LEAK_UPTIME", "3")
+        )
     )
     timeout_buffer = float(os.environ.get("STABLENEW_SHUTDOWN_LEAK_TIMEOUT_BUFFER", "5"))
 

@@ -5,13 +5,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from src.learning.learning_plan import LearningPlan, LearningRunStep
 from src.learning.learning_runner import LearningRunner
 from src.pipeline.pipeline_runner import PipelineRunResult
-
 
 PipelineRunCallable = Callable[[dict[str, Any], LearningRunStep], PipelineRunResult]
 
@@ -38,7 +38,7 @@ class LearningExecutionResult:
     """Aggregate learning execution result."""
 
     plan: LearningPlan
-    step_results: List[LearningStepExecutionResult]
+    step_results: list[LearningStepExecutionResult]
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -58,10 +58,12 @@ class LearningExecutionRunner:
     ) -> LearningExecutionResult:
         runner = LearningRunner(context.base_config)
         steps = runner.prepare_learning_batches(context.plan)
-        step_results: List[LearningStepExecutionResult] = []
+        step_results: list[LearningStepExecutionResult] = []
         for step in steps:
             pipeline_result = self._run_callable(step.config_snapshot, step)
-            step_results.append(LearningStepExecutionResult(step=step, pipeline_result=pipeline_result))
+            step_results.append(
+                LearningStepExecutionResult(step=step, pipeline_result=pipeline_result)
+            )
         return LearningExecutionResult(
             plan=context.plan,
             step_results=step_results,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Any
+from typing import Any
 
 from src.controller.pipeline_controller import PipelineController
 from src.queue.job_model import JobStatus
@@ -8,7 +8,7 @@ from src.queue.job_model import JobStatus
 
 def test_controller_job_lifecycle_mapping():
     controller = PipelineController()
-    transitions: List[Any] = []
+    transitions: list[Any] = []
 
     def capture_state(state: Any) -> bool:
         transitions.append(state)

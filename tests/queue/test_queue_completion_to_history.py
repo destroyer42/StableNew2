@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any
 
 from src.api.client import WebUIUnavailableError
+from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
-from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.single_node_runner import SingleNodeJobRunner
 
 
@@ -68,4 +68,3 @@ def test_webui_down_marks_job_failed(tmp_path: Path) -> None:
     assert entry.status == JobStatus.FAILED
     assert entry.error_message is not None
     assert "connection refused" in entry.error_message
-

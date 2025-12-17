@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Iterable
 from tkinter import ttk
-from typing import Any, Iterable
+from typing import Any
 
 from src.gui_v2.adapters.learning_adapter_v2 import LearningRecordSummary
+from src.learning.learning_record import LearningRecord
 
 
 class LearningReviewDialogV2(tk.Toplevel):
@@ -37,9 +39,11 @@ class LearningReviewDialogV2(tk.Toplevel):
 
         records_list = list(records)
         if not records_list:
-            ttk.Label(container, text="No learning data yet. Enable learning and run a few pipelines.", style="Dark.TLabel").pack(
-                anchor=tk.W, pady=(0, 6)
-            )
+            ttk.Label(
+                container,
+                text="No learning data yet. Enable learning and run a few pipelines.",
+                style="Dark.TLabel",
+            ).pack(anchor=tk.W, pady=(0, 6))
             ttk.Button(container, text="Close", command=self.destroy).pack()
             return
 
@@ -60,13 +64,19 @@ class LearningReviewDialogV2(tk.Toplevel):
                     rating_value = meta.get("rating")
                 if not tags_value:
                     tags_val = meta.get("tags", "")
-                    tags_value = tags_val if isinstance(tags_val, list) else str(tags_val).split(",")
+                    tags_value = (
+                        tags_val if isinstance(tags_val, list) else str(tags_val).split(",")
+                    )
             rating_var = tk.StringVar(value=str(rating_value or ""))
-            tags_str = ",".join([t for t in tags_value]) if isinstance(tags_value, list) else str(tags_value or "")
+            tags_str = (
+                ",".join(tags_value) if isinstance(tags_value, list) else str(tags_value or "")
+            )
             tags_var = tk.StringVar(value=tags_str)
             summary = getattr(record, "prompt_summary", "") or getattr(record, "run_id", "")
             model = getattr(record, "pipeline_summary", "") or getattr(record, "primary_model", "")
-            ttk.Label(table, text=record.timestamp).grid(row=idx, column=0, sticky=tk.W, padx=4, pady=2)
+            ttk.Label(table, text=record.timestamp).grid(
+                row=idx, column=0, sticky=tk.W, padx=4, pady=2
+            )
             ttk.Label(table, text=f"{summary} / {model}").grid(
                 row=idx, column=1, sticky=tk.W, padx=4, pady=2
             )

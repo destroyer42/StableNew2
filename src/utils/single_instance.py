@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import socket
-from typing import Optional
 
 
 class SingleInstanceLock:
@@ -12,7 +11,7 @@ class SingleInstanceLock:
     def __init__(self, host: str = "127.0.0.1", port: int = 47631) -> None:
         self._host = host
         self._port = port
-        self._socket: Optional[socket.socket] = None
+        self._socket: socket.socket | None = None
 
     def acquire(self) -> bool:
         """Bind the socket; return False if another instance already owns it."""

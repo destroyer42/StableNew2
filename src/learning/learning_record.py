@@ -10,9 +10,10 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List
+from typing import Any
 
 
 def _now_iso() -> str:
@@ -39,8 +40,8 @@ class LearningRecord:
 
     run_id: str
     timestamp: str
-    base_config: Dict[str, Any]
-    variant_configs: List[Dict[str, Any]]
+    base_config: dict[str, Any]
+    variant_configs: list[dict[str, Any]]
     randomizer_mode: str
     randomizer_plan_size: int
     primary_model: str
@@ -48,17 +49,17 @@ class LearningRecord:
     primary_scheduler: str
     primary_steps: int
     primary_cfg_scale: float
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    stage_plan: List[str] = field(default_factory=list)
-    stage_events: List[Dict[str, Any]] = field(default_factory=list)
-    outputs: List[Dict[str, Any]] = field(default_factory=list)
-    sidecar_priors: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    stage_plan: list[str] = field(default_factory=list)
+    stage_events: list[dict[str, Any]] = field(default_factory=list)
+    outputs: list[dict[str, Any]] = field(default_factory=list)
+    sidecar_priors: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True)
 
     @staticmethod
-    def from_json(text: str) -> "LearningRecord":
+    def from_json(text: str) -> LearningRecord:
         payload = json.loads(text)
         return LearningRecord(
             run_id=payload["run_id"],
@@ -81,13 +82,13 @@ class LearningRecord:
     @staticmethod
     def from_pipeline_context(
         *,
-        base_config: Dict[str, Any],
-        variant_configs: Iterable[Dict[str, Any]] | None,
+        base_config: dict[str, Any],
+        variant_configs: Iterable[dict[str, Any]] | None,
         randomizer_mode: str = "",
         randomizer_plan_size: int = 0,
-        extract_primary: Callable[[Dict[str, Any]], Dict[str, Any]] | None = None,
-        metadata: Dict[str, Any] | None = None,
-    ) -> "LearningRecord":
+        extract_primary: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> LearningRecord:
         run_id = str(uuid.uuid4())
         timestamp = _now_iso()
         variants = list(variant_configs or [])
@@ -136,7 +137,7 @@ class LearningRecordWriter:
                 temp_file.flush()
                 os.fsync(temp_file.fileno())
             with open(self.records_path, "a", encoding="utf-8") as dest:
-                with open(temp_path, "r", encoding="utf-8") as src:
+                with open(temp_path, encoding="utf-8") as src:
                     data = src.read()
                 dest.write(data)
                 dest.flush()
@@ -152,4 +153,6 @@ class LearningRecordWriter:
         """Backward compatible alias for append_record."""
 
         self.append_record(record)
+
+
 logger = logging.getLogger(__name__)

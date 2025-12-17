@@ -50,7 +50,9 @@ def _make_psutil(processes: list[_FakeProcess]) -> types.SimpleNamespace:
 
 @pytest.fixture(autouse=True)
 def patch_time(monkeypatch):
-    monkeypatch.setattr(scanner_module, "time", types.SimpleNamespace(time=lambda: 1000.0, sleep=lambda _: None))
+    monkeypatch.setattr(
+        scanner_module, "time", types.SimpleNamespace(time=lambda: 1000.0, sleep=lambda _: None)
+    )
     yield
 
 

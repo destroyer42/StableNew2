@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from src.controller.app_controller import AppController, RunConfigDict, RunMode, RunSource
 
 
@@ -45,7 +43,9 @@ class DummyAppController(AppController):
     on_add_to_queue = None
 
 
-def assert_last_run_config(controller: DummyAppController, expected_mode: str, expected_source: str) -> RunConfigDict:
+def assert_last_run_config(
+    controller: DummyAppController, expected_mode: str, expected_source: str
+) -> RunConfigDict:
     assert controller.pipeline_controller is not None
     fake = controller.pipeline_controller
     assert fake.calls, "start_pipeline should have been called"
@@ -76,13 +76,18 @@ def test_on_add_job_to_queue_v2_uses_queue_mode_and_add_source():
     controller.on_add_job_to_queue_v2()
     assert_last_run_config(controller, RunMode.QUEUE.value, RunSource.ADD_TO_QUEUE_BUTTON.value)
     assert controller.app_state.pipeline_state.run_mode == RunMode.QUEUE.value
-    assert controller.pipeline_controller._last_run_config["source"] == RunSource.ADD_TO_QUEUE_BUTTON.value
+    assert (
+        controller.pipeline_controller._last_run_config["source"]
+        == RunSource.ADD_TO_QUEUE_BUTTON.value
+    )
 
 
 def test_run_config_reports_prompt_pack_when_present():
     controller = DummyAppController(FakePipelineController())
     controller.app_state.job_draft.pack_id = "pack-xyz"
     controller.start_run_v2()
-    run_config = assert_last_run_config(controller, RunMode.DIRECT.value, RunSource.RUN_BUTTON.value)
+    run_config = assert_last_run_config(
+        controller, RunMode.DIRECT.value, RunSource.RUN_BUTTON.value
+    )
     assert run_config["prompt_source"] == "pack"
     assert run_config["prompt_pack_id"] == "pack-xyz"

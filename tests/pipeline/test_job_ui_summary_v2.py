@@ -6,7 +6,6 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 
 def make_job_record(**kwargs):
-    from src.pipeline.job_models_v2 import BatchSettings, OutputSettings
     base_config = {
         "model": "base-model",
         "prompt": "A prompt",

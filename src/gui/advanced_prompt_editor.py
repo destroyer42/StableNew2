@@ -5,9 +5,9 @@ Advanced Prompt Pack Editor with validation, embedding/LoRA discovery, and smart
 import os
 import re
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from typing import Callable, Optional
 
 from ..utils.config import DEFAULT_GLOBAL_NEGATIVE_PROMPT
 from .scrolling import make_scrollable
@@ -1558,9 +1558,9 @@ class AdvancedPromptEditorV2(ttk.Frame):
         parent: tk.Misc,
         *,
         initial_prompt: str = "",
-        initial_negative_prompt: Optional[str] = None,
-        on_apply: Optional[Callable[[str, Optional[str]], None]] = None,
-        on_cancel: Optional[Callable[[], None]] = None,
+        initial_negative_prompt: str | None = None,
+        on_apply: Callable[[str, str | None], None] | None = None,
+        on_cancel: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.on_apply = on_apply
@@ -1571,7 +1571,7 @@ class AdvancedPromptEditorV2(ttk.Frame):
         if initial_prompt:
             self.prompt_text.insert("1.0", initial_prompt)
 
-        self.negative_prompt_text: Optional[tk.Text]
+        self.negative_prompt_text: tk.Text | None
         if initial_negative_prompt is not None:
             self.negative_prompt_text = tk.Text(self, height=6, wrap="word")
             self.negative_prompt_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 3))

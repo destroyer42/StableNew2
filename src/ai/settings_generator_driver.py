@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Dict
 
 from src.ai.settings_generator_contract import (
     SettingsSuggestion,
@@ -31,7 +30,7 @@ class LocalStubSettingsGenerator(SettingsGenerator):
     def generate_suggestion(self, request: SettingsSuggestionRequest) -> SettingsSuggestion:
         baseline = deepcopy(request.baseline_config or {})
         txt2img = baseline.setdefault("txt2img", {})
-        tweaks: Dict[SuggestionIntent, Dict[str, object]] = {
+        tweaks: dict[SuggestionIntent, dict[str, object]] = {
             SuggestionIntent.HIGH_DETAIL: {"steps": txt2img.get("steps", 20) + 5, "cfg_scale": 9.0},
             SuggestionIntent.FAST_DRAFT: {"steps": max(5, txt2img.get("steps", 20) - 5)},
             SuggestionIntent.PORTRAIT: {"width": 512, "height": 704},
@@ -41,6 +40,10 @@ class LocalStubSettingsGenerator(SettingsGenerator):
         override = tweaks.get(request.intent, {})
         txt2img.update(override)
 
-        stage_suggestion = StageSuggestion(stage_name="txt2img", config_overrides=override, notes="stubbed")
+        stage_suggestion = StageSuggestion(
+            stage_name="txt2img", config_overrides=override, notes="stubbed"
+        )
         metadata = {"stub": True, "intent": request.intent.value}
-        return SettingsSuggestion(stages=[stage_suggestion], global_notes="Stub suggestion", internal_metadata=metadata)
+        return SettingsSuggestion(
+            stages=[stage_suggestion], global_notes="Stub suggestion", internal_metadata=metadata
+        )

@@ -4,7 +4,6 @@ import os
 import platform
 import subprocess
 from pathlib import Path
-from typing import List
 
 try:
     import psutil  # type: ignore[import]
@@ -22,8 +21,8 @@ def _matches_keywords(text: str | None) -> bool:
     return any(keyword in lowered for keyword in KEYWORDS)
 
 
-def _collect_candidates() -> List[str]:
-    matches: List[str] = []
+def _collect_candidates() -> list[str]:
+    matches: list[str] = []
     if psutil:
         for proc in psutil.process_iter(attrs=["pid", "name", "cmdline", "cwd"]):
             pid = proc.info.get("pid")
@@ -34,12 +33,18 @@ def _collect_candidates() -> List[str]:
             cwd = proc.info.get("cwd") or ""
             if "python" not in name and "python" not in cmdline.lower():
                 continue
-            if _matches_keywords(cmdline) or _matches_keywords(cwd) or _matches_keywords(str(REPO_ROOT)):
+            if (
+                _matches_keywords(cmdline)
+                or _matches_keywords(cwd)
+                or _matches_keywords(str(REPO_ROOT))
+            ):
                 matches.append(f"{pid}:{name}:{cmdline}")
         return matches
 
     if platform.system() == "Windows":
-        result = subprocess.run(["tasklist", "/FI", "IMAGENAME eq python.exe"], capture_output=True, text=True)
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq python.exe"], capture_output=True, text=True
+        )
         lines = [line for line in result.stdout.splitlines() if line.strip()]
     else:
         result = subprocess.run(["ps", "-A"], capture_output=True, text=True)
@@ -53,7 +58,7 @@ def _collect_candidates() -> List[str]:
     return matches
 
 
-def list_stablenew_processes() -> List[str]:
+def list_stablenew_processes() -> list[str]:
     return _collect_candidates()
 
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from src.queue.job_model import Job, JobStatus
 from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.queue.job_model import Job, JobStatus
 
 
 def _make_pipeline_config() -> PipelineConfig:

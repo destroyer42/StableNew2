@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-# PR-GUI-F1: Tests reference PreviewPanelV2.queue_items_text which was removed
-# Queue widgets moved to QueuePanelV2
-pytestmark = pytest.mark.skip(reason="PR-GUI-F1: PreviewPanelV2 queue widgets removed")
-
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
+
+# PR-GUI-F1: Tests reference PreviewPanelV2.queue_items_text which was removed
+# Queue widgets moved to QueuePanelV2
+pytestmark = pytest.mark.skip(reason="PR-GUI-F1: PreviewPanelV2 queue widgets removed")
 
 
 class DummyQueueController:

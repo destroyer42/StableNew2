@@ -3,8 +3,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest import mock
 
-import pytest
-
 from src.controller.webui_connection_controller import WebUIConnectionState
 from src.gui.api_status_panel import resolve_webui_state_display
 

@@ -9,14 +9,12 @@ Validates that:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock
-import pytest
 
+from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
-from src.queue.job_history_store import JSONLJobHistoryStore
-from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.controller.archive.pipeline_config_types import PipelineConfig
 
 
 def _make_dummy_njr() -> NormalizedJobRecord:
@@ -39,7 +37,7 @@ class TestQueueNJRPath:
         """Queue job created from NJR should have NJR snapshot in storage."""
         history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
         queue = JobQueue(history_store=history_store)
-        
+
         # Create job with NJR
         njr = _make_dummy_njr()
         job = Job(
@@ -48,10 +46,10 @@ class TestQueueNJRPath:
         )
         job._normalized_record = njr
         job.snapshot = {"normalized_job": njr.to_queue_snapshot()}
-        
+
         # Submit to queue
         queue.submit(job)
-        
+
         # Verify job has NJR
         retrieved = queue.get_job("njr-job-1")
         assert retrieved is not None
@@ -63,7 +61,7 @@ class TestQueueNJRPath:
         """Job with NJR should execute via NJR path only (no pipeline_config fallback)."""
         history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
         queue = JobQueue(history_store=history_store)
-        
+
         # Create NJR-backed job
         njr = _make_dummy_njr()
         job = Job(
@@ -71,9 +69,9 @@ class TestQueueNJRPath:
             priority=JobPriority.NORMAL,
         )
         job._normalized_record = njr
-        
+
         queue.submit(job)
-        
+
         # PR-CORE1-B2: Execution validation
         # In actual execution, app_controller._execute_job should:
         # 1. See _normalized_record is present
@@ -89,7 +87,7 @@ class TestQueueNJRPath:
         """Legacy job with only pipeline_config (no NJR) should still work."""
         history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
         queue = JobQueue(history_store=history_store)
-        
+
         # Create legacy job (pre-v2.6 style)
         job = Job(
             job_id="legacy-1",
@@ -105,9 +103,9 @@ class TestQueueNJRPath:
             width=512,
             height=512,
         )
-        
+
         queue.submit(job)
-        
+
         # Verify legacy job works
         retrieved = queue.get_job("legacy-1")
         assert retrieved is not None
@@ -117,7 +115,7 @@ class TestQueueNJRPath:
     def test_history_entry_with_njr_snapshot(self, tmp_path: Path):
         """History entries for NJR jobs should include NJR snapshot."""
         history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-        
+
         # Create NJR-backed job
         njr = _make_dummy_njr()
         job = Job(
@@ -129,10 +127,10 @@ class TestQueueNJRPath:
             "schema_version": "1.0",
             "normalized_job": njr.to_queue_snapshot(),
         }
-        
+
         # Record submission
         history_store.record_job_submission(job)
-        
+
         # Mark completed
         history_store.record_status_change(
             job_id="history-njr-1",
@@ -140,7 +138,7 @@ class TestQueueNJRPath:
             ts=None,
             result={"status": "success"},
         )
-        
+
         # Retrieve from history
         entry = history_store.get_job("history-njr-1")
         assert entry is not None
@@ -153,7 +151,7 @@ class TestQueueNJRPath:
         """PR-CORE1-B2: New queue jobs should not rely on pipeline_config for execution."""
         history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
         queue = JobQueue(history_store=history_store)
-        
+
         # Simulate creating a new job via the v2.6 pipeline
         njr = _make_dummy_njr()
         job = Job(
@@ -165,9 +163,9 @@ class TestQueueNJRPath:
         )
         job._normalized_record = njr
         # pipeline_config is intentionally absent for new NJR-only jobs
-        
+
         queue.submit(job)
-        
+
         # Verification: Job has NJR, execution path should use NJR only
         retrieved = queue.get_job("new-job-1")
         assert hasattr(retrieved, "_normalized_record")

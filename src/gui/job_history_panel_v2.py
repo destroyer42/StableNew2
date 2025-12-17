@@ -5,15 +5,15 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tkinter as tk
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
-
-import tkinter as tk
 from tkinter import ttk
+from typing import Any
 
-from src.queue.job_history_store import JobHistoryEntry
 from src.gui import theme_v2 as theme_mod
+from src.queue.job_history_store import JobHistoryEntry
 
 
 class JobHistoryPanelV2(ttk.Frame):

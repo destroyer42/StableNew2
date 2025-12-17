@@ -4,8 +4,9 @@
 
 import logging
 import tkinter as tk
+from collections.abc import Iterable
 from tkinter import ttk
-from typing import Any, Iterable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +362,9 @@ class ADetailerConfigPanel:
         """
         config = self.get_config()
 
-        scheduler_value = config.get("adetailer_scheduler", config.get("scheduler", "inherit")) or "inherit"
+        scheduler_value = (
+            config.get("adetailer_scheduler", config.get("scheduler", "inherit")) or "inherit"
+        )
 
         payload = {
             "adetailer_model": config["adetailer_model"],

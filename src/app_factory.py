@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import tkinter as tk
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from src.api.webui_process_manager import WebUIProcessManager
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.main_window_v2 import MainWindowV2
-from src.api.webui_process_manager import WebUIProcessManager
 from src.utils.config import ConfigManager
-from src.utils import attach_gui_log_handler
 
 if TYPE_CHECKING:
     from src.controller.job_service import JobService
@@ -16,15 +15,16 @@ if TYPE_CHECKING:
 
 from typing import Any
 
+
 def build_v2_app(
     *,
-    root: Optional[tk.Tk] = None,
-    pipeline_runner: Optional[Any] = None,
-    webui_manager: Optional[WebUIProcessManager] = None,
+    root: tk.Tk | None = None,
+    pipeline_runner: Any | None = None,
+    webui_manager: WebUIProcessManager | None = None,
     threaded: bool = False,
-    config_manager: Optional[ConfigManager] = None,
-    job_service: Optional["JobService"] = None,
-) -> Tuple[tk.Tk, AppStateV2, AppController, MainWindowV2]:
+    config_manager: ConfigManager | None = None,
+    job_service: JobService | None = None,
+) -> tuple[tk.Tk, AppStateV2, AppController, MainWindowV2]:
     """
     Build the V2 application stack with injectable runner for tests.
 
@@ -65,7 +65,9 @@ def build_v2_app(
 
     # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
     from pathlib import Path
+
     from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
+
     diagnostics_service = DiagnosticsServiceV2(Path("reports") / "diagnostics")
     app_controller.attach_watchdog(diagnostics_service)
     # --- END PR-CORE1-D21A ---

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from typing import Optional
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.prompt_workspace_state import PromptWorkspaceState
@@ -10,21 +9,24 @@ from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 
 
 class PromptTabFrame(ttk.Frame):
-        def apply_prompt_pack(self, summary) -> None:
-            """Apply a PromptPackSummary to the prompt editor fields."""
-            if not summary:
-                return
-            # Update positive prompt
-            if hasattr(self, "editor") and hasattr(summary, "prompt"):
-                self.editor.delete("1.0", "end")
-                self.editor.insert("1.0", getattr(summary, "prompt", ""))
-            # Update negative prompt if present
-            if hasattr(self, "negative_prompt_editor") and hasattr(summary, "negative_prompt"):
-                self.negative_prompt_editor.delete("1.0", "end")
-                self.negative_prompt_editor.insert("1.0", getattr(summary, "negative_prompt", ""))
+    def apply_prompt_pack(self, summary) -> None:
+        """Apply a PromptPackSummary to the prompt editor fields."""
+        if not summary:
+            return
+        # Update positive prompt
+        if hasattr(self, "editor") and hasattr(summary, "prompt"):
+            self.editor.delete("1.0", "end")
+            self.editor.insert("1.0", getattr(summary, "prompt", ""))
+        # Update negative prompt if present
+        if hasattr(self, "negative_prompt_editor") and hasattr(summary, "negative_prompt"):
+            self.negative_prompt_editor.delete("1.0", "end")
+            self.negative_prompt_editor.insert("1.0", getattr(summary, "negative_prompt", ""))
+
+
 """Prompt tab with slot selection, editor, and metadata preview."""
 
-def __init__(self, master: tk.Misc, app_state: Optional[AppStateV2] = None, *args, **kwargs) -> None:
+
+def __init__(self, master: tk.Misc, app_state: AppStateV2 | None = None, *args, **kwargs) -> None:
     super().__init__(master, *args, **kwargs)
     self.workspace_state = PromptWorkspaceState()
     self.app_state = app_state
@@ -57,6 +59,8 @@ def __init__(self, master: tk.Misc, app_state: Optional[AppStateV2] = None, *arg
     self._refresh_metadata()
 
     # Left column -------------------------------------------------------
+
+
 def _build_left_panel(self) -> None:
     header = ttk.Label(self.left_frame, text="Prompt Slots")
     header.pack(anchor="w")
@@ -70,7 +74,7 @@ def _build_left_panel(self) -> None:
 
     self.slot_list = tk.Listbox(self.left_frame, exportselection=False, height=10)
     for i in range(10):
-        self.slot_list.insert("end", f"Prompt {i+1}")
+        self.slot_list.insert("end", f"Prompt {i + 1}")
     self.slot_list.selection_set(0)
     self.slot_list.bind("<<ListboxSelect>>", self._on_slot_select)
     self.slot_list.pack(fill="both", expand=True, pady=(2, 0))
@@ -100,7 +104,9 @@ def _build_left_panel(self) -> None:
     # Event handlers / helpers ------------------------------------------
     def _on_new_pack(self) -> None:
         if self.workspace_state.dirty:
-            proceed = messagebox.askyesno("Unsaved Changes", "Discard unsaved changes and create a new pack?")
+            proceed = messagebox.askyesno(
+                "Unsaved Changes", "Discard unsaved changes and create a new pack?"
+            )
             if not proceed:
                 return
         self.workspace_state.new_pack("Untitled", slot_count=10)
@@ -153,7 +159,6 @@ def _build_left_panel(self) -> None:
     def _refresh_metadata(self) -> None:
         pack = self.workspace_state.current_pack
         slot_index = self.workspace_state.get_current_slot_index()
-        slot = pack.get_slot(slot_index) if pack else None
         meta = self.workspace_state.get_current_prompt_metadata() if pack else None
         loras = meta.loras if meta else []
         embeds = meta.embeddings if meta else []
@@ -172,8 +177,8 @@ def _build_left_panel(self) -> None:
             )
         summary_lines.extend(
             [
-            "",
-            "Detected LoRAs:",
+                "",
+                "Detected LoRAs:",
             ]
         )
         if loras:

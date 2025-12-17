@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 
 import pytest
 
-import logging
-
-from src.utils import InMemoryLogHandler, LogContext, get_logger, log_with_ctx
 from src.gui.log_trace_panel_v2 import LogTracePanelV2
+from src.utils import InMemoryLogHandler, LogContext, get_logger, log_with_ctx
 
 
 def test_log_trace_panel_v2_smoke():

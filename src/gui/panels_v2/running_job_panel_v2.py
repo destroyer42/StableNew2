@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import tkinter as tk
-from tkinter import ttk
-from typing import Any, Callable
 import threading
+import tkinter as tk
+from collections.abc import Callable
+from tkinter import ttk
+from typing import Any
 
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
@@ -18,7 +19,7 @@ from src.pipeline.job_models_v2 import JobStatusV2, QueueJobV2, UnifiedJobSummar
 class RunningJobPanelV2(ttk.Frame):
     """
     Panel displaying the currently running job.
-    
+
     Features:
     - Job info display
     - Progress bar with percentage
@@ -65,7 +66,7 @@ class RunningJobPanelV2(ttk.Frame):
             wraplength=200,
         )
         self.job_info_label.pack(fill="x", pady=(0, 4))
-        
+
         # PR-CORE-D: PromptPack provenance label
         self.pack_info_label = ttk.Label(
             self,
@@ -73,7 +74,7 @@ class RunningJobPanelV2(ttk.Frame):
             wraplength=200,
         )
         self.pack_info_label.pack(fill="x", pady=(0, 4))
-        
+
         # PR-CORE-D: Stage chain with current stage highlighting
         self.stage_chain_label = ttk.Label(
             self,
@@ -161,7 +162,7 @@ class RunningJobPanelV2(ttk.Frame):
         """Format ETA seconds to a human-readable string."""
         if seconds is None or seconds <= 0:
             return ""
-        
+
         if seconds < 60:
             return f"ETA: {int(seconds)}s"
         elif seconds < 3600:
@@ -194,7 +195,7 @@ class RunningJobPanelV2(ttk.Frame):
 
         # Job info
         self.job_info_label.configure(text=job.get_display_summary())
-        
+
         # PR-CORE-D: Display PromptPack metadata if available
         if self._current_job_summary:
             pack_name = getattr(self._current_job_summary, "prompt_pack_name", None)
@@ -212,7 +213,7 @@ class RunningJobPanelV2(ttk.Frame):
                 self.pack_info_label.configure(text=pack_text)
             else:
                 self.pack_info_label.configure(text="")
-            
+
             # Display stage chain (could add current stage highlighting later)
             stage_labels = getattr(self._current_job_summary, "stage_chain_labels", None)
             if stage_labels:
@@ -282,7 +283,7 @@ class RunningJobPanelV2(ttk.Frame):
 
     def _on_cancel_and_return(self) -> None:
         """Handle cancel + return to queue button click.
-        
+
         PR-GUI-F3: Cancels the running job and puts it back at the
         bottom of the queue for later retry.
         """
@@ -295,10 +296,10 @@ class RunningJobPanelV2(ttk.Frame):
 
     def update_job(self, job: QueueJobV2 | None, queue_origin: int | None = None) -> None:
         """Update the panel with a new job or None.
-        
+
         PR-GUI-F2: Now accepts queue_origin to show which queue position
         the running job came from.
-        
+
         Args:
             job: The running job, or None if no job is running.
             queue_origin: 1-based queue position the job came from, or None.
@@ -308,15 +309,15 @@ class RunningJobPanelV2(ttk.Frame):
         self._current_job = job
         self._queue_origin = queue_origin
         self._update_display()
-    
+
     def update_job_with_summary(
         self,
         job: QueueJobV2 | None,
         summary: UnifiedJobSummary | None = None,
-        queue_origin: int | None = None
+        queue_origin: int | None = None,
     ) -> None:
         """PR-CORE-D: Update the panel with job and UnifiedJobSummary.
-        
+
         Args:
             job: The running job, or None if no job is running.
             summary: UnifiedJobSummary with PromptPack metadata.
@@ -336,7 +337,7 @@ class RunningJobPanelV2(ttk.Frame):
         if self._current_job:
             self._current_job.progress = progress
             self._current_job.eta_seconds = eta_seconds
-            
+
             progress_pct = int(progress * 100)
             self.progress_bar.configure(value=progress_pct)
             self.progress_label.configure(text=f"{progress_pct}%")

@@ -17,7 +17,9 @@ def test_log_shutdown_state_records_threads(caplog: pytest.LogCaptureFixture) ->
     assert "Thread: name=" in text
 
 
-def test_log_shutdown_state_reports_child_processes(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_shutdown_state_reports_child_processes(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class FakeProcess:
         def children(self, recursive: bool) -> list[object]:
             return []

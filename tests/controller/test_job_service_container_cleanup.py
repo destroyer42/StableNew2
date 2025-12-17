@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 from src.controller import job_service as job_service_module
 from src.controller.job_service import JobService
 from src.queue.job_model import Job, JobStatus
@@ -41,7 +39,7 @@ class DummyWatchdog:
 
 class FakeContainer:
     def __init__(self) -> None:
-        self.added: List[int] = []
+        self.added: list[int] = []
         self.killed = False
         self.teardown_called = False
 

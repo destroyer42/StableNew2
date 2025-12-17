@@ -10,8 +10,9 @@ import logging
 import tkinter as tk
 from tkinter import ttk
 
-from . import theme as theme_mod
 from src.controller.webui_connection_controller import WebUIConnectionState
+
+from . import theme as theme_mod
 
 logger = logging.getLogger(__name__)
 

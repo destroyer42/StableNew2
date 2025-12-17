@@ -7,7 +7,6 @@ from src.controller.pipeline_controller import PipelineController
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.utils.config import ConfigManager
 
-
 DEFAULT_PACK_CONFIG: dict[str, Any] = {
     "pipeline": {
         "images_per_prompt": 1,

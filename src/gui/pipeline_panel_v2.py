@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Any, List
+from typing import Any
 
-from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
-from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
+from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
+from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
+from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_upscale_stage_card_v2 import AdvancedUpscaleStageCardV2
 from src.gui.stage_cards_v2.validation_result import ValidationResult
-from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
-from .widgets.scrollable_frame_v2 import ScrollableFrame
-from .widgets.config_sweep_widget_v2 import ConfigSweepWidgetV2
 from src.gui.theme_v2 import STATUS_LABEL_STYLE
-from . import theme as theme_mod
 from src.pipeline.job_models_v2 import NormalizedJobRecord, UnifiedJobSummary
+
+from . import theme as theme_mod
+from .widgets.config_sweep_widget_v2 import ConfigSweepWidgetV2
+from .widgets.scrollable_frame_v2 import ScrollableFrame
 
 
 class PipelinePanelV2(ttk.Frame):
@@ -91,11 +92,21 @@ class PipelinePanelV2(ttk.Frame):
         # Scrollable frame with stage cards
         self._scroll: ScrollableFrame = ScrollableFrame(self)
         self.body = self._scroll.inner
-        self.txt2img_card = AdvancedTxt2ImgStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
-        self.img2img_card = AdvancedImg2ImgStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
-        self.adetailer_card = ADetailerStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
-        self.upscale_card = AdvancedUpscaleStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
-        self.adetailer_card = ADetailerStageCardV2(self.body, theme=self.theme, config_manager=self.config_manager)
+        self.txt2img_card = AdvancedTxt2ImgStageCardV2(
+            self.body, theme=self.theme, config_manager=self.config_manager
+        )
+        self.img2img_card = AdvancedImg2ImgStageCardV2(
+            self.body, theme=self.theme, config_manager=self.config_manager
+        )
+        self.adetailer_card = ADetailerStageCardV2(
+            self.body, theme=self.theme, config_manager=self.config_manager
+        )
+        self.upscale_card = AdvancedUpscaleStageCardV2(
+            self.body, theme=self.theme, config_manager=self.config_manager
+        )
+        self.adetailer_card = ADetailerStageCardV2(
+            self.body, theme=self.theme, config_manager=self.config_manager
+        )
 
         self.run_button: ttk.Button | None = None
         self.stop_button: ttk.Button | None = None
@@ -117,7 +128,9 @@ class PipelinePanelV2(ttk.Frame):
                 pass
             # PR-CORE-D: Subscribe to PromptPack selection for run button state
             try:
-                self.app_state.subscribe("selected_prompt_pack", self._refresh_summary_from_app_state)
+                self.app_state.subscribe(
+                    "selected_prompt_pack", self._refresh_summary_from_app_state
+                )
                 self.app_state.subscribe("selected_prompt_pack", self._update_run_button_state)
             except Exception:
                 pass
@@ -133,10 +146,16 @@ class PipelinePanelV2(ttk.Frame):
         summary = self._get_latest_summary(records)
         self.update_pack_summary(summary, len(records))
 
-    def _get_latest_summary(self, records: list[NormalizedJobRecord] | None = None) -> UnifiedJobSummary | None:
+    def _get_latest_summary(
+        self, records: list[NormalizedJobRecord] | None = None
+    ) -> UnifiedJobSummary | None:
         if not self.app_state:
             return None
-        entries = records if records is not None else (getattr(self.app_state, "preview_jobs", None) or [])
+        entries = (
+            records
+            if records is not None
+            else (getattr(self.app_state, "preview_jobs", None) or [])
+        )
         if not entries:
             return None
         first = entries[0]
@@ -146,7 +165,9 @@ class PipelinePanelV2(ttk.Frame):
             return first
         return None
 
-    def update_pack_summary(self, summary: UnifiedJobSummary | None, total_records: int | None = None) -> None:
+    def update_pack_summary(
+        self, summary: UnifiedJobSummary | None, total_records: int | None = None
+    ) -> None:
         if summary is None:
             self.pack_label.config(text="Prompt Pack: –")
             self.row_label.config(text="Row: –")
@@ -157,20 +178,26 @@ class PipelinePanelV2(ttk.Frame):
         pack_name = summary.prompt_pack_name or "Untitled Pack"
         self.pack_label.config(text=f"Prompt Pack: {pack_name}")
         row_number = summary.prompt_pack_row_index + 1
-        
+
         # PR-CORE-E: Show config variant count in preview
         if total_records and total_records > 1:
             # Check if we have config sweep enabled
-            sweep_enabled = getattr(self.app_state, "config_sweep_enabled", False) if self.app_state else False
-            variant_count = len(getattr(self.app_state, "config_sweep_variants", [])) if self.app_state else 0
-            
+            sweep_enabled = (
+                getattr(self.app_state, "config_sweep_enabled", False) if self.app_state else False
+            )
+            variant_count = (
+                len(getattr(self.app_state, "config_sweep_variants", [])) if self.app_state else 0
+            )
+
             if sweep_enabled and variant_count > 1:
-                self.row_label.config(text=f"Row: {row_number} of {total_records} ({variant_count} config variants)")
+                self.row_label.config(
+                    text=f"Row: {row_number} of {total_records} ({variant_count} config variants)"
+                )
             else:
                 self.row_label.config(text=f"Row: {row_number} of {total_records}")
         else:
             self.row_label.config(text=f"Row: {row_number}")
-        
+
         self.positive_preview_label.config(
             text=f"Positive Preview: {self._truncate(summary.positive_prompt_preview)}"
         )
@@ -222,7 +249,11 @@ class PipelinePanelV2(ttk.Frame):
         return ValidationResult(True, None)
 
     def _apply_stage_visibility(self) -> None:
-        enabled = set(self.sidebar.get_enabled_stages()) if getattr(self, "sidebar", None) else {"txt2img", "img2img", "adetailer", "upscale"}
+        enabled = (
+            set(self.sidebar.get_enabled_stages())
+            if getattr(self, "sidebar", None)
+            else {"txt2img", "img2img", "adetailer", "upscale"}
+        )
         if "txt2img" in enabled:
             self.txt2img_card.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
         else:
@@ -250,24 +281,24 @@ class PipelinePanelV2(ttk.Frame):
 
     def _update_run_button_state(self) -> None:
         """PR-CORE-D: Update run button state based on PromptPack selection.
-        
+
         Run button is enabled only when:
         1. A PromptPack is selected (selected_prompt_pack_id exists)
         2. A config snapshot is selected (selected_config_snapshot_id exists)
         """
         if not self.app_state:
             return
-        
+
         # Check if run button exists
         if not self.run_button:
             return
-        
+
         # PR-CORE-D: Enforce PromptPack-only - disable button if no pack selected
         has_pack = bool(getattr(self.app_state, "selected_prompt_pack_id", None))
         has_config = bool(getattr(self.app_state, "selected_config_snapshot_id", None))
-        
+
         should_enable = has_pack and has_config
-        
+
         try:
             if should_enable:
                 self.run_button.config(state="normal")
@@ -280,12 +311,12 @@ class PipelinePanelV2(ttk.Frame):
         """PR-CORE-E: Handle config sweep changes."""
         if not self.app_state:
             return
-        
+
         # Update app state with sweep config
         sweep_config = self.config_sweep_widget.get_sweep_config()
         self.app_state.set_config_sweep_enabled(sweep_config["enabled"])
         self.app_state.set_config_sweep_variants(sweep_config["variants"])
-        
+
         # Update global negative apply flags
         for stage in ["txt2img", "img2img", "upscale", "adetailer"]:
             flag_key = f"apply_global_negative_{stage}"
@@ -294,7 +325,7 @@ class PipelinePanelV2(ttk.Frame):
 
     def get_config_sweep_plan(self) -> dict[str, Any]:
         """PR-CORE-E: Get config sweep plan from widget.
-        
+
         Returns:
             Dict with enabled, variants, and global negative flags.
         """
@@ -322,7 +353,7 @@ def format_queue_job_summary(job: Any) -> str:
     prompt_preview = prompt.strip().splitlines()[0] if prompt.strip() else ""
     if prompt_preview and len(prompt_preview) < len(prompt.strip()):
         prompt_preview = prompt_preview[:40].rstrip() + "..."
-    summary_parts: List[str] = [model]
+    summary_parts: list[str] = [model]
     summary_parts.append(f"seed={seed or 'auto'}")
     if status:
         summary_parts.append(str(status))

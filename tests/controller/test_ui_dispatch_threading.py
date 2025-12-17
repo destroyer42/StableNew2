@@ -1,7 +1,7 @@
 import threading
-import pytest
-from unittest.mock import MagicMock
+
 from src.controller.app_controller import AppController
+
 
 def test_ui_dispatch_on_ui_thread_executes_immediately():
     called = []
@@ -10,14 +10,19 @@ def test_ui_dispatch_on_ui_thread_executes_immediately():
     controller._ui_dispatch(lambda: called.append("ran"))
     assert called == ["ran"]
 
+
 def test_ui_dispatch_on_background_thread_schedules():
     scheduled = []
+
     def fake_scheduler(fn):
         scheduled.append(fn)
+
     controller = AppController(main_window=None, ui_scheduler=fake_scheduler)
     controller._ui_thread_id = 12345  # fake UI thread id
+
     def background():
         controller._ui_dispatch(lambda: scheduled.append("scheduled"))
+
     t = threading.Thread(target=background)
     t.start()
     t.join()

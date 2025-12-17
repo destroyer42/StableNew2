@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import time
 import traceback
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
-from typing import Any, Mapping
+from typing import Any
 
 from src.utils.exceptions_v2 import StableNewError
-
 
 DEFAULT_REMEDIATION = "Please consult the logs and retry."
 _ENVELOPE_ATTR = "_sn_error_envelope"

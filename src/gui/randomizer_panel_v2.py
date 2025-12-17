@@ -5,11 +5,10 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
 from dataclasses import dataclass
+from tkinter import ttk
 from typing import Any
 
-from . import theme as theme_mod
 from src.gui_v2.adapters.randomizer_adapter_v2 import (
     RiskBand,
     build_randomizer_plan,
@@ -17,12 +16,15 @@ from src.gui_v2.adapters.randomizer_adapter_v2 import (
     preview_variants,
 )
 
+from . import theme as theme_mod
+
 DEFAULT_MAX_VARIANTS = 512
 
 
 @dataclass
 class MatrixRow:
     """Represents a single matrix dimension row in the UI."""
+
     key: str
     label_var: tk.StringVar
     value_var: tk.StringVar
@@ -36,21 +38,26 @@ class RandomizerPanelV2(ttk.Frame):
         style_name = getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
         super().__init__(master, style=style_name, padding=theme_mod.PADDING_MD, **kwargs)
         self._controller = controller
+        self._theme = theme
         self.controller = controller  # alias for legacy compatibility
         self.theme = theme
 
         # Header
-        header_style = getattr(theme, "STATUS_STRONG_LABEL_STYLE", theme_mod.STATUS_STRONG_LABEL_STYLE)
+        header_style = getattr(
+            theme, "STATUS_STRONG_LABEL_STYLE", theme_mod.STATUS_STRONG_LABEL_STYLE
+        )
         header_frame = ttk.Frame(self, style="Dark.TFrame")
         header_frame.pack(fill=tk.X, pady=(0, 4))
         self.header_label = ttk.Label(header_frame, text="Randomizer", style=header_style)
         self.header_label.pack(side=tk.LEFT)
         self._risk_badge_var = tk.StringVar(value="")
-        self._risk_badge = ttk.Label(header_frame, textvariable=self._risk_badge_var, style="Dark.TLabel")
+        self._risk_badge = ttk.Label(
+            header_frame, textvariable=self._risk_badge_var, style="Dark.TLabel"
+        )
         self._risk_badge.pack(side=tk.RIGHT, padx=(8, 0))
 
         # Body container
-        body_style = getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
+        body_style = getattr(self._theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
         self.body = ttk.Frame(self, style=body_style)
         self.body.pack(fill=tk.BOTH, expand=True)
 
@@ -66,7 +73,9 @@ class RandomizerPanelV2(ttk.Frame):
 
         # Stats display variables
         self.variant_count_var = tk.StringVar(value="Variants: 0")
-        self.variant_explainer_var = tk.StringVar(value="Randomizer is OFF. Enable to see variant count.")
+        self.variant_explainer_var = tk.StringVar(
+            value="Randomizer is OFF. Enable to see variant count."
+        )
         self._variant_count = 0
         self._change_callback = None
         self._risk_threshold = 128
@@ -178,7 +187,9 @@ class RandomizerPanelV2(ttk.Frame):
         stats_frame = ttk.Frame(self.body, style="Dark.TFrame")
         stats_frame.grid(row=3, column=0, columnspan=4, sticky=tk.EW, pady=(0, 6))
 
-        ttk.Label(stats_frame, textvariable=self.variant_count_var, style="Dark.TLabel").pack(side=tk.LEFT)
+        ttk.Label(stats_frame, textvariable=self.variant_count_var, style="Dark.TLabel").pack(
+            side=tk.LEFT
+        )
         ttk.Label(stats_frame, textvariable=self.variant_explainer_var, style="Dark.TLabel").pack(
             side=tk.LEFT, padx=(12, 0)
         )
@@ -194,7 +205,9 @@ class RandomizerPanelV2(ttk.Frame):
         # === Row 6: Add row button ===
         btn_frame = ttk.Frame(self.body, style="Dark.TFrame")
         btn_frame.grid(row=6, column=0, columnspan=4, sticky=tk.W, pady=(0, 6))
-        add_btn = ttk.Button(btn_frame, text="+ Add dimension", command=lambda: self._add_matrix_row())
+        add_btn = ttk.Button(
+            btn_frame, text="+ Add dimension", command=lambda: self._add_matrix_row()
+        )
         add_btn.pack(side=tk.LEFT)
 
         # === Row 7: Preview area ===
@@ -217,14 +230,14 @@ class RandomizerPanelV2(ttk.Frame):
         self._preview_list.column("idx", width=30, anchor=tk.W)
         self._preview_list.column("summary", width=450, anchor=tk.W)
         self._preview_list.pack(fill=tk.BOTH, expand=True)
-        preview_bg = getattr(theme, "VALIDATION_NORMAL_BG", theme_mod.VALIDATION_NORMAL_BG)
-        preview_fg = getattr(theme, "VALIDATION_NORMAL_FG", theme_mod.VALIDATION_NORMAL_FG)
-        preview_accent = getattr(theme, "ACCENT_GOLD", theme_mod.ACCENT_GOLD)
+        preview_bg = getattr(self._theme, "VALIDATION_NORMAL_BG", theme_mod.VALIDATION_NORMAL_BG)
+        preview_fg = getattr(self._theme, "VALIDATION_NORMAL_FG", theme_mod.VALIDATION_NORMAL_FG)
+        preview_accent = getattr(self._theme, "ACCENT_GOLD", theme_mod.ACCENT_GOLD)
         self._preview_list.configure(
             background=preview_bg,
             foreground=preview_fg,
             selectbackground=preview_accent,
-            selectforeground=getattr(theme, "TEXT_PRIMARY", theme_mod.TEXT_PRIMARY),
+            selectforeground=getattr(self._theme, "TEXT_PRIMARY", theme_mod.TEXT_PRIMARY),
         )
 
         self.body.columnconfigure(0, weight=0)
@@ -500,9 +513,8 @@ class RandomizerPanelV2(ttk.Frame):
             parts.append(f"model={model}")
 
         # Check for sampler
-        sampler = (
-            cfg.get("txt2img", {}).get("sampler_name")
-            or cfg.get("pipeline", {}).get("sampler")
+        sampler = cfg.get("txt2img", {}).get("sampler_name") or cfg.get("pipeline", {}).get(
+            "sampler"
         )
         if sampler:
             parts.append(f"sampler={sampler}")

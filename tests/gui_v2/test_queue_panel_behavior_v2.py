@@ -20,7 +20,6 @@ from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.pipeline.job_models_v2 import JobStatusV2, QueueJobV2
 
-
 # -----------------------------------------------------------------------------
 # Fixtures
 # -----------------------------------------------------------------------------
@@ -82,7 +81,9 @@ class TestQueuePanelSelection:
     """Tests for queue panel selection behavior."""
 
     @pytest.mark.gui
-    def test_selection_tracks_selected_job_id(self, tk_root, mock_controller, mock_app_state) -> None:
+    def test_selection_tracks_selected_job_id(
+        self, tk_root, mock_controller, mock_app_state
+    ) -> None:
         """Selecting a row should track the selected job ID."""
         panel = QueuePanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         jobs = create_test_jobs(3)
@@ -97,7 +98,9 @@ class TestQueuePanelSelection:
         assert selected.job_id == "test_job_1"
 
     @pytest.mark.gui
-    def test_selection_returns_none_when_empty(self, tk_root, mock_controller, mock_app_state) -> None:
+    def test_selection_returns_none_when_empty(
+        self, tk_root, mock_controller, mock_app_state
+    ) -> None:
         """Selection should return None when nothing is selected."""
         panel = QueuePanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         panel.update_jobs([])
@@ -186,9 +189,7 @@ class TestQueuePanelOrderNumbers:
     """Tests for order number display (PR-GUI-F2)."""
 
     @pytest.mark.gui
-    def test_queue_items_have_order_numbers(
-        self, tk_root, mock_controller, mock_app_state
-    ) -> None:
+    def test_queue_items_have_order_numbers(self, tk_root, mock_controller, mock_app_state) -> None:
         """Queue list items should show 1-based order numbers."""
         panel = QueuePanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         jobs = create_test_jobs(3)
@@ -213,9 +214,7 @@ class TestQueuePanelRunningJobHighlight:
     """Tests for running job highlighting (PR-GUI-F2)."""
 
     @pytest.mark.gui
-    def test_running_job_has_indicator(
-        self, tk_root, mock_controller, mock_app_state
-    ) -> None:
+    def test_running_job_has_indicator(self, tk_root, mock_controller, mock_app_state) -> None:
         """Running job in queue should have a visual indicator."""
         panel = QueuePanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         jobs = create_test_jobs(3)
@@ -229,9 +228,7 @@ class TestQueuePanelRunningJobHighlight:
         assert "▶" in item1
 
     @pytest.mark.gui
-    def test_non_running_jobs_no_indicator(
-        self, tk_root, mock_controller, mock_app_state
-    ) -> None:
+    def test_non_running_jobs_no_indicator(self, tk_root, mock_controller, mock_app_state) -> None:
         """Non-running jobs should not have the running indicator."""
         panel = QueuePanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         jobs = create_test_jobs(3)
@@ -247,9 +244,7 @@ class TestQueuePanelRunningJobHighlight:
         assert "▶" not in item2
 
     @pytest.mark.gui
-    def test_get_running_job_queue_position(
-        self, tk_root, mock_controller, mock_app_state
-    ) -> None:
+    def test_get_running_job_queue_position(self, tk_root, mock_controller, mock_app_state) -> None:
         """get_running_job_queue_position should return 1-based position."""
         panel = QueuePanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         jobs = create_test_jobs(3)
@@ -292,9 +287,7 @@ class TestRunningJobPanelDisplay:
         self, tk_root, mock_controller, mock_app_state
     ) -> None:
         """Running job panel should display job summary."""
-        panel = RunningJobPanelV2(
-            tk_root, controller=mock_controller, app_state=mock_app_state
-        )
+        panel = RunningJobPanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         job = QueueJobV2.create(
             config_snapshot={"prompt": "test prompt", "model": "test_model", "seed": 12345}
         )
@@ -311,9 +304,7 @@ class TestRunningJobPanelDisplay:
         self, tk_root, mock_controller, mock_app_state
     ) -> None:
         """Running job panel should show queue origin (PR-GUI-F2)."""
-        panel = RunningJobPanelV2(
-            tk_root, controller=mock_controller, app_state=mock_app_state
-        )
+        panel = RunningJobPanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         job = QueueJobV2.create(config_snapshot={"prompt": "test"})
         job.status = JobStatusV2.RUNNING
 
@@ -328,9 +319,7 @@ class TestRunningJobPanelDisplay:
         self, tk_root, mock_controller, mock_app_state
     ) -> None:
         """Queue origin label should be empty when origin is None."""
-        panel = RunningJobPanelV2(
-            tk_root, controller=mock_controller, app_state=mock_app_state
-        )
+        panel = RunningJobPanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
         job = QueueJobV2.create(config_snapshot={"prompt": "test"})
         job.status = JobStatusV2.RUNNING
 
@@ -345,9 +334,7 @@ class TestRunningJobPanelDisplay:
         self, tk_root, mock_controller, mock_app_state
     ) -> None:
         """Panel should show 'No job running' when job is None."""
-        panel = RunningJobPanelV2(
-            tk_root, controller=mock_controller, app_state=mock_app_state
-        )
+        panel = RunningJobPanelV2(tk_root, controller=mock_controller, app_state=mock_app_state)
 
         panel.update_job(None)
 

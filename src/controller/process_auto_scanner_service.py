@@ -6,9 +6,10 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, List
+from typing import Any
 
 try:
     import psutil  # type: ignore[import]
@@ -37,7 +38,11 @@ class ProcessAutoScannerSummary:
 
 def _is_test_mode() -> bool:
     import os
-    return bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("STABLENEW_TEST_MODE") == "1"
+
+    return (
+        bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("STABLENEW_TEST_MODE") == "1"
+    )
+
 
 class ProcessAutoScannerService:
     def __init__(
@@ -55,7 +60,9 @@ class ProcessAutoScannerService:
         self._last_summary = ProcessAutoScannerSummary()
         self._thread: threading.Thread | None = None
         if start_thread and not _is_test_mode():
-            self._thread = threading.Thread(target=self._run_loop, daemon=True, name="ProcessAutoScanner")
+            self._thread = threading.Thread(
+                target=self._run_loop, daemon=True, name="ProcessAutoScanner"
+            )
             self._thread.start()
         elif start_thread and _is_test_mode():
             # In test mode, do not start background thread; service is a no-op
@@ -111,10 +118,12 @@ class ProcessAutoScannerService:
                 self._last_summary = summary
             return summary
 
-        protected = set(int(pid) for pid in self._protected_pids() if isinstance(pid, int))
+        protected = {int(pid) for pid in (self._protected_pids() or []) if isinstance(pid, int)}
         scanned = 0
         killed_details: list[dict[str, Any]] = []
-        for proc in self._psutil.process_iter(attrs=("pid", "name", "cwd", "memory_info", "create_time")):
+        for proc in self._psutil.process_iter(
+            attrs=("pid", "name", "cwd", "memory_info", "create_time")
+        ):
             if self._stop_event.is_set():
                 break
             pid = getattr(proc, "pid", None)
@@ -130,11 +139,11 @@ class ProcessAutoScannerService:
             # This prevents killing external processes like WebUI that happen to be Python
             if not self._is_repo_process(proc):
                 continue
-            
+
             # VS CODE ALLOWLIST: Never terminate VS Code / extension worker processes
             if self._is_vscode_related(proc):
                 continue
-            
+
             scanned += 1
             try:
                 create_time = proc.create_time()
@@ -204,7 +213,7 @@ class ProcessAutoScannerService:
 
     def _is_vscode_related(self, proc: Any) -> bool:
         """Best-effort check for VS Code / extension worker processes (never terminate).
-        
+
         Returns True if process is likely a VS Code editor or extension (e.g., MyPy LSP, Pylance, debugpy).
         These should never be terminated even if they meet scanner thresholds.
         """
@@ -270,5 +279,9 @@ class ProcessAutoScannerService:
                 proc.wait(timeout=self._config.kill_timeout)
                 return True
             except Exception:
-                logger.debug("Failed to kill stray process %s", getattr(proc, "pid", "unknown"), exc_info=True)
+                logger.debug(
+                    "Failed to kill stray process %s",
+                    getattr(proc, "pid", "unknown"),
+                    exc_info=True,
+                )
                 return False

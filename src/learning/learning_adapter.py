@@ -6,20 +6,20 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from .learning_plan import LearningPlan, LearningRunStep
 from .learning_runner import LearningRunner
 
 
 def build_learning_plan_from_config(
-    base_config: Dict[str, Any],
+    base_config: dict[str, Any],
     *,
     stage: str,
     target_variable: str,
-    sweep_values: List[Any],
+    sweep_values: list[Any],
     images_per_step: int = 1,
-    metadata: Dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> LearningPlan:
     """Construct a plan from config + sweep parameters."""
 
@@ -34,9 +34,9 @@ def build_learning_plan_from_config(
 
 
 def prepare_learning_run(
-    base_config: Dict[str, Any],
-    options: Dict[str, Any],
-) -> Tuple[LearningPlan, List[LearningRunStep]]:
+    base_config: dict[str, Any],
+    options: dict[str, Any],
+) -> tuple[LearningPlan, list[LearningRunStep]]:
     """Return plan + steps based on base_config and options."""
 
     stage = options.get("stage", "txt2img")

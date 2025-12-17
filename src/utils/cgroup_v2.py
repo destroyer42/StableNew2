@@ -30,7 +30,9 @@ class LinuxCGroupV2:
         self._cpu_limit_percent = cpu_limit_percent
         self._max_processes = max_processes
 
-    def _configure_limits(self, memory_mb: float | None, cpu_percent: float | None, max_processes: int | None) -> None:
+    def _configure_limits(
+        self, memory_mb: float | None, cpu_percent: float | None, max_processes: int | None
+    ) -> None:
         if memory_mb is not None:
             self._write("memory.max", str(int(memory_mb * 1024 * 1024)))
         if cpu_percent is not None:

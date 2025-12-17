@@ -28,7 +28,9 @@ def test_status_bar_transitions(tk_root: tk.Tk):
         assert 0 < bar.progress_bar["value"] <= 50
 
         bar.update_eta(90)
-        assert "ETA: 01:30" in bar.eta_label.cget("text") or bar.eta_label.cget("text") == "ETA: 01:30"
+        assert (
+            "ETA: 01:30" in bar.eta_label.cget("text") or bar.eta_label.cget("text") == "ETA: 01:30"
+        )
         bar.update_eta(None)
         assert bar.eta_label.cget("text") == ""
 

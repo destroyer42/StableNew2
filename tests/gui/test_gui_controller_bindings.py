@@ -1,15 +1,15 @@
 import tkinter as tk
+from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Any, Callable
 
 import pytest
 
 from src.controller.app_controller import AppController
-from src.pipeline.job_models_v2 import JobHistoryItemDTO, JobQueueItemDTO
-from src.queue.job_model import Job, JobPriority, JobStatus
 from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
+from src.pipeline.job_models_v2 import JobHistoryItemDTO, JobQueueItemDTO
+from src.queue.job_model import Job, JobPriority, JobStatus
 
 
 @pytest.fixture

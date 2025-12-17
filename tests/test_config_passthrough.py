@@ -112,7 +112,7 @@ class ConfigPassthroughValidator:
                     ),
                     patch.object(temp_logger, "save_manifest", return_value=None),
                 ):
-                    result = pipeline.run_full_pipeline(
+                    pipeline.run_full_pipeline(
                         prompt="configuration validation test",
                         config=test_config,
                         run_name="validation_test",
@@ -311,7 +311,7 @@ def run_configuration_validation_tests():
 
     # Show specific issues
     all_issues = []
-    for test_name, result in results.items():
+    for result in results.values():
         if result.get("analysis", {}).get("issues"):
             all_issues.extend(result["analysis"]["issues"])
 

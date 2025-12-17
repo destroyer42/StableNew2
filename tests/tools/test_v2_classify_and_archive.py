@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.v2_classify_and_archive import classify_path, build_inventory, move_to_archive
+from tools.v2_classify_and_archive import build_inventory, classify_path, move_to_archive
 
 
 @pytest.mark.parametrize(
@@ -20,13 +20,19 @@ from tools.v2_classify_and_archive import classify_path, build_inventory, move_t
                 "misc/unknown.txt",
             ],
             {"src/gui/text_panel.py"},
-            {"src/gui/stage_cards_v2/card.py", "src/controller/app_controller.py", "tests/gui_v2/test_dummy.py"},
+            {
+                "src/gui/stage_cards_v2/card.py",
+                "src/controller/app_controller.py",
+                "tests/gui_v2/test_dummy.py",
+            },
             {"src/utils/helper.py"},
             {"misc/unknown.txt"},
         )
     ],
 )
-def test_build_inventory(tmp_path: Path, paths, expect_v1, expect_v2, expect_shared, expect_unknown):
+def test_build_inventory(
+    tmp_path: Path, paths, expect_v1, expect_v2, expect_shared, expect_unknown
+):
     for rel in paths:
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -15,10 +15,10 @@ from tkinter import ttk
 
 import pytest
 
-
 # -----------------------------------------------------------------------------
 # Refiner Visibility Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_refiner_options_hidden_when_disabled() -> None:
@@ -116,6 +116,7 @@ def test_refiner_visibility_toggles_with_checkbox() -> None:
 # Hires Fix Visibility Tests
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.gui
 def test_hires_options_hidden_when_disabled() -> None:
     """Hires options frame should be hidden when hires is disabled."""
@@ -174,6 +175,7 @@ def test_hires_options_shown_when_enabled() -> None:
 # -----------------------------------------------------------------------------
 # Hires Model Selector Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_hires_model_selector_exists() -> None:
@@ -235,6 +237,7 @@ def test_hires_model_use_base_model_label_constant() -> None:
 # -----------------------------------------------------------------------------
 # LabeledSlider Numeric Indicator Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_labeled_slider_shows_numeric_value() -> None:
@@ -319,6 +322,7 @@ def test_labeled_slider_shows_percent() -> None:
 # -----------------------------------------------------------------------------
 # Upscale Final Size Calculation Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_upscale_final_size_not_zero() -> None:

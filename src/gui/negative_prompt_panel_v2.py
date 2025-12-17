@@ -27,7 +27,9 @@ class NegativePromptPanelV2(ttk.Frame):
         buttons = ttk.Frame(self, style=style_name)
         buttons.pack(fill=tk.X, pady=(theme_mod.PADDING_SM, 0))
         ttk.Button(buttons, text="Clear", command=self.clear).pack(side=tk.LEFT)
-        ttk.Button(buttons, text="Reset", command=self.reset_to_default).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(buttons, text="Reset", command=self.reset_to_default).pack(
+            side=tk.LEFT, padx=(4, 0)
+        )
 
     def get_negative_prompt(self) -> str:
         return self.text.get("1.0", tk.END).strip()

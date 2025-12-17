@@ -1,5 +1,5 @@
-import threading
 import time
+
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.queue.job_queue import JobQueue
@@ -26,7 +26,13 @@ def main():
     job_service = JobService(JobQueue())
     pipeline_controller = DummyPipelineController()
 
-    controller = AppController(main_window=None, job_service=job_service, pipeline_controller=pipeline_controller, ui_scheduler=ui_scheduler, threaded=False)
+    controller = AppController(
+        main_window=None,
+        job_service=job_service,
+        pipeline_controller=pipeline_controller,
+        ui_scheduler=ui_scheduler,
+        threaded=False,
+    )
 
     start = time.time()
     # Simulate Add to Queue click
@@ -38,5 +44,5 @@ def main():
     print(f"PipelineController enqueued count: {pipeline_controller.enqueued}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

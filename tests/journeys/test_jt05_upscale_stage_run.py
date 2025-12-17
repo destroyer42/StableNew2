@@ -15,12 +15,9 @@ from unittest.mock import patch
 
 import pytest
 
-from src.controller.app_controller import LifecycleState
 from tests.helpers.factories import update_current_config
 from tests.helpers.gui_harness import pipeline_harness
 from tests.journeys.journey_helpers_v2 import (
-    get_latest_job,
-    get_stage_plan_for_job,
     start_run_and_wait,
 )
 
@@ -42,7 +39,7 @@ class TestJT05UpscaleStageRun:
             root = Path(temp_dir)
             yield root
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     @pytest.mark.journey
     @pytest.mark.slow
     def test_jt05_standalone_upscale_stage(self, mock_webui_api, app_root):
@@ -54,8 +51,8 @@ class TestJT05UpscaleStageRun:
         """
         # Setup mocks
         mock_webui_api.return_value.upscale_image.return_value = {
-            'images': [{'data': 'base64_encoded_upscaled_image'}],
-            'info': '{"upscale_factor": 2.0, "model": "UltraSharp"}'
+            "images": [{"data": "base64_encoded_upscaled_image"}],
+            "info": '{"upscale_factor": 2.0, "model": "UltraSharp"}',
         }
 
         # Create test image file
@@ -88,11 +85,13 @@ class TestJT05UpscaleStageRun:
         job_entry = start_run_and_wait(app_controller, use_run_now=True, timeout_seconds=30.0)
 
         # Assert job metadata
-        assert job_entry.run_mode == "queue", f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
+        assert job_entry.run_mode == "queue", (
+            f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
+        )
         # Verify UI state
         assert window.pipeline_tab.upscale_enabled.get() is True
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     @pytest.mark.journey
     @pytest.mark.slow
     def test_jt05_multi_stage_txt2img_upscale_pipeline(self, mock_webui_api, app_root):
@@ -105,12 +104,12 @@ class TestJT05UpscaleStageRun:
         """
         # Setup mocks for both stages
         mock_webui_api.return_value.txt2img.return_value = {
-            'images': [{'data': 'base64_encoded_txt2img_image'}],
-            'info': '{"prompt": "test landscape", "width": 512, "height": 512}'
+            "images": [{"data": "base64_encoded_txt2img_image"}],
+            "info": '{"prompt": "test landscape", "width": 512, "height": 512}',
         }
         mock_webui_api.return_value.upscale_image.return_value = {
-            'images': [{'data': 'base64_encoded_final_upscaled_image'}],
-            'info': '{"upscale_factor": 2.0, "model": "ESRGAN"}'
+            "images": [{"data": "base64_encoded_final_upscaled_image"}],
+            "info": '{"upscale_factor": 2.0, "model": "ESRGAN"}',
         }
 
         with pipeline_harness() as harness:
@@ -144,15 +143,17 @@ class TestJT05UpscaleStageRun:
         job_entry = start_run_and_wait(app_controller, use_run_now=False, timeout_seconds=30.0)
 
         # Assert job metadata
-        assert job_entry.run_mode == "direct", f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+        assert job_entry.run_mode == "direct", (
+            f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+        )
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     def test_jt05_upscale_parameter_variations(self, mock_webui_api, app_root):
         """Test various upscale parameters and factor calculations."""
         # Setup mock
         mock_webui_api.return_value.upscale_image.return_value = {
-            'images': [{'data': 'base64_encoded_image'}],
-            'info': '{"upscale_factor": 1.5, "model": "4x-UltraSharp"}'
+            "images": [{"data": "base64_encoded_image"}],
+            "info": '{"upscale_factor": 1.5, "model": "4x-UltraSharp"}',
         }
 
         # Create test image
@@ -186,18 +187,20 @@ class TestJT05UpscaleStageRun:
                     window.pipeline_tab.input_image_path = str(test_image_path)
 
                     # Execute run via helper API
-                    job_entry = start_run_and_wait(app_controller, use_run_now=True, timeout_seconds=30.0)
+                    job_entry = start_run_and_wait(
+                        app_controller, use_run_now=True, timeout_seconds=30.0
+                    )
 
                     # Assert job metadata
                     assert job_entry.run_mode == "queue"
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     def test_jt05_upscale_metadata_preservation(self, mock_webui_api, app_root):
         """Test that upscale preserves prompt and pipeline metadata."""
         # Setup mock with metadata
         mock_webui_api.return_value.upscale_image.return_value = {
-            'images': [{'data': 'base64_encoded_image'}],
-            'info': '{"upscale_factor": 2.0, "model": "UltraSharp", "original_prompt": "test prompt"}'
+            "images": [{"data": "base64_encoded_image"}],
+            "info": '{"upscale_factor": 2.0, "model": "UltraSharp", "original_prompt": "test prompt"}',
         }
 
         # Create test image with metadata
@@ -226,18 +229,19 @@ class TestJT05UpscaleStageRun:
             # Assert job metadata
             assert job_entry.run_mode == "direct"
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     def test_jt05_upscale_error_handling(self, mock_webui_api, app_root):
         """Test upscale error handling and edge cases."""
         # Setup mock to raise exception
-        mock_webui_api.return_value.upscale_image.side_effect = Exception("Upscale model not available")
+        mock_webui_api.return_value.upscale_image.side_effect = Exception(
+            "Upscale model not available"
+        )
 
         # Create test image
         test_image_path = app_root / "test_input.png"
         test_image_path.write_bytes(b"fake_png_data")
 
         with pipeline_harness() as harness:
-            app_state = harness.app_state
             app_controller = harness.controller
             window = harness.window
 

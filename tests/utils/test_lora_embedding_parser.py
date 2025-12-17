@@ -1,4 +1,4 @@
-from src.gui.utils.lora_embedding_parser import parse_loras, parse_embeddings
+from src.gui.utils.lora_embedding_parser import parse_embeddings, parse_loras
 
 
 def test_parse_loras_multiple():

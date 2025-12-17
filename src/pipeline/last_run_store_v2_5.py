@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 import json
 import logging
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
 
 from src.gui.app_state_v2 import CurrentConfig
 
 LAST_RUN_PATH = Path("state/last_run_v2_5.json")
+
 
 @dataclass
 class LastRunConfigV2_5:
@@ -82,6 +83,7 @@ def update_current_config_from_last_run(cfg: CurrentConfig, last: LastRunConfigV
     cfg.hires_denoise = last.hires_denoise
     cfg.hires_use_base_model_for_hires = last.hires_use_base_model
 
+
 class LastRunStoreV2_5:
     def __init__(self, path: Path | None = None):
         self.path = path or LAST_RUN_PATH
@@ -94,7 +96,9 @@ class LastRunStoreV2_5:
             with self.path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
             # Tolerate missing/extra fields
-            return LastRunConfigV2_5(**{k: v for k, v in data.items() if k in LastRunConfigV2_5.__annotations__})
+            return LastRunConfigV2_5(
+                **{k: v for k, v in data.items() if k in LastRunConfigV2_5.__annotations__}
+            )
         except Exception as exc:
             logging.warning(f"Failed to load last-run config: {exc}")
             return None
@@ -104,6 +108,8 @@ class LastRunStoreV2_5:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with self.path.open("w", encoding="utf-8") as f:
                 json.dump(asdict(cfg), f, indent=2)
-            logging.info(f"Saved last-run config: model={cfg.model}, sampler={cfg.sampler_name}, steps={cfg.steps}, size={cfg.width}x{cfg.height}")
+            logging.info(
+                f"Saved last-run config: model={cfg.model}, sampler={cfg.sampler_name}, steps={cfg.steps}, size={cfg.width}x{cfg.height}"
+            )
         except Exception as exc:
             logging.warning(f"Failed to save last-run config: {exc}")

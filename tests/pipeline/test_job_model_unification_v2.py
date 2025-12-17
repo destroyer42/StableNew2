@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.pipeline.job_models_v2 import JobView, NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 
 
 def _sample_record() -> NormalizedJobRecord:
@@ -20,7 +20,9 @@ def _sample_record() -> NormalizedJobRecord:
         positive_prompt="aurora over the mountains",
         negative_prompt="bad anatomy",
         stage_chain=[
-            StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a")
+            StageConfig(
+                stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a"
+            )
         ],
     )
 

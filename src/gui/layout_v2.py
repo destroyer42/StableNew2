@@ -10,4 +10,6 @@ def configure_root_grid(root: tk.Tk) -> None:
     for row in get_root_rows():
         root.rowconfigure(row["index"], weight=row.get("weight", 0), minsize=row.get("minsize", 0))
     for column in get_root_columns():
-        root.columnconfigure(column["index"], weight=column.get("weight", 0), minsize=column.get("minsize", 0))
+        root.columnconfigure(
+            column["index"], weight=column.get("weight", 0), minsize=column.get("minsize", 0)
+        )

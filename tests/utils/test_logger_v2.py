@@ -58,7 +58,9 @@ def test_jsonl_file_handler_writes_jsonl(tmp_path: Path) -> None:
     handler.close()
 
     assert log_path.exists()
-    lines = [line.strip() for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    lines = [
+        line.strip() for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
     assert len(lines) == 1
     data = json.loads(lines[0])
     assert data["job_id"] == "job-jsonl"

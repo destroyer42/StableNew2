@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
-
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
+from typing import Any
 
 from src.utils.config import ConfigManager
 
@@ -145,9 +145,13 @@ class EngineSettingsDialog(ttk.Frame):
         entry = ttk.Entry(parent, textvariable=var)
         entry.grid(row=row, column=1, sticky="ew", pady=2, padx=(4, 0))
         if var_type == "int":
-            entry.configure(validate="key", validatecommand=(entry.register(self._validate_int), "%P"))
+            entry.configure(
+                validate="key", validatecommand=(entry.register(self._validate_int), "%P")
+            )
         elif var_type == "float":
-            entry.configure(validate="key", validatecommand=(entry.register(self._validate_float), "%P"))
+            entry.configure(
+                validate="key", validatecommand=(entry.register(self._validate_float), "%P")
+            )
 
     def _validate_int(self, value: str) -> bool:
         if value == "":

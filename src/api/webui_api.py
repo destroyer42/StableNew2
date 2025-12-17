@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
 import hashlib
 import json
 import threading
 import time
 from collections.abc import Callable
+from enum import Enum
 from typing import Any
 
 from src.api.client import SDWebUIClient
@@ -153,6 +153,7 @@ class WebUIAPI:
             "models_endpoint": False,
             "options_endpoint": False,
             "boot_marker_found": False,
+            "progress_idle": False,
         }
 
         while time.time() - start_time < timeout_s:
@@ -186,7 +187,7 @@ class WebUIAPI:
                 logger.debug("Options endpoint check failed: %s", exc)
                 checks_status["options_endpoint"] = False
 
-            # Check 3: boot marker in stdout
+            # Check 3: boot marker in stdout (observability-only)
             if get_stdout_tail:
                 try:
                     stdout_content = get_stdout_tail()
@@ -202,21 +203,45 @@ class WebUIAPI:
             else:
                 # If no stdout callback provided, assume marker is present
                 checks_status["boot_marker_found"] = True
-                logger.debug(
-                    "No stdout callback provided; assuming boot marker present"
-                )
+                logger.debug("No stdout callback provided; assuming boot marker present")
 
-            # API readiness is sufficient: both models and options endpoints must be responsive.
-            # Boot marker detection is observability-only (not a gating requirement).
-            # This prevents false negatives where stdout markers differ across WebUI versions.
-            api_ready = checks_status["models_endpoint"] and checks_status["options_endpoint"]
+            # Check 4: Progress endpoint check (ensures WebUI is idle/ready, not loading model)
+            try:
+                if hasattr(self._client, "_session"):
+                    progress_response = self._client._session.get(
+                        f"{self._client.base_url}/sdapi/v1/progress",
+                        timeout=5.0,
+                    )
+                    if progress_response.status_code == 200:
+                        progress_data = progress_response.json()
+                        # WebUI is ready if progress is 0 (idle) and not currently processing
+                        is_idle = progress_data.get("progress", 1.0) == 0.0
+                        checks_status["progress_idle"] = is_idle
+                        if not is_idle:
+                            logger.debug("WebUI is busy (progress: %.2f)", progress_data.get("progress", 0))
+                    else:
+                        checks_status["progress_idle"] = False
+                else:
+                    checks_status["progress_idle"] = True
+            except Exception as exc:
+                logger.debug("Progress endpoint check failed: %s", exc)
+                checks_status["progress_idle"] = False
+
+            # API readiness requires: models endpoint + options endpoint
+            # Boot marker and progress checks are observability-only
+            api_ready = (
+                checks_status["models_endpoint"]
+                and checks_status["options_endpoint"]
+            )
             if api_ready:
                 elapsed = time.time() - start_time
                 boot_marker_status = "found" if checks_status["boot_marker_found"] else "not found"
+                progress_status = "idle" if checks_status.get("progress_idle", False) else "busy"
                 logger.info(
-                    "WebUI TRUE-READY confirmed after %.1f seconds (models: ok, options: ok, boot_marker: %s)",
+                    "WebUI TRUE-READY confirmed after %.1f seconds (models: ok, options: ok, boot_marker: %s, progress: %s)",
                     elapsed,
                     boot_marker_status,
+                    progress_status,
                 )
                 return True
 
@@ -258,7 +283,9 @@ class WebUIAPI:
         return_status: bool = False,
     ) -> bool | OptionsApplyResult:
         if not updates:
-            return self._finalize_options_result(OptionsApplyResult.APPLIED, return_status=return_status)
+            return self._finalize_options_result(
+                OptionsApplyResult.APPLIED, return_status=return_status
+            )
 
         if not self._ensure_client_ready():
             logger.debug("Skipping WebUI options (client not ready, stage=%s)", stage)

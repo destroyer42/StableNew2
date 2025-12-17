@@ -38,7 +38,9 @@ def test_job_lifecycle_logger_records_job_finished():
     state = AppStateV2()
     logger = JobLifecycleLogger(app_state=state)
 
-    logger.log_job_finished(source="job_service", job_id="job-123", status="completed", message="Done")
+    logger.log_job_finished(
+        source="job_service", job_id="job-123", status="completed", message="Done"
+    )
 
     assert state.log_events
     event = state.log_events[-1]

@@ -1,8 +1,6 @@
 from types import SimpleNamespace
 
 # Need WebUIConnectionState for stubbing the ensure_connected result
-import pytest
-
 from src.controller.pipeline_controller import PipelineController
 from src.controller.webui_connection_controller import WebUIConnectionState
 from src.queue.job_model import JobStatus
@@ -15,7 +13,7 @@ class FakeJobExecutionController:
         self.callbacks: dict[str, callable] = {}
 
     def submit_pipeline_run(self, payload_callable):
-        job_id = f"job-{len(self.submitted)+1}"
+        job_id = f"job-{len(self.submitted) + 1}"
         self.submitted.append(payload_callable)
         return job_id
 
@@ -26,15 +24,21 @@ class FakeJobExecutionController:
         self.callbacks[key] = callback
 
 
-def _setup_controller(monkeypatch, queue_enabled: bool) -> tuple[PipelineController, FakeJobExecutionController]:
+def _setup_controller(
+    monkeypatch, queue_enabled: bool
+) -> tuple[PipelineController, FakeJobExecutionController]:
     fake_job_ctrl = FakeJobExecutionController()
-    monkeypatch.setattr("src.controller.pipeline_controller.is_queue_execution_enabled", lambda: queue_enabled)
+    monkeypatch.setattr(
+        "src.controller.pipeline_controller.is_queue_execution_enabled", lambda: queue_enabled
+    )
     controller = PipelineController()
     controller._job_controller = fake_job_ctrl
     controller._job_controller.set_status_callback("pipeline_ctrl", controller._on_queue_status)
     controller._job_controller.set_status_callback("pipeline", controller._on_job_status)
     controller._queue_execution_enabled = queue_enabled
-    controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
+    controller._webui_connection.ensure_connected = (
+        lambda autostart=True: WebUIConnectionState.READY
+    )
     return controller, fake_job_ctrl
 
 

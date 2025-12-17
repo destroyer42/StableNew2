@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.controller.webui_connection_controller import WebUIConnectionState
 from src.controller.pipeline_controller import PipelineController
+from src.controller.webui_connection_controller import WebUIConnectionState
 
 
 def test_controller_submits_job_and_transitions_states():
@@ -15,7 +15,9 @@ def test_controller_submits_job_and_transitions_states():
         return True
 
     controller.gui_transition_state = capture_state
-    controller._webui_connection.ensure_connected = lambda autostart=True: WebUIConnectionState.READY
+    controller._webui_connection.ensure_connected = (
+        lambda autostart=True: WebUIConnectionState.READY
+    )
     controller._job_controller.submit_pipeline_run = lambda fn: fn()
     calls = SimpleNamespace(completed=False)
 

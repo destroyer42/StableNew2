@@ -9,10 +9,7 @@ Validates:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from src.pipeline.job_models_v2 import QueueJobV2
 from src.pipeline.job_queue_v2 import JobQueueV2
@@ -86,10 +83,12 @@ class TestQueuePersistenceRoundTrip:
         with patch("src.utils.config.QUEUE_STATE_PATH", queue_path):
             # Create a queue with jobs
             queue1 = JobQueueV2()
-            queue1.add_jobs([
-                QueueJobV2.create({"prompt": "test1"}),
-                QueueJobV2.create({"prompt": "test2"}),
-            ])
+            queue1.add_jobs(
+                [
+                    QueueJobV2.create({"prompt": "test1"}),
+                    QueueJobV2.create({"prompt": "test2"}),
+                ]
+            )
             queue1.auto_run_enabled = True
 
             # Serialize and save

@@ -4,13 +4,40 @@ import copy
 import csv
 import json
 import logging
+import weakref
 from collections import deque
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import RLock
-from typing import Any, Deque, Dict, Iterable, Mapping, Optional
+from typing import Any
+
+# Module-level registry for StructuredLogger lifecycle management
+_structured_logger_registry: weakref.WeakSet[Any] = weakref.WeakSet()
+
+
+def get_structured_logger_registry_count() -> int:
+    """Return the current count of active StructuredLogger instances."""
+    return len(_structured_logger_registry)
+
+
+def close_all_structured_loggers() -> None:
+    """
+    Close all active StructuredLogger instances (best-effort, safe to call multiple times).
+
+    Iterates through registered loggers and calls close() on each.
+    Silently continues on any exception.
+    """
+    # Make a copy to avoid mutation during iteration
+    loggers_to_close = list(_structured_logger_registry)
+    for logger_instance in loggers_to_close:
+        try:
+            logger_instance.close()
+        except Exception:
+            # Best-effort: silently skip any that fail
+            pass
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -22,13 +49,13 @@ def get_logger(name: str) -> logging.Logger:
 class LogContext:
     """Contextual information for logging (run_id, stage, subsystem, etc.)."""
 
-    run_id: Optional[str] = None
-    job_id: Optional[str] = None
-    stage: Optional[str] = None
-    subsystem: Optional[str] = None
+    run_id: str | None = None
+    job_id: str | None = None
+    stage: str | None = None
+    subsystem: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = {}
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {}
         if self.run_id:
             data["run_id"] = self.run_id
         if self.job_id:
@@ -116,16 +143,16 @@ def log_with_ctx(
     level: int,
     message: str,
     *,
-    ctx: Optional[LogContext] = None,
-    extra_fields: Optional[Mapping[str, Any]] = None,
+    ctx: LogContext | None = None,
+    extra_fields: Mapping[str, Any] | None = None,
 ) -> None:
     """Log a message with optional structured context, appended as JSON."""
-    payload: Dict[str, Any] = {}
+    payload: dict[str, Any] = {}
     if ctx is not None:
         payload.update(ctx.to_dict())
     if extra_fields:
         payload.update(extra_fields)
-    json_payload: Dict[str, Any] = {"message": message}
+    json_payload: dict[str, Any] = {"message": message}
     json_payload.update(payload)
 
     if payload:
@@ -147,7 +174,7 @@ class InMemoryLogHandler(logging.Handler):
         super().__init__(level=level)
         self._max_entries = max_entries
         self._lock = RLock()
-        self._entries: Deque[Dict[str, Any]] = deque(maxlen=max_entries)
+        self._entries: deque[dict[str, Any]] = deque(maxlen=max_entries)
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -168,7 +195,7 @@ class InMemoryLogHandler(logging.Handler):
         with self._lock:
             self._entries.append(entry)
 
-    def get_entries(self) -> Iterable[Dict[str, Any]]:
+    def get_entries(self) -> Iterable[dict[str, Any]]:
         """Return a snapshot of the current entries."""
         with self._lock:
             return list(self._entries)
@@ -199,6 +226,36 @@ class StructuredLogger:
 
         # Setup Python logging
         self.logger = logging.getLogger("StableNew")
+
+        # Track handlers added by this instance
+        self._handlers_added: list[logging.Handler] = []
+        self._closed: bool = False
+
+        # Register this instance in the global registry
+        _structured_logger_registry.add(self)
+
+    def close(self) -> None:
+        """
+        Close this logger instance: flush, close, and remove all attached handlers.
+
+        Idempotent: safe to call multiple times.
+        """
+        if self._closed:
+            return
+
+        self._closed = True
+
+        # Detach and close all handlers we added
+        for handler in self._handlers_added:
+            try:
+                handler.flush()
+                handler.close()
+                self.logger.removeHandler(handler)
+            except Exception:
+                # Best-effort: continue even if one handler fails
+                pass
+
+        self._handlers_added.clear()
 
     def create_run_directory(self, run_name: str | None = None) -> Path:
         """
@@ -354,7 +411,7 @@ class StructuredLogger:
                             file_path = Path(img_data["path"])
                             if file_path.exists():
                                 file_size = file_path.stat().st_size
-                        except:
+                        except (OSError, ValueError):
                             pass
 
                     row = {
@@ -408,11 +465,6 @@ class StructuredLogger:
             return True
         except Exception as e:
             self.logger.error(f"Failed to create pack CSV summary: {e}")
-            return False
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Failed to create CSV summary: {e}")
             return False
 
     def create_rollup_manifest(self, run_dir: Path) -> bool:

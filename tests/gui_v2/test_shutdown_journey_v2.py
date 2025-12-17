@@ -15,8 +15,8 @@ def test_shutdown_journey_calls_controller_once_per_close() -> None:
         _, _, controller, window = build_v2_app(root=root)
         calls: list[str | None] = []
 
-        def stub(reason: str | None = None) -> None:
-            calls.append(reason)
+        def stub(reason: str | None = None, *, _calls=calls) -> None:
+            _calls.append(reason)
 
         controller.shutdown_app = stub
         window.on_app_close()

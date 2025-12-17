@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.learning.learning_record import LearningRecord
 from src.learning.learning_record_builder import build_learning_record
 from src.pipeline.pipeline_runner import PipelineRunResult
-from src.controller.archive.pipeline_config_types import PipelineConfig
-from src.pipeline.stage_sequencer import StageExecutionPlan, StageExecution, StageConfig
-from src.learning.learning_record import LearningRecord
+from src.pipeline.stage_sequencer import StageConfig, StageExecution, StageExecutionPlan
 
 
 def _run_result_stub(run_id: str = "run-123") -> PipelineRunResult:
@@ -30,7 +30,15 @@ def _run_result_stub(run_id: str = "run-123") -> PipelineRunResult:
         randomizer_plan_size=1,
         metadata={"timestamp": "t0"},
         stage_plan=stage_plan,
-        stage_events=[{"stage": "txt2img", "phase": "exit", "image_index": 1, "total_images": 1, "cancelled": False}],
+        stage_events=[
+            {
+                "stage": "txt2img",
+                "phase": "exit",
+                "image_index": 1,
+                "total_images": 1,
+                "cancelled": False,
+            }
+        ],
     )
 
 

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-import tkinter as tk
-
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.queue.job_history_store import JobHistoryEntry, JobStatus

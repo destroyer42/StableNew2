@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from src.controller.app_controller import AppController
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 

@@ -3,7 +3,7 @@ import tkinter as tk
 import pytest
 
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
-from src.pipeline.job_models_v2 import PackUsageInfo, NormalizedJobRecord, StagePromptInfo
+from src.pipeline.job_models_v2 import NormalizedJobRecord, PackUsageInfo, StagePromptInfo
 from src.utils import InMemoryLogHandler
 
 

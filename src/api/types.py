@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class GenerateErrorCode(str, Enum):
@@ -23,10 +23,10 @@ class GenerateErrorCode(str, Enum):
 class GenerateResult:
     """Structured response for a single generation stage."""
 
-    images: List[Any]
-    info: Dict[str, Any]
+    images: list[Any]
+    info: dict[str, Any]
     stage: str
-    timings: Optional[Dict[str, float]] = None
+    timings: dict[str, float] | None = None
 
 
 @dataclass
@@ -35,16 +35,16 @@ class GenerateError:
 
     code: GenerateErrorCode
     message: str
-    stage: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
+    stage: str | None = None
+    details: dict[str, Any] | None = None
 
 
 @dataclass
 class GenerateOutcome:
     """Wrapper that carries either a GenerateResult or a GenerateError."""
 
-    result: Optional[GenerateResult] = None
-    error: Optional[GenerateError] = None
+    result: GenerateResult | None = None
+    error: GenerateError | None = None
 
     @property
     def ok(self) -> bool:

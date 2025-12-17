@@ -13,8 +13,7 @@ import pytest
 
 from src.pipeline.config_variant_plan_v2 import ConfigVariant, ConfigVariantPlanV2
 from src.pipeline.job_builder_v2 import JobBuilderV2
-from src.pipeline.job_models_v2 import BatchSettings, OutputSettings
-
+from src.pipeline.job_models_v2 import BatchSettings
 
 # ============================================================================
 # ConfigVariantPlanV2 Tests
@@ -377,7 +376,7 @@ class TestConfigSweepIntegration:
         jobs2 = builder.build_jobs(base_config=base_config, config_variant_plan=plan)
 
         assert len(jobs1) == len(jobs2)
-        for j1, j2 in zip(jobs1, jobs2):
+        for j1, j2 in zip(jobs1, jobs2, strict=True):
             assert j1.config_variant_label == j2.config_variant_label
             assert j1.config_variant_index == j2.config_variant_index
             assert j1.config["cfg_scale"] == j2.config["cfg_scale"]

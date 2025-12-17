@@ -20,9 +20,9 @@ from src.gui.theme_v2 import (
 class PipelineRunControlsV2(ttk.Frame):
     """
     Simplified queue/run controls for V2.
-    
+
     All jobs go through the queue - no direct mode.
-    
+
     Controls:
     - Auto-run queue: checkbox to run next job automatically
     - Pause/Resume: toggle queue processing
@@ -115,9 +115,7 @@ class PipelineRunControlsV2(ttk.Frame):
         queue_count = len(queue_items) if queue_items else 0
 
         # Update pause/resume button
-        self.pause_resume_button.configure(
-            text="Resume Queue" if is_paused else "Pause Queue"
-        )
+        self.pause_resume_button.configure(text="Resume Queue" if is_paused else "Pause Queue")
 
         # Update status label
         if running_job:

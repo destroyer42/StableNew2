@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import List
 
-from src.gui.utils.lora_embedding_parser import EmbeddingReference, LoraReference, parse_embeddings, parse_loras
-
+from src.gui.utils.lora_embedding_parser import (
+    EmbeddingReference,
+    LoraReference,
+    parse_embeddings,
+    parse_loras,
+)
 
 _MATRIX_PATTERN = re.compile(r"\{[^{}]*\|[^{}]*\}")
 
 
 @dataclass
 class PromptMetadata:
-    loras: List[LoraReference] = field(default_factory=list)
-    embeddings: List[EmbeddingReference] = field(default_factory=list)
+    loras: list[LoraReference] = field(default_factory=list)
+    embeddings: list[EmbeddingReference] = field(default_factory=list)
     matrix_count: int = 0
     text_length: int = 0
     line_count: int = 0

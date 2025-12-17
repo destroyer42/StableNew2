@@ -78,9 +78,7 @@ class TestWaitUntilReadyExceptionHandling:
     def test_handles_exception_on_first_attempt_then_succeeds(self):
         """Verify wait_until_ready continues after exception on first attempt."""
         mock_client = Mock()
-        mock_client.check_api_ready = Mock(
-            side_effect=[RuntimeError("connection error"), True]
-        )
+        mock_client.check_api_ready = Mock(side_effect=[RuntimeError("connection error"), True])
 
         sleep_calls = []
 

@@ -9,11 +9,12 @@ import subprocess
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
-from src.utils import get_logger, LogContext, log_with_ctx
+from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 
 
@@ -31,7 +32,7 @@ def _load_webui_cache() -> dict[str, Any]:
     """Load cached WebUI configuration."""
     try:
         if _WEBUI_CACHE_FILE.exists():
-            with _WEBUI_CACHE_FILE.open('r') as f:
+            with _WEBUI_CACHE_FILE.open("r") as f:
                 return json.load(f)
     except Exception:
         pass
@@ -42,7 +43,7 @@ def _save_webui_cache(cache: dict[str, Any]) -> None:
     """Save WebUI configuration to cache."""
     try:
         _WEBUI_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with _WEBUI_CACHE_FILE.open('w') as f:
+        with _WEBUI_CACHE_FILE.open("w") as f:
             json.dump(cache, f, indent=2)
     except Exception:
         pass
@@ -61,7 +62,7 @@ class WebUIProcessConfig:
 
     def build_env(self) -> dict[str, str]:
         env = dict(os.environ)
-        env.update({k: v for k, v in (self.env_overrides or {}).items()})
+        env.update(self.env_overrides or {})
         return env
 
 
@@ -77,6 +78,7 @@ class WebUIProcessManager:
         self._pid: int | None = None
         self._stdout_tail: deque[str] = deque(maxlen=200)
         self._stderr_tail: deque[str] = deque(maxlen=200)
+        self._stopped: bool = False
         global _GLOBAL_WEBUI_PROCESS_MANAGER
         _GLOBAL_WEBUI_PROCESS_MANAGER = self
 
@@ -137,6 +139,7 @@ class WebUIProcessManager:
             return self._process
 
         import logging
+
         ctx = LogContext(subsystem="api")
         log_with_ctx(
             logger,
@@ -148,13 +151,16 @@ class WebUIProcessManager:
         run_session_id = build_run_session_id()
 
         try:
+            # CRITICAL FIX: Don't capture stdout/stderr at all - let WebUI write directly to console
+            # This prevents any potential file locking or buffer blocking issues
+            
             self._process = subprocess.Popen(
                 self._config.command,
                 cwd=self._config.working_dir or None,
                 env=self._config.build_env(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                shell=os.name == "nt" and self._config.command[0].endswith(".bat"),  # Use shell for .bat files on Windows
+                stdout=None,  # Inherit parent's stdout (console)
+                stderr=None,  # Inherit parent's stderr (console)
+                shell=True if (os.name == "nt" and self._config.command[0].endswith(".bat")) else False,
             )
             self._pid = self._process.pid
             self._start_time = time.time()
@@ -165,40 +171,26 @@ class WebUIProcessManager:
                 cwd=self._config.working_dir,
             )
             logger.info(launch_msg)
-            # Log process output in background
+            logger.info("WebUI stdout/stderr will appear directly in console (not captured)")
             self._stdout_tail.clear()
             self._stderr_tail.clear()
-
-            def log_output(stream, name, buffer: deque[str] | None) -> None:
-                if stream is None or buffer is None:
-                    return
-                try:
-                    for line in iter(stream.readline, b""):
-                        decoded = line.decode(errors="ignore").rstrip("\n")
-                        buffer.append(decoded)
-                        logger.info("WebUI %s: %s", name, decoded)
-                except Exception:
-                    pass
-
-            threading.Thread(
-                target=log_output,
-                args=(self._process.stdout, "stdout", self._stdout_tail),
-                daemon=True,
-            ).start()
-            threading.Thread(
-                target=log_output,
-                args=(self._process.stderr, "stderr", self._stderr_tail),
-                daemon=True,
-            ).start()
         except Exception as exc:  # noqa: BLE001 - surface structured error
             raise WebUIStartupError(f"Failed to start WebUI: {exc}") from exc
 
         return self._process
 
     def stop(self) -> None:
-        """Attempt to terminate the process if running."""
-
-        self.stop_webui()
+        """Attempt to terminate the process if running (idempotent)."""
+        if self._stopped:
+            return
+        self._stopped = True
+        try:
+            self.stop_webui()
+        except Exception:
+            logger.exception("Error calling stop_webui during stop()")
+        finally:
+            # Clear global reference to allow cleanup
+            clear_global_webui_process_manager()
 
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
@@ -214,7 +206,7 @@ class WebUIProcessManager:
             return True
         # PR-CORE1-D15: Ensure .terminated attribute exists for test doubles
         if not hasattr(process, "terminated"):
-            setattr(process, "terminated", False)
+            process.terminated = False
         if process.poll() is not None:
             self._finalize_process(process)
             # Already exited; terminated remains False
@@ -223,7 +215,7 @@ class WebUIProcessManager:
         logger.info("Initiating WebUI shutdown (pid=%s, grace=%.1fs)", pid, grace_seconds)
         try:
             process.terminate()
-            setattr(process, "terminated", True)
+            process.terminated = True
         except Exception:
             pass
 
@@ -332,7 +324,9 @@ class WebUIProcessManager:
                 extra_fields={
                     "error": str(exc),
                     "base_url": base_url,
-                } if exc else {},
+                }
+                if exc
+                else {},
             )
             ready = False
         finally:
@@ -379,7 +373,9 @@ class WebUIProcessManager:
             "running": self.is_running(),
             "pid": getattr(self._process, "pid", None) if self._process else None,
             "start_time": self._start_time,
-            "last_exit_code": self._last_exit_code if self._process is None else self._process.poll(),
+            "last_exit_code": self._last_exit_code
+            if self._process is None
+            else self._process.poll(),
             "command": list(self._config.command),
             "working_dir": self._config.working_dir,
         }
@@ -480,9 +476,9 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
 
     # First try cached location
     cache = _load_webui_cache()
-    cached_workdir = cache.get('workdir')
-    cached_command = cache.get('command')
-    
+    cached_workdir = cache.get("workdir")
+    cached_command = cache.get("command")
+
     if cached_workdir and cached_command:
         workdir_path = Path(cached_workdir)
         if workdir_path.exists() and workdir_path.is_dir():
@@ -501,15 +497,11 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
     # Fall back to app config
     workdir = app_config.get_webui_workdir()
     command = app_config.get_webui_command()
-    
+
     if workdir and command:
         # Cache this valid configuration
         print(f"Caching WebUI location: {workdir}")
-        _save_webui_cache({
-            'workdir': workdir,
-            'command': command,
-            'timestamp': time.time()
-        })
+        _save_webui_cache({"workdir": workdir, "command": command, "timestamp": time.time()})
         return WebUIProcessConfig(
             command=command,
             working_dir=workdir,
@@ -533,11 +525,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         if command_path.exists():
             # Cache the detected configuration
             print(f"Caching detected WebUI location: {workdir}")
-            _save_webui_cache({
-                'workdir': workdir,
-                'command': command,
-                'timestamp': time.time()
-            })
+            _save_webui_cache({"workdir": workdir, "command": command, "timestamp": time.time()})
             return WebUIProcessConfig(
                 command=command,
                 working_dir=workdir,
@@ -553,3 +541,9 @@ _GLOBAL_WEBUI_PROCESS_MANAGER: WebUIProcessManager | None = None
 
 def get_global_webui_process_manager() -> WebUIProcessManager | None:
     return _GLOBAL_WEBUI_PROCESS_MANAGER
+
+
+def clear_global_webui_process_manager() -> None:
+    """Clear the global WebUI process manager reference (idempotent)."""
+    global _GLOBAL_WEBUI_PROCESS_MANAGER
+    _GLOBAL_WEBUI_PROCESS_MANAGER = None

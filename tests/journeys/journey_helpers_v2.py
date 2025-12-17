@@ -13,14 +13,13 @@ Public API:
 from __future__ import annotations
 
 import time
-from typing import Iterable
+from collections.abc import Iterable
 from datetime import datetime
 
 from src.controller.app_controller import AppController
 from src.pipeline.stage_sequencer import StageExecutionPlan
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
-
 
 _DEFAULT_TIMEOUT = 30.0
 

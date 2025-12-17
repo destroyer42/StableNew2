@@ -11,7 +11,6 @@ import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, QueueJobV2
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -36,6 +35,7 @@ def tk_root():
 def queue_panel(tk_root):
     """Create a QueuePanelV2 instance."""
     from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+
     panel = QueuePanelV2(tk_root)
     panel.pack(fill=tk.BOTH, expand=True)
     tk_root.update_idletasks()

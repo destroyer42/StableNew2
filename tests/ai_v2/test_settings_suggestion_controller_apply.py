@@ -20,7 +20,10 @@ def test_apply_suggestion_does_not_mutate_baseline():
 def test_controller_requests_stub_suggestion():
     controller = SettingsSuggestionController()
     suggestion = controller.request_suggestion(
-        SuggestionIntent.FAST_DRAFT, "pack", {"txt2img": {"steps": 20}}, dataset_snapshot={"runs": [], "feedback": []}
+        SuggestionIntent.FAST_DRAFT,
+        "pack",
+        {"txt2img": {"steps": 20}},
+        dataset_snapshot={"runs": [], "feedback": []},
     )
     assert suggestion.stages
     assert suggestion.internal_metadata.get("stub") is True

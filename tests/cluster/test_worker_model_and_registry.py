@@ -14,7 +14,9 @@ def test_worker_registry_register_and_update():
     local = registry.get_local_worker()
     assert registry.get_worker(local.id) is not None
 
-    worker = WorkerDescriptor(id="node-1", name="node-1", is_local=False, gpus=2, vram_gb=16.0, status=WorkerStatus.ONLINE)
+    worker = WorkerDescriptor(
+        id="node-1", name="node-1", is_local=False, gpus=2, vram_gb=16.0, status=WorkerStatus.ONLINE
+    )
     registry.register_worker(worker)
 
     all_workers = registry.list_workers()

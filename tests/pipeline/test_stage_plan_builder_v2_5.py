@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan, StageExecution
+from src.pipeline.stage_sequencer import (
+    build_stage_execution_plan,
+)
 
 
 def _base_pipeline_config(**overrides) -> dict[str, dict]:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
 from types import SimpleNamespace
+from typing import Any
 
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.logger import StructuredLogger

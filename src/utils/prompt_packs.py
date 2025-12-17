@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, List, Mapping
+from typing import Any
 
 from src.pipeline.run_config import PromptSource, RunConfig
+
 from .file_io import get_prompt_packs
 
 
@@ -34,7 +36,7 @@ def discover_packs(packs_dir: Path | str | None = None) -> list[PromptPackInfo]:
     """
     directory = _ensure_path(packs_dir)
     pack_paths = get_prompt_packs(directory)
-    descriptors: List[PromptPackInfo] = []
+    descriptors: list[PromptPackInfo] = []
     for pack_path in pack_paths:
         descriptors.append(
             PromptPackInfo(

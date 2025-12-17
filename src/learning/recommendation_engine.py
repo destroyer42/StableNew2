@@ -92,7 +92,7 @@ class RecommendationEngine:
 
         records = []
         try:
-            with open(self.records_path, encoding='utf-8') as f:
+            with open(self.records_path, encoding="utf-8") as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if not line:
@@ -114,10 +114,10 @@ class RecommendationEngine:
         scored_records = []
 
         for record in records:
-            metadata = record.get('metadata', {})
+            metadata = record.get("metadata", {})
 
             # Only consider records with user ratings
-            user_rating = metadata.get('user_rating')
+            user_rating = metadata.get("user_rating")
             if user_rating is None:
                 continue
 
@@ -129,18 +129,18 @@ class RecommendationEngine:
                 continue
 
             # Extract experiment context
-            experiment_name = metadata.get('experiment_name', '')
-            variable_under_test = metadata.get('variable_under_test', '')
-            variant_value = metadata.get('variant_value')
+            experiment_name = metadata.get("experiment_name", "")
+            variable_under_test = metadata.get("variable_under_test", "")
+            variant_value = metadata.get("variant_value")
 
             # Extract parameter values from the record
-            primary_sampler = record.get('primary_sampler', '')
-            primary_scheduler = record.get('primary_scheduler', '')
-            primary_steps = record.get('primary_steps', 0)
-            primary_cfg_scale = record.get('primary_cfg_scale', 0.0)
+            primary_sampler = record.get("primary_sampler", "")
+            primary_scheduler = record.get("primary_scheduler", "")
+            primary_steps = record.get("primary_steps", 0)
+            primary_cfg_scale = record.get("primary_cfg_scale", 0.0)
 
             # Get timestamp for recency weighting
-            timestamp_str = record.get('timestamp', '')
+            timestamp_str = record.get("timestamp", "")
             try:
                 # Parse ISO timestamp
                 timestamp = time.mktime(time.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S"))
@@ -148,49 +148,47 @@ class RecommendationEngine:
                 timestamp = time.time()  # Use current time if parsing fails
 
             scored_record = {
-                'rating': rating,
-                'experiment_name': experiment_name,
-                'variable_under_test': variable_under_test,
-                'variant_value': variant_value,
-                'primary_sampler': primary_sampler,
-                'primary_scheduler': primary_scheduler,
-                'primary_steps': primary_steps,
-                'primary_cfg_scale': primary_cfg_scale,
-                'timestamp': timestamp,
-                'metadata': metadata,
+                "rating": rating,
+                "experiment_name": experiment_name,
+                "variable_under_test": variable_under_test,
+                "variant_value": variant_value,
+                "primary_sampler": primary_sampler,
+                "primary_scheduler": primary_scheduler,
+                "primary_steps": primary_steps,
+                "primary_cfg_scale": primary_cfg_scale,
+                "timestamp": timestamp,
+                "metadata": metadata,
             }
             scored_records.append(scored_record)
 
         return scored_records
 
     def _compute_optimal_settings(
-        self,
-        records: list[dict[str, Any]],
-        stage: str
+        self, records: list[dict[str, Any]], stage: str
     ) -> dict[str, ParameterRecommendation]:
         """Compute optimal parameter settings from scored records."""
         recommendations = {}
 
         # Group records by parameter type and value
-        param_groups: Dict[str, Dict[Any, List[float]]] = defaultdict(lambda: defaultdict(list))
+        param_groups: dict[str, dict[Any, list[float]]] = defaultdict(lambda: defaultdict(list))
 
         for record in records:
             # Add recency weighting (more recent records weighted slightly higher)
             # For now, disable recency weighting to avoid test complications
             weight = 1.0
 
-            rating = record['rating'] * weight
+            rating = record["rating"] * weight
 
             # Collect ratings for each parameter type
-            param_groups['sampler'][record['primary_sampler']].append(rating)
-            param_groups['scheduler'][record['primary_scheduler']].append(rating)
-            param_groups['steps'][record['primary_steps']].append(rating)
-            param_groups['cfg_scale'][record['primary_cfg_scale']].append(rating)
+            param_groups["sampler"][record["primary_sampler"]].append(rating)
+            param_groups["scheduler"][record["primary_scheduler"]].append(rating)
+            param_groups["steps"][record["primary_steps"]].append(rating)
+            param_groups["cfg_scale"][record["primary_cfg_scale"]].append(rating)
 
             # If this record is from a variable test, also track that parameter
-            if record['variable_under_test'] and record['variant_value'] is not None:
-                param_name = record['variable_under_test'].lower().replace(' ', '_')
-                param_groups[param_name][record['variant_value']].append(rating)
+            if record["variable_under_test"] and record["variant_value"] is not None:
+                param_name = record["variable_under_test"].lower().replace(" ", "_")
+                param_groups[param_name][record["variant_value"]].append(rating)
 
         # Compute recommendations for each parameter
         for param_name, value_ratings in param_groups.items():
@@ -222,8 +220,9 @@ class RecommendationEngine:
                 confidence = sample_confidence * consistency_confidence
 
                 # Select based on confidence, break ties by highest rating
-                if (confidence > best_confidence or
-                    (confidence == best_confidence and mean_rating > best_mean)):
+                if confidence > best_confidence or (
+                    confidence == best_confidence and mean_rating > best_mean
+                ):
                     best_value = value
                     best_confidence = confidence
                     best_mean = mean_rating
@@ -259,13 +258,13 @@ class RecommendationEngine:
             optimal_settings = self._compute_optimal_settings(scored_records, stage)
 
             self._cache = {
-                'recommendations': optimal_settings,
-                'timestamp': time.time(),
-                'record_count': len(scored_records),
+                "recommendations": optimal_settings,
+                "timestamp": time.time(),
+                "record_count": len(scored_records),
             }
             self._cache_timestamp = time.time()
         else:
-            optimal_settings = self._cache.get('recommendations', {}) if self._cache else {}
+            optimal_settings = self._cache.get("recommendations", {}) if self._cache else {}
 
         # Create recommendation set
         rec_set = RecommendationSet(
@@ -287,16 +286,16 @@ class RecommendationEngine:
             scored_records = self._score_records(records)
 
             return {
-                'total_records': len(records),
-                'rated_records': len(scored_records),
-                'cache_timestamp': self._cache_timestamp,
-                'records_path': str(self.records_path),
+                "total_records": len(records),
+                "rated_records": len(scored_records),
+                "cache_timestamp": self._cache_timestamp,
+                "records_path": str(self.records_path),
             }
         else:
             return {
-                'total_records': self._cache.get('record_count', 0),
-                'rated_records': self._cache.get('record_count', 0),
-                'cache_timestamp': self._cache_timestamp,
-                'records_path': str(self.records_path),
-                'cached': True,
+                "total_records": self._cache.get("record_count", 0),
+                "rated_records": self._cache.get("record_count", 0),
+                "cache_timestamp": self._cache_timestamp,
+                "records_path": str(self.records_path),
+                "cached": True,
             }

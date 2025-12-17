@@ -19,82 +19,88 @@ will be wired in later via a PipelineRunner abstraction.
 
 from __future__ import annotations
 
+import os
+import sys
+import tempfile
+import threading
+import time
+import traceback
+from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, TypedDict, TYPE_CHECKING
-import os
-import sys
-import threading
-import tempfile
-import time
-import traceback
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from src.api.client import SDWebUIClient
 from src.api.webui_api import WebUIAPI
+from src.api.webui_process_manager import WebUIProcessManager, clear_global_webui_process_manager
 from src.api.webui_resource_service import WebUIResourceService
-from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
 from src.api.webui_resources import WebUIResource
-from src.api.webui_process_manager import WebUIProcessManager
-from src.pipeline.last_run_store_v2_5 import (
-    LastRunConfigV2_5,
-    LastRunStoreV2_5,
-    current_config_to_last_run,
-    update_current_config_from_last_run,
+from src.controller.webui_connection_controller import (
+    WebUIConnectionController,
+    WebUIConnectionState,
 )
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.main_window_v2 import MainWindow
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
 from src.gui.views.error_modal_v2 import ErrorModalV2
+from src.pipeline.last_run_store_v2_5 import (
+    LastRunStoreV2_5,
+    current_config_to_last_run,
+    update_current_config_from_last_run,
+)
 from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
+
 if TYPE_CHECKING:  # pragma: no cover - type-only import
     from src.controller.archive.pipeline_config_types import PipelineConfig
+import logging
+import uuid
+
 from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
+from src.controller.job_history_service import JobHistoryService
+from src.controller.job_lifecycle_logger import JobLifecycleLogger
+from src.controller.job_service import JobService
+from src.controller.pipeline_controller import PipelineController
 from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
-from src.utils import (
-    InMemoryLogHandler,
-    LogContext,
-    StructuredLogger,
-    attach_jsonl_log_handler,
-    log_with_ctx,
-)
-from src.utils.queue_helpers_v2 import job_to_queue_job
-from src.utils.diagnostics_bundle_v2 import build_crash_bundle
-from src.utils.error_envelope_v2 import (
-    get_attached_envelope,
-    serialize_envelope,
-    UnifiedErrorEnvelope,
-    wrap_exception,
-)
-from src.utils.config import ConfigManager, LoraRuntimeConfig, normalize_lora_strengths
-from src.utils.debug_shutdown_inspector import log_shutdown_state
-from src.utils.file_io import read_prompt_pack
-from src.utils.prompt_packs import PromptPackInfo, discover_packs
-from src.gui.app_state_v2 import PackJobEntry, AppStateV2
+from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.learning.model_profiles import get_model_profile_defaults_for_model
-from src.controller.pipeline_controller import PipelineController
+from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
-from src.queue.job_history_store import JSONLJobHistoryStore
-from src.controller.job_history_service import JobHistoryService
-from src.controller.job_service import JobService
-from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
     UnsupportedQueueSchemaError,
     load_queue_snapshot,
     save_queue_snapshot,
 )
+from src.utils import (
+    InMemoryLogHandler,
+    LogContext,
+    StructuredLogger,
+    attach_jsonl_log_handler,
+    close_all_structured_loggers,
+    log_with_ctx,
+)
+from src.utils.config import ConfigManager, LoraRuntimeConfig, normalize_lora_strengths
+from src.utils.debug_shutdown_inspector import log_shutdown_state
+from src.utils.diagnostics_bundle_v2 import build_crash_bundle
+from src.utils.error_envelope_v2 import (
+    UnifiedErrorEnvelope,
+    get_attached_envelope,
+    serialize_envelope,
+    wrap_exception,
+)
+from src.utils.file_io import read_prompt_pack
+from src.utils.prompt_packs import PromptPackInfo, discover_packs
+from src.utils.queue_helpers_v2 import job_to_queue_job
 
-import logging
-import uuid
 logger = logging.getLogger(__name__)
 
 
@@ -134,6 +140,7 @@ class RunConfig:
     - GUI state (model, sampler, resolution, randomization, matrix)
     - prompt pack selection
     """
+
     preset_name: str = ""
     model_name: str = ""
     vae_name: str = ""
@@ -161,7 +168,7 @@ class RunConfig:
 @dataclass
 class AppState:
     lifecycle: LifecycleState = LifecycleState.IDLE
-    last_error: Optional[str] = None
+    last_error: str | None = None
     current_config: RunConfig = field(default_factory=RunConfig)
     resources: dict[str, list[Any]] = field(
         default_factory=lambda: {
@@ -212,18 +219,15 @@ class AppController:
 
     def on_add_to_queue_clicked(self) -> None:
         """Fire-and-forget async boundary for Add to Queue."""
-        if getattr(self, '_queue_submit_in_progress', False):
+        if getattr(self, "_queue_submit_in_progress", False):
             self._append_log("[D21] Queue submit already in progress; ignoring duplicate request.")
             return
         self._queue_submit_in_progress = True
-        jobs = getattr(self, '_draft_job_bundle', [])
+        jobs = getattr(self, "_draft_job_bundle", [])
         self._draft_job_bundle = []
         import threading
-        threading.Thread(
-            target=self._submit_jobs_async,
-            args=(jobs,),
-            daemon=True
-        ).start()
+
+        threading.Thread(target=self._submit_jobs_async, args=(jobs,), daemon=True).start()
 
     def _submit_jobs_async(self, jobs):
         try:
@@ -235,7 +239,7 @@ class AppController:
     def __init__(
         self,
         main_window: MainWindow | None,
-        pipeline_runner: Optional[PipelineRunner] = None,
+        pipeline_runner: PipelineRunner | None = None,
         threaded: bool = True,
         packs_dir: Path | str | None = None,
         api_client: SDWebUIClient | None = None,
@@ -247,8 +251,9 @@ class AppController:
         pipeline_controller: PipelineController | None = None,
         ui_scheduler: Callable[[Callable[[], None]], None] = None,
     ) -> None:
-        import time
         import threading
+        import time
+
         self._ui_thread_id = threading.get_ident()
         self._ui_scheduler = ui_scheduler
         # --- BEGIN PR-CORE1-D21A: Watchdog/Diagnostics wiring ---
@@ -267,7 +272,7 @@ class AppController:
         if self.app_state is None:
             self.app_state = AppStateV2()
             if main_window is not None:
-                setattr(main_window, "app_state", self.app_state)
+                main_window.app_state = self.app_state
         self._job_lifecycle_logger = JobLifecycleLogger(app_state=self.app_state)
         self.state = AppState()
         self.threaded = threaded
@@ -301,8 +306,8 @@ class AppController:
         self.resource_service = resource_service or WebUIResourceService(client=client)
         self.state.resources = self._empty_resource_map()
         self.webui_process_manager = webui_process_manager
-        self._cancel_token: Optional[CancelToken] = None
-        self._worker_thread: Optional[threading.Thread] = None
+        self._cancel_token: CancelToken | None = None
+        self._worker_thread: threading.Thread | None = None
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
         history_path = Path("runs") / "job_history.json"
         if os.environ.get("PYTEST_CURRENT_TEST"):
@@ -323,7 +328,7 @@ class AppController:
         self._shutdown_started_at: float | None = None
         self._shutdown_completed = False
         self.packs: list[PromptPackInfo] = []
-        self._selected_pack_index: Optional[int] = None
+        self._selected_pack_index: int | None = None
         # Initialize PipelineController for modern pipeline execution (bridge)
         if pipeline_controller is not None:
             self.pipeline_controller = pipeline_controller
@@ -336,7 +341,9 @@ class AppController:
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
             )
-        self.webui_connection_controller = getattr(self.pipeline_controller, "_webui_connection", None)
+        self.webui_connection_controller = getattr(
+            self.pipeline_controller, "_webui_connection", None
+        )
         if self.webui_connection_controller is None:
             self.webui_connection_controller = WebUIConnectionController()
         try:
@@ -344,16 +351,26 @@ class AppController:
         except Exception:
             pass
         try:
-            self.webui_connection_controller.set_on_resources_updated(self._on_webui_resources_updated)
+            self.webui_connection_controller.set_on_resources_updated(
+                self._on_webui_resources_updated
+            )
         except Exception:
             pass
-        if hasattr(self._api_client, "set_options_readiness_provider") and self.webui_connection_controller is not None:
+        if (
+            hasattr(self._api_client, "set_options_readiness_provider")
+            and self.webui_connection_controller is not None
+        ):
             try:
-                self._api_client.set_options_readiness_provider(self.webui_connection_controller.is_webui_ready_strict)
+                self._api_client.set_options_readiness_provider(
+                    self.webui_connection_controller.is_webui_ready_strict
+                )
             except Exception:
                 pass
         # PR-CORE1-D21B: Wire activity hooks for queue/runner heartbeats
-        if hasattr(self.pipeline_controller, "job_service") and self.pipeline_controller.job_service is not None:
+        if (
+            hasattr(self.pipeline_controller, "job_service")
+            and self.pipeline_controller.job_service is not None
+        ):
             self.pipeline_controller.job_service.set_activity_hooks(
                 on_queue_activity=self.notify_queue_activity,
                 on_runner_activity=self.notify_runner_activity,
@@ -361,7 +378,7 @@ class AppController:
         try:
             jc = getattr(self.pipeline_controller, "_job_controller", None)
             if jc and hasattr(self.job_service, "history_store"):
-                shared_history = getattr(self.job_service, "history_store")
+                shared_history = self.job_service.history_store
                 queue = getattr(jc, "_queue", None)
                 if queue is not None:
                     try:
@@ -384,15 +401,17 @@ class AppController:
                 self.main_window.connect_controller(self)
         self._setup_queue_callbacks()
         self._setup_diagnostics_hooks()
+
     def shutdown(self) -> None:
         """Shutdown the AppController and all background services cleanly."""
         self._is_shutting_down = True
-        if hasattr(self, '_system_watchdog') and self._system_watchdog:
+        if hasattr(self, "_system_watchdog") and self._system_watchdog:
             self._system_watchdog.stop()
         # ...existing shutdown logic if any...
 
     def _ui_dispatch(self, fn: Callable[[], None]) -> None:
         import threading
+
         if threading.get_ident() == self._ui_thread_id:
             fn()
             return
@@ -420,7 +439,7 @@ class AppController:
                 return
         fn()
 
-    def _wrap_ui_callback(self, handler: Optional[Callable[..., None]]) -> Optional[Callable[..., None]]:
+    def _wrap_ui_callback(self, handler: Callable[..., None] | None) -> Callable[..., None] | None:
         """Return a callable that schedules `handler(*args, **kwargs)` via `_ui_dispatch`.
 
         If `handler` is None, returns None. The wrapper preserves argument shapes
@@ -452,8 +471,9 @@ class AppController:
     def list_embeddings(self) -> list[WebUIResource]:
         return self.resource_service.list_embeddings()
 
-    def get_gui_log_handler(self) -> Optional[InMemoryLogHandler]:
+    def get_gui_log_handler(self) -> InMemoryLogHandler | None:
         return self.gui_log_handler
+
     def run_txt2img_once(self, config: dict[str, Any] | None = None) -> None:
         self._append_log("[controller] run_txt2img_once called.")
         if config is None:
@@ -475,9 +495,9 @@ class AppController:
             self._append_log(f"Pipeline error: {exc!r}")
             self._update_status(f"Error: {exc!r}")
 
-    
     def update_ui_heartbeat(self) -> None:
         import time
+
         self.last_ui_heartbeat_ts = time.monotonic()
 
     def attach_watchdog(self, diagnostics_service: Any) -> None:
@@ -507,8 +527,8 @@ class AppController:
 
     def notify_queue_activity(self) -> None:
         import time
-        self.last_queue_activity_ts = time.monotonic()
 
+        self.last_queue_activity_ts = time.monotonic()
 
     def run_pipeline_v2_bridge(self) -> bool:
         """
@@ -635,6 +655,7 @@ class AppController:
 
     def _build_stage_plan_config_for_tests(self) -> dict[str, Any]:
         """Construct a minimal config dict for StageSequencer.build_stage_execution_plan."""
+
         def _val(obj: object, name: str, default: Any) -> Any:
             try:
                 value = getattr(obj, name)
@@ -725,6 +746,7 @@ class AppController:
             return
         try:
             from types import SimpleNamespace
+
             from src.api.client import ApiClient
 
             cfg = getattr(self.state, "current_config", None)
@@ -732,8 +754,18 @@ class AppController:
             tab_state = getattr(pipeline_tab, "pipeline_state", None)
             app_state_pipeline = getattr(self.app_state, "pipeline_state", None)
 
-            prompt = getattr(tab_state, "prompt", None) or getattr(app_state_pipeline, "prompt", None) or getattr(cfg, "prompt", "") or ""
-            negative = getattr(tab_state, "negative_prompt", None) or getattr(app_state_pipeline, "negative_prompt", None) or getattr(cfg, "negative_prompt", "") or ""
+            prompt = (
+                getattr(tab_state, "prompt", None)
+                or getattr(app_state_pipeline, "prompt", None)
+                or getattr(cfg, "prompt", "")
+                or ""
+            )
+            negative = (
+                getattr(tab_state, "negative_prompt", None)
+                or getattr(app_state_pipeline, "negative_prompt", None)
+                or getattr(cfg, "negative_prompt", "")
+                or ""
+            )
 
             request = SimpleNamespace(
                 prompt=prompt,
@@ -836,6 +868,7 @@ class AppController:
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint; uses explicit APIs and falls back to legacy run."""
         import threading
+
         thread_name = threading.current_thread().name
         self._append_log(f"[D21] on_add_job_to_queue_v2 ENTRY (thread={thread_name})")
         self._ensure_run_mode_default("add_to_queue")
@@ -845,11 +878,15 @@ class AppController:
             try:
                 count = controller.enqueue_draft_jobs(run_config=run_config)
                 if count > 0:
-                    self._append_log(f"[controller] Submitted {count} job(s) from preview to queue (thread={thread_name})")
+                    self._append_log(
+                        f"[controller] Submitted {count} job(s) from preview to queue (thread={thread_name})"
+                    )
                     self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
                     return
             except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[controller] enqueue_draft_jobs error: {exc!r} (thread={thread_name})")
+                self._append_log(
+                    f"[controller] enqueue_draft_jobs error: {exc!r} (thread={thread_name})"
+                )
         handler = getattr(self, "on_add_job_to_queue", None)
         if callable(handler):
             try:
@@ -857,7 +894,9 @@ class AppController:
                 self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
                 return
             except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[controller] fallback add job to queue error: {exc!r} (thread={thread_name})")
+                self._append_log(
+                    f"[controller] fallback add job to queue error: {exc!r} (thread={thread_name})"
+                )
         self._ensure_run_mode_default("add_to_queue")
         self._start_run_v2(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
         self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
@@ -901,9 +940,13 @@ class AppController:
         mw = self.main_window
         if mw is None:
             return
-        missing = [name for name in ("header_zone", "left_zone", "bottom_zone") if not hasattr(mw, name)]
+        missing = [
+            name for name in ("header_zone", "left_zone", "bottom_zone") if not hasattr(mw, name)
+        ]
         if missing:
-            print(f"AppController._attach_to_gui: main_window missing zones {missing}; deferring wiring")
+            print(
+                f"AppController._attach_to_gui: main_window missing zones {missing}; deferring wiring"
+            )
             return
 
         header = mw.header_zone
@@ -980,6 +1023,7 @@ class AppController:
                 self.job_service.set_event_dispatcher(self._run_in_gui_thread)
             except Exception:
                 pass
+
         # Wrap callbacks so any background-thread emissions are marshaled
         # onto the UI thread via `_ui_dispatch` to avoid Tk thread violations.
         def _wrap_ui_callback(handler: Callable[..., None]) -> Callable[..., None]:
@@ -997,19 +1041,33 @@ class AppController:
 
             return _wrapped
 
-        self.job_service.register_callback(JobService.EVENT_QUEUE_UPDATED, _wrap_ui_callback(self._on_queue_updated))
-        self.job_service.register_callback(JobService.EVENT_QUEUE_STATUS, _wrap_ui_callback(self._on_queue_status_changed))
-        self.job_service.register_callback(JobService.EVENT_JOB_STARTED, _wrap_ui_callback(self._on_job_started))
-        self.job_service.register_callback(JobService.EVENT_JOB_FINISHED, _wrap_ui_callback(self._on_job_finished))
-        self.job_service.register_callback(JobService.EVENT_JOB_FAILED, _wrap_ui_callback(self._on_job_failed))
-        self.job_service.register_callback(JobService.EVENT_QUEUE_EMPTY, _wrap_ui_callback(self._on_queue_empty))
+        self.job_service.register_callback(
+            JobService.EVENT_QUEUE_UPDATED, _wrap_ui_callback(self._on_queue_updated)
+        )
+        self.job_service.register_callback(
+            JobService.EVENT_QUEUE_STATUS, _wrap_ui_callback(self._on_queue_status_changed)
+        )
+        self.job_service.register_callback(
+            JobService.EVENT_JOB_STARTED, _wrap_ui_callback(self._on_job_started)
+        )
+        self.job_service.register_callback(
+            JobService.EVENT_JOB_FINISHED, _wrap_ui_callback(self._on_job_finished)
+        )
+        self.job_service.register_callback(
+            JobService.EVENT_JOB_FAILED, _wrap_ui_callback(self._on_job_failed)
+        )
+        self.job_service.register_callback(
+            JobService.EVENT_QUEUE_EMPTY, _wrap_ui_callback(self._on_queue_empty)
+        )
         self._refresh_job_history()
         # PR-GUI-F3: Load persisted queue state on startup
         self._load_queue_state()
         # PR-D: Register status callback for queue/history panel sync
         if hasattr(self.job_service, "set_status_callback"):
             try:
-                self.job_service.set_status_callback("gui_queue_history", _wrap_ui_callback(self._on_job_status_for_panels))
+                self.job_service.set_status_callback(
+                    "gui_queue_history", _wrap_ui_callback(self._on_job_status_for_panels)
+                )
             except Exception:
                 pass
 
@@ -1028,7 +1086,8 @@ class AppController:
             self._original_tk_report_callback_exception = root.report_callback_exception
             root.report_callback_exception = self._handle_tk_exception
         self.job_service.register_callback(
-            JobService.EVENT_WATCHDOG_VIOLATION, self._wrap_ui_callback(self._on_watchdog_violation_event)
+            JobService.EVENT_WATCHDOG_VIOLATION,
+            self._wrap_ui_callback(self._on_watchdog_violation_event),
         )
 
     # ------------------------------------------------------------------
@@ -1037,7 +1096,7 @@ class AppController:
 
     def _load_queue_state(self) -> None:
         """Load persisted queue state on startup.
-        
+
         PR-GUI-F3: Restores queue jobs and control flags from disk.
         """
         try:
@@ -1070,7 +1129,7 @@ class AppController:
 
     def _save_queue_state(self) -> None:
         """Save current queue state for persistence.
-        
+
         PR-GUI-F3: Persists queue control flags to disk.
         Note: V1 JobQueue jobs contain callables and can't be serialized.
         """
@@ -1114,7 +1173,9 @@ class AppController:
         normalized_record = getattr(job, "_normalized_record", None)
         if normalized_record is not None and self.pipeline_controller is not None:
             execution_path = "njr"
-            self._append_log(f"[queue] Job {job.job_id} has normalized_record, executing via NJR-only path")
+            self._append_log(
+                f"[queue] Job {job.job_id} has normalized_record, executing via NJR-only path"
+            )
             try:
                 result_payload = self.pipeline_controller._run_job(job)
             except Exception as exc:  # noqa: BLE001
@@ -1122,7 +1183,9 @@ class AppController:
                 result_payload = {"error": str(exc)}
         else:
             execution_path = "missing_njr"
-            self._append_log(f"[queue] Job {job.job_id} is missing normalized_record; cannot execute.")
+            self._append_log(
+                f"[queue] Job {job.job_id} is missing normalized_record; cannot execute."
+            )
             result_payload = {
                 "error": "Job is missing normalized_record; legacy/pipeline_config execution is disabled.",
             }
@@ -1168,7 +1231,11 @@ class AppController:
         history_dto = None
 
         if queue_upsert_needed:
-            created_at = getattr(summary, "created_at", None) or getattr(job, "created_at", None) or datetime.now()
+            created_at = (
+                getattr(summary, "created_at", None)
+                or getattr(job, "created_at", None)
+                or datetime.now()
+            )
             queue_dto = JobQueueItemDTO(
                 job_id=getattr(summary, "job_id", job.job_id),
                 label=getattr(summary, "model_name", None) or getattr(job, "label", job.job_id),
@@ -1440,7 +1507,7 @@ class AppController:
 
     def on_queue_send_job_v2(self) -> None:
         """Manually dispatch the next job from the queue.
-        
+
         PR-GUI-F3: Send Job button - dispatches top of queue immediately.
         Respects pause state (if paused, does nothing).
         """
@@ -1499,7 +1566,9 @@ class AppController:
         except Exception:
             pass
 
-    def on_advanced_prompt_applied(self, new_prompt: str, negative_prompt: Optional[str] = None) -> None:
+    def on_advanced_prompt_applied(
+        self, new_prompt: str, negative_prompt: str | None = None
+    ) -> None:
         prompt_value = new_prompt or ""
         self._append_log("[controller] Advanced prompt applied.")
         ws = getattr(self.app_state, "prompt_workspace_state", None)
@@ -1532,7 +1601,7 @@ class AppController:
     # Internal helpers (state & logging)
     # ------------------------------------------------------------------
 
-    def _set_lifecycle(self, new_state: LifecycleState, error: Optional[str] = None) -> None:
+    def _set_lifecycle(self, new_state: LifecycleState, error: str | None = None) -> None:
         self.state.lifecycle = new_state
         self.state.last_error = error
 
@@ -1546,7 +1615,7 @@ class AppController:
             self._update_status(f"Error: {error or 'Unknown error'}")
 
     def _set_lifecycle_threadsafe(
-        self, new_state: LifecycleState, error: Optional[str] = None
+        self, new_state: LifecycleState, error: str | None = None
     ) -> None:
         """
         Schedule lifecycle change on the Tk main thread if threaded.
@@ -1562,9 +1631,11 @@ class AppController:
     def _update_status(self, text: str) -> None:
         """Update status bar text if the bottom zone is ready; otherwise cache it."""
         import threading
+
         self._pending_status_text = text
         thread_name = threading.current_thread().name
         status_bar = getattr(self.main_window, "status_bar_v2", None)
+
         def do_update():
             if status_bar and hasattr(status_bar, "update_status"):
                 try:
@@ -1586,6 +1657,7 @@ class AppController:
                 )
                 return
             status_label.configure(text=f"Status: {text}")
+
         # Only update UI on main thread; otherwise, dispatch via root.after
         root = getattr(self.main_window, "root", None)
         if thread_name != "MainThread" and root is not None:
@@ -1604,7 +1676,7 @@ class AppController:
 
     def _validate_pipeline_config(self) -> tuple[bool, str]:
         """DEPRECATED (PR-CORE1-12): Legacy validation for pipeline_config panel.
-        
+
         Use PipelineController + NJR validation instead. This method is retained
         only for backward compatibility with archived GUI components.
         """
@@ -1612,8 +1684,14 @@ class AppController:
         if not getattr(cfg, "model_name", None) and self.state.current_config:
             cfg = self.state.current_config
         run_cfg = getattr(self.app_state, "run_config", {}) if self.app_state else {}
-        model_name = getattr(cfg, "model_name", None) or run_cfg.get("model") or run_cfg.get("model_name")
-        sampler_name = getattr(cfg, "sampler_name", None) or run_cfg.get("sampler") or run_cfg.get("sampler_name")
+        model_name = (
+            getattr(cfg, "model_name", None) or run_cfg.get("model") or run_cfg.get("model_name")
+        )
+        sampler_name = (
+            getattr(cfg, "sampler_name", None)
+            or run_cfg.get("sampler")
+            or run_cfg.get("sampler_name")
+        )
         steps_value = getattr(cfg, "steps", None) or run_cfg.get("steps")
         if not model_name:
             return False, "Please select a model before running the pipeline."
@@ -1705,7 +1783,9 @@ class AppController:
         if not job_id:
             return
         try:
-            JobExplanationPanelV2(job_id, master=self.main_window.root if self.main_window else None)
+            JobExplanationPanelV2(
+                job_id, master=self.main_window.root if self.main_window else None
+            )
         except Exception as exc:
             self._append_log(f"[controller] Failed to explain job {job_id}: {exc!r}")
 
@@ -1714,7 +1794,7 @@ class AppController:
 
     def _get_protected_process_pids(self) -> Iterable[int]:
         pids: set[int] = set()
-        
+
         # Always protect WebUI PID (if running)
         # This is critical to prevent ProcessAutoScannerService from killing WebUI
         # even if protected_pids callback logic changes in the future
@@ -1722,7 +1802,7 @@ class AppController:
             webui_pid = getattr(self.webui_process_manager, "pid", None)
             if webui_pid and isinstance(webui_pid, int):
                 pids.add(webui_pid)
-        
+
         # Protect PIDs from running jobs
         if self.job_service:
             snapshot = self.job_service.get_diagnostics_snapshot()
@@ -1731,7 +1811,7 @@ class AppController:
                 for pid in entry.get("external_pids", []) or []:
                     if isinstance(pid, int):
                         pids.add(pid)
-        
+
         return pids
 
     def _generate_diagnostics_bundle(
@@ -1765,9 +1845,7 @@ class AppController:
         self._last_error_envelope = envelope
         return envelope
 
-    def _log_structured_error(
-        self, envelope: UnifiedErrorEnvelope, message: str
-    ) -> None:
+    def _log_structured_error(self, envelope: UnifiedErrorEnvelope, message: str) -> None:
         log_with_ctx(
             logger,
             logging.ERROR,
@@ -1797,7 +1875,9 @@ class AppController:
     def _clear_error_modal(self) -> None:
         self._error_modal = None
 
-    def _handle_uncaught_exception(self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback) -> None:
+    def _handle_uncaught_exception(
+        self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback
+    ) -> None:
         tb = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         self._generate_diagnostics_bundle(
             "uncaught_exception",
@@ -1813,7 +1893,9 @@ class AppController:
         if self._original_threading_excepthook:
             self._original_threading_excepthook(args)
 
-    def _handle_tk_exception(self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback) -> None:
+    def _handle_tk_exception(
+        self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback
+    ) -> None:
         tb = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         self._generate_diagnostics_bundle(
             "tk_exception",
@@ -1825,9 +1907,7 @@ class AppController:
             except Exception:
                 pass
 
-    def _on_watchdog_violation_event(
-        self, job_id: str, envelope: UnifiedErrorEnvelope
-    ) -> None:
+    def _on_watchdog_violation_event(self, job_id: str, envelope: UnifiedErrorEnvelope) -> None:
         reason = envelope.context.get("watchdog_reason", envelope.error_type)
         self._generate_diagnostics_bundle(
             f"watchdog_{reason.lower()}",
@@ -1837,7 +1917,9 @@ class AppController:
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         snapshot = self.job_service.get_diagnostics_snapshot() if self.job_service else {}
         data = dict(snapshot)
-        data["last_bundle"] = str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
+        data["last_bundle"] = (
+            str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
+        )
         data["last_bundle_reason"] = self._last_diagnostics_bundle_reason
         return data
 
@@ -1865,10 +1947,14 @@ class AppController:
         - Updates lifecycle state and returns the result.
         """
         if self.state.lifecycle == LifecycleState.RUNNING:
-            self._append_log("[controller] run_pipeline requested, but pipeline is already running.")
+            self._append_log(
+                "[controller] run_pipeline requested, but pipeline is already running."
+            )
             return None
 
-        self._append_log("[controller] run_pipeline is deprecated; use pipeline_controller.start_pipeline_v2.")
+        self._append_log(
+            "[controller] run_pipeline is deprecated; use pipeline_controller.start_pipeline_v2."
+        )
         return None
 
     def _run_via_pipeline_controller(self) -> Any:
@@ -1880,12 +1966,12 @@ class AppController:
 
     def _execute_pipeline_via_runner(self, pipeline_config: PipelineConfig) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy pipeline_config execution removed.
-        
+
         Execute pipeline using the traditional PipelineRunner approach.
-        
+
         This method is DISABLED as of PR-CORE1-B2 (NJR-only execution).
         Use PipelineController.start_pipeline_v2() which builds NJR + enqueues.
-        
+
         Raises:
             RuntimeError: Always - pipeline_config execution is disabled.
         """
@@ -1893,10 +1979,10 @@ class AppController:
 
     def _run_pipeline_from_tab(self, pipeline_tab: Any, pipeline_config: PipelineConfig) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy tab-based pipeline_config execution.
-        
+
         This method routed execution based on pipeline_tab flags. No longer used
         since GUI V2 uses PipelineController for all execution.
-        
+
         Consider removing in future cleanup after GUI V1 removal.
         """
         flags = {
@@ -1996,13 +2082,13 @@ class AppController:
 
     def _run_pipeline_via_runner_only(self, pipeline_config: PipelineConfig) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy fallback execution - NO LONGER USED.
-        
+
         As of PR-CORE1-B2, all jobs execute via NJR-only path. This method existed
         as a fallback for jobs without NJR, but such jobs are no longer created.
-        
+
         All execution MUST go through:
         GUI → PipelineController → JobService → Queue → Runner (NJR only)
-        
+
         Raises:
             RuntimeError: Always - pipeline_config execution is disabled.
         """
@@ -2020,7 +2106,9 @@ class AppController:
         model_var = getattr(pipeline_tab, "upscale_model", None)
         model = ""
         try:
-            model = str(model_var.get()).strip() if hasattr(model_var, "get") else str(model_var or "")
+            model = (
+                str(model_var.get()).strip() if hasattr(model_var, "get") else str(model_var or "")
+            )
         except Exception:
             model = str(model_var or "")
         tile_var = getattr(pipeline_tab, "upscale_tile_size", None)
@@ -2147,9 +2235,11 @@ class AppController:
             self._set_lifecycle_threadsafe(LifecycleState.ERROR, error=str(exc))
             cancel_token.clear_stop_requirement()
 
-    def _cache_last_run_payload(self, executor_config: dict[str, Any], pipeline_config: PipelineConfig) -> None:
+    def _cache_last_run_payload(
+        self, executor_config: dict[str, Any], pipeline_config: PipelineConfig
+    ) -> None:
         """DEPRECATED (PR-CORE1-12): Legacy payload caching for pipeline_config.
-        
+
         This cached pipeline_config for debugging/replay. No longer used since
         NJR jobs include full snapshots. Consider removing in future cleanup.
         """
@@ -2220,7 +2310,6 @@ class AppController:
                 self._load_stage_card(card, executor_config)
             stage_panel.load_adetailer_config(executor_config.get("adetailer") or {})
 
-        sidebar = self._get_sidebar_panel()
         pipeline_section = executor_config.get("pipeline") or {}
         stage_defaults = {
             "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
@@ -2258,10 +2347,18 @@ class AppController:
         if self.app_state is not None:
             configs.append(self.app_state.current_config)
         for cfg in configs:
-            self._set_profile_default(cfg, "refiner_model_name", defaults.get("default_refiner_id"), "")
-            self._set_profile_default(cfg, "refiner_switch_at", defaults.get("default_refiner_switch_at"), None)
-            self._set_profile_default(cfg, "hires_upscaler_name", defaults.get("default_hires_upscaler_id"), "Latent")
-            self._set_profile_default(cfg, "hires_denoise", defaults.get("default_hires_denoise"), 0.3)
+            self._set_profile_default(
+                cfg, "refiner_model_name", defaults.get("default_refiner_id"), ""
+            )
+            self._set_profile_default(
+                cfg, "refiner_switch_at", defaults.get("default_refiner_switch_at"), None
+            )
+            self._set_profile_default(
+                cfg, "hires_upscaler_name", defaults.get("default_hires_upscaler_id"), "Latent"
+            )
+            self._set_profile_default(
+                cfg, "hires_denoise", defaults.get("default_hires_denoise"), 0.3
+            )
             # Keep hires_enabled False unless user explicitly toggles it.
 
     @staticmethod
@@ -2311,6 +2408,7 @@ class AppController:
                 loader(executor_config)
             except Exception:
                 pass
+
     def on_stop_clicked(self) -> None:
         """
         Called when the user presses STOP.
@@ -2433,6 +2531,24 @@ class AppController:
         except Exception:
             logger.exception("Error waiting for worker thread during shutdown")
 
+        try:
+            close_all_structured_loggers()
+        except Exception:
+            logger.exception("Error closing structured loggers during shutdown")
+
+        # Close API client resources
+        try:
+            if hasattr(self, "_api_client") and self._api_client:
+                self._api_client.close()
+        except Exception:
+            logger.exception("Error closing API client during shutdown")
+
+        # Clear WebUI process manager global reference
+        try:
+            clear_global_webui_process_manager()
+        except Exception:
+            logger.exception("Error clearing WebUI process manager during shutdown")
+
         self._shutdown_completed = True
 
     def _cancel_active_jobs(self, reason: str) -> None:
@@ -2476,7 +2592,11 @@ class AppController:
         manager = self.webui_process_manager
         if not manager:
             return
-        stop_fn = getattr(manager, "stop_webui", None) or getattr(manager, "shutdown", None) or getattr(manager, "stop", None)
+        stop_fn = (
+            getattr(manager, "stop_webui", None)
+            or getattr(manager, "shutdown", None)
+            or getattr(manager, "stop", None)
+        )
         if callable(stop_fn):
             pid = getattr(manager, "pid", None)
             logger.info("Calling stop_webui for PID %s", pid)
@@ -2497,19 +2617,23 @@ class AppController:
         svc = getattr(self, "job_service", None)
         if not svc:
             return
-        runner = getattr(svc, "runner", None)
-        if runner and hasattr(runner, "stop"):
+        # Call public stop() method for deterministic lifecycle management
+        if hasattr(svc, "stop"):
             try:
-                runner.stop()
+                svc.stop()
             except Exception:
-                logger.exception("Error stopping job runner")
+                logger.exception("Error stopping job service")
 
     def _shutdown_watchdog(self) -> None:
         timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "8"))
         hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
         time.sleep(timeout)
         if not self._shutdown_completed:
-            logger.error("Shutdown watchdog triggered after %.1fs (completed=%s)", timeout, self._shutdown_completed)
+            logger.error(
+                "Shutdown watchdog triggered after %.1fs (completed=%s)",
+                timeout,
+                self._shutdown_completed,
+            )
             if hard_exit:
                 logger.error("Hard exit forced due to shutdown hang.")
                 os._exit(1)
@@ -2545,12 +2669,12 @@ class AppController:
                     pass
                 else:
                     self._apply_randomizer_from_config(preset_config)
-            
+
             # Extract core config fields from preset and apply to core config panel
             core_overrides = self._extract_core_overrides_from_preset(preset_config)
             if core_overrides:
                 self._apply_core_overrides(core_overrides)
-            
+
             # Update PipelineConfigPanelV2 if available
             # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
             pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
@@ -2559,42 +2683,42 @@ class AppController:
                     pipeline_config_panel.apply_run_config(preset_config)
                 except Exception:
                     pass
-            
+
             self._append_log(f"[controller] Applied preset '{preset_name}' to run config")
             self._apply_adetailer_config_section(preset_config)
-            
+
         except Exception as e:
             self._append_log(f"[controller] Error applying preset '{preset_name}': {e}")
 
     def _extract_core_overrides_from_preset(self, preset_config: dict[str, Any]) -> dict[str, Any]:
         """Extract core configuration overrides from preset config."""
         overrides = {}
-        
+
         # Get txt2img config as primary source
         txt2img_config = preset_config.get("txt2img", {})
-        
+
         # Extract model
         if "model" in txt2img_config and txt2img_config["model"]:
             overrides["model"] = txt2img_config["model"]
-        
+
         # Extract sampler
         if "sampler_name" in txt2img_config and txt2img_config["sampler_name"]:
             overrides["sampler"] = txt2img_config["sampler_name"]
-        
+
         # Extract steps
         if "steps" in txt2img_config:
             try:
                 overrides["steps"] = int(txt2img_config["steps"])
             except (ValueError, TypeError):
                 pass
-        
+
         # Extract cfg_scale
         if "cfg_scale" in txt2img_config:
             try:
                 overrides["cfg_scale"] = float(txt2img_config["cfg_scale"])
             except (ValueError, TypeError):
                 pass
-        
+
         # Extract resolution
         if "width" in txt2img_config and "height" in txt2img_config:
             try:
@@ -2613,7 +2737,7 @@ class AppController:
                     overrides["resolution_preset"] = f"{width}x{height}"
             except (ValueError, TypeError):
                 pass
-        
+
         return overrides
 
     def _apply_core_overrides(self, overrides: dict[str, Any]) -> None:
@@ -2623,20 +2747,20 @@ class AppController:
             pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
             if pipeline_tab is None:
                 return
-            
+
             sidebar_panel = getattr(pipeline_tab, "sidebar", None)
             if sidebar_panel is None:
                 return
-            
+
             core_config_panel = getattr(sidebar_panel, "get_core_config_panel", lambda: None)()
             if core_config_panel is None:
                 return
-            
+
             # Apply the overrides
             if hasattr(core_config_panel, "apply_from_overrides"):
                 core_config_panel.apply_from_overrides(overrides)
                 self._append_log(f"[controller] Applied core config overrides: {overrides}")
-                
+
         except Exception as e:
             self._append_log(f"[controller] Error applying core config overrides: {e}")
 
@@ -2669,7 +2793,7 @@ class AppController:
         pack = self.packs[index]
         self._append_log(f"[controller] Pack selected: {pack.name}")
 
-    def _find_pack_by_id(self, pack_id: str) -> Optional[PromptPackInfo]:
+    def _find_pack_by_id(self, pack_id: str) -> PromptPackInfo | None:
         """Find a pack by its ID (name)."""
         for pack in self.packs:
             if pack.name == pack_id:
@@ -2716,7 +2840,7 @@ class AppController:
                     return prompt_text
         except Exception:
             pass
-        
+
         # Fall back to PromptWorkspaceState (Prompt tab)
         try:
             ws = getattr(self.main_window, "prompt_workspace_state", None)
@@ -2732,7 +2856,6 @@ class AppController:
     # ------------------------------------------------------------------
     # Config state helpers
     # ------------------------------------------------------------------
-
 
     # --- V2.5 resource discovery wiring ---
     # Duplicate resource list methods removed; use the main definitions above.
@@ -2767,6 +2890,7 @@ class AppController:
             "hires_denoise": cfg.hires_denoise,
             "hires_use_base_model_for_hires": cfg.hires_use_base_model_for_hires,
         }
+
     def update_config(self, **kwargs: float | int | str) -> None:
         mapping = {
             "model": "model_name",
@@ -2779,8 +2903,8 @@ class AppController:
         targets = [self.state.current_config]
         if self.app_state is not None and hasattr(self.app_state, "current_config"):
             targets.append(self.app_state.current_config)
-        for field, value in kwargs.items():
-            attr = mapping.get(field)
+        for field_name, value in kwargs.items():
+            attr = mapping.get(field_name)
             if not attr:
                 continue
 
@@ -2832,9 +2956,9 @@ class AppController:
 
     def build_pipeline_config_v2(self) -> PipelineConfig:
         """DEPRECATED (PR-CORE1-12): Legacy pipeline_config builder.
-        
+
         Build the pipeline configuration structure that drives the runner.
-        
+
         NOTE: This is still called internally by PipelineController during NJR
         construction, but MUST NOT be used for execution payloads. Will be
         refactored in future cleanup to remove PipelineConfig dependency.
@@ -2843,11 +2967,11 @@ class AppController:
 
     def _build_pipeline_config(self) -> PipelineConfig:
         """DEPRECATED (PR-CORE1-12): Internal pipeline_config builder.
-        
+
         NOTE: Still used by PipelineController._build_pipeline_config_from_state()
         during NJR construction. This is INTERNAL ONLY and will be refactored in
         future to directly build NJR fields without intermediate PipelineConfig.
-        
+
         DO NOT use this for execution payloads.
         """
         # Compat import: PipelineConfig was moved to archive types in PR-CORE1-D22D.
@@ -2881,7 +3005,11 @@ class AppController:
                 pack = self.packs[0]
             except Exception:
                 pack = None
-        prompt = self._get_active_prompt_text() or self._resolve_prompt_from_pack(pack) or current.get("prompt", "")
+        prompt = (
+            self._get_active_prompt_text()
+            or self._resolve_prompt_from_pack(pack)
+            or current.get("prompt", "")
+        )
         if not prompt:
             prompt = (pack.name if pack else current.get("preset_name")) or "StableNew GUI Run"
 
@@ -3028,7 +3156,9 @@ class AppController:
             self._dropdown_loader.apply(resources, pipeline_tab=pipeline_tab)
         except Exception:
             if not self._warned_missing_pipeline_apply:
-                logger.warning("Pipeline tab missing apply_webui_resources; skipping dropdown hydration")
+                logger.warning(
+                    "Pipeline tab missing apply_webui_resources; skipping dropdown hydration"
+                )
                 self._warned_missing_pipeline_apply = True
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
@@ -3050,7 +3180,10 @@ class AppController:
             except Exception:
                 pass
         self._emit_webui_resources_updated(normalized)
-        counts = tuple(len(normalized[key]) for key in ("models", "vaes", "samplers", "schedulers", "upscalers"))
+        counts = tuple(
+            len(normalized[key])
+            for key in ("models", "vaes", "samplers", "schedulers", "upscalers")
+        )
         msg = (
             f"Resource update: {counts[0]} models, {counts[1]} vaes, "
             f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
@@ -3078,13 +3211,13 @@ class AppController:
             return
         dropdowns = self._dropdown_loader.load_dropdowns(self, self.app_state)
         self._dropdown_loader.apply_to_gui(pipeline_tab, dropdowns)
-        
+
         # Also refresh the sidebar's core config panel
         sidebar = self._get_sidebar_panel()
         if sidebar and hasattr(sidebar, "refresh_core_config_from_webui"):
             try:
                 sidebar.refresh_core_config_from_webui()
-            except Exception as e:
+            except Exception:
                 pass
 
     def _get_stage_cards_panel(self) -> Any:
@@ -3155,7 +3288,9 @@ class AppController:
             self.app_state.set_adetailer_enabled(enabled)
             self.app_state.set_adetailer_config(snapshot)
 
-    def _update_run_config_randomizer(self, enabled: bool | None = None, max_variants: int | None = None) -> None:
+    def _update_run_config_randomizer(
+        self, enabled: bool | None = None, max_variants: int | None = None
+    ) -> None:
         if not self.app_state:
             return
         current = dict(self.app_state.run_config or {})
@@ -3263,7 +3398,9 @@ class AppController:
         found = False
         for cfg in self.app_state.lora_strengths:
             if cfg.name == lora_name:
-                updated.append(LoraRuntimeConfig(name=cfg.name, strength=normalized, enabled=cfg.enabled))
+                updated.append(
+                    LoraRuntimeConfig(name=cfg.name, strength=normalized, enabled=cfg.enabled)
+                )
                 found = True
             else:
                 updated.append(cfg)
@@ -3279,7 +3416,9 @@ class AppController:
         found = False
         for cfg in self.app_state.lora_strengths:
             if cfg.name == lora_name:
-                updated.append(LoraRuntimeConfig(name=cfg.name, strength=cfg.strength, enabled=normalized))
+                updated.append(
+                    LoraRuntimeConfig(name=cfg.name, strength=cfg.strength, enabled=normalized)
+                )
                 found = True
             else:
                 updated.append(cfg)
@@ -3287,11 +3426,10 @@ class AppController:
             updated.append(LoraRuntimeConfig(name=lora_name, enabled=normalized))
         self.app_state.set_lora_strengths(updated)
 
-
     def on_pipeline_pack_load_config(self, pack_id: str) -> None:
         """Load a pack's config into the stage cards."""
         self._append_log(f"[controller] Loading config for pack: {pack_id}")
-        
+
         # Try to load pack config via ConfigManager
         pack_config = self._config_manager.load_pack_config(pack_id)
         if pack_config is None:
@@ -3299,13 +3437,13 @@ class AppController:
             return
         pipeline_section = pack_config.get("pipeline") or {}
         self._apply_pipeline_stage_flags(pipeline_section)
-        
+
         # Apply to run config
         if self.app_state:
             self.app_state.set_run_config(pack_config)
             self._maybe_set_app_state_lora_strengths(pack_config)
             self._apply_randomizer_from_config(pack_config)
-        
+
         # Update stage cards if available
         # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
         pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
@@ -3321,13 +3459,13 @@ class AppController:
                 self._load_stage_card(card, pack_config)
             stage_panel.load_adetailer_config(pack_config.get("adetailer") or {})
         self._apply_adetailer_config_section(pack_config)
-        
+
         self._append_log(f"[controller] Loaded config for pack '{pack_id}'")
 
     def on_pipeline_pack_apply_config(self, pack_ids: list[str]) -> None:
         """Write current stage config into one or more packs."""
         self._append_log(f"[controller] Applying config to packs: {pack_ids}")
-        
+
         # Get current run config
         current_config = self._run_config_with_lora()
         panel_randomizer = self._get_panel_randomizer_config()
@@ -3338,7 +3476,7 @@ class AppController:
             return
         if self.app_state:
             self.app_state.set_run_config(current_config)
-        
+
         # Save to each pack
         for pack_id in pack_ids:
             success = self._config_manager.save_pack_config(pack_id, current_config)
@@ -3368,7 +3506,7 @@ class AppController:
         """Add one or more packs to the current job draft."""
         print(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
         self._append_log(f"[controller] Adding packs to job: {pack_ids}")
-        
+
         entries = []
         stage_flags = self._build_stage_flags()
         randomizer_metadata = self._build_randomizer_metadata()
@@ -3380,13 +3518,15 @@ class AppController:
                 self._append_log(f"[controller] Pack not found: {pack_id}")
                 print(f"[AppController] ERROR: Pack '{pack_id}' not found!")
                 continue
-            
+
             # Get current run config from app_state
             run_config = self._run_config_with_lora()
-            
+
             # Ensure randomization is included
             if "randomization_enabled" not in run_config:
-                run_config["randomization_enabled"] = self.state.current_config.randomization_enabled
+                run_config["randomization_enabled"] = (
+                    self.state.current_config.randomization_enabled
+                )
             prompt_text, negative_prompt_text = self._read_pack_prompts(pack)
             print(f"[AppController] Pack '{pack_id}' prompt length: {len(prompt_text)} chars")
             entry = PackJobEntry(
@@ -3400,7 +3540,7 @@ class AppController:
             )
             entries.append(entry)
             print(f"[AppController] Created PackJobEntry for '{pack_id}'")
-        
+
         if entries and self.app_state:
             self.app_state.add_packs_to_job_draft(entries)
             self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
@@ -3497,7 +3637,7 @@ class AppController:
         if success:
             self._append_log(f"[controller] Set '{preset_name}' as default preset")
         else:
-            self._append_log(f"[controller] Failed to set default preset")
+            self._append_log("[controller] Failed to set default preset")
 
     def _load_and_apply_preset(self, preset_name: str) -> dict[str, Any] | None:
         preset_config = self._config_manager.load_preset(preset_name)
@@ -3511,12 +3651,12 @@ class AppController:
     def on_pipeline_preset_apply_to_packs(self, preset_name: str, pack_ids: list[str]) -> None:
         """Copy preset values into configs of selected packs."""
         self._append_log(f"[controller] Applying preset '{preset_name}' to packs: {pack_ids}")
-        
+
         preset_config = self._config_manager.load_preset(preset_name)
         if preset_config is None:
             self._append_log(f"[controller] Failed to load preset: {preset_name}")
             return
-        
+
         # Apply to each pack
         for pack_id in pack_ids:
             success = self._config_manager.save_pack_config(pack_id, preset_config)
@@ -3528,17 +3668,17 @@ class AppController:
     def on_pipeline_preset_load_to_stages(self, preset_name: str) -> None:
         """Load preset values into stage cards."""
         self._append_log(f"[controller] Loading preset '{preset_name}' to stages")
-        
+
         preset_config = self._config_manager.load_preset(preset_name)
         if preset_config is None:
             self._append_log(f"[controller] Failed to load preset: {preset_name}")
             return
-        
+
         # Apply to run config
         if self.app_state:
             self.app_state.set_run_config(preset_config)
             self._apply_randomizer_from_config(preset_config)
-        
+
         # Update stage cards
         # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
         pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
@@ -3553,13 +3693,13 @@ class AppController:
     def on_pipeline_preset_save_from_stages(self, preset_name: str) -> None:
         """Save current stage config as a preset."""
         self._append_log(f"[controller] Saving preset '{preset_name}' from stages")
-        
+
         # Get current config
         current_config = self._run_config_with_lora()
         if not current_config:
             self._append_log("[controller] No current config to save")
             return
-        
+
         # Save as preset
         success = self._config_manager.save_preset(preset_name, current_config)
         if success:
@@ -3570,7 +3710,7 @@ class AppController:
     def on_pipeline_preset_delete(self, preset_name: str) -> None:
         """Remove an existing preset."""
         self._append_log(f"[controller] Deleting preset '{preset_name}'")
-        
+
         # TODO: Add confirmation dialog if needed
         success = self._config_manager.delete_preset(preset_name)
         if success:
@@ -3581,7 +3721,6 @@ class AppController:
 
 # Convenience entrypoint for testing the skeleton standalone
 if __name__ == "__main__":
-    import tkinter as tk
     from src.gui.main_window_v2 import StableNewApp
 
     app = StableNewApp()

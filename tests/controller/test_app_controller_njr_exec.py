@@ -62,7 +62,9 @@ class TestNJRPreferredExecution:
         job = Job(job_id="test-job-1", priority=JobPriority.NORMAL)
         job._normalized_record = dummy_njr
 
-        mock_app_controller.pipeline_controller._run_job.return_value = self._canonical_job_result(job.job_id)
+        mock_app_controller.pipeline_controller._run_job.return_value = self._canonical_job_result(
+            job.job_id
+        )
 
         result = mock_app_controller._execute_job(job)
 
@@ -77,7 +79,9 @@ class TestNJRPreferredExecution:
         job = Job(job_id="test-job-2", priority=JobPriority.NORMAL)
         job._normalized_record = dummy_njr
 
-        mock_app_controller.pipeline_controller._run_job.side_effect = RuntimeError("NJR execution failed")
+        mock_app_controller.pipeline_controller._run_job.side_effect = RuntimeError(
+            "NJR execution failed"
+        )
 
         result = mock_app_controller._execute_job(job)
 

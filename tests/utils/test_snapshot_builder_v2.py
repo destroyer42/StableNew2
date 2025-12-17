@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.stage_models import StageType
 from src.queue.job_model import Job

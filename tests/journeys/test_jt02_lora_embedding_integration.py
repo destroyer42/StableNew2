@@ -99,7 +99,7 @@ in the style of classic landscape painting"""
             # The exact implementation may vary, but the test validates the integration
 
             # Access pipeline tab (assuming it exists)
-            pipeline_tab = getattr(window, 'pipeline_tab', None)
+            pipeline_tab = getattr(window, "pipeline_tab", None)
             if pipeline_tab is not None:
                 # Verify pipeline can access current prompt metadata
                 # This is a placeholder - actual implementation depends on Pipeline tab design
@@ -172,7 +172,9 @@ def test_jt02_lora_embedding_metadata_transfer():
         actual_embeddings = [emb.name for emb in metadata.embeddings]
 
         assert actual_loras == case["expected_loras"], f"LoRA mismatch for: {case['prompt']}"
-        assert actual_embeddings == case["expected_embeddings"], f"Embedding mismatch for: {case['prompt']}"
+        assert actual_embeddings == case["expected_embeddings"], (
+            f"Embedding mismatch for: {case['prompt']}"
+        )
 
 
 def test_jt02_pipeline_tab_integration():

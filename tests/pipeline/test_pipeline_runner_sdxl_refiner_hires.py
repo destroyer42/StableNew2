@@ -7,7 +7,13 @@ import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.pipeline.stage_sequencer import StageConfig, StageExecution, StageExecutionPlan, StageMetadata, StageTypeEnum
+from src.pipeline.stage_sequencer import (
+    StageConfig,
+    StageExecution,
+    StageExecutionPlan,
+    StageMetadata,
+    StageTypeEnum,
+)
 
 
 class DummyClient:
@@ -29,7 +35,9 @@ class RecordingPipeline:
         self.calls: list[tuple[str, dict[str, dict[str, object]]]] = []
         self.stage_events: list[dict[str, object]] = []
 
-    def run_txt2img_stage(self, prompt, negative_prompt, config, output_dir, image_name, cancel_token=None):
+    def run_txt2img_stage(
+        self, prompt, negative_prompt, config, output_dir, image_name, cancel_token=None
+    ):
         # config is the stage payload, not a nested config dict
         self.calls.append(("txt2img", dict(config)))
         return {"path": str(Path(output_dir) / f"{image_name}.png")}
@@ -42,7 +50,9 @@ class RecordingPipeline:
         self.calls.append(("upscale", {"input": str(input_image_path)}))
         return {"path": str(Path(run_dir) / "upscaled.png")}
 
-    def run_adetailer_stage(self, input_image_path, config, run_dir, image_name, prompt=None, cancel_token=None):
+    def run_adetailer_stage(
+        self, input_image_path, config, run_dir, image_name, prompt=None, cancel_token=None
+    ):
         self.calls.append(("adetailer", {"input": str(input_image_path)}))
         return {"path": str(Path(run_dir) / "adetailer.png")}
 

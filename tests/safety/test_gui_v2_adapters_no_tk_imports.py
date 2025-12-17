@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ADAPTER_FILES = [
     Path("src/gui_v2/adapters/__init__.py"),
     Path("src/gui_v2/adapters/pipeline_adapter_v2.py"),

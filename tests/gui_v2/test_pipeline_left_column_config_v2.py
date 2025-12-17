@@ -34,8 +34,8 @@ def test_pipeline_left_column_config_v2() -> None:
             assert stage_name in stage_states, f"Stage toggle {stage_name} should exist"
 
         # Check that both panels have access to controller and app_state (may be None in test environment)
-        assert hasattr(config_panel, 'controller'), "Config panel should have controller attribute"
-        assert hasattr(config_panel, 'app_state'), "Config panel should have app_state attribute"
+        assert hasattr(config_panel, "controller"), "Config panel should have controller attribute"
+        assert hasattr(config_panel, "app_state"), "Config panel should have app_state attribute"
 
         # Check that the panels are properly integrated
         left_inner = getattr(pipeline_tab, "left_inner", None)

@@ -36,7 +36,9 @@ def test_controller_refreshes_adetailer_resources(monkeypatch) -> None:
     controller.app_state = AppStateV2()
     controller.resource_service = FakeResourceService()
     fake_panel = FakeStageCardsPanel()
-    controller.main_window = SimpleNamespace(pipeline_tab=SimpleNamespace(stage_cards_panel=fake_panel))
+    controller.main_window = SimpleNamespace(
+        pipeline_tab=SimpleNamespace(stage_cards_panel=fake_panel)
+    )
 
     controller.refresh_resources_from_webui()
 

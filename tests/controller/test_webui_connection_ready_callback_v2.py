@@ -4,7 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
+from src.controller.webui_connection_controller import (
+    WebUIConnectionController,
+    WebUIConnectionState,
+)
 
 
 @pytest.mark.parametrize("autostart", [False])

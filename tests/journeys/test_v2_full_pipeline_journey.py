@@ -54,7 +54,9 @@ def test_v2_full_pipeline_journey_runs_once():
         assert call.config.prompt != ""
         assert call.config.model != ""
         assert call.config.steps > 0
-        assert app_controller.state.last_error in {None, ""} or isinstance(app_controller.state.last_error, str)
+        assert app_controller.state.last_error in {None, ""} or isinstance(
+            app_controller.state.last_error, str
+        )
     finally:
         try:
             window.cleanup()

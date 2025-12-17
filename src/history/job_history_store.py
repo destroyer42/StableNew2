@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import (
@@ -12,7 +13,6 @@ from src.history.history_schema_v26 import (
     validate_entry,
 )
 from src.utils.jsonl_codec import JSONLCodec
-
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,9 @@ class JobHistoryStore:
 
     def append(self, record: HistoryRecord | Mapping[str, Any]) -> None:
         entries = self.load()
-        history_record = record if isinstance(record, HistoryRecord) else HistoryRecord.from_dict(record)
+        history_record = (
+            record if isinstance(record, HistoryRecord) else HistoryRecord.from_dict(record)
+        )
         entries.append(history_record)
         self.save(entries)
 

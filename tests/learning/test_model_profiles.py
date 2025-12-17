@@ -1,6 +1,6 @@
 import pytest
 
-from src.learning.model_profiles import ModelProfile, STYLE_DEFAULTS, get_profile_defaults
+from src.learning.model_profiles import STYLE_DEFAULTS, ModelProfile, get_profile_defaults
 
 
 @pytest.mark.parametrize(

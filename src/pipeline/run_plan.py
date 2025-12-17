@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 
@@ -20,10 +19,10 @@ class PlannedJob:
 
 @dataclass
 class RunPlan:
-    jobs: List[PlannedJob] = field(default_factory=list)
+    jobs: list[PlannedJob] = field(default_factory=list)
     total_jobs: int = 0
     total_images: int = 0
-    enabled_stages: List[str] = field(default_factory=list)
+    enabled_stages: list[str] = field(default_factory=list)
     source_job_id: str | None = None
     replay_of: str | None = None
 
@@ -33,7 +32,7 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
     Derives a RunPlan from a NormalizedJobRecord.
     This is the canonical path for both live runs and replays.
     """
-    stage_chain: List[StageConfig] = list(getattr(njr, "stage_chain", []) or [])
+    stage_chain: list[StageConfig] = list(getattr(njr, "stage_chain", []) or [])
     first_stage = stage_chain[0] if stage_chain else None
     stage_name = getattr(first_stage, "stage_type", None) or "txt2img"
     enabled_stages = [getattr(stage, "stage_type", "") for stage in stage_chain] or [stage_name]

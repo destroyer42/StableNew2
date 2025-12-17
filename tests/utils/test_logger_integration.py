@@ -45,6 +45,7 @@ def test_inmemory_log_handler_respects_max_entries() -> None:
 def test_attach_gui_log_handler() -> None:
     """Test that attach_gui_log_handler creates and attaches handler."""
     from src.utils import attach_gui_log_handler
+
     handler = attach_gui_log_handler(max_entries=10)
     assert isinstance(handler, InMemoryLogHandler)
     assert handler._max_entries == 10

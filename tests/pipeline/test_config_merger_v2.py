@@ -27,7 +27,6 @@ from src.pipeline.config_merger_v2 import (
     UpscaleOverrides,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: Base configs for testing
 # ---------------------------------------------------------------------------
@@ -375,9 +374,7 @@ class TestNestedStageDisable:
 class TestPipelineLevelMerge:
     """Test ConfigMergerV2.merge_pipeline for multi-stage merging."""
 
-    def test_merge_pipeline_with_no_overrides(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_with_no_overrides(self, base_pipeline_config: dict) -> None:
         """With no overrides, merge_pipeline returns deep copy of base."""
         flags = StageOverrideFlags()  # All flags False
         bundle = StageOverridesBundle()
@@ -393,9 +390,7 @@ class TestPipelineLevelMerge:
         assert result is not base_pipeline_config
         assert result["refiner"] is not base_pipeline_config["refiner"]
 
-    def test_merge_pipeline_with_none_bundle(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_with_none_bundle(self, base_pipeline_config: dict) -> None:
         """None bundle is handled gracefully."""
         flags = StageOverrideFlags(txt2img_override_enabled=True)
 
@@ -408,9 +403,7 @@ class TestPipelineLevelMerge:
         assert result == base_pipeline_config
         assert result is not base_pipeline_config
 
-    def test_merge_pipeline_txt2img_override(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_txt2img_override(self, base_pipeline_config: dict) -> None:
         """txt2img overrides are applied when flag is True."""
         flags = StageOverrideFlags(txt2img_override_enabled=True)
         bundle = StageOverridesBundle(
@@ -433,9 +426,7 @@ class TestPipelineLevelMerge:
         assert result["cfg_scale"] == 12.0
         assert result["prompt"] == "base prompt"  # Preserved
 
-    def test_merge_pipeline_only_enabled_flags_apply(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_only_enabled_flags_apply(self, base_pipeline_config: dict) -> None:
         """Only stages with override flags True are modified."""
         flags = StageOverrideFlags(
             txt2img_override_enabled=False,  # Should NOT apply txt2img
@@ -460,9 +451,7 @@ class TestPipelineLevelMerge:
         assert result["upscale"]["scale_factor"] == 4.0
         assert result["upscale"]["denoise_strength"] == 0.1
 
-    def test_merge_pipeline_with_refiner_override(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_with_refiner_override(self, base_pipeline_config: dict) -> None:
         """Refiner overrides are applied via its own flag."""
         flags = StageOverrideFlags(refiner_override_enabled=True)
         bundle = StageOverridesBundle(
@@ -483,9 +472,7 @@ class TestPipelineLevelMerge:
         assert result["refiner"]["switch_at"] == 0.7
         assert result["refiner_enabled"] is True
 
-    def test_merge_pipeline_with_hires_override(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_with_hires_override(self, base_pipeline_config: dict) -> None:
         """Hires overrides are applied via its own flag."""
         flags = StageOverrideFlags(hires_override_enabled=True)
         bundle = StageOverridesBundle(
@@ -506,9 +493,7 @@ class TestPipelineLevelMerge:
         assert result["hires_fix"]["upscaler_name"] == "Latent"
         assert result["hires_fix"]["scale_factor"] == 1.5
 
-    def test_merge_pipeline_with_adetailer_override(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_with_adetailer_override(self, base_pipeline_config: dict) -> None:
         """ADetailer overrides are applied via its own flag."""
         flags = StageOverrideFlags(adetailer_override_enabled=True)
         bundle = StageOverridesBundle(
@@ -529,9 +514,7 @@ class TestPipelineLevelMerge:
         assert result["adetailer"]["confidence"] == 0.5
         assert result["adetailer"]["enabled"] is True
 
-    def test_merge_pipeline_with_img2img_override(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_with_img2img_override(self, base_pipeline_config: dict) -> None:
         """Img2img overrides are applied via its own flag."""
         flags = StageOverrideFlags(img2img_override_enabled=True)
         bundle = StageOverridesBundle(
@@ -552,9 +535,7 @@ class TestPipelineLevelMerge:
         assert result["img2img"]["denoise_strength"] == 0.8
         assert result["img2img"]["steps"] == 40
 
-    def test_merge_pipeline_multiple_overrides(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_multiple_overrides(self, base_pipeline_config: dict) -> None:
         """Multiple stages can be overridden simultaneously."""
         flags = StageOverrideFlags(
             txt2img_override_enabled=True,
@@ -588,9 +569,7 @@ class TestPipelineLevelMerge:
 class TestImmutabilityGuarantees:
     """Merger must not mutate inputs."""
 
-    def test_merge_pipeline_does_not_mutate_base(
-        self, base_pipeline_config: dict
-    ) -> None:
+    def test_merge_pipeline_does_not_mutate_base(self, base_pipeline_config: dict) -> None:
         """merge_pipeline should not modify the base config."""
         import copy
 

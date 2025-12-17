@@ -7,7 +7,6 @@ using stubbed WebUI client (no real GPU/network).
 from __future__ import annotations
 
 import time
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -15,23 +14,21 @@ from typing import Any
 
 import pytest
 
-from src.controller.job_service import JobService
-from src.pipeline.pipeline_runner import PipelineRunResult
 from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.controller.job_service import JobService
 from src.pipeline.payload_builder import build_sdxl_payload
-from tests.helpers.job_helpers import make_test_njr
-from src.pipeline.stage_sequencer import StageSequencer
+from src.pipeline.pipeline_runner import PipelineRunResult
 from src.pipeline.run_config import PromptSource, RunConfig
+from src.pipeline.stage_sequencer import StageSequencer
 from src.queue.job_history_store import (
-    JSONLJobHistoryStore,
     JobHistoryEntry,
+    JSONLJobHistoryStore,
     job_history_entry_from_run_config,
 )
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
-from tests.helpers.job_helpers import make_test_job_from_njr
-
+from tests.helpers.job_helpers import make_test_job_from_njr, make_test_njr
 
 
 def wait_for_job_completion(
@@ -81,7 +78,9 @@ def _job_from_config(
             "height": height,
         },
     )
-    return make_test_job_from_njr(njr, run_mode=run_mode, source=source, prompt_source=prompt_source)
+    return make_test_job_from_njr(
+        njr, run_mode=run_mode, source=source, prompt_source=prompt_source
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -280,15 +279,31 @@ def job_service(
         config_dict = job.config_snapshot or {}
         # Only keep fields valid for PipelineConfig
         valid_fields = {
-            "prompt", "model", "sampler", "width", "height", "steps", "cfg_scale", "negative_prompt",
-            "pack_name", "preset_name", "variant_configs", "randomizer_mode", "randomizer_plan_size",
-            "lora_settings", "metadata", "refiner_enabled", "refiner_model_name", "refiner_switch_at", "hires_fix"
+            "prompt",
+            "model",
+            "sampler",
+            "width",
+            "height",
+            "steps",
+            "cfg_scale",
+            "negative_prompt",
+            "pack_name",
+            "preset_name",
+            "variant_configs",
+            "randomizer_mode",
+            "randomizer_plan_size",
+            "lora_settings",
+            "metadata",
+            "refiner_enabled",
+            "refiner_model_name",
+            "refiner_switch_at",
+            "hires_fix",
         }
         filtered = {k: v for k, v in config_dict.items() if k in valid_fields}
         config = PipelineConfig(**filtered)
         result = stub_runner.run(config)
         # If result is a PipelineRunResult, convert to dict
-        if hasattr(result, 'to_dict'):
+        if hasattr(result, "to_dict"):
             result_dict = result.to_dict()
         else:
             result_dict = dict(result)
@@ -587,11 +602,11 @@ class TestQueueRunEndToEnd:
 
         before_run = datetime.utcnow()
         job_service.submit_queued(job)
-        
+
         # Wait for job to complete (background runner processes it)
         history_job = wait_for_job_completion(history_store, job.job_id, timeout=2.0)
         after_run = datetime.utcnow()
-        
+
         # Stop the runner to clean up
         job_service.runner.stop()
 

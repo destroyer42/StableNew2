@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
 from src.utils.prompt_packs import PromptPackInfo
@@ -29,9 +27,7 @@ def test_on_pipeline_add_packs_to_job_populates_preview_metadata(tmp_path: Path)
     )
     controller.app_state = AppStateV2()
     controller.main_window = type("Window", (), {"pipeline_tab": DummyPipelineTab()})()
-    controller.packs = [
-        PromptPackInfo(name="test_pack", path=pack_path, preset_name="")
-    ]
+    controller.packs = [PromptPackInfo(name="test_pack", path=pack_path, preset_name="")]
 
     controller.on_pipeline_add_packs_to_job(["test_pack"])
 

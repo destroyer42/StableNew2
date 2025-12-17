@@ -29,7 +29,9 @@ def test_learning_execution_runner_invokes_per_step():
         images_per_step=1,
     )
     base_cfg = {"txt2img": {"cfg_scale": 7.0}}
-    context = LearningExecutionContext(plan=plan, base_config=base_cfg, metadata={"experiment": "test"})
+    context = LearningExecutionContext(
+        plan=plan, base_config=base_cfg, metadata={"experiment": "test"}
+    )
     runner = LearningExecutionRunner(run_callable=_fake_pipeline_run)
     result = runner.run(context)
 

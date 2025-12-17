@@ -4,10 +4,10 @@ import tkinter as tk
 
 import pytest
 
+from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
+
 # PR-GUI-F1: PipelineRunControlsV2 no longer has run_button - auto-run via queue
 pytestmark = pytest.mark.skip(reason="PR-GUI-F1: run_button removed from PipelineRunControlsV2")
-
-from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 
 
 class DummyController:

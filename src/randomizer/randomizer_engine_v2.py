@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import itertools
 import random
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterable, List, Optional
 
 
 class RandomizationSeedMode(str, Enum):
@@ -19,25 +19,25 @@ class RandomizationPlanV2:
     enabled: bool = False
     max_variants: int = 0
     seed_mode: RandomizationSeedMode = RandomizationSeedMode.NONE
-    base_seed: Optional[int] = None
-    model_choices: List[str] = field(default_factory=list)
-    vae_choices: List[str] = field(default_factory=list)
-    sampler_choices: List[str] = field(default_factory=list)
-    scheduler_choices: List[str] = field(default_factory=list)
-    cfg_scale_values: List[float] = field(default_factory=list)
-    steps_values: List[int] = field(default_factory=list)
-    batch_sizes: List[int] = field(default_factory=list)
+    base_seed: int | None = None
+    model_choices: list[str] = field(default_factory=list)
+    vae_choices: list[str] = field(default_factory=list)
+    sampler_choices: list[str] = field(default_factory=list)
+    scheduler_choices: list[str] = field(default_factory=list)
+    cfg_scale_values: list[float] = field(default_factory=list)
+    steps_values: list[int] = field(default_factory=list)
+    batch_sizes: list[int] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class _VariantOverride:
-    model: Optional[str] = None
-    vae: Optional[str] = None
-    sampler: Optional[str] = None
-    scheduler: Optional[str] = None
-    cfg_scale: Optional[float] = None
-    steps: Optional[int] = None
-    batch_size: Optional[int] = None
+    model: str | None = None
+    vae: str | None = None
+    sampler: str | None = None
+    scheduler: str | None = None
+    cfg_scale: float | None = None
+    steps: int | None = None
+    batch_size: int | None = None
 
 
 def _ensure_list(values: Iterable) -> list:
@@ -45,7 +45,9 @@ def _ensure_list(values: Iterable) -> list:
     return entries or [None]
 
 
-def _iter_candidate_overrides(plan: RandomizationPlanV2, rng: random.Random) -> list[_VariantOverride]:
+def _iter_candidate_overrides(
+    plan: RandomizationPlanV2, rng: random.Random
+) -> list[_VariantOverride]:
     if not plan.enabled:
         return []
     model_vals = _ensure_list(plan.model_choices)
@@ -103,19 +105,21 @@ def _apply_seed(base: object, plan: RandomizationPlanV2, idx: int) -> None:
     if not hasattr(base, "seed"):
         return
     if plan.seed_mode == RandomizationSeedMode.FIXED:
-        setattr(base, "seed", plan.base_seed)
+        base.seed = plan.base_seed
     elif plan.seed_mode == RandomizationSeedMode.PER_VARIANT:
-        setattr(base, "seed", plan.base_seed + idx)
+        base.seed = plan.base_seed + idx
 
 
-def generate_run_config_variants(base_config: object, plan: RandomizationPlanV2, *, rng_seed: Optional[int] = None) -> list[object]:
+def generate_run_config_variants(
+    base_config: object, plan: RandomizationPlanV2, *, rng_seed: int | None = None
+) -> list[object]:
     if not plan.enabled:
         return [deepcopy(base_config)]
 
     rng = random.Random(rng_seed)
     combinations = _iter_candidate_overrides(plan, rng)
     if not combinations:
-        combinations = [ _VariantOverride() ]
+        combinations = [_VariantOverride()]
     if plan.max_variants > 0:
         combinations = combinations[: plan.max_variants]
 

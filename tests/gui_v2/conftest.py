@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import threading
 import tkinter as tk
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +12,6 @@ import pytest
 from src.services.config_service import ConfigService
 from src.utils.config import ConfigManager
 from src.utils.preferences import PreferencesManager
-
 
 DEFAULT_TXT2IMG_CFG = {
     "model": "sd_xl_base_1.0",

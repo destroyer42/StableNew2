@@ -20,7 +20,6 @@ import pytest
 
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
-
 from tests.helpers.pipeline_fixtures_v2 import (
     FixedTimeGenerator,
     SequentialIdGenerator,
@@ -30,7 +29,6 @@ from tests.helpers.pipeline_fixtures_v2 import (
     make_randomizer_plan_disabled,
     make_randomizer_plan_simple_models,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

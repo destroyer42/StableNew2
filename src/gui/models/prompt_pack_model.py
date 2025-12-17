@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 
 @dataclass
@@ -17,28 +16,30 @@ class PromptPackModel:
     """Simple prompt pack container."""
 
     name: str
-    path: Optional[str] = None
-    slots: List[PromptSlot] = field(default_factory=list)
+    path: str | None = None
+    slots: list[PromptSlot] = field(default_factory=list)
 
     @classmethod
-    def new(cls, name: str, slot_count: int = 10) -> "PromptPackModel":
+    def new(cls, name: str, slot_count: int = 10) -> PromptPackModel:
         slots = [PromptSlot(index=i, text="") for i in range(slot_count)]
         return cls(name=name, slots=slots)
 
     @classmethod
-    def load_from_file(cls, path: str | Path, min_slots: int = 10) -> "PromptPackModel":
+    def load_from_file(cls, path: str | Path, min_slots: int = 10) -> PromptPackModel:
         """Load from a simple JSON format; pads slots to min_slots."""
         data_path = Path(path)
         try:
             with data_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as exc:
-            raise IOError(f"Failed to load prompt pack: {exc}") from exc
+            raise OSError(f"Failed to load prompt pack: {exc}") from exc
         name = data.get("name") or data_path.stem
         raw_slots = data.get("slots") or []
         slots: list[PromptSlot] = []
         for idx, slot in enumerate(raw_slots):
-            slots.append(PromptSlot(index=int(slot.get("index", idx)), text=str(slot.get("text", ""))))
+            slots.append(
+                PromptSlot(index=int(slot.get("index", idx)), text=str(slot.get("text", "")))
+            )
         # Pad to minimum slots
         while len(slots) < min_slots:
             slots.append(PromptSlot(index=len(slots), text=""))
@@ -56,7 +57,7 @@ class PromptPackModel:
             with target.open("w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
         except Exception as exc:
-            raise IOError(f"Failed to save prompt pack: {exc}") from exc
+            raise OSError(f"Failed to save prompt pack: {exc}") from exc
         self.path = str(target)
         return target
 

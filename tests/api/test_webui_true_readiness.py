@@ -31,9 +31,7 @@ class TestWaitUntilTrueReadySuccess:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.1,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.1, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -59,9 +57,7 @@ class TestWaitUntilTrueReadySuccess:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.01,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.01, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -81,9 +77,7 @@ class TestWaitUntilTrueReadySuccess:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.1,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.1, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -102,9 +96,7 @@ class TestWaitUntilTrueReadySuccess:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.1,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.1, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -123,9 +115,7 @@ class TestWaitUntilTrueReadySuccess:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.1,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.1, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -150,9 +140,7 @@ class TestWaitUntilTrueReadyTimeout:
 
         with pytest.raises(WebUIReadinessTimeout) as excinfo:
             api.wait_until_true_ready(
-                timeout_s=0.1,
-                poll_interval_s=0.01,
-                get_stdout_tail=get_stdout_tail
+                timeout_s=0.1, poll_interval_s=0.01, get_stdout_tail=get_stdout_tail
             )
 
         exc = excinfo.value
@@ -176,9 +164,7 @@ class TestWaitUntilTrueReadyTimeout:
 
         with pytest.raises(WebUIReadinessTimeout) as excinfo:
             api.wait_until_true_ready(
-                timeout_s=0.1,
-                poll_interval_s=0.01,
-                get_stdout_tail=get_stdout_tail
+                timeout_s=0.1, poll_interval_s=0.01, get_stdout_tail=get_stdout_tail
             )
 
         exc = excinfo.value
@@ -202,9 +188,7 @@ class TestWaitUntilTrueReadyTimeout:
 
         with pytest.raises(WebUIReadinessTimeout) as excinfo:
             api.wait_until_true_ready(
-                timeout_s=0.1,
-                poll_interval_s=0.01,
-                get_stdout_tail=get_stdout_tail
+                timeout_s=0.1, poll_interval_s=0.01, get_stdout_tail=get_stdout_tail
             )
 
         exc = excinfo.value
@@ -227,9 +211,7 @@ class TestWaitUntilTrueReadyTimeout:
 
         with pytest.raises(WebUIReadinessTimeout):
             api.wait_until_true_ready(
-                timeout_s=0.1,
-                poll_interval_s=0.01,
-                get_stdout_tail=get_stdout_tail
+                timeout_s=0.1, poll_interval_s=0.01, get_stdout_tail=get_stdout_tail
             )
 
     def test_raises_timeout_when_options_endpoint_never_ready(self):
@@ -248,9 +230,7 @@ class TestWaitUntilTrueReadyTimeout:
 
         with pytest.raises(WebUIReadinessTimeout):
             api.wait_until_true_ready(
-                timeout_s=0.1,
-                poll_interval_s=0.01,
-                get_stdout_tail=get_stdout_tail
+                timeout_s=0.1, poll_interval_s=0.01, get_stdout_tail=get_stdout_tail
             )
 
 
@@ -272,9 +252,7 @@ class TestWaitUntilTrueReadySafeModeCompatibility:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.1,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.1, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -296,9 +274,7 @@ class TestWaitUntilTrueReadySafeModeCompatibility:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.1,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.1, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -328,9 +304,7 @@ class TestWaitUntilTrueReadyPollingBehavior:
 
         api = WebUIAPI(client=mock_client)
         result = api.wait_until_true_ready(
-            timeout_s=30,
-            poll_interval_s=0.01,
-            get_stdout_tail=get_stdout_tail
+            timeout_s=30, poll_interval_s=0.01, get_stdout_tail=get_stdout_tail
         )
 
         assert result is True
@@ -347,7 +321,7 @@ class TestWebUIReadinessTimeoutException:
             total_waited=45.5,
             stdout_tail="Loading...",
             stderr_tail="",
-            checks_status={"models": False, "options": True, "boot_marker": False}
+            checks_status={"models": False, "options": True, "boot_marker": False},
         )
 
         assert exc.total_waited == 45.5
@@ -359,24 +333,16 @@ class TestWebUIReadinessTimeoutException:
             total_waited=30,
             stdout_tail="StableNew v1.2.3\nLoading models...\nWaiting...",
             stderr_tail="",
-            checks_status={}
+            checks_status={},
         )
 
         assert "Loading models" in exc.stdout_tail
 
     def test_exception_has_checks_status_metadata(self):
         """Verify exception captures status of each readiness check."""
-        checks = {
-            "models_endpoint": True,
-            "options_endpoint": False,
-            "boot_marker": True
-        }
+        checks = {"models_endpoint": True, "options_endpoint": False, "boot_marker": True}
         exc = WebUIReadinessTimeout(
-            message="Timeout",
-            total_waited=30,
-            stdout_tail="",
-            stderr_tail="",
-            checks_status=checks
+            message="Timeout", total_waited=30, stdout_tail="", stderr_tail="", checks_status=checks
         )
 
         assert exc.checks_status == checks

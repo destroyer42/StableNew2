@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -53,7 +52,6 @@ def test_stage_runner_executes_txt2img_then_upscale(tmp_path):
     runner = PipelineRunner(DummyClient(), DummyLogger(), runs_base_dir=tmp_path / "runs")
     njr = _make_njr_for_stages([StageType.TXT2IMG, StageType.UPSCALE])
     result = runner.run_njr(njr, cancel_token=_cancel_token())
-    pipeline = runner._pipeline  # type: ignore[attr-defined]
     assert result.success is True
     assert result.stage_plan is not None
     assert result.stage_plan.enabled_stages == ["txt2img", "upscale"]
@@ -63,7 +61,6 @@ def test_stage_runner_executes_adetailer_stage(tmp_path):
     runner = PipelineRunner(DummyClient(), DummyLogger(), runs_base_dir=tmp_path / "runs")
     njr = _make_njr_for_stages([StageType.TXT2IMG, StageType.ADETAILER])
     result = runner.run_njr(njr, cancel_token=_cancel_token())
-    pipeline = runner._pipeline  # type: ignore[attr-defined]
     assert result.success is True
     assert result.stage_plan is not None
     assert result.stage_plan.enabled_stages == ["txt2img", "adetailer"]

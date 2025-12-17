@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from src.utils import InMemoryLogHandler, get_logger
 
 

@@ -48,7 +48,9 @@ class FakeSidebarPanel:
         self.calls.append((stage, enabled))
 
 
-def _build_controller(panel: FakeStageCardsPanel | None = None, sidebar: FakeSidebarPanel | None = None) -> AppController:
+def _build_controller(
+    panel: FakeStageCardsPanel | None = None, sidebar: FakeSidebarPanel | None = None
+) -> AppController:
     controller = AppController(
         None,
         threaded=False,

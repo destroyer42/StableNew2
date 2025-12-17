@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
 
 from src.queue.job_model import Job, JobStatus
@@ -11,7 +10,9 @@ from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 
 
-def _wait_for_status(job_queue: JobQueue, job_id: str, *, status: JobStatus, timeout: float = 2.0) -> Job | None:
+def _wait_for_status(
+    job_queue: JobQueue, job_id: str, *, status: JobStatus, timeout: float = 2.0
+) -> Job | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         job = job_queue.get_job(job_id)

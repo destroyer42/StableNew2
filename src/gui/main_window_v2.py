@@ -2,26 +2,26 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Any, Callable, Optional, Dict
+from typing import Any
 
 from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
-from src.gui.app_state_v2 import AppStateV2
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
+from src.gui.app_state_v2 import AppStateV2
+from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
+from src.gui.engine_settings_dialog import EngineSettingsDialog
 from src.gui.gui_invoker import GuiInvoker
 from src.gui.layout_v2 import configure_root_grid
-from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
-from src.gui.theme_v2 import apply_theme, BACKGROUND_ELEVATED, TEXT_PRIMARY, ACCENT_GOLD
 from src.gui.log_trace_panel_v2 import LogTracePanelV2
-from src.gui.sidebar_panel_v2 import SidebarPanelV2
-from src.gui.pipeline_panel_v2 import PipelinePanelV2
-from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.status_bar_v2 import StatusBarV2
-from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
-from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
+from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
-from src.utils import InMemoryLogHandler
+from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
+from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.zone_map_v2 import get_root_zone_config
+from src.utils import InMemoryLogHandler
+from src.utils.config import ConfigManager
 
 
 class HeaderZone(ttk.Frame):
@@ -71,12 +71,20 @@ class BottomZone(ttk.Frame):
         self.status_bar_v2.grid(row=1, column=0, sticky="ew")
 
         # Compatibility aliases expected by AppController-based tests.
-        self.api_status_label = getattr(getattr(self.status_bar_v2, "webui_panel", None), "status_label", None)
+        self.api_status_label = getattr(
+            getattr(self.status_bar_v2, "webui_panel", None), "status_label", None
+        )
         if self.api_status_label is None:
             self.api_status_label = ttk.Label(self, text="API: Unknown", style="StatusBar.TLabel")
-        self.status_label = getattr(self.status_bar_v2, "status_label", ttk.Label(self, text="Status: Idle"))
+        self.status_label = getattr(
+            self.status_bar_v2, "status_label", ttk.Label(self, text="Status: Idle")
+        )
 
-        log_style_kwargs = {"bg": BACKGROUND_ELEVATED, "fg": TEXT_PRIMARY, "insertbackground": TEXT_PRIMARY}
+        log_style_kwargs = {
+            "bg": BACKGROUND_ELEVATED,
+            "fg": TEXT_PRIMARY,
+            "insertbackground": TEXT_PRIMARY,
+        }
         self.log_text = tk.Text(self, height=10, **log_style_kwargs)
         self.log_text.grid_forget()
 
@@ -131,7 +139,7 @@ class MainWindowV2:
         self.center_notebook = ttk.Notebook(self.root)
         self.center_notebook.grid(**get_root_zone_config("main"))
         # Registry to ensure a single authoritative tab instance per id
-        self._tab_registry: Dict[str, tk.Widget] = {}
+        self._tab_registry: dict[str, tk.Widget] = {}
 
         # Prompt tab (compatibility for journey tests / prompt workspace access)
         self.prompt_tab = PromptTabFrame(self.center_notebook, app_state=self.app_state)
@@ -139,6 +147,7 @@ class MainWindowV2:
 
         # PR-CORE1-D14: Always create and assign pipeline_tab for test/compat
         from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
+
         # Use the registry to prevent duplicate pipeline tabs
         def _make_pipeline(parent):
             # Construct the richer PipelineTabFrame with available context so dropdowns and panels populate
@@ -155,7 +164,10 @@ class MainWindowV2:
                 # Fallback to minimal constructor
                 tab = PipelineTabFrame(parent)
             # Also ensure pipeline_controller attribute is set if present
-            if hasattr(tab, "pipeline_controller") and getattr(tab, "pipeline_controller", None) is None:
+            if (
+                hasattr(tab, "pipeline_controller")
+                and getattr(tab, "pipeline_controller", None) is None
+            ):
                 try:
                     tab.pipeline_controller = self.pipeline_controller
                 except Exception:
@@ -190,7 +202,9 @@ class MainWindowV2:
         self.left_zone = None
         self.right_zone = None
 
-        self.bottom_zone = BottomZone(self.root, controller=self.app_controller, app_state=self.app_state)
+        self.bottom_zone = BottomZone(
+            self.root, controller=self.app_controller, app_state=self.app_state
+        )
         self.bottom_zone.grid(**get_root_zone_config("status"))
         self.status_bar_v2 = getattr(self.bottom_zone, "status_bar_v2", None)
 
@@ -207,8 +221,13 @@ class MainWindowV2:
 
         # --- Attach panels to zones ---
         import os
-        self._is_test_mode = bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("STABLENEW_TEST_MODE") == "1"
+
+        self._is_test_mode = (
+            bool(os.environ.get("PYTEST_CURRENT_TEST"))
+            or os.environ.get("STABLENEW_TEST_MODE") == "1"
+        )
         from src.gui.panels_v2.layout_manager_v2 import LayoutManagerV2
+
         self.layout_manager_v2 = LayoutManagerV2(self)
         # In tests we still attach panels so UI smoke tests can assert existence
         # of standard tabs. Always attach panels here for test harnesses.
@@ -222,8 +241,11 @@ class MainWindowV2:
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
 
-        self._dropdown_loader_v2 = DropdownLoaderV2(getattr(self.app_controller, "_config_manager", None))
+        self._dropdown_loader_v2 = DropdownLoaderV2(
+            getattr(self.app_controller, "_config_manager", None)
+        )
         if not hasattr(self.pipeline_tab, "apply_webui_resources"):
+
             def _apply_pipeline_resources(resources: dict[str, list[Any]] | None) -> None:
                 self._dropdown_loader_v2.apply(resources, pipeline_tab=self.pipeline_tab)
 
@@ -288,6 +310,7 @@ class MainWindowV2:
             if self.app_controller and hasattr(self.app_controller, "update_ui_heartbeat"):
                 self.app_controller.update_ui_heartbeat()
             self.root.after(250, _tick)
+
         self.root.after(250, _tick)
 
     # Compatibility hook for controllers
@@ -462,14 +485,17 @@ class MainWindowV2:
 
         if hasattr(left, "packs_list") and callable(getattr(ctrl, "on_pack_selected", None)):
             try:
-                left.packs_list.bind("<<ListboxSelect>>", lambda _e: self._handle_pack_selection(ctrl))
+                left.packs_list.bind(
+                    "<<ListboxSelect>>", lambda _e: self._handle_pack_selection(ctrl)
+                )
             except Exception:
                 pass
 
         if hasattr(left, "preset_combo") and callable(getattr(ctrl, "on_preset_selected", None)):
             try:
                 left.preset_combo.bind(
-                    "<<ComboboxSelected>>", lambda _e: ctrl.on_preset_selected(left.preset_combo.get())
+                    "<<ComboboxSelected>>",
+                    lambda _e: ctrl.on_preset_selected(left.preset_combo.get()),
                 )
             except Exception:
                 pass
@@ -636,8 +662,8 @@ class MainWindowV2:
         self,
         *,
         initial_prompt: str = "",
-        initial_negative_prompt: Optional[str] = None,
-        on_apply: Callable[[str, Optional[str]], None] | None = None,
+        initial_negative_prompt: str | None = None,
+        on_apply: Callable[[str, str | None], None] | None = None,
     ) -> None:
         if not getattr(self, "root", None):
             return
@@ -646,7 +672,7 @@ class MainWindowV2:
         dialog.title("Advanced Prompt Editor")
         dialog.transient(self.root)
 
-        def _handle_apply(prompt_value: str, negative_value: Optional[str] = None) -> None:
+        def _handle_apply(prompt_value: str, negative_value: str | None = None) -> None:
             if callable(on_apply):
                 try:
                     on_apply(prompt_value, negative_value)
@@ -670,7 +696,7 @@ class MainWindowV2:
         except Exception:
             pass
 
-    def apply_prompt_text(self, prompt: str, negative_prompt: Optional[str] = None) -> None:
+    def apply_prompt_text(self, prompt: str, negative_prompt: str | None = None) -> None:
         text = prompt or ""
         if getattr(self, "app_state", None):
             try:
@@ -725,10 +751,9 @@ class MainWindowV2:
             pass
 
 
-
 def run_app(
-    root: Optional[tk.Tk] = None,
-    webui_manager: Optional[WebUIProcessManager] = None,
+    root: tk.Tk | None = None,
+    webui_manager: WebUIProcessManager | None = None,
     app_controller=None,
     packs_controller=None,
     pipeline_controller=None,

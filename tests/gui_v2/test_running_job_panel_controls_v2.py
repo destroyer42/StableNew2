@@ -11,7 +11,6 @@ Tests:
 from __future__ import annotations
 
 import tkinter as tk
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -81,7 +80,9 @@ class TestRunningJobPanelDisplay:
         assert "No job" in panel.job_info_label.cget("text")
 
     @pytest.mark.gui
-    def test_panel_shows_job_summary(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_panel_shows_job_summary(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Panel displays job summary when job is running."""
         panel = RunningJobPanelV2(
             tk_root,
@@ -120,7 +121,9 @@ class TestRunningJobPanelProgress:
         assert "50%" in panel.progress_label.cget("text")
 
     @pytest.mark.gui
-    def test_eta_displays_formatted(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_eta_displays_formatted(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """ETA is displayed in human-readable format."""
         panel = RunningJobPanelV2(
             tk_root,
@@ -162,7 +165,9 @@ class TestRunningJobPanelButtons:
         assert "disabled" in panel.cancel_return_button.state()
 
     @pytest.mark.gui
-    def test_buttons_enabled_when_job_running(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_buttons_enabled_when_job_running(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Buttons are enabled when job is running."""
         panel = RunningJobPanelV2(
             tk_root,
@@ -179,7 +184,9 @@ class TestRunningJobPanelCallbacks:
     """Tests for button callbacks."""
 
     @pytest.mark.gui
-    def test_pause_calls_controller(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_pause_calls_controller(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Pause button calls controller pause method."""
         panel = RunningJobPanelV2(
             tk_root,
@@ -191,7 +198,9 @@ class TestRunningJobPanelCallbacks:
         mock_controller.on_pause_job_v2.assert_called_once()
 
     @pytest.mark.gui
-    def test_resume_calls_controller_when_paused(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_resume_calls_controller_when_paused(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Resume button calls controller resume method when paused."""
         sample_running_job.status = JobStatusV2.PAUSED
         panel = RunningJobPanelV2(
@@ -204,7 +213,9 @@ class TestRunningJobPanelCallbacks:
         mock_controller.on_resume_job_v2.assert_called_once()
 
     @pytest.mark.gui
-    def test_cancel_calls_controller(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_cancel_calls_controller(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Cancel button calls controller cancel method."""
         panel = RunningJobPanelV2(
             tk_root,
@@ -216,7 +227,9 @@ class TestRunningJobPanelCallbacks:
         mock_controller.on_cancel_job_v2.assert_called_once()
 
     @pytest.mark.gui
-    def test_cancel_and_return_calls_controller(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_cancel_and_return_calls_controller(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Cancel + Return button calls controller method."""
         panel = RunningJobPanelV2(
             tk_root,
@@ -232,7 +245,9 @@ class TestRunningJobPanelPauseResumeToggle:
     """Tests for pause/resume button text toggle."""
 
     @pytest.mark.gui
-    def test_button_says_pause_when_running(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_button_says_pause_when_running(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Button says 'Pause' when job is running."""
         panel = RunningJobPanelV2(
             tk_root,
@@ -243,7 +258,9 @@ class TestRunningJobPanelPauseResumeToggle:
         assert "Pause" in panel.pause_resume_button.cget("text")
 
     @pytest.mark.gui
-    def test_button_says_resume_when_paused(self, tk_root, mock_controller, mock_app_state, sample_running_job):
+    def test_button_says_resume_when_paused(
+        self, tk_root, mock_controller, mock_app_state, sample_running_job
+    ):
         """Button says 'Resume' when job is paused."""
         sample_running_job.status = JobStatusV2.PAUSED
         panel = RunningJobPanelV2(

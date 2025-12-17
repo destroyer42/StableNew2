@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any
 
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
@@ -27,7 +27,7 @@ def _normalize_run_config(run_config: Mapping[str, Any] | None) -> dict[str, Any
     if not run_config:
         return {}
     try:
-        return {k: v for k, v in dict(run_config).items()}
+        return dict(run_config)
     except Exception:
         return {"value": str(run_config)}
 
@@ -76,7 +76,10 @@ def _extract_effective_prompts(config: Any) -> dict[str, str]:
         "neg_prompt",
         default="",
     )
-    return {"positive": str(positive) if positive else "", "negative": str(negative) if negative else ""}
+    return {
+        "positive": str(positive) if positive else "",
+        "negative": str(negative) if negative else "",
+    }
 
 
 def _extract_model_selection(config: Any) -> dict[str, str | None]:
@@ -122,8 +125,12 @@ def _ensure_prompt_pack_metadata(job: Job, normalized_job: NormalizedJobRecord) 
 def _extract_stage_metadata(config: Any) -> dict[str, Any]:
     stages = _config_value(config, "stages", default=[]) or []
     stage_flags = {
-        "txt2img": bool(_config_value(config, "stage_txt2img_enabled", default=None) or "txt2img" in stages),
-        "img2img": bool(_config_value(config, "stage_img2img_enabled", default=None) or "img2img" in stages),
+        "txt2img": bool(
+            _config_value(config, "stage_txt2img_enabled", default=None) or "txt2img" in stages
+        ),
+        "img2img": bool(
+            _config_value(config, "stage_img2img_enabled", default=None) or "img2img" in stages
+        ),
         "refiner": bool(_config_value(config, "refiner_enabled", "refiner", default=False)),
         "hires": bool(_config_value(config, "hires_enabled", "hires_fix", default=False)),
         "upscale": bool(_config_value(config, "upscale_enabled", "upscale", default=False)),
@@ -173,7 +180,9 @@ def _deserialize_lora_tags(data: Any) -> list[LoRATag]:
 
 
 def _serialize_normalized_job(record: NormalizedJobRecord) -> dict[str, Any]:
-    status_value = record.status.value if isinstance(record.status, JobStatusV2) else str(record.status)
+    status_value = (
+        record.status.value if isinstance(record.status, JobStatusV2) else str(record.status)
+    )
     return {
         "job_id": record.job_id,
         "path_output_dir": record.path_output_dir,
@@ -326,7 +335,10 @@ def build_job_snapshot(
     config = normalized_job.config
     timestamp = datetime.utcnow().isoformat()
     legacy_mode = False
-    if not normalized_job.prompt_pack_id and _normalize_prompt_source(getattr(job, "prompt_source", None)) == "pack":
+    if (
+        not normalized_job.prompt_pack_id
+        and _normalize_prompt_source(getattr(job, "prompt_source", None)) == "pack"
+    ):
         legacy_mode = True
     return {
         "schema_version": SCHEMA_VERSION,

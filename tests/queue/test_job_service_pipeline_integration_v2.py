@@ -33,7 +33,6 @@ from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 
-
 # ---------------------------------------------------------------------------
 # Test Helpers
 # ---------------------------------------------------------------------------
@@ -358,7 +357,9 @@ class TestQueuedModeExecution:
             release_event.wait(timeout=2.0)
             return {"job_id": job.job_id, "status": "completed"}
 
-        runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=blocking_callable, poll_interval=0.01)
+        runner = SingleNodeJobRunner(
+            job_queue=job_queue, run_callable=blocking_callable, poll_interval=0.01
+        )
         service = JobService(job_queue=job_queue, runner=runner)
 
         job = make_job("queued-block-001")
@@ -399,9 +400,7 @@ class TestMultipleQueuedJobs:
         job_service.submit_queued(job3)
 
         # Poll until all complete
-        completed_jobs = poll_until_all_terminal(
-            job_queue, ["multi-001", "multi-002", "multi-003"]
-        )
+        completed_jobs = poll_until_all_terminal(job_queue, ["multi-001", "multi-002", "multi-003"])
 
         assert len(completed_jobs) == 3
         assert all(j.status == JobStatus.COMPLETED for j in completed_jobs)
@@ -425,9 +424,7 @@ class TestMultipleQueuedJobs:
             job_service.submit_queued(job)
 
         # Poll until all complete
-        poll_until_all_terminal(
-            job_queue, [j.job_id for j in jobs]
-        )
+        poll_until_all_terminal(job_queue, [j.job_id for j in jobs])
 
         # Check execution order
         executed_ids = recording_callable.get_job_ids()
@@ -533,9 +530,7 @@ class TestQueueErrorHandling:
         service.submit_queued(make_job("success-2"))
 
         # Poll until all terminal
-        poll_until_all_terminal(
-            job_queue, ["success-1", "fail-middle", "success-2"]
-        )
+        poll_until_all_terminal(job_queue, ["success-1", "fail-middle", "success-2"])
 
         # Check statuses
         job1 = job_queue.get_job("success-1")

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Optional, Any
+from typing import Any
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.controllers.learning_controller import LearningController
@@ -19,7 +19,14 @@ from src.learning.learning_record import LearningRecordWriter
 class LearningTabFrame(ttk.Frame):
     """Learning tab with header and three-column workspace layout."""
 
-    def __init__(self, master: tk.Misc, app_state: Optional[AppStateV2] = None, pipeline_controller: Optional[Any] = None, *args, **kwargs) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        app_state: AppStateV2 | None = None,
+        pipeline_controller: Any | None = None,
+        *args,
+        **kwargs,
+    ) -> None:
         super().__init__(master, *args, **kwargs)
         self.app_state = app_state
         self.pipeline_controller = pipeline_controller
@@ -31,7 +38,9 @@ class LearningTabFrame(ttk.Frame):
         self.learning_state = LearningState()
         self.learning_controller = LearningController(
             learning_state=self.learning_state,
-            prompt_workspace_state=getattr(self.app_state, 'prompt_workspace_state', None) if self.app_state else None,
+            prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
+            if self.app_state
+            else None,
             pipeline_controller=self.pipeline_controller,
             learning_record_writer=self.learning_record_writer,
         )
@@ -48,7 +57,7 @@ class LearningTabFrame(ttk.Frame):
         header_label = ttk.Label(
             self.header_frame,
             text="Learning Experiment Workspace",
-            font=("TkDefaultFont", 14, "bold")
+            font=("TkDefaultFont", 14, "bold"),
         )
         header_label.pack(anchor="w")
 
@@ -64,27 +73,19 @@ class LearningTabFrame(ttk.Frame):
 
         # Left panel: Experiment Design
         self.experiment_panel = ExperimentDesignPanel(
-            self.body_frame,
-            learning_controller=self.learning_controller,
-            style="Panel.TFrame"
+            self.body_frame, learning_controller=self.learning_controller, style="Panel.TFrame"
         )
         self.experiment_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
         # Center panel: Learning Plan Table
-        self.plan_table = LearningPlanTable(
-            self.body_frame,
-            style="Panel.TFrame"
-        )
+        self.plan_table = LearningPlanTable(self.body_frame, style="Panel.TFrame")
         self.plan_table.grid(row=0, column=1, sticky="nsew", padx=2, pady=4)
 
         # Connect controller to plan table
         self.learning_controller._plan_table = self.plan_table
 
         # Right panel: Learning Review
-        self.review_panel = LearningReviewPanel(
-            self.body_frame,
-            style="Panel.TFrame"
-        )
+        self.review_panel = LearningReviewPanel(self.body_frame, style="Panel.TFrame")
         self.review_panel.grid(row=0, column=2, sticky="nsew", padx=(2, 0), pady=4)
 
         # Connect controller to review panel

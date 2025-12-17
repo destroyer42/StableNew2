@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 from src.controller.app_controller import AppController
 from src.utils.config import ConfigManager
@@ -73,7 +72,9 @@ def test_app_controller_settings_saved(tmp_path: Path) -> None:
         job_service=make_stubbed_job_service(),  # PR-0114C-Ty: DI for tests
     )
 
-    controller.on_settings_saved({"webui_base_url": "http://localhost:1234", "output_dir": "test/output"})
+    controller.on_settings_saved(
+        {"webui_base_url": "http://localhost:1234", "output_dir": "test/output"}
+    )
 
     assert config_manager.get_setting("webui_base_url") == "http://localhost:1234"
     assert config_manager.get_setting("output_dir") == "test/output"

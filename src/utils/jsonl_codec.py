@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any
 
 JsonObject = dict[str, Any]
 SchemaValidator = Callable[[JsonObject], tuple[bool, list[str]]]
@@ -66,13 +67,9 @@ class JSONLCodec:
             try:
                 valid, errors = self._schema_validator(parsed)
             except Exception as exc:
-                self._logger(
-                    f"JSONL validator threw exception ({path}, line {line_number}): {exc}"
-                )
+                self._logger(f"JSONL validator threw exception ({path}, line {line_number}): {exc}")
                 return None
             if not valid:
-                self._logger(
-                    f"JSONL validation failed ({path}, line {line_number}): {errors}"
-                )
+                self._logger(f"JSONL validation failed ({path}, line {line_number}): {errors}")
                 return None
         return parsed

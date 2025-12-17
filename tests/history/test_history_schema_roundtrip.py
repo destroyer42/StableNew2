@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.history.job_history_store import JobHistoryStore
 from src.history.history_schema_v26 import HISTORY_SCHEMA_VERSION, validate_entry
+from src.history.job_history_store import JobHistoryStore
 
 
 def _write_jsonl(path: Path, entries: list[dict]) -> None:

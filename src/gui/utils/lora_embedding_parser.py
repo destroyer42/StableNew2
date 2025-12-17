@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -20,9 +20,9 @@ class EmbeddingReference:
     end: int | None = None
 
 
-def parse_loras(text: str) -> List[LoraReference]:
+def parse_loras(text: str) -> list[LoraReference]:
     """Parse LoRA references from prompt text."""
-    refs: List[LoraReference] = []
+    refs: list[LoraReference] = []
 
     # Support both {lora:name:weight} and <lora:name:weight> formats
     brace_pattern = re.compile(r"\{lora:([^:}]+)(?::([0-9.]+))?\}")
@@ -47,9 +47,9 @@ def parse_loras(text: str) -> List[LoraReference]:
     return refs
 
 
-def parse_embeddings(text: str) -> List[EmbeddingReference]:
+def parse_embeddings(text: str) -> list[EmbeddingReference]:
     """Parse embedding references from prompt text."""
-    refs: List[EmbeddingReference] = []
+    refs: list[EmbeddingReference] = []
 
     # Support both <embedding:name> and embedding:name formats
     # Process angle bracket format first (more specific)
@@ -78,7 +78,7 @@ def parse_embeddings(text: str) -> List[EmbeddingReference]:
     return refs
 
 
-def parse_prompt_metadata(text: str) -> Dict[str, Any]:
+def parse_prompt_metadata(text: str) -> dict[str, Any]:
     """Return a simple metadata dict for convenience."""
     return {
         "loras": parse_loras(text),

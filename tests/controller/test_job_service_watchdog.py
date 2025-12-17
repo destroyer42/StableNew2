@@ -8,9 +8,9 @@ from src.controller import job_service as job_service_module
 from src.controller.job_service import JobService
 from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
-from src.utils.watchdog_v2 import WatchdogConfig
 from src.utils.error_envelope_v2 import wrap_exception
 from src.utils.exceptions_v2 import WatchdogViolationError
+from src.utils.watchdog_v2 import WatchdogConfig
 
 
 class DummyRunner:
@@ -35,7 +35,9 @@ class DummyRunner:
 
 
 class FakeWatchdog:
-    def __init__(self, job_id: str, metadata: Any, config: WatchdogConfig, violation_callback: Any) -> None:
+    def __init__(
+        self, job_id: str, metadata: Any, config: WatchdogConfig, violation_callback: Any
+    ) -> None:
         self.job_id = job_id
         self.metadata = metadata
         self.config = config

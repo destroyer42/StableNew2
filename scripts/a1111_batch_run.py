@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import gc
 import logging
+from collections.abc import Callable, Sequence
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import requests
 from PIL import Image
@@ -21,7 +22,12 @@ DEFAULT_GC_INTERVAL = 10
 class BatchRunClient:
     """Minimal helper for feeding folders of assets through external child scripts."""
 
-    def __init__(self, *, session_factory: SessionFactory | None = None, gc_interval: int = DEFAULT_GC_INTERVAL) -> None:
+    def __init__(
+        self,
+        *,
+        session_factory: SessionFactory | None = None,
+        gc_interval: int = DEFAULT_GC_INTERVAL,
+    ) -> None:
         self._session_factory = session_factory or requests.Session
         self._gc_interval = max(1, int(gc_interval or DEFAULT_GC_INTERVAL))
 

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
+from collections.abc import Iterable
 from tkinter import ttk
-from typing import Iterable
 
 from src.config import app_config
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
-from src.gui.theme_v2 import BODY_LABEL_STYLE, PRIMARY_BUTTON_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE
 
 
 class CoreConfigPanelV2(BaseStageCardV2):
     """Expose core pipeline fields (model, sampler, steps, cfg, resolution).
-    
+
     When embed_mode=True, widgets are built directly into the master frame
     without creating the standard card structure (no header, no body_frame wrapper).
     """
@@ -95,7 +95,9 @@ class CoreConfigPanelV2(BaseStageCardV2):
         if self._models:
             self._model_combo["values"] = tuple(self._models)
         else:
-            self._model_combo["values"] = tuple(self._names_from_adapter(self._model_adapter, "get_model_names"))
+            self._model_combo["values"] = tuple(
+                self._names_from_adapter(self._model_adapter, "get_model_names")
+            )
         self._build_full_width_row(parent, "Model", self._model_combo, row_idx)
         row_idx += 1
 
@@ -104,7 +106,9 @@ class CoreConfigPanelV2(BaseStageCardV2):
             if self._vaes:
                 self._vae_combo["values"] = tuple(self._vaes)
             else:
-                self._vae_combo["values"] = tuple(self._names_from_adapter(self._vae_adapter, "get_vae_names"))
+                self._vae_combo["values"] = tuple(
+                    self._names_from_adapter(self._vae_adapter, "get_vae_names")
+                )
             self._build_full_width_row(parent, "VAE", self._vae_combo, row_idx)
             row_idx += 1
 
@@ -112,7 +116,9 @@ class CoreConfigPanelV2(BaseStageCardV2):
         if self._samplers:
             self._sampler_combo["values"] = tuple(self._samplers)
         else:
-            self._sampler_combo["values"] = tuple(self._names_from_adapter(self._sampler_adapter, "get_sampler_names"))
+            self._sampler_combo["values"] = tuple(
+                self._names_from_adapter(self._sampler_adapter, "get_sampler_names")
+            )
         self._build_sampler_row(parent, row_idx)
         row_idx += 1
         self._build_resolution_row(parent, row_idx)
@@ -135,14 +141,21 @@ class CoreConfigPanelV2(BaseStageCardV2):
         try:
             models = self._names_from_adapter(self._model_adapter, "get_model_names", "list_models")
             vaes = self._names_from_adapter(self._vae_adapter, "get_vae_names", "list_vaes")
-            samplers = self._names_from_adapter(self._sampler_adapter, "get_sampler_names", "get_available_samplers")
+            samplers = self._names_from_adapter(
+                self._sampler_adapter, "get_sampler_names", "get_available_samplers"
+            )
             self._update_combo(self._model_combo, self.model_var, models)
             self._update_combo(self._vae_combo, self.vae_var, vaes)
             self._update_combo(self._sampler_combo, self.sampler_var, samplers)
-        except Exception as e:
+        except Exception:
             pass
 
-    def _names_from_adapter(self, adapter: object | None, adapter_method_name: str, controller_method_name: str | None = None) -> list[str]:
+    def _names_from_adapter(
+        self,
+        adapter: object | None,
+        adapter_method_name: str,
+        controller_method_name: str | None = None,
+    ) -> list[str]:
         # First try controller methods (preferred for consistency with stage cards)
         if self._controller is not None and controller_method_name is not None:
             controller_method = getattr(self._controller, controller_method_name, None)
@@ -153,19 +166,19 @@ class CoreConfigPanelV2(BaseStageCardV2):
                         # Handle different return types from controller methods
                         names = []
                         for item in result:
-                            if hasattr(item, 'display_name') and item.display_name:
+                            if hasattr(item, "display_name") and item.display_name:
                                 # WebUIResource objects (models, vaes)
                                 names.append(str(item.display_name))
-                            elif hasattr(item, 'name') and item.name:
+                            elif hasattr(item, "name") and item.name:
                                 # WebUIResource objects (fallback)
                                 names.append(str(item.name))
                             else:
                                 # Strings or other objects (samplers)
                                 names.append(str(item))
                         return [name for name in names if name]
-                except Exception as e:
+                except Exception:
                     pass
-        
+
         # Fall back to adapter methods
         if adapter is None:
             return []
@@ -176,10 +189,12 @@ class CoreConfigPanelV2(BaseStageCardV2):
             result = method()
             names = [str(name) for name in (result or []) if name]
             return names
-        except Exception as e:
+        except Exception:
             return []
 
-    def _update_combo(self, combo: ttk.Combobox | None, variable: tk.StringVar, values: Iterable[str]) -> None:
+    def _update_combo(
+        self, combo: ttk.Combobox | None, variable: tk.StringVar, values: Iterable[str]
+    ) -> None:
         if combo is None:
             return
         current = variable.get()
@@ -197,7 +212,9 @@ class CoreConfigPanelV2(BaseStageCardV2):
         label_widget.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
         widget.grid(row=row_idx, column=1, sticky="ew", pady=(0, 4))
 
-    def _build_full_width_row(self, parent: ttk.Frame, label: str, widget: tk.Widget, row_idx: int) -> None:
+    def _build_full_width_row(
+        self, parent: ttk.Frame, label: str, widget: tk.Widget, row_idx: int
+    ) -> None:
         label_widget = ttk.Label(parent, text=label, style=BODY_LABEL_STYLE)
         label_widget.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
         widget.grid(row=row_idx, column=1, columnspan=5, sticky="ew", pady=(0, 4))
@@ -207,7 +224,7 @@ class CoreConfigPanelV2(BaseStageCardV2):
         sampler_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         self._sampler_combo.grid(row=row_idx, column=1, sticky="w", padx=(0, 4), pady=(0, 4))
         try:
-            sampler_combo.configure(width=20)
+            self._sampler_combo.configure(width=20)
         except Exception:
             pass
 
@@ -222,13 +239,17 @@ class CoreConfigPanelV2(BaseStageCardV2):
 
         cfg_label = ttk.Label(parent, text="CFG", style=BODY_LABEL_STYLE)
         cfg_label.grid(row=row_idx, column=4, sticky="w", padx=(0, 4), pady=(0, 4))
-        cfg_spin = self._build_spin(parent, self.cfg_var, from_=0.0, to=30.0, increment=0.5, width=4)
+        cfg_spin = self._build_spin(
+            parent, self.cfg_var, from_=0.0, to=30.0, increment=0.5, width=4
+        )
         cfg_spin.grid(row=row_idx, column=5, sticky="ew", pady=(0, 4))
 
     def _build_resolution_row(self, parent: ttk.Frame, row_idx: int) -> None:
         preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
         preset_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
-        self._preset_combo = self._build_combo(parent, self.resolution_preset_var, tuple(self._preset_map.keys()))
+        self._preset_combo = self._build_combo(
+            parent, self.resolution_preset_var, tuple(self._preset_map.keys())
+        )
         self._preset_combo.grid(row=row_idx, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
         self._preset_combo.bind("<<ComboboxSelected>>", self._on_resolution_preset_selected)
 
@@ -259,7 +280,9 @@ class CoreConfigPanelV2(BaseStageCardV2):
         divisor = math.gcd(width, height) or 1
         return f"{width // divisor}:{height // divisor}"
 
-    def _build_combo(self, parent: ttk.Frame, variable: tk.StringVar, values: Iterable[str]) -> ttk.Combobox:
+    def _build_combo(
+        self, parent: ttk.Frame, variable: tk.StringVar, values: Iterable[str]
+    ) -> ttk.Combobox:
         combo = ttk.Combobox(
             parent,
             textvariable=variable,
@@ -350,7 +373,9 @@ class CoreConfigPanelV2(BaseStageCardV2):
             width, height = map(int, value.split("x"))
         except Exception:
             return value
-        return self._preset_reverse_map.get((width, height), f"{width}x{height} ({self._format_ratio(width, height)})")
+        return self._preset_reverse_map.get(
+            (width, height), f"{width}x{height} ({self._format_ratio(width, height)})"
+        )
 
     def _parse_preset_label(self, label: str) -> tuple[int, int]:
         try:

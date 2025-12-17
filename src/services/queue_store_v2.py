@@ -7,9 +7,10 @@ Every job entry stores exactly one NormalizedJobRecord snapshot plus metadata.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from src.utils.jsonl_codec import JSONLCodec
 
@@ -58,14 +59,14 @@ def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
     """Ensure a normalized queue job matches schema v2.6."""
     errors: list[str] = []
 
-    for field, expected in REQUIRED_QUEUE_FIELDS.items():
-        if field not in item:
-            errors.append(f"missing {field}")
+    for field_name, expected in REQUIRED_QUEUE_FIELDS.items():
+        if field_name not in item:
+            errors.append(f"missing {field_name}")
             continue
-        value = item[field]
+        value = item[field_name]
         if not isinstance(value, expected):
-            errors.append(f"{field} must be {expected.__name__}, got {type(value).__name__}")
-        if field == "queue_schema" and isinstance(value, str) and value != SCHEMA_VERSION:
+            errors.append(f"{field_name} must be {expected.__name__}, got {type(value).__name__}")
+        if field_name == "queue_schema" and isinstance(value, str) and value != SCHEMA_VERSION:
             errors.append(f"queue_schema must be {SCHEMA_VERSION}, got {value}")
 
     metadata = item.get("metadata")

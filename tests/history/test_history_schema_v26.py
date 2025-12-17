@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from src.history.history_schema_v26 import (
     HISTORY_SCHEMA_VERSION,
-    HistorySchemaError,
     validate_entry,
 )
 

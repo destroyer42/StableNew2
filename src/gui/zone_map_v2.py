@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from collections.abc import Iterable
+from typing import Any
 
 ZONE_MAP: dict[str, Any] = {
     "root": {

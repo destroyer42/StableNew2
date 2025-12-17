@@ -12,10 +12,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
+
 # PR-GUI-F1: PipelineRunControlsV2 removed from layout, buttons moved to QueuePanelV2
 pytestmark = pytest.mark.skip(reason="PR-GUI-F1: PipelineRunControlsV2 removed from layout")
-
-from src.gui.panels_v2.pipeline_run_controls_v2 import PipelineRunControlsV2
 
 
 @pytest.fixture

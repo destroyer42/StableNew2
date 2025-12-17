@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -194,7 +193,7 @@ class TestPipelineControllerPreviewQueueFlow:
         assert submitted == 1
         assert mock_job_service.submit_job_with_run_mode.call_count == 1
         job_arg = mock_job_service.submit_job_with_run_mode.call_args[0][0]
-        assert getattr(job_arg, "_normalized_record") is record
+        assert job_arg._normalized_record is record
 
 
 class TestJobStatusCallbackFlow:

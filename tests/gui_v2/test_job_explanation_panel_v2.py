@@ -23,7 +23,17 @@ def tk_root():
 def _build_run_snapshot(run_dir):
     config = {"prompt": "a sunset", "negative_prompt": "blurry"}
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "run_metadata.json").write_text(json.dumps({"run_id": "job-123", "config": config, "packs": [{"pack_name": "fantasy"}], "stage_outputs": [{"stage": "txt2img"}, {"stage": "upscale"}]}), encoding="utf-8")
+    (run_dir / "run_metadata.json").write_text(
+        json.dumps(
+            {
+                "run_id": "job-123",
+                "config": config,
+                "packs": [{"pack_name": "fantasy"}],
+                "stage_outputs": [{"stage": "txt2img"}, {"stage": "upscale"}],
+            }
+        ),
+        encoding="utf-8",
+    )
     manifest = {
         "prompt": "a sunset over cliffs",
         "final_prompt": "a sunset over cliffs, cinematic",

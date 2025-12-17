@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any
 
 from src.learning.model_profiles import STYLE_DEFAULTS, infer_style_id_for_model
 from src.utils.config import ConfigManager
@@ -86,7 +87,9 @@ class GuiDefaultsResolver:
     def __init__(self, *, config_manager: ConfigManager | None = None) -> None:
         self._model_resolver = ModelDefaultsResolver(config_manager=config_manager)
 
-    def resolve_for_gui(self, *, model_name: str | None, preset_name: str | None = None) -> dict[str, Any]:
+    def resolve_for_gui(
+        self, *, model_name: str | None, preset_name: str | None = None
+    ) -> dict[str, Any]:
         ctx = ModelDefaultsContext(model_name=model_name, preset_name=preset_name)
         config = self._model_resolver.resolve_config(ctx)
         txt2img = config.get("txt2img", {})

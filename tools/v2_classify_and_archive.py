@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping
 
 from src.utils.file_access_log_v2_5_2025_11_26 import log_file_access
 
@@ -60,7 +59,12 @@ def classify_path(path: Path) -> str:
         return "v1"
     if rel.startswith("src/controller") or rel.startswith("src/gui/main_window_v2"):
         return "v2"
-    if rel.startswith("src/utils") or rel.startswith("src/pipeline") or rel.startswith("src/api") or rel.startswith("docs"):
+    if (
+        rel.startswith("src/utils")
+        or rel.startswith("src/pipeline")
+        or rel.startswith("src/api")
+        or rel.startswith("docs")
+    ):
         return "shared"
     if rel.startswith("tests/gui_v2/") and "legacy" not in rel:
         return "v2"
@@ -185,7 +189,9 @@ def _archive_target_for(rel: str, archive_root: Path) -> Path:
     return archive_root / Path(rel)
 
 
-def move_to_archive(root: Path, archive_root: Path, files: list[str], *, dry_run: bool = False) -> None:
+def move_to_archive(
+    root: Path, archive_root: Path, files: list[str], *, dry_run: bool = False
+) -> None:
     if not files:
         print("No V1 files to archive.")
         return

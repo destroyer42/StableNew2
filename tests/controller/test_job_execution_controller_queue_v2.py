@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -24,7 +24,9 @@ def test_run_job_callback_missing_normalized_record_raises(caplog) -> None:
         controller._run_job_callback(job)
 
     assert "Missing normalized record" in str(excinfo.value)
-    assert any("JOB_EXEC_ERROR | Missing normalized record" in record.message for record in caplog.records)
+    assert any(
+        "JOB_EXEC_ERROR | Missing normalized record" in record.message for record in caplog.records
+    )
 
 
 class _FailReplay:
@@ -46,4 +48,6 @@ def test_run_job_callback_replay_exception_logs_and_raises(caplog) -> None:
 
     assert "NJR execution failed" in str(excinfo.value)
     assert any("JOB_EXEC_REPLAY" in record.message for record in caplog.records)
-    assert any("JOB_EXEC_ERROR | NJR execution failed" in record.message for record in caplog.records)
+    assert any(
+        "JOB_EXEC_ERROR | NJR execution failed" in record.message for record in caplog.records
+    )

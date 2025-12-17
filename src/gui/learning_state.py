@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
 class LearningExperiment:
     """Represents a learning experiment definition."""
+
     name: str = ""
     description: str = ""
     baseline_config: dict[str, Any] = field(default_factory=dict)
@@ -23,6 +24,7 @@ class LearningExperiment:
 @dataclass
 class LearningVariant:
     """Represents a single variant in a learning plan."""
+
     experiment_id: str = ""
     param_value: Any = None
     status: str = "pending"  # pending, running, completed, failed
@@ -34,10 +36,11 @@ class LearningVariant:
 @dataclass
 class LearningImageRef:
     """Reference to a generated image in a learning context."""
+
     image_path: str = ""
     variant_id: str = ""
     learning_record_id: str = ""
-    rating: Optional[int] = None
+    rating: int | None = None
     notes: str = ""
 
 
@@ -45,7 +48,7 @@ class LearningState:
     """State management for the Learning module."""
 
     def __init__(self) -> None:
-        self.current_experiment: Optional[LearningExperiment] = None
+        self.current_experiment: LearningExperiment | None = None
         self.plan: list[LearningVariant] = []
-        self.selected_variant: Optional[LearningVariant] = None
+        self.selected_variant: LearningVariant | None = None
         self.selected_image_index: int = 0

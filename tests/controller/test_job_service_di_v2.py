@@ -21,7 +21,6 @@ from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.stub_runner import StubRunner
 
-
 # ---------------------------------------------------------------------------
 # Test: StubRunner DI
 # ---------------------------------------------------------------------------

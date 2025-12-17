@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from datetime import datetime
+
 import pytest
 
 from src.gui.app_state_v2 import PackJobEntry
@@ -128,7 +130,13 @@ class TestPreviewPanelSummary:
             },
             prompt_text="Testing prompt",
             negative_prompt_text="bad stuff",
-            stage_flags={"txt2img": True, "adetailer": True, "upscale": False, "refiner": False, "hires": False},
+            stage_flags={
+                "txt2img": True,
+                "adetailer": True,
+                "upscale": False,
+                "refiner": False,
+                "hires": False,
+            },
             randomizer_metadata={"enabled": False, "max_variants": 1},
         )
         job_draft = type("JD", (), {"packs": [entry]})()

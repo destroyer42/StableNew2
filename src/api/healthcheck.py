@@ -146,14 +146,19 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
             logging.WARNING,
             msg,
             ctx=ctx,
-            extra_fields={"last_error": str(last_error), "last_error_endpoint": last_error_endpoint},
+            extra_fields={
+                "last_error": str(last_error),
+                "last_error_endpoint": last_error_endpoint,
+            },
         )
     else:
         log_with_ctx(logger, logging.WARNING, msg, ctx=ctx)
     raise WebUIHealthCheckTimeout(msg)
 
 
-def find_webui_port(base_url_template: str = "http://127.0.0.1:{port}", ports: list[int] | None = None) -> str | None:
+def find_webui_port(
+    base_url_template: str = "http://127.0.0.1:{port}", ports: list[int] | None = None
+) -> str | None:
     """Try to find WebUI running on common ports."""
     if ports is None:
         ports = [7860, 7861, 7862, 7863, 7864, 8000, 8080, 5000]
@@ -171,8 +176,16 @@ def find_webui_port(base_url_template: str = "http://127.0.0.1:{port}", ports: l
             extra_fields={"port": port, "endpoint": PROGRESS_PATH},
         )
         try:
-            if wait_for_webui_ready(url, timeout=_SHORT_PORT_PROBE_TIMEOUT, poll_interval=_SHORT_PORT_PROBE_INTERVAL):
-                log_with_ctx(logger, logging.INFO, f"Found WebUI API on port {port}", ctx=ctx, extra_fields={"port": port})
+            if wait_for_webui_ready(
+                url, timeout=_SHORT_PORT_PROBE_TIMEOUT, poll_interval=_SHORT_PORT_PROBE_INTERVAL
+            ):
+                log_with_ctx(
+                    logger,
+                    logging.INFO,
+                    f"Found WebUI API on port {port}",
+                    ctx=ctx,
+                    extra_fields={"port": port},
+                )
                 return url
         except WebUIHealthCheckTimeout:
             log_with_ctx(

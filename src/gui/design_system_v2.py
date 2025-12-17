@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
+from tkinter import ttk
 
 Color = str
 
@@ -96,10 +96,30 @@ def apply_card_styles(style: ttk.Style) -> None:
 
 
 def apply_label_styles(style: ttk.Style) -> None:
-    style.configure(HEADING_LABEL, background=Colors.PRIMARY_BG, foreground=Colors.PRIMARY_ACCENT, font=_font(Typography.LG, Typography.BOLD))
-    style.configure(SUBHEADING_LABEL, background=Colors.PRIMARY_BG, foreground=Colors.TEXT_PRIMARY, font=_font(Typography.MD, Typography.BOLD))
-    style.configure(BODY_LABEL, background=Colors.PRIMARY_BG, foreground=Colors.TEXT_PRIMARY, font=_font(Typography.SM))
-    style.configure(MUTED_LABEL, background=Colors.PRIMARY_BG, foreground=Colors.TEXT_MUTED, font=_font(Typography.SM))
+    style.configure(
+        HEADING_LABEL,
+        background=Colors.PRIMARY_BG,
+        foreground=Colors.PRIMARY_ACCENT,
+        font=_font(Typography.LG, Typography.BOLD),
+    )
+    style.configure(
+        SUBHEADING_LABEL,
+        background=Colors.PRIMARY_BG,
+        foreground=Colors.TEXT_PRIMARY,
+        font=_font(Typography.MD, Typography.BOLD),
+    )
+    style.configure(
+        BODY_LABEL,
+        background=Colors.PRIMARY_BG,
+        foreground=Colors.TEXT_PRIMARY,
+        font=_font(Typography.SM),
+    )
+    style.configure(
+        MUTED_LABEL,
+        background=Colors.PRIMARY_BG,
+        foreground=Colors.TEXT_MUTED,
+        font=_font(Typography.SM),
+    )
 
 
 def apply_button_styles(style: ttk.Style) -> None:
@@ -159,11 +179,15 @@ def apply_design_system(style: ttk.Style) -> None:
     apply_button_styles(style)
 
 
-def create_primary_button(parent: tk.Misc, text: str, command: Callable[[], None] | None = None, **kwargs: object) -> ttk.Button:
+def create_primary_button(
+    parent: tk.Misc, text: str, command: Callable[[], None] | None = None, **kwargs: object
+) -> ttk.Button:
     return ttk.Button(parent, text=text, command=command, style=PRIMARY_BUTTON, **kwargs)
 
 
-def create_secondary_button(parent: tk.Misc, text: str, command: Callable[[], None] | None = None, **kwargs: object) -> ttk.Button:
+def create_secondary_button(
+    parent: tk.Misc, text: str, command: Callable[[], None] | None = None, **kwargs: object
+) -> ttk.Button:
     return ttk.Button(parent, text=text, command=command, style=SECONDARY_BUTTON, **kwargs)
 
 

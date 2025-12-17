@@ -21,7 +21,6 @@ from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job
 
-
 # ---------------------------------------------------------------------------
 # Fake/Stub Classes
 # ---------------------------------------------------------------------------
@@ -61,14 +60,16 @@ class FakeJobBuilder:
         **kwargs: Any,
     ) -> list[NormalizedJobRecord]:
         """Record call and return predetermined jobs."""
-        self.calls.append({
-            "base_config": base_config,
-            "randomization_plan": randomization_plan,
-            "batch_settings": batch_settings,
-            "output_settings": output_settings,
-            "config_variant_plan": config_variant_plan,
-            "rng_seed": rng_seed,
-        })
+        self.calls.append(
+            {
+                "base_config": base_config,
+                "randomization_plan": randomization_plan,
+                "batch_settings": batch_settings,
+                "output_settings": output_settings,
+                "config_variant_plan": config_variant_plan,
+                "rng_seed": rng_seed,
+            }
+        )
         return list(self._jobs_to_return)
 
 
@@ -88,12 +89,14 @@ class FakeWebUIConnection:
 
     def ensure_connected(self, autostart: bool = False) -> Any:
         from src.controller.webui_connection_controller import WebUIConnectionState
+
         return WebUIConnectionState.READY
 
 
 def _start_pipeline_with_pack(controller: PipelineController, **kwargs: Any) -> bool:
     controller._last_run_config = {"prompt_pack_id": "test-pack-123"}
     return controller.start_pipeline_v2(**kwargs)
+
 
 def _prepare_controller(
     fake_builder: FakeJobBuilder,
@@ -168,6 +171,7 @@ class FakeRunner:
 
 class FakeHistory:
     """Fake history store."""
+
     pass
 
 
@@ -272,9 +276,7 @@ class TestSingleJobQueueMode:
 class TestMultipleJobSubmission:
     """Test multiple job submission."""
 
-    def test_multiple_jobs_all_submitted(
-        self
-    ) -> None:
+    def test_multiple_jobs_all_submitted(self) -> None:
         """Multiple jobs from builder are all submitted."""
         # Arrange
         records = [
@@ -296,9 +298,7 @@ class TestMultipleJobSubmission:
         submitted_ids = [job.job_id for job, _ in fake_service.submitted_jobs]
         assert submitted_ids == ["job-1", "job-2", "job-3"]
 
-    def test_variant_metadata_preserved(
-        self
-    ) -> None:
+    def test_variant_metadata_preserved(self) -> None:
         """Variant index and total are preserved in submitted jobs."""
         # Arrange
         records = [
@@ -329,9 +329,7 @@ class TestMultipleJobSubmission:
 class TestDirectMode:
     """Test direct mode submission."""
 
-    def test_direct_mode_sets_run_mode(
-        self
-    ) -> None:
+    def test_direct_mode_sets_run_mode(self) -> None:
         """Direct mode sets run_mode='direct' on jobs."""
         # Arrange
         record = make_normalized_job()
@@ -359,9 +357,7 @@ class TestDirectMode:
 class TestEmptyBuilderOutput:
     """Test behavior when builder returns no jobs."""
 
-    def test_empty_jobs_returns_false(
-        self
-    ) -> None:
+    def test_empty_jobs_returns_false(self) -> None:
         """Returns False when builder produces no jobs."""
         # Arrange
         fake_builder = FakeJobBuilder(jobs_to_return=[])
@@ -376,9 +372,7 @@ class TestEmptyBuilderOutput:
         assert result is False
         assert len(fake_service.submitted_jobs) == 0
 
-    def test_no_crash_on_empty_output(
-        self
-    ) -> None:
+    def test_no_crash_on_empty_output(self) -> None:
         """No exception when builder returns empty list."""
         # Arrange
         fake_builder = FakeJobBuilder(jobs_to_return=[])
@@ -402,9 +396,7 @@ class TestEmptyBuilderOutput:
 class TestMetadataPreservation:
     """Test that job metadata is preserved through conversion."""
 
-    def test_config_snapshot_contains_job_fields(
-        self
-    ) -> None:
+    def test_config_snapshot_contains_job_fields(self) -> None:
         """Config snapshot includes all expected fields."""
         # Arrange
         record = make_normalized_job(
@@ -433,9 +425,7 @@ class TestMetadataPreservation:
         assert snapshot["prompt"] == "test prompt"
         assert snapshot["prompt_pack_id"] == "test-pack-123"
 
-    def test_source_and_prompt_source_preserved(
-        self
-    ) -> None:
+    def test_source_and_prompt_source_preserved(self) -> None:
         """Source and prompt_source are set on job."""
         # Arrange
         record = make_normalized_job()
@@ -467,9 +457,7 @@ class TestMetadataPreservation:
 class TestCannotRunState:
     """Test behavior when state manager reports cannot run."""
 
-    def test_cannot_run_returns_false(
-        self
-    ) -> None:
+    def test_cannot_run_returns_false(self) -> None:
         """Returns False when state_manager.can_run() is False."""
         # Arrange
         fake_builder = FakeJobBuilder(jobs_to_return=[make_normalized_job()])

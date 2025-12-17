@@ -26,7 +26,9 @@ def test_visualizer_displays_failure(tk_root):
         stage="upscale",
         endpoint="/sdapi/v1/extra-single-image",
         method="POST",
-        payload={"image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="},
+        payload={
+            "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+        },
         status_code=500,
         response_text="Invalid encoded image",
         error_message="HTTPError",

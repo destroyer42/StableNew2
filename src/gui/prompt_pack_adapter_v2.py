@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
 
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
@@ -33,7 +33,7 @@ class PromptPackAdapterV2:
         """Return prompt pack summaries for display."""
 
         descriptors = self._discover(self.packs_dir)
-        summaries: List[PromptPackSummary] = []
+        summaries: list[PromptPackSummary] = []
         for info in descriptors:
             prompts = self._safe_read_pack(info.path)
             description = self._first_positive_prompt(prompts)

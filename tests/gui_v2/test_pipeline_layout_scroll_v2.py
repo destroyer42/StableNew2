@@ -16,10 +16,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # -----------------------------------------------------------------------------
 # ScrollableFrame Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_scrollable_frame_has_canvas_and_scrollbar() -> None:
@@ -86,11 +86,13 @@ def test_scrollable_frame_mousewheel_bindings() -> None:
 # Pipeline Tab Column Tests
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.gui
 def test_pipeline_tab_has_three_scrollable_columns() -> None:
     """Pipeline tab should have three ScrollableFrame columns."""
     try:
         from src.app_factory import build_v2_app
+
         root, app_state, controller, window = build_v2_app()
     except Exception as exc:
         pytest.skip(f"Tkinter/app not available: {exc}")
@@ -128,6 +130,7 @@ def test_pipeline_tab_columns_have_content() -> None:
     """Each pipeline column should have content inside its scroll frame."""
     try:
         from src.app_factory import build_v2_app
+
         root, app_state, controller, window = build_v2_app()
     except Exception as exc:
         pytest.skip(f"Tkinter/app not available: {exc}")
@@ -161,6 +164,7 @@ def test_pipeline_tab_columns_have_content() -> None:
 # -----------------------------------------------------------------------------
 # Minimum Window Width Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_pipeline_tab_has_min_width_constant() -> None:
@@ -216,8 +220,9 @@ def test_ensure_minimum_window_width_expands_narrow_window() -> None:
         width_str = geom.split("x")[0]
         width = int(width_str)
 
-        assert width >= PipelineTabFrame.MIN_WINDOW_WIDTH, \
+        assert width >= PipelineTabFrame.MIN_WINDOW_WIDTH, (
             f"Window should be at least {PipelineTabFrame.MIN_WINDOW_WIDTH}px wide, got {width}"
+        )
     finally:
         root.destroy()
 
@@ -269,8 +274,9 @@ def test_ensure_minimum_window_width_preserves_large_window() -> None:
         new_geom = root.geometry()
         new_width = int(new_geom.split("x")[0])
 
-        assert new_width >= original_width, \
+        assert new_width >= original_width, (
             f"Window should not shrink (was {original_width}, now {new_width})"
+        )
     finally:
         root.destroy()
 
@@ -278,6 +284,7 @@ def test_ensure_minimum_window_width_preserves_large_window() -> None:
 # -----------------------------------------------------------------------------
 # Preview Panel Tests (No Inner Scroll)
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_preview_panel_has_no_inner_scroll() -> None:
@@ -296,8 +303,9 @@ def test_preview_panel_has_no_inner_scroll() -> None:
         root.update_idletasks()
 
         # Should NOT have _scroll attribute (removed in PR-GUI-D)
-        assert not hasattr(panel, "_scroll"), \
+        assert not hasattr(panel, "_scroll"), (
             "PreviewPanelV2 should not have inner _scroll (removed in PR-GUI-D)"
+        )
 
         # Should have direct body frame
         assert hasattr(panel, "body"), "PreviewPanelV2 should have body frame"
@@ -324,8 +332,7 @@ def test_preview_panel_body_is_direct_child() -> None:
 
         # Body's parent should be the panel itself (after removing inner scroll)
         body_parent = panel.body.master
-        assert body_parent == panel, \
-            "Body frame should be direct child of PreviewPanelV2"
+        assert body_parent == panel, "Body frame should be direct child of PreviewPanelV2"
     finally:
         root.destroy()
 
@@ -333,6 +340,7 @@ def test_preview_panel_body_is_direct_child() -> None:
 # -----------------------------------------------------------------------------
 # Validation Placeholder Removal Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_pipeline_config_panel_no_validation_label() -> None:
@@ -351,12 +359,15 @@ def test_pipeline_config_panel_no_validation_label() -> None:
         root.update_idletasks()
 
         # Should NOT have _validation_message_var or _validation_label
-        assert not hasattr(panel, "_validation_message_var"), \
+        assert not hasattr(panel, "_validation_message_var"), (
             "PipelineConfigPanel should not have legacy _validation_message_var"
-        assert not hasattr(panel, "_validation_label"), \
+        )
+        assert not hasattr(panel, "_validation_label"), (
             "PipelineConfigPanel should not have legacy _validation_label"
-        assert not hasattr(panel, "queue_label_var"), \
+        )
+        assert not hasattr(panel, "queue_label_var"), (
             "PipelineConfigPanel should not have legacy queue_label_var"
+        )
     finally:
         root.destroy()
 

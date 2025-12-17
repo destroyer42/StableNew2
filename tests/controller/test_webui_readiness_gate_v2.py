@@ -23,4 +23,3 @@ def test_queue_job_fails_when_webui_not_ready():
     assert result["metadata"]["execution_path"] == "ready_gate"
     assert "WebUI not ready" in (result.get("error") or "")
     controller.pipeline_controller._run_job.assert_not_called()
-

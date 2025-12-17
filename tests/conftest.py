@@ -62,7 +62,10 @@ def _mock_webui_discovery(monkeypatch):
         import src.api.client as api_client  # type: ignore
 
         current_test = os.environ.get("PYTEST_CURRENT_TEST", "")
-        if "tests/test_api.py" not in current_test and "tests/test_api_client.py" not in current_test:
+        if (
+            "tests/test_api.py" not in current_test
+            and "tests/test_api_client.py" not in current_test
+        ):
             monkeypatch.setattr(
                 api_client.SDWebUIClient,
                 "check_api_ready",
@@ -96,6 +99,7 @@ def tmp_path(tmp_path_factory):
 # PR-0114C-Ty: DI fixtures for JobService/Runner/History
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def stubbed_job_service():
     """Create a JobService with StubRunner and NullHistoryService.
@@ -104,6 +108,7 @@ def stubbed_job_service():
     pipelines or hit SD/WebUI resources.
     """
     from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
+
     return make_stubbed_job_service()
 
 
@@ -115,6 +120,7 @@ def stubbed_job_service_with_queue():
     to inspect queue or history state.
     """
     from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service_with_queue
+
     return make_stubbed_job_service_with_queue()
 
 

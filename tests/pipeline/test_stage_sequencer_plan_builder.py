@@ -9,7 +9,15 @@ from src.pipeline.stage_sequencer import build_stage_execution_plan
 
 def _base_config():
     return {
-        "txt2img": {"enabled": True, "model": "m", "sampler_name": "Euler", "steps": 20, "cfg_scale": 7.0, "width": 512, "height": 512},
+        "txt2img": {
+            "enabled": True,
+            "model": "m",
+            "sampler_name": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "width": 512,
+            "height": 512,
+        },
         "img2img": {"enabled": False, "model": "m", "sampler_name": "Euler", "steps": 10},
         "upscale": {"enabled": False, "upscaler": "R-ESRGAN 4x+"},
         "pipeline": {"txt2img_enabled": True, "img2img_enabled": False, "upscale_enabled": False},
@@ -124,7 +132,7 @@ def test_plan_builder_adetailer_without_generative_stage_raises():
 
 def test_plan_builder_reorders_adetailer_with_warning(caplog):
     """Test that stages are built in correct order (txt2img -> upscale -> adetailer).
-    
+
     Note: No reordering warning is expected because stages are added in canonical order.
     The warning only fires if stages were somehow added out of order and need reordering.
     """

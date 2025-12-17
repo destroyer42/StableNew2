@@ -1,13 +1,14 @@
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import pytest
+
 from src.controller.pipeline_controller import PipelineController
 from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+
 
 def _make_pack_files(tmp_path: Path, pack_id: str, prompt: str) -> None:
     packs_dir = tmp_path
@@ -42,6 +43,7 @@ def make_minimal_pack_job_entry(prompt="hello", pack_id="pack1"):
 def pack_dir(tmp_path: Path) -> Path:
     return tmp_path / "packs"
 
+
 def test_controller_builds_njr_from_pack_bundle(pack_dir: Path):
     _make_pack_files(pack_dir, "pack1", "hello")
     controller = PipelineController(config_manager=None)
@@ -54,5 +56,5 @@ def test_controller_builds_njr_from_pack_bundle(pack_dir: Path):
     assert len(njrs) >= 1
     assert all(isinstance(njr, NormalizedJobRecord) for njr in njrs)
     for njr in njrs:
-        assert hasattr(njr, 'prompt_pack_id')
+        assert hasattr(njr, "prompt_pack_id")
         assert isinstance(njr.prompt_pack_id, str)

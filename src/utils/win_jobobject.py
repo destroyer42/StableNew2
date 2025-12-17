@@ -66,7 +66,12 @@ kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
 kernel32.CloseHandle.restype = wintypes.BOOL
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 kernel32.SetInformationJobObject.restype = wintypes.BOOL
-kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, wintypes.INT, wintypes.LPVOID, wintypes.DWORD]
+kernel32.SetInformationJobObject.argtypes = [
+    wintypes.HANDLE,
+    wintypes.INT,
+    wintypes.LPVOID,
+    wintypes.DWORD,
+]
 
 
 class WindowsJobObject:
@@ -101,7 +106,9 @@ class WindowsJobObject:
             return
         try:
             if not kernel32.AssignProcessToJobObject(self._handle, proc_handle):
-                logger.debug("AssignProcessToJobObject failed for pid %s: %s", pid, ctypes.get_last_error())
+                logger.debug(
+                    "AssignProcessToJobObject failed for pid %s: %s", pid, ctypes.get_last_error()
+                )
         finally:
             kernel32.CloseHandle(proc_handle)
 

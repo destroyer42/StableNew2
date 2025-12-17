@@ -9,10 +9,6 @@ Validates:
 
 from __future__ import annotations
 
-from datetime import datetime
-
-import pytest
-
 from src.pipeline.job_models_v2 import JobStatusV2, QueueJobV2
 from src.pipeline.job_queue_v2 import JobQueueV2
 
@@ -341,7 +337,11 @@ class TestJobQueueV2Listeners:
     def test_listener_called_on_add_job(self) -> None:
         queue = JobQueueV2()
         notifications = []
-        queue.add_listener(lambda: notifications.append("notified"))
+
+        def notify() -> None:
+            notifications.append("notified")
+
+        queue.add_listener(notify)
 
         queue.add_job(QueueJobV2.create({}))
         assert len(notifications) == 1
@@ -352,7 +352,11 @@ class TestJobQueueV2Listeners:
         queue.add_job(job)
 
         notifications = []
-        queue.add_listener(lambda: notifications.append("notified"))
+
+        def notify() -> None:
+            notifications.append("notified")
+
+        queue.add_listener(notify)
 
         queue.remove_job(job.job_id)
         assert len(notifications) == 1
@@ -362,7 +366,11 @@ class TestJobQueueV2Listeners:
         queue.add_jobs([QueueJobV2.create({}) for _ in range(2)])
 
         notifications = []
-        queue.add_listener(lambda: notifications.append("notified"))
+
+        def notify() -> None:
+            notifications.append("notified")
+
+        queue.add_listener(notify)
 
         queue.move_job_down(queue.jobs[0].job_id)
         assert len(notifications) == 1
@@ -370,7 +378,9 @@ class TestJobQueueV2Listeners:
     def test_listener_can_be_removed(self) -> None:
         queue = JobQueueV2()
         notifications = []
-        callback = lambda: notifications.append("notified")
+
+        def callback() -> None:
+            notifications.append("notified")
 
         queue.add_listener(callback)
         queue.add_job(QueueJobV2.create({}))

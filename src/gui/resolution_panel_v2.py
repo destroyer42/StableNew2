@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Iterable
 
 from src.gui import theme_v2 as theme_mod
 
@@ -29,7 +28,13 @@ class ResolutionPanelV2(ttk.Frame):
         "9:16": (9, 16),
     }
 
-    def __init__(self, master: tk.Misc, *, theme: object = None, presets: dict[str, tuple[int, int]] | None = None) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        theme: object = None,
+        presets: dict[str, tuple[int, int]] | None = None,
+    ) -> None:
         style_name = theme_mod.SURFACE_FRAME_STYLE
         super().__init__(master, style=style_name, padding=theme_mod.PADDING_MD)
         self.theme = theme or theme_mod
@@ -46,27 +51,57 @@ class ResolutionPanelV2(ttk.Frame):
         row = ttk.Frame(self, style=style_name)
         row.pack(fill=tk.X, pady=(0, theme_mod.PADDING_SM))
         ttk.Label(row, text="Width", style=theme_mod.STATUS_LABEL_STYLE).pack(side=tk.LEFT)
-        self.width_entry = ttk.Spinbox(row, from_=64, to=4096, increment=64, textvariable=self.width_var, width=8, command=self._on_dimension_change)
+        self.width_entry = ttk.Spinbox(
+            row,
+            from_=64,
+            to=4096,
+            increment=64,
+            textvariable=self.width_var,
+            width=8,
+            command=self._on_dimension_change,
+        )
         self.width_entry.pack(side=tk.LEFT, padx=(4, 8))
 
         ttk.Label(row, text="Height", style=theme_mod.STATUS_LABEL_STYLE).pack(side=tk.LEFT)
-        self.height_entry = ttk.Spinbox(row, from_=64, to=4096, increment=64, textvariable=self.height_var, width=8, command=self._on_dimension_change)
+        self.height_entry = ttk.Spinbox(
+            row,
+            from_=64,
+            to=4096,
+            increment=64,
+            textvariable=self.height_var,
+            width=8,
+            command=self._on_dimension_change,
+        )
         self.height_entry.pack(side=tk.LEFT, padx=(4, 0))
 
         preset_row = ttk.Frame(self, style=style_name)
         preset_row.pack(fill=tk.X, pady=(0, theme_mod.PADDING_SM))
         ttk.Label(preset_row, text="Preset", style=theme_mod.STATUS_LABEL_STYLE).pack(side=tk.LEFT)
-        self.preset_combo = ttk.Combobox(preset_row, values=tuple(self.presets.keys()), textvariable=self.preset_var, state="readonly", width=12)
+        self.preset_combo = ttk.Combobox(
+            preset_row,
+            values=tuple(self.presets.keys()),
+            textvariable=self.preset_var,
+            state="readonly",
+            width=12,
+        )
         self.preset_combo.pack(side=tk.LEFT, padx=(4, 8))
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_selected)
 
         ttk.Label(preset_row, text="Ratio", style=theme_mod.STATUS_LABEL_STYLE).pack(side=tk.LEFT)
-        self.ratio_combo = ttk.Combobox(preset_row, values=tuple(self.RATIOS.keys()), textvariable=self.ratio_var, state="readonly", width=8)
+        self.ratio_combo = ttk.Combobox(
+            preset_row,
+            values=tuple(self.RATIOS.keys()),
+            textvariable=self.ratio_var,
+            state="readonly",
+            width=8,
+        )
         self.ratio_combo.pack(side=tk.LEFT, padx=(4, 0))
         self.ratio_combo.bind("<<ComboboxSelected>>", self._on_ratio_selected)
 
         self.mp_var = tk.StringVar(value=self._build_mp_label())
-        ttk.Label(self, textvariable=self.mp_var, style=theme_mod.STATUS_LABEL_STYLE).pack(anchor=tk.W, pady=(theme_mod.PADDING_SM, 0))
+        ttk.Label(self, textvariable=self.mp_var, style=theme_mod.STATUS_LABEL_STYLE).pack(
+            anchor=tk.W, pady=(theme_mod.PADDING_SM, 0)
+        )
 
         self.width_var.trace_add("write", lambda *_: self._update_mp_label())
         self.height_var.trace_add("write", lambda *_: self._update_mp_label())

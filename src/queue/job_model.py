@@ -5,15 +5,14 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, IntEnum
-from typing import Any, Dict, List, Optional
-
-import time
+from typing import Any
 
 from src.cluster.worker_model import WorkerId
-from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
+from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, serialize_envelope
 
 
 class JobPriority(IntEnum):
@@ -55,7 +54,7 @@ def _utcnow() -> datetime:
 class Job:
     job_id: str
     # Backwards-compatible positional arg: allow Job(job_id, pipeline_config)
-    pipeline_config: Optional[Dict[str, Any]] = None
+    pipeline_config: dict[str, Any] | None = None
     priority: JobPriority = JobPriority.NORMAL
     status: JobStatus = JobStatus.QUEUED
     created_at: datetime = field(default_factory=_utcnow)
@@ -63,23 +62,23 @@ class Job:
     started_at: datetime | None = None
     completed_at: datetime | None = None
     learning_enabled: bool = False
-    randomizer_metadata: Optional[Dict[str, Any]] = None
-    lora_settings: Optional[Dict[str, Dict[str, Any]]] = None
-    error_message: Optional[str] = None
+    randomizer_metadata: dict[str, Any] | None = None
+    lora_settings: dict[str, dict[str, Any]] | None = None
+    error_message: str | None = None
     error_envelope: UnifiedErrorEnvelope | None = None
-    result: Optional[Dict[str, Any]] = None
+    result: dict[str, Any] | None = None
     payload: Any | None = None
     worker_id: WorkerId | None = None
     run_mode: str = "queue"
     # PR-106: Metadata fields for provenance tracking
     source: str = "unknown"
     prompt_source: str = "manual"
-    prompt_pack_id: Optional[str] = None
-    config_snapshot: Optional[Dict[str, Any]] = None
+    prompt_pack_id: str | None = None
+    config_snapshot: dict[str, Any] | None = None
     # PR-044: Variant metadata for randomizer tracking
-    variant_index: Optional[int] = None
-    variant_total: Optional[int] = None
-    snapshot: Optional[Dict[str, Any]] = None
+    variant_index: int | None = None
+    variant_total: int | None = None
+    snapshot: dict[str, Any] | None = None
     execution_metadata: JobExecutionMetadata = field(default_factory=JobExecutionMetadata)
     # Note: `pipeline_config` is a compat field and is excluded from `to_dict`.
 
@@ -93,7 +92,7 @@ class Job:
         if error_message:
             self.error_message = error_message
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         # pipeline_config is intentionally excluded for v2.6+ compatibility
         return {
             "job_id": self.job_id,
@@ -120,7 +119,7 @@ class Job:
         }
 
     @property
-    def pipeline_config(self) -> Optional[Dict[str, Any]]:
+    def pipeline_config(self) -> dict[str, Any] | None:  # noqa: F811
         """Compatibility property for legacy code expecting `job.pipeline_config`.
 
         Returns the legacy pipeline config if present and no normalized record
@@ -134,7 +133,7 @@ class Job:
         return pc if pc is not None else self.config_snapshot
 
     @pipeline_config.setter
-    def pipeline_config(self, value: Optional[Dict[str, Any]]) -> None:
+    def pipeline_config(self, value: dict[str, Any] | None) -> None:  # noqa: F811
         # Store compat payload without affecting NJR execution paths.
         self.__dict__["pipeline_config"] = value
 
@@ -173,8 +172,8 @@ class PromptPackEntryResult:
     prompt: str
     negative_prompt: str
     pipeline_mode: str | None
-    params: Dict[str, Any]
-    outputs: List[Dict[str, Any]]
+    params: dict[str, Any]
+    outputs: list[dict[str, Any]]
     raw_result: Any | None
 
 
@@ -184,4 +183,4 @@ class PromptPackBatchResult:
     status: str
     mode: str
     total_entries: int
-    results: List[PromptPackEntryResult]
+    results: list[PromptPackEntryResult]

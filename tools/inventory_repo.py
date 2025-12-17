@@ -16,10 +16,10 @@ from __future__ import annotations
 import ast
 import json
 from collections import deque
-from dataclasses import dataclass, asdict
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = ROOT / "docs"
@@ -115,7 +115,9 @@ def build_records() -> dict[Path, FileRecord]:
         line_count = sum(1 for _ in path.open(encoding="utf-8", errors="ignore"))
         has_v1_marker = "v1" in path.name.lower()
         try:
-            header = "".join(path.read_text(encoding="utf-8", errors="ignore").splitlines()[:3]).lower()
+            header = "".join(
+                path.read_text(encoding="utf-8", errors="ignore").splitlines()[:3]
+            ).lower()
             has_v1_marker = has_v1_marker or "v1" in header
         except Exception:
             pass
@@ -222,9 +224,7 @@ def categorize(path: str) -> str:
 
 
 def write_legacy_md(records: dict[Path, FileRecord]) -> None:
-    legacy = [
-        rec for rec in records.values() if rec.has_v1_marker or not rec.reachable_from_main
-    ]
+    legacy = [rec for rec in records.values() if rec.has_v1_marker or not rec.reachable_from_main]
     buckets: dict[str, list[FileRecord]] = {}
     for rec in legacy:
         buckets.setdefault(categorize(rec.path), []).append(rec)

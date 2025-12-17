@@ -16,6 +16,7 @@ def _skip_if_no_tk():
     """Helper to skip test if Tk is unavailable."""
     try:
         import tkinter as tk
+
         root = tk.Tk()
         root.withdraw()
         return root
@@ -30,8 +31,8 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should not have a Queue header label."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
@@ -46,14 +47,16 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should not have a queue_status_label."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
             panel.pack()
 
-            assert not hasattr(panel, "queue_status_label"), "PreviewPanelV2 should not have queue_status_label"
+            assert not hasattr(panel, "queue_status_label"), (
+                "PreviewPanelV2 should not have queue_status_label"
+            )
         finally:
             root.destroy()
 
@@ -61,14 +64,16 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should not have a queue_items_text widget."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
             panel.pack()
 
-            assert not hasattr(panel, "queue_items_text"), "PreviewPanelV2 should not have queue_items_text"
+            assert not hasattr(panel, "queue_items_text"), (
+                "PreviewPanelV2 should not have queue_items_text"
+            )
         finally:
             root.destroy()
 
@@ -76,14 +81,16 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should not have a running_job_label."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
             panel.pack()
 
-            assert not hasattr(panel, "running_job_label"), "PreviewPanelV2 should not have running_job_label"
+            assert not hasattr(panel, "running_job_label"), (
+                "PreviewPanelV2 should not have running_job_label"
+            )
         finally:
             root.destroy()
 
@@ -91,14 +98,16 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should not have a running_job_status_label."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
             panel.pack()
 
-            assert not hasattr(panel, "running_job_status_label"), "PreviewPanelV2 should not have running_job_status_label"
+            assert not hasattr(panel, "running_job_status_label"), (
+                "PreviewPanelV2 should not have running_job_status_label"
+            )
         finally:
             root.destroy()
 
@@ -106,14 +115,16 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should not have a queue_controls_frame."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
             panel.pack()
 
-            assert not hasattr(panel, "queue_controls_frame"), "PreviewPanelV2 should not have queue_controls_frame"
+            assert not hasattr(panel, "queue_controls_frame"), (
+                "PreviewPanelV2 should not have queue_controls_frame"
+            )
         finally:
             root.destroy()
 
@@ -121,8 +132,8 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should not have a pause_button."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
@@ -136,16 +147,20 @@ class TestPreviewPanelNoQueueStatus:
         """PreviewPanelV2 should still have an actions_frame with Add to Queue button."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.preview_panel_v2 import PreviewPanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = PreviewPanelV2(root)
             panel.pack()
 
             assert hasattr(panel, "actions_frame"), "PreviewPanelV2 should have actions_frame"
-            assert hasattr(panel, "add_to_queue_button"), "PreviewPanelV2 should have add_to_queue_button"
-            assert hasattr(panel, "clear_draft_button"), "PreviewPanelV2 should have clear_draft_button"
+            assert hasattr(panel, "add_to_queue_button"), (
+                "PreviewPanelV2 should have add_to_queue_button"
+            )
+            assert hasattr(panel, "clear_draft_button"), (
+                "PreviewPanelV2 should have clear_draft_button"
+            )
         finally:
             root.destroy()
 
@@ -157,16 +172,19 @@ class TestQueuePanelHasControls:
         """QueuePanelV2 should have a Pause Queue button."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = QueuePanelV2(root)
             panel.pack()
 
-            assert hasattr(panel, "pause_resume_button"), "QueuePanelV2 should have pause_resume_button"
+            assert hasattr(panel, "pause_resume_button"), (
+                "QueuePanelV2 should have pause_resume_button"
+            )
             # Verify it's a button
             from tkinter import ttk
+
             assert isinstance(panel.pause_resume_button, ttk.Button)
         finally:
             root.destroy()
@@ -175,8 +193,8 @@ class TestQueuePanelHasControls:
         """QueuePanelV2 should have an Auto-run queue checkbox."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = QueuePanelV2(root)
@@ -191,14 +209,16 @@ class TestQueuePanelHasControls:
         """QueuePanelV2 should have a queue status label."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = QueuePanelV2(root)
             panel.pack()
 
-            assert hasattr(panel, "queue_status_label"), "QueuePanelV2 should have queue_status_label"
+            assert hasattr(panel, "queue_status_label"), (
+                "QueuePanelV2 should have queue_status_label"
+            )
         finally:
             root.destroy()
 
@@ -206,8 +226,8 @@ class TestQueuePanelHasControls:
         """Queue status label should update when update_queue_status is called."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = QueuePanelV2(root)
@@ -232,8 +252,8 @@ class TestQueuePanelHasControls:
         """Pause button should show 'Resume Queue' when paused."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.theme_v2 import apply_theme
             from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
             panel = QueuePanelV2(root)
@@ -280,8 +300,9 @@ class TestNoRunControlsPanel:
                 for alias in node.names:
                     imports.append(alias.name)
 
-        assert "PipelineRunControlsV2" not in imports, \
+        assert "PipelineRunControlsV2" not in imports, (
             "PipelineRunControlsV2 should not be imported in pipeline_tab_frame_v2"
+        )
 
     def test_run_controls_attribute_not_present(self):
         """PipelineTabFrame should not have run_controls attribute when instantiated."""
@@ -294,8 +315,10 @@ class TestNoRunControlsPanel:
             # PipelineTabFrame requires many dependencies, so we just check the class
             # doesn't reference run_controls in its __init__ anymore
             import inspect
+
             source = inspect.getsource(PipelineTabFrame.__init__)
-            assert "self.run_controls = PipelineRunControlsV2" not in source, \
+            assert "self.run_controls = PipelineRunControlsV2" not in source, (
                 "PipelineTabFrame should not create run_controls"
+            )
         finally:
             root.destroy()

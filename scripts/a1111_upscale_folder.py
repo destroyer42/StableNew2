@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from scripts.a1111_batch_run import BatchRunClient
 
@@ -30,7 +30,7 @@ def upscale_folder(
 
     images = discover_images(folder)
     if max_images is not None and max_images < len(images):
-        images = images[: max_images]
+        images = images[:max_images]
     if not images:
         return []
     runner = client or BatchRunClient()

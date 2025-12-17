@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome
 from src.pipeline.executor import Pipeline, PipelineStageError
@@ -46,9 +47,12 @@ def test_pipeline_generates_diagnostics_bundle_on_webui_crash():
 
     service_stub = Mock()
     mock_build = service_stub.build_async
-    with patch("src.pipeline.executor.get_global_webui_process_manager", return_value=manager_stub), patch(
-        "src.pipeline.executor._get_diagnostics_service",
-        return_value=service_stub,
+    with (
+        patch("src.pipeline.executor.get_global_webui_process_manager", return_value=manager_stub),
+        patch(
+            "src.pipeline.executor._get_diagnostics_service",
+            return_value=service_stub,
+        ),
     ):
         with pytest.raises(PipelineStageError) as excinfo:
             pipeline._generate_images("txt2img", {})

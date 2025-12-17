@@ -43,12 +43,12 @@ class ScrollableFrame(ttk.Frame):
 
     def _bind_mousewheel_events(self) -> None:
         """Bind mouse wheel to scroll column under cursor.
-        
+
         PR-GUI-D: Uses enter/leave on the canvas to capture wheel events,
         avoiding conflicts with nested comboboxes and spinboxes.
         """
         self._wheel_bound = False
-        
+
         def _bind_wheel(_event: tk.Event) -> None:
             if not self._wheel_bound:
                 self._canvas.bind_all("<MouseWheel>", self._on_mousewheel)
@@ -56,7 +56,7 @@ class ScrollableFrame(ttk.Frame):
                 self._canvas.bind_all("<Button-4>", self._on_mousewheel_linux)
                 self._canvas.bind_all("<Button-5>", self._on_mousewheel_linux)
                 self._wheel_bound = True
-        
+
         def _unbind_wheel(_event: tk.Event) -> None:
             if self._wheel_bound:
                 try:
@@ -66,7 +66,7 @@ class ScrollableFrame(ttk.Frame):
                 except Exception:
                     pass
                 self._wheel_bound = False
-        
+
         # Bind to both canvas and inner frame
         self._canvas.bind("<Enter>", _bind_wheel, add="+")
         self._canvas.bind("<Leave>", _unbind_wheel, add="+")

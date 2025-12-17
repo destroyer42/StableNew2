@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import io
-from typing import Any, Iterable, List
+from collections.abc import Iterable
+from typing import Any
 
 
 class DummyProcess:
@@ -34,10 +35,10 @@ class DummyWebUIClient:
         hypernetworks: Iterable[dict[str, Any]] | None = None,
         upscalers: Iterable[dict[str, Any]] | None = None,
     ):
-        self._models: List[dict[str, Any]] = list(models or [])
-        self._vaes: List[dict[str, Any]] = list(vaes or [])
-        self._hypernetworks: List[dict[str, Any]] = list(hypernetworks or [])
-        self._upscalers: List[dict[str, Any]] = list(upscalers or [])
+        self._models: list[dict[str, Any]] = list(models or [])
+        self._vaes: list[dict[str, Any]] = list(vaes or [])
+        self._hypernetworks: list[dict[str, Any]] = list(hypernetworks or [])
+        self._upscalers: list[dict[str, Any]] = list(upscalers or [])
 
     def get_models(self) -> list[dict[str, Any]]:
         return list(self._models)
@@ -51,7 +52,9 @@ class DummyWebUIClient:
     def get_upscalers(self) -> list[dict[str, Any]]:
         return list(self._upscalers)
 
-    def generate_images(self, *, stage: str = "txt2img", payload: dict[str, Any] | None = None, **_kwargs: Any) -> dict[str, Any]:
+    def generate_images(
+        self, *, stage: str = "txt2img", payload: dict[str, Any] | None = None, **_kwargs: Any
+    ) -> dict[str, Any]:
         payload = payload or {}
         return {
             "stage": stage,

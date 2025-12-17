@@ -7,11 +7,10 @@ import logging
 import os
 import subprocess
 import sys
-from pathlib import Path
-from typing import Any
-
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +49,12 @@ class JobExplanationPanelV2(tk.Toplevel):
 
         header = ttk.Frame(container)
         header.pack(fill=tk.X)
-        ttk.Label(header, text=f"Job {job_id}", font=("TkDefaultFont", 12, "bold")).pack(side=tk.LEFT)
-        ttk.Button(header, text="Open Run Folder", command=self._open_run_folder).pack(side=tk.RIGHT)
+        ttk.Label(header, text=f"Job {job_id}", font=("TkDefaultFont", 12, "bold")).pack(
+            side=tk.LEFT
+        )
+        ttk.Button(header, text="Open Run Folder", command=self._open_run_folder).pack(
+            side=tk.RIGHT
+        )
 
         self._origin_frame = ttk.LabelFrame(container, text="Job Origin")
         self._origin_frame.pack(fill=tk.X, pady=(8, 8))
@@ -70,7 +73,9 @@ class JobExplanationPanelV2(tk.Toplevel):
             ("status", "Status"),
         ]:
             self.stage_tree.heading(col, text=label)
-            self.stage_tree.column(col, width=120 if col in {"stage", "status"} else 220, anchor=tk.W)
+            self.stage_tree.column(
+                col, width=120 if col in {"stage", "status"} else 220, anchor=tk.W
+            )
         self.stage_tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
         flow_frame = ttk.LabelFrame(container, text="Stage Flow")
@@ -103,7 +108,10 @@ class JobExplanationPanelV2(tk.Toplevel):
 
         packs = run_metadata.get("packs") or []
         if packs:
-            origin = "; ".join(f"{item.get('pack_name', 'unknown')} (stage={item.get('used_for_stage','txt2img')})" for item in packs)
+            origin = "; ".join(
+                f"{item.get('pack_name', 'unknown')} (stage={item.get('used_for_stage', 'txt2img')})"
+                for item in packs
+            )
         else:
             origin = "Manual prompt / direct entry"
         self._origin_text.config(text=f"Source: {origin}")
@@ -126,8 +134,16 @@ class JobExplanationPanelV2(tk.Toplevel):
         stages_present: list[str] = []
         for stage_name, filename in manifest_templates:
             manifest = _read_json(self._run_dir / filename)
-            prompt = manifest.get("final_prompt") if manifest else run_metadata.get("config", {}).get("prompt", "")
-            negative = manifest.get("final_negative_prompt") if manifest else config.get("negative_prompt", "")
+            prompt = (
+                manifest.get("final_prompt")
+                if manifest
+                else run_metadata.get("config", {}).get("prompt", "")
+            )
+            negative = (
+                manifest.get("final_negative_prompt")
+                if manifest
+                else config.get("negative_prompt", "")
+            )
             global_terms = manifest.get("global_negative_terms", "") if manifest else ""
             status = "available" if manifest else "missing"
             stages_present.append(stage_name)

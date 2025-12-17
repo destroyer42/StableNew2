@@ -1,7 +1,7 @@
 """Pipeline module"""
 
 from .executor import Pipeline
-from .pipeline_runner import PipelineRunResult, PipelineRunner
+from .pipeline_runner import PipelineRunner, PipelineRunResult
 from .stage_sequencer import (
     StageConfig,
     StageExecution,

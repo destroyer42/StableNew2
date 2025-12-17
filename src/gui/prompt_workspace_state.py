@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
-from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.models.prompt_metadata import PromptMetadata, build_prompt_metadata
+from src.gui.models.prompt_pack_model import PromptPackModel
 
 
 class PromptWorkspaceState:
     """Lightweight state holder for the Prompt tab."""
 
     def __init__(self) -> None:
-        self.current_pack: Optional[PromptPackModel] = None
+        self.current_pack: PromptPackModel | None = None
         self.dirty: bool = False
         self._current_slot_index: int = 0
 
@@ -65,7 +64,7 @@ class PromptWorkspaceState:
             return ""
         return self.current_pack.name
 
-    def get_current_path(self) -> Optional[str]:
+    def get_current_path(self) -> str | None:
         if not self.current_pack:
             return None
         return self.current_pack.path

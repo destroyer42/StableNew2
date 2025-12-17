@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass, asdict
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from src.queue.job_model import Job, JobStatus
 from src.cluster.worker_model import WorkerId
+from src.queue.job_model import Job, JobStatus
 
 if TYPE_CHECKING:
     from src.pipeline.run_config import RunConfig
@@ -41,12 +42,12 @@ class JobHistoryEntry:
     error_message: str | None = None
     worker_id: WorkerId | None = None
     run_mode: str = "queue"
-    result: Dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
     # PR-112: Prompt origin tracking
     prompt_source: str = "manual"  # "manual" | "pack"
     prompt_pack_id: str | None = None
-    prompt_keys: List[str] | None = None
-    snapshot: Dict[str, Any] | None = None
+    prompt_keys: list[str] | None = None
+    snapshot: dict[str, Any] | None = None
     duration_ms: int | None = None
 
     def to_json(self) -> str:
@@ -65,8 +66,9 @@ class JobHistoryEntry:
         return json.dumps(data, ensure_ascii=True)
 
     @staticmethod
-    def from_json(line: str) -> "JobHistoryEntry":
+    def from_json(line: str) -> JobHistoryEntry:
         raw = json.loads(line)
+
         def _parse_ts(value: str | None) -> datetime | None:
             if not value:
                 return None
@@ -93,7 +95,7 @@ class JobHistoryEntry:
 
 def job_history_entry_from_run_config(
     job_id: str,
-    run_config: "RunConfig",
+    run_config: RunConfig,
     *,
     status: JobStatus = JobStatus.QUEUED,
     payload_summary: str = "",
@@ -119,7 +121,9 @@ def job_history_entry_from_run_config(
         status=status,
         payload_summary=payload_summary,
         run_mode=run_config.run_mode,
-        prompt_source=run_config.prompt_source.value if hasattr(run_config.prompt_source, "value") else str(run_config.prompt_source),
+        prompt_source=run_config.prompt_source.value
+        if hasattr(run_config.prompt_source, "value")
+        else str(run_config.prompt_source),
         prompt_pack_id=run_config.prompt_pack_id,
         prompt_keys=list(run_config.prompt_keys) if run_config.prompt_keys else None,
         **extra,
@@ -138,16 +142,16 @@ class JobHistoryStore:
         status: JobStatus,
         ts: datetime,
         error: str | None = None,
-        result: Dict[str, Any] | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
     def list_jobs(
         self, status: JobStatus | None = None, limit: int = 50, offset: int = 0
-    ) -> List[JobHistoryEntry]:  # pragma: no cover - interface
+    ) -> list[JobHistoryEntry]:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def get_job(self, job_id: str) -> Optional[JobHistoryEntry]:  # pragma: no cover - interface
+    def get_job(self, job_id: str) -> JobHistoryEntry | None:  # pragma: no cover - interface
         raise NotImplementedError
 
     def save_entry(self, entry: JobHistoryEntry) -> None:  # pragma: no cover - interface
@@ -184,7 +188,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
         status: JobStatus,
         ts: datetime,
         error: str | None = None,
-        result: Dict[str, Any] | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:
         current = self.get_job(job_id)
         created_at = current.created_at if current else ts
@@ -218,14 +222,14 @@ class JSONLJobHistoryStore(JobHistoryStore):
 
     def list_jobs(
         self, status: JobStatus | None = None, limit: int = 50, offset: int = 0
-    ) -> List[JobHistoryEntry]:
+    ) -> list[JobHistoryEntry]:
         entries = list(self._load_latest_by_job().values())
         entries.sort(key=lambda e: e.created_at, reverse=True)
         if status:
             entries = [e for e in entries if e.status == status]
         return entries[offset : offset + limit]
 
-    def get_job(self, job_id: str) -> Optional[JobHistoryEntry]:
+    def get_job(self, job_id: str) -> JobHistoryEntry | None:
         return self._load_latest_by_job().get(job_id)
 
     def _append(self, entry: JobHistoryEntry) -> None:

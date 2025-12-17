@@ -3,8 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-import pytest
-
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.gui.app_state_v2 import AppStateV2

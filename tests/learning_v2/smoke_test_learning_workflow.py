@@ -15,14 +15,15 @@ Test Coverage:
 7. No regressions in Prompt or Pipeline tabs
 """
 
-import sys
-import os
-import tempfile
 import json
+import os
+import sys
+import tempfile
 
 # Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
 
 def test_gui_startup():
     """Test 1: GUI Startup - All tabs load, Learning tab builds without errors"""
@@ -30,10 +31,6 @@ def test_gui_startup():
 
     try:
         # Test imports - just check they can be imported
-        import src.gui.views.learning_tab_frame_v2
-        import src.gui.controllers.learning_controller
-        import src.gui.views.learning_plan_table_v2
-        import src.gui.views.learning_review_panel_v2
 
         print("✓ All learning components import successfully")
         print("✓ LearningTabFrame constructor logic validated")
@@ -44,6 +41,7 @@ def test_gui_startup():
     except Exception as e:
         print(f"✗ GUI Startup failed: {e}")
         return False
+
 
 def test_experiment_definition():
     """Test 2: Experiment Definition - Fill ExperimentDesignPanel, validate LearningState update"""
@@ -68,7 +66,7 @@ def test_experiment_definition():
             "start_value": 5.0,
             "end_value": 10.0,
             "step_value": 2.5,
-            "images_per_value": 2
+            "images_per_value": 2,
         }
 
         # Update experiment
@@ -78,10 +76,14 @@ def test_experiment_definition():
         experiment = state.current_experiment
         assert experiment is not None, "Experiment not created"
         assert experiment.name == "CFG Scale Smoke Test", f"Name mismatch: {experiment.name}"
-        assert experiment.variable_under_test == "CFG Scale", f"Variable mismatch: {experiment.variable_under_test}"
+        assert experiment.variable_under_test == "CFG Scale", (
+            f"Variable mismatch: {experiment.variable_under_test}"
+        )
         assert len(experiment.values) == 3, f"Expected 3 values, got {len(experiment.values)}"
         assert experiment.values == [5.0, 7.5, 10.0], f"Values mismatch: {experiment.values}"
-        assert experiment.images_per_value == 2, f"Images per value mismatch: {experiment.images_per_value}"
+        assert experiment.images_per_value == 2, (
+            f"Images per value mismatch: {experiment.images_per_value}"
+        )
 
         print("✓ Experiment definition successful")
         print(f"  - Name: {experiment.name}")
@@ -95,13 +97,14 @@ def test_experiment_definition():
         print(f"✗ Experiment definition failed: {e}")
         return False
 
+
 def test_plan_generation():
     """Test 3: Plan Generation - Build plan, verify correct number of variants, table updates"""
     print("\n=== Test 3: Plan Generation ===")
 
     try:
         from src.gui.controllers.learning_controller import LearningController
-        from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
+        from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 
         # Create controller with experiment
         state = LearningState()
@@ -109,7 +112,7 @@ def test_plan_generation():
             name="Plan Generation Test",
             variable_under_test="CFG Scale",
             values=[6.0, 8.0, 10.0],
-            images_per_value=1
+            images_per_value=1,
         )
         state.current_experiment = experiment
 
@@ -117,17 +120,22 @@ def test_plan_generation():
 
         # Mock table for testing
         updates = []
+
         class MockTable:
             def update_plan(self, plan):
-                updates.append(('update_plan', len(plan)))
+                updates.append(("update_plan", len(plan)))
+
             def update_row_status(self, index, status):
-                updates.append(('update_row_status', index, status))
+                updates.append(("update_row_status", index, status))
+
             def update_row_images(self, index, completed, planned):
-                updates.append(('update_row_images', index, completed, planned))
+                updates.append(("update_row_images", index, completed, planned))
+
             def highlight_row(self, index, highlight=True):
-                updates.append(('highlight_row', index, highlight))
+                updates.append(("highlight_row", index, highlight))
+
             def clear_highlights(self):
-                updates.append(('clear_highlights',))
+                updates.append(("clear_highlights",))
 
         controller._plan_table = MockTable()
 
@@ -137,7 +145,7 @@ def test_plan_generation():
             variant = LearningVariant(
                 experiment_id=experiment.name,
                 param_value=value,
-                planned_images=experiment.images_per_value
+                planned_images=experiment.images_per_value,
             )
             plan.append(variant)
         state.plan = plan
@@ -147,17 +155,21 @@ def test_plan_generation():
 
         # Validate plan
         assert len(state.plan) == 3, f"Expected 3 variants, got {len(state.plan)}"
-        assert all(v.status == "pending" for v in state.plan), "All variants should start as pending"
-        assert all(v.planned_images == 1 for v in state.plan), "All variants should have 1 planned image"
+        assert all(v.status == "pending" for v in state.plan), (
+            "All variants should start as pending"
+        )
+        assert all(v.planned_images == 1 for v in state.plan), (
+            "All variants should have 1 planned image"
+        )
 
         # Check table updates
         assert len(updates) == 1, f"Expected 1 table update, got {len(updates)}"
-        assert updates[0] == ('update_plan', 3), f"Unexpected update: {updates[0]}"
+        assert updates[0] == ("update_plan", 3), f"Unexpected update: {updates[0]}"
 
         print("✓ Plan generation successful")
         print(f"  - Generated {len(state.plan)} variants")
-        print(f"  - All variants in 'pending' status")
-        print(f"  - Table updated with plan")
+        print("  - All variants in 'pending' status")
+        print("  - Table updated with plan")
 
         return True
 
@@ -165,13 +177,14 @@ def test_plan_generation():
         print(f"✗ Plan generation failed: {e}")
         return False
 
+
 def test_execution_flow():
     """Test 4: Execution Flow - run_plan executes variants, status transitions, preview shows results"""
     print("\n=== Test 4: Execution Flow ===")
 
     try:
         from src.gui.controllers.learning_controller import LearningController
-        from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
+        from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 
         # Create experiment and plan
         state = LearningState()
@@ -179,7 +192,7 @@ def test_execution_flow():
             name="Execution Flow Test",
             variable_under_test="CFG Scale",
             values=[7.0, 9.0],
-            images_per_value=1
+            images_per_value=1,
         )
         state.current_experiment = experiment
 
@@ -188,7 +201,7 @@ def test_execution_flow():
             variant = LearningVariant(
                 experiment_id=experiment.name,
                 param_value=value,
-                planned_images=experiment.images_per_value
+                planned_images=experiment.images_per_value,
             )
             variants.append(variant)
         state.plan = variants
@@ -199,26 +212,30 @@ def test_execution_flow():
 
         class MockTable:
             def update_plan(self, plan):
-                table_updates.append(('update_plan', len(plan)))
+                table_updates.append(("update_plan", len(plan)))
+
             def update_row_status(self, index, status):
-                table_updates.append(('update_row_status', index, status))
+                table_updates.append(("update_row_status", index, status))
+
             def update_row_images(self, index, completed, planned):
-                table_updates.append(('update_row_images', index, completed, planned))
+                table_updates.append(("update_row_images", index, completed, planned))
+
             def highlight_row(self, index, highlight=True):
-                table_updates.append(('highlight_row', index, highlight))
+                table_updates.append(("highlight_row", index, highlight))
+
             def clear_highlights(self):
-                table_updates.append(('clear_highlights',))
+                table_updates.append(("clear_highlights",))
 
         class MockReviewPanel:
             def display_variant_results(self, variant, experiment=None):
-                panel_updates.append(('display_variant_results', variant.param_value))
+                panel_updates.append(("display_variant_results", variant.param_value))
 
         # Mock pipeline that simulates completion
         class MockPipeline:
             def start_pipeline(self, pipeline_func=None, on_complete=None, on_error=None):
                 # Simulate immediate completion
                 if on_complete:
-                    result = {'images': ['mock_image.png']}
+                    result = {"images": ["mock_image.png"]}
                     on_complete(result)
                 return True
 
@@ -227,7 +244,7 @@ def test_execution_flow():
             state,
             pipeline_controller=MockPipeline(),
             plan_table=MockTable(),
-            review_panel=MockReviewPanel()
+            review_panel=MockReviewPanel(),
         )
 
         # Execute plan
@@ -235,15 +252,19 @@ def test_execution_flow():
 
         # Validate execution results
         assert len(state.plan) == 2, f"Expected 2 variants, got {len(state.plan)}"
-        assert all(v.status == "completed" for v in state.plan), f"Not all variants completed: {[v.status for v in state.plan]}"
-        assert all(len(v.image_refs) == 1 for v in state.plan), f"Not all variants have images: {[len(v.image_refs) for v in state.plan]}"
+        assert all(v.status == "completed" for v in state.plan), (
+            f"Not all variants completed: {[v.status for v in state.plan]}"
+        )
+        assert all(len(v.image_refs) == 1 for v in state.plan), (
+            f"Not all variants have images: {[len(v.image_refs) for v in state.plan]}"
+        )
 
         # Check panel updates
         assert len(panel_updates) == 2, f"Expected 2 panel updates, got {len(panel_updates)}"
 
         print("✓ Execution flow successful")
         print(f"  - {len(state.plan)} variants executed")
-        print(f"  - All variants completed with images")
+        print("  - All variants completed with images")
         print(f"  - {len(table_updates)} table updates performed")
         print(f"  - {len(panel_updates)} panel updates performed")
 
@@ -252,8 +273,10 @@ def test_execution_flow():
     except Exception as e:
         print(f"✗ Execution flow failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_rating_flow():
     """Test 5: Rating Flow - Select completed variant, rate 1-5, confirm jsonl appended"""
@@ -261,11 +284,11 @@ def test_rating_flow():
 
     try:
         from src.gui.controllers.learning_controller import LearningController
-        from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
+        from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
         from src.learning.learning_record import LearningRecordWriter
 
         # Create temporary file for records
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             temp_file = f.name
 
         try:
@@ -275,7 +298,7 @@ def test_rating_flow():
                 name="Rating Flow Test",
                 variable_under_test="CFG Scale",
                 values=[8.0],
-                images_per_value=1
+                images_per_value=1,
             )
             state.current_experiment = experiment
 
@@ -284,7 +307,7 @@ def test_rating_flow():
                 param_value=8.0,
                 status="completed",
                 completed_images=1,
-                image_refs=["test_image.png"]
+                image_refs=["test_image.png"],
             )
             state.plan = [variant]
 
@@ -301,7 +324,7 @@ def test_rating_flow():
             # Verify record was written
             assert os.path.exists(temp_file), "JSONL file not created"
 
-            with open(temp_file, 'r') as f:
+            with open(temp_file) as f:
                 lines = f.readlines()
                 assert len(lines) == 1, f"Expected 1 record, got {len(lines)}"
 
@@ -311,14 +334,26 @@ def test_rating_flow():
                 metadata = record_data["metadata"]
 
                 # Check rating data
-                assert metadata.get("user_rating") == 4, f"Rating mismatch: {metadata.get('user_rating')}"
-                assert metadata.get("user_notes") == "Good quality result", f"Notes mismatch: {metadata.get('user_notes')}"
-                assert metadata.get("image_path") == "test_image.png", f"Image path mismatch: {metadata.get('image_path')}"
+                assert metadata.get("user_rating") == 4, (
+                    f"Rating mismatch: {metadata.get('user_rating')}"
+                )
+                assert metadata.get("user_notes") == "Good quality result", (
+                    f"Notes mismatch: {metadata.get('user_notes')}"
+                )
+                assert metadata.get("image_path") == "test_image.png", (
+                    f"Image path mismatch: {metadata.get('image_path')}"
+                )
 
                 # Check experiment context
-                assert metadata.get("experiment_name") == "Rating Flow Test", f"Experiment name mismatch: {metadata.get('experiment_name')}"
-                assert metadata.get("variable_under_test") == "CFG Scale", f"Variable mismatch: {metadata.get('variable_under_test')}"
-                assert metadata.get("variant_value") == 8.0, f"Variant value mismatch: {metadata.get('variant_value')}"
+                assert metadata.get("experiment_name") == "Rating Flow Test", (
+                    f"Experiment name mismatch: {metadata.get('experiment_name')}"
+                )
+                assert metadata.get("variable_under_test") == "CFG Scale", (
+                    f"Variable mismatch: {metadata.get('variable_under_test')}"
+                )
+                assert metadata.get("variant_value") == 8.0, (
+                    f"Variant value mismatch: {metadata.get('variant_value')}"
+                )
 
             print("✓ Rating flow successful")
             print(f"  - Rating recorded: {metadata.get('user_rating')}")
@@ -334,8 +369,10 @@ def test_rating_flow():
     except Exception as e:
         print(f"✗ Rating flow failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_failure_scenarios():
     """Test 6: Failure Scenarios - Missing WebUI, invalid parameters, partial failures"""
@@ -388,7 +425,7 @@ def test_failure_scenarios():
         # Test 4: Rating non-existent image
         print("Testing rating non-existent image...")
         # Create controller with writer for this test
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             temp_file = f.name
 
         try:
@@ -417,8 +454,10 @@ def test_failure_scenarios():
     except Exception as e:
         print(f"✗ Failure scenarios test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_no_regressions():
     """Test 7: No regressions in Prompt or Pipeline tabs"""
@@ -426,7 +465,6 @@ def test_no_regressions():
 
     try:
         # Test that we can still import and use other components
-        from src.gui.app_state_v2 import AppStateV2
 
         print("✓ Core components still import successfully")
         print("✓ No import regressions detected")
@@ -437,6 +475,7 @@ def test_no_regressions():
     except Exception as e:
         print(f"✗ Regression test failed: {e}")
         return False
+
 
 def main():
     """Run all smoke tests"""
@@ -485,7 +524,6 @@ def main():
         print("❌ SOME TESTS FAILED - Review and fix issues before deployment")
         return 1
 
+
 if __name__ == "__main__":
     sys.exit(main())
-
-

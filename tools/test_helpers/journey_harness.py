@@ -5,11 +5,11 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from subprocess import CompletedProcess
-from typing import Mapping, Optional
 
 
-def build_env(extra: Optional[Mapping[str, str]] = None) -> dict[str, str]:
+def build_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
     env = dict(os.environ)
     if extra:
         env.update(extra)
@@ -20,7 +20,7 @@ def run_app_once(
     *,
     auto_exit_seconds: float = 3.0,
     timeout_buffer: float = 5.0,
-    extra_env: Optional[Mapping[str, str]] = None,
+    extra_env: Mapping[str, str] | None = None,
 ) -> CompletedProcess[str]:
     """Launch `python -m src.main` and await its auto-exit with captured output."""
 
@@ -39,12 +39,12 @@ def run_app_once(
     )
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as err:
         proc.kill()
         stdout, stderr = proc.communicate(timeout=5)
         raise RuntimeError(
             f"StableNew did not exit within {timeout} seconds (returncode={proc.returncode})"
-        )
+        ) from err
 
     return CompletedProcess(
         args=proc.args, returncode=proc.returncode, stdout=stdout, stderr=stderr
@@ -56,7 +56,7 @@ def run_journey_mode(
     *,
     auto_exit_seconds: float = 3.0,
     timeout_buffer: float = 5.0,
-    extra_env: Optional[Mapping[str, str]] = None,
+    extra_env: Mapping[str, str] | None = None,
 ) -> CompletedProcess[str]:
     """Run a journey-mode-specific auto-exit invocation (future-proof hook)."""
 

@@ -22,10 +22,11 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 def _create_root() -> tk.Tk:
     """Create a real Tk root for journey tests; fail fast if unavailable."""
     import os
+
     # Set Tkinter environment variables for Windows
-    os.environ['TCL_LIBRARY'] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tcl8.6"
-    os.environ['TK_LIBRARY'] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tk8.6"
-    
+    os.environ["TCL_LIBRARY"] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tcl8.6"
+    os.environ["TK_LIBRARY"] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tk8.6"
+
     try:
         root = tk.Tk()
         root.withdraw()
@@ -51,10 +52,8 @@ def test_jt01_prompt_pack_authoring_and_randomization():
         "A mystical wizard's tower in a {{foggy|misty|cloudy}} landscape\nwith magical auras\n<lora:fantasy_magic:0.9>\nembedding:arcane_power\nin medieval manuscript style",
         "A futuristic space station orbiting {{Earth|Mars|Jupiter}}\nwith advanced technology\n<lora:sci_fi_tech:0.8>\nembedding:cosmic_scale\nin hard sci-fi style",
         "A cozy cabin in a {{snowy|autumn|spring}} forest\nwith warm light from windows\n<lora:rustic_architecture:0.6>\nembedding:homey_comfort\nin rustic painting style",
-        "An ancient temple ruins in a {{jungle|desert|canyon}}\nwith mysterious atmosphere\n<lora:archaeological_sites:0.7>\nembedding:historical_mystery\nin archaeological style"
+        "An ancient temple ruins in a {{jungle|desert|canyon}}\nwith mysterious atmosphere\n<lora:archaeological_sites:0.7>\nembedding:historical_mystery\nin archaeological style",
     ]
-
-    global_negative = "blurry, low quality, distorted, ugly, deformed, watermark, text, signature"
 
     # Create temporary directory for test files
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -105,7 +104,7 @@ def test_jt01_prompt_pack_authoring_and_randomization():
             assert loaded_pack.name == pack_name
             assert len(loaded_pack.slots) == 10
 
-            for i, (original_slot, loaded_slot) in enumerate(zip(pack.slots, loaded_pack.slots)):
+            for original_slot, loaded_slot in zip(pack.slots, loaded_pack.slots, strict=True):
                 assert original_slot.index == loaded_slot.index
                 assert original_slot.text == loaded_slot.text
 
@@ -124,18 +123,20 @@ def test_jt01_prompt_pack_authoring_and_randomization():
             # the prompt metadata from the loaded pack
 
             # For now, verify that the prompt state is connected to app state
-            if hasattr(app_state, 'prompt_workspace_state'):
+            if hasattr(app_state, "prompt_workspace_state"):
                 assert app_state.prompt_workspace_state == prompt_state
 
             # Step 9: Test edge cases
 
             # Nested randomization (if supported)
             nested_prompt = "A {{red|{{blue|green}}|yellow}} object"
-            nested_metadata = build_prompt_metadata(nested_prompt)
+            build_prompt_metadata(nested_prompt)
             # Current implementation may not handle nested, so just verify it parses
 
             # Unicode content
-            unicode_prompt = "A beautiful 山水 landscape with 樱花\n<lora:asian_art:0.8>\nembedding:zen_calm"
+            unicode_prompt = (
+                "A beautiful 山水 landscape with 樱花\n<lora:asian_art:0.8>\nembedding:zen_calm"
+            )
             unicode_metadata = build_prompt_metadata(unicode_prompt)
             assert unicode_metadata.line_count >= 2
             assert len(unicode_metadata.loras) == 1

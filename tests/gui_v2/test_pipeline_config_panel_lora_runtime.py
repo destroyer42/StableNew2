@@ -38,7 +38,7 @@ def test_pipeline_panel_lora_controls_update_controller() -> None:
         controller = FakeController()
         panel = PipelinePanelV2(root, controller=controller, on_change=lambda: None)
         # Try to find LoRA controls; if not present, skip
-        if not hasattr(panel, '_lora_controls') or not panel._lora_controls:
+        if not hasattr(panel, "_lora_controls") or not panel._lora_controls:
             pytest.skip("LoRA runtime controls not implemented in v2 panel surface yet")
         assert "LoRA-Alpha" in panel._lora_controls
         enabled_var, alpha_scale = panel._lora_controls["LoRA-Alpha"]

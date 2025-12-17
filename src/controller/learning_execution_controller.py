@@ -2,27 +2,30 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any
 
+from src.config.app_config import get_learning_enabled, set_learning_enabled
+from src.gui_v2.adapters.learning_adapter_v2 import (
+    list_recent_learning_records,
+    update_record_feedback,
+)
 from src.learning.learning_execution import (
     LearningExecutionContext,
     LearningExecutionResult,
     LearningExecutionRunner,
 )
 from src.learning.learning_plan import LearningPlan
-from src.gui_v2.adapters.learning_adapter_v2 import (
-    list_recent_learning_records,
-    update_record_feedback,
-)
 from src.pipeline.pipeline_runner import PipelineRunResult
-from src.config.app_config import get_learning_enabled, set_learning_enabled
 
 
 class LearningExecutionController:
     """Expose a high-level API to run learning plans via an injected pipeline run callable."""
 
-    def __init__(self, run_callable: Callable[[dict, Any], PipelineRunResult] | None = None) -> None:
+    def __init__(
+        self, run_callable: Callable[[dict, Any], PipelineRunResult] | None = None
+    ) -> None:
         self._run_callable = run_callable
         self._last_result: LearningExecutionResult | None = None
         self._records_path: Path = Path("output/learning/learning_records.jsonl")
@@ -36,7 +39,9 @@ class LearningExecutionController:
     ) -> LearningExecutionResult:
         if self._run_callable is None:
             raise RuntimeError("No pipeline run callable provided for learning execution.")
-        context = LearningExecutionContext(plan=plan, base_config=base_config, metadata=metadata or {})
+        context = LearningExecutionContext(
+            plan=plan, base_config=base_config, metadata=metadata or {}
+        )
         runner = LearningExecutionRunner(run_callable=self._wrap_callable())
         self._last_result = runner.run(context)
         return self._last_result

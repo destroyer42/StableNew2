@@ -42,7 +42,9 @@ def collect_system_snapshot() -> dict[str, Any]:
             cpu = None
     disk = None
     try:
-        disk_usage = shutil.disk_usage("/") if os.name == "posix" else shutil.disk_usage(os.getcwd())
+        disk_usage = (
+            shutil.disk_usage("/") if os.name == "posix" else shutil.disk_usage(os.getcwd())
+        )
         disk = {
             "total_mb": float(disk_usage.total) / (1024**2),
             "used_mb": float(disk_usage.used) / (1024**2),

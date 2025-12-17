@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Tuple
-
-import pytest
+from collections.abc import Callable
+from typing import Any
 
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
@@ -58,7 +57,7 @@ class FakeJobService:
         self._jobs = list(jobs)
 
 
-def _build_controller() -> Tuple[AppController, FakeJobService]:
+def _build_controller() -> tuple[AppController, FakeJobService]:
     fake_service = FakeJobService()
     controller = AppController(None, threaded=False, job_service=fake_service)
     controller.app_state = AppStateV2()

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-
-import pytest
 
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
@@ -42,7 +39,9 @@ def _make_controller(config: dict[str, any]) -> tuple[AppController, DummyConfig
     controller.get_available_samplers = lambda: ["sampler-a"]
     controller.state.current_config.model_name = "model-a"
     controller.state.current_config.sampler_name = "sampler-a"
-    controller._get_selected_pack = lambda: None  # stub since controller helper is missing in test env
+    controller._get_selected_pack = (
+        lambda: None
+    )  # stub since controller helper is missing in test env
     controller.get_current_config = lambda: {
         "model": controller.state.current_config.model_name,
         "sampler": controller.state.current_config.sampler_name,
@@ -67,7 +66,9 @@ def test_load_lora_strengths_populates_app_state() -> None:
 
 def test_apply_config_writes_lora_strengths_to_packs() -> None:
     controller, config_manager = _make_controller({})
-    controller.app_state.set_lora_strengths([LoraRuntimeConfig(name="LoRA-A", strength=1.2, enabled=False)])
+    controller.app_state.set_lora_strengths(
+        [LoraRuntimeConfig(name="LoRA-A", strength=1.2, enabled=False)]
+    )
 
     controller.on_pipeline_pack_apply_config(["pack-x"])
 

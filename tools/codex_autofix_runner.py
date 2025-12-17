@@ -1,4 +1,5 @@
 """Utilities for running Codex AutoFix inside CI."""
+
 from __future__ import annotations
 
 import argparse
@@ -7,7 +8,6 @@ import subprocess
 import sys
 import textwrap
 from dataclasses import dataclass
-from typing import Optional
 
 import requests
 
@@ -39,22 +39,20 @@ class CommandResult:
             Command: {self.command}
             Exit code: {self.returncode}
 
-            STDOUT:\n{tail(self.stdout) or '(empty)'}
+            STDOUT:\n{tail(self.stdout) or "(empty)"}
 
-            STDERR:\n{tail(self.stderr) or '(empty)'}
+            STDERR:\n{tail(self.stderr) or "(empty)"}
             """
         ).strip()
 
 
-def run_command(command: str, *, env: Optional[dict[str, str]] = None) -> CommandResult:
-    process = (
-        subprocess.run(  # noqa: S603,S607 - intentional shell invocation for composite commands
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            env={**os.environ, **(env or {})},
-        )
+def run_command(command: str, *, env: dict[str, str] | None = None) -> CommandResult:
+    process = subprocess.run(  # noqa: S603,S607 - intentional shell invocation for composite commands
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, **(env or {})},
     )
     return CommandResult(
         command=command,

@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
-import pytest
-
 from src.controller import job_service as job_service_module
 from src.controller.job_service import JobService
 from src.queue.job_model import Job
@@ -41,13 +37,13 @@ def test_cleanup_external_processes_terminates_pids(monkeypatch) -> None:
     job_queue.submit(job)
     service.register_external_process(job.job_id, 42)
 
-    calls: List[Tuple[str, int]] = []
+    calls: list[tuple[str, int]] = []
 
     class FakeProcess:
         def __init__(self, pid: int) -> None:
             self.pid = pid
 
-        def children(self, recursive: bool = False) -> list["FakeProcess"]:
+        def children(self, recursive: bool = False) -> list[FakeProcess]:
             return []
 
         def terminate(self) -> None:
@@ -58,7 +54,6 @@ def test_cleanup_external_processes_terminates_pids(monkeypatch) -> None:
 
         def kill(self) -> None:
             calls.append(("kill", self.pid))
-
 
     class FakePsutil:
         class NoSuchProcess(Exception):

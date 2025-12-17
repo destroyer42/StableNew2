@@ -21,7 +21,6 @@ from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job
 
-
 # ---------------------------------------------------------------------------
 # Fake/Stub Classes (shared with integration tests)
 # ---------------------------------------------------------------------------
@@ -81,6 +80,7 @@ class FakeWebUIConnection:
 
     def ensure_connected(self, autostart: bool = False) -> Any:
         from src.controller.webui_connection_controller import WebUIConnectionState
+
         return WebUIConnectionState.READY
 
 
@@ -157,6 +157,7 @@ class FakeRunner:
 
 class FakeHistory:
     """Fake history store."""
+
     pass
 
 

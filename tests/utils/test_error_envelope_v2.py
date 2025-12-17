@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, wrap_exception
 from src.utils.exceptions_v2 import PipelineError
 

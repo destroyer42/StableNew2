@@ -105,8 +105,11 @@ class _SidebarCard(BaseStageCardV2):
                 child.configure(style=CARD_FRAME_STYLE)
             if hasattr(child, "winfo_children"):
                 self._apply_dark_styles(child)
+
+
 class SidebarPanelV2(ttk.Frame):
     """Container for sidebar content (core config + negative prompt + packs + pipeline controls)."""
+
     _STAGE_ORDER = get_pipeline_stage_order() or ["txt2img", "img2img", "adetailer", "upscale"]
     _STAGE_LABELS = {
         "txt2img": "Enable txt2img",
@@ -155,8 +158,13 @@ class SidebarPanelV2(ttk.Frame):
         # PR-GUI-H: config_source_label moved into Pipeline Presets panel
 
         from src.utils.config import ConfigManager
+
         self.config_manager = ConfigManager()
-        self.preset_names = self.config_manager.list_presets() if hasattr(self.config_manager, "list_presets") else []
+        self.preset_names = (
+            self.config_manager.list_presets()
+            if hasattr(self.config_manager, "list_presets")
+            else []
+        )
         self.preset_var = tk.StringVar(value=self.preset_names[0] if self.preset_names else "")
         self.preset_combo: ttk.Combobox | None = None
         self.preset_menu_button: ttk.Menubutton | None = None
@@ -166,7 +174,9 @@ class SidebarPanelV2(ttk.Frame):
 
         self.pack_list_manager = PromptPackListManager()
         self.pack_list_names = self.pack_list_manager.get_list_names()
-        self.pack_list_var = tk.StringVar(value=self.pack_list_names[0] if self.pack_list_names else "")
+        self.pack_list_var = tk.StringVar(
+            value=self.pack_list_names[0] if self.pack_list_names else ""
+        )
         self.pack_listbox: tk.Listbox | None = None
         self.load_config_button: ttk.Button | None = None
         self.apply_config_button: ttk.Button | None = None
@@ -238,7 +248,6 @@ class SidebarPanelV2(ttk.Frame):
         )
         self.output_settings_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
 
-
     def _build_preset_actions_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
@@ -260,10 +269,16 @@ class SidebarPanelV2(ttk.Frame):
         self.preset_menu_button.grid(row=0, column=1, padx=(4, 0))
         self.preset_dropdown = self.preset_menu_button
         self.preset_menu = tk.Menu(self.preset_menu_button, tearoff=0)
-        self.preset_menu.add_command(label="Apply to Default", command=self._on_preset_apply_to_default)
-        self.preset_menu.add_command(label="Apply to Selected Packs", command=self._on_preset_apply_to_packs)
+        self.preset_menu.add_command(
+            label="Apply to Default", command=self._on_preset_apply_to_default
+        )
+        self.preset_menu.add_command(
+            label="Apply to Selected Packs", command=self._on_preset_apply_to_packs
+        )
         self.preset_menu.add_command(label="Load to Stages", command=self._on_preset_load_to_stages)
-        self.preset_menu.add_command(label="Save from Stages", command=self._on_preset_save_from_stages)
+        self.preset_menu.add_command(
+            label="Save from Stages", command=self._on_preset_save_from_stages
+        )
         self.preset_menu.add_command(label="Delete", command=self._on_preset_delete)
         self.preset_menu_button.config(menu=self.preset_menu)
 
@@ -281,9 +296,7 @@ class SidebarPanelV2(ttk.Frame):
         )
         create_button.grid(row=0, column=0, sticky="w")
 
-        self.config_source_label = ttk.Label(
-            bottom_row, text="Defaults", style=MUTED_LABEL_STYLE
-        )
+        self.config_source_label = ttk.Label(bottom_row, text="Defaults", style=MUTED_LABEL_STYLE)
         self.config_source_label.grid(row=0, column=1, sticky="e", padx=(8, 0))
         return frame
 
@@ -354,13 +367,21 @@ class SidebarPanelV2(ttk.Frame):
         btn_frame.columnconfigure(1, weight=1)
         btn_frame.columnconfigure(2, weight=1)
         btn_frame.columnconfigure(3, weight=1)
-        self.load_config_button = ttk.Button(btn_frame, text="Load Config", command=self._on_pack_load_config)
+        self.load_config_button = ttk.Button(
+            btn_frame, text="Load Config", command=self._on_pack_load_config
+        )
         self.load_config_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
-        self.apply_config_button = ttk.Button(btn_frame, text="Apply Config", command=self._on_pack_apply_config)
+        self.apply_config_button = ttk.Button(
+            btn_frame, text="Apply Config", command=self._on_pack_apply_config
+        )
         self.apply_config_button.grid(row=0, column=1, sticky="ew", padx=(0, 2))
-        self.add_to_job_button = ttk.Button(btn_frame, text="Add to Job", command=self._on_add_to_job)
+        self.add_to_job_button = ttk.Button(
+            btn_frame, text="Add to Job", command=self._on_add_to_job
+        )
         self.add_to_job_button.grid(row=0, column=2, sticky="ew", padx=(0, 2))
-        self.preview_toggle_button = ttk.Button(btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED)
+        self.preview_toggle_button = ttk.Button(
+            btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED
+        )
         self.preview_toggle_button.grid(row=0, column=3, sticky="ew")
 
         list_frame = ttk.Frame(frame)
@@ -395,7 +416,9 @@ class SidebarPanelV2(ttk.Frame):
             height=8,
         )
         self.pack_listbox.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(list_box_frame, orient=tk.VERTICAL, command=self.pack_listbox.yview)
+        scrollbar = ttk.Scrollbar(
+            list_box_frame, orient=tk.VERTICAL, command=self.pack_listbox.yview
+        )
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.pack_listbox.config(yscrollcommand=scrollbar.set)
         enable_mousewheel(self.pack_listbox)
@@ -408,7 +431,9 @@ class SidebarPanelV2(ttk.Frame):
         self._preview_frame = ttk.Frame(frame)
         self._preview_frame.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         self._preview_frame.columnconfigure(0, weight=1)
-        preview_label = ttk.Label(self._preview_frame, text="Prompt Preview", style=BODY_LABEL_STYLE)
+        preview_label = ttk.Label(
+            self._preview_frame, text="Prompt Preview", style=BODY_LABEL_STYLE
+        )
         preview_label.grid(row=0, column=0, sticky="w")
         preview_text_frame = ttk.Frame(self._preview_frame)
         preview_text_frame.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
@@ -424,7 +449,9 @@ class SidebarPanelV2(ttk.Frame):
             borderwidth=1,
         )
         self.pack_preview_text.grid(row=0, column=0, sticky="nsew")
-        preview_scrollbar = ttk.Scrollbar(preview_text_frame, orient=tk.VERTICAL, command=self.pack_preview_text.yview)
+        preview_scrollbar = ttk.Scrollbar(
+            preview_text_frame, orient=tk.VERTICAL, command=self.pack_preview_text.yview
+        )
         preview_scrollbar.grid(row=0, column=1, sticky="ns")
         self.pack_preview_text.config(yscrollcommand=preview_scrollbar.set)
         self._preview_frame.grid_remove()
@@ -487,7 +514,8 @@ class SidebarPanelV2(ttk.Frame):
             packs = summaries
         if self._manual_pack_names:
             packs = [
-                PromptPackSummary(name=pn, description="", prompt_count=1, path=Path("")) for pn in self._manual_pack_names
+                PromptPackSummary(name=pn, description="", prompt_count=1, path=Path(""))
+                for pn in self._manual_pack_names
             ]
         self._current_pack_names = [summary.name for summary in packs]
         self.pack_listbox.delete(0, "end")
@@ -498,7 +526,11 @@ class SidebarPanelV2(ttk.Frame):
     def _populate_preset_combo(self) -> None:
         if not self.preset_combo:
             return
-        presets = self.config_manager.list_presets() if hasattr(self.config_manager, "list_presets") else []
+        presets = (
+            self.config_manager.list_presets()
+            if hasattr(self.config_manager, "list_presets")
+            else []
+        )
         self.preset_names = presets
         values = presets + [self._CREATE_PRESET_LABEL]
         self.preset_combo.config(values=values)
@@ -522,7 +554,11 @@ class SidebarPanelV2(ttk.Frame):
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if len(selection) != 1:
             return
-        pack_id = self._current_pack_names[selection[0]] if selection[0] < len(self._current_pack_names) else None
+        pack_id = (
+            self._current_pack_names[selection[0]]
+            if selection[0] < len(self._current_pack_names)
+            else None
+        )
         if not pack_id:
             return
         controller = self.controller
@@ -538,7 +574,9 @@ class SidebarPanelV2(ttk.Frame):
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         if not selection:
             return
-        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
+        pack_ids = [
+            self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
+        ]
         controller = self.controller
         if controller and hasattr(controller, "on_pipeline_pack_apply_config"):
             try:
@@ -548,7 +586,7 @@ class SidebarPanelV2(ttk.Frame):
 
     def _on_add_to_job(self) -> None:
         """Handle 'Add to Job' button click.
-        
+
         PR-CORE-D/E: PromptPack-only architecture - button should only be enabled when pack(s) selected.
         Routes to controller's on_pipeline_add_packs_to_job.
         """
@@ -556,11 +594,11 @@ class SidebarPanelV2(ttk.Frame):
         if not self.pack_listbox:
             print("[SidebarPanel] No pack_listbox, returning")
             return
-        
+
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         controller = self.controller
         print(f"[SidebarPanel] Selection: {selection}, Controller: {controller}")
-        
+
         # PromptPack-only: This should not execute if button state is correct, but guard anyway
         if not selection:
             print("[SidebarPanel] No selection, falling back to single prompt handler")
@@ -570,9 +608,11 @@ class SidebarPanelV2(ttk.Frame):
                 except Exception:
                     pass
             return
-        
+
         # Add selected pack(s) to job draft
-        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
+        pack_ids = [
+            self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
+        ]
         print(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
         if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
             print(f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})")
@@ -581,10 +621,13 @@ class SidebarPanelV2(ttk.Frame):
                 print("[SidebarPanel] Successfully called on_pipeline_add_packs_to_job")
             except Exception as e:
                 import logging
+
                 print(f"[SidebarPanel] EXCEPTION: {e}")
                 logging.exception(f"Error adding packs to job: {e}")
         else:
-            print(f"[SidebarPanel] Controller missing or doesn't have on_pipeline_add_packs_to_job method")
+            print(
+                "[SidebarPanel] Controller missing or doesn't have on_pipeline_add_packs_to_job method"
+            )
 
     def _toggle_pack_preview(self) -> None:
         if not self.preview_toggle_button or not self.pack_listbox:
@@ -651,7 +694,9 @@ class SidebarPanelV2(ttk.Frame):
             return cached
         prompts = read_prompt_pack(summary.path)
         if not prompts:
-            preview = f"Pack: {summary.name}\nPrompts: {summary.prompt_count}\n\nNo preview available."
+            preview = (
+                f"Pack: {summary.name}\nPrompts: {summary.prompt_count}\n\nNo preview available."
+            )
             self._preview_cache[summary.path] = preview
             return preview
         block_lines = self._read_first_block(summary.path)
@@ -784,7 +829,9 @@ class SidebarPanelV2(ttk.Frame):
         if not preset_name or not self.pack_listbox:
             return
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
-        pack_ids = [self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)]
+        pack_ids = [
+            self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
+        ]
         controller = self.controller
         if controller and hasattr(controller, "on_pipeline_preset_apply_to_packs"):
             try:
@@ -861,30 +908,57 @@ class SidebarPanelV2(ttk.Frame):
 
     def _build_run_mode_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
-        rb1 = ttk.Radiobutton(frame, text="Direct", value="direct", variable=self.run_mode_var, command=self._on_run_mode_change, style="Dark.TRadiobutton")
+        rb1 = ttk.Radiobutton(
+            frame,
+            text="Direct",
+            value="direct",
+            variable=self.run_mode_var,
+            command=self._on_run_mode_change,
+            style="Dark.TRadiobutton",
+        )
         rb1.grid(row=0, column=0, sticky="w", pady=2)
-        rb2 = ttk.Radiobutton(frame, text="Queue", value="queue", variable=self.run_mode_var, command=self._on_run_mode_change, style="Dark.TRadiobutton")
+        rb2 = ttk.Radiobutton(
+            frame,
+            text="Queue",
+            value="queue",
+            variable=self.run_mode_var,
+            command=self._on_run_mode_change,
+            style="Dark.TRadiobutton",
+        )
         rb2.grid(row=1, column=0, sticky="w", pady=2)
         return frame
 
     def _build_run_scope_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
-        for idx, (label, val) in enumerate([("Selected only", "selected"), ("From selected", "from_selected"), ("Full pipeline", "full")]):
-            rb = ttk.Radiobutton(frame, text=label, value=val, variable=self.run_scope_var, command=self._emit_change, style="Dark.TRadiobutton")
+        for idx, (label, val) in enumerate(
+            [
+                ("Selected only", "selected"),
+                ("From selected", "from_selected"),
+                ("Full pipeline", "full"),
+            ]
+        ):
+            rb = ttk.Radiobutton(
+                frame,
+                text=label,
+                value=val,
+                variable=self.run_scope_var,
+                command=self._emit_change,
+                style="Dark.TRadiobutton",
+            )
             rb.grid(row=idx, column=0, sticky="w", pady=2)
         return frame
 
     def _build_pipeline_config_section(self, parent: ttk.Frame) -> ttk.Frame:
         """DEPRECATED (PR-CORE1-12): Pipeline config section no longer used.
-        
+
         This method built a PipelineConfigPanel which is now archived. The panel
         was wired to pipeline_config execution, which is removed in v2.6.
-        
+
         Consider removing this method entirely in future cleanup.
         """
         # PR-CORE1-12: PipelineConfigPanel archived - no longer wired
         # from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
-        
+
         # Create a frame to hold the pipeline config panel and stage toggles
         frame = ttk.Frame(parent)
         stage_section = ttk.Frame(frame)
@@ -896,7 +970,9 @@ class SidebarPanelV2(ttk.Frame):
 
         # Try to instantiate the archived/shim PipelineConfigPanel and expose it
         try:
-            from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel  # type: ignore
+            from src.gui.panels_v2.pipeline_config_panel_v2 import (
+                PipelineConfigPanel,  # type: ignore
+            )
         except Exception:
             PipelineConfigPanel = None  # pragma: no cover - best-effort
 
@@ -999,6 +1075,7 @@ class SidebarPanelV2(ttk.Frame):
     # No sidebar Run Now button or Add to Queue button in new layout
     def _refresh_run_mode_widgets(self) -> None:
         pass
+
     def get_global_negative_config(self) -> dict[str, object]:
         return {
             "enabled": bool(self.global_negative_enabled_var.get()),
@@ -1024,7 +1101,7 @@ class SidebarPanelV2(ttk.Frame):
 
     def get_core_overrides(self) -> dict[str, object]:
         panel = self.get_core_config_panel()
-        if panel and hasattr(panel, 'get_overrides'):
+        if panel and hasattr(panel, "get_overrides"):
             return panel.get_overrides()
         return {}
 

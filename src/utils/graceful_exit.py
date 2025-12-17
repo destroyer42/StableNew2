@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, NoReturn, Optional
+from typing import Any, NoReturn
 
 from src.config.app_config import is_debug_shutdown_inspector_enabled
 from src.controller.app_controller import AppController
@@ -18,9 +18,9 @@ _shutdown_committed = False
 
 
 def graceful_exit(
-    controller: Optional[AppController],
-    root: Optional[Any],
-    single_instance_lock: Optional[SingleInstanceLock],
+    controller: AppController | None,
+    root: Any | None,
+    single_instance_lock: SingleInstanceLock | None,
     logger: logging.Logger,
     *,
     window=None,

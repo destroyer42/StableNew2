@@ -5,7 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.learning.recommendation_engine import RecommendationEngine, ParameterRecommendation, RecommendationSet
+from src.learning.recommendation_engine import (
+    RecommendationEngine,
+)
 
 
 class TestRecommendationEngine(unittest.TestCase):
@@ -14,7 +16,7 @@ class TestRecommendationEngine(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Create temporary file for test records
-        self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False)
+        self.temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False)
         self.temp_path = Path(self.temp_file.name)
         self.temp_file.close()
 
@@ -26,9 +28,17 @@ class TestRecommendationEngine(unittest.TestCase):
         if self.temp_path.exists():
             self.temp_path.unlink()
 
-    def _create_test_record(self, rating: int, sampler: str = "Euler a", scheduler: str = "Karras",
-                           steps: int = 20, cfg_scale: float = 7.0, experiment_name: str = "Test Exp",
-                           variable_under_test: str = "CFG Scale", variant_value: float = 7.0) -> dict:
+    def _create_test_record(
+        self,
+        rating: int,
+        sampler: str = "Euler a",
+        scheduler: str = "Karras",
+        steps: int = 20,
+        cfg_scale: float = 7.0,
+        experiment_name: str = "Test Exp",
+        variable_under_test: str = "CFG Scale",
+        variant_value: float = 7.0,
+    ) -> dict:
         """Create a test learning record."""
         return {
             "run_id": f"test_run_{rating}",
@@ -49,7 +59,7 @@ class TestRecommendationEngine(unittest.TestCase):
                 "image_path": f"test_image_{rating}.png",
                 "user_rating": rating,
                 "user_notes": f"Test rating {rating}",
-            }
+            },
         }
 
     def test_empty_records(self):
@@ -61,8 +71,8 @@ class TestRecommendationEngine(unittest.TestCase):
         """Test recommendations from a single record."""
         # Write a single record
         record = self._create_test_record(rating=4, sampler="Euler a", steps=20, cfg_scale=7.0)
-        with open(self.temp_path, 'w') as f:
-            f.write(json.dumps(record) + '\n')
+        with open(self.temp_path, "w") as f:
+            f.write(json.dumps(record) + "\n")
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
 
@@ -87,9 +97,9 @@ class TestRecommendationEngine(unittest.TestCase):
             self._create_test_record(rating=5, sampler="Euler a", steps=20, cfg_scale=7.0),
         ]
 
-        with open(self.temp_path, 'w') as f:
+        with open(self.temp_path, "w") as f:
             for record in records:
-                f.write(json.dumps(record) + '\n')
+                f.write(json.dumps(record) + "\n")
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
 
@@ -109,9 +119,9 @@ class TestRecommendationEngine(unittest.TestCase):
             self._create_test_record(rating=4, sampler="Euler a"),
         ]
 
-        with open(self.temp_path, 'w') as f:
+        with open(self.temp_path, "w") as f:
             for record in records:
-                f.write(json.dumps(record) + '\n')
+                f.write(json.dumps(record) + "\n")
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
 
@@ -135,9 +145,9 @@ class TestRecommendationEngine(unittest.TestCase):
             self._create_test_record(rating=5, sampler="DPM++ 2M Karras"),
         ]
 
-        with open(self.temp_path, 'w') as f:
+        with open(self.temp_path, "w") as f:
             for record in records:
-                f.write(json.dumps(record) + '\n')
+                f.write(json.dumps(record) + "\n")
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
 
@@ -157,29 +167,37 @@ class TestRecommendationEngine(unittest.TestCase):
             self._create_test_record(rating=4, steps=20),
         ]
 
-        with open(self.temp_path, 'w') as f:
+        with open(self.temp_path, "w") as f:
             for record in records:
-                f.write(json.dumps(record) + '\n')
+                f.write(json.dumps(record) + "\n")
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
 
         steps_rec = recommendations.get_best_for_parameter("steps")
         self.assertIsNotNone(steps_rec)
-        self.assertEqual(steps_rec.recommended_value, 20)  # Most reliable value (2 samples, mean 4.0)
+        self.assertEqual(
+            steps_rec.recommended_value, 20
+        )  # Most reliable value (2 samples, mean 4.0)
         self.assertEqual(steps_rec.sample_count, 2)
         self.assertEqual(steps_rec.mean_rating, 4.0)
 
     def test_experiment_variable_tracking(self):
         """Test that experiment variables are properly tracked."""
         records = [
-            self._create_test_record(rating=4, cfg_scale=6.0, variable_under_test="CFG Scale", variant_value=6.0),
-            self._create_test_record(rating=5, cfg_scale=8.0, variable_under_test="CFG Scale", variant_value=8.0),
-            self._create_test_record(rating=3, cfg_scale=10.0, variable_under_test="CFG Scale", variant_value=10.0),
+            self._create_test_record(
+                rating=4, cfg_scale=6.0, variable_under_test="CFG Scale", variant_value=6.0
+            ),
+            self._create_test_record(
+                rating=5, cfg_scale=8.0, variable_under_test="CFG Scale", variant_value=8.0
+            ),
+            self._create_test_record(
+                rating=3, cfg_scale=10.0, variable_under_test="CFG Scale", variant_value=10.0
+            ),
         ]
 
-        with open(self.temp_path, 'w') as f:
+        with open(self.temp_path, "w") as f:
             for record in records:
-                f.write(json.dumps(record) + '\n')
+                f.write(json.dumps(record) + "\n")
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
 
@@ -191,8 +209,8 @@ class TestRecommendationEngine(unittest.TestCase):
     def test_ui_format_conversion(self):
         """Test conversion to UI format."""
         record = self._create_test_record(rating=4, sampler="Euler a")
-        with open(self.temp_path, 'w') as f:
-            f.write(json.dumps(record) + '\n')
+        with open(self.temp_path, "w") as f:
+            f.write(json.dumps(record) + "\n")
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
         ui_format = recommendations.to_ui_format()
@@ -214,9 +232,9 @@ class TestRecommendationEngine(unittest.TestCase):
             self._create_test_record(rating=5),
         ]
 
-        with open(self.temp_path, 'w') as f:
+        with open(self.temp_path, "w") as f:
             for record in records:
-                f.write(json.dumps(record) + '\n')
+                f.write(json.dumps(record) + "\n")
 
         stats = self.engine.get_statistics()
         self.assertIn("total_records", stats)
@@ -226,7 +244,7 @@ class TestRecommendationEngine(unittest.TestCase):
     def test_malformed_json_handling(self):
         """Test handling of malformed JSON records."""
         # Write some valid and invalid JSON
-        with open(self.temp_path, 'w') as f:
+        with open(self.temp_path, "w") as f:
             f.write('{"valid": "json"}\n')
             f.write('{"incomplete": json\n')  # Malformed
             f.write('{"another": "valid"}\n')
@@ -234,7 +252,8 @@ class TestRecommendationEngine(unittest.TestCase):
         # Should not crash and should process valid records
         recommendations = self.engine.recommend("test prompt", "txt2img")
         # Should handle gracefully (may have no recommendations if records don't have ratings)
+        self.assertIsNotNone(recommendations)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

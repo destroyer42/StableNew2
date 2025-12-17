@@ -13,9 +13,7 @@ def test_stage_cards_have_single_header(tk_root: object) -> None:
     panel = getattr(harness.pipeline_tab, "stage_cards_panel", None)
     assert panel is not None
     header_labels = [
-        child.title_label
-        for child in panel.winfo_children()
-        if hasattr(child, "title_label")
+        child.title_label for child in panel.winfo_children() if hasattr(child, "title_label")
     ]
     assert len(header_labels) == len(panel.stage_order)
     # Labels may not be mapped if cards are collapsed - check they exist instead

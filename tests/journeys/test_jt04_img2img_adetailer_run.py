@@ -18,7 +18,6 @@ from src.app_factory import build_v2_app
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.state import PipelineState
 from tests.journeys.journey_helpers_v2 import (
-    get_latest_job,
     get_stage_plan_for_job,
     start_run_and_wait,
 )
@@ -72,11 +71,11 @@ def test_jt04_img2img_adetailer_pipeline_run():
             base_image_path.touch()  # Create empty file as placeholder
 
             # Step 4: Access Pipeline tab
-            pipeline_tab = getattr(window, 'pipeline_tab', None)
+            pipeline_tab = getattr(window, "pipeline_tab", None)
             assert pipeline_tab is not None, "Pipeline tab should exist"
 
             # Step 5: Configure Pipeline for img2img + ADetailer
-            pipeline_state = getattr(pipeline_tab, 'pipeline_state', None)
+            pipeline_state = getattr(pipeline_tab, "pipeline_state", None)
             assert isinstance(pipeline_state, PipelineState)
 
             # Set pipeline state
@@ -88,22 +87,22 @@ def test_jt04_img2img_adetailer_pipeline_run():
             pipeline_tab.img2img_strength.set(0.45)
 
             # Step 6: Mock the WebUI API call for img2img + ADetailer
-            with patch('src.api.client.ApiClient.generate_images') as mock_generate:
+            with patch("src.api.client.ApiClient.generate_images") as mock_generate:
                 # Mock successful img2img transformation response
                 mock_response = Mock()
                 mock_response.success = True
                 mock_response.images = [Mock()]  # One transformed image
                 mock_response.metadata = {
-                    'stage': 'img2img',
-                    'denoise': 0.45,
-                    'sampler': 'Euler',
-                    'scheduler': 'Karras',
-                    'steps': 20,
-                    'cfg_scale': 7.0,
-                    'adetailer_enabled': True,
-                    'adetailer_model': 'face_yolov8n.pt',
-                    'base_image_path': str(base_image_path),
-                    'seed': 12345,
+                    "stage": "img2img",
+                    "denoise": 0.45,
+                    "sampler": "Euler",
+                    "scheduler": "Karras",
+                    "steps": 20,
+                    "cfg_scale": 7.0,
+                    "adetailer_enabled": True,
+                    "adetailer_model": "face_yolov8n.pt",
+                    "base_image_path": str(base_image_path),
+                    "seed": 12345,
                 }
                 mock_generate.return_value = mock_response
 
@@ -113,7 +112,9 @@ def test_jt04_img2img_adetailer_pipeline_run():
                 job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
 
                 # Step 8: Assert job metadata
-                assert job_entry.run_mode == "direct", f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+                assert job_entry.run_mode == "direct", (
+                    f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+                )
 
                 # Step 10: Verify API call parameters
                 if mock_generate.call_args:
@@ -122,19 +123,19 @@ def test_jt04_img2img_adetailer_pipeline_run():
                     assert call_args.negative_prompt == test_negative
                     assert call_args.denoise == 0.45
                     assert call_args.base_image_path == str(base_image_path)
-                    assert call_args.sampler == 'Euler'
-                    assert call_args.scheduler == 'Karras'
+                    assert call_args.sampler == "Euler"
+                    assert call_args.scheduler == "Karras"
                     assert call_args.steps == 20
                     assert call_args.cfg_scale == 7.0
-                    if hasattr(call_args, 'adetailer_enabled'):
+                    if hasattr(call_args, "adetailer_enabled"):
                         assert call_args.adetailer_enabled is True
-                        assert call_args.adetailer_model == 'face_yolov8n.pt'
+                        assert call_args.adetailer_model == "face_yolov8n.pt"
 
                 # Verify response metadata
-                assert mock_response.metadata['stage'] == 'img2img'
-                assert mock_response.metadata['denoise'] == 0.45
-                assert mock_response.metadata['adetailer_enabled'] is True
-                assert mock_response.metadata['base_image_path'] == str(base_image_path)
+                assert mock_response.metadata["stage"] == "img2img"
+                assert mock_response.metadata["denoise"] == 0.45
+                assert mock_response.metadata["adetailer_enabled"] is True
+                assert mock_response.metadata["base_image_path"] == str(base_image_path)
 
                 # Verify base image was properly referenced
                 assert base_image_path.exists(), "Base image should exist for img2img"
@@ -196,10 +197,10 @@ def test_jt04_img2img_edge_cases():
                 pack.slots[0].text = "Test prompt for edge case"
 
                 # Step 3: Access Pipeline tab
-                pipeline_tab = getattr(window, 'pipeline_tab', None)
+                pipeline_tab = getattr(window, "pipeline_tab", None)
                 assert pipeline_tab is not None
 
-                pipeline_state = getattr(pipeline_tab, 'pipeline_state', None)
+                pipeline_state = getattr(pipeline_tab, "pipeline_state", None)
                 assert isinstance(pipeline_state, PipelineState)
 
                 # Step 4: Configure with edge case parameters
@@ -218,7 +219,7 @@ def test_jt04_img2img_edge_cases():
                 pipeline_state.base_image_path = base_image_path
 
                 # Step 5: Mock API and test edge case handling
-                with patch('src.api.client.ApiClient.generate_images') as mock_generate:
+                with patch("src.api.client.ApiClient.generate_images") as mock_generate:
                     if case.get("should_fail"):
                         # For cases that should fail, mock an error response
                         mock_response = Mock()
@@ -228,7 +229,9 @@ def test_jt04_img2img_edge_cases():
 
                         # Execute run via helper API - should handle error gracefully
                         controller = app_controller
-                        job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
+                        job_entry = start_run_and_wait(
+                            controller, use_run_now=False, timeout_seconds=30.0
+                        )
                         assert job_entry.run_mode == "direct"
 
                     else:
@@ -237,19 +240,23 @@ def test_jt04_img2img_edge_cases():
                         mock_response.success = True
                         mock_response.images = [Mock()]
                         mock_response.metadata = {
-                            'denoise': case.get('expected_denoise', 0.0),
-                            'stage': 'img2img',
-                            'seed': 67890,
+                            "denoise": case.get("expected_denoise", 0.0),
+                            "stage": "img2img",
+                            "seed": 67890,
                         }
                         mock_generate.return_value = mock_response
 
                         # Execute run via helper API
                         controller = app_controller
-                        job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
+                        job_entry = start_run_and_wait(
+                            controller, use_run_now=False, timeout_seconds=30.0
+                        )
                         assert job_entry.run_mode == "direct"
 
                         # Verify response
-                        assert mock_response.metadata['denoise'] == case.get('expected_denoise', 0.0)
+                        assert mock_response.metadata["denoise"] == case.get(
+                            "expected_denoise", 0.0
+                        )
 
             finally:
                 try:
@@ -285,10 +292,10 @@ def test_jt04_adetailer_integration():
             base_image_path.touch()
 
             # Step 3: Access Pipeline tab
-            pipeline_tab = getattr(window, 'pipeline_tab', None)
+            pipeline_tab = getattr(window, "pipeline_tab", None)
             assert pipeline_tab is not None
 
-            pipeline_state = getattr(pipeline_tab, 'pipeline_state', None)
+            pipeline_state = getattr(pipeline_tab, "pipeline_state", None)
             assert isinstance(pipeline_state, PipelineState)
 
             # Step 4: Configure ADetailer-focused pipeline
@@ -299,39 +306,41 @@ def test_jt04_adetailer_integration():
             # ADetailer-specific configurations to test
             adetailer_configs = [
                 {
-                    'model': 'face_yolov8n.pt',
-                    'confidence': 0.3,
-                    'mask_blur': 4,
-                    'inpaint_full_res': True,
+                    "model": "face_yolov8n.pt",
+                    "confidence": 0.3,
+                    "mask_blur": 4,
+                    "inpaint_full_res": True,
                 },
                 {
-                    'model': 'hand_yolov8n.pt',
-                    'confidence': 0.5,
-                    'mask_blur': 8,
-                    'inpaint_full_res': False,
+                    "model": "hand_yolov8n.pt",
+                    "confidence": 0.5,
+                    "mask_blur": 8,
+                    "inpaint_full_res": False,
                 },
             ]
 
             for ad_config in adetailer_configs:
                 # Step 5: Mock API with ADetailer parameters
-                with patch('src.api.client.ApiClient.generate_images') as mock_generate:
+                with patch("src.api.client.ApiClient.generate_images") as mock_generate:
                     mock_response = Mock()
                     mock_response.success = True
                     mock_response.images = [Mock()]
                     mock_response.metadata = {
-                        'stage': 'img2img',
-                        'adetailer_enabled': True,
-                        'adetailer_model': ad_config['model'],
-                        'adetailer_confidence': ad_config['confidence'],
-                        'adetailer_mask_blur': ad_config['mask_blur'],
-                        'adetailer_inpaint_full_res': ad_config['inpaint_full_res'],
-                        'seed': 11111,
+                        "stage": "img2img",
+                        "adetailer_enabled": True,
+                        "adetailer_model": ad_config["model"],
+                        "adetailer_confidence": ad_config["confidence"],
+                        "adetailer_mask_blur": ad_config["mask_blur"],
+                        "adetailer_inpaint_full_res": ad_config["inpaint_full_res"],
+                        "seed": 11111,
                     }
                     mock_generate.return_value = mock_response
 
                     # Step 6: Execute run via helper API
                     controller = app_controller
-                    job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
+                    job_entry = start_run_and_wait(
+                        controller, use_run_now=False, timeout_seconds=30.0
+                    )
                     assert job_entry.run_mode == "direct"
 
                     # Step 7: Verify stage plan includes adetailer
@@ -341,8 +350,8 @@ def test_jt04_adetailer_integration():
                         assert "adetailer" in stage_types or "img2img" in stage_types
 
                     # Verify response metadata
-                    assert mock_response.metadata['adetailer_enabled'] is True
-                    assert mock_response.metadata['adetailer_model'] == ad_config['model']
+                    assert mock_response.metadata["adetailer_enabled"] is True
+                    assert mock_response.metadata["adetailer_model"] == ad_config["model"]
 
         finally:
             try:

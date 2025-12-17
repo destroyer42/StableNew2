@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 from src.utils.logging_helpers_v2 import PROCESS_LOG_PREFIX, format_cmdline
 
@@ -55,7 +54,7 @@ def iter_python_processes() -> Iterator[ProcessInfo]:
             continue
 
         # Name check (best-effort)
-        raw_name = (info.get("name") or "")
+        raw_name = info.get("name") or ""
         name_lower = raw_name.lower()
         if name_lower not in _PYTHON_EXECUTABLES:
             continue

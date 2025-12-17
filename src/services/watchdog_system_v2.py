@@ -15,7 +15,9 @@ class SystemWatchdogV2:
         "queue_runner_stall": 30.0,
     }
 
-    def __init__(self, app_controller, diagnostics_service, *, check_interval_s: float | None = None):
+    def __init__(
+        self, app_controller, diagnostics_service, *, check_interval_s: float | None = None
+    ):
         self.app = app_controller
         self.diagnostics = diagnostics_service
         self._stop = threading.Event()
@@ -24,7 +26,9 @@ class SystemWatchdogV2:
         self._lock = threading.Lock()
         self._last_trigger_ts: dict[str, float] = defaultdict(lambda: 0.0)
         self._in_flight: dict[str, bool] = defaultdict(lambda: False)
-        self._loop_period = float(check_interval_s) if check_interval_s is not None else float(self.LOOP_PERIOD_S)
+        self._loop_period = (
+            float(check_interval_s) if check_interval_s is not None else float(self.LOOP_PERIOD_S)
+        )
 
     def start(self) -> None:
         t = threading.Thread(target=self._loop, daemon=True, name="SystemWatchdogV2")
@@ -82,8 +86,10 @@ class SystemWatchdogV2:
         context = {
             "ui_heartbeat_age_s": now - float(getattr(self.app, "last_ui_heartbeat_ts", 0) or 0),
             "queue_activity_age_s": now - float(getattr(self.app, "last_queue_activity_ts", 0) or 0)
-                if hasattr(self.app, "last_queue_activity_ts") else None,
-            "runner_activity_age_s": now - float(getattr(self.app, "last_runner_activity_ts", 0) or 0),
+            if hasattr(self.app, "last_queue_activity_ts")
+            else None,
+            "runner_activity_age_s": now
+            - float(getattr(self.app, "last_runner_activity_ts", 0) or 0),
             "queue_state": getattr(self.app, "get_queue_state", lambda: None)(),
             "watchdog_reason": reason,
         }
@@ -98,7 +104,9 @@ class SystemWatchdogV2:
             if hasattr(self.diagnostics, "build_async"):
                 # Call with on_done if supported; fall back if not accepted by signature.
                 try:
-                    self.diagnostics.build_async(reason=reason, context=context, on_done=_done_callback)  # type: ignore[arg-type]
+                    self.diagnostics.build_async(
+                        reason=reason, context=context, on_done=_done_callback
+                    )  # type: ignore[arg-type]
                 except TypeError:
                     # Older API: call without on_done and clear in-flight in a spawned thread
                     def _fallback_worker():
@@ -106,7 +114,10 @@ class SystemWatchdogV2:
                             self.diagnostics.build(reason=reason, context=context)
                         finally:
                             _done_callback()
-                    threading.Thread(target=_fallback_worker, daemon=True, name=f"DiagTrigger-{reason}").start()
+
+                    threading.Thread(
+                        target=_fallback_worker, daemon=True, name=f"DiagTrigger-{reason}"
+                    ).start()
             else:
                 # Fall back to spawning a thread here.
                 def _worker():
@@ -114,6 +125,7 @@ class SystemWatchdogV2:
                         self.diagnostics.build(reason=reason, context=context)
                     finally:
                         _done_callback()
+
                 threading.Thread(target=_worker, daemon=True, name=f"DiagTrigger-{reason}").start()
         except Exception:
             _done_callback()

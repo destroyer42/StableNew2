@@ -14,17 +14,15 @@ Refiner and Hires are metadata on generation stages, not separate stage types.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
-
-import logging
 
 from src.pipeline.stage_models import (
     InvalidStagePlanError,
     StageType,
     StageTypeEnum,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +102,7 @@ def _require_fields(payload: dict[str, Any], fields: list[str], stage_name: str)
 
 
 def _stage_payload(config: dict[str, Any], section: str) -> dict[str, Any]:
-    return dict((config.get(section, {}) or {}))
+    return dict(config.get(section, {}) or {})
 
 
 def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
@@ -119,10 +117,18 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
 
     # Determine which stages are enabled using pipeline flags as primary source
     # Fall back to section-level enabled flags for backward compatibility
-    txt_enabled = pipeline_flags.get("txt2img_enabled", True) and _extract_enabled(config, "txt2img", True)
-    img_enabled = pipeline_flags.get("img2img_enabled", False) or _extract_enabled(config, "img2img", False)
-    ad_enabled = pipeline_flags.get("adetailer_enabled", False) or _extract_enabled(config, "adetailer", False)
-    up_enabled = pipeline_flags.get("upscale_enabled", False) or _extract_enabled(config, "upscale", False)
+    txt_enabled = pipeline_flags.get("txt2img_enabled", True) and _extract_enabled(
+        config, "txt2img", True
+    )
+    img_enabled = pipeline_flags.get("img2img_enabled", False) or _extract_enabled(
+        config, "img2img", False
+    )
+    ad_enabled = pipeline_flags.get("adetailer_enabled", False) or _extract_enabled(
+        config, "adetailer", False
+    )
+    up_enabled = pipeline_flags.get("upscale_enabled", False) or _extract_enabled(
+        config, "upscale", False
+    )
 
     order = 0
     generation_stages = []
@@ -239,7 +245,9 @@ def _build_stage_metadata(
         hires_enabled=hires_fix.get("enabled", False) or payload.get("hires_enabled", False),
         hires_upscale_factor=hires_fix.get("upscale_factor") or payload.get("upscale_factor"),
         hires_upscaler_name=hires_fix.get("upscaler_name") or payload.get("hires_upscaler_name"),
-        hires_denoise=hires_fix.get("denoise") or hires_fix.get("denoise_strength") or payload.get("hires_denoise"),
+        hires_denoise=hires_fix.get("denoise")
+        or hires_fix.get("denoise_strength")
+        or payload.get("hires_denoise"),
         hires_steps=hires_fix.get("steps"),
         stage_flags={
             "txt2img_enabled": pipeline_flags.get("txt2img_enabled", False),

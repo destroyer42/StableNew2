@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import tkinter as tk
+from collections.abc import Callable, Iterable
 from tkinter import ttk
-from typing import Callable, Dict, Iterable, List, Any
+from typing import Any
 
 from src.utils import InMemoryLogHandler
 
@@ -29,7 +30,7 @@ class LogTracePanelV2(ttk.Frame):
         self._job_filter = tk.StringVar(value="")
         self._auto_scroll = tk.BooleanVar(value=True)
         self._last_body_height = 0
-        self._last_rendered_lines: tuple[str, ...] = tuple()
+        self._last_rendered_lines: tuple[str, ...] = ()
 
         header = ttk.Frame(self)
         header.pack(side=tk.TOP, fill=tk.X)
@@ -201,7 +202,7 @@ class LogTracePanelV2(ttk.Frame):
         else:
             self._log_text.yview_moveto(current_yview[0])
 
-    def _get_payload(self, entry: Dict[str, object]) -> dict[str, Any] | None:
+    def _get_payload(self, entry: dict[str, object]) -> dict[str, Any] | None:
         payload = entry.get("payload")
         if isinstance(payload, dict):
             return payload
@@ -217,9 +218,7 @@ class LogTracePanelV2(ttk.Frame):
         except json.JSONDecodeError:
             return None
 
-    def _format_payload_summary(
-        self, payload: dict[str, Any] | None
-    ) -> str | None:
+    def _format_payload_summary(self, payload: dict[str, Any] | None) -> str | None:
         if not payload:
             return None
         envelope = payload.get("error_envelope") or payload.get("envelope")
@@ -245,11 +244,11 @@ class LogTracePanelV2(ttk.Frame):
             return None
         return f"[{', '.join(parts)}]"
 
-    def _apply_filter(self, entries: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
+    def _apply_filter(self, entries: Iterable[dict[str, object]]) -> list[dict[str, object]]:
         mode = self._level_filter.get()
         subsystem_target = self._subsystem_filter.get().strip().lower()
         job_target = self._job_filter.get().strip().lower()
-        result: List[Dict[str, object]] = []
+        result: list[dict[str, object]] = []
         for entry in entries:
             level = str(entry.get("level", "")).upper()
             if mode == "ALL":

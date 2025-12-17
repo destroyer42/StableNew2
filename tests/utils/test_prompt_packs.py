@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from src.pipeline.run_config import PromptSource, RunConfig
 from src.utils.prompt_packs import (
     PromptPackInfo,

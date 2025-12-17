@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable
 
 from src.gui.state import PipelineState
 from src.gui.views.stage_cards_panel import StageCardsPanel
@@ -43,7 +43,10 @@ class RunControlBar(ttk.Frame):
             toggle_frame, text="txt2img", variable=self.txt2img_var, command=self._on_stage_toggle
         ).pack(side="left", padx=2)
         ttk.Checkbutton(
-            toggle_frame, text="img2img/adetailer", variable=self.img2img_var, command=self._on_stage_toggle
+            toggle_frame,
+            text="img2img/adetailer",
+            variable=self.img2img_var,
+            command=self._on_stage_toggle,
         ).pack(side="left", padx=2)
         ttk.Checkbutton(
             toggle_frame, text="upscale", variable=self.upscale_var, command=self._on_stage_toggle
@@ -54,11 +57,19 @@ class RunControlBar(ttk.Frame):
         scope_frame.pack(fill="x", pady=(0, 4))
         ttk.Label(scope_frame, text="Run Scope:").pack(side="left", padx=(0, 6))
         self.scope_var = tk.StringVar(value=getattr(self.state, "run_scope", "full"))
-        scope_options = [("Selected only", "selected"), ("From selected", "from_selected"), ("Full pipeline", "full")]
+        scope_options = [
+            ("Selected only", "selected"),
+            ("From selected", "from_selected"),
+            ("Full pipeline", "full"),
+        ]
         for text, val in scope_options:
-            ttk.Radiobutton(scope_frame, text=text, value=val, variable=self.scope_var, command=self._on_scope_change).pack(
-                side="left", padx=2
-            )
+            ttk.Radiobutton(
+                scope_frame,
+                text=text,
+                value=val,
+                variable=self.scope_var,
+                command=self._on_scope_change,
+            ).pack(side="left", padx=2)
 
         # Run buttons
         btn_frame = ttk.Frame(self)
@@ -119,11 +130,11 @@ class RunControlBar(ttk.Frame):
         stages_text = ", ".join(enabled) if enabled else "none"
         scope_text = getattr(self.state, "run_scope", "full")
         mode_text = self.state.run_mode
-        
+
         # PR-044: Show randomizer status
         rand_mode = getattr(self.state, "randomizer_mode", "off")
         rand_text = "ON" if rand_mode != "off" else "OFF"
-        
+
         plan = self._build_run_plan()
         self.summary_var.set(
             f"Stages: {stages_text} | Scope: {scope_text} | Mode: {mode_text} | "
@@ -132,7 +143,7 @@ class RunControlBar(ttk.Frame):
 
     def _build_run_plan(self) -> RunPlan:
         """Build a lightweight run plan for summary purposes (no execution).
-        
+
         PR-044: Uses get_variant_count for engine-aligned variant estimation.
         """
         enabled_stages: list[str] = []
@@ -161,7 +172,7 @@ class RunControlBar(ttk.Frame):
             max_variants=max_variants,
             config=None,  # Lightweight call without full config
         )
-        
+
         # Still use build_prompt_variants for prompt text (legacy compat)
         variants = build_prompt_variants(
             prompt_text=prompt_text,
@@ -169,11 +180,10 @@ class RunControlBar(ttk.Frame):
             mode=rand_mode,
             max_variants=variant_count,
         )
-        
+
         jobs: list[PlannedJob] = []
         batch_runs = max(1, getattr(self.state, "batch_runs", 1))
-        variant_total = len(variants)
-        
+
         for batch_idx in range(batch_runs):
             for variant_id, variant_prompt in enumerate(variants):
                 for stage in enabled_stages:

@@ -5,7 +5,6 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +68,9 @@ class StateManager:
         """Initialize state manager."""
         self._state = initial_state
         self._lock = threading.Lock()
-        self._callbacks: dict[GUIState, list[Callable[[], None]]] = {state: [] for state in GUIState}
+        self._callbacks: dict[GUIState, list[Callable[[], None]]] = {
+            state: [] for state in GUIState
+        }
         self._transition_callbacks: list[Callable[[GUIState, GUIState], None]] = []
         self.pipeline_overrides: dict[str, object] = {}
 
@@ -231,6 +232,7 @@ class StateManager:
 @dataclass
 class LoraRuntimeSettings:
     """Runtime settings for a single LoRA."""
+
     enabled: bool = True
     strength: float = 1.0
 
@@ -249,7 +251,7 @@ class PipelineState:
     pending_jobs: int = 0
     randomizer_mode: str = "off"  # off | sequential | rotate | random
     max_variants: int = 1
-    lora_settings: Dict[str, LoraRuntimeSettings] = field(default_factory=dict)
+    lora_settings: dict[str, LoraRuntimeSettings] = field(default_factory=dict)
 
     def set_lora_setting(self, name: str, enabled: bool, strength: float) -> None:
         """Set LoRA runtime settings for a specific LoRA."""

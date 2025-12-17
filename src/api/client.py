@@ -17,8 +17,8 @@ from requests.adapters import HTTPAdapter
 from src.api.healthcheck import wait_for_webui_ready
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome, GenerateResult
 from src.utils import LogContext, get_logger, log_with_ctx
-from src.utils.config import ConfigManager
 from src.utils.api_failure_store_v2 import record_api_failure
+from src.utils.config import ConfigManager
 from src.utils.retry_policy_v2 import (
     IMG2IMG_RETRY_POLICY,
     STAGE_RETRY_POLICY,

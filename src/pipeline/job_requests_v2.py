@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.gui.app_state_v2 import PackJobEntry
 
@@ -30,18 +30,18 @@ def _ensure_json_serializable(value: Any) -> None:
 @dataclass(frozen=True)
 class PipelineRunRequest:
     prompt_pack_id: str
-    selected_row_ids: List[str]
+    selected_row_ids: list[str]
     config_snapshot_id: str
     run_mode: PipelineRunMode = PipelineRunMode.QUEUE
     source: PipelineRunSource = PipelineRunSource.ADD_TO_QUEUE
-    sweep_state: Optional[Dict[str, Any]] = None
-    randomizer_plan: Optional[Dict[str, Any]] = None
-    explicit_output_dir: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
-    requested_job_label: Optional[str] = None
+    sweep_state: dict[str, Any] | None = None
+    randomizer_plan: dict[str, Any] | None = None
+    explicit_output_dir: str | None = None
+    tags: list[str] = field(default_factory=list)
+    requested_job_label: str | None = None
     max_njr_count: int = 256
     allow_legacy_fallback: bool = False
-    pack_entries: List[PackJobEntry] = field(default_factory=list)
+    pack_entries: list[PackJobEntry] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.prompt_pack_id:
@@ -62,7 +62,7 @@ class PipelineRunRequest:
         if self.randomizer_plan is not None:
             _ensure_json_serializable(self.randomizer_plan)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "prompt_pack_id": self.prompt_pack_id,
             "selected_row_ids": list(self.selected_row_ids),
@@ -79,7 +79,7 @@ class PipelineRunRequest:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PipelineRunRequest":
+    def from_dict(cls, data: dict[str, Any]) -> PipelineRunRequest:
         run_mode = PipelineRunMode(data.get("run_mode", PipelineRunMode.QUEUE.value))
         source = PipelineRunSource(data.get("source", PipelineRunSource.ADD_TO_QUEUE.value))
         return cls(

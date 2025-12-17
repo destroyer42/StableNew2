@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.history.history_record import HistoryRecord
 from src.pipeline.job_models_v2 import JobView
+from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
-from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 
@@ -54,12 +55,12 @@ class JobHistoryService:
         except Exception:
             pass
 
-    def list_active_jobs(self) -> List[JobView]:
+    def list_active_jobs(self) -> list[JobView]:
         active_statuses = {JobStatus.QUEUED, JobStatus.RUNNING}
         jobs = [j for j in self._queue.list_jobs() if j.status in active_statuses]
         return [self._from_job(j, is_active=True) for j in jobs]
 
-    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> List[JobView]:
+    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> list[JobView]:
         history_entries = self._history.list_jobs(status=status, limit=limit)
         active_by_id = {
             j.job_id: j
@@ -75,7 +76,7 @@ class JobHistoryService:
                 view_models.append(self._from_history(entry))
         return view_models
 
-    def get_job(self, job_id: str) -> Optional[JobView]:
+    def get_job(self, job_id: str) -> JobView | None:
         active = next((j for j in self._queue.list_jobs() if j.job_id == job_id), None)
         if active:
             return self._from_job(active, is_active=True)
@@ -101,11 +102,15 @@ class JobHistoryService:
                 return False
         return False
 
-    def retry_job(self, job_id: str) -> Optional[str]:
+    def retry_job(self, job_id: str) -> str | None:
         """Retry a completed/failed job by re-submitting its payload."""
 
         vm = self.get_job(job_id)
-        if vm is None or vm.status not in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+        if vm is None or vm.status not in {
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        }:
             return None
 
         original = self._queue.get_job(job_id)
@@ -314,15 +319,15 @@ class NullHistoryService(JobHistoryService):
         """No-op record for failed jobs."""
         pass
 
-    def list_active_jobs(self) -> List[JobView]:
+    def list_active_jobs(self) -> list[JobView]:
         """Return empty list - no active jobs tracked."""
         return []
 
-    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> List[JobView]:
+    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> list[JobView]:
         """Return empty list - no history tracked."""
         return []
 
-    def get_job(self, job_id: str) -> Optional[JobView]:
+    def get_job(self, job_id: str) -> JobView | None:
         """Return None - no jobs tracked."""
         return None
 
@@ -330,6 +335,6 @@ class NullHistoryService(JobHistoryService):
         """Return False - cancellation not supported."""
         return False
 
-    def retry_job(self, job_id: str) -> Optional[str]:
+    def retry_job(self, job_id: str) -> str | None:
         """Return None - retry not supported."""
         return None

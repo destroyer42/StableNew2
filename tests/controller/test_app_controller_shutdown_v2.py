@@ -40,7 +40,9 @@ class FakeLearningController:
 def controller() -> AppController:
     job_service = FakeJobService()
     webui = FakeWebUIManager()
-    controller = AppController(None, threaded=False, job_service=job_service, webui_process_manager=webui)
+    controller = AppController(
+        None, threaded=False, job_service=job_service, webui_process_manager=webui
+    )
     controller.app_state = AppStateV2()
     controller.learning_controller = FakeLearningController()
     return controller

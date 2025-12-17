@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
@@ -53,7 +54,9 @@ def test_runner_retries_webui_crash_once():
     manager = Mock()
     manager.restart_webui.return_value = True
 
-    with patch("src.queue.single_node_runner.get_global_webui_process_manager", return_value=manager):
+    with patch(
+        "src.queue.single_node_runner.get_global_webui_process_manager", return_value=manager
+    ):
         result = runner.run_once(job)
 
     assert result["success"] is True
@@ -84,7 +87,9 @@ def test_runner_retries_webui_connection_failure_and_queue_continues():
     manager = Mock()
     manager.restart_webui.return_value = True
 
-    with patch("src.queue.single_node_runner.get_global_webui_process_manager", return_value=manager):
+    with patch(
+        "src.queue.single_node_runner.get_global_webui_process_manager", return_value=manager
+    ):
         with pytest.raises(RuntimeError):
             runner.run_once(job_failure)
         success_result = runner.run_once(job_success)
@@ -92,5 +97,7 @@ def test_runner_retries_webui_connection_failure_and_queue_continues():
     assert success_result["success"] is True
     assert job_failure.status == JobStatus.FAILED
     assert len(job_failure.execution_metadata.retry_attempts) == 1
-    assert job_failure.execution_metadata.retry_attempts[0].reason == "QUEUE_JOB_WEBUI_CRASH_SUSPECTED"
+    assert (
+        job_failure.execution_metadata.retry_attempts[0].reason == "QUEUE_JOB_WEBUI_CRASH_SUSPECTED"
+    )
     assert manager.restart_webui.call_count == 1

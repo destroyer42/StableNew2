@@ -25,7 +25,6 @@ from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import BatchSettings, OutputSettings
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 
-
 # ---------------------------------------------------------------------------
 # Test Config Types
 # ---------------------------------------------------------------------------
@@ -100,7 +99,9 @@ class TestUniqueJobIds:
         )
         batch = BatchSettings(batch_size=1, batch_runs=2)
 
-        jobs = builder.build_jobs(base_config=DataclassConfig(), randomization_plan=plan, batch_settings=batch)
+        jobs = builder.build_jobs(
+            base_config=DataclassConfig(), randomization_plan=plan, batch_settings=batch
+        )
         ids = [j.job_id for j in jobs]
         assert len(ids) == len(set(ids)), "All job IDs must be unique"
 
@@ -120,12 +121,16 @@ class TestUniqueJobIds:
 class TestOutputSettingsPreserved:
     """Verify output settings are correctly applied."""
 
-    def test_output_dir_applied(self, builder: JobBuilderV2, output_settings: OutputSettings) -> None:
+    def test_output_dir_applied(
+        self, builder: JobBuilderV2, output_settings: OutputSettings
+    ) -> None:
         """Output directory is set on jobs."""
         jobs = builder.build_jobs(base_config=DataclassConfig(), output_settings=output_settings)
         assert all(j.path_output_dir == "/output/norm_test" for j in jobs)
 
-    def test_filename_template_applied(self, builder: JobBuilderV2, output_settings: OutputSettings) -> None:
+    def test_filename_template_applied(
+        self, builder: JobBuilderV2, output_settings: OutputSettings
+    ) -> None:
         """Filename template is set on jobs."""
         jobs = builder.build_jobs(base_config=DataclassConfig(), output_settings=output_settings)
         assert all(j.filename_template == "{job_id}_{seed}" for j in jobs)
@@ -154,7 +159,9 @@ class TestSeedModeSemantics:
             seed_mode=RandomizationSeedMode.FIXED,
             max_variants=2,
         )
-        jobs = builder.build_jobs(base_config=DataclassConfig(), randomization_plan=plan, rng_seed=42)
+        jobs = builder.build_jobs(
+            base_config=DataclassConfig(), randomization_plan=plan, rng_seed=42
+        )
         seeds = {j.seed for j in jobs}
         assert len(seeds) == 1, "FIXED mode should produce same seed for all"
 
@@ -167,7 +174,9 @@ class TestSeedModeSemantics:
             base_seed=100,
             max_variants=3,
         )
-        jobs = builder.build_jobs(base_config=DataclassConfig(), randomization_plan=plan, rng_seed=42)
+        jobs = builder.build_jobs(
+            base_config=DataclassConfig(), randomization_plan=plan, rng_seed=42
+        )
         seeds = [j.seed for j in jobs]
         assert len(seeds) == len(set(seeds)), "PER_VARIANT should produce unique seeds"
 
@@ -221,7 +230,9 @@ class TestImmutability:
         # Modify the job's config nested value
         jobs[0].config.nested["a"] = 999
 
-        assert original.nested["a"] == original_nested_a, "Nested mutation should not affect original"
+        assert original.nested["a"] == original_nested_a, (
+            "Nested mutation should not affect original"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +280,9 @@ class TestIndices:
         )
         batch = BatchSettings(batch_size=1, batch_runs=3)
 
-        jobs = builder.build_jobs(base_config=DataclassConfig(), randomization_plan=plan, batch_settings=batch)
+        jobs = builder.build_jobs(
+            base_config=DataclassConfig(), randomization_plan=plan, batch_settings=batch
+        )
 
         # Should have 2 variants * 3 batch_runs = 6 jobs
         assert len(jobs) == 6
@@ -334,7 +347,9 @@ class TestTimestamps:
         """Timestamps are non-decreasing."""
         plan = RandomizationPlanV2(enabled=True, model_choices=["m1", "m2", "m3"])
         batch = BatchSettings(batch_size=1, batch_runs=2)
-        jobs = builder.build_jobs(base_config=DataclassConfig(), randomization_plan=plan, batch_settings=batch)
+        jobs = builder.build_jobs(
+            base_config=DataclassConfig(), randomization_plan=plan, batch_settings=batch
+        )
 
         timestamps = [j.created_ts for j in jobs]
         for i in range(1, len(timestamps)):

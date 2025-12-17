@@ -24,6 +24,7 @@ _UNRESOLVED_TOKEN_PATTERNS = (
     re.compile(r"__[^_]+__"),
 )
 
+
 @dataclass
 class PromptVariant:
     """Represents one randomized prompt."""
@@ -183,9 +184,7 @@ class PromptRandomizer:
             wildcard_variants = self._expand_wildcards(sr_text, list(sr_labels))
             for wildcard_text, wildcard_labels in wildcard_variants:
                 combos = (
-                    [self._next_matrix_combo()]
-                    if rotate_each_variant
-                    else matrix_combos
+                    [self._next_matrix_combo()] if rotate_each_variant else matrix_combos
                 ) or [None]
                 for combo in combos:
                     labels = list(wildcard_labels)
@@ -211,9 +210,7 @@ class PromptRandomizer:
             deduped.append(variant)
 
         if truncated:
-            estimated = self._estimate_variant_upper_bound(
-                working_prompt, matrix_requested or 1
-            )
+            estimated = self._estimate_variant_upper_bound(working_prompt, matrix_requested or 1)
             logger.warning(
                 "Randomization requested approximately %s combinations but cap is %s; "
                 "returning first %s variant(s). Reduce randomization scope or set "
@@ -450,9 +447,7 @@ class PromptRandomizer:
         backtrack(0, {})
         return combos or [None]
 
-    def _resolve_max_variants(
-        self, cfg: dict[str, Any], override: int | None = None
-    ) -> int:
+    def _resolve_max_variants(self, cfg: dict[str, Any], override: int | None = None) -> int:
         candidate = override if override is not None else cfg.get("max_variants")
         try:
             candidate_int = int(candidate)

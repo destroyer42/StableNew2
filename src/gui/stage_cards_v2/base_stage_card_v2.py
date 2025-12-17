@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Optional, Any
+from typing import Any
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.theme_v2 import (
@@ -20,7 +20,7 @@ class BaseStageCardV2(ttk.Frame):
         self,
         master: tk.Misc,
         title: str,
-        description: Optional[str] = None,
+        description: str | None = None,
         *,
         config_manager: Any = None,
         show_header: bool = True,

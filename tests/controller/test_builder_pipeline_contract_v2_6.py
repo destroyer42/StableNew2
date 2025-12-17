@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 
@@ -44,7 +45,9 @@ def pack_dir(tmp_path: Path) -> Path:
     return tmp_path / "packs"
 
 
-def test_prompt_pack_builder_produces_njrs_for_single_entry(pack_dir: Path, monkeypatch: pytest.MonkeyPatch):
+def test_prompt_pack_builder_produces_njrs_for_single_entry(
+    pack_dir: Path, monkeypatch: pytest.MonkeyPatch
+):
     pack_id = "pack1"
     _make_pack_files(pack_dir, pack_id, "hello world")
     controller = PipelineController(config_manager=None)
@@ -79,6 +82,6 @@ def test_multiple_pack_entries_produce_multiple_njrs(pack_dir: Path):
 def test_no_pipeline_config_assembler_dependency():
     # Importing PipelineController should not raise ModuleNotFoundError for assembler
     try:
-        from src.controller import pipeline_controller
+        importlib.import_module("src.controller.pipeline_controller")
     except ModuleNotFoundError as e:
         assert "pipeline_config_assembler" not in str(e)

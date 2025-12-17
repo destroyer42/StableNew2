@@ -1,5 +1,5 @@
-from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 
 
 def _make_pipeline_config() -> PipelineConfig:

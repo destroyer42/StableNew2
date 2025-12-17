@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from src.utils.process_container_v2 import NullProcessContainer, ProcessContainerConfig, build_process_container
+from src.utils.process_container_v2 import (
+    NullProcessContainer,
+    ProcessContainerConfig,
+    build_process_container,
+)
 
 
 def test_build_process_container_disabled() -> None:

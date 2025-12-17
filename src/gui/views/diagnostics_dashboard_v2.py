@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
@@ -79,7 +79,11 @@ class DiagnosticsDashboardV2(ttk.Frame):
         self._process_text = self._build_text_widget(body, "Processes")
 
         import os
-        self._is_test_mode = bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("STABLENEW_TEST_MODE") == "1"
+
+        self._is_test_mode = (
+            bool(os.environ.get("PYTEST_CURRENT_TEST"))
+            or os.environ.get("STABLENEW_TEST_MODE") == "1"
+        )
         self._refresh_snapshot()
 
     def _build_text_widget(self, parent: ttk.Frame, title: str) -> tk.Text:
@@ -114,7 +118,7 @@ class DiagnosticsDashboardV2(ttk.Frame):
             self._schedule_refresh()
 
     def _schedule_refresh(self) -> None:
-        if getattr(self, '_is_test_mode', False):
+        if getattr(self, "_is_test_mode", False):
             return
         self._cancel_refresh()
         self._refresh_after_id = self.after(self.REFRESH_INTERVAL_MS, self._refresh_snapshot)
@@ -147,9 +151,7 @@ class DiagnosticsDashboardV2(ttk.Frame):
             used = info.get("used_mb", 0.0)
             total = info.get("total_mb", 0.0)
             percent = info.get("percent", 0.0)
-            self._memory_var.set(
-                f"Memory: {used:.1f}MB / {total:.1f}MB ({percent:.0f}%)"
-            )
+            self._memory_var.set(f"Memory: {used:.1f}MB / {total:.1f}MB ({percent:.0f}%)")
         else:
             self._memory_var.set("Memory: unknown")
 
@@ -196,12 +198,16 @@ class DiagnosticsDashboardV2(ttk.Frame):
         widget.insert(tk.END, "\n".join(lines[-20:]) + ("\n" if lines else ""))
         widget.config(state=tk.DISABLED)
 
-    def _format_event_lines(self, events: list[dict[str, Any]], *, label: str = "watchdog") -> list[str]:
+    def _format_event_lines(
+        self, events: list[dict[str, Any]], *, label: str = "watchdog"
+    ) -> list[str]:
         result: list[str] = []
         for event in events[-5:]:
             ts = event.get("timestamp")
             ts_text = (
-                datetime.utcfromtimestamp(ts).isoformat() + "Z" if isinstance(ts, (int, float)) else "n/a"
+                datetime.utcfromtimestamp(ts).isoformat() + "Z"
+                if isinstance(ts, (int, float))
+                else "n/a"
             )
             job_id = event.get("job_id") or "unknown"
             reason = event.get("reason") or label

@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.learning.learning_record import LearningRecord, _now_iso
 
@@ -39,7 +39,7 @@ def _stage_plan_list(run_result: PipelineRunResult) -> list[str]:
 def build_learning_record(
     pipeline_config: Any,
     run_result: PipelineRunResult,
-    learning_context: Optional[dict[str, Any]] = None,
+    learning_context: dict[str, Any] | None = None,
 ) -> LearningRecord:
     """
     Build a LearningRecord from pipeline inputs and outputs without performing IO.
@@ -88,7 +88,9 @@ def build_learning_record(
     primary_knobs = _extract_primary_knobs(base_config if isinstance(base_config, dict) else {})
     # Discover sidecar priors for model and LoRA
     from pathlib import Path
+
     from src.learning.learning_profile_sidecar import find_profile_sidecar
+
     sidecar_priors = {}
     model_name = str(primary_knobs.get("model", ""))
     if model_name:
@@ -118,7 +120,9 @@ def build_learning_record(
         metadata=metadata,
         stage_plan=_stage_plan_list(run_result),
         stage_events=getattr(run_result, "stage_events", []) or [],
-        outputs=getattr(run_result, "metadata", {}).get("stage_outputs", []) if hasattr(run_result, "metadata") else [],
+        outputs=getattr(run_result, "metadata", {}).get("stage_outputs", [])
+        if hasattr(run_result, "metadata")
+        else [],
         sidecar_priors=sidecar_priors,
     )
     return record

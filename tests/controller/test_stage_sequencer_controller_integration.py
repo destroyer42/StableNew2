@@ -7,7 +7,13 @@ from src.pipeline.stage_sequencer import StageExecutionPlan
 def test_controller_stores_last_stage_execution_plan():
     controller = PipelineController()
     cfg = {
-        "txt2img": {"enabled": True, "model": "m", "sampler_name": "Euler", "steps": 20, "cfg_scale": 7.0},
+        "txt2img": {
+            "enabled": True,
+            "model": "m",
+            "sampler_name": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.0,
+        },
         "img2img": {"enabled": False, "model": "m", "sampler_name": "Euler", "steps": 10},
         "upscale": {"enabled": False, "upscaler": "R-ESRGAN 4x+"},
         "pipeline": {},

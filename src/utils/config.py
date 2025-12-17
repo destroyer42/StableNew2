@@ -2,10 +2,11 @@
 
 import json
 import logging
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
     "blurry, bad quality, distorted, ugly, malformed, nsfw, nude, naked, explicit, "
@@ -294,7 +295,7 @@ class ConfigManager:
                 "adetailer_cfg": 7.0,
                 "adetailer_prompt": "",
                 "adetailer_negative_prompt": "",
-                },
+            },
             "video": {"fps": 24, "codec": "libx264", "quality": "medium"},
             "api": {"base_url": "http://127.0.0.1:7860", "timeout": 300},
             "webui_options_write_enabled": False,
@@ -438,7 +439,14 @@ class ConfigManager:
         }
         for key in ("refiner_enabled", "refiner_model_name", "refiner_switch_at"):
             txt2img.setdefault(key, defaults[key])
-        for key in ("hires_enabled", "hires_upscaler_name", "hires_upscale_factor", "hires_steps", "hires_denoise", "hires_use_base_model"):
+        for key in (
+            "hires_enabled",
+            "hires_upscaler_name",
+            "hires_upscale_factor",
+            "hires_steps",
+            "hires_denoise",
+            "hires_use_base_model",
+        ):
             hires.setdefault(key, defaults[key])
 
     def get_pack_overrides(self, pack_name: str) -> dict[str, Any]:
@@ -620,9 +628,7 @@ class ConfigManager:
 
     def update_settings(self, updates: dict[str, Any]) -> None:
         current = dict(self._load_settings())
-        current.update(
-            {k: v for k, v in updates.items() if v is not None}
-        )
+        current.update({k: v for k, v in updates.items() if v is not None})
         self.save_settings(current)
 
     def save_settings(self, settings: dict[str, Any] | None = None) -> bool:
@@ -827,10 +833,10 @@ QUEUE_STATE_PATH = Path("state/queue_state_v2.json")
 def save_queue_state(queue_data: dict[str, Any]) -> bool:
     """
     Save the queue state to disk for persistence across sessions.
-    
+
     Args:
         queue_data: Serialized queue state from JobQueueV2.serialize()
-        
+
     Returns:
         True if saved successfully
     """
@@ -850,7 +856,7 @@ def save_queue_state(queue_data: dict[str, Any]) -> bool:
 def load_queue_state() -> dict[str, Any] | None:
     """
     Load the queue state from disk.
-    
+
     Returns:
         Serialized queue state to pass to JobQueueV2.restore(), or None if no state exists
     """
@@ -869,7 +875,7 @@ def load_queue_state() -> dict[str, Any] | None:
 def clear_queue_state() -> bool:
     """
     Delete the saved queue state file.
-    
+
     Returns:
         True if cleared successfully
     """

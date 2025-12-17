@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import tkinter as tk
-
 import pytest
 
 from src.app_factory import build_v2_app
@@ -23,8 +21,12 @@ def test_pipeline_tab_three_column_layout_v2() -> None:
         assert pipeline_tab is not None, "Pipeline tab should exist"
 
         assert hasattr(pipeline_tab, "left_column"), "Pipeline tab should expose left column frame"
-        assert hasattr(pipeline_tab, "center_column"), "Pipeline tab should expose center column frame"
-        assert hasattr(pipeline_tab, "right_column"), "Pipeline tab should expose right column frame"
+        assert hasattr(pipeline_tab, "center_column"), (
+            "Pipeline tab should expose center column frame"
+        )
+        assert hasattr(pipeline_tab, "right_column"), (
+            "Pipeline tab should expose right column frame"
+        )
 
         left_column = pipeline_tab.left_column
         center_column = pipeline_tab.center_column

@@ -3,7 +3,19 @@ from __future__ import annotations
 import os
 import threading
 import time
-from typing import Optional
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
+
+try:
+    import psutil  # type: ignore[import]
+except ImportError:  # pragma: no cover - optional dependency
+    psutil = None  # type: ignore[assignment]
+
+from src.queue.job_model import JobExecutionMetadata
+from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, wrap_exception
+from src.utils.exceptions_v2 import WatchdogViolationError
+
 
 def _is_test_mode() -> bool:
     # pytest sets this environment variable while tests run
@@ -14,20 +26,6 @@ def _is_test_mode() -> bool:
         return True
     return False
 
-import logging
-import threading
-import time
-from dataclasses import dataclass, field
-from typing import Any, Callable
-
-try:
-    import psutil  # type: ignore[import]
-except ImportError:  # pragma: no cover - optional dependency
-    psutil = None  # type: ignore[assignment]
-
-from src.queue.job_model import JobExecutionMetadata
-from src.utils.error_envelope_v2 import wrap_exception, UnifiedErrorEnvelope
-from src.utils.exceptions_v2 import WatchdogViolationError
 
 WATCHDOG_LOG_PREFIX = "[WATCHDOG]"
 
@@ -134,7 +132,9 @@ class JobWatchdog(threading.Thread):
         rss_mb = self._current_rss(proc)
         return rss_mb > limit_mb if limit_mb else False
 
-    def _check_idle(self, pid: int, proc: Any, limit_sec: float, now: float) -> WatchdogViolation | None:
+    def _check_idle(
+        self, pid: int, proc: Any, limit_sec: float, now: float
+    ) -> WatchdogViolation | None:
         cpu_time = self._current_cpu_time(proc)
         last_cpu = self._cpu_times.get(pid)
         if last_cpu is None:
@@ -198,9 +198,7 @@ class JobWatchdog(threading.Thread):
         except Exception:
             return None
 
-    def _build_violation_envelope(
-        self, violation: WatchdogViolation
-    ) -> UnifiedErrorEnvelope:
+    def _build_violation_envelope(self, violation: WatchdogViolation) -> UnifiedErrorEnvelope:
         exc = WatchdogViolationError(f"Watchdog violation: {violation.reason}")
         context = {"watchdog_reason": violation.reason, **(violation.info or {})}
         if violation.pid is not None:

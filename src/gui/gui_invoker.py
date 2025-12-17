@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-from typing import Callable
+from collections.abc import Callable
 
 
 class GuiInvoker:
@@ -28,4 +28,3 @@ class GuiInvoker:
         """Prevent any further scheduling."""
         with self._lock:
             self._disposed = True
-

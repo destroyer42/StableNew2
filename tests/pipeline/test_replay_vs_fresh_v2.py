@@ -27,7 +27,11 @@ def _njr() -> NormalizedJobRecord:
         seed=77,
         positive_prompt="mountain",
         negative_prompt="lowres",
-        stage_chain=[StageConfig(stage_type="txt2img", enabled=True, steps=30, cfg_scale=7.0, sampler_name="Euler a")],
+        stage_chain=[
+            StageConfig(
+                stage_type="txt2img", enabled=True, steps=30, cfg_scale=7.0, sampler_name="Euler a"
+            )
+        ],
         steps=30,
         cfg_scale=7.0,
         width=640,

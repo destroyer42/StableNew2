@@ -9,7 +9,6 @@ from src.gui.app_state_v2 import CurrentConfig
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.learning.model_profiles import get_model_profile_defaults_for_model
 
-
 # Setup TCL/TK environment variables at module load time
 if sys.platform.startswith("win"):
     tcl_library = os.environ.get("TCL_LIBRARY")

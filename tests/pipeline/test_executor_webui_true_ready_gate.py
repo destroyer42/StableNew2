@@ -60,11 +60,7 @@ class TestTrueReadyGateBlocks:
         def mock_gate_timeout():
             gate_calls[0] += 1
             raise WebUIReadinessTimeout(
-                message="Timeout",
-                total_waited=60,
-                stdout_tail="",
-                stderr_tail="",
-                checks_status={}
+                message="Timeout", total_waited=60, stdout_tail="", stderr_tail="", checks_status={}
             )
 
         pipeline._ensure_webui_true_ready = mock_gate_timeout
@@ -97,7 +93,7 @@ class TestTrueReadyGateBlocks:
                 total_waited=30,
                 stdout_tail="",
                 stderr_tail="",
-                checks_status={}
+                checks_status={},
             )
 
         pipeline._ensure_webui_true_ready = mock_gate

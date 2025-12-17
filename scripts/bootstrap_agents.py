@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 AGENT_FILES = [
     ".github/agents/controller_lead_engineer.md",
     ".github/agents/implementer.md",
@@ -104,6 +103,7 @@ def main() -> None:
   6. Optionally, add or update your CI workflow (in .github/workflows/ci.yml)
      to run pytest and linting for all PRs.
 """)
+
 
 if __name__ == "__main__":
     main()

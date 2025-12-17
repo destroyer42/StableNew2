@@ -1,9 +1,9 @@
-import types
 from unittest import mock
 
-import pytest
-
-from src.controller.webui_connection_controller import WebUIConnectionController, WebUIConnectionState
+from src.controller.webui_connection_controller import (
+    WebUIConnectionController,
+    WebUIConnectionState,
+)
 
 
 def make_controller(monkeypatch, results):
@@ -16,13 +16,23 @@ def make_controller(monkeypatch, results):
             raise outcome
         return outcome
 
-    monkeypatch.setattr("src.controller.webui_connection_controller.wait_for_webui_ready", fake_wait)
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.wait_for_webui_ready", fake_wait
+    )
     fake_pm = mock.Mock()
     fake_pm.return_value.start.return_value = True
     monkeypatch.setattr("src.controller.webui_connection_controller.WebUIProcessManager", fake_pm)
-    monkeypatch.setattr("src.controller.webui_connection_controller.build_default_webui_process_config", lambda: mock.Mock())
-    monkeypatch.setattr("src.controller.webui_connection_controller.app_config.get_webui_autostart_enabled", lambda: True)
-    monkeypatch.setattr("src.controller.webui_connection_controller.time.sleep", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.build_default_webui_process_config",
+        lambda: mock.Mock(),
+    )
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.app_config.get_webui_autostart_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.time.sleep", lambda *args, **kwargs: None
+    )
     ctrl = WebUIConnectionController(base_url_provider=lambda: "http://x")
     return ctrl, calls, fake_pm
 

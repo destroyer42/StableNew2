@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any
 
 
 class LearningMode(str, Enum):
@@ -24,9 +24,9 @@ class LearningPlan:
     mode: str
     stage: str
     target_variable: str
-    sweep_values: List[Any]
+    sweep_values: list[Any]
     images_per_step: int = 1
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -38,7 +38,7 @@ class LearningRunStep:
     variable: str
     value: Any
     images_requested: int
-    config_snapshot: Dict[str, Any]
+    config_snapshot: dict[str, Any]
 
 
 @dataclass
@@ -46,12 +46,12 @@ class LearningRunResult:
     """Placeholder result for learning batches."""
 
     plan: LearningPlan
-    steps: List[LearningRunStep]
-    artifacts: List[Dict[str, Any]]
-    summary: Dict[str, Any]
+    steps: list[LearningRunStep]
+    artifacts: list[dict[str, Any]]
+    summary: dict[str, Any]
 
 
-def _normalize_sweep_values(raw_values: Any) -> List[Any]:
+def _normalize_sweep_values(raw_values: Any) -> list[Any]:
     if raw_values is None:
         return []
     if isinstance(raw_values, (list, tuple, set)):
@@ -59,7 +59,7 @@ def _normalize_sweep_values(raw_values: Any) -> List[Any]:
     return [raw_values]
 
 
-def build_learning_plan_from_dict(payload: Dict[str, Any]) -> LearningPlan:
+def build_learning_plan_from_dict(payload: dict[str, Any]) -> LearningPlan:
     """Construct a LearningPlan from a dict payload."""
 
     if payload is None:

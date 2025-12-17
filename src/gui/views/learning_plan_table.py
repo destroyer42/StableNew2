@@ -33,12 +33,7 @@ class LearningPlanTable(ttk.Frame):
 
         # Treeview with columns
         columns = ("variant", "param_value", "stage", "status", "images")
-        self.tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            height=10
-        )
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
 
         # Define headings
         self.tree.heading("variant", text="Variant #")
@@ -63,7 +58,7 @@ class LearningPlanTable(ttk.Frame):
         scrollbar.grid(row=0, column=1, sticky="ns")
 
         # Add selection binding
-        self.tree.bind('<<TreeviewSelect>>', self._on_row_selected)
+        self.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
 
     def update_plan(self, plan: list[LearningVariant]) -> None:
         """Update the table with the current learning plan."""
@@ -77,12 +72,12 @@ class LearningPlanTable(ttk.Frame):
                 "",
                 "end",
                 values=(
-                    f"#{i+1}",
+                    f"#{i + 1}",
                     str(variant.param_value),
                     "txt2img",  # TODO: Get from experiment stage
                     variant.status.title(),
-                    f"{variant.completed_images}/{variant.planned_images}"
-                )
+                    f"{variant.completed_images}/{variant.planned_images}",
+                ),
             )
 
     def _on_row_selected(self, event: Any) -> None:
@@ -102,9 +97,9 @@ class LearningPlanTable(ttk.Frame):
     def _notify_row_selected(self, index: int) -> None:
         """Notify controller of row selection."""
         # This will be called by the controller to handle selection
-        if hasattr(self.master, 'learning_controller'):
+        if hasattr(self.master, "learning_controller"):
             controller = self.master.learning_controller
-            if hasattr(controller, 'on_variant_selected'):
+            if hasattr(controller, "on_variant_selected"):
                 controller.on_variant_selected(index)
 
     def update_row_status(self, index: int, status: str) -> None:

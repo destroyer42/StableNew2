@@ -7,9 +7,9 @@ import os
 import subprocess
 import sys
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
-from typing import Callable
 
 from src.utils.diagnostics_bundle_v2 import DEFAULT_BUNDLE_DIR
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
@@ -117,9 +117,7 @@ class ErrorModalV2(tk.Toplevel):
             command=self._open_bundle_folder,
         )
         open_button.pack(side="left", padx=(0, 8))
-        close_button = ttk.Button(
-            button_frame, text="Close", command=self._handle_close
-        )
+        close_button = ttk.Button(button_frame, text="Close", command=self._handle_close)
         close_button.pack(side="right")
 
         self.update_idletasks()

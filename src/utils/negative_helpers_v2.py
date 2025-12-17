@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 
 def merge_global_negative(
     base_negative: str | None,
     global_terms: str | None,
-) -> Tuple[str, str, bool, str]:
+) -> tuple[str, str, bool, str]:
     """Return (original, final, applied, global_terms) for negatives."""
     base = (base_negative or "").strip()
     global_clean = (global_terms or "").strip()

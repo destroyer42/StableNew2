@@ -12,7 +12,9 @@ def test_start_invokes_subprocess_with_config(monkeypatch):
     popen_mock = mock.Mock(return_value=dummy)
     monkeypatch.setattr("subprocess.Popen", popen_mock)
 
-    cfg = WebUIProcessConfig(command=["python", "webui.py"], working_dir="/tmp/webui", env_overrides={"A": "1"})
+    cfg = WebUIProcessConfig(
+        command=["python", "webui.py"], working_dir="/tmp/webui", env_overrides={"A": "1"}
+    )
     manager = WebUIProcessManager(cfg)
 
     process = manager.start()
@@ -113,6 +115,7 @@ def test_check_health_uses_retries(monkeypatch):
     cfg = WebUIProcessConfig(command=["python", "webui.py"])
     manager = WebUIProcessManager(cfg)
     called = []
+
     def fake_wait(url, timeout, poll_interval):
         called.append((url, timeout, poll_interval))
         return True

@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Literal, Optional, Sequence
-import uuid
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.pipeline.resolution_layer import (
     ResolvedPipelineConfig,
     ResolvedPrompt,
-    UnifiedConfigResolver,
-    UnifiedPromptResolver,
 )
 
+if TYPE_CHECKING:
+    from src.queue.job_model import Job
 
 _STAGE_DISPLAY_MAP: dict[str, str] = {
     "txt2img": "txt2img",
@@ -73,13 +74,14 @@ def _format_batch_label(index: int, total: int) -> str | None:
 @dataclass(frozen=True)
 class JobQueueItemDTO:
     """Queue display DTO derived from NormalizedJobRecord snapshot.
-    
+
     For jobs built via JobBuilderV2, this DTO should be constructed from
     the NJR snapshot stored in Job.snapshot, not from Job.pipeline_config.
-    
-    PR-CORE1-12: pipeline_config is DEPRECATED. Legacy jobs without NJR 
+
+    PR-CORE1-12: pipeline_config is DEPRECATED. Legacy jobs without NJR
     snapshots may fall back to pipeline_config, but all new jobs use NJR only.
     """
+
     job_id: str
     label: str
     status: str
@@ -87,7 +89,7 @@ class JobQueueItemDTO:
     created_at: datetime
 
     @classmethod
-    def from_job(cls, job: "Job") -> "JobQueueItemDTO":
+    def from_job(cls, job: Job) -> JobQueueItemDTO:
         return cls(
             job_id=job.job_id,
             label=getattr(job, "label", job.job_id) or job.job_id,
@@ -100,13 +102,14 @@ class JobQueueItemDTO:
 @dataclass(frozen=True)
 class JobHistoryItemDTO:
     """History display DTO derived from NormalizedJobRecord snapshot.
-    
+
     For jobs built via JobBuilderV2, this DTO should be constructed from
     the NJR snapshot stored in history entries, not from pipeline_config.
-    
-    PR-CORE1-12: pipeline_config is DEPRECATED. Legacy history entries without 
+
+    PR-CORE1-12: pipeline_config is DEPRECATED. Legacy history entries without
     NJR snapshots may fall back to pipeline_config, but all new jobs use NJR only.
     """
+
     job_id: str
     label: str
     completed_at: datetime
@@ -114,7 +117,7 @@ class JobHistoryItemDTO:
     stages: str
 
     @classmethod
-    def from_job(cls, job: "Job") -> "JobHistoryItemDTO":
+    def from_job(cls, job: Job) -> JobHistoryItemDTO:
         return cls(
             job_id=job.job_id,
             label=getattr(job, "label", job.job_id) or job.job_id,
@@ -126,6 +129,7 @@ class JobHistoryItemDTO:
 
 class JobStatusV2(str, Enum):
     """Status of a queue job."""
+
     QUEUED = "queued"
     RUNNING = "running"
     PAUSED = "paused"
@@ -179,13 +183,13 @@ class LoRATag:
 class StageConfig:
     stage_type: StageType
     enabled: bool = False
-    steps: Optional[int] = None
-    cfg_scale: Optional[float] = None
-    denoising_strength: Optional[float] = None
-    sampler_name: Optional[str] = None
-    scheduler: Optional[str] = None
-    model: Optional[str] = None
-    vae: Optional[str] = None
+    steps: int | None = None
+    cfg_scale: float | None = None
+    denoising_strength: float | None = None
+    sampler_name: str | None = None
+    scheduler: str | None = None
+    model: str | None = None
+    vae: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -213,12 +217,12 @@ class PipelineConfigSnapshot:
     filename_template: str = "{seed}"
     metadata: dict[str, Any] | None = None
 
-    def copy_with_overrides(self, **overrides: Any) -> "PipelineConfigSnapshot":
+    def copy_with_overrides(self, **overrides: Any) -> PipelineConfigSnapshot:
         data = {**self.__dict__, **overrides}
         return PipelineConfigSnapshot(**data)
 
     @staticmethod
-    def default() -> "PipelineConfigSnapshot":
+    def default() -> PipelineConfigSnapshot:
         return PipelineConfigSnapshot(
             model_name="stable-diffusion-v1-5",
             sampler_name="Euler a",
@@ -259,7 +263,7 @@ class UnifiedJobSummary:
     prompt_pack_name: str
     prompt_pack_row_index: int
     positive_prompt_preview: str
-    negative_prompt_preview: Optional[str]
+    negative_prompt_preview: str | None
     lora_preview: str
     embedding_preview: str
     base_model: str
@@ -270,7 +274,7 @@ class UnifiedJobSummary:
     height: int
     stage_chain_labels: list[str]
     randomization_enabled: bool
-    matrix_mode: Optional[str]
+    matrix_mode: str | None
     matrix_slot_values_preview: str
     variant_index: int
     batch_index: int
@@ -279,7 +283,7 @@ class UnifiedJobSummary:
     estimated_image_count: int
     status: str
     created_at: datetime
-    completed_at: Optional[datetime]
+    completed_at: datetime | None
 
     @staticmethod
     def _truncate(value: str) -> str:
@@ -288,7 +292,7 @@ class UnifiedJobSummary:
         return value if len(value) <= 120 else value[:120] + "..."
 
     @classmethod
-    def from_normalized_record(cls, record: "NormalizedJobRecord") -> "UnifiedJobSummary":
+    def from_normalized_record(cls, record: NormalizedJobRecord) -> UnifiedJobSummary:
         return cls(
             job_id=record.job_id,
             prompt_pack_id=record.prompt_pack_id,
@@ -321,7 +325,7 @@ class UnifiedJobSummary:
         )
 
     @classmethod
-    def from_job(cls, job: "Job", status: JobStatusV2) -> "UnifiedJobSummary":
+    def from_job(cls, job: Job, status: JobStatusV2) -> UnifiedJobSummary:
         now = getattr(job, "created_at", datetime.utcnow())
         prompt_pack_id = getattr(job, "prompt_pack_id", "") or ""
         prompt_pack_name = getattr(job, "prompt_pack_name", "") or ""
@@ -371,14 +375,14 @@ class JobUiSummary:
     negative_preview: str | None
     stages_display: str
     estimated_images: int
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
     @classmethod
-    def from_normalized(cls, rec: "NormalizedJobRecord") -> "JobUiSummary":
+    def from_normalized(cls, rec: NormalizedJobRecord) -> JobUiSummary:
         return cls.from_job_view(rec.to_job_view())
 
     @classmethod
-    def from_job_view(cls, view: "JobView") -> "JobUiSummary":
+    def from_job_view(cls, view: JobView) -> JobUiSummary:
         created_at = None
         if view.created_at:
             try:
@@ -394,6 +398,8 @@ class JobUiSummary:
             estimated_images=view.estimated_images,
             created_at=created_at,
         )
+
+
 @dataclass
 class JobLifecycleLogEvent:
     timestamp: datetime
@@ -405,7 +411,6 @@ class JobLifecycleLogEvent:
     message: str
 
 
-
 @dataclass
 class BatchSettings:
     """Settings for batch expansion in job building.
@@ -414,6 +419,7 @@ class BatchSettings:
         batch_size: Images per job for WebUI (passed through to executor).
         batch_runs: Number of times to repeat each variant config as separate jobs.
     """
+
     batch_size: int = 1
     batch_runs: int = 1
 
@@ -426,6 +432,7 @@ class OutputSettings:
         base_output_dir: Base directory for job outputs.
         filename_template: Template string for output filenames (e.g., "{seed}_{steps}").
     """
+
     base_output_dir: str = "output"
     filename_template: str = "{seed}"
 
@@ -438,16 +445,16 @@ class NormalizedJobRecord:
     - Job construction via JobBuilderV2
     - Preview/queue/history display via UnifiedJobSummary
     - Job snapshots and provenance tracking
-    
+
     NormalizedJobRecord is the "read model" - used for building and displaying jobs.
-    
+
     PR-CORE1-12: pipeline_config is DEPRECATED and removed from runtime execution.
     During early CORE1-A/B hybrid state, Job.pipeline_config was the execution payload,
     but PR-CORE1-B3 guarantees new v2.6 jobs never populate this field.
     Full NJR-only execution is enforced for all new jobs; pipeline_config is
     legacy-only (always None for v2.6 jobs) and will be fully removed in future cleanup.
     PR-CORE1-B5 removed the old Job.payload-driven execution path in favor of NJRs.
-    
+
     All fields are explicit - no hidden defaults or missing values.
 
     Attributes:
@@ -466,6 +473,7 @@ class NormalizedJobRecord:
     `prompt_pack_name` should be populated when available so downstream services can
     attribute the job to the correct PromptPack.
     """
+
     job_id: str
     config: Any  # PipelineConfig or dict - fully merged
     path_output_dir: str
@@ -483,7 +491,7 @@ class NormalizedJobRecord:
     prompt_pack_id: str = ""
     prompt_pack_name: str = ""
     prompt_pack_row_index: int = 0
-    prompt_pack_version: Optional[str] = None
+    prompt_pack_version: str | None = None
     positive_prompt: str = ""
     negative_prompt: str = ""
     positive_embeddings: list[str] = field(default_factory=list)
@@ -498,7 +506,7 @@ class NormalizedJobRecord:
     scheduler: str = ""
     clip_skip: int = 0
     base_model: str = ""
-    vae: Optional[str] = None
+    vae: str | None = None
     stage_chain: list[StageConfig] = field(default_factory=list)
     loop_type: Literal["pipeline", "prompt", "image"] = "pipeline"
     loop_count: int = 1
@@ -507,22 +515,22 @@ class NormalizedJobRecord:
     run_mode: Literal["DIRECT", "QUEUE"] = "QUEUE"
     queue_source: Literal["RUN_NOW", "ADD_TO_QUEUE"] = "ADD_TO_QUEUE"
     randomization_enabled: bool = False
-    matrix_name: Optional[str] = None
-    matrix_mode: Optional[str] = None
-    matrix_prompt_mode: Optional[str] = None
+    matrix_name: str | None = None
+    matrix_mode: str | None = None
+    matrix_prompt_mode: str | None = None
     config_variant_label: str = "base"
     config_variant_index: int = 0
     config_variant_overrides: dict[str, Any] = field(default_factory=dict)
     aesthetic_enabled: bool = False
-    aesthetic_weight: Optional[float] = None
-    aesthetic_text: Optional[str] = None
-    aesthetic_embedding: Optional[str] = None
+    aesthetic_weight: float | None = None
+    aesthetic_text: str | None = None
+    aesthetic_embedding: str | None = None
     extra_metadata: dict[str, Any] = field(default_factory=dict)
     output_paths: list[str] = field(default_factory=list)
-    thumbnail_path: Optional[str] = None
-    completed_at: Optional[datetime] = None
+    thumbnail_path: str | None = None
+    completed_at: datetime | None = None
     status: JobStatusV2 = JobStatusV2.QUEUED
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     @property
     def created_at(self) -> datetime:
@@ -605,12 +613,12 @@ class NormalizedJobRecord:
                 prompt += "..."
 
         seed_str = str(self.seed) if self.seed is not None else "?"
-        
+
         # PR-CORE-E: Add config variant label
         config_variant_info = ""
         if self.config_variant_label and self.config_variant_label != "base":
             config_variant_info = f" [{self.config_variant_label}]"
-        
+
         variant_info = ""
         if self.variant_total > 1:
             variant_info = f" [v{self.variant_index + 1}/{self.variant_total}]"
@@ -639,11 +647,10 @@ class NormalizedJobRecord:
         last_error: str | None = None,
         worker_id: str | None = None,
         result: dict[str, Any] | None = None,
-    ) -> "JobView":
+    ) -> JobView:
         """Return a presentation-focused JobView derived from this NJR."""
-        normalized_status = (
-            status
-            or str(self.status.value if hasattr(self.status, "value") else self.status)
+        normalized_status = status or str(
+            self.status.value if hasattr(self.status, "value") else self.status
         )
         return JobView.from_njr(
             self,
@@ -764,7 +771,9 @@ class NormalizedJobRecord:
         snapshot["lora_tags"] = [asdict(tag) for tag in self.lora_tags]
         snapshot["queue_source"] = self.queue_source
         snapshot["run_mode"] = self.run_mode
-        snapshot["status"] = self.status.value if hasattr(self.status, "value") else str(self.status)
+        snapshot["status"] = (
+            self.status.value if hasattr(self.status, "value") else str(self.status)
+        )
 
         if self.txt2img_prompt_info:
             snapshot["txt2img_prompt_info"] = asdict(self.txt2img_prompt_info)
@@ -806,7 +815,7 @@ class JobView:
     @classmethod
     def from_njr(
         cls,
-        record: "NormalizedJobRecord",
+        record: NormalizedJobRecord,
         *,
         status: str | None = None,
         created_at: str | None = None,
@@ -816,7 +825,7 @@ class JobView:
         last_error: str | None = None,
         worker_id: str | None = None,
         result: dict[str, Any] | None = None,
-    ) -> "JobView":
+    ) -> JobView:
         model = record.base_model or record._extract_model_name() or "unknown"
         prompt_text = (
             record.positive_prompt
@@ -842,7 +851,9 @@ class JobView:
         if batch_label:
             label += f" {batch_label}"
 
-        status_value = status or str(record.status.value if hasattr(record.status, "value") else record.status)
+        status_value = status or str(
+            record.status.value if hasattr(record.status, "value") else record.status
+        )
         created_iso = created_at or _coerce_iso_timestamp(record.created_ts)
         return cls(
             job_id=record.job_id,
@@ -883,19 +894,19 @@ class QueueJobV2:
     config_snapshot: dict[str, Any]
     status: JobStatusV2 = JobStatusV2.QUEUED
     created_at: datetime = field(default_factory=datetime.now)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     progress: float = 0.0
-    eta_seconds: Optional[float] = None
-    error_message: Optional[str] = None
+    eta_seconds: float | None = None
+    error_message: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def create(
         cls,
         config_snapshot: dict[str, Any],
-        metadata: Optional[dict[str, Any]] = None,
-    ) -> "QueueJobV2":
+        metadata: dict[str, Any] | None = None,
+    ) -> QueueJobV2:
         """Create a new job with a unique ID."""
         return cls(
             job_id=str(uuid.uuid4()),
@@ -905,7 +916,7 @@ class QueueJobV2:
 
     def get_display_summary(self) -> str:
         """Get a short display string for the job.
-        
+
         PR-CORE-E: Includes config variant label in display.
         """
         config = self.config_snapshot
@@ -915,13 +926,13 @@ class QueueJobV2:
         prompt = config.get("prompt", "")[:30]
         if len(config.get("prompt", "")) > 30:
             prompt += "..."
-        
+
         # PR-CORE-E: Add config variant label if present
         config_variant_label = config.get("config_variant_label", None)
         variant_suffix = ""
         if config_variant_label and config_variant_label != "base":
             variant_suffix = f" [{config_variant_label}]"
-        
+
         return f"{stage} | {model} | seed={seed}{variant_suffix}"
 
     def to_dict(self) -> dict[str, Any]:
@@ -940,7 +951,7 @@ class QueueJobV2:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "QueueJobV2":
+    def from_dict(cls, data: dict[str, Any]) -> QueueJobV2:
         """Deserialize job from dictionary."""
         status_str = data.get("status", "queued")
         try:

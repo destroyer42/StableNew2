@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Iterable
 from tkinter import ttk
-from typing import Any, Iterable
+from typing import Any
 
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
-from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE, TEXT_PRIMARY
+from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 
 
 class ADetailerStageCardV2(BaseStageCardV2):
@@ -77,9 +78,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             1,
         )
 
-        row = self._add_spin_section(
-            parent, row, "Mask blur:", self.mask_blur_var, 0, 16, 1
-        )
+        row = self._add_spin_section(parent, row, "Mask blur:", self.mask_blur_var, 0, 16, 1)
 
         self._add_labeled_combo(
             parent,
@@ -197,10 +196,14 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._configure_combo(self._model_combo, models, self.model_var)
         self._configure_combo(self._detector_combo, detectors, self.detector_var)
 
-    def _configure_combo(self, combo: ttk.Combobox | None, values: list[str], variable: tk.StringVar) -> None:
+    def _configure_combo(
+        self, combo: ttk.Combobox | None, values: list[str], variable: tk.StringVar
+    ) -> None:
         if not combo:
             return
-        combo.configure(values=values, state="readonly" if values else "disabled", style="Dark.TCombobox")
+        combo.configure(
+            values=values, state="readonly" if values else "disabled", style="Dark.TCombobox"
+        )
         if values:
             current = variable.get()
             if not current or current not in values:

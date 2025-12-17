@@ -157,6 +157,8 @@ class VideoCreator:
         duration_per_image: float = 3.0,
         transition_duration: float = 0.5,
         fps: int = 24,
+        codec: str = "libx264",
+        quality: str = "medium",
     ) -> bool:
         """
         Create a slideshow video with transitions.
@@ -173,9 +175,6 @@ class VideoCreator:
             fps: Frames per second
             codec: Video codec to use
             quality: Video quality preset
-
-        Returns:
-            True if video created successfully
         """
         if not self.ffmpeg_available:
             logger.error("FFmpeg is not available")
@@ -192,7 +191,7 @@ class VideoCreator:
                 for img_path in image_paths:
                     # FFmpeg concat demuxer format
                     f.write(f"file '{img_path.absolute()}'\n")
-                    f.write(f"duration {1/fps}\n")
+                    f.write(f"duration {1 / fps}\n")
                 # Add last image again for proper duration
                 if image_paths:
                     f.write(f"file '{image_paths[-1].absolute()}'\n")

@@ -1,4 +1,4 @@
-from typing import Mapping
+from collections.abc import Mapping
 from unittest.mock import Mock
 
 from src.controller.pipeline_controller import PipelineController
@@ -21,7 +21,9 @@ def test_get_gui_model_defaults_delegates_to_resolver() -> None:
     controller._gui_defaults_resolver = mock_resolver
     result = controller.get_gui_model_defaults("juggernaut", "preset-a")
     assert result is default
-    mock_resolver.resolve_for_gui.assert_called_once_with(model_name="juggernaut", preset_name="preset-a")
+    mock_resolver.resolve_for_gui.assert_called_once_with(
+        model_name="juggernaut", preset_name="preset-a"
+    )
 
 
 def test_build_merged_config_for_run_applies_style_defaults() -> None:
@@ -35,7 +37,11 @@ def test_build_merged_config_for_run_applies_style_defaults() -> None:
 
 def test_build_merged_config_for_run_respects_runtime_overrides() -> None:
     controller = _build_controller()
-    overrides: Mapping[str, Mapping[str, object]] = {"txt2img": {"refiner_model_name": "custom-refiner"}}
-    merged = controller.build_merged_config_for_run("sdxl_portrait_model", runtime_overrides=overrides)
+    overrides: Mapping[str, Mapping[str, object]] = {
+        "txt2img": {"refiner_model_name": "custom-refiner"}
+    }
+    merged = controller.build_merged_config_for_run(
+        "sdxl_portrait_model", runtime_overrides=overrides
+    )
     txt2img = merged.get("txt2img", {})
     assert txt2img.get("refiner_model_name") == "custom-refiner"

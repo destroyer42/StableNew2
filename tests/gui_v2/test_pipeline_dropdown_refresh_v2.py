@@ -1,4 +1,5 @@
 import tkinter as tk
+
 import pytest
 
 from src.gui.app_state_v2 import AppStateV2

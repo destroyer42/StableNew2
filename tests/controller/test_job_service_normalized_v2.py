@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Mapping
+from collections.abc import Mapping
 
 import pytest
 
@@ -43,7 +43,9 @@ def _make_normalized_record() -> NormalizedJobRecord:
         scheduler="ddim",
         base_model="sdxl",
         stage_chain=[
-            StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a")
+            StageConfig(
+                stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a"
+            )
         ],
         loop_type="pipeline",
         loop_count=1,
@@ -53,7 +55,9 @@ def _make_normalized_record() -> NormalizedJobRecord:
     )
 
 
-def _build_job_with_snapshot(record: NormalizedJobRecord, *, run_config: Mapping[str, object] | None = None) -> Job:
+def _build_job_with_snapshot(
+    record: NormalizedJobRecord, *, run_config: Mapping[str, object] | None = None
+) -> Job:
     job = Job(job_id=record.job_id, run_mode="queue", prompt_pack_id=record.prompt_pack_id)
     job.snapshot = build_job_snapshot(job, record, run_config=run_config)
     return job

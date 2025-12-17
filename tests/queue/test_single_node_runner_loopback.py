@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import time
 
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
-from src.controller.archive.pipeline_config_types import PipelineConfig
 
 
 def _cfg():
-    return PipelineConfig(prompt="p", model="m", sampler="Euler", width=512, height=512, steps=10, cfg_scale=7.0)
+    return PipelineConfig(
+        prompt="p", model="m", sampler="Euler", width=512, height=512, steps=10, cfg_scale=7.0
+    )
 
 
 def test_single_node_runner_executes_jobs_and_updates_status():
@@ -29,5 +31,7 @@ def test_single_node_runner_executes_jobs_and_updates_status():
     runner.stop()
 
     jobs = queue.list_jobs()
-    assert all(job.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.RUNNING} for job in jobs)
+    assert all(
+        job.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.RUNNING} for job in jobs
+    )
     assert set(executed) == {"j1", "j2"}

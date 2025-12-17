@@ -37,8 +37,6 @@ def test_split_queueable_records_filters_packless() -> None:
     controller = PipelineController.__new__(PipelineController)
     pack_record = _make_record(prompt_source="pack", prompt_pack_id="pack-id")
     manual_record = _make_record(prompt_source="manual", prompt_pack_id=None)
-    queueable, non_queueable = controller._split_queueable_records(
-        [pack_record, manual_record]
-    )
+    queueable, non_queueable = controller._split_queueable_records([pack_record, manual_record])
     assert pack_record in queueable
     assert manual_record in non_queueable

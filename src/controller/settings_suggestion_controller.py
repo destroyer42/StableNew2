@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 from src.ai.settings_generator_adapter import build_request_from_learning_data
 from src.ai.settings_generator_contract import SettingsSuggestion, SuggestionIntent
@@ -23,14 +23,16 @@ class SettingsSuggestionController:
         baseline_config: dict[str, Any],
         dataset_snapshot: dict[str, Any] | None = None,
     ) -> SettingsSuggestion:
-        request = build_request_from_learning_data(intent, pack_id, baseline_config, dataset_snapshot)
+        request = build_request_from_learning_data(
+            intent, pack_id, baseline_config, dataset_snapshot
+        )
         return self.generator.generate_suggestion(request)
 
     def apply_suggestion_to_config(
         self,
-        baseline_config: Dict[str, Any],
+        baseline_config: dict[str, Any],
         suggestion: SettingsSuggestion,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         merged = deepcopy(baseline_config or {})
         for stage in suggestion.stages:
             stage_name = stage.stage_name

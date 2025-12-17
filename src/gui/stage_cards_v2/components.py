@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable, Optional
 
 from src.gui import theme_v2
-from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE, SECONDARY_BUTTON_STYLE, SLIDER_VALUE_LABEL_STYLE
+from src.gui.theme_v2 import (
+    BODY_LABEL_STYLE,
+    SECONDARY_BUTTON_STYLE,
+    SLIDER_VALUE_LABEL_STYLE,
+    SURFACE_FRAME_STYLE,
+)
 
 
 class LabeledSlider(ttk.Frame):
@@ -21,7 +26,7 @@ class LabeledSlider(ttk.Frame):
         label_format: str = "{:.2f}",
         show_percent: bool = False,
         length: int = 180,
-        command: Optional[Callable[[float], None]] = None,
+        command: Callable[[float], None] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, **kwargs)
@@ -78,9 +83,13 @@ class LabeledSlider(ttk.Frame):
 
 
 class PromptSection(ttk.Frame):
-    def __init__(self, master: tk.Misc, *, title: str = "Prompt", height: int = 3, **kwargs) -> None:
+    def __init__(
+        self, master: tk.Misc, *, title: str = "Prompt", height: int = 3, **kwargs
+    ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=4, **kwargs)
-        ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", pady=(0, 2))
+        ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", pady=(0, 2)
+        )
         self.text = tk.Text(
             self,
             height=height,
@@ -106,20 +115,34 @@ class PromptSection(ttk.Frame):
 class SamplerSection(ttk.Frame):
     def __init__(self, master: tk.Misc, *, title: str = "Sampler / Steps / CFG", **kwargs) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=4, **kwargs)
-        ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+        ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, columnspan=4, sticky="w", pady=(0, 4)
+        )
 
         self.sampler_var = tk.StringVar()
         self.steps_var = tk.StringVar(value="20")
         self.cfg_var = tk.StringVar(value="7.0")
 
-        ttk.Label(self, text="Sampler", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", padx=(0, 4))
-        ttk.Entry(self, textvariable=self.sampler_var, width=18, style="Dark.TEntry").grid(row=1, column=1, sticky="ew", padx=(0, 8))
+        ttk.Label(self, text="Sampler", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", padx=(0, 4)
+        )
+        ttk.Entry(self, textvariable=self.sampler_var, width=18, style="Dark.TEntry").grid(
+            row=1, column=1, sticky="ew", padx=(0, 8)
+        )
 
-        ttk.Label(self, text="Steps", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", padx=(0, 4))
-        ttk.Entry(self, textvariable=self.steps_var, width=8, style="Dark.TEntry").grid(row=1, column=3, sticky="ew")
+        ttk.Label(self, text="Steps", style=BODY_LABEL_STYLE).grid(
+            row=1, column=2, sticky="w", padx=(0, 4)
+        )
+        ttk.Entry(self, textvariable=self.steps_var, width=8, style="Dark.TEntry").grid(
+            row=1, column=3, sticky="ew"
+        )
 
-        ttk.Label(self, text="CFG", style=BODY_LABEL_STYLE).grid(row=2, column=0, sticky="w", padx=(0, 4), pady=(4, 0))
-        ttk.Entry(self, textvariable=self.cfg_var, width=8, style="Dark.TEntry").grid(row=2, column=1, sticky="ew", pady=(4, 0))
+        ttk.Label(self, text="CFG", style=BODY_LABEL_STYLE).grid(
+            row=2, column=0, sticky="w", padx=(0, 4), pady=(4, 0)
+        )
+        ttk.Entry(self, textvariable=self.cfg_var, width=8, style="Dark.TEntry").grid(
+            row=2, column=1, sticky="ew", pady=(4, 0)
+        )
 
         for col in range(4):
             self.columnconfigure(col, weight=1 if col in (1, 3) else 0)
@@ -128,13 +151,17 @@ class SamplerSection(ttk.Frame):
 class SeedSection(ttk.Frame):
     def __init__(self, master: tk.Misc, *, title: str = "Seed", **kwargs) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=4, **kwargs)
-        ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", pady=(0, 2))
-        self.seed_var = tk.StringVar(value="0")
-        ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry").grid(row=1, column=0, sticky="ew")
-        self.randomize_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(self, text="Randomize", variable=self.randomize_var, style=SECONDARY_BUTTON_STYLE).grid(
-            row=1, column=1, sticky="w", padx=(8, 0)
+        ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", pady=(0, 2)
         )
+        self.seed_var = tk.StringVar(value="0")
+        ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry").grid(
+            row=1, column=0, sticky="ew"
+        )
+        self.randomize_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            self, text="Randomize", variable=self.randomize_var, style=SECONDARY_BUTTON_STYLE
+        ).grid(row=1, column=1, sticky="w", padx=(8, 0))
         self.columnconfigure(0, weight=1)
 
 

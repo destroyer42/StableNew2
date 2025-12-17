@@ -1,7 +1,8 @@
 import pytest
-from src.api.webui_resources import WebUIResourceService
 
+from src.api.webui_resources import WebUIResourceService
 from tests.helpers.webui_mocks import DummyWebUIClient
+
 
 @pytest.fixture
 def temp_webui_root(tmp_path):
@@ -23,6 +24,7 @@ def temp_webui_root(tmp_path):
     up_dir.mkdir(parents=True)
     (up_dir / "upscaler1.pt").write_text("")
     return tmp_path
+
 
 def test_api_backed_discovery():
     client = DummyWebUIClient(
@@ -49,6 +51,7 @@ def test_api_backed_discovery():
     assert any(r.name == "hyper1" for r in hypers)
     upscalers = service.list_upscalers()
     assert any(r.name == "upscaler1" for r in upscalers)
+
 
 def _build_resource_map(service: WebUIResourceService) -> dict[str, list]:
     return {

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import pytest
-
 from typing import Any
+
+import pytest
 
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome
 from src.pipeline.executor import Pipeline, PipelineStageError
@@ -19,7 +19,9 @@ class DummyClient:
 
 def test_generate_outcome_error_raises_pipeline_stage_error():
     outcome = GenerateOutcome(
-        error=GenerateError(code=GenerateErrorCode.INVALID_MODEL, message="bad model", stage="txt2img")
+        error=GenerateError(
+            code=GenerateErrorCode.INVALID_MODEL, message="bad model", stage="txt2img"
+        )
     )
     client = DummyClient(outcome)
     pipeline = Pipeline(client, StructuredLogger())

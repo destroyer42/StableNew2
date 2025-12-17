@@ -7,6 +7,7 @@ from typing import Any
 
 from src.gui import design_system_v2 as design_system
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
+from src.gui.panels_v2.debug_log_panel_v2 import DebugLogPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -20,7 +21,6 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
-from src.gui.panels_v2.debug_log_panel_v2 import DebugLogPanelV2
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class PipelineTabFrame(ttk.Frame):
         # PR-GUI-F1: Run Controls panel removed - controls moved to QueuePanelV2
 
         queue_card = _create_card(self.right_scroll.inner)
-        queue_card.grid(row=1, column=0, sticky="ew", padx=(0, 12),pady=(0, 8))
+        queue_card.grid(row=1, column=0, sticky="ew", padx=(0, 12), pady=(0, 8))
         self.queue_panel = QueuePanelV2(
             queue_card,
             controller=queue_controller,
@@ -139,7 +139,7 @@ class PipelineTabFrame(ttk.Frame):
         self.queue_panel.grid(row=0, column=0, sticky="ew")
 
         running_job_card = _create_card(self.right_scroll.inner)
-        running_job_card.grid(row=2, column=0, sticky="ew", padx=(0, 12),pady=(0, 8))
+        running_job_card.grid(row=2, column=0, sticky="ew", padx=(0, 12), pady=(0, 8))
         self.running_job_panel = RunningJobPanelV2(
             running_job_card,
             controller=queue_controller,
@@ -148,7 +148,7 @@ class PipelineTabFrame(ttk.Frame):
         self.running_job_panel.grid(row=0, column=0, sticky="ew")
 
         history_card = _create_card(self.right_scroll.inner)
-        history_card.grid(row=3, column=0, sticky="nsew", padx=(0, 12),pady=(0, 0))
+        history_card.grid(row=3, column=0, sticky="nsew", padx=(0, 12), pady=(0, 0))
         history_card.rowconfigure(0, weight=1)
         self.history_panel = JobHistoryPanelV2(
             history_card,
@@ -169,7 +169,6 @@ class PipelineTabFrame(ttk.Frame):
         )
         self.diagnostics_dashboard.grid(row=0, column=0, sticky="nsew")
 
-
         self.stage_cards_panel = StageCardsPanel(
             self.stage_cards_frame,
             controller=self.pipeline_controller,
@@ -181,8 +180,6 @@ class PipelineTabFrame(ttk.Frame):
         txt2img_card = getattr(self.stage_cards_panel, "txt2img_card", None)
         img2img_card = getattr(self.stage_cards_panel, "img2img_card", None)
         upscale_card = getattr(self.stage_cards_panel, "upscale_card", None)
-        adetailer_card = getattr(self.stage_cards_panel, "adetailer_card", None)
-
         self.txt2img_width = getattr(txt2img_card, "width_var", tk.IntVar(value=512))
         self.txt2img_height = getattr(txt2img_card, "height_var", tk.IntVar(value=512))
         self.txt2img_steps = getattr(txt2img_card, "steps_var", tk.IntVar(value=20))
@@ -373,9 +370,16 @@ class PipelineTabFrame(ttk.Frame):
             pass
 
     def _apply_stage_visibility(self) -> None:
-        stage_order = get_pipeline_stage_order() or ["txt2img",  "img2img", "ADetailer", "upscale"]
-        enabled = self.sidebar.get_enabled_stages() if hasattr(self, "sidebar") else ["txt2img", "img2img", "ADetailer", "upscale"]
-        mapping = {stage_name: getattr(self.stage_cards_panel, f"{stage_name}_card", None) for stage_name in stage_order}
+        stage_order = get_pipeline_stage_order() or ["txt2img", "img2img", "ADetailer", "upscale"]
+        enabled = (
+            self.sidebar.get_enabled_stages()
+            if hasattr(self, "sidebar")
+            else ["txt2img", "img2img", "ADetailer", "upscale"]
+        )
+        mapping = {
+            stage_name: getattr(self.stage_cards_panel, f"{stage_name}_card", None)
+            for stage_name in stage_order
+        }
         ordered_cards = []
         for stage_name in stage_order:
             if stage_name in enabled:
@@ -442,7 +446,9 @@ class PipelineTabFrame(ttk.Frame):
         except Exception:
             pass
 
-    def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None = None) -> None:
+    def _on_app_state_resources_changed(
+        self, resources: dict[str, list[Any]] | None = None
+    ) -> None:
         panel = getattr(self, "stage_cards_panel", None)
         if panel is not None and resources:
             panel.apply_resource_update(resources)
@@ -472,7 +478,9 @@ class PipelineTabFrame(ttk.Frame):
         return has_records
 
     def _get_pipeline_preview_jobs(self) -> list[NormalizedJobRecord]:
-        controller = self.pipeline_controller or getattr(self.app_controller, "pipeline_controller", None)
+        controller = self.pipeline_controller or getattr(
+            self.app_controller, "pipeline_controller", None
+        )
         if controller is None:
             return []
         getter = getattr(controller, "get_preview_jobs", None)

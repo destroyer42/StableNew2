@@ -6,33 +6,31 @@ import logging
 import os
 import threading
 import uuid
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Callable, List, Mapping, Optional
 from pathlib import Path
+from typing import Any
 
-from src.queue.job_model import Job, JobPriority, JobStatus
-from src.queue.job_queue import JobQueue
-from src.queue.single_node_runner import SingleNodeJobRunner
-from src.queue.job_history_store import JobHistoryStore, JSONLJobHistoryStore
-from src.config.app_config import get_job_history_path
 from src.cluster.worker_registry import WorkerRegistry
-from src.cluster.worker_model import WorkerDescriptor
+from src.config.app_config import get_job_history_path
 from src.history.history_record import HistoryRecord
-from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import normalize_run_result
 from src.pipeline.replay_engine import ReplayEngine
+from src.queue.job_history_store import JobHistoryStore, JSONLJobHistoryStore
+from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_queue import JobQueue
+from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.queue_store_v2 import (
-    QueueSnapshotV1,
     SCHEMA_VERSION,
+    QueueSnapshotV1,
     UnsupportedQueueSchemaError,
     load_queue_snapshot,
     save_queue_snapshot,
 )
 from src.utils import LogContext, log_with_ctx
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
-
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +86,10 @@ class JobExecutionController:
         self._queue_paused = False
         self._queue_persistence: QueuePersistenceManager | None = None
         self._runner = SingleNodeJobRunner(
-            self._queue, self._run_job_callback, poll_interval=poll_interval, on_status_change=self._on_status
+            self._queue,
+            self._run_job_callback,
+            poll_interval=poll_interval,
+            on_status_change=self._on_status,
         )
         self._worker_thread_name: str | None = None
 
@@ -96,12 +97,14 @@ class JobExecutionController:
         if replay_target is None and hasattr(self._runner, "run_njr"):
             replay_target = self._runner
         if replay_target is None and callable(self._execute_job):
+
             class _ExecuteAdapter:
                 def __init__(self, fn: Callable[[Any], Any]) -> None:
                     self._fn = fn
 
                 def run_njr(self, record: NormalizedJobRecord, *_: Any, **__: Any) -> Any:
                     return self._fn(record)  # type: ignore[arg-type]
+
             replay_target = _ExecuteAdapter(self._execute_job)
         self._replay_engine = ReplayEngine(replay_target, cancel_token=None)
         self._started = False
@@ -182,7 +185,9 @@ class JobExecutionController:
     def clear_status_callback(self, key: str) -> None:
         self._callbacks.pop(key, None)
 
-    def set_status_dispatcher(self, dispatcher: Callable[[Callable[[], None]], None] | None) -> None:
+    def set_status_dispatcher(
+        self, dispatcher: Callable[[Callable[[], None]], None] | None
+    ) -> None:
         """Set dispatcher used to marshal status callbacks onto the GUI thread."""
         self._status_dispatcher = dispatcher
 
@@ -190,6 +195,7 @@ class JobExecutionController:
         for cb in list(self._callbacks.values()):
             try:
                 if self._status_dispatcher:
+
                     def _call(callback=cb, j=job, s=status):
                         callback(j, s)
 

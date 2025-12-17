@@ -42,7 +42,7 @@ class TestJT06PromptPackQueueRun:
             root = Path(temp_dir)
             yield root
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     def test_jt06_single_pack_queue_run(self, mock_webui_api, app_root):
         """Test single prompt pack queued for execution.
 
@@ -56,8 +56,8 @@ class TestJT06PromptPackQueueRun:
         """
         # Setup mock for txt2img
         mock_webui_api.return_value.txt2img.return_value = {
-            'images': [{'data': 'base64_encoded_image'}],
-            'info': '{"prompt": "test prompt from pack", "seed": 12345}'
+            "images": [{"data": "base64_encoded_image"}],
+            "info": '{"prompt": "test prompt from pack", "seed": 12345}',
         }
 
         test_pack_id = "jt06_test_pack"
@@ -90,6 +90,7 @@ class TestJT06PromptPackQueueRun:
             if hasattr(app_state, "job_draft"):
                 try:
                     from src.gui.app_state_v2 import PackJobEntry
+
                     pack_entry = PackJobEntry(
                         pack_id=test_pack_id,
                         pack_name=test_pack_id,
@@ -103,7 +104,9 @@ class TestJT06PromptPackQueueRun:
             job_entry = start_run_and_wait(app_controller, use_run_now=True, timeout_seconds=30.0)
 
             # Assert job metadata
-            assert job_entry.run_mode == "queue", f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
+            assert job_entry.run_mode == "queue", (
+                f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
+            )
 
             # Get and verify stage plan
             plan = get_stage_plan_for_job(app_controller, job_entry)
@@ -113,7 +116,7 @@ class TestJT06PromptPackQueueRun:
             stage_types = plan.get_stage_types()
             assert "txt2img" in stage_types, f"Expected 'txt2img' in stage types, got {stage_types}"
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     def test_jt06_pack_queue_add_only(self, mock_webui_api, app_root):
         """Test adding pack to queue without immediate execution.
 
@@ -125,8 +128,8 @@ class TestJT06PromptPackQueueRun:
         """
         # Setup mock for txt2img
         mock_webui_api.return_value.txt2img.return_value = {
-            'images': [{'data': 'base64_encoded_image'}],
-            'info': '{"prompt": "queued pack prompt", "seed": 54321}'
+            "images": [{"data": "base64_encoded_image"}],
+            "info": '{"prompt": "queued pack prompt", "seed": 54321}',
         }
 
         test_prompt = "A majestic mountain range at dawn"
@@ -159,13 +162,15 @@ class TestJT06PromptPackQueueRun:
             )
 
             # Assert job metadata
-            assert job_entry.run_mode == "queue", f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
+            assert job_entry.run_mode == "queue", (
+                f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
+            )
 
             # Verify job appears in history
             latest = get_latest_job(app_controller)
             assert latest is not None, "Job should appear in history"
 
-    @patch('src.api.webui_api.WebUIAPI')
+    @patch("src.api.webui_api.WebUIAPI")
     def test_jt06_pack_with_generation_stage(self, mock_webui_api, app_root):
         """Test prompt pack execution includes proper generation stage.
 
@@ -177,8 +182,8 @@ class TestJT06PromptPackQueueRun:
         """
         # Setup mock for txt2img
         mock_webui_api.return_value.txt2img.return_value = {
-            'images': [{'data': 'base64_encoded_image'}],
-            'info': '{"prompt": "pack generation test", "seed": 99999}'
+            "images": [{"data": "base64_encoded_image"}],
+            "info": '{"prompt": "pack generation test", "seed": 99999}',
         }
 
         test_prompt = "A futuristic city with flying vehicles"

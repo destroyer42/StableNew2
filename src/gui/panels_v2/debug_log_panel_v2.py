@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from datetime import datetime
 from typing import Any
 
-from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, SURFACE_FRAME_STYLE, PADDING_MD, STATUS_STRONG_LABEL_STYLE
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.theme_v2 import (
+    BACKGROUND_ELEVATED,
+    PADDING_MD,
+    STATUS_STRONG_LABEL_STYLE,
+    SURFACE_FRAME_STYLE,
+    TEXT_PRIMARY,
+)
 from src.pipeline.job_models_v2 import JobLifecycleLogEvent
 
 
 class DebugLogPanelV2(ttk.Frame):
-    def __init__(self, master: tk.Misc, *, app_state: AppStateV2 | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, master: tk.Misc, *, app_state: AppStateV2 | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=PADDING_MD, **kwargs)
         self.app_state = app_state
         header = ttk.Label(self, text="Job Lifecycle Log", style=STATUS_STRONG_LABEL_STYLE)

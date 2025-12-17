@@ -207,9 +207,6 @@ class DeadCodeDetector:
         for imports in self.import_graph.values():
             all_imports.update(imports)
 
-        # Find referenced module names from file structure
-        referenced_modules = self.find_referenced_modules(self.all_files)
-
         # Find unused files
         unused = []
         for py_file in self.all_files:
@@ -391,8 +388,6 @@ class FileArchiver:
         try:
             with open(manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
-
-            archive_dir = manifest_path.parent
 
             for file_info in manifest["archived_files"]:
                 archive_path = self.root_dir / file_info["archive_path"]

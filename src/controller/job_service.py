@@ -2,41 +2,41 @@
 
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import asdict
-from datetime import datetime
 import logging
 import time
+from collections import deque
+from collections.abc import Callable
+from dataclasses import asdict
+from datetime import datetime
 from threading import Lock
+from typing import Any, Literal, Protocol
 
-from typing import Any, Callable, Literal, Protocol
-
+from src.config.app_config import get_process_container_config, get_watchdog_config
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
-from src.config.app_config import get_process_container_config, get_watchdog_config
-from src.queue.job_model import Job, JobExecutionMetadata, JobPriority, JobStatus, RetryAttempt
 from src.gui.pipeline_panel_v2 import format_queue_job_summary
-from src.queue.job_queue import JobQueue
-from src.queue.single_node_runner import SingleNodeJobRunner
-from src.queue.job_history_store import JobHistoryStore
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
+    JobView,
     NormalizedJobRecord,
     UnifiedJobSummary,
-    JobView,
 )
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest
+from src.queue.job_history_store import JobHistoryStore
+from src.queue.job_model import Job, JobExecutionMetadata, JobPriority, JobStatus, RetryAttempt
+from src.queue.job_queue import JobQueue
+from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils import LogContext, log_with_ctx
-from src.utils.error_envelope_v2 import serialize_envelope, UnifiedErrorEnvelope
+from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, serialize_envelope
 from src.utils.process_container_v2 import (
+    PROCESS_CONTAINER_LOG_PREFIX,
     NullProcessContainer,
     ProcessContainer,
     ProcessContainerConfig,
-    PROCESS_CONTAINER_LOG_PREFIX,
     build_process_container,
 )
-from src.utils.watchdog_v2 import JobWatchdog, WatchdogConfig, WATCHDOG_LOG_PREFIX
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+from src.utils.watchdog_v2 import WATCHDOG_LOG_PREFIX, JobWatchdog, WatchdogConfig
 
 try:
     import psutil  # type: ignore[import]
@@ -46,7 +46,7 @@ except ImportError:  # pragma: no cover - psutil is optional for cleanup
 logger = logging.getLogger(__name__)
 
 
-def _terminate_single_process(proc: "psutil.Process", *, timeout: float) -> None:
+def _terminate_single_process(proc: psutil.Process, *, timeout: float) -> None:
     if proc is None:
         return
     try:
@@ -105,6 +105,7 @@ def _terminate_process_tree(pid: int, *, timeout: float = 3.0) -> None:
     for child in reversed(children):
         _terminate_single_process(child, timeout=timeout)
     _terminate_single_process(root, timeout=timeout)
+
 
 QueueStatus = Literal["idle", "running", "paused"]
 
@@ -241,7 +242,7 @@ class JobService:
 
     def set_status_callback(self, name: str, callback: Callable[[Job, JobStatus], None]) -> None:
         """PR-D: Register a callback for job status changes with full job + status info.
-        
+
         Args:
             name: Identifier for this callback (e.g., "gui_queue_history")
             callback: Function that receives (job: Job, status: JobStatus)
@@ -284,7 +285,7 @@ class JobService:
             ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
             extra_fields={"run_mode": mode},
         )
-        record = self._prepare_job_for_submission(job)
+        self._prepare_job_for_submission(job)
         if job.status == JobStatus.FAILED:
             # Record the failed submission without attempting execution
             self.job_queue.submit(job)
@@ -316,7 +317,7 @@ class JobService:
                 )
             else:
                 job.unified_summary = record.to_unified_summary()
-                setattr(job, "_normalized_record", record)
+                job._normalized_record = record
         return record
 
     def _job_from_njr(
@@ -342,7 +343,9 @@ class JobService:
         job._normalized_record = record  # type: ignore[attr-defined]
         return job
 
-    def enqueue_njrs(self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest) -> list[str]:
+    def enqueue_njrs(
+        self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest
+    ) -> list[str]:
         """Enqueue a batch of NormalizedJobRecord instances."""
         job_ids: list[str] = []
         for record in njrs[: run_request.max_njr_count]:
@@ -351,7 +354,9 @@ class JobService:
             job_ids.append(job.job_id)
         return job_ids
 
-    def run_njrs_direct(self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest) -> list[str]:
+    def run_njrs_direct(
+        self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest
+    ) -> list[str]:
         """Run NJRs immediately (Run Now semantics)."""
         job_ids: list[str] = []
         for record in njrs[: run_request.max_njr_count]:
@@ -363,7 +368,7 @@ class JobService:
 
     def submit_direct(self, job: Job) -> dict | None:
         """Execute a job synchronously (bypasses queue for 'Run Now' semantics).
-        
+
         PR-106: Explicit API for direct execution path.
         Ensures returned result envelope includes job_id at the top level.
         """
@@ -388,7 +393,7 @@ class JobService:
 
     def submit_queued(self, job: Job) -> None:
         """Submit a job to the queue for background execution.
-        
+
         PR-106: Explicit API for queued execution path.
         """
         log_with_ctx(
@@ -434,7 +439,9 @@ class JobService:
                 raise
             self._worker_started = True
 
-    def _validate_normalized_record(self, record: NormalizedJobRecord) -> tuple[bool, dict[str, str]]:
+    def _validate_normalized_record(
+        self, record: NormalizedJobRecord
+    ) -> tuple[bool, dict[str, str]]:
         """Basic validation of normalized job metadata before queue acceptance."""
         if not record.job_id:
             return False, {"code": "missing_job_id", "message": "Normalized job is missing job_id."}
@@ -515,7 +522,7 @@ class JobService:
 
     def submit_jobs(self, jobs: list[Job]) -> None:
         """Submit multiple jobs respecting each job's configured run_mode.
-        
+
         PR-044: Batch submission for randomizer variant jobs.
         """
         for job in jobs:
@@ -586,7 +593,6 @@ class JobService:
         metadata = self._pop_combined_metadata(job_id)
         if not metadata or not metadata.external_pids:
             return
-        reason_suffix = f" ({reason})" if reason else ""
         log_with_ctx(
             logger,
             logging.INFO,
@@ -719,12 +725,17 @@ class JobService:
                     "run_mode": job.run_mode,
                     "prompt_source": getattr(job, "prompt_source", None),
                     "prompt_pack_id": getattr(job, "prompt_pack_id", None),
-                    "validation_status": result_code or ("ok" if job.status != JobStatus.FAILED else "failed"),
-                    "legacy_snapshot_mode": bool(getattr(record, "extra_metadata", {}).get("legacy_snapshot_mode"))
+                    "validation_status": result_code
+                    or ("ok" if job.status != JobStatus.FAILED else "failed"),
+                    "legacy_snapshot_mode": bool(
+                        getattr(record, "extra_metadata", {}).get("legacy_snapshot_mode")
+                    )
                     if record
                     else False,
                     "external_pids": list(job.execution_metadata.external_pids),
-                    "retry_attempts": [asdict(attempt) for attempt in job.execution_metadata.retry_attempts],
+                    "retry_attempts": [
+                        asdict(attempt) for attempt in job.execution_metadata.retry_attempts
+                    ],
                     "started_at": job.started_at.isoformat() if job.started_at else None,
                     "completed_at": job.completed_at.isoformat() if job.completed_at else None,
                     "error_envelope": serialize_envelope(job.error_envelope),
@@ -775,6 +786,14 @@ class JobService:
             self.runner.stop()
             self._worker_started = False
 
+    def stop(self) -> None:
+        """Stop queue worker thread and join with timeout (idempotent).
+
+        This is the public lifecycle method for shutting down queue processing.
+        Safe to call multiple times.
+        """
+        self._stop_runner()
+
     def _handle_job_status_change(self, job: Job, status: JobStatus) -> None:
         log_with_ctx(
             logger,
@@ -806,10 +825,10 @@ class JobService:
             self._stop_watchdog(job.job_id)
             self.cleanup_external_processes(job.job_id, reason=status.value.lower())
             self._destroy_container(job.job_id)
-        
+
         # PR-D: Emit status-specific callbacks for GUI queue/history updates
         self._emit_status_callbacks(job, status)
-        
+
         self._emit_queue_updated()
         if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
             self._emit(self.EVENT_QUEUE_EMPTY)
@@ -924,11 +943,12 @@ class JobService:
             if key.startswith("_status_callback_")
             for cb in callbacks
         ]
-        
+
         self._build_job_view(job, status)
         for callback in status_callbacks:
             try:
                 if self._event_dispatcher:
+
                     def _call(cb=callback, j=job, s=status):
                         cb(j, s)
 
@@ -969,12 +989,12 @@ class JobService:
                 result=getattr(job, "result", None),
             )
             summary = record.to_unified_summary()
-            setattr(job, "unified_summary", summary)
+            job.unified_summary = summary
             return view
 
         fallback_label = getattr(job, "label", job.job_id) or job.job_id
         fallback_summary = UnifiedJobSummary.from_job(job, normalized_status)
-        setattr(job, "unified_summary", fallback_summary)
+        job.unified_summary = fallback_summary
         return JobView(
             job_id=job.job_id,
             status=normalized_status.value,

@@ -21,6 +21,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
+from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
     BatchSettings,
     JobStatusV2,
@@ -31,7 +32,6 @@ from src.pipeline.job_models_v2 import (
     StagePromptInfo,
 )
 from src.pipeline.job_requests_v2 import PipelineRunRequest
-from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.randomizer import (
     RandomizationPlanV2,
     RandomizationSeedMode,
@@ -166,7 +166,7 @@ class JobBuilderV2:
         jobs: list[NormalizedJobRecord] = []
         output_dir = run_request.explicit_output_dir or "output"
         filename_template = "{seed}"
-        for index, entry in enumerate(entries[: run_request.max_njr_count]):
+        for _index, entry in enumerate(entries[: run_request.max_njr_count]):
             config = entry.config_snapshot or {}
             txt2img_config = config.get("txt2img", {})
             seed = self._extract_config_value(config, "seed") or txt2img_config.get("seed")
@@ -176,7 +176,9 @@ class JobBuilderV2:
                 enabled=True,
                 steps=int(txt2img_config.get("steps") or config.get("steps") or 20),
                 cfg_scale=float(txt2img_config.get("cfg_scale") or config.get("cfg_scale") or 7.5),
-                sampler_name=txt2img_config.get("sampler_name") or config.get("sampler") or "DPM++ 2M",
+                sampler_name=txt2img_config.get("sampler_name")
+                or config.get("sampler")
+                or "DPM++ 2M",
                 scheduler=txt2img_config.get("scheduler") or config.get("scheduler") or "ddim",
                 model=txt2img_config.get("model") or config.get("model") or "unknown",
                 vae=txt2img_config.get("vae"),

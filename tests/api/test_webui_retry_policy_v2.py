@@ -66,7 +66,11 @@ def test_retry_callback_records_attempts(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr("src.api.client.requests.Session.request", stub_request)
     logged: list[tuple[str, int, int, str]] = []
 
-    client = SDWebUIClient(retry_callback=lambda stage, attempt_index, max_attempts, reason: logged.append((stage, attempt_index, max_attempts, reason)))
+    client = SDWebUIClient(
+        retry_callback=lambda stage, attempt_index, max_attempts, reason: logged.append(
+            (stage, attempt_index, max_attempts, reason)
+        )
+    )
     client._sleep = lambda _: None
 
     result = client.txt2img({"prompt": "callback test"})

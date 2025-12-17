@@ -10,7 +10,6 @@ Tests:
 from __future__ import annotations
 
 import tkinter as tk
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -116,12 +115,12 @@ class TestQueuePanelPauseResumeButton:
             controller=mock_controller,
             app_state=mock_app_state,
         )
-        
+
         # Not paused - should say "Pause Queue"
         mock_app_state.is_queue_paused = False
         panel.update_from_app_state(mock_app_state)
         assert "Pause" in panel.pause_resume_button.cget("text")
-        
+
         # Paused - should say "Resume Queue"
         mock_app_state.is_queue_paused = True
         panel.update_from_app_state(mock_app_state)

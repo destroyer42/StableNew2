@@ -5,8 +5,8 @@ import pytest
 
 import src.pipeline.executor as executor_module
 from src.api.types import GenerateResult
-from src.pipeline.executor import Pipeline
 from src.gui.state import CancellationError
+from src.pipeline.executor import Pipeline
 from src.utils.logger import StructuredLogger
 
 

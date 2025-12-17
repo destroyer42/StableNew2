@@ -27,17 +27,18 @@ As of PR-CORE1-B2 and PR-CORE1-12:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict
 from time import time
-from typing import Any, Mapping
+from typing import Any
 from uuid import uuid4
 
+from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     NormalizedJobRecord,
     StageConfig,
 )
-from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 
@@ -160,7 +161,9 @@ def build_njr_from_history_dict(legacy_dict: dict[str, Any]) -> NormalizedJobRec
         # Prefer normalized_job section if present
         normalized = normalized_job_from_snapshot(snapshot)
         if normalized is None and isinstance(snapshot.get("normalized_job"), Mapping):
-            normalized = normalized_job_from_snapshot({"normalized_job": snapshot["normalized_job"]})
+            normalized = normalized_job_from_snapshot(
+                {"normalized_job": snapshot["normalized_job"]}
+            )
         if normalized is not None:
             return normalized
 
@@ -170,8 +173,14 @@ def build_njr_from_history_dict(legacy_dict: dict[str, Any]) -> NormalizedJobRec
     if isinstance(pipeline_config, Mapping):
         config = PipelineConfig(
             prompt=str(pipeline_config.get("prompt", "") or ""),
-            model=_normalize_model_name(pipeline_config.get("model", "") or pipeline_config.get("model_name", "")),
-            sampler=str(pipeline_config.get("sampler", "") or pipeline_config.get("sampler_name", "") or "Euler a"),
+            model=_normalize_model_name(
+                pipeline_config.get("model", "") or pipeline_config.get("model_name", "")
+            ),
+            sampler=str(
+                pipeline_config.get("sampler", "")
+                or pipeline_config.get("sampler_name", "")
+                or "Euler a"
+            ),
             width=_coerce_int(pipeline_config.get("width", 512), 512),
             height=_coerce_int(pipeline_config.get("height", 512), 512),
             steps=_coerce_int(pipeline_config.get("steps", 20), 20),

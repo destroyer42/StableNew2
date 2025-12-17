@@ -41,8 +41,12 @@ def make_event_controller(pipeline_controller: DummyPipelineController | None) -
     controller._last_run_config = {}
     controller._append_log = lambda text: None
     controller._build_run_config = MethodType(AppController._build_run_config, controller)
-    controller._ensure_run_mode_default = MethodType(AppController._ensure_run_mode_default, controller)
-    controller._prepare_queue_run_config = MethodType(AppController._prepare_queue_run_config, controller)
+    controller._ensure_run_mode_default = MethodType(
+        AppController._ensure_run_mode_default, controller
+    )
+    controller._prepare_queue_run_config = MethodType(
+        AppController._prepare_queue_run_config, controller
+    )
     controller._start_run_v2_calls = 0
     controller._start_run_v2 = MethodType(_legacy_run, controller)
     return controller
@@ -66,7 +70,9 @@ def test_on_add_to_queue_updates_run_config_and_uses_pipeline_controller() -> No
     pipeline_controller = DummyPipelineController()
     controller = make_event_controller(pipeline_controller)
     controller.on_add_to_queue()
-    assert pipeline_controller.enqueued_run_configs, "PipelineController should receive a run config"
+    assert pipeline_controller.enqueued_run_configs, (
+        "PipelineController should receive a run config"
+    )
     run_config = pipeline_controller.enqueued_run_configs[-1]
     assert run_config is not None
     assert run_config["run_mode"] == RunMode.QUEUE.value

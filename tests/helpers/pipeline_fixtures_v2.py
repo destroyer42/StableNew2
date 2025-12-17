@@ -20,7 +20,6 @@ from typing import Any
 from src.pipeline.job_models_v2 import BatchSettings, NormalizedJobRecord, OutputSettings
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 
-
 # ---------------------------------------------------------------------------
 # Run Mode / Source Enums (for test isolation)
 # ---------------------------------------------------------------------------
@@ -28,12 +27,14 @@ from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 
 class RunMode(str, Enum):
     """Run mode for pipeline jobs."""
+
     DIRECT = "direct"
     QUEUE = "queue"
 
 
 class RunSource(str, Enum):
     """Source of run request."""
+
     RUN = "run"
     RUN_NOW = "run_now"
     ADD_TO_QUEUE = "add_to_queue"
@@ -47,6 +48,7 @@ class RunSource(str, Enum):
 @dataclass
 class RunConfigV2:
     """Minimal run config for testing controller paths."""
+
     run_mode: RunMode = RunMode.QUEUE
     source: RunSource = RunSource.RUN
     prompt_pack_id: str | None = "pack-001"
@@ -128,6 +130,7 @@ class MinimalPipelineConfig:
     This is a test double, not the real PipelineConfig, but has the same
     attributes needed for JobBuilder and controller tests.
     """
+
     model: str = "base-model"
     prompt: str = "test prompt"
     negative_prompt: str = ""

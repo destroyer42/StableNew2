@@ -6,10 +6,10 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from src.gui.enhanced_slider import EnhancedSlider
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
-from src.gui.enhanced_slider import EnhancedSlider
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 
 
@@ -43,18 +43,23 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
                 child.destroy()
         except Exception:
             pass
-        ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", padx=(0, 4)
+        )
         self.sampler_combo = ttk.Combobox(
             self.sampler_section,
             textvariable=self.sampler_var,
-            values=getattr(self.controller, "get_available_samplers", lambda: [])() or ["Euler", "DPM++ 2M"],
+            values=getattr(self.controller, "get_available_samplers", lambda: [])()
+            or ["Euler", "DPM++ 2M"],
             state="readonly",
             width=18,
             style="Dark.TCombobox",
         )
         self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
-        ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(
+            row=0, column=2, sticky="w", padx=(0, 4)
+        )
         # Steps combobox with common values
         steps_values = ["10", "15", "20", "25", "30", "40", "50", "75", "100"]
         self.steps_combo = ttk.Combobox(
@@ -67,9 +72,10 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         )
         self.steps_combo.grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
+        ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0)
+        )
         # CFG slider with fixed range 1.0-30.0
-        from src.gui.enhanced_slider import EnhancedSlider
         self.cfg_slider = EnhancedSlider(
             self.sampler_section,
             from_=1.0,
@@ -87,7 +93,9 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         meta.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
-        ttk.Label(meta, text="Denoise", style=BODY_LABEL_STYLE).grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(meta, text="Denoise", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", padx=(0, 4)
+        )
         slider_frame = ttk.Frame(meta, style=SURFACE_FRAME_STYLE)
         slider_frame.grid(row=0, column=1, sticky="ew", padx=(0, 8))
         EnhancedSlider(
@@ -99,7 +107,9 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             label="",
         ).pack(fill="x", expand=True)
 
-        ttk.Label(meta, text="Mask mode", style=BODY_LABEL_STYLE).grid(row=0, column=2, sticky="w", padx=(0, 4))
+        ttk.Label(meta, text="Mask mode", style=BODY_LABEL_STYLE).grid(
+            row=0, column=2, sticky="w", padx=(0, 4)
+        )
         ttk.Combobox(
             meta,
             textvariable=self.mask_mode_var,
@@ -109,7 +119,9 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         ).grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(row=1, column=0, sticky="w", pady=(6, 2))
+        ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", pady=(6, 2)
+        )
         # Width combobox with multiples of 128 only
         width_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
         self.width_combo = ttk.Combobox(
@@ -121,9 +133,11 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.width_combo.grid(row=1, column=1, sticky="ew", padx=(0, 8))
-        
-        ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE).grid(row=1, column=2, sticky="w", pady=(6, 2))
-        # Height combobox with multiples of 128 only  
+
+        ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE).grid(
+            row=1, column=2, sticky="w", pady=(6, 2)
+        )
+        # Height combobox with multiples of 128 only
         height_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
         self.height_combo = ttk.Combobox(
             meta,
@@ -243,10 +257,13 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
     @staticmethod
     def _normalize_sampler_entry(entry: Any) -> str:
         if isinstance(entry, dict):
-            return (
-                str(entry.get("name") or entry.get("label") or entry.get("sampler_name") or entry.get("title") or "")
-                .strip()
-            )
+            return str(
+                entry.get("name")
+                or entry.get("label")
+                or entry.get("sampler_name")
+                or entry.get("title")
+                or ""
+            ).strip()
         return str(entry).strip()
 
     @staticmethod

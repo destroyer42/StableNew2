@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+
 import pytest
 
 from src.gui.tooltip import attach_tooltip

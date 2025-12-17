@@ -24,7 +24,9 @@ def test_options_payload_is_deduped(monkeypatch):
 
     monkeypatch.setattr(client, "update_options", fake_update)
     time_values = iter([0.0, 0.0, 2.0, 6.0])
-    webui_api = WebUIAPI(client=client, options_min_interval=5.0, time_provider=lambda: next(time_values))
+    webui_api = WebUIAPI(
+        client=client, options_min_interval=5.0, time_provider=lambda: next(time_values)
+    )
 
     assert webui_api.apply_options({"foo": "bar"})
     assert len(calls) == 1
@@ -49,7 +51,9 @@ def test_stage_call_not_blocked(monkeypatch):
     applied: list[dict[str, Any]] = []
     stages: list[str] = []
 
-    monkeypatch.setattr(client, "update_options", lambda updates: applied.append(dict(updates)) or {})
+    monkeypatch.setattr(
+        client, "update_options", lambda updates: applied.append(dict(updates)) or {}
+    )
 
     def fake_generate(stage: str, payload: dict[str, Any], **kwargs: Any) -> GenerateOutcome:
         stages.append(stage)

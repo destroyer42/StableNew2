@@ -24,7 +24,10 @@ def test_jobrunner_integration_updates_status_and_result():
     runner.stop()
     jobs = queue.list_jobs()
     assert jobs
-    assert jobs[0].result is not None or jobs[0].status in {jobs[0].status.FAILED, jobs[0].status.RUNNING}
+    assert jobs[0].result is not None or jobs[0].status in {
+        jobs[0].status.FAILED,
+        jobs[0].status.RUNNING,
+    }
 
 
 def test_runner_executes_restored_jobs() -> None:

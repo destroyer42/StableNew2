@@ -41,7 +41,9 @@ def test_manual_diagnostics_bundle_triggers_builder(monkeypatch, tmp_path: Path)
     monkeypatch.setattr("src.utils.diagnostics_bundle_v2.build_crash_bundle", fake_build)
     monkeypatch.setattr("src.controller.app_controller.build_crash_bundle", fake_build)
 
-    controller = AppController(None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService())
+    controller = AppController(
+        None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
+    )
     controller.generate_diagnostics_bundle_manual()
 
     assert recorded
@@ -58,7 +60,9 @@ def test_watchdog_violation_generates_bundle(monkeypatch, tmp_path: Path) -> Non
     monkeypatch.setattr("src.utils.diagnostics_bundle_v2.build_crash_bundle", fake_build)
     monkeypatch.setattr("src.controller.app_controller.build_crash_bundle", fake_build)
 
-    controller = AppController(None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService())
+    controller = AppController(
+        None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
+    )
     exc = WatchdogViolationError("Watchdog MEMORY")
     envelope = wrap_exception(
         exc,

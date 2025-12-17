@@ -269,7 +269,7 @@ class TestPipelineEarlyOut:
 
         with patch("src.pipeline.executor.save_image_from_base64", return_value=True):
             with patch("src.pipeline.executor.load_image_to_base64", return_value="base64"):
-                results = pipeline.run_full_pipeline("test", config, cancel_token=cancel_token)
+                pipeline.run_full_pipeline("test", config, cancel_token=cancel_token)
 
         # API should not be called
         assert mock_client.generate_images.call_count == 0

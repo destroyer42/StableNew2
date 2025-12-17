@@ -8,8 +8,9 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from .state import CancellationError, CancelToken, GUIState, PipelineState, StateManager
 from src.gui.prompt_workspace_state import PromptWorkspaceState
+
+from .state import CancellationError, CancelToken, GUIState, PipelineState, StateManager
 
 logger = logging.getLogger(__name__)
 
@@ -154,9 +155,7 @@ class PipelineController:
 
         with self._cleanup_lock:
             if self._stop_in_progress:
-                self._log(
-                    "Cleanup already in progress; ignoring duplicate stop request", "DEBUG"
-                )
+                self._log("Cleanup already in progress; ignoring duplicate stop request", "DEBUG")
                 return False
             self._stop_in_progress = True
 

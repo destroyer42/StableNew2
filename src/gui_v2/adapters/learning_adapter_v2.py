@@ -5,22 +5,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any
 
 from src.learning.learning_adapter import prepare_learning_run
-from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_plan import LearningPlan, LearningRunStep
+from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_runner import LearningRunner
 
 
 def create_learning_context(
-    base_config: Dict[str, Any] | None,
+    base_config: dict[str, Any] | None,
     one_click_action: str | None = None,
-    run_metadata: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    run_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Return a normalized context payload for future learning flows.
 
@@ -35,15 +36,15 @@ def create_learning_context(
 
 
 def prepare_learning_plan_and_steps(
-    base_config: Dict[str, Any],
-    options: Dict[str, Any],
-) -> Tuple[LearningPlan, list[LearningRunStep]]:
+    base_config: dict[str, Any],
+    options: dict[str, Any],
+) -> tuple[LearningPlan, list[LearningRunStep]]:
     """Small wrapper around the existing learning adapter for GUI-facing code."""
 
     return prepare_learning_run(deepcopy(base_config), deepcopy(options))
 
 
-def get_runner(base_config: Dict[str, Any] | None = None) -> LearningRunner:
+def get_runner(base_config: dict[str, Any] | None = None) -> LearningRunner:
     """Return a LearningRunner instance without importing GUI modules."""
 
     return LearningRunner(deepcopy(base_config or {}))
@@ -86,7 +87,7 @@ def _record_to_summary(record: LearningRecord) -> LearningRecordSummary:
     )
 
 
-def list_recent_learning_records(records_path: Path, limit: int = 10) -> List[LearningRecord]:
+def list_recent_learning_records(records_path: Path, limit: int = 10) -> list[LearningRecord]:
     """Return the most recent learning records from a JSONL file."""
 
     path = Path(records_path)
@@ -94,7 +95,7 @@ def list_recent_learning_records(records_path: Path, limit: int = 10) -> List[Le
         path = path / "learning_records.jsonl"
     if not path.exists():
         return []
-    records: List[LearningRecord] = []
+    records: list[LearningRecord] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except Exception:

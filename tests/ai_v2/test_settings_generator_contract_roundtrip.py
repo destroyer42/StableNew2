@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from src.ai.settings_generator_contract import (
     SettingsSuggestion,
     SettingsSuggestionRequest,

@@ -122,18 +122,6 @@ class EnhancedSlider(ttk.Frame):
         if hasattr(self, "label_widget"):
             self.label_widget.config(text=new_label)
 
-        self.from_ = from_
-        self.to = to
-        self.resolution = resolution
-        self.variable = variable or tk.DoubleVar()
-        self.command = command
-
-        # Create the widgets
-        self._create_widgets(width, label)
-
-        # Bind variable changes
-        self.variable.trace("w", self._on_variable_change)
-
     def _create_widgets(self, width, label):
         """Create the slider widgets"""
         # Left arrow button

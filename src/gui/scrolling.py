@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Tuple
 
 
 def enable_mousewheel(widget: tk.Widget) -> None:
@@ -34,7 +33,7 @@ def enable_mousewheel(widget: tk.Widget) -> None:
     widget.bind("<Leave>", _unbind, add="+")
 
 
-def make_scrollable(parent: tk.Widget, *, orient: str = "vertical") -> Tuple[ttk.Frame, tk.Widget]:
+def make_scrollable(parent: tk.Widget, *, orient: str = "vertical") -> tuple[ttk.Frame, tk.Widget]:
     """Wrap a frame in a scrollable canvas and return (container, inner frame)."""
     container = ttk.Frame(parent)
     canvas = tk.Canvas(container, highlightthickness=0)
@@ -51,10 +50,12 @@ def make_scrollable(parent: tk.Widget, *, orient: str = "vertical") -> Tuple[ttk
 
     def _configure_canvas(event: tk.Event) -> None:
         canvas.configure(scrollregion=canvas.bbox("all"))
+
     inner.bind("<Configure>", _configure_canvas)
 
     def _resize_canvas(event: tk.Event) -> None:
         canvas.itemconfigure(window, width=event.width)
+
     canvas.bind("<Configure>", _resize_canvas)
 
     return container, inner

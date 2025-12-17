@@ -28,7 +28,6 @@ from src.pipeline.stage_sequencer import (
 )
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
-
 # -----------------------------------------------------------------------------
 # Fixtures
 # -----------------------------------------------------------------------------
@@ -304,20 +303,22 @@ class StubPipeline:
         return {"images": ["txt2img_output"], "path": str(run_dir / "txt2img.png")}
 
     def run_img2img_stage(
-        self, input_image, prompt: str, payload: dict, run_dir, image_name: str | None = None, **kwargs
+        self,
+        input_image,
+        prompt: str,
+        payload: dict,
+        run_dir,
+        image_name: str | None = None,
+        **kwargs,
     ) -> dict[str, Any]:
         self.calls.append(("img2img", {"input": str(input_image), **payload}))
         return {"images": ["img2img_output"], "path": str(run_dir / "img2img.png")}
 
-    def run_upscale_stage(
-        self, input_image, payload: dict, run_dir, **kwargs
-    ) -> dict[str, Any]:
+    def run_upscale_stage(self, input_image, payload: dict, run_dir, **kwargs) -> dict[str, Any]:
         self.calls.append(("upscale", {"input": str(input_image), **payload}))
         return {"images": ["upscale_output"], "path": str(run_dir / "upscale.png")}
 
-    def run_adetailer_stage(
-        self, input_image, payload: dict, run_dir, **kwargs
-    ) -> dict[str, Any]:
+    def run_adetailer_stage(self, input_image, payload: dict, run_dir, **kwargs) -> dict[str, Any]:
         self.calls.append(("adetailer", {"input": str(input_image), **payload}))
         return {"images": ["adetailer_output"], "path": str(run_dir / "adetailer.png")}
 

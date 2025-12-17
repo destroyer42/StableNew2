@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
-from src.pipeline.pipeline_runner import PipelineRunResult, PipelineRunner, normalize_run_result
+from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
 
 
 def _minimal_normalized_record() -> NormalizedJobRecord:
@@ -18,7 +18,9 @@ def _minimal_normalized_record() -> NormalizedJobRecord:
         created_ts=0.0,
         randomizer_summary=None,
         stage_chain=[
-            StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a")
+            StageConfig(
+                stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a"
+            )
         ],
     )
 
@@ -62,7 +64,9 @@ def test_pipeline_run_result_to_dict_and_back() -> None:
 
 
 def test_normalize_run_result_accepts_dicts_and_defaults() -> None:
-    canonical = normalize_run_result({"run_id": "from-dict", "success": True}, default_run_id="fallback")
+    canonical = normalize_run_result(
+        {"run_id": "from-dict", "success": True}, default_run_id="fallback"
+    )
     assert canonical["run_id"] == "from-dict"
     assert canonical["success"] is True
     fallback = normalize_run_result("unexpected", default_run_id="fallback")

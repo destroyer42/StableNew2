@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable, Iterable
 from tkinter import ttk
-from typing import Callable, Iterable
 
-from . import theme as theme_mod
 from src.gui.theme_v2 import (
     ACCENT_GOLD,
-    apply_validation_colors,
     BORDER_SUBTLE,
     VALIDATION_NORMAL_BG,
     VALIDATION_NORMAL_FG,
+    apply_validation_colors,
 )
+
+from . import theme as theme_mod
 from .prompt_pack_adapter_v2 import PromptPackSummary
 
 
@@ -41,17 +42,26 @@ class PromptPackPanelV2(ttk.Frame):
         self.set_packs(self._packs)
 
     def _build_ui(self, theme) -> None:
-        header_style = getattr(theme, "STATUS_STRONG_LABEL_STYLE", theme_mod.STATUS_STRONG_LABEL_STYLE)
+        header_style = getattr(
+            theme, "STATUS_STRONG_LABEL_STYLE", theme_mod.STATUS_STRONG_LABEL_STYLE
+        )
         ttk.Label(self, text="Prompt Packs", style=header_style).pack(anchor=tk.W, pady=(0, 4))
 
         # Pack list selector (if multiple lists)
         if self._pack_list_names:
             self.pack_list_var = tk.StringVar(value=self._pack_list_names[0])
-            self.pack_list_combo = ttk.Combobox(self, values=self._pack_list_names, textvariable=self.pack_list_var, state="readonly")
+            self.pack_list_combo = ttk.Combobox(
+                self,
+                values=self._pack_list_names,
+                textvariable=self.pack_list_var,
+                state="readonly",
+            )
             self.pack_list_combo.pack(fill=tk.X, pady=(0, 4))
             self.pack_list_combo.bind("<<ComboboxSelected>>", self._on_pack_list_changed)
 
-        list_frame = ttk.Frame(self, style=getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE))
+        list_frame = ttk.Frame(
+            self, style=getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
+        )
         list_frame.pack(fill=tk.BOTH, expand=True)
 
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL)
@@ -80,7 +90,9 @@ class PromptPackPanelV2(ttk.Frame):
         self.listbox.bind("<<ListboxSelect>>", self._on_selection_changed)
         scrollbar.configure(command=self.listbox.yview)
 
-        meta_frame = ttk.Frame(self, style=getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE))
+        meta_frame = ttk.Frame(
+            self, style=getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
+        )
         meta_frame.pack(fill=tk.X, pady=(theme_mod.PADDING_SM, 0))
         self.description_var = tk.StringVar(value="Select a pack to preview its prompt")
         self.meta_label = ttk.Label(meta_frame, textvariable=self.description_var, wraplength=260)
