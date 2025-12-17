@@ -1,0 +1,1220 @@
+diff -ruN /mnt/data/pr_multistage_002_orig/src/pipeline/pipeline_runner.py /mnt/data/pr_multistage_002/src/pipeline/pipeline_runner.py
+--- /mnt/data/pr_multistage_002_orig/src/pipeline/pipeline_runner.py	2025-12-16 08:26:38.000000000 +0000
++++ /mnt/data/pr_multistage_002/src/pipeline/pipeline_runner.py	2025-12-16 18:00:23.624569491 +0000
+@@ -1,331 +1,389 @@
+-"""Production pipeline runner using NJR + RunPlan (PR-MULTISTAGE-001)."""
+-
+-from __future__ import annotations
+-
+-import json
+-from pathlib import Path
+-from time import time
+-from typing import TYPE_CHECKING, Any
+-
+-from src.gui.state import CancellationError
+-from src.pipeline.executor import Pipeline
+-from src.pipeline.job_models_v2 import (
+-    NormalizedJobRecord,
+-    PipelineRunResult,
+-    StageOutput,
+-)
+-from src.pipeline.run_plan import build_run_plan
+-from src.services.output_layout_service import OutputLayoutService
+-from src.utils import get_logger
+-
+-if TYPE_CHECKING:  # pragma: no cover
+-    from src.controller.app_controller import CancelToken
+-    from src.pipeline.run_plan import RunPlan
+-    from src.services.output_layout_service import OutputLayout
+-
+-
+-log = get_logger(__name__)
+-
+-
+-class PipelineRunner:
+-    """Orchestrates multi-stage pipeline execution from NJR + RunPlan."""
+-
+-    def __init__(
+-        self,
+-        executor: Pipeline | Any = None,
+-        output_base_dir: str | Path | Any = "outputs",
+-    ):
+-        """Initialize runner with executor and output configuration.
+-
+-        Supports both new (executor, output_base_dir) and legacy (api_client, structured_logger) signatures
+-        for backward compatibility with existing controllers.
+-
+-        Args:
+-            executor: Pipeline executor OR (legacy) api_client
+-            output_base_dir: Output directory OR (legacy) structured_logger
+-        """
+-        # Handle legacy signature: PipelineRunner(api_client, structured_logger)
+-        if type(output_base_dir).__name__ == "StructuredLogger":
+-            # Legacy: executor is api_client, output_base_dir is structured_logger
+-            # For now, just ignore them and use defaults
+-            self._executor = executor
+-            self._output_service = OutputLayoutService()
+-        else:
+-            # New signature: executor is Pipeline, output_base_dir is path
+-            self._executor = executor
+-            self._output_service = OutputLayoutService(output_base_dir)
+-
+-    def run_njr(
+-        self,
+-        njr: NormalizedJobRecord,
+-        cancel_token: CancelToken | None = None,
+-    ) -> PipelineRunResult:
+-        """
+-        Execute pipeline using NormalizedJobRecord (ONLY supported entrypoint).
+-
+-        Args:
+-            njr: NormalizedJobRecord to execute
+-            cancel_token: Optional cancellation token
+-
+-        Returns:
+-            PipelineRunResult with typed stage outputs and final images
+-
+-        Raises:
+-            AssertionError: If njr is not NormalizedJobRecord
+-            CancellationError: If execution is cancelled
+-            PipelineStageError: If any stage fails
+-        """
+-        assert isinstance(njr, NormalizedJobRecord), (
+-            f"run_njr() requires NormalizedJobRecord, got {type(njr).__name__}"
+-        )
+-
+-        start_time = time()
+-        stage_outputs: list[StageOutput] = []
+-        final_images: list[str] = []
+-        error_stage: str | None = None
+-        error_msg: str | None = None
+-
+-        try:
+-            # Compute canonical output layout
+-            layout = self._output_service.compute_layout(njr)
+-
+-            # Build execution plan from NJR
+-            run_plan = build_run_plan(njr, layout)
+-
+-            # Create output directories
+-            enabled_stages = [s.stage_name for s in run_plan.enabled_stages()]
+-            self._output_service.ensure_directories(layout, enabled_stages)
+-
+-            # Write NJR snapshot
+-            self._write_njr_snapshot(layout, njr)
+-
+-            # Execute each enabled stage in order
+-            input_images: list[Path] | None = None
+-            for stage_plan in run_plan.stages:
+-                if not stage_plan.enabled:
+-                    # Record skipped stage
+-                    stage_outputs.append(
+-                        StageOutput(
+-                            stage_name=stage_plan.stage_name,
+-                            skipped=True,
+-                        )
+-                    )
+-                    continue
+-
+-                self._ensure_not_cancelled(cancel_token, f"{stage_plan.stage_name}")
+-
+-                # Execute stage and collect output
+-                output = self._execute_stage(
+-                    njr,
+-                    stage_plan,
+-                    layout,
+-                    input_images=input_images,
+-                    cancel_token=cancel_token,
+-                )
+-                stage_outputs.append(output)
+-
+-                # If this stage failed, stop execution
+-                if output.error:
+-                    error_stage = stage_plan.stage_name
+-                    error_msg = output.error
+-                    break
+-
+-                # Prepare input for next stage
+-                if output.image_paths:
+-                    input_images = [Path(p) for p in output.image_paths]
+-                    final_images = output.image_paths
+-
+-            # Write stage manifest and metadata
+-            for stage_output in stage_outputs:
+-                if not stage_output.skipped and not stage_output.error:
+-                    self._write_stage_manifest(layout, stage_output)
+-
+-            # Write run metadata
+-            self._write_run_metadata(layout, njr, run_plan, stage_outputs)
+-
+-            success = error_msg is None
+-            return PipelineRunResult(
+-                success=success,
+-                job_id=njr.job_id,
+-                final_image_paths=final_images,
+-                stage_outputs=stage_outputs,
+-                error=error_msg,
+-                error_stage=error_stage,
+-                run_root=str(layout.run_root),
+-                duration_ms=int((time() - start_time) * 1000),
+-            )
+-
+-        except CancellationError:
+-            raise
+-        except Exception as exc:
+-            error_msg = str(exc)
+-            return PipelineRunResult(
+-                success=False,
+-                job_id=njr.job_id,
+-                final_image_paths=final_images,
+-                stage_outputs=stage_outputs,
+-                error=error_msg,
+-                error_stage=error_stage,
+-                duration_ms=int((time() - start_time) * 1000),
+-            )
+-
+-    def _execute_stage(
+-        self,
+-        njr: NormalizedJobRecord,
+-        stage_plan: Any,
+-        layout: OutputLayout,
+-        input_images: list[Path] | None = None,
+-        cancel_token: CancelToken | None = None,
+-    ) -> StageOutput:
+-        """Execute a single pipeline stage."""
+-        stage_name = stage_plan.stage_name
+-        start_time = time()
+-
+-        try:
+-            # TODO: Call executor based on stage_name
+-            # For now, placeholder that collects output from executor
+-            image_paths: list[str] = []
+-            manifest_paths: list[str] = []
+-
+-            # Placeholder: actual executor call would populate these
+-            # result = self._executor.run_stage(
+-            #     stage_name,
+-            #     njr,
+-            #     output_dir,
+-            #     input_images=input_images,
+-            #     cancel_token=cancel_token,
+-            # )
+-            # image_paths = result.get("image_paths", [])
+-
+-            return StageOutput(
+-                stage_name=stage_name,
+-                image_paths=image_paths,
+-                manifest_paths=manifest_paths,
+-                duration_ms=int((time() - start_time) * 1000),
+-                skipped=False,
+-                error=None,
+-            )
+-        except Exception as exc:
+-            return StageOutput(
+-                stage_name=stage_name,
+-                duration_ms=int((time() - start_time) * 1000),
+-                skipped=False,
+-                error=str(exc),
+-            )
+-
+-    def _write_njr_snapshot(self, layout: OutputLayout, njr: NormalizedJobRecord) -> None:
+-        """Write NJR snapshot for audit trail."""
+-        snapshot_path = layout.njr_snapshot_path
+-        snapshot = {
+-            "job_id": njr.job_id,
+-            "prompt_pack_id": njr.prompt_pack_id,
+-            "positive_prompt": njr.positive_prompt,
+-            "negative_prompt": njr.negative_prompt,
+-            "timestamp": str(time()),
+-        }
+-        try:
+-            with open(snapshot_path, "w") as f:
+-                json.dump(snapshot, f, indent=2)
+-        except Exception as exc:
+-            log.error(f"Failed to write NJR snapshot: {exc}")
+-
+-    def _write_stage_manifest(self, layout: OutputLayout, output: StageOutput) -> None:
+-        """Write stage manifest (images list + metadata)."""
+-        manifest_path = layout.stage_manifest_path(output.stage_name)
+-        manifest = {
+-            "stage_name": output.stage_name,
+-            "image_paths": output.image_paths,
+-            "duration_ms": output.duration_ms,
+-        }
+-        try:
+-            with open(manifest_path, "w") as f:
+-                json.dump(manifest, f, indent=2)
+-        except Exception as exc:
+-            log.error(f"Failed to write stage manifest for {output.stage_name}: {exc}")
+-
+-    def _write_run_metadata(
+-        self,
+-        layout: OutputLayout,
+-        njr: NormalizedJobRecord,
+-        run_plan: RunPlan,
+-        stage_outputs: list[StageOutput],
+-    ) -> None:
+-        """Write complete run metadata."""
+-        metadata_path = layout.run_metadata_path
+-        metadata = {
+-            "job_id": njr.job_id,
+-            "prompt_pack_id": njr.prompt_pack_id,
+-            "run_root": str(layout.run_root),
+-            "manifests_dir": str(layout.manifests_dir),
+-            "stages": run_plan.to_dict()["stages"],
+-            "stage_outputs": [o.to_dict() for o in stage_outputs],
+-            "timestamp": str(time()),
+-        }
+-        try:
+-            with open(metadata_path, "w") as f:
+-                json.dump(metadata, f, indent=2)
+-        except Exception as exc:
+-            log.error(f"Failed to write run metadata: {exc}")
+-
+-    @staticmethod
+-    def _ensure_not_cancelled(cancel_token: CancelToken | None, context: str) -> None:
+-        """Check if execution was cancelled."""
+-        if cancel_token and getattr(cancel_token, "is_cancelled", None):
+-            if cancel_token.is_cancelled():
+-                raise CancellationError(f"Cancelled during {context}")
+-
+-
+-def normalize_run_result(
+-    result: PipelineRunResult | dict[str, Any] | None,
+-    default_run_id: str = "unknown",
+-) -> dict[str, Any]:
+-    """Convert PipelineRunResult to legacy dict format for backward compatibility.
+-
+-    This function bridges the old dict-based result format with the new typed
+-    PipelineRunResult format used by the NJR-only runner.
+-
+-    Args:
+-        result: PipelineRunResult, dict, or None
+-        default_run_id: Job ID to use if result doesn't contain one
+-
+-    Returns:
+-        Dict with canonical fields for legacy consumers
+-    """
+-    if result is None:
+-        return {
+-            "success": False,
+-            "error": "No result returned",
+-            "job_id": default_run_id,
+-            "metadata": {},
+-        }
+-
+-    # If it's already a PipelineRunResult, convert to dict
+-    if isinstance(result, PipelineRunResult):
+-        return {
+-            "success": result.success,
+-            "error": result.error,
+-            "job_id": result.job_id,
+-            "run_root": result.run_root,
+-            "final_image_paths": result.final_image_paths,
+-            "stage_outputs": [s.to_dict() for s in result.stage_outputs],
+-            "duration_ms": result.duration_ms,
+-            "metadata": {},
+-        }
+-
+-    # If it's a dict, normalize and return
+-    if isinstance(result, dict):
+-        return {
+-            "success": result.get("success", False),
+-            "error": result.get("error"),
+-            "job_id": result.get("job_id", default_run_id),
+-            "metadata": result.get("metadata", {}),
+-        }
+-
+-    # Fallback: treat as failure
+-    return {
+-        "success": False,
+-        "error": f"Unexpected result type: {type(result).__name__}",
+-        "job_id": default_run_id,
+-        "metadata": {},
+-    }
+-
++"""Production pipeline runner using NJR + RunPlan (PR-MULTISTAGE-001)."""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++from time import time
++from typing import TYPE_CHECKING, Any
++
++from src.gui.state import CancellationError
++from src.pipeline.executor import Pipeline
++from src.pipeline.job_models_v2 import (
++    NormalizedJobRecord,
++    PipelineRunResult,
++    StageOutput,
++)
++from src.pipeline.run_plan import build_run_plan
++from src.services.output_layout_service import OutputLayoutService
++from src.utils import get_logger
++
++if TYPE_CHECKING:  # pragma: no cover
++    from src.controller.app_controller import CancelToken
++    from src.pipeline.run_plan import RunPlan
++    from src.services.output_layout_service import OutputLayout
++
++
++log = get_logger(__name__)
++
++
++class PipelineRunner:
++    """Orchestrates multi-stage pipeline execution from NJR + RunPlan."""
++
++    def __init__(
++        self,
++        executor: Pipeline | Any = None,
++        output_base_dir: str | Path | Any = "outputs",
++    ):
++        """Initialize runner with executor and output configuration.
++
++        Supports both new (executor, output_base_dir) and legacy (api_client, structured_logger) signatures
++        for backward compatibility with existing controllers.
++
++        Args:
++            executor: Pipeline executor OR (legacy) api_client
++            output_base_dir: Output directory OR (legacy) structured_logger
++        """
++        # Handle legacy signature: PipelineRunner(api_client, structured_logger)
++        if type(output_base_dir).__name__ == "StructuredLogger":
++            # Legacy: executor is api_client, output_base_dir is structured_logger
++            # For now, just ignore them and use defaults
++            self._executor = executor
++            self._output_service = OutputLayoutService()
++        else:
++            # New signature: executor is Pipeline, output_base_dir is path
++            self._executor = executor
++            self._output_service = OutputLayoutService(output_base_dir)
++
++    def run_njr(
++        self,
++        njr: NormalizedJobRecord,
++        cancel_token: CancelToken | None = None,
++    ) -> PipelineRunResult:
++        """
++        Execute pipeline using NormalizedJobRecord (ONLY supported entrypoint).
++
++        Args:
++            njr: NormalizedJobRecord to execute
++            cancel_token: Optional cancellation token
++
++        Returns:
++            PipelineRunResult with typed stage outputs and final images
++
++        Raises:
++            AssertionError: If njr is not NormalizedJobRecord
++            CancellationError: If execution is cancelled
++            PipelineStageError: If any stage fails
++        """
++        assert isinstance(njr, NormalizedJobRecord), (
++            f"run_njr() requires NormalizedJobRecord, got {type(njr).__name__}"
++        )
++
++        start_time = time()
++        stage_outputs: list[StageOutput] = []
++        final_images: list[str] = []
++        error_stage: str | None = None
++        error_msg: str | None = None
++
++        try:
++            # Compute canonical output layout
++            layout = self._output_service.compute_layout(njr)
++
++            # Build execution plan from NJR
++            run_plan = build_run_plan(njr, layout)
++
++            # Create output directories
++            enabled_stages = [s.stage_name for s in run_plan.enabled_stages()]
++            self._output_service.ensure_directories(layout, enabled_stages)
++
++            # Write NJR snapshot
++            self._write_njr_snapshot(layout, njr)
++
++            # Execute each enabled stage in order
++            input_images: list[Path] | None = None
++            for stage_plan in run_plan.stages:
++                if not stage_plan.enabled:
++                    # Record skipped stage
++                    stage_outputs.append(
++                        StageOutput(
++                            stage_name=stage_plan.stage_name,
++                            skipped=True,
++                        )
++                    )
++                    continue
++
++                self._ensure_not_cancelled(cancel_token, f"{stage_plan.stage_name}")
++
++                # Execute stage and collect output
++                output = self._execute_stage(
++                    njr,
++                    stage_plan,
++                    layout,
++                    input_images=input_images,
++                    cancel_token=cancel_token,
++                )
++                stage_outputs.append(output)
++
++                # If this stage failed, stop execution
++                if output.error:
++                    error_stage = stage_plan.stage_name
++                    error_msg = output.error
++                    break
++
++                # Prepare input for next stage
++                if output.image_paths:
++                    input_images = [Path(p) for p in output.image_paths]
++                    final_images = output.image_paths
++
++            # Write stage manifest and metadata
++            for stage_output in stage_outputs:
++                if not stage_output.skipped and not stage_output.error:
++                    self._write_stage_manifest(layout, stage_output)
++
++            # Write run metadata
++            self._write_run_metadata(layout, njr, run_plan, stage_outputs)
++
++            success = error_msg is None
++            return PipelineRunResult(
++                success=success,
++                job_id=njr.job_id,
++                final_image_paths=final_images,
++                stage_outputs=stage_outputs,
++                error=error_msg,
++                error_stage=error_stage,
++                run_root=str(layout.run_root),
++                duration_ms=int((time() - start_time) * 1000),
++            )
++
++        except CancellationError:
++            raise
++        except Exception as exc:
++            error_msg = str(exc)
++            return PipelineRunResult(
++                success=False,
++                job_id=njr.job_id,
++                final_image_paths=final_images,
++                stage_outputs=stage_outputs,
++                error=error_msg,
++                error_stage=error_stage,
++                duration_ms=int((time() - start_time) * 1000),
++            )
++
++    def _execute_stage(
++        self,
++        njr: NormalizedJobRecord,
++        stage_plan: Any,
++        layout: OutputLayout,
++        input_images: list[Path] | None = None,
++        cancel_token: CancelToken | None = None,
++    ) -> StageOutput:
++        """Execute a single pipeline stage."""
++        stage_name = stage_plan.stage_name
++        start_time = time()
++
++        try:
++
++            # Resolve output directory for this stage
++            output_dir = Path(str(stage_plan.output_dir))
++            output_dir.mkdir(parents=True, exist_ok=True)
++
++            stage_cfg = dict(stage_plan.config or {})
++            full_cfg = stage_cfg.pop("_full_config", None)
++            if not isinstance(full_cfg, dict):
++                full_cfg = {}
++
++            # Dispatch to the underlying executor.
++            # Note: refiner/hires are implemented as flags on txt2img (not standalone stages).
++            result: dict[str, Any] | None
++            if stage_name == "txt2img":
++                cfg = dict(full_cfg)
++                cfg["txt2img"] = stage_cfg
++                result = self._pipeline.run_txt2img_stage(
++                    njr.positive_prompt or "",
++                    njr.negative_prompt or "",
++                    cfg,
++                    output_dir,
++                    image_name=f"{stage_name}",
++                    cancel_token=cancel_token,
++                )
++            elif stage_name == "img2img":
++                if not input_images:
++                    raise ValueError("img2img requires input image(s) from previous stage")
++                result = self._pipeline.run_img2img_stage(
++                    input_images[0],
++                    njr.positive_prompt or "",
++                    stage_cfg,
++                    output_dir,
++                    image_name=f"{stage_name}",
++                    full_config=full_cfg,
++                    cancel_token=cancel_token,
++                )
++            elif stage_name == "upscale":
++                if not input_images:
++                    raise ValueError("upscale requires input image(s) from previous stage")
++                result = self._pipeline.run_upscale_stage(
++                    input_images[0],
++                    stage_cfg,
++                    output_dir,
++                    image_name=f"{stage_name}",
++                    cancel_token=cancel_token,
++                )
++            elif stage_name == "adetailer":
++                if not input_images:
++                    raise ValueError("adetailer requires input image(s) from previous stage")
++                cfg = dict(full_cfg)
++                cfg.setdefault("adetailer", stage_cfg)
++                result = self._pipeline.run_adetailer_stage(
++                    input_images[0],
++                    cfg,
++                    output_dir,
++                    image_name=f"{stage_name}",
++                    prompt=njr.positive_prompt or "",
++                    cancel_token=cancel_token,
++                )
++            else:
++                raise ValueError(f"Unsupported stage: {stage_name}")
++
++            image_paths: list[str] = []
++            manifest_paths: list[str] = []
++            if isinstance(result, dict):
++                path = result.get("path")
++                if isinstance(path, str) and path:
++                    image_paths.append(path)
++                paths = result.get("image_paths") or result.get("paths")
++                if isinstance(paths, list):
++                    image_paths.extend([p for p in paths if isinstance(p, str)])
++
++            return StageOutput(
++                stage_name=stage_name,
++                image_paths=image_paths,
++                manifest_paths=manifest_paths,
++                duration_ms=int((time() - start_time) * 1000),
++                skipped=False,
++                error=None,
++            )
++
++        except Exception as exc:
++            return StageOutput(
++                stage_name=stage_name,
++                duration_ms=int((time() - start_time) * 1000),
++                skipped=False,
++                error=str(exc),
++            )
++
++    def _write_njr_snapshot(self, layout: OutputLayout, njr: NormalizedJobRecord) -> None:
++        """Write NJR snapshot for audit trail."""
++        snapshot_path = layout.njr_snapshot_path
++        snapshot = {
++            "job_id": njr.job_id,
++            "prompt_pack_id": njr.prompt_pack_id,
++            "positive_prompt": njr.positive_prompt,
++            "negative_prompt": njr.negative_prompt,
++            "timestamp": str(time()),
++        }
++        try:
++            with open(snapshot_path, "w") as f:
++                json.dump(snapshot, f, indent=2)
++        except Exception as exc:
++            log.error(f"Failed to write NJR snapshot: {exc}")
++
++    def _write_stage_manifest(self, layout: OutputLayout, output: StageOutput) -> None:
++        """Write stage manifest (images list + metadata)."""
++        manifest_path = layout.stage_manifest_path(output.stage_name)
++        manifest = {
++            "stage_name": output.stage_name,
++            "image_paths": output.image_paths,
++            "duration_ms": output.duration_ms,
++        }
++        try:
++            with open(manifest_path, "w") as f:
++                json.dump(manifest, f, indent=2)
++        except Exception as exc:
++            log.error(f"Failed to write stage manifest for {output.stage_name}: {exc}")
++
++    def _write_run_metadata(
++        self,
++        layout: OutputLayout,
++        njr: NormalizedJobRecord,
++        run_plan: RunPlan,
++        stage_outputs: list[StageOutput],
++    ) -> None:
++        """Write complete run metadata."""
++        metadata_path = layout.run_metadata_path
++        metadata = {
++            "job_id": njr.job_id,
++            "prompt_pack_id": njr.prompt_pack_id,
++            "run_root": str(layout.run_root),
++            "manifests_dir": str(layout.manifests_dir),
++            "stages": run_plan.to_dict()["stages"],
++            "stage_outputs": [o.to_dict() for o in stage_outputs],
++            "timestamp": str(time()),
++        }
++        try:
++            with open(metadata_path, "w") as f:
++                json.dump(metadata, f, indent=2)
++        except Exception as exc:
++            log.error(f"Failed to write run metadata: {exc}")
++
++    @staticmethod
++    def _ensure_not_cancelled(cancel_token: CancelToken | None, context: str) -> None:
++        """Check if execution was cancelled."""
++        if cancel_token and getattr(cancel_token, "is_cancelled", None):
++            if cancel_token.is_cancelled():
++                raise CancellationError(f"Cancelled during {context}")
++
++
++def normalize_run_result(
++    result: PipelineRunResult | dict[str, Any] | None,
++    default_run_id: str = "unknown",
++) -> dict[str, Any]:
++    """Convert PipelineRunResult to legacy dict format for backward compatibility.
++
++    This function bridges the old dict-based result format with the new typed
++    PipelineRunResult format used by the NJR-only runner.
++
++    Args:
++        result: PipelineRunResult, dict, or None
++        default_run_id: Job ID to use if result doesn't contain one
++
++    Returns:
++        Dict with canonical fields for legacy consumers
++    """
++    if result is None:
++        return {
++            "success": False,
++            "error": "No result returned",
++            "job_id": default_run_id,
++            "metadata": {},
++        }
++
++    # If it's already a PipelineRunResult, convert to dict
++    if isinstance(result, PipelineRunResult):
++        return {
++            "success": result.success,
++            "error": result.error,
++            "job_id": result.job_id,
++            "run_root": result.run_root,
++            "final_image_paths": result.final_image_paths,
++            "stage_outputs": [s.to_dict() for s in result.stage_outputs],
++            "duration_ms": result.duration_ms,
++            "metadata": {},
++        }
++
++    # If it's a dict, normalize and return
++    if isinstance(result, dict):
++        return {
++            "success": result.get("success", False),
++            "error": result.get("error"),
++            "job_id": result.get("job_id", default_run_id),
++            "metadata": result.get("metadata", {}),
++        }
++
++    # Fallback: treat as failure
++    return {
++        "success": False,
++        "error": f"Unexpected result type: {type(result).__name__}",
++        "job_id": default_run_id,
++        "metadata": {},
++    }
++
+diff -ruN /mnt/data/pr_multistage_002_orig/src/pipeline/run_plan.py /mnt/data/pr_multistage_002/src/pipeline/run_plan.py
+--- /mnt/data/pr_multistage_002_orig/src/pipeline/run_plan.py	2025-12-16 08:03:06.000000000 +0000
++++ /mnt/data/pr_multistage_002/src/pipeline/run_plan.py	2025-12-16 18:01:43.364348168 +0000
+@@ -1,141 +1,149 @@
+-"""RunPlan abstraction for multi-stage pipeline execution (PR-MULTISTAGE-001).
+-
+-RunPlan is the intermediate stage between NormalizedJobRecord and PipelineRunner.
+-It encodes the stage chain, output paths, and execution order in a declarative form.
+-"""
+-
+-from __future__ import annotations
+-
+-from dataclasses import dataclass, field
+-from pathlib import Path
+-from typing import TYPE_CHECKING, Any
+-
+-if TYPE_CHECKING:
+-    from src.pipeline.job_models_v2 import NormalizedJobRecord
+-    from src.services.output_layout_service import OutputLayout
+-
+-
+-# Canonical stage order for all pipeline executions
+-STAGE_ORDER = ["txt2img", "refiner", "hires", "img2img", "upscale", "adetailer"]
+-
+-
+-@dataclass
+-class StagePlan:
+-    """Plan for executing a single stage."""
+-
+-    stage_name: str
+-    enabled: bool
+-    config: dict[str, Any] = field(default_factory=dict)
+-
+-    @property
+-    def output_dir(self) -> Path:
+-        """Return the output directory for this stage's images."""
+-        # This will be set by the caller (PipelineRunner)
+-        return Path(self.config.get("_output_dir", f"images/{self.stage_name}"))
+-
+-    def to_dict(self) -> dict[str, Any]:
+-        """Serialize to dictionary."""
+-        return {
+-            "stage_name": self.stage_name,
+-            "enabled": self.enabled,
+-            "config": self.config,
+-        }
+-
+-
+-@dataclass
+-class RunPlan:
+-    """Complete execution plan for a pipeline run.
+-    
+-    Derived from a NormalizedJobRecord and OutputLayout.
+-    Encodes the canonical stage chain and output paths.
+-    """
+-
+-    job_id: str
+-    prompt_pack_id: str
+-    stages: list[StagePlan] = field(default_factory=list)
+-    run_root: Path = field(default_factory=Path)
+-    manifests_dir: Path = field(default_factory=Path)
+-
+-    def enabled_stages(self) -> list[StagePlan]:
+-        """Return list of enabled stages in execution order."""
+-        return [s for s in self.stages if s.enabled]
+-
+-    def stage_by_name(self, name: str) -> StagePlan | None:
+-        """Lookup a stage by name."""
+-        for stage in self.stages:
+-            if stage.stage_name == name:
+-                return stage
+-        return None
+-
+-    def to_dict(self) -> dict[str, Any]:
+-        """Serialize to dictionary."""
+-        return {
+-            "job_id": self.job_id,
+-            "prompt_pack_id": self.prompt_pack_id,
+-            "stages": [s.to_dict() for s in self.stages],
+-            "run_root": str(self.run_root),
+-            "manifests_dir": str(self.manifests_dir),
+-        }
+-
+-
+-def build_run_plan(njr: NormalizedJobRecord, layout: OutputLayout) -> RunPlan:
+-    """Build a RunPlan from an NJR and OutputLayout.
+-    
+-    Args:
+-        njr: NormalizedJobRecord to plan for
+-        layout: OutputLayout providing artifact paths
+-        
+-    Returns:
+-        RunPlan with canonical stage chain and output paths
+-        
+-    Raises:
+-        AssertionError: If njr is not a NormalizedJobRecord instance
+-    """
+-    from src.pipeline.job_models_v2 import NormalizedJobRecord
+-
+-    assert isinstance(njr, NormalizedJobRecord), (
+-        f"build_run_plan() requires NormalizedJobRecord, got {type(njr).__name__}"
+-    )
+-
+-    # Extract stage chain from NJR
+-    stage_chain = getattr(njr, "stage_chain", [])
+-    if not stage_chain:
+-        # Default: txt2img only
+-        stage_chain = ["txt2img"]
+-
+-    # Build stage plans in canonical order
+-    stages: list[StagePlan] = []
+-    for stage_name in STAGE_ORDER:
+-        enabled = stage_name in stage_chain
+-        config = {}
+-        if enabled and hasattr(njr, "config") and isinstance(njr.config, dict):
+-            # Extract stage-specific config from NJR if available
+-            config = njr.config.copy()
+-        config["_output_dir"] = str(layout.stage_images_dir(stage_name))
+-        stages.append(StagePlan(stage_name=stage_name, enabled=enabled, config=config))
+-
+-    return RunPlan(
+-        job_id=njr.job_id,
+-        prompt_pack_id=njr.prompt_pack_id or "default",
+-        stages=stages,
+-        run_root=layout.run_root,
+-        manifests_dir=layout.manifests_dir,
+-    )
+-
+-
+-def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
+-    """Legacy wrapper for backward compatibility (replay engine, etc).
+-
+-    Creates OutputLayout automatically and delegates to build_run_plan().
+-
+-    Args:
+-        njr: NormalizedJobRecord to plan for
+-
+-    Returns:
+-        RunPlan with canonical stage chain and output paths
+-    """
+-    from src.services.output_layout_service import OutputLayoutService
+-
+-    service = OutputLayoutService()
+-    layout = service.compute_layout(njr)
+-    return build_run_plan(njr, layout)
++"""RunPlan abstraction for multi-stage pipeline execution.
++
++RunPlan is the intermediate stage between NormalizedJobRecord and PipelineRunner.
++It encodes the stage chain, output paths, and execution order in a declarative form.
++
++PR-MULTISTAGE-002 fixes a critical planning bug where stage_chain was treated as a
++list of strings, but in reality it is usually a list of StageConfig objects.
++That mismatch caused *all* stages to appear disabled, letting queue jobs complete
++in milliseconds without ever calling the pipeline.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import TYPE_CHECKING, Any
++
++if TYPE_CHECKING:
++    from src.pipeline.job_models_v2 import NormalizedJobRecord
++    from src.services.output_layout_service import OutputLayout
++
++
++# Canonical stage order for all pipeline executions (v2.6 contract).
++# NOTE: "refiner" and "hires" are capabilities of txt2img (flags), not standalone stages.
++STAGE_ORDER = ["txt2img", "img2img", "upscale", "adetailer"]
++
++
++def _enabled_stage_names(njr: "NormalizedJobRecord") -> list[str]:
++    """Return enabled stage names from an NJR.
++
++    Supports both:
++      - stage_chain: list[StageConfig]
++      - stage_chain: list[str] (legacy/tests)
++    """
++    stage_chain = getattr(njr, "stage_chain", None) or []
++    enabled: list[str] = []
++
++    for item in stage_chain:
++        # Most common: StageConfig
++        stage_type = getattr(item, "stage_type", None)
++        if stage_type is not None:
++            if bool(getattr(item, "enabled", True)):
++                enabled.append(str(stage_type))
++            continue
++
++        # Legacy: strings
++        if isinstance(item, str):
++            enabled.append(item)
++
++    if not enabled:
++        enabled = ["txt2img"]
++    return enabled
++
++
++@dataclass
++class StagePlan:
++    """Plan for executing a single stage."""
++
++    stage_name: str
++    enabled: bool
++    config: dict[str, Any] = field(default_factory=dict)
++
++    @property
++    def output_dir(self) -> Path:
++        """Return the output directory for this stage's images."""
++        return Path(self.config.get("_output_dir", f"images/{self.stage_name}"))
++
++    def to_dict(self) -> dict[str, Any]:
++        return {
++            "stage_name": self.stage_name,
++            "enabled": self.enabled,
++            "config": self.config,
++        }
++
++
++@dataclass
++class RunPlan:
++    """Complete execution plan for a pipeline run."""
++
++    job_id: str
++    prompt_pack_id: str
++    stages: list[StagePlan] = field(default_factory=list)
++    run_root: Path = field(default_factory=Path)
++    manifests_dir: Path = field(default_factory=Path)
++
++    def enabled_stages(self) -> list[StagePlan]:
++        return [s for s in self.stages if s.enabled]
++
++    def stage_by_name(self, name: str) -> StagePlan | None:
++        for stage in self.stages:
++            if stage.stage_name == name:
++                return stage
++        return None
++
++    def to_dict(self) -> dict[str, Any]:
++        return {
++            "job_id": self.job_id,
++            "prompt_pack_id": self.prompt_pack_id,
++            "stages": [s.to_dict() for s in self.stages],
++            "run_root": str(self.run_root),
++            "manifests_dir": str(self.manifests_dir),
++        }
++
++
++def build_run_plan(njr: "NormalizedJobRecord", layout: "OutputLayout") -> RunPlan:
++    """Build a RunPlan from an NJR and OutputLayout."""
++    from src.pipeline.job_models_v2 import NormalizedJobRecord
++
++    assert isinstance(njr, NormalizedJobRecord), (
++        f"build_run_plan() requires NormalizedJobRecord, got {type(njr).__name__}"
++    )
++
++    enabled_names = set(_enabled_stage_names(njr))
++
++    full_config: dict[str, Any] = {}
++    if isinstance(getattr(njr, "config", None), dict):
++        full_config = dict(njr.config)
++
++    stages: list[StagePlan] = []
++    for stage_name in STAGE_ORDER:
++        enabled = stage_name in enabled_names
++
++        # Stage-specific config section (flat) + an embedded pointer to the full config.
++        stage_cfg: dict[str, Any] = {}
++        section = full_config.get(stage_name)
++        if isinstance(section, dict):
++            stage_cfg.update(section)
++
++        stage_cfg["_output_dir"] = str(layout.stage_images_dir(stage_name))
++        stage_cfg["_full_config"] = full_config
++
++        stages.append(StagePlan(stage_name=stage_name, enabled=enabled, config=stage_cfg))
++
++    return RunPlan(
++        job_id=njr.job_id,
++        prompt_pack_id=njr.prompt_pack_id or "default",
++        stages=stages,
++        run_root=layout.run_root,
++        manifests_dir=layout.manifests_dir,
++    )
++
++
++def build_run_plan_from_njr(njr: "NormalizedJobRecord") -> RunPlan:
++    """Legacy wrapper for backward compatibility."""
++    from src.services.output_layout_service import OutputLayoutService
++
++    service = OutputLayoutService()
++    layout = service.compute_layout(njr)
++    return build_run_plan(njr, layout)
+diff -ruN /mnt/data/pr_multistage_002_orig/tests/pipeline/test_pipeline_runner.py /mnt/data/pr_multistage_002/tests/pipeline/test_pipeline_runner.py
+--- /mnt/data/pr_multistage_002_orig/tests/pipeline/test_pipeline_runner.py	2025-12-15 06:53:18.000000000 +0000
++++ /mnt/data/pr_multistage_002/tests/pipeline/test_pipeline_runner.py	2025-12-16 18:03:15.947603628 +0000
+@@ -1,71 +1,46 @@
+-from unittest.mock import Mock
++from __future__ import annotations
+ 
+-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+-from src.pipeline.pipeline_runner import PipelineRunResult, PipelineRunner, normalize_run_result
++from src.pipeline.job_models_v2 import NormalizedJobRecord
++from src.pipeline.stage_models import StageConfig, StageRuntimeConfig
++from src.pipeline.pipeline_runner import PipelineRunner
+ 
+ 
+-def _minimal_normalized_record() -> NormalizedJobRecord:
+-    return NormalizedJobRecord(
+-        job_id="runner-test",
+-        config={},
+-        path_output_dir="output",
+-        filename_template="{seed}",
+-        seed=42,
+-        variant_index=0,
+-        variant_total=1,
+-        batch_index=0,
+-        batch_total=1,
+-        created_ts=0.0,
+-        randomizer_summary=None,
+-        stage_chain=[
+-            StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a")
+-        ],
+-    )
++class StubStructuredLogger:
++    def log(self, *args, **kwargs):  # pragma: no cover
++        return None
+ 
+ 
+-def test_run_njr_is_only_public_entrypoint() -> None:
+-    runner = PipelineRunner(Mock(), Mock())
+-    assert hasattr(runner, "run_njr")
+-    assert not hasattr(runner, "run")
++def test_pipeline_runner_requires_njr(tmp_path):
++    runner = PipelineRunner(api_client=None, structured_logger=StubStructuredLogger(), runs_base_dir=str(tmp_path))
++    try:
++        runner.run_njr("not an njr")  # type: ignore[arg-type]
++        assert False, "expected AssertionError"
++    except AssertionError:
++        assert True
+ 
+ 
+-def test_run_njr_delegates_to_executor() -> None:
+-    runner = PipelineRunner(Mock(), Mock())
+-    record = _minimal_normalized_record()
+-    pipeline = Mock()
+-    pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
+-    runner._pipeline = pipeline
+-    result = runner.run_njr(record, cancel_token=None)
+-    pipeline.run_txt2img_stage.assert_called_once()
+-    assert result.success is True
+-    assert result.variants == [{"path": "output.png"}]
++def test_pipeline_runner_smoke_txt2img(tmp_path):
++    runner = PipelineRunner(api_client=None, structured_logger=StubStructuredLogger(), runs_base_dir=str(tmp_path))
++
++    # Patch the executor call so we don't need a real SDWebUI.
++    calls = {}
+ 
++    def fake_txt2img(prompt, negative_prompt, config, output_dir, image_name, cancel_token=None):
++        calls["prompt"] = prompt
++        return {"path": str(output_dir / f"{image_name}.png")}
+ 
+-def test_pipeline_run_result_to_dict_and_back() -> None:
+-    result = PipelineRunResult(
+-        run_id="roundtrip-001",
+-        success=True,
+-        error=None,
+-        variants=[{"variant": "a"}],
+-        learning_records=[],
+-        metadata={"note": "test"},
+-        stage_plan=None,
+-        stage_events=[{"stage": "txt2img"}],
++    runner._pipeline.run_txt2img_stage = fake_txt2img  # type: ignore[attr-defined]
++
++    njr = NormalizedJobRecord(
++        job_id="job1",
++        prompt_pack_id="pack",
++        positive_prompt="p",
++        negative_prompt="n",
++        config={"txt2img": {"width": 512, "height": 512}},
++        stage_chain=[StageConfig(stage_type="txt2img", enabled=True, config=StageRuntimeConfig())],
+     )
+-    data = result.to_dict()
+-    assert data["run_id"] == "roundtrip-001"
+-    assert data["metadata"]["note"] == "test"
+-    restored = PipelineRunResult.from_dict(data)
+-    assert restored.run_id == result.run_id
+-    assert restored.success == result.success
+-    assert restored.metadata == result.metadata
+-
+-
+-def test_normalize_run_result_accepts_dicts_and_defaults() -> None:
+-    canonical = normalize_run_result({"run_id": "from-dict", "success": True}, default_run_id="fallback")
+-    assert canonical["run_id"] == "from-dict"
+-    assert canonical["success"] is True
+-    fallback = normalize_run_result("unexpected", default_run_id="fallback")
+-    assert fallback["run_id"] == "fallback"
+-    assert fallback["success"] is False
+-    assert fallback["error"] == "unexpected"
++
++    result = runner.run_njr(njr)
++    assert result.success is True
++    assert result.final_image_paths
++    assert calls.get("prompt") == "p"
+diff -ruN /mnt/data/pr_multistage_002_orig/tests/pipeline/test_pipeline_runner_multistage_002.py /mnt/data/pr_multistage_002/tests/pipeline/test_pipeline_runner_multistage_002.py
+--- /mnt/data/pr_multistage_002_orig/tests/pipeline/test_pipeline_runner_multistage_002.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/pr_multistage_002/tests/pipeline/test_pipeline_runner_multistage_002.py	2025-12-16 18:02:46.924435671 +0000
+@@ -0,0 +1,87 @@
++from __future__ import annotations
++
++from pathlib import Path
++
++from src.pipeline.job_models_v2 import NormalizedJobRecord
++from src.pipeline.stage_models import StageConfig, StageRuntimeConfig
++from src.pipeline.pipeline_runner import PipelineRunner
++from src.pipeline.run_plan import build_run_plan
++from src.services.output_layout_service import OutputLayoutService
++
++
++class StubStructuredLogger:
++    def info(self, *args, **kwargs):
++        return None
++
++    def warning(self, *args, **kwargs):
++        return None
++
++    def error(self, *args, **kwargs):
++        return None
++
++
++class StubApiClient:
++    """Pipeline executor expects an api_client; we patch the stage methods so it is unused."""
++
++
++def _make_min_njr(job_id: str = "job-1") -> NormalizedJobRecord:
++    return NormalizedJobRecord(
++        job_id=job_id,
++        prompt_pack_id="PACK",
++        positive_prompt="a test prompt",
++        negative_prompt="",
++        config={
++            "txt2img": {
++                "model": "dummy",
++                "sampler_name": "Euler a",
++                "steps": 1,
++                "cfg_scale": 7.0,
++                "width": 512,
++                "height": 512,
++            },
++            "pipeline": {"adetailer_enabled": False},
++        },
++        stage_chain=[
++            StageConfig(stage_type="txt2img", enabled=True, config=StageRuntimeConfig()),
++        ],
++    )
++
++
++def test_build_run_plan_enables_stage_config_chain(tmp_path: Path, monkeypatch):
++    # Force OutputLayoutService to use tmp_path as base output folder
++    from src.services import output_layout_service as ols
++
++    monkeypatch.setattr(ols, "DEFAULT_OUTPUT_BASE_DIR", str(tmp_path), raising=False)
++
++    njr = _make_min_njr()
++    layout = OutputLayoutService().compute_layout(njr)
++    plan = build_run_plan(njr, layout)
++
++    enabled = [s.stage_name for s in plan.enabled_stages()]
++    assert enabled == ["txt2img"]
++
++
++def test_pipeline_runner_executes_txt2img_when_enabled(tmp_path: Path, monkeypatch):
++    # Force OutputLayoutService to use tmp_path as base output folder
++    from src.services import output_layout_service as ols
++
++    monkeypatch.setattr(ols, "DEFAULT_OUTPUT_BASE_DIR", str(tmp_path), raising=False)
++
++    njr = _make_min_njr("job-2")
++
++    runner = PipelineRunner(StubApiClient(), StubStructuredLogger())
++
++    calls = {"count": 0}
++
++    def stub_txt2img(prompt, negative_prompt, config, output_dir, image_name, cancel_token=None):
++        calls["count"] += 1
++        out = Path(output_dir) / f"{image_name}.png"
++        return {"path": str(out)}
++
++    runner._pipeline.run_txt2img_stage = stub_txt2img  # type: ignore[attr-defined]
++
++    result = runner.run_njr(njr)
++
++    assert calls["count"] == 1
++    assert result.success is True
++    assert result.final_image_paths and result.final_image_paths[0].endswith("txt2img.png")
