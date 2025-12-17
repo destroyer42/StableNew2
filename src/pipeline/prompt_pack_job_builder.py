@@ -255,7 +255,10 @@ class PromptPackNormalizedJobBuilder:
                     {
                         "upscaler": data.get("upscaler"),
                         "upscale_mode": data.get("upscale_mode"),
-                        "resize": data.get("upscaling_resize"),
+                        "upscaling_resize": data.get("upscaling_resize"),  # Keep original key name
+                        "gfpgan_visibility": data.get("gfpgan_visibility"),
+                        "codeformer_visibility": data.get("codeformer_visibility"),
+                        "codeformer_weight": data.get("codeformer_weight"),
                     }
                 )
             stage_cfg = StageConfig(

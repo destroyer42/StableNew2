@@ -1307,6 +1307,23 @@ class Pipeline:
         else:
             ad_neg_final = base_ad_neg
 
+        # DEBUG: Log ADetailer config received
+        logger.info(
+            "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s, mask_feather=%s",
+            config.get("adetailer_model", "NOT_SET"),
+            config.get("adetailer_steps", "NOT_SET"),
+            config.get("adetailer_denoise", "NOT_SET"),
+            config.get("adetailer_cfg", "NOT_SET"),
+            config.get("adetailer_sampler", "NOT_SET"),
+            config.get("adetailer_confidence", "NOT_SET"),
+            config.get("adetailer_mask_feather", "NOT_SET"),
+        )
+        logger.info(
+            "ADETAILER PROMPTS RECEIVED: positive='%s', negative='%s'",
+            (config.get("adetailer_prompt", "NOT_SET")[:60] + "...") if len(config.get("adetailer_prompt", "")) > 60 else config.get("adetailer_prompt", "NOT_SET"),
+            (base_ad_neg[:60] + "...") if len(base_ad_neg) > 60 else base_ad_neg,
+        )
+
         # Build ADetailer payload
         payload = {
             "init_images": [init_image],
@@ -2608,9 +2625,26 @@ class Pipeline:
 
             upscale_mode = config.get("upscale_mode", "single")
 
+            # DEBUG: Log full upscale config
+            logger.info(
+                "UPSCALE CONFIG RECEIVED: mode=%s, upscaler=%s, resize=%s, steps=%s, sampler=%s, denoise=%s",
+                upscale_mode,
+                config.get("upscaler", "NOT_SET"),
+                config.get("upscaling_resize", "NOT_SET"),
+                config.get("steps", "NOT_SET"),
+                config.get("sampler_name", "NOT_SET"),
+                config.get("denoising_strength", "NOT_SET"),
+            )
+
+            # Set conservative tile sizes to prevent CUDA OOM
             if hasattr(self.client, "ensure_safe_upscale_defaults"):
                 try:
-                    self.client.ensure_safe_upscale_defaults()
+                    # Use smaller tiles for safety (512 vs default 768)
+                    self.client.ensure_safe_upscale_defaults(
+                        max_img_mp=8.0,
+                        max_tile=512,
+                        max_overlap=64,
+                    )
                 except Exception as exc:  # noqa: BLE001 - best-effort safety clamp
                     logger.debug("ensure_safe_upscale_defaults failed: %s", exc)
 
@@ -2728,16 +2762,15 @@ class Pipeline:
                     int(orig_height * upscaling_resize) if orig_height is not None else "?",
                 )
 
-                # Prepare payload for metadata regardless of call method
-                payload = {
-                    "image_base64": input_image_b64,
-                    "upscaler": upscaler,
-                    "upscaling_resize": upscaling_resize,
-                    "gfpgan_visibility": gfpgan_vis,
-                    "codeformer_visibility": codeformer_vis,
-                    "codeformer_weight": codeformer_weight,
-                }
-                response = self._generate_images("upscale", payload)
+                # Call client.upscale_image() which properly formats the payload
+                response = self.client.upscale_image(
+                    image_base64=input_image_b64,
+                    upscaler=upscaler,
+                    upscaling_resize=upscaling_resize,
+                    gfpgan_visibility=gfpgan_vis,
+                    codeformer_visibility=codeformer_vis,
+                    codeformer_weight=codeformer_weight,
+                )
                 response_key = "image"
                 image_key = None
 
@@ -2759,19 +2792,34 @@ class Pipeline:
 
             if save_image_from_base64(image_data, image_path):
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                # Build metadata config based on upscale mode
+                if upscale_mode == "img2img":
+                    config_dict = self._clean_metadata_payload(payload)
+                    neg_prompt = payload.get("negative_prompt")
+                else:
+                    # Single-image mode doesn't have full payload
+                    config_dict = {
+                        "upscaler": upscaler,
+                        "upscaling_resize": upscaling_resize,
+                        "gfpgan_visibility": gfpgan_vis,
+                        "codeformer_visibility": codeformer_vis,
+                        "codeformer_weight": codeformer_weight,
+                    }
+                    neg_prompt = None
+                
                 metadata = {
                     "name": image_name,
                     "stage": "upscale",
                     "timestamp": timestamp,
                     "input_image": str(input_image_path),
-                    "final_negative_prompt": payload.get("negative_prompt"),
+                    "final_negative_prompt": neg_prompt,
                     "global_negative_applied": global_applied
                     if "global_applied" in locals()
                     else False,
                     "global_negative_terms": global_terms
                     if "global_terms" in locals() and global_applied
                     else "",
-                    "config": self._clean_metadata_payload(payload),
+                    "config": config_dict,
                     "path": str(image_path),
                 }
 

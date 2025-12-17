@@ -3535,7 +3535,7 @@ class AppController:
                 config_snapshot=run_config,
                 prompt_text=prompt_text,
                 negative_prompt_text=negative_prompt_text,
-                stage_flags=dict(stage_flags),
+                stage_flags={},  # Empty dict - let pack config determine stages
                 randomizer_metadata=randomizer_metadata,
             )
             entries.append(entry)

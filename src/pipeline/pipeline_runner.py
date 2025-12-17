@@ -28,6 +28,8 @@ from src.pipeline.stage_sequencer import (
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
 
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:  # pragma: no cover
     from src.controller.app_controller import CancelToken
 
@@ -63,32 +65,97 @@ class PipelineRunner:
         learning_records = []
         metadata = dict(njr.config or {})
         try:
-            # For each stage in the plan, execute and collect results
-            last_image_meta = None
+            # Execute stages sequentially, passing outputs forward
+            last_image_path = None
+            last_result = None
             prompt = getattr(njr, "positive_prompt", "") or ""
             negative_prompt = getattr(njr, "negative_prompt", "") or ""
+            
             for stage in plan.jobs:
-                # Build payload for this stage
-                payload = {
-                    "prompt": stage.prompt_text,
-                    "negative_prompt": negative_prompt,
-                    "model": stage.model,
-                    "sampler_name": stage.sampler,
-                    "steps": njr.steps or 20,
-                    "cfg_scale": stage.cfg_scale or njr.cfg_scale or 7.5,
-                    "width": njr.width or 1024,
-                    "height": njr.height or 1024,
-                }
-                # Call the appropriate pipeline stage
-                result = self._pipeline.run_txt2img_stage(
-                    payload["prompt"],
-                    payload["negative_prompt"],
-                    payload,
-                    run_dir,
-                    image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
-                    cancel_token=cancel_token,
-                )
+                # Dispatch to the appropriate stage executor based on stage_name
+                if stage.stage_name == "txt2img":
+                    # Build payload for txt2img
+                    payload = {
+                        "prompt": stage.prompt_text,
+                        "negative_prompt": negative_prompt,
+                        "model": stage.model,
+                        "sampler_name": stage.sampler,
+                        "steps": njr.steps or 20,
+                        "cfg_scale": stage.cfg_scale or njr.cfg_scale or 7.5,
+                        "width": njr.width or 1024,
+                        "height": njr.height or 1024,
+                    }
+                    result = self._pipeline.run_txt2img_stage(
+                        payload["prompt"],
+                        payload["negative_prompt"],
+                        payload,
+                        run_dir,
+                        image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
+                        cancel_token=cancel_token,
+                    )
+                    # Extract the image path from metadata dict for next stage
+                    if result and "path" in result:
+                        last_image_path = result["path"]
+                    
+                elif stage.stage_name == "adetailer":
+                    if not last_image_path:
+                        logger.warning("adetailer stage skipped: no input image from previous stage")
+                        continue
+                    # Get stage config from njr.stage_chain
+                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "adetailer"), None)
+                    if stage_config:
+                        config_dict = asdict(stage_config)
+                        # Flatten 'extra' dict to top level for executor
+                        if "extra" in config_dict:
+                            config_dict.update(config_dict.pop("extra"))
+                    else:
+                        config_dict = {}
+                    # CRITICAL: Add adetailer_enabled flag that run_adetailer() expects
+                    config_dict["adetailer_enabled"] = True
+                    
+                    result = self._pipeline.run_adetailer_stage(
+                        input_image_path=Path(last_image_path),
+                        config=config_dict,
+                        output_dir=run_dir,
+                        image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
+                        prompt=prompt,
+                        cancel_token=cancel_token,
+                    )
+                    # Update last_image_path for next stage
+                    if result and "path" in result:
+                        last_image_path = result["path"]
+                    
+                elif stage.stage_name == "upscale":
+                    if not last_image_path:
+                        logger.warning("upscale stage skipped: no input image from previous stage")
+                        continue
+                    # Get stage config from njr.stage_chain
+                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "upscale"), None)
+                    if stage_config:
+                        config_dict = asdict(stage_config)
+                        # Flatten 'extra' dict to top level for executor
+                        if "extra" in config_dict:
+                            config_dict.update(config_dict.pop("extra"))
+                    else:
+                        config_dict = {}
+                    
+                    result = self._pipeline.run_upscale_stage(
+                        input_image_path=Path(last_image_path),
+                        config=config_dict,
+                        output_dir=run_dir,
+                        image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
+                        cancel_token=cancel_token,
+                    )
+                    # Update last_image_path
+                    if result and "path" in result:
+                        last_image_path = result["path"]
+                    
+                else:
+                    logger.warning(f"Unknown stage type: {stage.stage_name}, skipping")
+                    continue
+                
                 variants.append(result)
+                last_result = result
                 stage_events.append(
                     {
                         "stage": stage.stage_name,
@@ -123,6 +190,9 @@ class PipelineRunner:
             stage_plan=plan,
             stage_events=stage_events,
         )
+        logger.info(f"🔍 DEBUG: PipelineRunResult created with success={success}, error={error}, variants={len(variants)}")
+        result_dict = result.to_dict()
+        logger.info(f"🔍 DEBUG: to_dict() success={result_dict.get('success')}, error={result_dict.get('error')}")
         try:
             write_run_metadata(run_id, metadata, base_dir=self._runs_base_dir)
         except Exception:
