@@ -776,6 +776,7 @@ class SDWebUIClient:
         Returns:
             Response data including base64 encoded images
         """
+        logger.info("🔵 [BATCH_SIZE_DEBUG] client.txt2img: Received payload with batch_size=%s, n_iter=%s", payload.get('batch_size'), payload.get('n_iter'))
         with self._request_context(
             "post",
             "/sdapi/v1/txt2img",
@@ -1205,6 +1206,86 @@ class SDWebUIClient:
         ]
         logger.info("Retrieved %s schedulers", len(schedulers))
         return schedulers
+
+    def get_adetailer_models(self) -> list[str]:
+        """
+        Get list of available ADetailer models.
+        
+        Returns:
+            List of ADetailer model names (detection models including yolo and mediapipe)
+        """
+        # Try to get from scripts API
+        with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
+            if response is None:
+                logger.warning("Failed to get scripts from API; using ADetailer defaults")
+                return self._get_default_adetailer_models()
+            
+            try:
+                data = response.json()
+                # Look for ADetailer in txt2img scripts
+                txt2img_scripts = data.get("txt2img", [])
+                for script in txt2img_scripts:
+                    if isinstance(script, dict) and "adetailer" in script.get("name", "").lower():
+                        # Try to extract model list from args
+                        # ADetailer typically has args with 'ad_model' or similar
+                        args = script.get("args", [])
+                        if not args:
+                            continue
+                            
+                        # The first arg in ADetailer is usually the model selector
+                        # It may be a dict with 'choices' or 'value' field
+                        for i, arg in enumerate(args):
+                            if isinstance(arg, dict):
+                                # Check for choices field (dropdown options)
+                                if "choices" in arg:
+                                    choices = arg.get("choices", [])
+                                    if choices and len(choices) > 3:  # Sanity check
+                                        logger.info("Retrieved %s ADetailer models from scripts API (arg %s)", len(choices), i)
+                                        return choices
+                                # Also check label for model-related args
+                                label = arg.get("label", "").lower()
+                                if "model" in label and "choices" in arg:
+                                    choices = arg.get("choices", [])
+                                    if choices:
+                                        logger.info("Retrieved %s ADetailer models from scripts API (via label)", len(choices))
+                                        return choices
+            except Exception as exc:
+                logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
+        
+        # Fallback defaults
+        defaults = self._get_default_adetailer_models()
+        logger.info("Using default ADetailer models: %s", len(defaults))
+        return defaults
+    
+    @staticmethod
+    def _get_default_adetailer_models() -> list[str]:
+        """Get comprehensive default list of common ADetailer detection models."""
+        return [
+            "face_yolov8n.pt",
+            "face_yolov8s.pt",
+            "hand_yolov8n.pt",
+            "hand_yolov8s.pt",
+            "person_yolov8n-seg.pt",
+            "person_yolov8s-seg.pt",
+            "mediapipe_face_full",
+            "mediapipe_face_short",
+            "mediapipe_face_mesh",
+            "mediapipe_face_mesh_eyes_only",
+        ]
+
+    def get_adetailer_detectors(self) -> list[str]:
+        """
+        Get list of available ADetailer detectors.
+        
+        Note: In ADetailer, 'detectors' are the same as 'models' - they're all detection models.
+        The GUI may show them separately for UX, but the API uses the same list.
+        
+        Returns:
+            List of ADetailer detector/model names (same as get_adetailer_models)
+        """
+        # ADetailer doesn't have a separate detector list - it's the same as models
+        # Both dropdowns should show the same detection models
+        return self.get_adetailer_models()
 
     def set_model(self, model_name: str) -> bool:
         """

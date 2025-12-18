@@ -248,8 +248,19 @@ class PromptPackNormalizedJobBuilder:
                     "adetailer_denoise"
                 )
             if stage == "adetailer":
-                extra["prompt"] = data.get("adetailer_prompt")
-                extra["negative_prompt"] = data.get("adetailer_negative_prompt")
+                extra.update({
+                    "prompt": data.get("adetailer_prompt"),
+                    "negative_prompt": data.get("adetailer_negative_prompt"),
+                    "adetailer_enabled": data.get("adetailer_enabled"),
+                    "adetailer_model": data.get("adetailer_model"),
+                    "adetailer_confidence": data.get("adetailer_confidence"),
+                    "adetailer_mask_feather": data.get("adetailer_mask_feather"),
+                    "adetailer_sampler": data.get("adetailer_sampler"),
+                    "adetailer_scheduler": data.get("adetailer_scheduler"),
+                    "adetailer_steps": data.get("adetailer_steps"),
+                    "adetailer_denoise": data.get("adetailer_denoise"),
+                    "adetailer_cfg": data.get("adetailer_cfg"),
+                })
             if stage == "upscale":
                 extra.update(
                     {

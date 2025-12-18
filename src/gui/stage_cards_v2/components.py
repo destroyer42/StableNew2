@@ -154,15 +154,36 @@ class SeedSection(ttk.Frame):
         ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=(0, 2)
         )
-        self.seed_var = tk.StringVar(value="0")
+        self.seed_var = tk.StringVar(value="-1")
         ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry").grid(
             row=1, column=0, sticky="ew"
         )
         self.randomize_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
-            self, text="Randomize", variable=self.randomize_var, style=SECONDARY_BUTTON_STYLE
+            self, text="Randomize", variable=self.randomize_var, style=SECONDARY_BUTTON_STYLE,
+            command=self._on_randomize_toggle
         ).grid(row=1, column=1, sticky="w", padx=(8, 0))
+        
+        # Add randomize button (🎲)
+        randomize_btn = ttk.Button(
+            self, text="🎲", width=3,
+            command=self._on_randomize_click
+        )
+        randomize_btn.grid(row=1, column=2, sticky="w", padx=(4, 0))
+        
         self.columnconfigure(0, weight=1)
+    
+    def _on_randomize_toggle(self) -> None:
+        """Handle randomize checkbox toggle."""
+        if self.randomize_var.get():
+            self.seed_var.set("-1")
+    
+    def _on_randomize_click(self) -> None:
+        """Handle randomize button click."""
+        import random
+        new_seed = random.randint(0, 2**32 - 1)
+        self.seed_var.set(str(new_seed))
+        self.randomize_var.set(False)
 
 
 __all__ = ["LabeledSlider", "PromptSection", "SamplerSection", "SeedSection"]

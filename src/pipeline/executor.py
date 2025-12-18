@@ -211,6 +211,33 @@ class Pipeline:
         )
         return merge_global_negative(base_negative, global_terms)
 
+    def _resolve_negative_prompt(
+        self,
+        primary_meta: dict[str, Any] | None,
+        fallback_meta: dict[str, Any] | None = None,
+        default_negative: str | None = None,
+    ) -> str:
+        """
+        Resolve the most relevant negative prompt from stage metadata or config.
+
+        Prefers the most recent stage metadata, then falls back to a prior stage
+        (typically txt2img) before finally using a provided default string.
+        """
+        for candidate in (primary_meta, fallback_meta):
+            if not isinstance(candidate, dict):
+                continue
+            neg = candidate.get("final_negative_prompt") or candidate.get("negative_prompt")
+            if neg:
+                return str(neg)
+            cfg = candidate.get("config")
+            if isinstance(cfg, dict):
+                neg = cfg.get("negative_prompt")
+                if neg:
+                    return str(neg)
+        if default_negative:
+            return str(default_negative)
+        return ""
+
     def set_progress_controller(self, controller: Any | None) -> None:
         """Attach a progress reporting controller."""
 
@@ -791,7 +818,8 @@ class Pipeline:
         """
         raw_sampler = config.get("sampler_name", "Euler a")
         sampler_name = (raw_sampler or "Euler a").strip() or "Euler a"
-        scheduler_value = config.get("scheduler")
+        # Strip and check for actual value (not just empty string)
+        scheduler_value = (config.get("scheduler") or "").strip()
 
         scheduler_mappings = {
             "Karras": "Karras",
@@ -800,6 +828,7 @@ class Pipeline:
             "SGM Uniform": "SGM Uniform",
         }
 
+        # Only try to extract from sampler name if no explicit scheduler provided
         if not scheduler_value:
             for scheduler_keyword, mapped in scheduler_mappings.items():
                 if scheduler_keyword in sampler_name:
@@ -808,8 +837,12 @@ class Pipeline:
                     break
 
         payload: dict[str, str] = {"sampler_name": sampler_name}
+        # Include scheduler in payload if provided (not empty)
         if scheduler_value:
             payload["scheduler"] = scheduler_value
+            logger.debug("Including scheduler in payload: '%s'", scheduler_value)
+        else:
+            logger.debug("No scheduler specified, WebUI will use default")
         return payload
 
     @staticmethod
@@ -1238,6 +1271,7 @@ class Pipeline:
         self,
         input_image_path: Path,
         prompt: str,
+        negative_prompt: str,
         config: dict[str, Any],
         run_dir: Path,
         cancel_token=None,
@@ -1248,6 +1282,7 @@ class Pipeline:
         Args:
             input_image_path: Path to input image
             prompt: Text prompt
+            negative_prompt: Negative prompt (fallback if no adetailer_negative_prompt)
             config: Configuration for ADetailer
             run_dir: Run directory
             cancel_token: Optional cancellation token
@@ -1290,22 +1325,28 @@ class Pipeline:
         payload_width = actual_width or _coerce_dimension(config.get("width"), 512)
         payload_height = actual_height or _coerce_dimension(config.get("height"), 512)
 
-        # Optionally apply global negative to adetailer negative prompt
+        # Use adetailer-specific negative prompt if provided, otherwise use txt2img negative
         base_ad_neg = config.get("adetailer_negative_prompt", "")
-        apply_global = (config.get("pipeline", {}) if isinstance(config, dict) else {}).get(
-            "apply_global_negative_adetailer", True
-        )
-        if apply_global:
-            ad_neg_final = self.config_manager.add_global_negative(base_ad_neg)
-            try:
-                logger.info(
-                    "🛡️ Applied global NSFW prevention (adetailer stage) - Enhanced: '%s'",
-                    (ad_neg_final[:120] + "...") if len(ad_neg_final) > 120 else ad_neg_final,
-                )
-            except Exception:
-                pass
+        apply_global = False  # Initialize to track if we applied global negative
+        if base_ad_neg:
+            # If specific adetailer negative provided, optionally add global negative
+            apply_global = (config.get("pipeline", {}) if isinstance(config, dict) else {}).get(
+                "apply_global_negative_adetailer", True
+            )
+            if apply_global:
+                ad_neg_final = self.config_manager.add_global_negative(base_ad_neg)
+                try:
+                    logger.info(
+                        "🛡️ Applied global NSFW prevention (adetailer stage) - Enhanced: '%s'",
+                        (ad_neg_final[:120] + "...") if len(ad_neg_final) > 120 else ad_neg_final,
+                    )
+                except Exception:
+                    pass
+            else:
+                ad_neg_final = base_ad_neg
         else:
-            ad_neg_final = base_ad_neg
+            # No specific adetailer negative, use txt2img negative (already has global + aesthetic + pack)
+            ad_neg_final = negative_prompt
 
         # DEBUG: Log ADetailer config received
         logger.info(
@@ -1324,10 +1365,18 @@ class Pipeline:
             (base_ad_neg[:60] + "...") if len(base_ad_neg) > 60 else base_ad_neg,
         )
 
+        # Use adetailer-specific prompt if provided, otherwise use txt2img prompt
+        adetailer_prompt = config.get("adetailer_prompt", "")
+        final_prompt = adetailer_prompt if adetailer_prompt else prompt
+        logger.info("🔵 [ADETAILER_DEBUG] adetailer_prompt='%s', txt2img_prompt='%s', final_prompt='%s'", 
+                    adetailer_prompt[:60] if adetailer_prompt else "(empty)",
+                    prompt[:60] if prompt else "(empty)",
+                    final_prompt[:60] if final_prompt else "(empty)")
+        
         # Build ADetailer payload
         payload = {
             "init_images": [init_image],
-            "prompt": config.get("adetailer_prompt", prompt),
+            "prompt": final_prompt,
             "negative_prompt": ad_neg_final,
             "sampler_name": config.get("adetailer_sampler", "DPM++ 2M"),
             "steps": config.get("adetailer_steps", 28),
@@ -1350,7 +1399,7 @@ class Pipeline:
                             "ad_sampler": config.get("adetailer_sampler", "DPM++ 2M"),
                             "ad_steps": config.get("adetailer_steps", 28),
                             "ad_cfg_scale": config.get("adetailer_cfg", 7.0),
-                            "ad_prompt": config.get("adetailer_prompt", ""),
+                            "ad_prompt": final_prompt,  # Use final_prompt (adetailer override or original txt2img prompt)
                             "ad_negative_prompt": ad_neg_final,
                         }
                     ]
@@ -1634,6 +1683,7 @@ class Pipeline:
             last_image_path = txt2img_meta["path"]
             final_image_path = last_image_path
             adetailer_meta = None
+            last_stage_meta = txt2img_meta
             image_label = f"{index}/{total_images}" if total_images else str(index)
             do_upscale = upscale_enabled and (not upscale_only_last or index == total_images)
 
@@ -1672,6 +1722,7 @@ class Pipeline:
                 if img2img_meta:
                     results["img2img"].append(img2img_meta)
                     last_image_path = img2img_meta["path"]
+                    last_stage_meta = img2img_meta
                     logger.info(f"img2img completed for {txt2img_meta['name']}")
                 else:
                     logger.warning(
@@ -1688,10 +1739,16 @@ class Pipeline:
                 self._record_stage_event("adetailer", "enter", index, total_images, False)
                 adetailer_cfg = dict(config.get("adetailer", {}))
                 adetailer_cfg.setdefault("pipeline", pipeline_cfg)
+                fallback_negative = self._resolve_negative_prompt(
+                    last_stage_meta,
+                    txt2img_meta,
+                    (config.get("txt2img", {}) or {}).get("negative_prompt", ""),
+                )
                 try:
                     adetailer_meta = self.run_adetailer(
                         Path(last_image_path),
                         prompt,
+                        fallback_negative,
                         adetailer_cfg,
                         run_dir,
                         cancel_token=cancel_token,
@@ -1702,6 +1759,7 @@ class Pipeline:
                 if adetailer_meta:
                     results["adetailer"].append(adetailer_meta)
                     last_image_path = adetailer_meta["path"]
+                    last_stage_meta = adetailer_meta
                     final_image_path = last_image_path
                     logger.info(f"adetailer completed for {Path(txt2img_meta['path']).name}")
                 else:
@@ -1911,10 +1969,13 @@ class Pipeline:
             base_image_name = Path(txt2img_meta.get("name", "base")).stem
             last_image_path = txt2img_meta.get("path", "")
             final_image_path = last_image_path
+            last_stage_meta: dict[str, Any] | None = txt2img_meta
 
             # Compare mode keeps original + refined branch logic (unchanged broadly)
             if compare_mode and use_refiner:
-                candidates: list[dict[str, str]] = [{"label": "base", "path": txt2img_meta["path"]}]
+                candidates: list[dict[str, Any]] = [
+                    {"label": "base", "path": txt2img_meta["path"], "meta": txt2img_meta}
+                ]
                 try:
                     # Defensive: ensure refiner_checkpoint is string before split
                     ref_str = str(refiner_checkpoint) if refiner_checkpoint else ""
@@ -1947,7 +2008,7 @@ class Pipeline:
                 if cmp_meta:
                     cmp_meta = self._tag_variant_metadata(cmp_meta, variant_index, variant_label)
                     results["img2img"].append(cmp_meta)
-                    candidates.append({"label": "refined", "path": cmp_meta["path"]})
+                    candidates.append({"label": "refined", "path": cmp_meta["path"], "meta": cmp_meta})
 
                 processed_final_paths: list[str] = []
                 for cand in candidates:
@@ -1963,8 +2024,13 @@ class Pipeline:
                                 "apply_global_negative_adetailer", True
                             )
                         }
+                        cand_negative = self._resolve_negative_prompt(
+                            cand.get("meta"),
+                            txt2img_meta,
+                            (config.get("txt2img", {}) or {}).get("negative_prompt", ""),
+                        )
                         adetailer_meta = self.run_adetailer(
-                            Path(branch_last), prompt, adetailer_cfg, pack_dir
+                            Path(branch_last), prompt, cand_negative, adetailer_cfg, pack_dir
                         )
                         if adetailer_meta:
                             adetailer_meta = self._tag_variant_metadata(
@@ -2021,6 +2087,7 @@ class Pipeline:
                         )
                         results["img2img"].append(img2img_meta)
                         last_image_path = img2img_meta["path"]
+                        last_stage_meta = img2img_meta
                         final_image_path = last_image_path
                 if adetailer_enabled:
                     adetailer_cfg = dict(config.get("adetailer", {}))
@@ -2033,8 +2100,13 @@ class Pipeline:
                             "apply_global_negative_adetailer", True
                         )
                     }
+                    fallback_neg = self._resolve_negative_prompt(
+                        last_stage_meta,
+                        txt2img_meta,
+                        (config.get("txt2img", {}) or {}).get("negative_prompt", ""),
+                    )
                     adetailer_meta = self.run_adetailer(
-                        Path(last_image_path), prompt, adetailer_cfg, pack_dir
+                        Path(last_image_path), prompt, fallback_neg, adetailer_cfg, pack_dir
                     )
                     if adetailer_meta:
                         adetailer_meta = self._tag_variant_metadata(
@@ -2042,6 +2114,7 @@ class Pipeline:
                         )
                         results["adetailer"].append(adetailer_meta)
                         last_image_path = adetailer_meta["path"]
+                        last_stage_meta = adetailer_meta
                         final_image_path = last_image_path
                 if upscale_enabled:
                     upscale_dir = pack_dir / "upscaled"
@@ -2177,6 +2250,10 @@ class Pipeline:
             if txt2img_config is None:
                 # Flat payload format from PipelineRunner._build_stage_payload
                 txt2img_config = config
+            
+            # Extract batch_size from config (images_per_prompt)
+            stage_batch_size = config.get("batch_size", 1)
+            logger.info("🔵 [BATCH_SIZE_DEBUG] executor.run_txt2img_stage: config['batch_size']=%s, stage_batch_size=%s", config.get('batch_size'), stage_batch_size)
 
             # Optionally apply global NSFW prevention to negative prompt based on stage flag
             apply_global = config.get("pipeline", {}).get("apply_global_negative_txt2img", True)
@@ -2264,6 +2341,7 @@ class Pipeline:
             # Log configuration validation
             logger.debug(f"📝 Input txt2img config: {json.dumps(txt2img_config, indent=2)}")
 
+            logger.info("🔵 [BATCH_SIZE_DEBUG] executor: About to create WebUI payload with batch_size=%s", stage_batch_size)
             payload = {
                 "prompt": prompt,
                 "negative_prompt": enhanced_negative,
@@ -2275,7 +2353,7 @@ class Pipeline:
                 "seed_resize_from_h": txt2img_config.get("seed_resize_from_h", -1),
                 "seed_resize_from_w": txt2img_config.get("seed_resize_from_w", -1),
                 "clip_skip": txt2img_config.get("clip_skip", 2),
-                "batch_size": txt2img_config.get("batch_size", 1),
+                "batch_size": stage_batch_size,
                 "n_iter": txt2img_config.get("n_iter", 1),
                 "restore_faces": txt2img_config.get("restore_faces", False),
                 "tiling": txt2img_config.get("tiling", False),
@@ -2322,6 +2400,10 @@ class Pipeline:
 
             # Add refiner support (SDXL native API - top-level parameters)
             if use_refiner:
+                # WebUI v1.10+ supports native refiner via API parameters
+                # This doesn't require explicit model switching, so Safe Mode shouldn't block it
+                # However, if the refiner checkpoint name doesn't exist in WebUI, it may fail silently
+                
                 # Strip hash from checkpoint name if present (e.g., "model.safetensors [abc123]" -> "model.safetensors")
                 # Defensive: ensure refiner_checkpoint is string before split
                 try:
@@ -2331,6 +2413,16 @@ class Pipeline:
                     )
                 except Exception:
                     refiner_checkpoint_clean = str(refiner_checkpoint) if refiner_checkpoint else ""
+                
+                # Log Safe Mode status for transparency
+                if not self.client.options_write_enabled:
+                    logger.info(
+                        "🎨 Refiner enabled with Safe Mode active. "
+                        "Using WebUI's native refiner API (no explicit model switch needed). "
+                        "Refiner checkpoint: %s",
+                        refiner_checkpoint_clean
+                    )
+                
                 # Refiner parameters go at the top level of the payload
                 payload["refiner_checkpoint"] = refiner_checkpoint_clean
                 payload["refiner_switch_at"] = refiner_switch_at
@@ -2340,6 +2432,7 @@ class Pipeline:
 
             # Log final payload for validation
             logger.debug(f"🚀 Sending txt2img payload: {json.dumps(payload, indent=2)}")
+            logger.info("🔵 [BATCH_SIZE_DEBUG] executor: Final payload batch_size=%s, n_iter=%s (should generate %s total images)", payload.get('batch_size'), payload.get('n_iter'), payload.get('batch_size', 1) * payload.get('n_iter', 1))
 
             # Generate image
             self._apply_webui_defaults_once()
@@ -2348,10 +2441,44 @@ class Pipeline:
                 logger.error("txt2img failed - no images returned")
                 return None
 
-            # Save final image with provided name
-            image_path = output_dir / f"{image_name}.png"
-
-            if save_image_from_base64(response["images"][0], image_path):
+            # Log how many images were actually generated
+            num_images_received = len(response["images"])
+            logger.info("🔵 [BATCH_SIZE_DEBUG] WebUI returned %s images (expected %s)", num_images_received, payload.get('batch_size', 1) * payload.get('n_iter', 1))
+            
+            # Save ALL images when batch_size > 1
+            saved_paths = []
+            batch_size = payload.get('batch_size', 1)
+            
+            for batch_idx in range(num_images_received):
+                if batch_size > 1:
+                    # Multiple images: use suffix _batch0, _batch1, etc.
+                    batch_image_name = f"{image_name}_batch{batch_idx}"
+                    image_path = output_dir / f"{batch_image_name}.png"
+                else:
+                    # Single image: use original name
+                    image_path = output_dir / f"{image_name}.png"
+                    batch_image_name = image_name
+                
+                logger.info("🔵 [BATCH_SIZE_DEBUG] Saving image %s/%s: %s", batch_idx + 1, num_images_received, image_path.name)
+                if not save_image_from_base64(response["images"][batch_idx], image_path):
+                    logger.error("Failed to save image %s", image_path)
+                    continue
+                    
+                saved_paths.append(image_path)
+            
+            # Use the first image for metadata and return value (backward compatibility)
+            if saved_paths:
+                image_path = saved_paths[0]
+                # Extract original image_name from path (without _batch suffix)
+                if batch_size > 1:
+                    batch_image_name = f"{image_name}_batch0"
+                else:
+                    batch_image_name = image_name
+            else:
+                logger.error("No images were saved successfully")
+                return None
+            
+            if True:  # Keep original indentation for metadata block
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 metadata = {
                     "name": image_name,
@@ -2856,7 +2983,9 @@ class Pipeline:
             self._record_stage_event("upscale", "cancelled", 1, 1, True)
             raise
         except Exception as e:
+            import traceback
             logger.error(f"Upscale stage failed: {e}")
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
             self._record_stage_event("upscale", "exit", 1, 1, False)
             return None
 
@@ -2867,6 +2996,7 @@ class Pipeline:
         output_dir: Path,
         image_name: str,
         prompt: str | None = None,
+        negative_prompt: str | None = None,
         cancel_token=None,
     ) -> dict[str, Any] | None:
         """
@@ -2876,13 +3006,28 @@ class Pipeline:
         try:
             self._ensure_not_cancelled(cancel_token, "adetailer stage start")
             output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # DEBUG: Log what config was received
+            logger.info(
+                "ADETAILER_STAGE CONFIG KEYS: %s",
+                list(config.keys()) if config else "EMPTY"
+            )
+            logger.info(
+                "ADETAILER_STAGE VALUES: denoise=%s, steps=%s, model=%s, sampler=%s",
+                config.get("adetailer_denoise") if config else "NO_CONFIG",
+                config.get("adetailer_steps") if config else "NO_CONFIG",
+                config.get("adetailer_model") if config else "NO_CONFIG",
+                config.get("adetailer_sampler") if config else "NO_CONFIG",
+            )
+            
             adetailer_cfg = dict(config or {})
             adetailer_cfg.setdefault(
                 "pipeline", config.get("pipeline", {}) if isinstance(config, dict) else {}
             )
             prompt_text = prompt or adetailer_cfg.get("adetailer_prompt", "")
+            negative_text = negative_prompt or ""
             result = self.run_adetailer(
-                input_image_path, prompt_text, adetailer_cfg, output_dir, cancel_token=cancel_token
+                input_image_path, prompt_text, negative_text, adetailer_cfg, output_dir, cancel_token=cancel_token
             )
             if result:
                 self._last_adetailer_result = result

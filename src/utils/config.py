@@ -563,13 +563,24 @@ class ConfigManager:
             # Convert pack_name to config filename (heroes.txt -> heroes.json)
             config_path = self._pack_config_path(pack_name)
 
+            # Debug: Log what we're about to save
+            pipeline_section = config.get("pipeline", {})
+            logger.info(
+                "Saving pack config '%s': pipeline flags: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
+                pack_name,
+                pipeline_section.get("txt2img_enabled"),
+                pipeline_section.get("img2img_enabled"),
+                pipeline_section.get("adetailer_enabled"),
+                pipeline_section.get("upscale_enabled"),
+            )
+
             # Ensure packs directory exists
             config_path.parent.mkdir(exist_ok=True)
 
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
 
-            logger.info(f"Saved pack config: {pack_name}")
+            logger.info(f"Saved pack config to: {config_path}")
             return True
         except Exception as e:
             logger.error(f"Failed to save pack config '{pack_name}': {e}")

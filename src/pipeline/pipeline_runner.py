@@ -75,6 +75,8 @@ class PipelineRunner:
                 # Dispatch to the appropriate stage executor based on stage_name
                 if stage.stage_name == "txt2img":
                     # Build payload for txt2img
+                    batch_size_value = njr.images_per_prompt or 1
+                    logger.info("🔵 [BATCH_SIZE_DEBUG] pipeline_runner: njr.images_per_prompt=%s, using batch_size=%s", njr.images_per_prompt, batch_size_value)
                     payload = {
                         "prompt": stage.prompt_text,
                         "negative_prompt": negative_prompt,
@@ -84,7 +86,9 @@ class PipelineRunner:
                         "cfg_scale": stage.cfg_scale or njr.cfg_scale or 7.5,
                         "width": njr.width or 1024,
                         "height": njr.height or 1024,
+                        "batch_size": batch_size_value,
                     }
+                    logger.info("🔵 [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s", payload.get('batch_size'))
                     result = self._pipeline.run_txt2img_stage(
                         payload["prompt"],
                         payload["negative_prompt"],
@@ -119,6 +123,7 @@ class PipelineRunner:
                         output_dir=run_dir,
                         image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         cancel_token=cancel_token,
                     )
                     # Update last_image_path for next stage
@@ -369,6 +374,7 @@ class PipelineRunner:
                 run_dir,
                 image_name=image_name,
                 prompt=payload.get("prompt"),
+                negative_prompt=payload.get("negative_prompt"),
                 cancel_token=cancel_token,
             )
         raise ValueError(f"Unsupported stage {stage_type.value}")

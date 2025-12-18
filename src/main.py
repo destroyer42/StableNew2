@@ -418,12 +418,13 @@ def main() -> None:
         file_access_logger = FileAccessLogger(log_path)
         logging.getLogger(__name__).info("File access tracing enabled at %s", log_path)
         _install_file_access_hooks(file_access_logger)
-
+    
     logging.info("Starting StableNew V2 GUI (MainWindowV2)")
     # Don't bootstrap WebUI synchronously - do it asynchronously after GUI loads
     webui_manager = None
 
     single_instance_lock = SingleInstanceLock()
+    
     if not single_instance_lock.acquire():
         msg = (
             "StableNew is already running.\n\n"
@@ -437,7 +438,7 @@ def main() -> None:
         else:
             print(msg, file=sys.stderr)
         return
-
+    
     if tk is None:
         print("Tkinter is not available; cannot start StableNew GUI.", file=sys.stderr)
         single_instance_lock.release()
@@ -450,10 +451,11 @@ def main() -> None:
             auto_exit_seconds = float(auto_exit_env)
         except Exception:
             auto_exit_seconds = 0.0
-
+    
     root, app_state, app_controller, window = build_v2_app(
         root=tk.Tk(), webui_manager=webui_manager
     )
+    
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
             app_controller,
@@ -470,7 +472,7 @@ def main() -> None:
             window.schedule_auto_exit(auto_exit_seconds)
         except Exception:
             pass
-
+    
     root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
 
     try:

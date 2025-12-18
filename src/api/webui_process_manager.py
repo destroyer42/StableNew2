@@ -154,13 +154,17 @@ class WebUIProcessManager:
             # CRITICAL FIX: Don't capture stdout/stderr at all - let WebUI write directly to console
             # This prevents any potential file locking or buffer blocking issues
             
+            # For .bat files on Windows, we MUST use shell=True, otherwise they won't execute.
+            # The orphan process issue will be handled by aggressive cleanup in _kill_process_tree.
+            use_shell = os.name == "nt" and self._config.command[0].endswith(".bat")
+            
             self._process = subprocess.Popen(
                 self._config.command,
                 cwd=self._config.working_dir or None,
                 env=self._config.build_env(),
                 stdout=None,  # Inherit parent's stdout (console)
                 stderr=None,  # Inherit parent's stderr (console)
-                shell=True if (os.name == "nt" and self._config.command[0].endswith(".bat")) else False,
+                shell=use_shell,
             )
             self._pid = self._process.pid
             self._start_time = time.time()
@@ -200,45 +204,70 @@ class WebUIProcessManager:
 
     def stop_webui(self, grace_seconds: float = 10.0) -> bool:
         """Attempt to stop (gracefully then forcefully) the WebUI process."""
+        
+        logger.info("=" * 72)
+        logger.info("STOP_WEBUI CALLED (grace_seconds=%.1f)", grace_seconds)
+        logger.info("=" * 72)
 
         process = self._process
         if process is None:
+            logger.info("stop_webui called but no process tracked")
             return True
         # PR-CORE1-D15: Ensure .terminated attribute exists for test doubles
         if not hasattr(process, "terminated"):
             process.terminated = False
         if process.poll() is not None:
+            logger.info("stop_webui called but process already exited")
             self._finalize_process(process)
             # Already exited; terminated remains False
             return True
         pid = getattr(process, "pid", None)
         logger.info("Initiating WebUI shutdown (pid=%s, grace=%.1fs)", pid, grace_seconds)
+        
+        # Try graceful termination first
         try:
             process.terminate()
             process.terminated = True
-        except Exception:
-            pass
+            logger.info("Sent terminate signal to PID %s", pid)
+        except Exception as exc:
+            logger.warning("Failed to terminate PID %s: %s", pid, exc)
 
+        # Wait for graceful shutdown
         elapsed = 0.0
         interval = min(0.25, max(0.05, grace_seconds / 40.0))
+        graceful_exit = False
         while elapsed < grace_seconds:
             if process.poll() is not None:
+                logger.info("Process %s exited gracefully after %.1fs", pid, elapsed)
+                graceful_exit = True
                 break
             time.sleep(interval)
             elapsed += interval
 
+        # If still running, force kill
         if process.poll() is None:
+            logger.warning("Process %s did not exit gracefully, forcing kill", pid)
             try:
                 process.kill()
-            except Exception:
-                pass
+                logger.info("Sent kill signal to PID %s", pid)
+            except Exception as exc:
+                logger.warning("Failed to kill PID %s: %s", pid, exc)
             try:
                 process.wait(timeout=2.0)
-            except Exception:
-                pass
+                logger.info("Process %s exited after kill signal", pid)
+            except Exception as exc:
+                logger.warning("Process %s did not exit after kill, using taskkill: %s", pid, exc)
+            
+            # Last resort: kill entire process tree
             if process.poll() is None:
                 self._kill_process_tree(getattr(process, "pid", None))
 
+        # ALWAYS kill child processes, even if main process exited gracefully
+        # (WebUI spawns child workers that don't die with the parent)
+        if graceful_exit:
+            logger.info("Main WebUI process exited gracefully, now cleaning up child processes...")
+            self._kill_process_tree(pid)  # Kill children even after graceful exit
+        
         self._finalize_process(process)
         exit_code = self._last_exit_code
         running = self.is_running()
@@ -248,6 +277,14 @@ class WebUIProcessManager:
             exit_code,
             running,
         )
+        
+        # Final verification
+        if running:
+            logger.error(
+                "WebUI process %s is STILL RUNNING after shutdown attempt! Check Task Manager.",
+                pid,
+            )
+        
         return not self.is_running()
 
     def restart_webui(
@@ -390,22 +427,225 @@ class WebUIProcessManager:
         return self._pid
 
     def _kill_process_tree(self, pid: int | None) -> None:
+        """Kill the process and all WebUI-related python.exe processes."""
         if pid is None:
+            logger.warning("_kill_process_tree called with None pid")
             return
-        try:
-            if platform.system() == "Windows":
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    check=False,
-                    capture_output=True,
-                )
-            else:
+        
+        logger.info("Forcefully killing WebUI process tree for PID %s", pid)
+        
+        if platform.system() == "Windows":
+            # Kill all python.exe processes that look like WebUI
+            try:
+                import psutil
+                killed_pids = []
+                
+                # First, try to kill the tracked PID and its children
                 try:
-                    os.killpg(pid, signal.SIGTERM)
-                except Exception:
+                    parent = psutil.Process(pid)
+                    children = parent.children(recursive=True)
+                    logger.info("Found %d direct child processes for PID %s", len(children), pid)
+                    
+                    # Kill children first
+                    for child in children:
+                        try:
+                            logger.info("Killing direct child process PID %s (%s)", child.pid, child.name())
+                            child.kill()
+                            killed_pids.append(child.pid)
+                        except psutil.NoSuchProcess:
+                            pass
+                        except Exception as exc:
+                            logger.warning("Failed to kill child PID %s: %s", child.pid, exc)
+                    
+                    # Kill parent
+                    try:
+                        parent.kill()
+                        logger.info("Killed parent process PID %s", pid)
+                        killed_pids.append(pid)
+                    except psutil.NoSuchProcess:
+                        pass
+                except psutil.NoSuchProcess:
+                    logger.info("Parent process %s already gone", pid)
+                except Exception as exc:
+                    logger.warning("Failed to enumerate children of PID %s: %s", pid, exc)
+                
+                # AGGRESSIVE: Find and kill ALL python.exe processes that might be WebUI
+                # This catches orphaned processes that aren't direct children
+                webui_dir = self._config.working_dir
+                logger.warning("=" * 80)
+                logger.warning("STARTING AGGRESSIVE WEBUI PROCESS CLEANUP")
+                logger.warning("Working directory: %s", webui_dir)
+                logger.warning("=" * 80)
+                
+                # DIAGNOSTIC: List ALL python.exe processes BEFORE cleanup
+                logger.warning(">>> LISTING ALL PYTHON.EXE PROCESSES BEFORE CLEANUP:")
+                all_python_pids = []
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cwd', 'memory_info']):
+                    try:
+                        if proc.info['name'] and 'python' in proc.info['name'].lower():
+                            cmdline = proc.info.get('cmdline') or []
+                            cwd = proc.info.get('cwd', '')
+                            mem_info = proc.info.get('memory_info')
+                            mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
+                            all_python_pids.append(proc.pid)
+                            logger.warning(
+                                "  PID %s: name=%s, mem=%.1f MB, cwd=%s, cmdline=%s",
+                                proc.pid,
+                                proc.info['name'],
+                                mem_mb,
+                                cwd[:60] + "..." if len(cwd) > 60 else cwd,
+                                ' '.join(cmdline[:3]) if cmdline else "N/A",
+                            )
+                    except Exception:
+                        pass
+                logger.warning(">>> Found %d total python.exe processes", len(all_python_pids))
+                logger.warning("")
+                
+                logger.info("Scanning for orphaned WebUI python.exe processes (working_dir=%s)", webui_dir)
+                
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cwd', 'memory_info']):
+                    try:
+                        # Skip already-killed processes
+                        if proc.pid in killed_pids:
+                            continue
+                        
+                        # Look for python.exe
+                        if proc.info['name'] and 'python' in proc.info['name'].lower():
+                            cmdline = proc.info.get('cmdline') or []
+                            cwd = proc.info.get('cwd', '')
+                            mem_info = proc.info.get('memory_info')
+                            mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
+                            
+                            # Check if this looks like a WebUI process
+                            is_webui = False
+                            match_reason = []
+                            
+                            # Check 1: Command line contains webui, launch, or similar
+                            cmdline_str = ' '.join(cmdline).lower() if cmdline else ''
+                            webui_keywords = ['webui', 'launch.py', 'launch_webui', 'stable-diffusion', 'gradio']
+                            for keyword in webui_keywords:
+                                if keyword in cmdline_str:
+                                    is_webui = True
+                                    match_reason.append(f"cmdline contains '{keyword}'")
+                                    break
+                            
+                            # Check 2: Working directory matches our WebUI
+                            if webui_dir and cwd:
+                                try:
+                                    if Path(cwd).resolve() == Path(webui_dir).resolve():
+                                        is_webui = True
+                                        match_reason.append(f"cwd matches webui_dir")
+                                except Exception:
+                                    pass
+                            
+                            # Check 3: FAILSAFE - Memory > 500MB (likely a leaked WebUI process)
+                            # Normal Python processes are 17-150MB, WebUI processes are much larger
+                            if mem_mb > 500:
+                                is_webui = True
+                                match_reason.append(f"memory {mem_mb:.1f} MB > 500 MB threshold")
+                                logger.warning(
+                                    "Found large python.exe process PID %s (%.1f MB) - likely WebUI leak",
+                                    proc.pid,
+                                    mem_mb,
+                                )
+                            
+                            # DIAGNOSTIC: Log WHY we're killing or NOT killing each process
+                            if is_webui:
+                                logger.warning(
+                                    ">>> KILLING PID %s: %s (cwd=%s, mem=%.1f MB) - Reasons: %s",
+                                    proc.pid,
+                                    ' '.join(cmdline[:2]) if cmdline else proc.info['name'],
+                                    cwd[:40] + "..." if len(cwd) > 40 else cwd,
+                                    mem_mb,
+                                    ', '.join(match_reason),
+                                )
+                                try:
+                                    proc.kill()
+                                    logger.info("✓ Successfully killed PID %s", proc.pid)
+                                    killed_pids.append(proc.pid)
+                                except Exception as kill_exc:
+                                    logger.error("✗ FAILED to kill PID %s: %s", proc.pid, kill_exc)
+                            else:
+                                logger.debug(
+                                    "Skipping PID %s (mem=%.1f MB): No WebUI match",
+                                    proc.pid,
+                                    mem_mb,
+                                )
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                    except Exception as exc:
+                        logger.debug("Error checking process: %s", exc)
+                
+                logger.warning("")
+                logger.warning(">>> CLEANUP COMPLETE: Killed %d WebUI-related processes", len(killed_pids))
+                logger.warning(">>> PIDs killed: %s", killed_pids if killed_pids else "NONE")
+                
+                # DIAGNOSTIC: List ALL python.exe processes AFTER cleanup
+                logger.warning("")
+                logger.warning(">>> LISTING ALL PYTHON.EXE PROCESSES AFTER CLEANUP:")
+                remaining_python_pids = []
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'memory_info']):
+                    try:
+                        if proc.info['name'] and 'python' in proc.info['name'].lower():
+                            mem_info = proc.info.get('memory_info')
+                            mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
+                            remaining_python_pids.append(proc.pid)
+                            was_supposed_to_die = proc.pid in all_python_pids and proc.pid not in killed_pids
+                            status = "⚠ LEAKED" if mem_mb > 500 else "OK (small)"
+                            logger.warning(
+                                "  PID %s: mem=%.1f MB %s%s",
+                                proc.pid,
+                                mem_mb,
+                                status,
+                                " (SHOULD HAVE BEEN KILLED!)" if was_supposed_to_die and mem_mb > 500 else "",
+                            )
+                    except Exception:
+                        pass
+                logger.warning(">>> %d python.exe processes remain (started with %d)", 
+                             len(remaining_python_pids), len(all_python_pids))
+                logger.warning("=" * 80)
+                
+                logger.info("Killed %d WebUI-related processes", len(killed_pids))
+                
+            except ImportError:
+                logger.error("psutil not available - cannot kill orphaned processes! Install psutil.")
+                self._taskkill_tree(pid)
+            except Exception as exc:
+                logger.exception("Failed to kill WebUI processes: %s", exc)
+                self._taskkill_tree(pid)
+        else:
+            # Unix-like systems
+            try:
+                os.killpg(pid, signal.SIGTERM)
+                logger.info("Sent SIGTERM to process group %s", pid)
+            except Exception as exc:
+                logger.warning("Failed to kill process group %s, trying single process: %s", pid, exc)
+                try:
                     os.kill(pid, signal.SIGTERM)
-        except Exception:
-            logger.exception("Failed to kill WebUI process tree for pid %s", pid)
+                    logger.info("Sent SIGTERM to process %s", pid)
+                except Exception as kill_exc:
+                    logger.exception("Failed to kill process %s: %s", pid, kill_exc)
+
+    def _taskkill_tree(self, pid: int) -> None:
+        """Use Windows taskkill to kill process tree."""
+        try:
+            result = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                logger.info("Successfully killed process tree for PID %s via taskkill", pid)
+            else:
+                logger.warning(
+                    "taskkill returned code %s for PID %s: %s",
+                    result.returncode,
+                    pid,
+                    result.stderr.strip() if result.stderr else "no error message",
+                )
+        except Exception as exc:
+            logger.exception("taskkill failed for PID %s: %s", pid, exc)
 
     def _log_process_crash_tail(self, exit_code: int | None) -> None:
         if exit_code is None:

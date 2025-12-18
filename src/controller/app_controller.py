@@ -292,13 +292,18 @@ class AppController:
         root_logger.addHandler(self.gui_log_handler)
         json_config = get_jsonl_log_config()
         self.json_log_handler = attach_jsonl_log_handler(json_config, level=logging.INFO)
+        
         # Pipeline runner and controller setup
+        # Don't do port discovery on startup - too slow (50+ seconds if WebUI not running)
+        # Use default port and discover later if connection fails
+        default_url = os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
+        
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
-            self._api_client = api_client or SDWebUIClient()
+            self._api_client = api_client or SDWebUIClient(base_url=default_url)
             self._structured_logger = structured_logger or StructuredLogger()
         else:
-            self._api_client = api_client or SDWebUIClient()
+            self._api_client = api_client or SDWebUIClient(base_url=default_url)
             self._structured_logger = structured_logger or StructuredLogger()
             self.pipeline_runner = PipelineRunner(self._api_client, self._structured_logger)
         self._webui_api: WebUIAPI | None = None
@@ -524,6 +529,38 @@ class AppController:
             self._system_watchdog.start()
         except Exception:
             logger.exception("Failed to start system watchdog")
+
+    def _create_api_client_with_discovery(self) -> SDWebUIClient:
+        """
+        Create API client with automatic port discovery.
+        
+        WebUI auto-increments ports (7860 → 7861 → 7862...) when instances collide.
+        This scans ports 7860-7869 to find the active WebUI instance.
+        
+        Returns:
+            SDWebUIClient configured with discovered or default URL
+        """
+        import logging
+        from src.utils.webui_discovery import find_webui_api_port
+        
+        logger = logging.getLogger(__name__)
+        
+        # Try to discover actual WebUI port
+        discovered_url = find_webui_api_port(
+            base_url="http://127.0.0.1",
+            start_port=7860,
+            max_attempts=10  # Check ports 7860-7869
+        )
+        
+        if discovered_url:
+            logger.info(f"[controller] Discovered WebUI at {discovered_url}")
+            return SDWebUIClient(base_url=discovered_url)
+        else:
+            # Fall back to default or environment variable
+            import os
+            default_url = os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
+            logger.warning(f"[controller] WebUI discovery failed, using {default_url}")
+            return SDWebUIClient(base_url=default_url)
 
     def notify_queue_activity(self) -> None:
         import time
@@ -2317,6 +2354,13 @@ class AppController:
             "adetailer": bool(pipeline_section.get("adetailer_enabled", True)),
             "upscale": bool(pipeline_section.get("upscale_enabled", False)),
         }
+        logger.info(
+            "[controller] Loading stage flags from config: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
+            stage_defaults["txt2img"],
+            stage_defaults["img2img"],
+            stage_defaults["adetailer"],
+            stage_defaults["upscale"],
+        )
         for stage, enabled in stage_defaults.items():
             self._set_sidebar_stage_state(stage, enabled)
         self._refresh_stage_visibility()
@@ -2389,14 +2433,44 @@ class AppController:
         if not sidebar:
             return
         sidebar.set_stage_state(stage, enabled, emit_change=False)
+        
+        # Also update pipeline_tab flags to keep them in sync
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab:
+            enabled_var = getattr(pipeline_tab, f"{stage}_enabled", None)
+            if enabled_var is not None:
+                try:
+                    enabled_var.set(bool(enabled))
+                    logger.debug(
+                        "[controller] Synced stage '%s' to %s (sidebar + pipeline_tab)",
+                        stage,
+                        enabled,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[controller] Failed to sync stage '%s' to pipeline_tab: %s",
+                        stage,
+                        exc,
+                    )
 
     def _apply_pipeline_stage_flags(self, pipeline_section: dict[str, Any]) -> None:
         if not pipeline_section:
+            logger.warning("[controller] _apply_pipeline_stage_flags called with empty pipeline_section")
             return
+        
+        logger.info(
+            "[controller] Applying stage flags from pipeline section: %s",
+            {k: v for k, v in pipeline_section.items() if k.endswith("_enabled")},
+        )
+        
         for stage in ("txt2img", "img2img", "upscale", "adetailer"):
             key = f"{stage}_enabled"
             if key in pipeline_section:
-                self._set_sidebar_stage_state(stage, bool(pipeline_section.get(key)))
+                enabled = bool(pipeline_section.get(key))
+                logger.info("[controller] Setting stage '%s' to %s", stage, enabled)
+                self._set_sidebar_stage_state(stage, enabled)
+            else:
+                logger.warning("[controller] Pipeline section missing key '%s'", key)
         self._refresh_stage_visibility()
 
     def _load_stage_card(self, _card: Any | None, executor_config: dict[str, Any]) -> None:
@@ -2488,51 +2562,68 @@ class AppController:
     def shutdown_app(self, reason: str | None = None) -> None:
         """Centralized shutdown path invoked by GUI teardown or main_finally."""
         if self._is_shutting_down:
+            logger.info("[controller] shutdown_app: Already shutting down, skipping")
             return
         self._is_shutting_down = True
         if self._shutdown_started_at is None:
             self._shutdown_started_at = time.time()
             threading.Thread(target=self._shutdown_watchdog, daemon=True).start()
         label = reason or "shutdown"
-        logger.info("[controller] shutdown_app called (%s)", label)
+        logger.info("[controller] ===== SHUTDOWN_APP CALLED (%s) =====", label)
 
         try:
+            logger.info("[controller] Step 1/8: Cancelling active jobs...")
             self._cancel_active_jobs(label)
+            logger.info("[controller] Step 1/8: Active jobs cancelled")
         except Exception:
             logger.exception("Error cancelling active jobs during shutdown")
 
         try:
+            logger.info("[controller] Step 2/8: Stopping background work...")
             self.stop_all_background_work()
+            logger.info("[controller] Step 2/8: Background work stopped")
         except Exception:
             logger.exception("Error stopping background work during shutdown")
 
         try:
+            logger.info("[controller] Step 3/8: Shutting down learning hooks...")
             self._shutdown_learning_hooks()
+            logger.info("[controller] Step 3/8: Learning hooks shutdown complete")
         except Exception:
             logger.exception("Error shutting down learning hooks")
 
         try:
+            logger.info("[controller] Step 4/8: Shutting down WebUI process...")
             self._shutdown_webui()
+            logger.info("[controller] Step 4/8: WebUI shutdown complete")
         except Exception:
             logger.exception("Error shutting down WebUI")
         try:
+            logger.info("[controller] Step 5/8: Shutting down job service...")
             self._shutdown_job_service()
+            logger.info("[controller] Step 5/8: Job service shutdown complete")
         except Exception:
             logger.exception("Error shutting down job service")
 
         if is_debug_shutdown_inspector_enabled():
             try:
+                logger.info("[controller] Step 6/8: Running shutdown inspector...")
                 log_shutdown_state(logger, label)
+                logger.info("[controller] Step 6/8: Shutdown inspector complete")
             except Exception:
                 logger.exception("Error running shutdown inspector")
 
         try:
+            logger.info("[controller] Step 7/8: Joining worker thread...")
             self._join_worker_thread()
+            logger.info("[controller] Step 7/8: Worker thread joined")
         except Exception:
             logger.exception("Error waiting for worker thread during shutdown")
 
         try:
+            logger.info("[controller] Step 8/8: Closing loggers and API clients...")
             close_all_structured_loggers()
+            logger.info("[controller] Step 8/8: Loggers closed")
         except Exception:
             logger.exception("Error closing structured loggers during shutdown")
 
@@ -2546,10 +2637,13 @@ class AppController:
         # Clear WebUI process manager global reference
         try:
             clear_global_webui_process_manager()
+            logger.info("[controller] Global WebUI manager cleared")
         except Exception:
             logger.exception("Error clearing WebUI process manager during shutdown")
 
         self._shutdown_completed = True
+        logger.info("[controller] ===== SHUTDOWN_APP COMPLETE =====")
+
 
     def _cancel_active_jobs(self, reason: str) -> None:
         if self._cancel_token is not None:
@@ -2591,6 +2685,7 @@ class AppController:
     def _shutdown_webui(self) -> None:
         manager = self.webui_process_manager
         if not manager:
+            logger.info("[controller] _shutdown_webui: No WebUI manager to shutdown")
             return
         stop_fn = (
             getattr(manager, "stop_webui", None)
@@ -2599,13 +2694,13 @@ class AppController:
         )
         if callable(stop_fn):
             pid = getattr(manager, "pid", None)
-            logger.info("Calling stop_webui for PID %s", pid)
+            logger.info("[controller] _shutdown_webui: Calling stop_webui for PID %s", pid)
             try:
                 result = stop_fn()
                 running = manager.is_running() if hasattr(manager, "is_running") else None
                 exit_code = getattr(manager, "_last_exit_code", None)
                 logger.info(
-                    "WebUI shutdown result: running=%s, last_exit_code=%s, stop_return=%s",
+                    "[controller] _shutdown_webui: WebUI shutdown result: running=%s, last_exit_code=%s, stop_return=%s",
                     running,
                     exit_code,
                     result,
@@ -3459,6 +3554,25 @@ class AppController:
                 self._load_stage_card(card, pack_config)
             stage_panel.load_adetailer_config(pack_config.get("adetailer") or {})
         self._apply_adetailer_config_section(pack_config)
+        
+        # Apply output settings from pack config to output panel
+        pipeline_section = pack_config.get("pipeline", {})
+        sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
+        output_card = getattr(sidebar, "output_settings_card", None) if sidebar else None
+        output_panel = getattr(output_card, "child", None) if output_card else None
+        if output_panel and hasattr(output_panel, "apply_from_overrides"):
+            output_overrides = {
+                "batch_size": pipeline_section.get("images_per_prompt", 1),
+                "output_dir": pipeline_section.get("output_dir", "output"),
+                "filename_pattern": pipeline_section.get("filename_pattern", "{seed}"),
+                "image_format": pipeline_section.get("image_format", "png"),
+                "seed_mode": pipeline_section.get("seed_mode", "fixed"),
+            }
+            try:
+                output_panel.apply_from_overrides(output_overrides)
+                self._append_log(f"[controller] Applied output settings from pack config")
+            except Exception as e:
+                self._append_log(f"[controller] Error applying output settings: {e}")
 
         self._append_log(f"[controller] Loaded config for pack '{pack_id}'")
 
@@ -3466,16 +3580,139 @@ class AppController:
         """Write current stage config into one or more packs."""
         self._append_log(f"[controller] Applying config to packs: {pack_ids}")
 
-        # Get current run config
-        current_config = self._run_config_with_lora()
+        # Gather CURRENT config from ALL stage cards
+        current_config: dict[str, Any] = {}
+        
+        # Get stage cards panel
+        stage_panel = self._get_stage_cards_panel()
+        if stage_panel:
+            # Gather from txt2img card
+            txt2img_card = getattr(stage_panel, "txt2img_card", None)
+            if txt2img_card and hasattr(txt2img_card, "to_config_dict"):
+                try:
+                    txt2img_config = txt2img_card.to_config_dict()
+                    current_config.update(txt2img_config)
+                    self._append_log("[controller] Gathered txt2img config from GUI")
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering txt2img config: {e}")
+            
+            # Gather from img2img card
+            img2img_card = getattr(stage_panel, "img2img_card", None)
+            if img2img_card and hasattr(img2img_card, "to_config_dict"):
+                try:
+                    img2img_config = img2img_card.to_config_dict()
+                    current_config.update(img2img_config)
+                    self._append_log("[controller] Gathered img2img config from GUI")
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering img2img config: {e}")
+            
+            # Gather from upscale card
+            upscale_card = getattr(stage_panel, "upscale_card", None)
+            if upscale_card and hasattr(upscale_card, "to_config_dict"):
+                try:
+                    upscale_config = upscale_card.to_config_dict()
+                    current_config.update(upscale_config)
+                    self._append_log("[controller] Gathered upscale config from GUI")
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering upscale config: {e}")
+            
+            # Gather from adetailer card (returns flat dict)
+            adetailer_card = getattr(stage_panel, "adetailer_card", None)
+            if adetailer_card and hasattr(adetailer_card, "to_config_dict"):
+                try:
+                    adetailer_config = adetailer_card.to_config_dict()
+                    # Wrap in "adetailer" section to match pack structure
+                    if "adetailer" not in current_config:
+                        current_config["adetailer"] = {}
+                    current_config["adetailer"].update(adetailer_config)
+                    
+                    # CRITICAL: Also include enabled flag in adetailer section
+                    # Get it from pipeline_tab since adetailer card doesn't track it
+                    pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+                    if pipeline_tab:
+                        adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
+                        if adetailer_enabled_var is not None:
+                            current_config["adetailer"]["adetailer_enabled"] = bool(adetailer_enabled_var.get())
+                    
+                    self._append_log("[controller] Gathered adetailer config from GUI")
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering adetailer config: {e}")
+        
+        # Add randomizer config
         panel_randomizer = self._get_panel_randomizer_config()
         if panel_randomizer:
             current_config.update(panel_randomizer)
+        
+        # Add LoRA settings
+        if self.app_state and self.app_state.lora_strengths:
+            current_config["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
+        
         if not current_config:
             self._append_log("[controller] No current config to apply")
             return
+        
+        # Update app_state with gathered config
         if self.app_state:
             self.app_state.set_run_config(current_config)
+        
+        # Gather output settings from GUI output panel
+        sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
+        output_card = getattr(sidebar, "output_settings_card", None) if sidebar else None
+        output_panel = getattr(output_card, "child", None) if output_card else None
+        if output_panel and hasattr(output_panel, "get_output_overrides"):
+            try:
+                output_overrides = output_panel.get_output_overrides()
+                # Ensure pipeline section exists
+                if "pipeline" not in current_config:
+                    current_config["pipeline"] = {}
+                # Map output panel keys to pipeline section keys
+                current_config["pipeline"]["images_per_prompt"] = output_overrides.get("batch_size", 1)
+                current_config["pipeline"]["output_dir"] = output_overrides.get("output_dir", "output")
+                current_config["pipeline"]["filename_pattern"] = output_overrides.get("filename_pattern", "{seed}")
+                current_config["pipeline"]["image_format"] = output_overrides.get("image_format", "png")
+                current_config["pipeline"]["seed_mode"] = output_overrides.get("seed_mode", "fixed")
+                self._append_log(f"[controller] Gathered output settings from GUI")
+            except Exception as e:
+                self._append_log(f"[controller] Error gathering output settings: {e}")
+        
+        # Gather pipeline stage flags from pipeline_tab
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab:
+            try:
+                # Ensure pipeline section exists
+                if "pipeline" not in current_config:
+                    current_config["pipeline"] = {}
+                
+                # CRITICAL: Always gather ALL stage flags to ensure complete pipeline section
+                # This prevents merge-with-defaults from using old default values
+                txt2img_enabled_var = getattr(pipeline_tab, "txt2img_enabled", None)
+                img2img_enabled_var = getattr(pipeline_tab, "img2img_enabled", None)
+                adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
+                upscale_enabled_var = getattr(pipeline_tab, "upscale_enabled", None)
+                
+                # Set all flags explicitly (use True as default for txt2img, False for others)
+                current_config["pipeline"]["txt2img_enabled"] = (
+                    bool(txt2img_enabled_var.get()) if txt2img_enabled_var is not None else True
+                )
+                current_config["pipeline"]["img2img_enabled"] = (
+                    bool(img2img_enabled_var.get()) if img2img_enabled_var is not None else False
+                )
+                current_config["pipeline"]["adetailer_enabled"] = (
+                    bool(adetailer_enabled_var.get()) if adetailer_enabled_var is not None else False
+                )
+                current_config["pipeline"]["upscale_enabled"] = (
+                    bool(upscale_enabled_var.get()) if upscale_enabled_var is not None else False
+                )
+                
+                self._append_log(
+                    f"[controller] Gathered pipeline stage flags: "
+                    f"txt2img={current_config['pipeline'].get('txt2img_enabled')}, "
+                    f"img2img={current_config['pipeline'].get('img2img_enabled')}, "
+                    f"adetailer={current_config['pipeline'].get('adetailer_enabled')}, "
+                    f"upscale={current_config['pipeline'].get('upscale_enabled')}"
+                )
+            except Exception as e:
+                self._append_log(f"[controller] Error gathering stage flags: {e}")
 
         # Save to each pack
         for pack_id in pack_ids:
@@ -3527,19 +3764,38 @@ class AppController:
                 run_config["randomization_enabled"] = (
                     self.state.current_config.randomization_enabled
                 )
-            prompt_text, negative_prompt_text = self._read_pack_prompts(pack)
-            print(f"[AppController] Pack '{pack_id}' prompt length: {len(prompt_text)} chars")
-            entry = PackJobEntry(
-                pack_id=pack_id,
-                pack_name=pack.name,
-                config_snapshot=run_config,
-                prompt_text=prompt_text,
-                negative_prompt_text=negative_prompt_text,
-                stage_flags={},  # Empty dict - let pack config determine stages
-                randomizer_metadata=randomizer_metadata,
-            )
-            entries.append(entry)
-            print(f"[AppController] Created PackJobEntry for '{pack_id}'")
+            
+            # Read all prompts from pack file (not just first)
+            try:
+                all_prompts = read_prompt_pack(pack.path)
+            except Exception as e:
+                self._append_log(f"[controller] Failed to read pack '{pack_id}': {e}")
+                all_prompts = []
+            
+            if not all_prompts:
+                self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
+                continue
+            
+            print(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
+            
+            # Create one PackJobEntry per prompt row
+            for row_index, prompt_row in enumerate(all_prompts):
+                prompt_text = prompt_row.get("positive", "").strip()
+                negative_prompt_text = prompt_row.get("negative", "").strip()
+                
+                entry = PackJobEntry(
+                    pack_id=pack_id,
+                    pack_name=pack.name,
+                    config_snapshot=run_config,
+                    prompt_text=prompt_text,
+                    negative_prompt_text=negative_prompt_text,
+                    stage_flags={},  # Empty dict - let pack config determine stages
+                    randomizer_metadata=randomizer_metadata,
+                    pack_row_index=row_index,  # Track which prompt row this is
+                )
+                entries.append(entry)
+            
+            print(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
 
         if entries and self.app_state:
             self.app_state.add_packs_to_job_draft(entries)

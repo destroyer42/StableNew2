@@ -299,6 +299,12 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 var.trace_add("write", lambda *_: self._notify_change())
             except Exception:
                 pass
+        
+        # Add trace for randomize checkbox
+        try:
+            self.seed_section.randomize_var.trace_add("write", lambda *_: self._notify_change())
+        except Exception:
+            pass
 
         parent.columnconfigure(0, weight=1)
 
@@ -667,6 +673,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
 
     def load_from_section(self, section: dict[str, Any] | None) -> None:
         data = section or {}
+        # Basic fields
         self.model_var.set(data.get("model") or data.get("model_name", ""))
         self.vae_var.set(data.get("vae") or data.get("vae_name", ""))
         self.sampler_var.set(data.get("sampler_name", ""))
@@ -676,6 +683,31 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.width_var.set(int(self._safe_int(data.get("width", 512), 512)))
         self.height_var.set(int(self._safe_int(data.get("height", 512), 512)))
         self.clip_skip_var.set(int(self._safe_int(data.get("clip_skip", 2), 2)))
+        
+        # Seed (load from seed field)
+        seed_value = data.get("seed", -1)
+        if hasattr(self, 'seed_var'):
+            self.seed_var.set(str(int(self._safe_int(seed_value, -1))))
+        
+        # Refiner fields
+        self.refiner_enabled_var.set(bool(data.get("use_refiner", False)))
+        refiner_model = data.get("refiner_model_name") or data.get("refiner_checkpoint", "")
+        if refiner_model:
+            self.refiner_model_var.set(refiner_model)
+        self.refiner_switch_var.set(float(self._safe_float(data.get("refiner_switch_at", 0.8), 0.8)))
+        
+        # Hires fix fields  
+        self.hires_enabled_var.set(bool(data.get("enable_hr", False)))
+        self.hires_upscaler_var.set(data.get("hr_upscaler", "Latent"))
+        self.hires_factor_var.set(float(self._safe_float(data.get("hr_scale", 2.0), 2.0)))
+        self.hires_steps_var.set(int(self._safe_int(data.get("hr_second_pass_steps", 0), 0)))
+        self.hires_denoise_var.set(float(self._safe_float(data.get("denoising_strength", 0.3), 0.3)))
+        self.hires_use_base_model_var.set(bool(data.get("hires_use_base_model", True)))
+        
+        # Hires model override
+        hires_model = data.get("hr_checkpoint_name", "")
+        if hires_model:
+            self.hires_model_var.set(hires_model)
 
     def load_from_config(self, cfg: dict[str, Any]) -> None:
         section = (cfg or {}).get("txt2img", {}) or {}
@@ -685,7 +717,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # Use internal names for model/vae, and all selected values for payload correctness
         model_name = self._model_name_map.get(self.model_var.get(), self.model_var.get().strip())
         vae_name = self._vae_name_map.get(self.vae_var.get(), self.vae_var.get().strip())
-        return {
+        
+        config = {
             "txt2img": {
                 "model": model_name,
                 "model_name": model_name,
@@ -698,9 +731,32 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "width": int(self.width_var.get() or 512),
                 "height": int(self.height_var.get() or 512),
                 "clip_skip": int(self.clip_skip_var.get() or 2),
-                "seed": int(self.seed_var.get() or 0),
+                "seed": -1 if self.seed_section.randomize_var.get() else int(self.seed_var.get() or -1),
+                
+                # Refiner fields
+                "use_refiner": bool(self.refiner_enabled_var.get()),
+                "refiner_checkpoint": self._refiner_model_name_map.get(
+                    self.refiner_model_var.get(), 
+                    self.refiner_model_var.get().strip()
+                ),
+                "refiner_model_name": self._refiner_model_name_map.get(
+                    self.refiner_model_var.get(), 
+                    self.refiner_model_var.get().strip()
+                ),
+                "refiner_switch_at": float(self.refiner_switch_var.get() or 0.8),
+                
+                # Hires fix fields
+                "enable_hr": bool(self.hires_enabled_var.get()),
+                "hr_upscaler": self.hires_upscaler_var.get().strip(),
+                "hr_scale": float(self.hires_factor_var.get() or 2.0),
+                "hr_second_pass_steps": int(self.hires_steps_var.get() or 0),
+                "denoising_strength": float(self.hires_denoise_var.get() or 0.3),
+                "hires_use_base_model": bool(self.hires_use_base_model_var.get()),
+                "hr_checkpoint_name": self.hires_model_var.get().strip() if self.hires_model_var.get() else "",
             }
         }
+        
+        return config
 
     def validate(self) -> ValidationResult:
         # All controls are now constrained by UI, minimal validation needed
@@ -738,6 +794,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self._set_scheduler_options(resources.get("schedulers") or [])
         self._update_refiner_model_options(resources.get("models") or [])
         self._update_hires_upscaler_options(resources.get("upscalers") or [])
+        self._update_hires_model_options(resources.get("models") or [])
 
     def _update_model_options(self, entries: list[Any]) -> None:
         values, mapping = self._normalize_dropdown_entries(entries)
@@ -800,6 +857,19 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         if not values:
             values = ["Latent", "R-ESRGAN 4x+"]
         self._set_combo_values(self.hires_upscaler_combo, self.hires_upscaler_var, values)
+
+    def _update_hires_model_options(self, entries: list[Any]) -> None:
+        """Update hires model dropdown with available models."""
+        values = [self.USE_BASE_MODEL_LABEL]
+        for entry in entries:
+            name = (
+                getattr(entry, "display_name", None)
+                or getattr(entry, "name", None)
+                or str(entry)
+            )
+            if name:
+                values.append(name)
+        self._set_combo_values(self._hires_model_combo, self.hires_model_var, values)
 
     @staticmethod
     def _normalize_dropdown_entries(entries: list[Any]) -> tuple[list[str], dict[str, str]]:

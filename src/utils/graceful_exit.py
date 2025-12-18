@@ -43,27 +43,42 @@ def graceful_exit(
     shutdown_timeout = float(os.environ.get("STABLENEW_SHUTDOWN_TIMEOUT", "2.0"))
     logger.info("[graceful_exit] Initiating (%s)", label)
 
-    if root is not None:
-        try:
-            root.quit()
-        except Exception:
-            pass
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
+    # CRITICAL: Shutdown controller BEFORE destroying Tk root
+    # If root is destroyed first, process exits before cleanup completes
+    logger.info("[graceful_exit] Step 1: Shutting down app controller...")
     if controller is not None:
         try:
             controller.shutdown_app(label)
+            logger.info("[graceful_exit] Step 1: Controller shutdown complete")
         except Exception:
             logger.exception("graceful_exit: controller.shutdown_app failed")
+    else:
+        logger.info("[graceful_exit] Step 1: No controller to shutdown")
 
+    logger.info("[graceful_exit] Step 2: Cleaning up window...")
     if window is not None:
         try:
             window.cleanup()
+            logger.info("[graceful_exit] Step 2: Window cleanup complete")
         except Exception:
             logger.exception("graceful_exit: window.cleanup failed")
+    else:
+        logger.info("[graceful_exit] Step 2: No window to cleanup")
+
+    logger.info("[graceful_exit] Step 3: Destroying Tk root...")
+    if root is not None:
+        try:
+            root.quit()
+            logger.info("[graceful_exit] Step 3a: root.quit() complete")
+        except Exception:
+            logger.exception("graceful_exit: root.quit() failed")
+        try:
+            root.destroy()
+            logger.info("[graceful_exit] Step 3b: root.destroy() complete")
+        except Exception:
+            logger.exception("graceful_exit: root.destroy() failed")
+    else:
+        logger.info("[graceful_exit] Step 3: No root to destroy")
 
     deadline = time.time() + shutdown_timeout
     while time.time() < deadline:
