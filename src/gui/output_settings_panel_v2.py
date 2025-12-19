@@ -33,7 +33,6 @@ class OutputSettingsPanelV2(ttk.Frame):
         self.filename_pattern_var = tk.StringVar(value=app_config.filename_pattern_default())
         self.image_format_var = tk.StringVar(value=app_config.image_format_default())
         self.batch_size_var = tk.StringVar(value=str(app_config.batch_size_default()))
-        self.n_iter_var = tk.StringVar(value=str(app_config.n_iter_default()))
         self.seed_mode_var = tk.StringVar(value=app_config.seed_mode_default())
 
         self._build_row(
@@ -59,13 +58,7 @@ class OutputSettingsPanelV2(ttk.Frame):
             parent, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6
         )
         self._build_row(parent, "Batch Size", batch_spin, 3, 2)
-        self._create_tooltip(batch_spin, "Parallel images per generation (rendered simultaneously)")
-        
-        loops_spin = ttk.Spinbox(
-            parent, from_=1, to=20, increment=1, textvariable=self.n_iter_var, width=6
-        )
-        self._build_row(parent, "Loops", loops_spin, 4, 0)
-        self._create_tooltip(loops_spin, "Sequential generation passes (iterations, one after another)")
+        self._create_tooltip(batch_spin, "Number of images to generate per prompt")
         
         self._build_row(
             parent,
@@ -98,9 +91,6 @@ class OutputSettingsPanelV2(ttk.Frame):
             "batch_size": self._safe_int(
                 self.batch_size_var.get(), app_config.batch_size_default()
             ),
-            "n_iter": self._safe_int(
-                self.n_iter_var.get(), app_config.n_iter_default()
-            ),
             "seed_mode": self.seed_mode_var.get().strip(),
         }
 
@@ -118,12 +108,6 @@ class OutputSettingsPanelV2(ttk.Frame):
         if batch is not None:
             try:
                 self.batch_size_var.set(str(int(float(str(batch)))))
-            except Exception:
-                pass
-        n_iter = overrides.get("n_iter")
-        if n_iter is not None:
-            try:
-                self.n_iter_var.set(str(int(float(str(n_iter)))))
             except Exception:
                 pass
         seed = overrides.get("seed_mode")

@@ -1362,7 +1362,7 @@ class Pipeline:
         )
         logger.info(
             "ADETAILER PROMPTS RECEIVED: positive='%s', negative='%s'",
-            (config.get("adetailer_prompt", "NOT_SET")[:60] + "...") if len(config.get("adetailer_prompt", "")) > 60 else config.get("adetailer_prompt", "NOT_SET"),
+            (config.get("adetailer_prompt", "")[:60] + "...") if len(config.get("adetailer_prompt", "")) > 60 else (config.get("adetailer_prompt", "") or "(empty)"),
             (base_ad_neg[:60] + "...") if len(base_ad_neg) > 60 else base_ad_neg,
         )
 
@@ -1407,6 +1407,9 @@ class Pipeline:
                 }
             },
         }
+        # Add scheduler if present in config
+        if config.get("scheduler"):
+            payload["scheduler"] = config.get("scheduler")
 
         # Call img2img endpoint with ADetailer extension
         response = self._generate_images("img2img", payload)

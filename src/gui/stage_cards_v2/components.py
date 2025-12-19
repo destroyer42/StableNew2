@@ -154,6 +154,8 @@ class SeedSection(ttk.Frame):
         ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=(0, 2)
         )
+        
+        # Main seed
         self.seed_var = tk.StringVar(value="-1")
         ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry").grid(
             row=1, column=0, sticky="ew"
@@ -170,6 +172,24 @@ class SeedSection(ttk.Frame):
             command=self._on_randomize_click
         )
         randomize_btn.grid(row=1, column=2, sticky="w", padx=(4, 0))
+        
+        # Subseed controls
+        ttk.Label(self, text="Subseed", style=BODY_LABEL_STYLE).grid(
+            row=2, column=0, sticky="w", pady=(4, 2)
+        )
+        self.subseed_var = tk.StringVar(value="-1")
+        ttk.Entry(self, textvariable=self.subseed_var, width=14, style="Dark.TEntry").grid(
+            row=3, column=0, sticky="ew"
+        )
+        
+        # Subseed strength (0.0 - 1.0)
+        ttk.Label(self, text="Subseed Strength", style=BODY_LABEL_STYLE).grid(
+            row=4, column=0, sticky="w", pady=(4, 2)
+        )
+        self.subseed_strength_var = tk.StringVar(value="0.0")
+        ttk.Entry(self, textvariable=self.subseed_strength_var, width=14, style="Dark.TEntry").grid(
+            row=5, column=0, sticky="ew"
+        )
         
         self.columnconfigure(0, weight=1)
     

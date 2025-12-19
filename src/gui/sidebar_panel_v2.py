@@ -191,8 +191,23 @@ class SidebarPanelV2(ttk.Frame):
         self._current_pack_names: list[str] = []
         self._preview_cache: dict[Path, str] = {}
 
-        self.global_negative_enabled_var = tk.BooleanVar(value=False)
+        self.global_negative_enabled_var = tk.BooleanVar(value=True)  # Default enabled
         self.global_negative_text_var = tk.StringVar(value="")
+        self.global_positive_enabled_var = tk.BooleanVar(value=False)
+        self.global_positive_text_var = tk.StringVar(value="")
+        
+        # Load global prompts from config manager
+        try:
+            if self.config_manager:
+                if hasattr(self.config_manager, "get_global_negative_prompt"):
+                    global_neg = self.config_manager.get_global_negative_prompt()
+                    self.global_negative_text_var.set(global_neg)
+                if hasattr(self.config_manager, "get_global_positive_prompt"):
+                    global_pos = self.config_manager.get_global_positive_prompt()
+                    self.global_positive_text_var.set(global_pos)
+        except Exception:
+            # Fail silently if loading fails
+            pass
 
         self.preset_card = _SidebarCard(
             self,
@@ -457,22 +472,70 @@ class SidebarPanelV2(ttk.Frame):
         self._preview_frame.grid_remove()
         self._preview_current_path: Path | None = None
 
-        global_frame = ttk.Frame(frame)
-        global_frame.grid(row=4, column=0, sticky="ew")
-        enable_cb = ttk.Checkbutton(
+        # Global Prompts Section
+        global_frame = ttk.LabelFrame(frame, text="Global Prompts", padding=8, style="Dark.TLabelframe")
+        global_frame.grid(row=4, column=0, sticky="ew", pady=(4, 0))
+        global_frame.columnconfigure(1, weight=1)
+        
+        # Global Positive
+        pos_row = 0
+        ttk.Label(global_frame, text="✨ Positive:", style="Dark.TLabel").grid(
+            row=pos_row, column=0, sticky="w"
+        )
+        pos_cb = ttk.Checkbutton(
             global_frame,
-            text="Enable Global Negative",
+            text="Enable",
+            variable=self.global_positive_enabled_var,
+            style="Dark.TCheckbutton",
+        )
+        pos_cb.grid(row=pos_row, column=1, sticky="w", padx=(4, 0))
+        
+        pos_entry = ttk.Entry(
+            global_frame,
+            textvariable=self.global_positive_text_var,
+            width=30,
+            style="Dark.TEntry",
+        )
+        pos_entry.grid(row=pos_row + 1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        
+        save_pos_btn = ttk.Button(
+            global_frame,
+            text="Save Global Positive",
+            command=self._save_global_positive,
+            width=20,
+            style="Dark.TButton",
+        )
+        save_pos_btn.grid(row=pos_row + 2, column=0, columnspan=2, sticky="ew", pady=(2, 8))
+        
+        # Global Negative
+        neg_row = 3
+        ttk.Label(global_frame, text="🛡️ Negative:", style="Dark.TLabel").grid(
+            row=neg_row, column=0, sticky="w"
+        )
+        neg_cb = ttk.Checkbutton(
+            global_frame,
+            text="Enable",
             variable=self.global_negative_enabled_var,
             style="Dark.TCheckbutton",
         )
-        enable_cb.grid(row=0, column=0, sticky="w")
-        negative_entry = ttk.Entry(
+        neg_cb.grid(row=neg_row, column=1, sticky="w", padx=(4, 0))
+        
+        neg_entry = ttk.Entry(
             global_frame,
             textvariable=self.global_negative_text_var,
-            width=24,
+            width=30,
+            style="Dark.TEntry",
         )
-        negative_entry.grid(row=0, column=1, sticky="ew", padx=(8, 0))
-        global_frame.columnconfigure(1, weight=1)
+        neg_entry.grid(row=neg_row + 1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        
+        save_neg_btn = ttk.Button(
+            global_frame,
+            text="Save Global Negative",
+            command=self._save_global_negative,
+            width=20,
+            style="Dark.TButton",
+        )
+        save_neg_btn.grid(row=neg_row + 2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
 
         frame.rowconfigure(1, weight=1)
         self._populate_packs_for_selected_list()
@@ -1081,6 +1144,36 @@ class SidebarPanelV2(ttk.Frame):
             "enabled": bool(self.global_negative_enabled_var.get()),
             "text": self.global_negative_text_var.get().strip(),
         }
+    
+    def get_global_positive_config(self) -> dict[str, object]:
+        return {
+            "enabled": bool(self.global_positive_enabled_var.get()),
+            "text": self.global_positive_text_var.get().strip(),
+        }
+    
+    def _save_global_negative(self) -> None:
+        """Save global negative prompt to disk."""
+        if not self.config_manager:
+            return
+        if not hasattr(self.config_manager, "save_global_negative_prompt"):
+            return
+        text = self.global_negative_text_var.get().strip()
+        try:
+            self.config_manager.save_global_negative_prompt(text)
+        except Exception:
+            pass
+    
+    def _save_global_positive(self) -> None:
+        """Save global positive prompt to disk."""
+        if not self.config_manager:
+            return
+        if not hasattr(self.config_manager, "save_global_positive_prompt"):
+            return
+        text = self.global_positive_text_var.get().strip()
+        try:
+            self.config_manager.save_global_positive_prompt(text)
+        except Exception:
+            pass
 
     def get_core_config_panel(self) -> CoreConfigPanelV2 | None:
         return getattr(self, "core_config_panel", None)

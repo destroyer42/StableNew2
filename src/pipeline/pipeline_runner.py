@@ -119,20 +119,62 @@ class PipelineRunner:
                     # Build payload for txt2img
                     batch_size_value = njr.images_per_prompt or 1
                     logger.info("🔵 [BATCH_SIZE_DEBUG] pipeline_runner: njr.images_per_prompt=%s, using batch_size=%s", njr.images_per_prompt, batch_size_value)
-                    payload = {
-                        "prompt": stage.prompt_text,
-                        "negative_prompt": negative_prompt,
-                        "model": stage.model,
-                        "sampler_name": stage.sampler,
-                        "steps": njr.steps or 20,
-                        "cfg_scale": stage.cfg_scale or njr.cfg_scale or 7.5,
-                        "width": njr.width or 1024,
-                        "height": njr.height or 1024,
-                        "batch_size": batch_size_value,
-                    }
-                    # Add scheduler if present in NJR
+                    
+                    # Get config from NJR - it's a flat dict, not nested under 'txt2img'
+                    njr_config = njr.config or {}
+                    if not isinstance(njr_config, dict):
+                        njr_config = {}
+                    
+                    # Build payload starting with base config
+                    payload = {}
+                    
+                    # Add core txt2img parameters
+                    payload["prompt"] = stage.prompt_text
+                    payload["negative_prompt"] = negative_prompt
+                    payload["model"] = stage.model
+                    payload["sampler_name"] = stage.sampler
+                    payload["steps"] = njr.steps or 20
+                    payload["cfg_scale"] = stage.cfg_scale or njr.cfg_scale or 7.5
+                    payload["width"] = njr.width or 1024
+                    payload["height"] = njr.height or 1024
+                    payload["batch_size"] = batch_size_value
+                    
+                    # Add scheduler if present
                     if njr.scheduler:
                         payload["scheduler"] = njr.scheduler
+                    
+                    # Add hires fix settings from NJR config if present
+                    if njr_config.get("enable_hr"):
+                        payload["enable_hr"] = njr_config["enable_hr"]
+                        payload["hr_scale"] = njr_config.get("hr_scale", 2.0)
+                        payload["hr_upscaler"] = njr_config.get("hr_upscaler", "Latent")
+                        payload["hr_second_pass_steps"] = njr_config.get("hr_second_pass_steps", 0)
+                        payload["denoising_strength"] = njr_config.get("denoising_strength", 0.7)
+                        if njr_config.get("hr_resize_x"):
+                            payload["hr_resize_x"] = njr_config["hr_resize_x"]
+                        if njr_config.get("hr_resize_y"):
+                            payload["hr_resize_y"] = njr_config["hr_resize_y"]
+                    
+                    # Add refiner settings from NJR config if present
+                    if njr_config.get("refiner_checkpoint"):
+                        payload["refiner_checkpoint"] = njr_config["refiner_checkpoint"]
+                        payload["refiner_switch_at"] = njr_config.get("refiner_switch_at", 0.8)
+                    
+                    # Add other settings that might be in config
+                    for key in ["clip_skip", "seed", "subseed", "subseed_strength",
+                                "seed_resize_from_h", "seed_resize_from_w",
+                                "restore_faces", "tiling", "do_not_save_samples", "do_not_save_grid"]:
+                        if key in njr_config:
+                            payload[key] = njr_config[key]
+                    
+                    # Debug logging for hires fix
+                    logger.info("🔵 [HIRES_DEBUG] payload: enable_hr=%s, hr_scale=%s, hr_upscaler=%s, hr_second_pass_steps=%s, denoise=%s",
+                               payload.get("enable_hr"), payload.get("hr_scale"), payload.get("hr_upscaler"),
+                               payload.get("hr_second_pass_steps"), payload.get("denoising_strength"))
+                    # Add pipeline section for global negative settings
+                    if isinstance(njr_config, dict) and "pipeline" in njr_config:
+                        payload["pipeline"] = njr_config["pipeline"]
+                    
                     logger.info("🔵 [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s", payload.get('batch_size'))
                     # Include prompt pack row index in naming to prevent overwrites
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
@@ -168,11 +210,26 @@ class PipelineRunner:
                         config_dict = asdict(stage_config)
                         # Flatten 'extra' dict to top level for executor
                         if "extra" in config_dict:
-                            config_dict.update(config_dict.pop("extra"))
+                            extra = config_dict.pop("extra")
+                            # Map generic 'prompt'/'negative_prompt' to adetailer-specific keys
+                            if "prompt" in extra:
+                                extra["adetailer_prompt"] = extra.pop("prompt")
+                            if "negative_prompt" in extra:
+                                extra["adetailer_negative_prompt"] = extra.pop("negative_prompt")
+                            config_dict.update(extra)
                     else:
                         config_dict = {}
                     # CRITICAL: Add adetailer_enabled flag that run_adetailer() expects
                     config_dict["adetailer_enabled"] = True
+                    # Add scheduler from NJR if present
+                    if njr.scheduler:
+                        config_dict["scheduler"] = njr.scheduler
+                    
+                    # Debug logging
+                    logger.info("🔵 [ADETAILER_CONFIG_DEBUG] config_dict keys: %s", list(config_dict.keys()))
+                    logger.info("🔵 [ADETAILER_PROMPT_DEBUG] adetailer_prompt='%s', adetailer_negative='%s'",
+                               config_dict.get("adetailer_prompt", "(not set)")[:60],
+                               config_dict.get("adetailer_negative_prompt", "(not set)")[:60])
                     
                     # Process ALL images from previous stage through adetailer
                     next_stage_paths = []
@@ -250,6 +307,7 @@ class PipelineRunner:
             success = True
         except Exception as exc:
             error = str(exc)
+            logger.error(f"❌ Pipeline execution failed: {exc}", exc_info=True)
             stage_events.append(
                 {
                     "stage": stage.stage_name if "stage" in locals() else "pipeline",

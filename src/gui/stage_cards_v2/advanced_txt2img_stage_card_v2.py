@@ -674,8 +674,22 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
     def load_from_section(self, section: dict[str, Any] | None) -> None:
         data = section or {}
         # Basic fields
-        self.model_var.set(data.get("model") or data.get("model_name", ""))
-        self.vae_var.set(data.get("vae") or data.get("vae_name", ""))
+        # Model: config has internal name, need to find matching display name
+        model_internal = data.get("model") or data.get("model_name", "")
+        model_display = next(
+            (d for d, n in self._model_name_map.items() if n == model_internal),
+            model_internal  # Fallback to internal name if no match
+        )
+        self.model_var.set(model_display)
+        
+        # VAE: config has internal name, need to find matching display name
+        vae_internal = data.get("vae") or data.get("vae_name", "")
+        vae_display = next(
+            (d for d, n in self._vae_name_map.items() if n == vae_internal),
+            vae_internal  # Fallback to internal name if no match
+        )
+        self.vae_var.set(vae_display)
+        
         self.sampler_var.set(data.get("sampler_name", ""))
         self.scheduler_var.set(data.get("scheduler", ""))
         self.steps_var.set(int(self._safe_int(data.get("steps", 20), 20)))
@@ -688,6 +702,14 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         seed_value = data.get("seed", -1)
         if hasattr(self, 'seed_var'):
             self.seed_var.set(str(int(self._safe_int(seed_value, -1))))
+        
+        # Subseed and strength
+        if hasattr(self.seed_section, 'subseed_var'):
+            subseed_value = data.get("subseed", -1)
+            self.seed_section.subseed_var.set(str(int(self._safe_int(subseed_value, -1))))
+        if hasattr(self.seed_section, 'subseed_strength_var'):
+            subseed_strength = data.get("subseed_strength", 0.0)
+            self.seed_section.subseed_strength_var.set(str(float(self._safe_float(subseed_strength, 0.0))))
         
         # Refiner fields
         self.refiner_enabled_var.set(bool(data.get("use_refiner", False)))
@@ -732,6 +754,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "height": int(self.height_var.get() or 512),
                 "clip_skip": int(self.clip_skip_var.get() or 2),
                 "seed": -1 if self.seed_section.randomize_var.get() else int(self.seed_var.get() or -1),
+                "subseed": int(self.seed_section.subseed_var.get() or -1),
+                "subseed_strength": float(self.seed_section.subseed_strength_var.get() or 0.0),
                 
                 # Refiner fields
                 "use_refiner": bool(self.refiner_enabled_var.get()),
@@ -854,6 +878,13 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             for entry in entries
         ]
         values = [str(value).strip() for value in values if str(value).strip()]
+        
+        # Always include built-in upscalers at the beginning
+        builtin_upscalers = ["Latent", "Latent (antialiased)", "Latent (bicubic)", "Latent (bicubic antialiased)", "Latent (nearest)", "Latent (nearest-exact)", "None"]
+        for upscaler in reversed(builtin_upscalers):
+            if upscaler not in values:
+                values.insert(0, upscaler)
+        
         if not values:
             values = ["Latent", "R-ESRGAN 4x+"]
         self._set_combo_values(self.hires_upscaler_combo, self.hires_upscaler_var, values)

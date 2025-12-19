@@ -13,7 +13,7 @@
     "clip_skip": 2,
     "seed": -1,
     "subseed": -1,
-    "subseed_strength": 0.0,
+    "subseed_strength": 0.5,
     "use_refiner": false,
     "refiner_checkpoint": "babesByStableYogiPony_xlV4",
     "refiner_model_name": "babesByStableYogiPony_xlV4",

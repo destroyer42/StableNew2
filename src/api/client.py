@@ -1204,6 +1204,8 @@ class SDWebUIClient:
         schedulers = [
             scheduler.get("name", scheduler.get("label", "")) for scheduler in data if scheduler
         ]
+        # Ensure proper capitalization for scheduler names (WebUI expects "Karras" not "karras")
+        schedulers = [s.capitalize() if s and s.lower() in {"karras", "exponential", "normal", "simple", "beta", "linear", "cosine"} else s for s in schedulers]
         logger.info("Retrieved %s schedulers", len(schedulers))
         return schedulers
 
