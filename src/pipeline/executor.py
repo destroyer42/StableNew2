@@ -2500,14 +2500,13 @@ class Pipeline:
                     "timestamp": timestamp,
                     "original_prompt": prompt,
                     "final_prompt": payload.get("prompt", prompt),
-                    "prompt": payload.get("prompt", prompt),  # backward compatibility
                     "original_negative_prompt": negative_prompt,
                     "final_negative_prompt": payload.get("negative_prompt", enhanced_negative),
-                    "negative_prompt": payload.get(
-                        "negative_prompt", enhanced_negative
-                    ),  # backward compatibility
                     "global_negative_applied": global_applied,
                     "global_negative_terms": global_terms if global_applied else "",
+                    "seed": payload.get("seed", -1),
+                    "subseed": payload.get("subseed", -1),
+                    "subseed_strength": payload.get("subseed_strength", 0.0),
                     "config": self._clean_metadata_payload(payload),
                     "output_path": str(image_path),
                     "path": str(image_path),
@@ -2671,12 +2670,13 @@ class Pipeline:
                     "timestamp": timestamp,
                     "original_prompt": prompt,
                     "final_prompt": payload.get("prompt", prompt),
-                    "prompt": payload.get("prompt", prompt),
                     "original_negative_prompt": original_negative_prompt,
                     "final_negative_prompt": payload.get("negative_prompt", ""),
-                    "negative_prompt": payload.get("negative_prompt", ""),
                     "global_negative_applied": global_applied,
                     "global_negative_terms": global_terms if global_applied else "",
+                    "seed": payload.get("seed", -1),
+                    "subseed": payload.get("subseed", -1),
+                    "subseed_strength": payload.get("subseed_strength", 0.0),
                     "input_image": str(input_image_path),
                     "config": self._clean_metadata_payload(payload),
                     "path": str(image_path),

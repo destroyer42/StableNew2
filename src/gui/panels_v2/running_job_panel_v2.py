@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 from collections.abc import Callable
+from datetime import datetime
 from tkinter import ttk
 from typing import Any
 
@@ -109,6 +110,10 @@ class RunningJobPanelV2(ttk.Frame):
         self.status_label = ttk.Label(status_frame, text="Status: Idle")
         self.status_label.pack(side="left")
 
+        # Elapsed time (new)
+        self.elapsed_label = ttk.Label(status_frame, text="")
+        self.elapsed_label.pack(side="right", padx=(8, 0))
+
         self.eta_label = ttk.Label(status_frame, text="")
         self.eta_label.pack(side="right")
 
@@ -174,6 +179,29 @@ class RunningJobPanelV2(ttk.Frame):
             mins = int((seconds % 3600) // 60)
             return f"ETA: {hours}h {mins}m"
 
+    def _format_elapsed(self, started_at: datetime | None) -> str:
+        """Format elapsed time since job started."""
+        if started_at is None:
+            return ""
+
+        try:
+            now = datetime.utcnow()
+            delta = now - started_at
+            total_seconds = delta.total_seconds()
+
+            if total_seconds < 60:
+                return f"Elapsed: {int(total_seconds)}s"
+            elif total_seconds < 3600:
+                mins = int(total_seconds // 60)
+                secs = int(total_seconds % 60)
+                return f"Elapsed: {mins}m {secs}s"
+            else:
+                hours = int(total_seconds // 3600)
+                mins = int((total_seconds % 3600) // 60)
+                return f"Elapsed: {hours}h {mins}m"
+        except Exception:
+            return ""
+
     def _update_display(self) -> None:
         """Update the display based on current job state."""
         job = self._current_job
@@ -185,6 +213,7 @@ class RunningJobPanelV2(ttk.Frame):
             self.progress_bar.configure(value=0)
             self.progress_label.configure(text="0%")
             self.status_label.configure(text="Status: Idle")
+            self.elapsed_label.configure(text="")
             self.eta_label.configure(text="")
             self.queue_origin_label.configure(text="")  # PR-GUI-F2
             self.pause_resume_button.configure(text="Pause")
@@ -239,6 +268,10 @@ class RunningJobPanelV2(ttk.Frame):
         # Status
         status_text = f"Status: {job.status.value.title()}"
         self.status_label.configure(text=status_text)
+
+        # Elapsed time (if job has started)
+        elapsed_text = self._format_elapsed(job.started_at)
+        self.elapsed_label.configure(text=elapsed_text)
 
         # ETA
         self.eta_label.configure(text=self._format_eta(job.eta_seconds))

@@ -598,19 +598,31 @@ class NormalizedJobRecord:
         return max(1, self.images_per_prompt * self.loop_count)
 
     def get_display_summary(self) -> str:
-        """Get a short display string for the job."""
+        """Get a short display string for the job.
+        
+        Shows: Pack Name | batch_size×n_iter (X images) | seed | variant/batch info
+        """
         config = self.config
+        
+        # Get pack name or model
+        pack_name = self.prompt_pack_name or ""
         if isinstance(config, dict):
             model = config.get("model", "unknown")
-            prompt = config.get("prompt", "")[:30]
-            if len(config.get("prompt", "")) > 30:
-                prompt += "..."
+            batch_size = config.get("batch_size", 1)
+            n_iter = config.get("n_iter", 1)
         else:
             model = getattr(config, "model", "unknown")
-            prompt_val = getattr(config, "prompt", "")
-            prompt = prompt_val[:30] if prompt_val else ""
-            if len(prompt_val) > 30:
-                prompt += "..."
+            batch_size = getattr(config, "batch_size", 1)
+            n_iter = getattr(config, "n_iter", 1)
+        
+        primary_label = pack_name if pack_name else model
+        
+        # Build batch display
+        total_images = batch_size * n_iter
+        if batch_size > 1 or n_iter > 1:
+            batch_info = f" | {batch_size}×{n_iter} ({total_images} images)"
+        else:
+            batch_info = " | (1 image)"
 
         seed_str = str(self.seed) if self.seed is not None else "?"
 
@@ -622,11 +634,11 @@ class NormalizedJobRecord:
         variant_info = ""
         if self.variant_total > 1:
             variant_info = f" [v{self.variant_index + 1}/{self.variant_total}]"
-        batch_info = ""
+        batch_info_suffix = ""
         if self.batch_total > 1:
-            batch_info = f" [b{self.batch_index + 1}/{self.batch_total}]"
+            batch_info_suffix = f" [b{self.batch_index + 1}/{self.batch_total}]"
 
-        return f"{model} | seed={seed_str}{config_variant_info}{variant_info}{batch_info}"
+        return f"{primary_label}{batch_info} | seed={seed_str}{config_variant_info}{variant_info}{batch_info_suffix}"
 
     def to_unified_summary(self) -> UnifiedJobSummary:
         """Create a canonical summary for UI/queue/history consumers."""
@@ -918,14 +930,29 @@ class QueueJobV2:
         """Get a short display string for the job.
 
         PR-CORE-E: Includes config variant label in display.
+        Shows: Pack Name | Model | batch_size×n_iter (X images) | seed
         """
         config = self.config_snapshot
-        stage = config.get("stage", "txt2img")
+        
+        # Get pack name (fallback to model if not available)
+        pack_name = config.get("prompt_pack_name", "")
         model = config.get("model", config.get("model_name", "unknown"))
+        
+        # Use pack name if available, otherwise use model name
+        primary_label = pack_name if pack_name else model
+        
+        # Get batch info
+        batch_size = config.get("batch_size", 1)
+        n_iter = config.get("n_iter", 1)
+        total_images = batch_size * n_iter
+        
+        # Build batch display
+        if batch_size > 1 or n_iter > 1:
+            batch_info = f" | {batch_size}×{n_iter} ({total_images} images)"
+        else:
+            batch_info = " | (1 image)"
+        
         seed = config.get("seed", "?")
-        prompt = config.get("prompt", "")[:30]
-        if len(config.get("prompt", "")) > 30:
-            prompt += "..."
 
         # PR-CORE-E: Add config variant label if present
         config_variant_label = config.get("config_variant_label", None)
@@ -933,7 +960,7 @@ class QueueJobV2:
         if config_variant_label and config_variant_label != "base":
             variant_suffix = f" [{config_variant_label}]"
 
-        return f"{stage} | {model} | seed={seed}{variant_suffix}"
+        return f"{primary_label}{batch_info} | seed={seed}{variant_suffix}"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize job to dictionary for persistence."""

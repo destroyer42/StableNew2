@@ -129,7 +129,11 @@ class JobHistoryPanelV2(ttk.Frame):
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
         status = entry.status.value
         packs = self._shorten(entry.payload_summary or "n/a", width=40)
-        duration = self._format_duration(entry.started_at, entry.completed_at)
+        # Use pre-calculated duration_ms if available, otherwise fall back to timestamp diff
+        if entry.duration_ms is not None:
+            duration = self._format_duration_ms(entry.duration_ms)
+        else:
+            duration = self._format_duration(entry.started_at, entry.completed_at)
         images = "-"
         output = self._derive_output_folder(entry)
         return (time_text, status, packs, duration, images, output)
@@ -231,6 +235,20 @@ class JobHistoryPanelV2(ttk.Frame):
             return f"{delta.total_seconds():.1f}s"
         except Exception:
             return "-"
+
+    @staticmethod
+    def _format_duration_ms(duration_ms: int) -> str:
+        """Format duration in milliseconds to readable format."""
+        total_seconds = duration_ms / 1000
+        if total_seconds < 60:
+            return f"{total_seconds:.0f}s"
+        minutes = int(total_seconds // 60)
+        seconds = int(total_seconds % 60)
+        if minutes < 60:
+            return f"{minutes}m {seconds}s"
+        hours = minutes // 60
+        minutes = minutes % 60
+        return f"{hours}h {minutes}m"
 
     @staticmethod
     def _shorten(text: str, *, width: int = 16) -> str:

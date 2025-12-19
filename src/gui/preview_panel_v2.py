@@ -583,10 +583,8 @@ class PreviewPanelV2(ttk.Frame):
         self.controller.on_clear_draft()
 
     def _on_details_clicked(self) -> None:
-        """Show the logging view via controller helper."""
-        if not self.controller:
-            return
-        self.controller.show_log_trace_panel()
+        """Show detailed information about the preview jobs."""
+        self._show_preview_details()
 
     def _update_action_states(
         self,
@@ -612,3 +610,214 @@ class PreviewPanelV2(ttk.Frame):
         print(f"[PreviewPanel] Setting button state to: {state}")
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)
+    def _show_preview_details(self) -> None:
+        """Display a detailed breakdown of what will be queued."""
+        if not self._job_summaries and not self.app_state:
+            self._show_info_dialog("No Preview Available", "No jobs are currently in the preview.")
+            return
+
+        # Get job draft and preview jobs
+        job_draft = getattr(self.app_state, "job_draft", None) if self.app_state else None
+        preview_jobs = getattr(self.app_state, "preview_jobs", None) if self.app_state else None
+
+        if not job_draft and not preview_jobs:
+            self._show_info_dialog("No Preview Available", "No jobs are currently in the preview.")
+            return
+
+        # Build detailed information
+        details_lines = []
+        
+        # Summary header
+        packs = getattr(job_draft, "packs", []) if job_draft else []
+        total_jobs = len(preview_jobs) if preview_jobs else len(packs)
+        details_lines.append(f"PREVIEW SUMMARY")
+        details_lines.append(f"{'=' * 60}")
+        details_lines.append(f"Total Jobs to Queue: {total_jobs}")
+        details_lines.append("")
+
+        # Calculate total images
+        total_images = 0
+        if preview_jobs:
+            for job in preview_jobs:
+                config = getattr(job, "config", {}) or {}
+                batch_size = config.get("batch_size", 1)
+                n_iter = config.get("n_iter", 1)
+                total_images += batch_size * n_iter
+        elif packs:
+            for pack in packs:
+                config = getattr(pack, "config_snapshot", {}) or {}
+                txt2img_config = config.get("txt2img", config)
+                batch_size = txt2img_config.get("batch_size", 1)
+                n_iter = txt2img_config.get("n_iter", 1)
+                total_images += batch_size * n_iter
+
+        details_lines.append(f"Total Images: {total_images}")
+        details_lines.append("")
+
+        # Per-job breakdown
+        details_lines.append("JOB BREAKDOWN")
+        details_lines.append(f"{'-' * 60}")
+
+        if preview_jobs:
+            for idx, job in enumerate(preview_jobs, 1):
+                details_lines.extend(self._format_job_details(job, idx))
+        elif packs:
+            for idx, pack in enumerate(packs, 1):
+                details_lines.extend(self._format_pack_details(pack, idx))
+
+        # Show in dialog
+        details_text = "\n".join(details_lines)
+        self._show_info_dialog("Preview Details", details_text, width=700, height=500)
+
+    def _format_job_details(self, job: NormalizedJobRecord, index: int) -> list[str]:
+        """Format details for a single NormalizedJobRecord."""
+        lines = []
+        lines.append(f"\nJob #{index}: {job.job_id}")
+        
+        config = getattr(job, "config", {}) or {}
+        
+        # Model and settings
+        model = config.get("model", "unknown")
+        sampler = config.get("sampler_name", config.get("sampler", "unknown"))
+        scheduler = config.get("scheduler", "unknown")
+        steps = config.get("steps", "?")
+        cfg = config.get("cfg_scale", "?")
+        batch_size = config.get("batch_size", 1)
+        n_iter = config.get("n_iter", 1)
+        images_per_job = batch_size * n_iter
+        
+        lines.append(f"  Model: {model}")
+        lines.append(f"  Sampler: {sampler} / Scheduler: {scheduler}")
+        lines.append(f"  Steps: {steps}, CFG: {cfg}")
+        lines.append(f"  Batch Size: {batch_size}, Iterations: {n_iter} ({images_per_job} images)")
+        
+        # Stages
+        stages = []
+        if getattr(job, "stage_chain", None):
+            stage_names = [s.get("name", "?") for s in job.stage_chain]
+            stages = stage_names
+        else:
+            stages = ["txt2img"]  # default
+            
+        lines.append(f"  Stages: {' → '.join(stages)}")
+        
+        # Special features
+        features = []
+        if config.get("enable_hr"):
+            hr_upscaler = config.get("hr_upscaler", "?")
+            hr_scale = config.get("hr_scale", "?")
+            features.append(f"Hires Fix ({hr_upscaler} @ {hr_scale}x)")
+        if config.get("refiner_checkpoint"):
+            features.append(f"Refiner ({config.get('refiner_checkpoint')})")
+        if features:
+            lines.append(f"  Features: {', '.join(features)}")
+        
+        # Prompts (truncated)
+        prompt = getattr(job, "prompt", "") or config.get("prompt", "")
+        negative = getattr(job, "negative_prompt", "") or config.get("negative_prompt", "")
+        lines.append(f"  Prompt: {self._truncate_text(prompt, 80)}")
+        if negative:
+            lines.append(f"  Negative: {self._truncate_text(negative, 80)}")
+        
+        return lines
+
+    def _format_pack_details(self, pack: Any, index: int) -> list[str]:
+        """Format details for a single pack."""
+        lines = []
+        pack_name = getattr(pack, "pack_name", f"Pack {index}")
+        lines.append(f"\nPack #{index}: {pack_name}")
+        
+        config = getattr(pack, "config_snapshot", {}) or {}
+        txt2img_config = config.get("txt2img", config)
+        
+        # Model and settings
+        model = txt2img_config.get("model", config.get("model", "unknown"))
+        sampler = txt2img_config.get("sampler_name", config.get("sampler", "unknown"))
+        scheduler = txt2img_config.get("scheduler", config.get("scheduler", "unknown"))
+        steps = txt2img_config.get("steps", config.get("steps", "?"))
+        cfg = txt2img_config.get("cfg_scale", config.get("cfg_scale", "?"))
+        batch_size = txt2img_config.get("batch_size", config.get("batch_size", 1))
+        n_iter = txt2img_config.get("n_iter", config.get("n_iter", 1))
+        images_per_pack = batch_size * n_iter
+        
+        lines.append(f"  Model: {model}")
+        lines.append(f"  Sampler: {sampler} / Scheduler: {scheduler}")
+        lines.append(f"  Steps: {steps}, CFG: {cfg}")
+        lines.append(f"  Batch Size: {batch_size}, Iterations: {n_iter} ({images_per_pack} images)")
+        
+        # Stages
+        stage_flags = getattr(pack, "stage_flags", {}) or {}
+        stages = []
+        stage_order = ["txt2img", "img2img", "adetailer", "upscale"]
+        for stage in stage_order:
+            if stage_flags.get(stage):
+                stages.append(stage)
+        if not stages:
+            stages = ["txt2img"]
+        lines.append(f"  Stages: {' → '.join(stages)}")
+        
+        # Special features
+        features = []
+        if txt2img_config.get("enable_hr", config.get("enable_hr")):
+            hr_upscaler = txt2img_config.get("hr_upscaler", config.get("hr_upscaler", "?"))
+            hr_scale = txt2img_config.get("hr_scale", config.get("hr_scale", "?"))
+            features.append(f"Hires Fix ({hr_upscaler} @ {hr_scale}x)")
+        if txt2img_config.get("refiner_checkpoint", config.get("refiner_checkpoint")):
+            refiner = txt2img_config.get("refiner_checkpoint", config.get("refiner_checkpoint"))
+            features.append(f"Refiner ({refiner})")
+        if features:
+            lines.append(f"  Features: {', '.join(features)}")
+        
+        # Prompts (truncated)
+        prompt = getattr(pack, "prompt_text", "") or txt2img_config.get("prompt", "")
+        negative = getattr(pack, "negative_prompt_text", "") or txt2img_config.get("negative_prompt", "")
+        lines.append(f"  Prompt: {self._truncate_text(prompt, 80)}")
+        if negative:
+            lines.append(f"  Negative: {self._truncate_text(negative, 80)}")
+        
+        return lines
+
+    def _show_info_dialog(self, title: str, message: str, width: int = 500, height: int = 300) -> None:
+        """Show a dialog with detailed information."""
+        dialog = tk.Toplevel(self)
+        dialog.title(title)
+        dialog.geometry(f"{width}x{height}")
+        dialog.transient(self.winfo_toplevel())
+        
+        # Text widget with scrollbar
+        text_frame = ttk.Frame(dialog)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        text_widget = tk.Text(
+            text_frame,
+            wrap="word",
+            bg=BACKGROUND_ELEVATED,
+            fg=TEXT_PRIMARY,
+            relief="solid",
+            borderwidth=1,
+        )
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text_widget.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+        
+        text_widget.insert("1.0", message)
+        text_widget.configure(state="disabled")
+        
+        # Close button
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        close_button = ttk.Button(
+            button_frame,
+            text="Close",
+            command=dialog.destroy,
+        )
+        close_button.pack(side=tk.RIGHT)
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")

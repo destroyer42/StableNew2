@@ -1156,7 +1156,7 @@ class PipelineController(_GUIPipelineController):
         return False
 
     def on_queue_remove_job_v2(self, job_id: str) -> None:
-        queue = getattr(self._job_service, "queue", None)
+        queue = getattr(self._job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
                 queue.remove(job_id)
@@ -1164,7 +1164,7 @@ class PipelineController(_GUIPipelineController):
                 _logger.exception("on_queue_remove_job_v2 failed", exc_info=True)
 
     def on_queue_clear_v2(self) -> None:
-        queue = getattr(self._job_service, "queue", None)
+        queue = getattr(self._job_service, "job_queue", None)
         if queue and hasattr(queue, "clear"):
             try:
                 queue.clear()

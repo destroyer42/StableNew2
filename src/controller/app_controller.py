@@ -1414,9 +1414,29 @@ class AppController:
             return
         if job is None:
             self.app_state.set_running_job(None)
+            # Also clear running job panel if it exists
+            if hasattr(self, "main_window") and self.main_window:
+                tab_frame = getattr(self.main_window, "pipeline_tab", None)
+                if tab_frame and hasattr(tab_frame, "running_job_panel"):
+                    tab_frame.running_job_panel.update_job_with_summary(None, None, None)
             return
         queue_job = job_to_queue_job(job)
         self.app_state.set_running_job(queue_job)
+        
+        # Try to get UnifiedJobSummary from job's normalized record
+        summary = None
+        njr = getattr(job, "_normalized_record", None)
+        if njr and hasattr(njr, "to_unified_summary"):
+            try:
+                summary = njr.to_unified_summary()
+            except Exception:
+                pass
+        
+        # Update running job panel with summary if available
+        if hasattr(self, "main_window") and self.main_window:
+            tab_frame = getattr(self.main_window, "pipeline_tab", None)
+            if tab_frame and hasattr(tab_frame, "running_job_panel"):
+                tab_frame.running_job_panel.update_job_with_summary(queue_job, summary, None)
 
     # ------------------------------------------------------------------
     # PR-203: Queue Manipulation APIs
@@ -1426,7 +1446,7 @@ class AppController:
         """Move a job up in the queue."""
         if not self.job_service:
             return False
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "move_up"):
             try:
                 return bool(queue.move_up(job_id))
@@ -1438,7 +1458,7 @@ class AppController:
         """Move a job down in the queue."""
         if not self.job_service:
             return False
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "move_down"):
             try:
                 return bool(queue.move_down(job_id))
@@ -1450,7 +1470,7 @@ class AppController:
         """Remove a job from the queue."""
         if not self.job_service:
             return False
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
                 return queue.remove(job_id) is not None
@@ -1462,7 +1482,7 @@ class AppController:
         """Clear all jobs from the queue."""
         if not self.job_service:
             return 0
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "clear"):
             try:
                 result = int(queue.clear())
@@ -1477,7 +1497,7 @@ class AppController:
         if self.app_state:
             self.app_state.set_is_queue_paused(True)
         if self.job_service:
-            queue = getattr(self.job_service, "queue", None)
+            queue = getattr(self.job_service, "job_queue", None)
             if queue and hasattr(queue, "pause"):
                 queue.pause()
         self._save_queue_state()
@@ -1487,7 +1507,7 @@ class AppController:
         if self.app_state:
             self.app_state.set_is_queue_paused(False)
         if self.job_service:
-            queue = getattr(self.job_service, "queue", None)
+            queue = getattr(self.job_service, "job_queue", None)
             if queue and hasattr(queue, "resume"):
                 queue.resume()
         self._save_queue_state()
@@ -1497,9 +1517,7 @@ class AppController:
         if self.app_state:
             self.app_state.set_auto_run_queue(enabled)
         if self.job_service:
-            queue = getattr(self.job_service, "queue", None)
-            if queue and hasattr(queue, "auto_run_enabled"):
-                queue.auto_run_enabled = enabled
+            self.job_service.auto_run_enabled = enabled
         self._save_queue_state()
 
     def on_pause_job_v2(self) -> None:
@@ -1964,11 +1982,12 @@ class AppController:
         """Expose helper that expands the LogTracePanelV2 if present."""
         trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
         if trace_panel is None:
+            logger.warning("show_log_trace_panel called but log_trace_panel_v2 not found")
             return
         try:
             trace_panel.show()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to show log trace panel: {e}", exc_info=True)
 
     # ------------------------------------------------------------------
     # Run / Stop / Preview

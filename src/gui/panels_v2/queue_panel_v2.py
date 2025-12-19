@@ -107,7 +107,15 @@ class QueuePanelV2(ttk.Frame):
             text="Queue: Idle",
             style=STATUS_LABEL_STYLE,
         )
-        self.queue_status_label.pack(anchor="w", pady=(0, 4))
+        self.queue_status_label.pack(anchor="w", pady=(0, 2))
+
+        # Queue ETA label (estimated total time)
+        self.queue_eta_label = ttk.Label(
+            self,
+            text="",
+            style=STATUS_LABEL_STYLE,
+        )
+        self.queue_eta_label.pack(anchor="w", pady=(0, 4))
 
         # Job listbox with scrollbar
         list_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -230,6 +238,19 @@ class QueuePanelV2(ttk.Frame):
             return self._jobs[idx]
         return None
 
+    def _format_queue_eta(self, total_seconds: float) -> str:
+        """Format total queue ETA to human-readable string."""
+        if total_seconds < 60:
+            return f"Est. total: {int(total_seconds)}s"
+        elif total_seconds < 3600:
+            mins = int(total_seconds // 60)
+            secs = int(total_seconds % 60)
+            return f"Est. total: {mins}m {secs}s"
+        else:
+            hours = int(total_seconds // 3600)
+            mins = int((total_seconds % 3600) // 60)
+            return f"Est. total: {hours}h {mins}m"
+
     def _update_button_states(self) -> None:
         """Update button enabled/disabled states based on selection and queue contents."""
         idx = self._get_selected_index()
@@ -329,6 +350,16 @@ class QueuePanelV2(ttk.Frame):
         # Update count label
         count = len(self._jobs)
         self.count_label.configure(text=f"({count} job{'s' if count != 1 else ''})")
+
+        # Update ETA label (simple placeholder - TODO: integrate with duration_stats)
+        if count > 0:
+            # Simple estimate: 60 seconds per job as placeholder
+            # TODO: Replace with actual duration stats from history
+            estimated_seconds = count * 60
+            eta_text = self._format_queue_eta(estimated_seconds)
+            self.queue_eta_label.configure(text=eta_text)
+        else:
+            self.queue_eta_label.configure(text="")
 
         # Restore selection if possible
         if old_job_id:

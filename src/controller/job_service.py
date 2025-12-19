@@ -258,6 +258,7 @@ class JobService:
         """Optional hooks called on queue/runner activity for external observers."""
         self._on_queue_activity = on_queue_activity
         self._on_runner_activity = on_runner_activity
+        self.auto_run_enabled = True  # Default to auto-run enabled
 
     def enqueue(self, job: Job) -> None:
         self.job_queue.submit(job)
@@ -405,13 +406,21 @@ class JobService:
         self.enqueue(job)
         self._notify_job_submitted(job)
         if not self.runner.is_running():
-            log_with_ctx(
-                logger,
-                logging.INFO,
-                "Queue worker starting",
-                ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
-                extra_fields={"runner": type(self.runner).__name__},
-            )
+            if self.auto_run_enabled:
+                log_with_ctx(
+                    logger,
+                    logging.INFO,
+                    "Queue worker starting (auto-run enabled)",
+                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                    extra_fields={"runner": type(self.runner).__name__},
+                )
+            else:
+                log_with_ctx(
+                    logger,
+                    logging.INFO,
+                    "Job queued but auto-run disabled; use Run/Resume to start",
+                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                )
         else:
             log_with_ctx(
                 logger,
@@ -419,7 +428,8 @@ class JobService:
                 "Queue worker already running; job will be picked up by worker loop",
                 ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
             )
-        self._ensure_runner_started()
+        if self.auto_run_enabled:
+            self._ensure_runner_started()
 
     def _ensure_runner_started(self) -> None:
         with self._runner_lock:

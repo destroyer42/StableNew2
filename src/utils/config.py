@@ -747,40 +747,6 @@ class ConfigManager:
             logger.error("Failed to save global positive prompt: %s", exc)
             return False
 
-    def get_global_positive_prompt(self) -> str:
-        """Return the persisted global positive prompt, creating a default if missing."""
-
-        if self._global_positive_cache is not None:
-            return self._global_positive_cache
-
-        prompt = DEFAULT_GLOBAL_POSITIVE_PROMPT
-        try:
-            if self._global_positive_path.exists():
-                text = self._global_positive_path.read_text(encoding="utf-8").strip()
-                if text:
-                    prompt = text
-            else:
-                self._global_positive_path.parent.mkdir(parents=True, exist_ok=True)
-                self._global_positive_path.write_text(prompt, encoding="utf-8")
-        except Exception as exc:  # noqa: BLE001 - log and fall back to default
-            logger.warning("Failed reading global positive prompt: %s", exc)
-        self._global_positive_cache = prompt
-        return prompt
-
-    def save_global_positive_prompt(self, prompt: str) -> bool:
-        """Persist a custom global positive prompt to disk."""
-
-        text = (prompt or "").strip()
-        try:
-            self._global_positive_path.parent.mkdir(parents=True, exist_ok=True)
-            self._global_positive_path.write_text(text, encoding="utf-8")
-            self._global_positive_cache = text
-            logger.info("Saved global positive prompt (%s chars)", len(text))
-            return True
-        except Exception as exc:  # noqa: BLE001 - surface failure but keep running
-            logger.error("Failed to save global positive prompt: %s", exc)
-            return False
-
     def add_global_negative(self, negative_prompt: str) -> str:
         """
         Add global safety terms to the provided negative prompt.
