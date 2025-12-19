@@ -1274,6 +1274,7 @@ class Pipeline:
         negative_prompt: str,
         config: dict[str, Any],
         run_dir: Path,
+        image_name: str | None = None,
         cancel_token=None,
     ) -> dict[str, Any] | None:
         """
@@ -1418,15 +1419,19 @@ class Pipeline:
             return None
 
         # Save enhanced image
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        image_name = f"adetailer_{timestamp}"
-        image_path = run_dir / "adetailer" / f"{image_name}.png"
+        # Use provided image_name or fallback to timestamp
+        if image_name:
+            final_image_name = image_name
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_image_name = f"adetailer_{timestamp}"
+        image_path = run_dir / f"{final_image_name}.png"
 
         if save_image_from_base64(response["images"][0], image_path):
             metadata = {
-                "name": image_name,
+                "name": final_image_name,
                 "stage": "adetailer",
-                "timestamp": timestamp,
+                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
                 "original_prompt": prompt,
                 "final_prompt": payload.get("prompt", prompt),
                 "original_negative_prompt": base_ad_neg,
@@ -1440,8 +1445,14 @@ class Pipeline:
                 "path": str(image_path),
             }
 
-            self.logger.save_manifest(run_dir, image_name, metadata)
-            logger.info(f"adetailer completed: {image_name}")
+            # Save manifest in manifests/ subfolder (datetime/pack_name structure)
+            manifest_dir = run_dir / "manifests"
+            manifest_dir.mkdir(exist_ok=True, parents=True)
+            manifest_path = manifest_dir / f"{final_image_name}_adetailer.json"
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"adetailer completed: {final_image_name}")
             return metadata
 
         return None
@@ -2445,13 +2456,16 @@ class Pipeline:
             num_images_received = len(response["images"])
             logger.info("🔵 [BATCH_SIZE_DEBUG] WebUI returned %s images (expected %s)", num_images_received, payload.get('batch_size', 1) * payload.get('n_iter', 1))
             
-            # Save ALL images when batch_size > 1
+            # Save ALL images with unique filenames
+            # When multiple images are returned (batch_size > 1 OR n_iter > 1), use _batch{idx} suffix
             saved_paths = []
             batch_size = payload.get('batch_size', 1)
+            n_iter = payload.get('n_iter', 1)
             
             for batch_idx in range(num_images_received):
-                if batch_size > 1:
-                    # Multiple images: use suffix _batch0, _batch1, etc.
+                # Multiple images: use suffix _batch0, _batch1, etc.
+                # This applies when batch_size > 1 OR n_iter > 1
+                if num_images_received > 1:
                     batch_image_name = f"{image_name}_batch{batch_idx}"
                     image_path = output_dir / f"{batch_image_name}.png"
                 else:
@@ -2469,11 +2483,8 @@ class Pipeline:
             # Use the first image for metadata and return value (backward compatibility)
             if saved_paths:
                 image_path = saved_paths[0]
-                # Extract original image_name from path (without _batch suffix)
-                if batch_size > 1:
-                    batch_image_name = f"{image_name}_batch0"
-                else:
-                    batch_image_name = image_name
+                # Always use original image_name for metadata (without _batch suffix)
+                batch_image_name = image_name
             else:
                 logger.error("No images were saved successfully")
                 return None
@@ -2497,29 +2508,16 @@ class Pipeline:
                     "config": self._clean_metadata_payload(payload),
                     "output_path": str(image_path),
                     "path": str(image_path),
+                    "all_paths": [str(p) for p in saved_paths],  # All generated images for batch processing
                 }
 
-                # Save manifest (pack manifests for GUI, run manifests for CLI) - use stage-suffixed name
-                if output_dir.name in ["txt2img", "img2img", "upscaled"]:
-                    pack_dir = output_dir.parent
-                    manifest_name = f"{image_name}_txt2img"
-                    try:
-                        self.logger.save_pack_manifest(pack_dir, manifest_name, metadata)
-                    except Exception:
-                        manifest_dir = pack_dir / "manifests"
-                        manifest_dir.mkdir(exist_ok=True, parents=True)
-                        with open(
-                            manifest_dir / f"{manifest_name}.json", "w", encoding="utf-8"
-                        ) as f:
-                            json.dump(metadata, f, indent=2, ensure_ascii=False)
-                else:
-                    try:
-                        self.logger.save_manifest(output_dir, image_name, metadata)
-                    except Exception:
-                        manifest_dir = output_dir / "manifests"
-                        manifest_dir.mkdir(exist_ok=True, parents=True)
-                        with open(manifest_dir / f"{image_name}.json", "w", encoding="utf-8") as f:
-                            json.dump(metadata, f, indent=2, ensure_ascii=False)
+                # Save manifest in manifests/ subfolder (datetime/pack_name structure)
+                manifest_dir = output_dir / "manifests"
+                manifest_dir.mkdir(exist_ok=True, parents=True)
+                manifest_name = f"{image_name}_txt2img"
+                manifest_path = manifest_dir / f"{manifest_name}.json"
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
 
                 self._record_stage_event("txt2img", "exit", 1, 1, False)
                 return metadata
@@ -2681,27 +2679,13 @@ class Pipeline:
                     "path": str(image_path),
                 }
 
-                # Save manifest (pack manifests for GUI, run manifests for CLI) - stage-suffixed
-                if output_dir.name in ["txt2img", "img2img", "upscaled"]:
-                    pack_dir = output_dir.parent
-                    manifest_name = f"{image_name}_img2img"
-                    try:
-                        self.logger.save_pack_manifest(pack_dir, manifest_name, metadata)
-                    except Exception:
-                        manifest_dir = pack_dir / "manifests"
-                        manifest_dir.mkdir(exist_ok=True, parents=True)
-                        with open(
-                            manifest_dir / f"{manifest_name}.json", "w", encoding="utf-8"
-                        ) as f:
-                            json.dump(metadata, f, indent=2, ensure_ascii=False)
-                else:
-                    try:
-                        self.logger.save_manifest(output_dir, image_name, metadata)
-                    except Exception:
-                        manifest_dir = output_dir / "manifests"
-                        manifest_dir.mkdir(exist_ok=True, parents=True)
-                        with open(manifest_dir / f"{image_name}.json", "w", encoding="utf-8") as f:
-                            json.dump(metadata, f, indent=2, ensure_ascii=False)
+                # Save manifest in manifests/ subfolder (datetime/pack_name structure)
+                manifest_dir = output_dir / "manifests"
+                manifest_dir.mkdir(exist_ok=True, parents=True)
+                manifest_name = f"{image_name}_img2img"
+                manifest_path = manifest_dir / f"{manifest_name}.json"
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
 
                 logger.info(f"img2img completed: {image_path.name}")
                 self._record_stage_event("img2img", "exit", 1, 1, False)
@@ -2950,26 +2934,13 @@ class Pipeline:
                     "path": str(image_path),
                 }
 
-                # Save manifest (prefer pack manifests) with stage suffix to avoid overwriting
-                if output_dir.name in ["txt2img", "img2img", "upscaled"]:
-                    pack_dir = output_dir.parent
-                    manifest_name = f"{image_name}_upscale"
-                    try:
-                        self.logger.save_pack_manifest(pack_dir, manifest_name, metadata)
-                    except Exception:
-                        manifest_dir = pack_dir / "manifests"
-                        manifest_dir.mkdir(exist_ok=True, parents=True)
-                        with open(
-                            manifest_dir / f"{manifest_name}.json", "w", encoding="utf-8"
-                        ) as f:
-                            json.dump(metadata, f, indent=2, ensure_ascii=False)
-                else:
-                    manifest_dir = output_dir / "manifests"
-                    manifest_dir.mkdir(exist_ok=True)
-                    with open(
-                        manifest_dir / f"{image_name}_upscale.json", "w", encoding="utf-8"
-                    ) as f:
-                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                # Save manifest in manifests/ subfolder (datetime/pack_name structure)
+                manifest_dir = output_dir / "manifests"
+                manifest_dir.mkdir(exist_ok=True, parents=True)
+                manifest_name = f"{image_name}_upscale"
+                manifest_path = manifest_dir / f"{manifest_name}.json"
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
 
                 logger.info(f"Upscale completed: {image_path.name}")
                 self._record_stage_event("upscale", "exit", 1, 1, False)
@@ -3024,10 +2995,19 @@ class Pipeline:
             adetailer_cfg.setdefault(
                 "pipeline", config.get("pipeline", {}) if isinstance(config, dict) else {}
             )
-            prompt_text = prompt or adetailer_cfg.get("adetailer_prompt", "")
-            negative_text = negative_prompt or ""
+            # Use adetailer-specific prompts if provided, otherwise fallback to txt2img prompts
+            config_positive = adetailer_cfg.get("adetailer_prompt", "").strip()
+            config_negative = adetailer_cfg.get("adetailer_negative_prompt", "").strip()
+            prompt_text = config_positive if config_positive else (prompt or "")
+            negative_text = config_negative if config_negative else (negative_prompt or "")
+            logger.info("🔵 [ADETAILER_PROMPT_DEBUG] config_positive='%s', config_negative='%s', using prompt='%s', negative='%s'",
+                       config_positive[:40] if config_positive else "(empty)",
+                       config_negative[:40] if config_negative else "(empty)",
+                       prompt_text[:40] if prompt_text else "(empty)",
+                       negative_text[:40] if negative_text else "(empty)")
             result = self.run_adetailer(
-                input_image_path, prompt_text, negative_text, adetailer_cfg, output_dir, cancel_token=cancel_token
+                input_image_path, prompt_text, negative_text, adetailer_cfg, output_dir, 
+                image_name=image_name, cancel_token=cancel_token
             )
             if result:
                 self._last_adetailer_result = result

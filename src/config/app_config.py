@@ -23,6 +23,7 @@ _output_dir: str | None = None
 _filename_pattern: str | None = None
 _image_format: str | None = None
 _batch_size: int | None = None
+_n_iter: int | None = None
 _seed_mode: str | None = None
 _webui_workdir: str | None = None
 _webui_command: list[str] | None = None
@@ -464,6 +465,26 @@ def set_batch_size(value: int) -> None:
         _batch_size = int(value)
     except Exception:
         _batch_size = batch_size_default()
+
+
+def n_iter_default() -> int:
+    """Default n_iter (sequential iterations per prompt)."""
+
+    global _n_iter
+    if _n_iter is None:
+        try:
+            _n_iter = int(os.environ.get("STABLENEW_N_ITER", "1"))
+        except Exception:
+            _n_iter = 1
+    return _n_iter
+
+
+def set_n_iter(value: int) -> None:
+    global _n_iter
+    try:
+        _n_iter = int(value)
+    except Exception:
+        _n_iter = n_iter_default()
 
 
 def seed_mode_default() -> str:

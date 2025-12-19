@@ -396,7 +396,9 @@ class AppStateV2:
         self._notify("history_items")
 
     def add_packs_to_job_draft(self, entries: list[PackJobEntry]) -> None:
+        logger.info(f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects")
         self.job_draft.packs.extend(entries)
+        logger.info(f"[AppState] Total packs in draft: {len(self.job_draft.packs)}")
         self._notify("job_draft")
 
     def add_job_draft_part(

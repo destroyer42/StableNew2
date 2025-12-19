@@ -1,6 +1,6 @@
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-smiling tavern owner welcoming guests from [[environment]] entrance
+smiling tavern owner welcoming guests, a blonde-haired fine-breasted athletic beautiful woman, wearing almost nothing, in a normal stance with arched lower back and hands clasped behind head from a full-body stance perspective, detailed vagina, incredible skin, slight perspiration, glistening, looking sultry
 <lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
@@ -8,7 +8,7 @@ neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, b
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-priestess raising chalice in temple at [[environment]]
+priestess raising chalice in temple a silver-haired fine-breasted athletic beautiful woman, wearing almost nothing, in a normal stance with arched lower back and hands clasped behind head from a full-body stance perspective, detailed vagina, incredible skin, slight perspiration, glistening, looking sultry
 <lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
@@ -16,7 +16,7 @@ neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, b
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-royal advisor gazing through stained glass toward [[environment]]
+royal advisor gazing through stained glass, a red-haired large-breasted athletic beautiful woman, wearing almost nothing, in a normal stance with arched lower back and hands clasped behind head from a full-body stance perspective, detailed vagina, incredible skin, slight perspiration, glistening, looking sultry
 <lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
@@ -24,7 +24,7 @@ neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, b
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-regal lady in [[clothes]] leaning against balcony above [[environment]]
+regal lady leaning against balcony, a brown-haired fine-breasted athletic beautiful woman, wearing almost nothing, in a normal stance with arched lower back and hands clasped behind head from a full-body stance perspective, detailed vagina, incredible skin, slight perspiration, glistening, looking sultry
 <lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured

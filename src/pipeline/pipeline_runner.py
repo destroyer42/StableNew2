@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -37,7 +38,13 @@ if TYPE_CHECKING:  # pragma: no cover
 class PipelineRunner:
     """
     Adapter that drives the real multi-stage Pipeline executor.
+    Consolidates output folders by prompt pack - all jobs from the same pack
+    go into the same timestamped folder.
     """
+    
+    # Cache for active pack folders (pack_name -> (timestamp, folder_path))
+    _pack_folder_cache: dict[str, tuple[datetime, Path]] = {}
+    _folder_cache_timeout_minutes = 30  # Reuse folder if same pack within 30 minutes
 
     def run_njr(
         self,
@@ -54,10 +61,44 @@ class PipelineRunner:
         from src.pipeline.run_plan import build_run_plan_from_njr
 
         plan = build_run_plan_from_njr(njr)
-        # Prepare output dir and metadata
-        run_id = str(uuid4())
-        run_dir = Path(self._runs_base_dir) / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Prepare output dir with datetime_packname structure (flat)
+        # Format: output/{YYYYMMDD_HHMMSS}_{pack_name}/
+        # All jobs from the same pack share the same folder (cached for 30 minutes)
+        pack_name = getattr(njr, "prompt_pack_name", "") or getattr(njr, "job_id", "unknown")
+        # Sanitize pack name for filesystem
+        safe_pack_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in pack_name)
+        
+        # Check cache for existing folder for this pack
+        now = datetime.now()
+        cached_entry = PipelineRunner._pack_folder_cache.get(safe_pack_name)
+        
+        if cached_entry:
+            timestamp_created, run_dir = cached_entry
+            # Reuse if created within timeout window
+            if (now - timestamp_created).total_seconds() < (PipelineRunner._folder_cache_timeout_minutes * 60):
+                logger.info(f"♻️ Reusing existing folder for pack '{pack_name}': {run_dir}")
+                run_id = run_dir.name  # Use existing folder name as run_id
+            else:
+                # Cache expired, create new folder
+                logger.info(f"⏰ Cache expired for pack '{pack_name}', creating new folder")
+                timestamp = now.strftime("%Y%m%d_%H%M%S")
+                run_id = f"{timestamp}_{safe_pack_name}"
+                run_dir = Path(self._runs_base_dir) / run_id
+                run_dir.mkdir(parents=True, exist_ok=True)
+                PipelineRunner._pack_folder_cache[safe_pack_name] = (now, run_dir)
+        else:
+            # No cached folder, create new one
+            timestamp = now.strftime("%Y%m%d_%H%M%S")
+            run_id = f"{timestamp}_{safe_pack_name}"
+            run_dir = Path(self._runs_base_dir) / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            PipelineRunner._pack_folder_cache[safe_pack_name] = (now, run_dir)
+            logger.info(f"📁 Created new folder for pack '{pack_name}': {run_dir}")
+        
+        # Create manifests subfolder for JSON metadata
+        manifests_dir = run_dir / "manifests"
+        manifests_dir.mkdir(exist_ok=True)
         stage_events: list[dict[str, Any]] = []
         success = False
         error = None
@@ -66,7 +107,8 @@ class PipelineRunner:
         metadata = dict(njr.config or {})
         try:
             # Execute stages sequentially, passing outputs forward
-            last_image_path = None
+            # Track all image paths through the pipeline (supports batch processing)
+            current_stage_paths: list[str] = []
             last_result = None
             prompt = getattr(njr, "positive_prompt", "") or ""
             negative_prompt = getattr(njr, "negative_prompt", "") or ""
@@ -88,23 +130,38 @@ class PipelineRunner:
                         "height": njr.height or 1024,
                         "batch_size": batch_size_value,
                     }
+                    # Add scheduler if present in NJR
+                    if njr.scheduler:
+                        payload["scheduler"] = njr.scheduler
                     logger.info("🔵 [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s", payload.get('batch_size'))
+                    # Include prompt pack row index in naming to prevent overwrites
+                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     result = self._pipeline.run_txt2img_stage(
                         payload["prompt"],
                         payload["negative_prompt"],
                         payload,
                         run_dir,
-                        image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
+                        image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}",
                         cancel_token=cancel_token,
                     )
-                    # Extract the image path from metadata dict for next stage
-                    if result and "path" in result:
-                        last_image_path = result["path"]
+                    # Extract ALL image paths from metadata for batch processing
+                    if result and "all_paths" in result:
+                        current_stage_paths = result["all_paths"]
+                        logger.info(f"🔵 [BATCH_PIPELINE] txt2img produced {len(current_stage_paths)} images")
+                    elif result and "path" in result:
+                        # Fallback for single image (backward compatibility)
+                        current_stage_paths = [result["path"]]
+                    else:
+                        current_stage_paths = []
+                    
+                    variants.append(result)
+                    last_result = result
                     
                 elif stage.stage_name == "adetailer":
-                    if not last_image_path:
-                        logger.warning("adetailer stage skipped: no input image from previous stage")
+                    if not current_stage_paths:
+                        logger.warning("adetailer stage skipped: no input images from previous stage")
                         continue
+                    
                     # Get stage config from njr.stage_chain
                     stage_config = next((s for s in njr.stage_chain if s.stage_type == "adetailer"), None)
                     if stage_config:
@@ -117,23 +174,34 @@ class PipelineRunner:
                     # CRITICAL: Add adetailer_enabled flag that run_adetailer() expects
                     config_dict["adetailer_enabled"] = True
                     
-                    result = self._pipeline.run_adetailer_stage(
-                        input_image_path=Path(last_image_path),
-                        config=config_dict,
-                        output_dir=run_dir,
-                        image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
-                        prompt=prompt,
-                        negative_prompt=negative_prompt,
-                        cancel_token=cancel_token,
-                    )
-                    # Update last_image_path for next stage
-                    if result and "path" in result:
-                        last_image_path = result["path"]
+                    # Process ALL images from previous stage through adetailer
+                    next_stage_paths = []
+                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    for img_idx, input_path in enumerate(current_stage_paths):
+                        logger.info(f"🔵 [BATCH_PIPELINE] Processing adetailer for image {img_idx + 1}/{len(current_stage_paths)}")
+                        result = self._pipeline.run_adetailer_stage(
+                            input_image_path=Path(input_path),
+                            config=config_dict,
+                            output_dir=run_dir,
+                            image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}_img{img_idx:02d}",
+                            prompt=prompt,
+                            negative_prompt=negative_prompt,
+                            cancel_token=cancel_token,
+                        )
+                        # Collect output path from this image
+                        if result and "path" in result:
+                            next_stage_paths.append(result["path"])
+                        variants.append(result)
+                    
+                    # Update current_stage_paths for next stage
+                    current_stage_paths = next_stage_paths
+                    logger.info(f"🔵 [BATCH_PIPELINE] adetailer completed {len(current_stage_paths)} images")
                     
                 elif stage.stage_name == "upscale":
-                    if not last_image_path:
-                        logger.warning("upscale stage skipped: no input image from previous stage")
+                    if not current_stage_paths:
+                        logger.warning("upscale stage skipped: no input images from previous stage")
                         continue
+                    
                     # Get stage config from njr.stage_chain
                     stage_config = next((s for s in njr.stage_chain if s.stage_type == "upscale"), None)
                     if stage_config:
@@ -144,29 +212,38 @@ class PipelineRunner:
                     else:
                         config_dict = {}
                     
-                    result = self._pipeline.run_upscale_stage(
-                        input_image_path=Path(last_image_path),
-                        config=config_dict,
-                        output_dir=run_dir,
-                        image_name=f"{stage.stage_name}_{stage.variant_id:02d}",
-                        cancel_token=cancel_token,
-                    )
-                    # Update last_image_path
-                    if result and "path" in result:
-                        last_image_path = result["path"]
+                    # Process ALL images from previous stage through upscaler
+                    next_stage_paths = []
+                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    for img_idx, input_path in enumerate(current_stage_paths):
+                        logger.info(f"🔵 [BATCH_PIPELINE] Processing upscale for image {img_idx + 1}/{len(current_stage_paths)}")
+                        result = self._pipeline.run_upscale_stage(
+                            input_image_path=Path(input_path),
+                            config=config_dict,
+                            output_dir=run_dir,
+                            image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}_img{img_idx:02d}",
+                            cancel_token=cancel_token,
+                        )
+                        # Collect output path from this image
+                        if result and "path" in result:
+                            next_stage_paths.append(result["path"])
+                        variants.append(result)
+                    
+                    # Update current_stage_paths for next stage
+                    current_stage_paths = next_stage_paths
+                    logger.info(f"🔵 [BATCH_PIPELINE] upscale completed {len(current_stage_paths)} images")
                     
                 else:
                     logger.warning(f"Unknown stage type: {stage.stage_name}, skipping")
                     continue
                 
-                variants.append(result)
-                last_result = result
+                # Record stage event with actual image count
                 stage_events.append(
                     {
                         "stage": stage.stage_name,
                         "phase": "exit",
-                        "image_index": 1,
-                        "total_images": 1,
+                        "image_index": len(current_stage_paths),
+                        "total_images": len(current_stage_paths),
                         "cancelled": False,
                     }
                 )
@@ -611,11 +688,21 @@ class PipelineRunResult:
     def _serialize_stage_plan(self) -> dict[str, Any] | None:
         if not self.stage_plan:
             return None
-        return {
-            "run_id": self.stage_plan.run_id,
-            "stage_types": self.stage_plan.get_stage_types(),
-            "one_click_action": self.stage_plan.one_click_action,
-        }
+        # Handle both StageExecutionPlan and RunPlan
+        if hasattr(self.stage_plan, 'run_id'):
+            # StageExecutionPlan
+            return {
+                "run_id": self.stage_plan.run_id,
+                "stage_types": self.stage_plan.get_stage_types(),
+                "one_click_action": self.stage_plan.one_click_action,
+            }
+        else:
+            # RunPlan
+            return {
+                "total_jobs": getattr(self.stage_plan, "total_jobs", 0),
+                "total_images": getattr(self.stage_plan, "total_images", 0),
+                "enabled_stages": getattr(self.stage_plan, "enabled_stages", []),
+            }
 
     @classmethod
     def from_dict(

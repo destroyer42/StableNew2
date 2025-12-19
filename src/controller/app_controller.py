@@ -3563,6 +3563,7 @@ class AppController:
         if output_panel and hasattr(output_panel, "apply_from_overrides"):
             output_overrides = {
                 "batch_size": pipeline_section.get("images_per_prompt", 1),
+                "n_iter": pipeline_section.get("n_iter", 1),
                 "output_dir": pipeline_section.get("output_dir", "output"),
                 "filename_pattern": pipeline_section.get("filename_pattern", "{seed}"),
                 "image_format": pipeline_section.get("image_format", "png"),
@@ -3667,6 +3668,7 @@ class AppController:
                     current_config["pipeline"] = {}
                 # Map output panel keys to pipeline section keys
                 current_config["pipeline"]["images_per_prompt"] = output_overrides.get("batch_size", 1)
+                current_config["pipeline"]["n_iter"] = output_overrides.get("n_iter", 1)
                 current_config["pipeline"]["output_dir"] = output_overrides.get("output_dir", "output")
                 current_config["pipeline"]["filename_pattern"] = output_overrides.get("filename_pattern", "{seed}")
                 current_config["pipeline"]["image_format"] = output_overrides.get("image_format", "png")

@@ -45,14 +45,21 @@ class PromptPackNormalizedJobBuilder:
         self._packs_dir = Path(packs_dir)
 
     def build_jobs(self, entries: Iterable[PackJobEntry]) -> list[NormalizedJobRecord]:
+        # Convert to list to avoid consuming iterator and to enable length check
+        entries_list = list(entries)
+        _logger.info(f"[PromptPackNormalizedJobBuilder] build_jobs() called with {len(entries_list)} entries")
         records: list[NormalizedJobRecord] = []
-        for entry in entries:
+        entry_count = 0
+        for entry in entries_list:
+            entry_count += 1
             if not entry.pack_id:
                 _logger.warning("Pack entry missing pack_id, skipping")
                 continue
             jobs = self._build_jobs_for_entry(entry)
             if jobs:
+                _logger.info(f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) produced {len(jobs)} NJR(s)")
                 records.extend(jobs)
+        _logger.info(f"[PromptPackNormalizedJobBuilder] Total NJRs generated: {len(records)}")
         return records
 
     def _build_jobs_for_entry(self, entry: PackJobEntry) -> list[NormalizedJobRecord]:

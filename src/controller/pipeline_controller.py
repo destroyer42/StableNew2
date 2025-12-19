@@ -98,12 +98,15 @@ class PipelineController(_GUIPipelineController):
         """Build NormalizedJobRecord(s) from a bundle of PackJobEntry using the canonical builder pipeline."""
         from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 
+        _logger.info(f"[PipelineController] _build_njrs_from_pack_bundle received {len(pack_entries)} PackJobEntry objects")
+        
         builder = PromptPackNormalizedJobBuilder(
             config_manager=self._config_manager,
             job_builder=self._job_builder,
             packs_dir=getattr(self._config_manager, "packs_dir", "packs"),
         )
         njrs = builder.build_jobs(pack_entries)
+        _logger.info(f"[PipelineController] Builder returned {len(njrs)} NormalizedJobRecord(s)")
         return njrs
 
     def _normalize_run_mode(self, pipeline_state: PipelineState) -> str:
@@ -1449,9 +1452,13 @@ class PipelineController(_GUIPipelineController):
     ) -> int:
         if not records or not self._job_service:
             return 0
+        
+        _logger.info(f"[PipelineController] _submit_normalized_jobs called with {len(records)} NormalizedJobRecord(s)")
+        
         submitted = 0
         run_config_to_use = run_config or getattr(self, "_last_run_config", None)
-        for record in records:
+        for idx, record in enumerate(records):
+            _logger.info(f"[PipelineController] Submitting NJR {idx+1}/{len(records)}: pack={record.prompt_pack_id}, row={record.prompt_pack_row_index}")
             prompt_pack_id = None
             cfg = record.config
             if isinstance(cfg, dict):
@@ -1484,6 +1491,8 @@ class PipelineController(_GUIPipelineController):
             self._job_service.submit_job_with_run_mode(job)
             self._log_add_to_queue_event(job.job_id)
             submitted += 1
+        
+        _logger.info(f"[PipelineController] Successfully submitted {submitted} jobs to queue")
         return submitted
 
     def reconstruct_jobs_from_snapshot(self, snapshot: dict[str, Any]) -> list[NormalizedJobRecord]:
