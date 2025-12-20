@@ -20,14 +20,12 @@ class ADetailerStageCardV2(BaseStageCardV2):
     """Minimal ADetailer stage card exposing controls via BaseStageCardV2."""
 
     MODEL_OPTIONS = ["face_yolov8n.pt", "adetailer_v1.pt"]
-    DETECTOR_OPTIONS = ["face", "hand", "body"]
     SAMPLER_OPTIONS = ["DPM++ 2M", "Euler a", "DDIM", "DPM++ SDE"]
     MERGE_MODES = ["keep", "replace", "merge"]
 
     def __init__(self, master: tk.Misc, *, theme: Any | None = None, **kwargs: Any) -> None:
         # Detection settings
         self.model_var = tk.StringVar(value=self.MODEL_OPTIONS[0])
-        self.detector_var = tk.StringVar(value=self.DETECTOR_OPTIONS[0])
         self.confidence_var = tk.DoubleVar(value=0.35)
         self.max_detections_var = tk.IntVar(value=8)
         self.mask_blur_var = tk.IntVar(value=4)
@@ -51,7 +49,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.use_inpaint_wh_var = tk.BooleanVar(value=False)
         
         self._model_combo: ttk.Combobox | None = None
-        self._detector_combo: ttk.Combobox | None = None
         self._sampler_combo: ttk.Combobox | None = None
 
         super().__init__(
@@ -71,14 +68,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "ADetailer model:",
             self.model_var,
             self.MODEL_OPTIONS,
-            row,
-        )
-        row += 1
-        self._detector_combo = self._add_labeled_combo(
-            parent,
-            "Detector:",
-            self.detector_var,
-            self.DETECTOR_OPTIONS,
             row,
         )
         row += 1
@@ -250,7 +239,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             return
         # Detection settings
         self.model_var.set(cfg.get("adetailer_model") or cfg.get("ad_model") or self.MODEL_OPTIONS[0])
-        self.detector_var.set(cfg.get("detector") or self.DETECTOR_OPTIONS[0])
         self.confidence_var.set(float(cfg.get("adetailer_confidence") or cfg.get("ad_confidence", 0.35)))
         self.max_detections_var.set(int(cfg.get("max_detections", 8)))
         self.mask_blur_var.set(int(cfg.get("mask_blur") or cfg.get("ad_mask_blur", 4)))
@@ -276,10 +264,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def to_config_dict(self) -> dict[str, Any]:
         """Export config with keys matching executor.py expectations (lines 1354-1366)."""
         return {
-            # Detection settings (original 8 fields)
+            # Detection settings (original fields)
             "adetailer_model": self.model_var.get(),
             "ad_model": self.model_var.get(),  # Dual key for compatibility
-            "detector": self.detector_var.get(),
             "adetailer_confidence": self.confidence_var.get(),
             "ad_confidence": self.confidence_var.get(),  # Dual key
             "max_detections": self.max_detections_var.get(),
@@ -315,7 +302,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
         return [
             # Detection settings
             self.model_var,
-            self.detector_var,
             self.confidence_var,
             self.max_detections_var,
             self.mask_blur_var,
@@ -340,11 +326,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         if resources is None:
             resources = {}
         models = [str(v) for v in (resources.get("adetailer_models") or []) if str(v).strip()]
-        detectors = [str(v) for v in (resources.get("adetailer_detectors") or []) if str(v).strip()]
         samplers = [str(v) for v in (resources.get("samplers") or []) if str(v).strip()]
 
         self._configure_combo(self._model_combo, models, self.model_var)
-        self._configure_combo(self._detector_combo, detectors, self.detector_var)
         self._configure_combo(self._sampler_combo, samplers, self.sampler_var)
 
     def _configure_combo(

@@ -49,7 +49,6 @@
   "adetailer": {
     "adetailer_model": "mediapipe_face_full",
     "ad_model": "mediapipe_face_full",
-    "detector": "mediapipe_face_full",
     "adetailer_confidence": 0.6916666666666667,
     "ad_confidence": 0.6916666666666667,
     "max_detections": 2,

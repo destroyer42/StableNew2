@@ -219,6 +219,8 @@ class JobService:
         self.job_queue.register_status_callback(self._handle_job_status_change)
         self._runner_lock = Lock()
         self._worker_started = False
+        # Auto-run control flag (set externally via app_state restoration or UI toggle)
+        self.auto_run_enabled = False
         # Optional dispatcher used to schedule event delivery (e.g., onto UI thread).
         # Signature: dispatch_fn(callable_zero_arg) -> None
         self._event_dispatcher: Callable[[Callable[[], None]], None] | None = None
@@ -258,7 +260,7 @@ class JobService:
         """Optional hooks called on queue/runner activity for external observers."""
         self._on_queue_activity = on_queue_activity
         self._on_runner_activity = on_runner_activity
-        self.auto_run_enabled = True  # Default to auto-run enabled
+        # Note: auto_run_enabled should be set separately via app_state restoration or explicit control
 
     def enqueue(self, job: Job) -> None:
         self.job_queue.submit(job)
@@ -405,8 +407,10 @@ class JobService:
         )
         self.enqueue(job)
         self._notify_job_submitted(job)
-        if not self.runner.is_running():
-            if self.auto_run_enabled:
+        
+        # Start runner if auto-run is enabled and runner isn't running
+        if self.auto_run_enabled:
+            if not self.runner.is_running():
                 log_with_ctx(
                     logger,
                     logging.INFO,
@@ -414,22 +418,21 @@ class JobService:
                     ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
                     extra_fields={"runner": type(self.runner).__name__},
                 )
+                self._ensure_runner_started()
             else:
                 log_with_ctx(
                     logger,
-                    logging.INFO,
-                    "Job queued but auto-run disabled; use Run/Resume to start",
+                    logging.DEBUG,
+                    "Queue worker already running; job will be picked up by worker loop",
                     ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
                 )
         else:
             log_with_ctx(
                 logger,
-                logging.DEBUG,
-                "Queue worker already running; job will be picked up by worker loop",
+                logging.INFO,
+                "Job queued but auto-run disabled; use Send Job or Resume to start",
                 ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
             )
-        if self.auto_run_enabled:
-            self._ensure_runner_started()
 
     def _ensure_runner_started(self) -> None:
         with self._runner_lock:
@@ -770,16 +773,26 @@ class JobService:
         }
 
     def run_next_now(self) -> None:
-        """Synchronously run the next queued job via the runner."""
-        job = self.job_queue.get_next_job()
-        if job is None:
-            return
-        self._set_queue_status("running")
-        try:
-            self.runner.run_once(job)
-        finally:
-            if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
-                self._set_queue_status("idle")
+        """Start the runner to process queued jobs.
+        
+        This starts the background worker which will continuously process jobs
+        from the queue. Used by "Send Job" button and manual queue execution.
+        """
+        if not self.runner.is_running():
+            log_with_ctx(
+                logger,
+                logging.INFO,
+                "Starting queue worker for manual execution",
+                ctx=LogContext(subsystem="job_service"),
+            )
+            self._ensure_runner_started()
+        else:
+            log_with_ctx(
+                logger,
+                logging.DEBUG,
+                "Queue worker already running",
+                ctx=LogContext(subsystem="job_service"),
+            )
 
     def _stop_runner(self) -> None:
         with self._runner_lock:

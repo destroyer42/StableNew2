@@ -351,6 +351,9 @@ class AppController:
         )
         if self.webui_connection_controller is None:
             self.webui_connection_controller = WebUIConnectionController()
+        
+        # Override pack config state (for ConfigMergerV2 integration)
+        self.override_pack_config_enabled = False
         try:
             self.webui_connection_controller.register_on_ready(self.on_webui_ready)
         except Exception:
@@ -1155,6 +1158,15 @@ class AppController:
             self.app_state.set_auto_run_queue(snapshot.auto_run_enabled)
             self.app_state.set_is_queue_paused(snapshot.paused)
 
+        # PR-GUI-F3: Also restore auto_run_enabled to job_service
+        if (
+            hasattr(self, "pipeline_controller")
+            and self.pipeline_controller
+            and hasattr(self.pipeline_controller, "job_service")
+            and self.pipeline_controller.job_service
+        ):
+            self.pipeline_controller.job_service.auto_run_enabled = snapshot.auto_run_enabled
+
         # Note: We can't easily restore jobs to the V1 JobQueue since it uses
         # a different job model. This is a limitation of the current architecture.
         # The V1 queue doesn't persist job payloads - they're typically callables.
@@ -1449,7 +1461,10 @@ class AppController:
         queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "move_up"):
             try:
-                return bool(queue.move_up(job_id))
+                result = bool(queue.move_up(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_up_v2 error: {exc!r}")
         return False
@@ -1461,7 +1476,10 @@ class AppController:
         queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "move_down"):
             try:
-                return bool(queue.move_down(job_id))
+                result = bool(queue.move_down(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_down_v2 error: {exc!r}")
         return False
@@ -1473,7 +1491,10 @@ class AppController:
         queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
-                return queue.remove(job_id) is not None
+                result = queue.remove(job_id) is not None
+                if result:
+                    self._refresh_app_state_queue()
+                return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_remove_job_v2 error: {exc!r}")
         return False
@@ -1486,6 +1507,8 @@ class AppController:
         if queue and hasattr(queue, "clear"):
             try:
                 result = int(queue.clear())
+                if result > 0:
+                    self._refresh_app_state_queue()
                 self._save_queue_state()
                 return result
             except Exception as exc:
@@ -1518,6 +1541,22 @@ class AppController:
             self.app_state.set_auto_run_queue(enabled)
         if self.job_service:
             self.job_service.auto_run_enabled = enabled
+            # If enabling auto-run and queue has jobs, start the runner
+            if enabled:
+                queue = getattr(self.job_service, "job_queue", None)
+                app_paused = bool(getattr(self.app_state, "is_queue_paused", False)) if self.app_state else False
+                queue_paused = bool(getattr(queue, "is_paused", False)) if queue and hasattr(queue, "is_paused") else False
+                is_paused = app_paused or queue_paused
+                if is_paused:
+                    self._append_log("[controller] Auto-run enabled but queue is paused; runner not started")
+                elif queue and hasattr(queue, "list_jobs"):
+                    jobs = list(queue.list_jobs())
+                    if jobs:
+                        try:
+                            self.job_service.run_next_now()
+                            self._append_log(f"[controller] Auto-run enabled - starting runner for {len(jobs)} queued job(s)")
+                        except Exception as exc:
+                            self._append_log(f"[controller] Failed to start runner: {exc!r}")
         self._save_queue_state()
 
     def on_pause_job_v2(self) -> None:
@@ -1564,15 +1603,21 @@ class AppController:
         """Manually dispatch the next job from the queue.
 
         PR-GUI-F3: Send Job button - dispatches top of queue immediately.
-        Respects pause state (if paused, does nothing).
+        Starts the runner to process queued jobs.
         """
         if not self.job_service:
             return
-        queue = getattr(self.job_service, "queue", None)
-        if queue and hasattr(queue, "start_next_job"):
-            # Only dispatch if not paused
-            if not getattr(queue, "is_paused", False):
-                queue.start_next_job()
+        # Check if paused
+        is_paused = self.app_state.is_queue_paused if self.app_state else False
+        if is_paused:
+            self._append_log("[controller] Cannot send job - queue is paused")
+            return
+        # Start the runner to process queue
+        try:
+            self.job_service.run_next_now()
+            self._append_log("[controller] Queue worker started via Send Job")
+        except Exception as exc:
+            self._append_log(f"[controller] Failed to start queue worker: {exc!r}")
 
     def refresh_job_history(self, limit: int | None = None) -> None:
         """Trigger a manual history refresh (exposed to GUI)."""
@@ -3361,6 +3406,40 @@ class AppController:
         config_snapshot = self._collect_adetailer_panel_config()
         config_snapshot["enabled"] = normalized
         self.app_state.set_adetailer_config(config_snapshot)
+
+    def on_override_pack_config_changed(self, enabled: bool) -> None:
+        """Handle override pack config checkbox state change.
+        
+        When enabled=True, current stage card configs will override pack configs.
+        When enabled=False, pack configs are used as-is.
+        This state is consumed by ConfigMergerV2 when building StageOverrideFlags.
+        """
+        self.override_pack_config_enabled = bool(enabled)
+        self._append_log(
+            f"[controller] Pack config override: {'ENABLED' if enabled else 'DISABLED'} - "
+            f"Current stage settings will {'override' if enabled else 'not override'} pack configs"
+        )
+
+    def _build_stage_override_flags(self):  # type: ignore[no-untyped-def]
+        """Build StageOverrideFlags based on override checkbox state.
+        
+        When override checkbox is ON, all stage overrides are enabled.
+        When OFF, all overrides are disabled (pack configs used as-is).
+        
+        Returns:
+            StageOverrideFlags instance for use with ConfigMergerV2.merge_pipeline().
+        """
+        from src.pipeline.config_merger_v2 import StageOverrideFlags
+        
+        enabled = self.override_pack_config_enabled
+        return StageOverrideFlags(
+            txt2img_override_enabled=enabled,
+            img2img_override_enabled=enabled,
+            upscale_override_enabled=enabled,
+            refiner_override_enabled=enabled,
+            hires_override_enabled=enabled,
+            adetailer_override_enabled=enabled,
+        )
 
     def on_adetailer_config_changed(self, config: dict[str, Any]) -> None:
         if not self.app_state:

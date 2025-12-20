@@ -181,12 +181,15 @@ class UnifiedPromptResolver:
         global_negative: str = "",
         apply_global_negative: bool = True,
     ) -> PromptResolution:
+        # Apply matrix token substitution to both quality_line and subject_template
         subject = self._substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
+        quality = self._substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
+        
         lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in pack_row.lora_tags)
         positive_parts = []
         positive_parts.extend(pack_row.embeddings)
-        if pack_row.quality_line:
-            positive_parts.append(pack_row.quality_line)
+        if quality:  # Use substituted quality_line
+            positive_parts.append(quality)
         if subject:
             positive_parts.append(subject)
         if lora_tokens:

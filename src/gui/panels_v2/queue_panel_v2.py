@@ -671,32 +671,32 @@ class QueuePanelV2(ttk.Frame):
             summary: UnifiedJobSummary with PromptPack provenance
 
         Returns:
-            Formatted string like "Angelic Warriors [Row 3] v2/b1 Seed: 12345"
+            Formatted string like "Row 3: Angelic Warriors v2/b1 Seed: 12345"
         """
         parts = []
+
+        # Row index FIRST for easy distinction
+        row_idx = getattr(summary, "prompt_pack_row_index", None)
+        if row_idx is not None:
+            parts.append(f"Row {row_idx + 1}:")
 
         # Pack name
         pack_name = getattr(summary, "prompt_pack_name", None)
         if pack_name:
             parts.append(pack_name)
 
-        # Row index
-        row_idx = getattr(summary, "prompt_pack_row_index", None)
-        if row_idx is not None:
-            parts.append(f"[Row {row_idx + 1}]")
-
         # Variant/batch indices
         variant_idx = getattr(summary, "variant_index", None)
         batch_idx = getattr(summary, "batch_index", None)
         if variant_idx is not None or batch_idx is not None:
-            v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
-            b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
-            parts.append(f"{v_text}/{b_text}")
+            v_text = f"v{variant_idx + 1}" if variant_idx is not None else "v?"
+            b_text = f"b{batch_idx + 1}" if batch_idx is not None else "b?"
+            parts.append(f"[{v_text}/{b_text}]")
 
         # Seed
         seed = getattr(summary, "seed", None)
-        if seed is not None:
-            parts.append(f"Seed: {seed}")
+        if seed is not None and seed != -1:
+            parts.append(f"Seed:{seed}")
 
         return " ".join(parts) if parts else "Unknown Job"
 

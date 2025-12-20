@@ -582,7 +582,8 @@ class NormalizedJobRecord:
     @property
     def stage_chain_labels(self) -> list[str]:
         if self.stage_chain:
-            return [stage.stage_type for stage in self.stage_chain]
+            # Only return labels for enabled stages
+            return [stage.stage_type for stage in self.stage_chain if stage.enabled]
         return ["txt2img"]
 
     def matrix_slot_values_preview(self) -> str:

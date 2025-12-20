@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import itertools
 import logging
 from collections.abc import Iterable
 from pathlib import Path
@@ -22,6 +23,7 @@ from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 from src.utils.config import ConfigManager
+from src.utils.prompt_pack_utils import get_matrix_slots_dict, load_pack_metadata
 
 _logger = logging.getLogger(__name__)
 
@@ -55,12 +57,89 @@ class PromptPackNormalizedJobBuilder:
             if not entry.pack_id:
                 _logger.warning("Pack entry missing pack_id, skipping")
                 continue
-            jobs = self._build_jobs_for_entry(entry)
-            if jobs:
-                _logger.info(f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) produced {len(jobs)} NJR(s)")
-                records.extend(jobs)
+            
+            # Expand entry by matrix combinations from pack JSON
+            expanded_entries = self._expand_entry_by_matrix(entry)
+            _logger.info(f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) expanded to {len(expanded_entries)} variant(s)")
+            
+            for expanded_entry in expanded_entries:
+                jobs = self._build_jobs_for_entry(expanded_entry)
+                if jobs:
+                    _logger.info(f"[PromptPackNormalizedJobBuilder] Expanded entry produced {len(jobs)} NJR(s)")
+                    records.extend(jobs)
         _logger.info(f"[PromptPackNormalizedJobBuilder] Total NJRs generated: {len(records)}")
         return records
+
+    def _expand_entry_by_matrix(self, entry: PackJobEntry) -> list[PackJobEntry]:
+        """Expand a single entry into multiple entries based on pack JSON matrix slots.
+        
+        If the pack has matrix slots defined in its JSON metadata:
+        1. Load pack JSON metadata
+        2. Extract matrix slots (e.g., {"job": ["wizard", "knight"], "env": ["forest", "castle"]})
+        3. Generate all combinations (Cartesian product)
+        4. Create one entry per combination with matrix_slot_values set
+        
+        If no matrix or matrix disabled, returns [entry] unchanged.
+        
+        Args:
+            entry: Original PackJobEntry
+            
+        Returns:
+            List of PackJobEntry, one per matrix combination
+        """
+        # Resolve pack path
+        pack_path = self._resolve_pack_text_path(entry.pack_id)
+        if not pack_path:
+            _logger.debug(f"[Matrix Expansion] No pack path found for {entry.pack_id}, skipping expansion")
+            return [entry]
+        
+        # Load pack JSON metadata
+        metadata = load_pack_metadata(pack_path)
+        if not metadata:
+            _logger.debug(f"[Matrix Expansion] No JSON metadata for {entry.pack_id}, skipping expansion")
+            return [entry]
+        
+        # Extract matrix slots
+        matrix_slots_dict = get_matrix_slots_dict(metadata)
+        if not matrix_slots_dict:
+            _logger.debug(f"[Matrix Expansion] No matrix slots in {entry.pack_id}, skipping expansion")
+            return [entry]
+        
+        # Generate combinations (Cartesian product)
+        slot_names = list(matrix_slots_dict.keys())
+        slot_values_lists = [matrix_slots_dict[name] for name in slot_names]
+        combinations = list(itertools.product(*slot_values_lists))
+        
+        # Check matrix limit from metadata
+        matrix_config = metadata.get("matrix", {})
+        limit = matrix_config.get("limit", 0)
+        if limit > 0 and len(combinations) > limit:
+            combinations = combinations[:limit]
+            _logger.info(f"[Matrix Expansion] Limited combinations to {limit} (from {len(combinations)} total)")
+        
+        _logger.info(f"[Matrix Expansion] Generating {len(combinations)} combinations for {entry.pack_id} with slots: {slot_names}")
+        
+        # Create one entry per combination
+        expanded_entries = []
+        for combo in combinations:
+            # Build matrix_slot_values dict for this combination
+            matrix_values = {name: value for name, value in zip(slot_names, combo)}
+            
+            # Create a copy of the entry with matrix_slot_values set
+            expanded_entry = PackJobEntry(
+                pack_id=entry.pack_id,
+                pack_name=entry.pack_name,
+                pack_row_index=entry.pack_row_index,
+                prompt_text=entry.prompt_text,
+                negative_prompt_text=entry.negative_prompt_text,
+                config_snapshot=entry.config_snapshot,
+                stage_flags=entry.stage_flags,
+                matrix_slot_values=matrix_values,  # Set the matrix values for this combination
+                randomizer_metadata=entry.randomizer_metadata,
+            )
+            expanded_entries.append(expanded_entry)
+        
+        return expanded_entries
 
     def _build_jobs_for_entry(self, entry: PackJobEntry) -> list[NormalizedJobRecord]:
         pack_config = self._load_pack_config(entry.pack_id)

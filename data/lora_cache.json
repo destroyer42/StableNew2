@@ -1,0 +1,258 @@
+{
+  "add-detail-xl": {
+    "name": "add-detail-xl",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\add-detail-xl.safetensors",
+    "file_size": 228452344,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "aidmaImageUpgraderSDXL-v0.3": {
+    "name": "aidmaImageUpgraderSDXL-v0.3",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\aidmaImageUpgraderSDXL-v0.3.safetensors",
+    "file_size": 912577828,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "anatomy_helper": {
+    "name": "anatomy_helper",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\anatomy_helper.safetensors",
+    "file_size": 228473940,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Artistic Image Enhancement v1.1 Lite": {
+    "name": "Artistic Image Enhancement v1.1 Lite",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Artistic Image Enhancement v1.1 Lite.safetensors",
+    "file_size": 23477408,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Beautiful_Female_Face_XL_Adetailer_LoRa-000014": {
+    "name": "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Beautiful_Female_Face_XL_Adetailer_LoRa-000014.safetensors",
+    "file_size": 228469180,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "CinematicStyle_v1": {
+    "name": "CinematicStyle_v1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\CinematicStyle_v1.safetensors",
+    "file_size": 127992988,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "csybgh": {
+    "name": "csybgh",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\csybgh.safetensors",
+    "file_size": 170545340,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "DetailedEyes_V3": {
+    "name": "DetailedEyes_V3",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\DetailedEyes_V3.safetensors",
+    "file_size": 93151000,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "detailed_notrigger": {
+    "name": "detailed_notrigger",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\detailed_notrigger.safetensors",
+    "file_size": 12223744,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "dreamshaperXL10_lora": {
+    "name": "dreamshaperXL10_lora",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\dreamshaperXL10_lora.safetensors",
+    "file_size": 681230644,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "epiCRealismHelper": {
+    "name": "epiCRealismHelper",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\epiCRealismHelper.safetensors",
+    "file_size": 58546476,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Heroes_of_Valhalla_SDXL": {
+    "name": "Heroes_of_Valhalla_SDXL",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Heroes_of_Valhalla_SDXL.safetensors",
+    "file_size": 228457388,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "ILFF7Aerith": {
+    "name": "ILFF7Aerith",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\ILFF7Aerith.safetensors",
+    "file_size": 57425772,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "JuggerCineXL2": {
+    "name": "JuggerCineXL2",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\JuggerCineXL2.safetensors",
+    "file_size": 170539852,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "LCM_LoRA_Weights_SDXL": {
+    "name": "LCM_LoRA_Weights_SDXL",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\LCM_LoRA_Weights_SDXL.safetensors",
+    "file_size": 393855224,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "NSFWFilterXL_animagine": {
+    "name": "NSFWFilterXL_animagine",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\NSFWFilterXL_animagine.safetensors",
+    "file_size": 57476788,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "PerfectEyesXL": {
+    "name": "PerfectEyesXL",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\PerfectEyesXL.safetensors",
+    "file_size": 228453996,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "PhotoDistressed01-00a_CE_SDXL_128OT": {
+    "name": "PhotoDistressed01-00a_CE_SDXL_128OT",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\PhotoDistressed01-00a_CE_SDXL_128OT.safetensors",
+    "file_size": 681265716,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Photoshoot_Realism": {
+    "name": "Photoshoot_Realism",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Photoshoot_Realism.safetensors",
+    "file_size": 228453756,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Portrait Engine V1.0": {
+    "name": "Portrait Engine V1.0",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Portrait Engine V1.0.safetensors",
+    "file_size": 612738273,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Realism Lora By Stable Yogi_V3_Lite": {
+    "name": "Realism Lora By Stable Yogi_V3_Lite",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Realism Lora By Stable Yogi_V3_Lite.safetensors",
+    "file_size": 681230772,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Realism_Lora_By_Stable_yogi_SDXL8.1": {
+    "name": "Realism_Lora_By_Stable_yogi_SDXL8.1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Realism_Lora_By_Stable_yogi_SDXL8.1.safetensors",
+    "file_size": 44534360,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "RPGAngelsXL": {
+    "name": "RPGAngelsXL",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\RPGAngelsXL.safetensors",
+    "file_size": 85427260,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "sdxl1.0_realastic_female_lora": {
+    "name": "sdxl1.0_realastic_female_lora",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\sdxl1.0_realastic_female_lora.safetensors",
+    "file_size": 23401064,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "SDXL_FILM_PHOTOGRAPHY_STYLE_V1": {
+    "name": "SDXL_FILM_PHOTOGRAPHY_STYLE_V1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\SDXL_FILM_PHOTOGRAPHY_STYLE_V1.safetensors",
+    "file_size": 912593164,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "sdxl_photorealistic_slider_v1-0": {
+    "name": "sdxl_photorealistic_slider_v1-0",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\sdxl_photorealistic_slider_v1-0.safetensors",
+    "file_size": 24179004,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "stvmccrr": {
+    "name": "stvmccrr",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\stvmccrr.safetensors",
+    "file_size": 170554980,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "Super_Eye_Detailer_By_Stable_Yogi_SDPD0": {
+    "name": "Super_Eye_Detailer_By_Stable_Yogi_SDPD0",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Super_Eye_Detailer_By_Stable_Yogi_SDPD0.safetensors",
+    "file_size": 57417531,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,": {
+    "name": "WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,.safetensors",
+    "file_size": 456484716,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "XLAxeAndShield": {
+    "name": "XLAxeAndShield",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\XLAxeAndShield.safetensors",
+    "file_size": 228453308,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "xl_more_art-full_v1": {
+    "name": "xl_more_art-full_v1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\xl_more_art-full_v1.safetensors",
+    "file_size": 719020768,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "xl_yamer_style-3.0": {
+    "name": "xl_yamer_style-3.0",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\xl_yamer_style-3.0.safetensors",
+    "file_size": 57454572,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  }
+}

@@ -1119,7 +1119,7 @@ class PipelineController(_GUIPipelineController):
                 self._app_state.set_preview_jobs(records)
             except Exception:
                 pass
-        self.submit_preview_jobs_to_queue()
+        self.submit_preview_jobs_to_queue(records=records)
 
     def on_clear_job_draft(self) -> None:
         if not self._app_state:
@@ -1372,12 +1372,23 @@ class PipelineController(_GUIPipelineController):
     def submit_preview_jobs_to_queue(
         self,
         *,
+        records: list[NormalizedJobRecord] | None = None,
         source: str = "gui",
         prompt_source: str = "pack",
         run_config: dict[str, Any] | None = None,
     ) -> int:
-        """Submit preview jobs as queue jobs using NormalizedJobRecord data."""
-        normalized_jobs = self.get_preview_jobs()
+        """Submit preview jobs as queue jobs using NormalizedJobRecord data.
+        
+        Args:
+            records: Optional pre-fetched records to submit. If None, calls get_preview_jobs().
+            source: Source identifier for job tracking.
+            prompt_source: Prompt source type ("pack", "manual", etc).
+            run_config: Optional runtime configuration overrides.
+            
+        Returns:
+            Number of jobs successfully submitted to queue.
+        """
+        normalized_jobs = records if records is not None else self.get_preview_jobs()
         if not normalized_jobs:
             return 0
         queueable, non_queueable = self._split_queueable_records(normalized_jobs)

@@ -43,6 +43,7 @@ class RunningJobPanelV2(ttk.Frame):
         self._current_job: QueueJobV2 | None = None
         self._current_job_summary: UnifiedJobSummary | None = None  # PR-CORE-D
         self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
+        self._timer_id: str | None = None  # Tk after() timer ID for elapsed time updates
 
         # Title with queue origin indicator
         title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -64,7 +65,7 @@ class RunningJobPanelV2(ttk.Frame):
             self,
             text="No job running",
             style=STATUS_STRONG_LABEL_STYLE,
-            wraplength=200,
+            wraplength=400,
         )
         self.job_info_label.pack(fill="x", pady=(0, 4))
 
@@ -72,7 +73,7 @@ class RunningJobPanelV2(ttk.Frame):
         self.pack_info_label = ttk.Label(
             self,
             text="",
-            wraplength=200,
+            wraplength=400,
         )
         self.pack_info_label.pack(fill="x", pady=(0, 4))
 
@@ -80,7 +81,7 @@ class RunningJobPanelV2(ttk.Frame):
         self.stage_chain_label = ttk.Label(
             self,
             text="",
-            wraplength=200,
+            wraplength=400,
         )
         self.stage_chain_label.pack(fill="x", pady=(0, 4))
 
@@ -207,6 +208,8 @@ class RunningJobPanelV2(ttk.Frame):
         job = self._current_job
 
         if job is None:
+            # Stop timer when no job running
+            self._stop_timer()
             self.job_info_label.configure(text="No job running")
             self.pack_info_label.configure(text="")  # PR-CORE-D
             self.stage_chain_label.configure(text="")  # PR-CORE-D
@@ -289,6 +292,12 @@ class RunningJobPanelV2(ttk.Frame):
         self.pause_resume_button.state(["!disabled"] if can_control else ["disabled"])
         self.cancel_button.state(["!disabled"] if can_control else ["disabled"])
         self.cancel_return_button.state(["!disabled"] if can_control else ["disabled"])
+
+        # Start timer for elapsed time updates (if job is running or paused)
+        if is_running or is_paused:
+            self._start_timer()
+        else:
+            self._stop_timer()
 
     def _on_pause_resume(self) -> None:
         """Handle pause/resume button click."""
@@ -375,6 +384,30 @@ class RunningJobPanelV2(ttk.Frame):
             self.progress_bar.configure(value=progress_pct)
             self.progress_label.configure(text=f"{progress_pct}%")
             self.eta_label.configure(text=self._format_eta(eta_seconds))
+
+    def _start_timer(self) -> None:
+        """Start the periodic timer to update elapsed time (1 second interval)."""
+        if self._timer_id is None:
+            self._tick()
+
+    def _stop_timer(self) -> None:
+        """Stop the periodic timer."""
+        if self._timer_id is not None:
+            try:
+                self.after_cancel(self._timer_id)
+            except Exception:
+                pass
+            self._timer_id = None
+
+    def _tick(self) -> None:
+        """Update elapsed time and schedule next tick."""
+        # Update elapsed time if job is running
+        if self._current_job and self._current_job.started_at:
+            elapsed_text = self._format_elapsed(self._current_job.started_at)
+            self.elapsed_label.configure(text=elapsed_text)
+        
+        # Schedule next tick in 1 second
+        self._timer_id = self.after(1000, self._tick)
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update panel from app state."""

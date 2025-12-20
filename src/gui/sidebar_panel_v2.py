@@ -196,6 +196,9 @@ class SidebarPanelV2(ttk.Frame):
         self.global_positive_enabled_var = tk.BooleanVar(value=False)
         self.global_positive_text_var = tk.StringVar(value="")
         
+        # Override checkbox for pack config override
+        self.override_pack_config_var = tk.BooleanVar(value=False)
+        
         # Load global prompts from config manager
         try:
             if self.config_manager:
@@ -936,6 +939,7 @@ class SidebarPanelV2(ttk.Frame):
                 pass
 
     def _build_stages_section(self, parent: ttk.Frame) -> ttk.Frame:
+        """Build stages section with horizontal 2-column layout."""
         frame = ttk.Frame(parent)
         for idx, stage in enumerate(self._STAGE_ORDER):
             var = self.stage_states.get(stage)
@@ -953,7 +957,10 @@ class SidebarPanelV2(ttk.Frame):
                 command=make_toggle_command(stage),
                 style="Dark.TCheckbutton",
             )
-            cb.grid(row=idx, column=0, sticky="w", pady=2)
+            # 2-column layout: row = idx // 2, column = idx % 2
+            row = idx // 2
+            col = idx % 2
+            cb.grid(row=row, column=col, sticky="w", pady=2, padx=(0, 12))
         return frame
 
     def _on_stage_toggle(self, stage: str) -> None:
@@ -965,6 +972,17 @@ class SidebarPanelV2(ttk.Frame):
         if controller and hasattr(controller, "on_stage_toggled"):
             try:
                 controller.on_stage_toggled(stage, enabled)
+            except Exception:
+                pass
+        self._emit_change()
+
+    def _on_override_changed(self) -> None:
+        """Called when override pack config checkbox state changes."""
+        enabled = bool(self.override_pack_config_var.get())
+        controller = self.controller
+        if controller and hasattr(controller, "on_override_pack_config_changed"):
+            try:
+                controller.on_override_pack_config_changed(enabled)
             except Exception:
                 pass
         self._emit_change()
@@ -1012,18 +1030,30 @@ class SidebarPanelV2(ttk.Frame):
         return frame
 
     def _build_pipeline_config_section(self, parent: ttk.Frame) -> ttk.Frame:
-        """DEPRECATED (PR-CORE1-12): Pipeline config section no longer used.
+        """Pipeline config section with override checkbox and stage toggles.
 
-        This method built a PipelineConfigPanel which is now archived. The panel
-        was wired to pipeline_config execution, which is removed in v2.6.
-
-        Consider removing this method entirely in future cleanup.
+        PR-CORE1-12: PipelineConfigPanel archived - now using direct stage toggles.
+        Added override checkbox to control whether current stage configs override pack configs.
         """
         # PR-CORE1-12: PipelineConfigPanel archived - no longer wired
         # from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
 
         # Create a frame to hold the pipeline config panel and stage toggles
         frame = ttk.Frame(parent)
+        
+        # Override checkbox section
+        override_frame = ttk.Frame(frame)
+        override_frame.pack(fill="x", pady=(0, 8))
+        override_cb = ttk.Checkbutton(
+            override_frame,
+            text="Override pack configs with current stages",
+            variable=self.override_pack_config_var,
+            command=self._on_override_changed,
+            style="Dark.TCheckbutton",
+        )
+        override_cb.pack(anchor="w")
+        
+        # Stage toggles section
         stage_section = ttk.Frame(frame)
         stage_section.pack(fill="x", pady=(0, 8))
         header = ttk.Label(stage_section, text="Stages", style=HEADING_LABEL_STYLE)

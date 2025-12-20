@@ -36,7 +36,6 @@
   "adetailer": {
     "adetailer_model": "face_yolov8n.pt",
     "ad_model": "face_yolov8n.pt",
-    "detector": "face",
     "adetailer_confidence": 0.6916666666666667,
     "ad_confidence": 0.6916666666666667,
     "max_detections": 9,

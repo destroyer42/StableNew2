@@ -1,0 +1,5 @@
+<embedding:positive_embed>
+(masterpiece, best quality) [[job]] in [[environment]]
+<lora:add-detail-xl:0.65>
+neg: <embedding:negative_hands>
+neg: bad quality, blurry
