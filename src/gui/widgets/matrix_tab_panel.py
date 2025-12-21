@@ -1,5 +1,10 @@
 """
-MatrixTabPanel - Matrix configuration editor for Prompt Tab.
+MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab.
+
+v2.6 Changes:
+- Added 'random' mode for true per-slot independent randomization
+- Each slot randomly picks a value independently per run
+- Random mode provides equal probability for all combinations
 
 Provides UI for defining matrix slots (name + values) for Cartesian
 prompt expansion, with real-time preview of combinations.
@@ -81,7 +86,7 @@ class MatrixTabPanel(ttk.Frame):
         self.mode_combo = ttk.Combobox(
             header_frame,
             textvariable=self.mode_var,
-            values=["fanout", "sequential"],
+            values=["fanout", "sequential", "random"],
             state="readonly",
             width=12,
         )
@@ -298,7 +303,7 @@ class MatrixTabPanel(ttk.Frame):
         self._update_preview()
 
     def _update_preview(self) -> None:
-        """Generate and display preview of expanded combinations."""
+        """Generate and display preview of expanded combinations (full prompts, no truncation)."""
         matrix_config = self.workspace_state.get_matrix_config()
 
         # Clear preview
@@ -323,26 +328,32 @@ class MatrixTabPanel(ttk.Frame):
         # Build combinations using Cartesian product
         combinations = self._build_combinations(matrix_config)
 
+        # Apply limit if configured
+        limit = matrix_config.limit if matrix_config.limit and matrix_config.limit > 0 else len(combinations)
+        limited_combinations = combinations[:limit]
+
         # Apply combinations to prompt
         expanded_prompts = []
-        for combo in combinations:
+        for combo in limited_combinations:
             expanded = prompt_text
             for slot_name, slot_value in combo.items():
                 token = f"[[{slot_name}]]"
                 expanded = expanded.replace(token, slot_value)
             expanded_prompts.append(expanded)
 
-        # Display preview
-        total = len(expanded_prompts)
-        preview_lines = [f"Preview ({total} combinations):"]
+        # Display preview (NO TRUNCATION - show full prompts)
+        total = len(combinations)
+        displayed = len(expanded_prompts)
+        preview_lines = [f"Preview ({displayed} of {total} combinations):"]
+        preview_lines.append("")
 
-        for i, prompt in enumerate(expanded_prompts[:10], start=1):
-            # Truncate long prompts
-            display_prompt = prompt[:100] + "..." if len(prompt) > 100 else prompt
-            preview_lines.append(f"{i}. {display_prompt}")
+        for i, prompt in enumerate(expanded_prompts, start=1):
+            # NO truncation - show full prompt
+            preview_lines.append(f"{i}. {prompt}")
+            preview_lines.append("")  # Blank line between prompts for readability
 
-        if total > 10:
-            preview_lines.append(f"... and {total - 10} more")
+        if total > displayed:
+            preview_lines.append(f"━━━ {total - displayed} more combinations not shown (limit={limit}) ━━━")
 
         self.preview_text.insert("1.0", "\n".join(preview_lines))
         self.preview_text.config(state="disabled")

@@ -2412,11 +2412,17 @@ class AppController:
             stage_panel.load_adetailer_config(executor_config.get("adetailer") or {})
 
         pipeline_section = executor_config.get("pipeline") or {}
+        # Get stage flags directly from config without defaults - if missing, will be None
+        txt2img_val = pipeline_section.get("txt2img_enabled")
+        img2img_val = pipeline_section.get("img2img_enabled") 
+        adetailer_val = pipeline_section.get("adetailer_enabled")
+        upscale_val = pipeline_section.get("upscale_enabled")
+        
         stage_defaults = {
-            "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
-            "img2img": bool(pipeline_section.get("img2img_enabled", True)),
-            "adetailer": bool(pipeline_section.get("adetailer_enabled", True)),
-            "upscale": bool(pipeline_section.get("upscale_enabled", False)),
+            "txt2img": bool(txt2img_val) if txt2img_val is not None else True,
+            "img2img": bool(img2img_val) if img2img_val is not None else False,
+            "adetailer": bool(adetailer_val) if adetailer_val is not None else False,
+            "upscale": bool(upscale_val) if upscale_val is not None else False,
         }
         logger.info(
             "[controller] Loading stage flags from config: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",

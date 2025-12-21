@@ -1,5 +1,10 @@
 """Simple LoRA picker panel for managing LoRAs with strength controls.
 
+v2.6 Changes:
+- Replaced autocomplete text entry with dropdown combobox for simpler selection
+- User selects from available LoRAs and clicks Add button
+- Removed 70+ lines of autocomplete complexity
+
 This widget provides a basic interface for adding/removing LoRAs and adjusting
 their strengths. Keyword detection will be added in Phase A.
 """
@@ -34,7 +39,6 @@ class LoRAPickerPanel(ttk.Frame):
         # Initialize scanner
         self.scanner = get_lora_scanner(webui_root)
         self._available_loras: list[str] = []
-        self._autocomplete_list: tk.Listbox | None = None
         
         self._build_ui()
         
@@ -60,13 +64,15 @@ class LoRAPickerPanel(ttk.Frame):
         add_frame = ttk.Frame(self)
         add_frame.pack(fill="x", padx=5, pady=5)
         
-        self.lora_name_entry = ttk.Entry(add_frame, width=30)
-        self.lora_name_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.lora_name_entry.insert(0, "LoRA name...")
-        self.lora_name_entry.bind("<FocusIn>", self._on_entry_focus_in)
-        self.lora_name_entry.bind("<FocusOut>", self._on_entry_focus_out)
-        self.lora_name_entry.bind("<Return>", lambda e: self._on_add_lora())
-        self.lora_name_entry.bind("<KeyRelease>", self._on_entry_key_release)
+        self.lora_name_var = tk.StringVar()
+        self.lora_name_combo = ttk.Combobox(
+            add_frame,
+            textvariable=self.lora_name_var,
+            width=28,
+            state="readonly"
+        )
+        self.lora_name_combo.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.lora_name_combo.bind("<Return>", lambda e: self._on_add_lora())
         
         ttk.Button(add_frame, text="Add LoRA", command=self._on_add_lora).pack(side="left")
         
@@ -92,20 +98,11 @@ class LoRAPickerPanel(ttk.Frame):
         # Enable mousewheel scrolling
         canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
     
-    def _on_entry_focus_in(self, event) -> None:
-        """Clear placeholder text on focus."""
-        if self.lora_name_entry.get() == "LoRA name...":
-            self.lora_name_entry.delete(0, "end")
-    
-    def _on_entry_focus_out(self, event) -> None:
-        """Restore placeholder if empty."""
-        if not self.lora_name_entry.get():
-            self.lora_name_entry.insert(0, "LoRA name...")
-    
+
     def _on_add_lora(self) -> None:
         """Add a new LoRA to the list."""
-        name = self.lora_name_entry.get().strip()
-        if not name or name == "LoRA name...":
+        name = self.lora_name_var.get().strip()
+        if not name:
             return
         
         # Check for duplicates
@@ -116,9 +113,8 @@ class LoRAPickerPanel(ttk.Frame):
         # Create LoRA entry
         self._add_lora_entry(name, 0.8)
         
-        # Clear entry
-        self.lora_name_entry.delete(0, "end")
-        self.lora_name_entry.insert(0, "LoRA name...")
+        # Clear combobox
+        self.lora_name_var.set("")
         
         # Notify change
         if self.on_change_callback:
@@ -243,6 +239,7 @@ class LoRAPickerPanel(ttk.Frame):
         try:
             self.scanner.scan_loras()
             self._available_loras = self.scanner.get_lora_names()
+            self.lora_name_combo["values"] = sorted(self._available_loras)
         except Exception:
             pass
     
@@ -251,76 +248,8 @@ class LoRAPickerPanel(ttk.Frame):
         try:
             self.scanner.scan_loras(force_rescan=True)
             self._available_loras = self.scanner.get_lora_names()
-            self._hide_autocomplete()
+            self.lora_name_combo["values"] = sorted(self._available_loras)
         except Exception:
             pass
     
-    def _on_entry_key_release(self, event) -> None:
-        """Show autocomplete suggestions on key release."""
-        # Ignore special keys
-        if event.keysym in ["Return", "Escape", "Tab", "Up", "Down", "Left", "Right"]:
-            if event.keysym == "Escape":
-                self._hide_autocomplete()
-            elif event.keysym == "Down" and self._autocomplete_list:
-                self._autocomplete_list.focus_set()
-                self._autocomplete_list.selection_set(0)
-            return
-        
-        text = self.lora_name_entry.get()
-        if not text or text == "LoRA name...":
-            self._hide_autocomplete()
-            return
-        
-        # Search for matches
-        matches = [lora for lora in self._available_loras if text.lower() in lora.lower()]
-        
-        if matches:
-            self._show_autocomplete(matches[:10])  # Limit to 10 suggestions
-        else:
-            self._hide_autocomplete()
-    
-    def _show_autocomplete(self, matches: list[str]) -> None:
-        """Show autocomplete dropdown with matches."""
-        # Hide existing
-        self._hide_autocomplete()
-        
-        # Create listbox
-        self._autocomplete_list = tk.Listbox(
-            self,
-            height=min(len(matches), 10),
-            bg="#3c3c3c",
-            fg="white",
-            selectbackground="#0078d4"
-        )
-        
-        for match in matches:
-            self._autocomplete_list.insert("end", match)
-        
-        # Position below entry
-        x = self.lora_name_entry.winfo_x()
-        y = self.lora_name_entry.winfo_y() + self.lora_name_entry.winfo_height()
-        self._autocomplete_list.place(x=x, y=y, width=self.lora_name_entry.winfo_width())
-        
-        # Bind selection
-        self._autocomplete_list.bind("<Double-Button-1>", self._on_autocomplete_select)
-        self._autocomplete_list.bind("<Return>", self._on_autocomplete_select)
-        self._autocomplete_list.bind("<Escape>", lambda e: self._hide_autocomplete())
-    
-    def _hide_autocomplete(self) -> None:
-        """Hide autocomplete dropdown."""
-        if self._autocomplete_list:
-            self._autocomplete_list.destroy()
-            self._autocomplete_list = None
-    
-    def _on_autocomplete_select(self, event) -> None:
-        """Handle autocomplete selection."""
-        if not self._autocomplete_list:
-            return
-        
-        selection = self._autocomplete_list.curselection()
-        if selection:
-            selected_name = self._autocomplete_list.get(selection[0])
-            self.lora_name_entry.delete(0, "end")
-            self.lora_name_entry.insert(0, selected_name)
-            self._hide_autocomplete()
-            self.lora_name_entry.focus_set()
+

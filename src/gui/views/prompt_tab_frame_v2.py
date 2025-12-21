@@ -1,13 +1,21 @@
-# Renamed from prompt_tab_frame.py to prompt_tab_frame_v2.py
-# ...existing code...
+"""Prompt Tab Frame v2.6 - Main prompt editing interface with matrix integration.
+
+v2.6 Changes:
+- Integrated full Advanced Prompt Pack Editor v2.6 replacing lightweight version
+- Advanced editor now provides file operations, validation, model discovery
+- Enhanced workflow for comprehensive pack editing and management
+
+Main component for prompt pack editing with slot management, matrix configuration,
+LoRA/embedding pickers, and real-time preview.
+"""
 
 from __future__ import annotations
 
 import tkinter as tk
+import tkinter.simpledialog
 from tkinter import filedialog, messagebox, ttk
 
 from src.config.app_config import STABLENEW_WEBUI_ROOT
-from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.scrolling import enable_mousewheel
@@ -78,30 +86,62 @@ class PromptTabFrame(ttk.Frame):
 
     # Left column -------------------------------------------------------
     def _build_left_panel(self) -> None:
-        header = ttk.Label(self.left_frame, text="Prompt Slots", style=BODY_LABEL_STYLE)
-        header.pack(anchor="w")
-
-        btn_frame = ttk.Frame(self.left_frame)
-        btn_frame.pack(fill="x", pady=(4, 6))
-        ttk.Button(btn_frame, text="New", command=self._on_new_pack).pack(side="left", padx=(0, 2))
-        ttk.Button(btn_frame, text="Open...", command=self._on_open_pack).pack(
-            side="left", padx=(0, 2)
+        """Build pack manager and slot list panels.
+        
+        v2.6: Comprehensive pack management with load, clone, delete, rename, validate.
+        """
+        # Pack Manager Section (top)
+        pack_header = ttk.Label(self.left_frame, text="Pack Manager", style=BODY_LABEL_STYLE)
+        pack_header.pack(anchor="w")
+        
+        # Pack management buttons
+        pack_btn_frame = ttk.Frame(self.left_frame)
+        pack_btn_frame.pack(fill="x", pady=(4, 2))
+        ttk.Button(pack_btn_frame, text="New", command=self._on_new_pack, width=6).pack(side="left", padx=(0, 2))
+        ttk.Button(pack_btn_frame, text="Load", command=self._on_load_selected_pack, width=6).pack(side="left", padx=(0, 2))
+        ttk.Button(pack_btn_frame, text="Save", command=self._on_save_pack, width=6).pack(side="left")
+        
+        pack_btn_frame2 = ttk.Frame(self.left_frame)
+        pack_btn_frame2.pack(fill="x", pady=(2, 6))
+        ttk.Button(pack_btn_frame2, text="Clone", command=self._on_clone_pack, width=6).pack(side="left", padx=(0, 2))
+        ttk.Button(pack_btn_frame2, text="Rename", command=self._on_rename_pack, width=6).pack(side="left", padx=(0, 2))
+        ttk.Button(pack_btn_frame2, text="Delete", command=self._on_delete_pack, width=6).pack(side="left", padx=(0, 2))
+        ttk.Button(pack_btn_frame2, text="Validate", command=self._on_validate_pack, width=7).pack(side="left")
+        
+        # Pack list
+        self.pack_listbox = tk.Listbox(
+            self.left_frame, 
+            exportselection=False, 
+            height=8,
+            bg="#1E1E1E",
+            fg="#FFFFFF",
+            selectbackground="#FFC805",
+            selectforeground="#000000",
+            highlightthickness=0,
+            borderwidth=0
         )
-        ttk.Button(btn_frame, text="Save", command=self._on_save_pack).pack(
-            side="left", padx=(0, 2)
+        self.pack_listbox.pack(fill="both", expand=False, pady=(0, 8))
+        self.pack_listbox.bind("<Double-Button-1>", lambda e: self._on_load_selected_pack())
+        enable_mousewheel(self.pack_listbox)
+        self._refresh_pack_list()
+        
+        # Slot List Section (bottom)
+        ttk.Separator(self.left_frame, orient="horizontal").pack(fill="x", pady=(0, 8))
+        
+        slot_header = ttk.Label(self.left_frame, text="Prompt Slots", style=BODY_LABEL_STYLE)
+        slot_header.pack(anchor="w")
+
+        self.slot_list = tk.Listbox(
+            self.left_frame, 
+            exportselection=False, 
+            height=10,
+            bg="#1E1E1E",
+            fg="#FFFFFF",
+            selectbackground="#FFC805",
+            selectforeground="#000000",
+            highlightthickness=0,
+            borderwidth=0
         )
-        ttk.Button(btn_frame, text="Save As...", command=self._on_save_pack_as).pack(side="left")
-
-        # Add Load from TXT button
-        load_txt_frame = ttk.Frame(self.left_frame)
-        load_txt_frame.pack(fill="x", pady=(2, 6))
-        ttk.Button(
-            load_txt_frame,
-            text="Load from TXT...",
-            command=self._on_load_from_txt
-        ).pack(fill="x")
-
-        self.slot_list = tk.Listbox(self.left_frame, exportselection=False, height=10)
         for i in range(10):
             self.slot_list.insert("end", f"Prompt {i + 1}")
         self.slot_list.selection_set(0)
@@ -119,16 +159,11 @@ class PromptTabFrame(ttk.Frame):
 
     # Center column -----------------------------------------------------
     def _build_center_panel(self) -> None:
-        # Header frame (outside notebook)
+        # Header frame
         header_frame = ttk.Frame(self.center_frame)
         header_frame.pack(fill="x", pady=(0, 4))
         self.pack_name_label = ttk.Label(header_frame, text="Editor", style=BODY_LABEL_STYLE)
         self.pack_name_label.pack(side="left")
-        advanced_btn = ttk.Button(
-            header_frame, text="Advanced Editor", command=self._on_open_advanced_editor
-        )
-        advanced_btn.pack(side="right", padx=(0, 4))
-        attach_tooltip(advanced_btn, "Open the advanced prompt editor for the active prompt.")
 
         # Notebook for Prompts vs Matrix tabs
         self.editor_notebook = ttk.Notebook(self.center_frame)
@@ -176,7 +211,19 @@ class PromptTabFrame(ttk.Frame):
         ).pack(side="right")
 
         # Positive prompt editor (row 1)
-        self.editor = tk.Text(self.prompts_tab, height=8, wrap="word")
+        self.editor = tk.Text(
+            self.prompts_tab, 
+            height=8, 
+            wrap="word",
+            bg="#1E1E1E",
+            fg="#FFFFFF",
+            insertbackground="#FFC805",
+            selectbackground="#FFC805",
+            selectforeground="#000000",
+            highlightthickness=0,
+            borderwidth=1,
+            relief="solid"
+        )
         self.editor.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self.editor.bind("<<Modified>>", self._on_editor_modified)
         self.editor.bind("<KeyRelease>", self._on_positive_key_release)
@@ -185,8 +232,8 @@ class PromptTabFrame(ttk.Frame):
         enable_mousewheel(self.editor)
         attach_tooltip(self.editor, "Main prompt text for txt2img/img2img runs. Type [[ for slot autocomplete.")
         
-        # Configure tag for matrix token highlighting
-        self.editor.tag_config("matrix_token", background="#fff3cd", foreground="#856404")
+        # Configure tag for matrix token highlighting (darker yellow for dark mode)
+        self.editor.tag_config("matrix_token", background="#4A4A2A", foreground="#FFD700")
 
         # Negative prompt header (row 2)
         negative_header = ttk.Frame(self.prompts_tab)
@@ -206,7 +253,19 @@ class PromptTabFrame(ttk.Frame):
         ).pack(side="right")
 
         # Negative prompt editor (row 3)
-        self.negative_editor = tk.Text(self.prompts_tab, height=4, wrap="word")
+        self.negative_editor = tk.Text(
+            self.prompts_tab, 
+            height=4, 
+            wrap="word",
+            bg="#1E1E1E",
+            fg="#FFFFFF",
+            insertbackground="#FFC805",
+            selectbackground="#FFC805",
+            selectforeground="#000000",
+            highlightthickness=0,
+            borderwidth=1,
+            relief="solid"
+        )
         self.negative_editor.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self.negative_editor.bind("<<Modified>>", self._on_negative_modified)
         self.negative_editor.bind("<KeyRelease>", self._on_negative_key_release)
@@ -215,8 +274,8 @@ class PromptTabFrame(ttk.Frame):
         enable_mousewheel(self.negative_editor)
         attach_tooltip(self.negative_editor, "Negative prompt to exclude unwanted elements. Type [[ for slot autocomplete.")
         
-        # Configure tag for matrix token highlighting
-        self.negative_editor.tag_config("matrix_token", background="#fff3cd", foreground="#856404")
+        # Configure tag for matrix token highlighting (darker yellow for dark mode)
+        self.negative_editor.tag_config("matrix_token", background="#4A4A2A", foreground="#FFD700")
 
         # Separator (row 4)
         ttk.Separator(self.prompts_tab, orient="horizontal").grid(
@@ -249,23 +308,65 @@ class PromptTabFrame(ttk.Frame):
         )
         self.summary_label.pack(anchor="w", pady=(0, 6))
 
-        self.meta_text = tk.Text(self.right_frame, height=12, wrap="word", state="disabled")
+        self.meta_text = tk.Text(
+            self.right_frame, 
+            height=12, 
+            wrap="word", 
+            state="disabled",
+            bg="#1E1E1E",
+            fg="#FFFFFF",
+            highlightthickness=0,
+            borderwidth=1,
+            relief="solid"
+        )
         self.meta_text.pack(fill="both", expand=True)
 
     # Event handlers / helpers ------------------------------------------
     def _on_new_pack(self) -> None:
+        """Create a new pack with default preset settings.
+        
+        v2.6: New packs now use default.json preset settings for companion JSON file.
+        """
         if self.workspace_state.dirty:
             proceed = messagebox.askyesno(
                 "Unsaved Changes", "Discard unsaved changes and create a new pack?"
             )
             if not proceed:
                 return
-        self.workspace_state.new_pack("Untitled", slot_count=10)
+        
+        # Ask for pack name
+        import tkinter.simpledialog as simpledialog
+        pack_name = simpledialog.askstring("New Pack", "Enter pack name:", initialvalue="Untitled")
+        if not pack_name:
+            return
+        
+        # Create new pack
+        self.workspace_state.new_pack(pack_name, slot_count=10)
+        
+        # Load default preset settings into the pack
+        try:
+            from pathlib import Path
+            import json
+            
+            default_preset_path = Path("presets") / "default.json"
+            if default_preset_path.exists():
+                with open(default_preset_path, "r", encoding="utf-8") as f:
+                    default_preset = json.load(f)
+                
+                # Apply default preset to current pack
+                if hasattr(self.workspace_state.current_pack, 'preset_data'):
+                    self.workspace_state.current_pack.preset_data = default_preset
+                    self.workspace_state.mark_dirty()
+        except Exception:
+            pass  # Continue even if default preset loading fails
+        
         self.workspace_state.set_current_slot_index(0)
         self.slot_list.selection_clear(0, "end")
         self.slot_list.selection_set(0)
         self._refresh_editor()
         self._refresh_metadata()
+        self._refresh_pack_list()
+        self.pack_name_label.config(text=f"Editor - {pack_name}")
 
     def _on_slot_select(self, _event=None) -> None:
         try:
@@ -409,62 +510,106 @@ class PromptTabFrame(ttk.Frame):
             pass
 
     def _refresh_metadata(self) -> None:
+        """Refresh metadata/preview panel with full prompt preview."""
         pack = self.workspace_state.current_pack
         slot_index = self.workspace_state.get_current_slot_index()
-        meta = self.workspace_state.get_current_prompt_metadata() if pack else None
-
-        # Get positive and negative lengths separately
-        positive_text = self.workspace_state.get_current_prompt_text()
-        negative_text = self.workspace_state.get_current_negative_text()
-        positive_len = len(positive_text)
-        negative_len = len(negative_text)
-        positive_lines = positive_text.count("\n") + 1 if positive_text else 0
-        negative_lines = negative_text.count("\n") + 1 if negative_text else 0
-
-        loras = meta.loras if meta else []
-        embeds = meta.embeddings if meta else []
+        
+        # Get current slot data
+        current_slot = self.workspace_state.get_current_slot() if pack else None
+        if not current_slot:
+            self.meta_text.config(state="normal")
+            self.meta_text.delete("1.0", "end")
+            self.meta_text.insert("1.0", "No pack loaded")
+            self.meta_text.config(state="disabled")
+            return
+        
+        # Get matrix config
+        matrix_config = self.workspace_state.get_matrix_config()
+        
+        # Build preview sections
         dirty = " (modified)" if self.workspace_state.dirty else ""
-        self.pack_name_label.config(text=f"Editor - {pack.name if pack else 'None'}{dirty}")
-        summary_lines = [
+        preview_lines = [
             f"Pack: {pack.name if pack else 'None'}{dirty}",
             f"Slot: {slot_index + 1}",
             "",
-            f"Positive: {positive_len} chars across {positive_lines} line(s)",
-            f"Negative: {negative_len} chars across {negative_lines} line(s)",
+            "━━━ FULL PROMPT PREVIEW ━━━",
+            ""
         ]
-        if meta:
-            summary_lines.append(f"Matrix expressions: {meta.matrix_count}")
-        summary_lines.extend(
-            [
-                "",
-                "Detected LoRAs:",
-            ]
-        )
-        if loras:
-            for ref in loras:
-                if ref.weight is None:
-                    summary_lines.append(f" - {ref.name}")
-                else:
-                    summary_lines.append(f" - {ref.name} (w={ref.weight})")
+        
+        # Show matrix slots if defined
+        if matrix_config and matrix_config.slots:
+            preview_lines.append("Matrix Slots:")
+            for slot in matrix_config.slots:
+                values_preview = ", ".join(slot.values[:3])
+                if len(slot.values) > 3:
+                    values_preview += f"... ({len(slot.values)} total)"
+                preview_lines.append(f"  [[{slot.name}]]: {values_preview}")
+            preview_lines.append("")
+        
+        # Positive embeddings
+        if current_slot.positive_embeddings:
+            for emb_name in current_slot.positive_embeddings:
+                preview_lines.append(f"<embedding:{emb_name}>")
+        
+        # Positive prompt
+        positive_text = current_slot.text.strip()
+        if positive_text:
+            preview_lines.append(positive_text)
         else:
-            summary_lines.append(" - None")
-        summary_lines.append("")
-        summary_lines.append("Detected Embeddings:")
-        if embeds:
-            for ref in embeds:
-                summary_lines.append(f" - {ref.name}")
+            preview_lines.append("(no positive prompt)")
+        
+        # LoRAs
+        if current_slot.loras:
+            lora_line_parts = []
+            for lora_name, lora_weight in current_slot.loras:
+                lora_line_parts.append(f"<lora:{lora_name}:{lora_weight}>")
+            preview_lines.append(" ".join(lora_line_parts))
+        
+        preview_lines.append("")
+        
+        # Negative embeddings
+        if current_slot.negative_embeddings:
+            for emb_name in current_slot.negative_embeddings:
+                preview_lines.append(f"neg: <embedding:{emb_name}>")
+        
+        # Negative prompt
+        negative_text = current_slot.negative.strip()
+        if negative_text:
+            preview_lines.append(f"neg: {negative_text}")
         else:
-            summary_lines.append(" - None")
-        summary_lines.append("")
-        summary_lines.append("Pipeline Preview (conceptual):")
-        if slot_index == 0:
-            summary_lines.append(" - Intended as the base prompt for txt2img.")
-        else:
-            summary_lines.append(" - Additional prompt slot; mapping determined in pipeline tab.")
+            preview_lines.append("neg: (none)")
+        
+        # Global negative (if available from app_state)
+        if self.app_state and hasattr(self.app_state, "global_negative_prompt"):
+            global_neg = getattr(self.app_state, "global_negative_prompt", "")
+            if global_neg and global_neg.strip():
+                preview_lines.append("")
+                preview_lines.append("Global Negative (appended):")
+                preview_lines.append(f"  {global_neg.strip()}")
+        
+        preview_lines.extend([
+            "",
+            "━━━ STATISTICS ━━━",
+            f"Positive: {len(positive_text)} chars",
+            f"Negative: {len(negative_text)} chars",
+            f"LoRAs: {len(current_slot.loras)}",
+            f"Pos Embeddings: {len(current_slot.positive_embeddings)}",
+            f"Neg Embeddings: {len(current_slot.negative_embeddings)}",
+        ])
+        
+        if matrix_config and matrix_config.slots:
+            valid_slots = [s for s in matrix_config.slots if s.name and s.values]
+            if valid_slots:
+                # Calculate total combinations
+                from itertools import product
+                total_combinations = 1
+                for slot in valid_slots:
+                    total_combinations *= len(slot.values)
+                preview_lines.append(f"Matrix Combinations: {total_combinations}")
 
         self.meta_text.config(state="normal")
         self.meta_text.delete("1.0", "end")
-        self.meta_text.insert("1.0", "\n".join(summary_lines))
+        self.meta_text.insert("1.0", "\n".join(preview_lines))
         self.meta_text.config(state="disabled")
 
     def _open_matrix_helper(self) -> None:
@@ -472,52 +617,271 @@ class PromptTabFrame(ttk.Frame):
         dialog.grab_set()
         dialog.wait_window(dialog)
 
-    def _on_open_advanced_editor(self) -> None:
-        controller = getattr(self.app_state, "controller", None) if self.app_state else None
-        if controller and hasattr(controller, "on_open_advanced_editor"):
-            try:
-                controller.on_open_advanced_editor()
-                return
-            except Exception:
-                pass
-        self._open_advanced_editor_dialog()
-
-    def _open_advanced_editor_dialog(self) -> None:
-        top = tk.Toplevel(self)
-        top.title("Advanced Prompt Editor")
-        top.transient(self.winfo_toplevel())
-
-        def _handle_apply(prompt_value: str, negative_value: str | None = None) -> None:
-            # Apply positive prompt
-            self.apply_prompt_text(prompt_value)
-
-            # Apply negative prompt
-            if negative_value is not None:
-                try:
-                    index = self.workspace_state.get_current_slot_index()
-                    self.workspace_state.set_slot_negative(index, negative_value)
-                    self._refresh_editor()  # This now updates negative_editor too
-                except Exception:
-                    pass
-
-            try:
-                top.destroy()
-            except Exception:
-                pass
-
-        # Pass both positive AND negative to editor
-        editor = AdvancedPromptEditorV2(
-            top,
-            initial_prompt=self.workspace_state.get_current_prompt_text(),
-            initial_negative_prompt=self.workspace_state.get_current_negative_text(),
-            on_apply=_handle_apply,
-            on_cancel=lambda: top.destroy(),
-        )
-        editor.pack(fill="both", expand=True)
+    # Pack Management Functions (v2.6) ----------------------------------
+    
+    def _refresh_pack_list(self) -> None:
+        """Refresh the list of available packs from the packs directory."""
+        from pathlib import Path
+        
+        self.pack_listbox.delete(0, "end")
+        
+        packs_dir = Path("packs")
+        if not packs_dir.exists():
+            packs_dir.mkdir(parents=True, exist_ok=True)
+            return
+        
+        # Find all TXT files in packs directory
+        txt_files = sorted(packs_dir.glob("*.txt"))
+        for txt_file in txt_files:
+            self.pack_listbox.insert("end", txt_file.stem)
+    
+    def _on_load_selected_pack(self) -> None:
+        """Load the selected pack from the pack list."""
+        selection = self.pack_listbox.curselection()
+        if not selection:
+            messagebox.showinfo("Load Pack", "Please select a pack to load.")
+            return
+        
+        pack_name = self.pack_listbox.get(selection[0])
+        from pathlib import Path
+        
+        txt_path = Path("packs") / f"{pack_name}.txt"
+        if not txt_path.exists():
+            messagebox.showerror("Load Pack", f"Pack file not found: {txt_path}")
+            return
+        
+        # Use the same logic as _on_open_pack
         try:
-            top.grab_set()
-        except Exception:
-            pass
+            # Read TXT file
+            with open(txt_path, "r", encoding="utf-8") as f:
+                txt_content = f.read()
+
+            # Parse into multiple slots
+            all_components = parse_multi_slot_txt(txt_content)
+
+            if not all_components:
+                messagebox.showwarning("Load Pack", "No valid prompts found in file.")
+                return
+
+            # Check for companion JSON
+            json_path = txt_path.with_suffix(".json")
+            if json_path.exists():
+                self.workspace_state.load_pack(str(json_path))
+            else:
+                self.workspace_state.new_pack(pack_name, slot_count=len(all_components))
+
+            # Populate slots from TXT
+            for index, components in enumerate(all_components):
+                if index < len(self.workspace_state.current_pack.slots):
+                    slot = self.workspace_state.get_slot(index)
+                    slot.text = components.positive_text
+                    slot.negative = components.negative_text
+                    slot.positive_embeddings = components.positive_embeddings
+                    slot.negative_embeddings = components.negative_embeddings
+                    slot.loras = components.loras
+
+            self._refresh_slot_list()
+            self.workspace_state.set_current_slot_index(0)
+            self.slot_list.selection_clear(0, "end")
+            self.slot_list.selection_set(0)
+            self._refresh_editor()
+            self._refresh_metadata()
+            
+            self.pack_name_label.config(text=f"Editor - {pack_name}")
+            
+        except Exception as e:
+            messagebox.showerror("Load Pack", f"Failed to load pack:\\n{str(e)}")
+    
+    def _on_clone_pack(self) -> None:
+        """Clone the selected pack with a new name."""
+        selection = self.pack_listbox.curselection()
+        if not selection:
+            messagebox.showinfo("Clone Pack", "Please select a pack to clone.")
+            return
+        
+        pack_name = self.pack_listbox.get(selection[0])
+        new_name = tk.simpledialog.askstring("Clone Pack", f"Clone '{pack_name}' as:", initialvalue=f"{pack_name}_copy")
+        
+        if not new_name:
+            return
+        
+        from pathlib import Path
+        import shutil
+        
+        src_txt = Path("packs") / f"{pack_name}.txt"
+        src_json = Path("packs") / f"{pack_name}.json"
+        dest_txt = Path("packs") / f"{new_name}.txt"
+        dest_json = Path("packs") / f"{new_name}.json"
+        
+        if dest_txt.exists():
+            messagebox.showerror("Clone Pack", f"Pack '{new_name}' already exists.")
+            return
+        
+        try:
+            # Copy TXT file
+            if src_txt.exists():
+                shutil.copy2(src_txt, dest_txt)
+            
+            # Copy JSON file if it exists
+            if src_json.exists():
+                shutil.copy2(src_json, dest_json)
+            
+            self._refresh_pack_list()
+            messagebox.showinfo("Clone Pack", f"Pack cloned successfully as '{new_name}'.")
+        except Exception as e:
+            messagebox.showerror("Clone Pack", f"Failed to clone pack:\\n{str(e)}")
+    
+    def _on_rename_pack(self) -> None:
+        """Rename the selected pack."""
+        selection = self.pack_listbox.curselection()
+        if not selection:
+            messagebox.showinfo("Rename Pack", "Please select a pack to rename.")
+            return
+        
+        old_name = self.pack_listbox.get(selection[0])
+        new_name = tk.simpledialog.askstring("Rename Pack", f"Rename '{old_name}' to:", initialvalue=old_name)
+        
+        if not new_name or new_name == old_name:
+            return
+        
+        from pathlib import Path
+        
+        old_txt = Path("packs") / f"{old_name}.txt"
+        old_json = Path("packs") / f"{old_name}.json"
+        new_txt = Path("packs") / f"{new_name}.txt"
+        new_json = Path("packs") / f"{new_name}.json"
+        
+        if new_txt.exists():
+            messagebox.showerror("Rename Pack", f"Pack '{new_name}' already exists.")
+            return
+        
+        try:
+            # Rename TXT file
+            if old_txt.exists():
+                old_txt.rename(new_txt)
+            
+            # Rename JSON file if it exists
+            if old_json.exists():
+                old_json.rename(new_json)
+            
+            self._refresh_pack_list()
+            messagebox.showinfo("Rename Pack", f"Pack renamed to '{new_name}'.")
+        except Exception as e:
+            messagebox.showerror("Rename Pack", f"Failed to rename pack:\\n{str(e)}")
+    
+    def _on_delete_pack(self) -> None:
+        """Delete the selected pack."""
+        selection = self.pack_listbox.curselection()
+        if not selection:
+            messagebox.showinfo("Delete Pack", "Please select a pack to delete.")
+            return
+        
+        pack_name = self.pack_listbox.get(selection[0])
+        
+        if not messagebox.askyesno("Delete Pack", f"Are you sure you want to delete '{pack_name}'?\\nThis cannot be undone."):
+            return
+        
+        from pathlib import Path
+        
+        txt_path = Path("packs") / f"{pack_name}.txt"
+        json_path = Path("packs") / f"{pack_name}.json"
+        
+        try:
+            # Delete TXT file
+            if txt_path.exists():
+                txt_path.unlink()
+            
+            # Delete JSON file if it exists
+            if json_path.exists():
+                json_path.unlink()
+            
+            self._refresh_pack_list()
+            messagebox.showinfo("Delete Pack", f"Pack '{pack_name}' deleted successfully.")
+        except Exception as e:
+            messagebox.showerror("Delete Pack", f"Failed to delete pack:\\n{str(e)}")
+    
+    def _on_validate_pack(self) -> None:
+        """Validate the selected pack for errors."""
+        selection = self.pack_listbox.curselection()
+        if not selection:
+            messagebox.showinfo("Validate Pack", "Please select a pack to validate.")
+            return
+        
+        pack_name = self.pack_listbox.get(selection[0])
+        
+        from pathlib import Path
+        import re
+        
+        txt_path = Path("packs") / f"{pack_name}.txt"
+        json_path = Path("packs") / f"{pack_name}.json"
+        
+        errors = []
+        warnings = []
+        
+        # Check if files exist
+        if not txt_path.exists():
+            errors.append(f"TXT file not found: {txt_path}")
+        
+        try:
+            # Validate TXT content
+            if txt_path.exists():
+                with open(txt_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                
+                # Check for empty file
+                if not content.strip():
+                    errors.append("TXT file is empty")
+                
+                # Check for [[tokens]] without defined matrix slots
+                matrix_tokens = re.findall(r'\[\[([^\]]+)\]\]', content)
+                if matrix_tokens and not json_path.exists():
+                    warnings.append(f"Found {len(set(matrix_tokens))} matrix tokens but no JSON file")
+                
+                # Check for LoRA/embedding syntax
+                lora_pattern = r'<lora:([^:>]+)(?::([^>]+))?>'
+                loras = re.findall(lora_pattern, content)
+                for lora_name, weight in loras:
+                    if weight:
+                        try:
+                            w = float(weight)
+                            if w < 0 or w > 2:
+                                warnings.append(f"LoRA '{lora_name}' has unusual weight: {w}")
+                        except ValueError:
+                            errors.append(f"LoRA '{lora_name}' has invalid weight: {weight}")
+            
+            # Validate JSON content
+            if json_path.exists():
+                import json
+                with open(json_path, "r", encoding="utf-8") as f:
+                    json_data = json.load(f)
+                
+                # Check matrix configuration
+                matrix_config = json_data.get("matrix_config", {})
+                if matrix_config.get("enabled"):
+                    slots = matrix_config.get("slots", [])
+                    if not slots:
+                        warnings.append("Matrix enabled but no slots defined")
+                    else:
+                        for slot in slots:
+                            if not slot.get("name"):
+                                errors.append("Matrix slot missing name")
+                            if not slot.get("values"):
+                                warnings.append(f"Matrix slot '{slot.get('name', '?')}' has no values")
+            
+            # Display results
+            if errors:
+                result_msg = "❌ ERRORS FOUND:\\n\\n" + "\\n".join(f"• {e}" for e in errors)
+                if warnings:
+                    result_msg += "\\n\\n⚠️ WARNINGS:\\n\\n" + "\\n".join(f"• {w}" for w in warnings)
+                messagebox.showerror("Validation Failed", result_msg)
+            elif warnings:
+                result_msg = "⚠️ WARNINGS:\\n\\n" + "\\n".join(f"• {w}" for w in warnings)
+                messagebox.showwarning("Validation Warnings", result_msg)
+            else:
+                messagebox.showinfo("Validation Passed", f"✓ Pack '{pack_name}' is valid!\\n\\nNo errors or warnings found.")
+        
+        except Exception as e:
+            messagebox.showerror("Validation Error", f"Failed to validate pack:\\n{str(e)}")
 
     def apply_prompt_text(self, prompt: str) -> None:
         text = prompt or ""
@@ -537,19 +901,69 @@ class PromptTabFrame(ttk.Frame):
             pass
 
     def _on_open_pack(self) -> None:
+        """Open a prompt pack from TXT file (and load companion JSON if available)."""
         path = filedialog.askopenfilename(
             title="Open Prompt Pack",
-            filetypes=[("Prompt Packs", "*.json"), ("All Files", "*.*")],
+            filetypes=[("Text Files", "*.txt"), ("JSON Files", "*.json"), ("All Files", "*.*")],
         )
         if not path:
             return
+        
+        from pathlib import Path
+        file_path = Path(path)
+        
         try:
-            self.workspace_state.load_pack(path)
-            self.workspace_state.set_current_slot_index(0)
-            self.slot_list.selection_clear(0, "end")
-            self.slot_list.selection_set(0)
-            self._refresh_editor()
-            self._refresh_metadata()
+            # If user selected TXT, parse it and look for companion JSON
+            if file_path.suffix.lower() == ".txt":
+                # Read TXT file
+                with open(file_path, "r", encoding="utf-8") as f:
+                    txt_content = f.read()
+
+                # Parse into multiple slots
+                all_components = parse_multi_slot_txt(txt_content)
+
+                if not all_components:
+                    messagebox.showwarning("Open Prompt Pack", "No valid prompts found in file.")
+                    return
+
+                # Check for companion JSON (for matrix config)
+                json_path = file_path.with_suffix(".json")
+                if json_path.exists():
+                    # Load the full pack from JSON (gets matrix, etc.)
+                    self.workspace_state.load_pack(str(json_path))
+                else:
+                    # Create new pack from TXT only
+                    pack_name = file_path.stem
+                    self.workspace_state.new_pack(pack_name, slot_count=len(all_components))
+
+                # Populate slots from TXT (overwrites JSON slot content)
+                for index, components in enumerate(all_components):
+                    if index < len(self.workspace_state.current_pack.slots):
+                        slot = self.workspace_state.get_slot(index)
+                        slot.text = components.positive_text
+                        slot.negative = components.negative_text
+                        slot.positive_embeddings = components.positive_embeddings
+                        slot.negative_embeddings = components.negative_embeddings
+                        slot.loras = components.loras
+
+                # Update slot list
+                self._refresh_slot_list()
+                self.workspace_state.set_current_slot_index(0)
+                self.slot_list.selection_clear(0, "end")
+                self.slot_list.selection_set(0)
+                self.workspace_state.mark_dirty()
+                self._refresh_editor()
+                self._refresh_metadata()
+
+            else:
+                # User selected JSON directly - load normally
+                self.workspace_state.load_pack(path)
+                self.workspace_state.set_current_slot_index(0)
+                self.slot_list.selection_clear(0, "end")
+                self.slot_list.selection_set(0)
+                self._refresh_editor()
+                self._refresh_metadata()
+                
         except Exception as exc:
             messagebox.showerror("Open Prompt Pack", f"Failed to open pack:\n{exc}")
 
@@ -563,6 +977,7 @@ class PromptTabFrame(ttk.Frame):
         try:
             self.workspace_state.save_current_pack()
             self._refresh_metadata()
+            self._refresh_pack_list()  # v2.6: Update pack list after save
         except Exception as exc:
             messagebox.showerror("Save Prompt Pack", f"Failed to save pack:\n{exc}")
 
@@ -577,6 +992,7 @@ class PromptTabFrame(ttk.Frame):
         try:
             self.workspace_state.save_current_pack_as(path)
             self._refresh_metadata()
+            self._refresh_pack_list()  # v2.6: Update pack list after save
         except Exception as exc:
             messagebox.showerror("Save Prompt Pack As", f"Failed to save pack:\n{exc}")
 
@@ -785,6 +1201,13 @@ class PromptTabFrame(ttk.Frame):
                 height=min(8, len(slot_names)),
                 width=20,
                 exportselection=False,
+                bg="#1E1E1E",
+                fg="#FFFFFF",
+                selectbackground="#FFC805",
+                selectforeground="#000000",
+                highlightthickness=1,
+                highlightbackground="#2A2A2A",
+                borderwidth=0
             )
             self._autocomplete_list.bind("<<ListboxSelect>>", lambda e: self._on_autocomplete_select(editor))
             self._autocomplete_list.bind("<Double-Button-1>", lambda e: self._on_autocomplete_select(editor))

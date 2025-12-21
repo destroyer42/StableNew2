@@ -344,9 +344,10 @@ class ConfigManager:
                 "fallback_prompt": "",
             },
             "pipeline": {
-                "img2img_enabled": True,
-                "upscale_enabled": True,
+                "txt2img_enabled": True,
+                "img2img_enabled": False,
                 "adetailer_enabled": False,
+                "upscale_enabled": False,
                 "allow_hr_with_stages": False,
                 "refiner_compare_mode": False,  # When True and refiner+hires enabled, branch original & refined
                 # Global negative application toggles per-stage (default True for backward compatibility)
@@ -520,7 +521,7 @@ class ConfigManager:
 
     def get_pack_config(self, pack_name: str) -> dict[str, Any]:
         """
-        Get individual pack configuration from its .json file.
+        Get pack pipeline configuration from unified JSON's preset_data section.
 
         Args:
             pack_name: Name of the prompt pack (e.g., "heroes.txt")
@@ -536,7 +537,22 @@ class ConfigManager:
 
         try:
             with open(config_path, encoding="utf-8") as f:
-                config = json.load(f)
+                data = json.load(f)
+            
+            # Handle unified format (v2.6+) vs legacy format
+            if "preset_data" in data:
+                config = data["preset_data"]
+            elif "pack_data" in data:
+                # New format but no preset_data yet
+                config = {}
+            else:
+                # Legacy format - check if this is actually a config file
+                if "pipeline" in data or "txt2img" in data:
+                    config = data
+                else:
+                    # It's a legacy pack data file, no config
+                    config = {}
+            
             logger.debug(f"Loaded pack config: {pack_name}")
             return config
         except Exception as e:
@@ -555,7 +571,7 @@ class ConfigManager:
 
     def save_pack_config(self, pack_name: str, config: dict[str, Any]) -> bool:
         """
-        Save individual pack configuration to its .json file.
+        Save pipeline configuration to unified JSON's preset_data section.
 
         Args:
             pack_name: Name of the prompt pack (e.g., "heroes.txt")
@@ -583,8 +599,35 @@ class ConfigManager:
             # Ensure packs directory exists
             config_path.parent.mkdir(exist_ok=True)
 
+            # Load existing data to preserve pack_data section
+            existing_data = {}
+            if config_path.exists():
+                try:
+                    with open(config_path, encoding="utf-8") as f:
+                        existing_data = json.load(f)
+                except Exception:
+                    pass  # If load fails, start fresh
+            
+            # Build unified structure
+            if "pack_data" in existing_data:
+                # Unified format - preserve pack_data, update preset_data
+                unified_data = existing_data
+                unified_data["preset_data"] = config
+            elif "name" in existing_data and "slots" in existing_data:
+                # Legacy pack format - convert to unified
+                unified_data = {
+                    "pack_data": existing_data,
+                    "preset_data": config,
+                }
+            else:
+                # No existing data or legacy config-only format
+                unified_data = {
+                    "pack_data": {"name": Path(pack_name).stem, "slots": [], "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []}},
+                    "preset_data": config,
+                }
+
             with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
+                json.dump(unified_data, f, indent=2, ensure_ascii=False)
 
             logger.info(f"Saved pack config to: {config_path}")
             return True

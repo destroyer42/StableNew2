@@ -128,14 +128,22 @@ class JobHistoryPanelV2(ttk.Frame):
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
         status = entry.status.value
-        packs = self._shorten(entry.payload_summary or "n/a", width=40)
+        
+        # Extract better summary from NJR snapshot
+        packs = self._extract_summary(entry)
+        
         # Use pre-calculated duration_ms if available, otherwise fall back to timestamp diff
         if entry.duration_ms is not None:
             duration = self._format_duration_ms(entry.duration_ms)
         else:
             duration = self._format_duration(entry.started_at, entry.completed_at)
-        images = "-"
-        output = self._derive_output_folder(entry)
+        
+        # Extract image count from result or NJR snapshot
+        images = self._extract_image_count(entry)
+        
+        # Get actual output folder from result or job_id
+        output = self._extract_output_folder(entry)
+        
         return (time_text, status, packs, duration, images, output)
 
     def _on_select(self, event=None) -> None:
@@ -207,6 +215,71 @@ class JobHistoryPanelV2(ttk.Frame):
         self.explain_btn.configure(state=tk.NORMAL)
         self._history_menu.tk_popup(event.x_root, event.y_root)
 
+    def _extract_summary(self, entry: JobHistoryEntry) -> str:
+        """Extract meaningful summary from NJR snapshot."""
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            if njr:
+                # Get model and prompt info
+                model = njr.get("base_model", "")
+                prompt = njr.get("positive_prompt", "")
+                seed = njr.get("seed")
+                
+                if model or prompt:
+                    parts = []
+                    if model:
+                        parts.append(f"Model: {self._shorten(model, width=20)}")
+                    if prompt:
+                        parts.append(f"Prompt: {self._shorten(prompt, width=30)}")
+                    if seed is not None:
+                        parts.append(f"Seed: {seed}")
+                    return " | ".join(parts)
+        
+        # Fallback to payload summary
+        return self._shorten(entry.payload_summary or "n/a", width=40)
+    
+    def _extract_image_count(self, entry: JobHistoryEntry) -> str:
+        """Extract image count from result or NJR snapshot."""
+        # Try result first
+        if entry.result and isinstance(entry.result, dict):
+            count = entry.result.get("image_count") or entry.result.get("images_generated")
+            if count is not None:
+                return str(count)
+        
+        # Try NJR snapshot
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            if njr:
+                variant_total = njr.get("variant_total", 1)
+                batch_total = njr.get("batch_total", 1)
+                if variant_total and batch_total:
+                    return str(variant_total * batch_total)
+        
+        return "-"
+    
+    def _extract_output_folder(self, entry: JobHistoryEntry) -> str:
+        """Extract actual output folder from result or derive from job_id."""
+        # Try result first for actual output path
+        if entry.result and isinstance(entry.result, dict):
+            output_dir = entry.result.get("output_dir") or entry.result.get("output_folder")
+            if output_dir:
+                return str(Path(output_dir).name)  # Just show the folder name
+        
+        # Try to derive from job_id
+        base = Path("output")
+        candidates = [
+            base / entry.job_id,
+            Path("runs") / entry.job_id,
+            Path("outputs") / entry.job_id,
+        ]
+        
+        for candidate in candidates:
+            if candidate.exists():
+                return str(candidate)
+        
+        # Default: show output/job_id (even if doesn't exist yet)
+        return str(base / entry.job_id)
+    
     def _derive_output_folder(self, entry: JobHistoryEntry) -> str:
         base = Path("runs")
         candidate = base / entry.job_id
@@ -221,10 +294,17 @@ class JobHistoryPanelV2(ttk.Frame):
         if not value:
             return "-"
         try:
-            dt = datetime.fromisoformat(value)
-            return dt.strftime("%H:%M:%S")
+            # Parse as UTC datetime, convert to local
+            if isinstance(value, str):
+                dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            else:
+                dt = value
+            # Convert to local time if it's a datetime
+            if hasattr(dt, 'astimezone'):
+                dt = dt.astimezone()
+            return dt.strftime("%m-%d-%Y %H:%M:%S")
         except Exception:
-            return value
+            return str(value) if value else "-"
 
     @staticmethod
     def _format_duration(start: str | None, end: str | None) -> str:

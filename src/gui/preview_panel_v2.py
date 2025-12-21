@@ -172,11 +172,15 @@ class PreviewPanelV2(ttk.Frame):
 
     def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
         """Render previews from NormalizedJobRecord objects."""
+        print(f"[PreviewPanel] set_preview_jobs called with {len(jobs) if jobs else 0} jobs")
         if self._dispatch_to_ui(lambda: self.set_preview_jobs(jobs)):
+            print("[PreviewPanel] Dispatched to UI thread, returning")
             return
+        print(f"[PreviewPanel] Building summary entries from {len(jobs) if jobs else 0} jobs")
         summary_entries: list[Any] = []
         for job in jobs or []:
             summary_entries.append(self._summary_from_normalized_job(job))
+        print(f"[PreviewPanel] Created {len(summary_entries)} summary entries, calling set_job_summaries")
         self.set_job_summaries(summary_entries)
 
     def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
@@ -438,18 +442,26 @@ class PreviewPanelV2(ttk.Frame):
         self._update_action_states(job_draft, preview_jobs)
 
     def _bind_app_state_previews(self) -> None:
+        print(f"[PreviewPanel] _bind_app_state_previews called, app_state={self.app_state}")
         if not self.app_state or not hasattr(self.app_state, "subscribe"):
+            print(f"[PreviewPanel] Cannot subscribe - app_state={self.app_state}, has_subscribe={hasattr(self.app_state, 'subscribe') if self.app_state else False}")
             return
         try:
+            print("[PreviewPanel] Subscribing to preview_jobs changes")
             self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
-        except Exception:
+            print("[PreviewPanel] Successfully subscribed to preview_jobs")
+        except Exception as e:
+            print(f"[PreviewPanel] Failed to subscribe: {e}")
             pass
         self._on_preview_jobs_changed()
 
     def _on_preview_jobs_changed(self) -> None:
+        print("[PreviewPanel] _on_preview_jobs_changed called")
         if not self.app_state:
+            print("[PreviewPanel] No app_state, returning")
             return
         records = getattr(self.app_state, "preview_jobs", None)
+        print(f"[PreviewPanel] Got {len(records) if records else 0} preview jobs from app_state")
         self.set_preview_jobs(records)
 
     def _render_summary(self, summary: Any | None, total: int) -> None:

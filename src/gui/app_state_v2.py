@@ -421,11 +421,15 @@ class AppStateV2:
         self._notify("job_draft")
 
     def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
+        print(f"[AppState] set_preview_jobs called with {len(jobs) if jobs else 0} jobs")
         if jobs is None:
             jobs = []
         if self.preview_jobs != jobs:
+            print(f"[AppState] preview_jobs changed, notifying subscribers")
             self.preview_jobs = list(jobs)
             self._notify("preview_jobs")
+        else:
+            print(f"[AppState] preview_jobs unchanged, not notifying")
 
     def append_log_event(self, event: JobLifecycleLogEvent) -> None:
         self.log_events.append(event)

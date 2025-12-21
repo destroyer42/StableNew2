@@ -1,18 +1,16 @@
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
 armored basilisk glaring across [[environment]]
-<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7>
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7> <lora:xl_more_art-full_v1:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
 giant frost wyrm circling over [[environment]]
-<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7>
+<lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7> <lora:xl_more_art-full_v1:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
@@ -21,14 +19,12 @@ shadowy demon titan emerging from [[environment]]
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
 winged chimera roaring against the sky of [[environment]]
 <lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
@@ -37,14 +33,12 @@ towering dragon coiled above [[environment]]
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
 lava serpent bursting from cracks in [[environment]]
 <lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
@@ -53,14 +47,12 @@ abyssal kraken grasping ruins in [[environment]]
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
 colossal hydra rising from [[environment]]
 <lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
@@ -69,11 +61,9 @@ ancient bone colossus striding over [[environment]]
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) epic creature concept, dramatic contrast, atmospheric fog, high fantasy, magical atmosphere
 celestial lion with burning mane guarding [[environment]]
 <lora:add-detail-xl:0.6> <lora:CinematicStyle_v1:0.55> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-

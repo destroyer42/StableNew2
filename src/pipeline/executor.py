@@ -33,6 +33,7 @@ from ..utils import (
     merge_global_negative,
     save_image_from_base64,
 )
+from ..utils.negative_helpers_v2 import merge_global_positive
 
 if TYPE_CHECKING:
     from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
@@ -210,6 +211,15 @@ class Pipeline:
             self.config_manager.get_global_negative_prompt().strip() if apply_global else ""
         )
         return merge_global_negative(base_negative, global_terms)
+
+    def _merge_stage_positive(
+        self, base_positive: str, apply_global: bool
+    ) -> tuple[str, str, bool, str]:
+        """Compute original/final positive prompts plus metadata."""
+        global_terms = (
+            self.config_manager.get_global_positive_prompt().strip() if apply_global else ""
+        )
+        return merge_global_positive(base_positive, global_terms)
 
     def _resolve_negative_prompt(
         self,
@@ -672,9 +682,13 @@ class Pipeline:
         # Optionally disable hires fix when running downstream stages
         try:
             pipeline = cfg.get("pipeline", {})
-            disable_hr = (
-                pipeline.get("img2img_enabled", True) or pipeline.get("upscale_enabled", True)
-            ) and not pipeline.get("allow_hr_with_stages", False)
+            # Check if img2img or upscale are enabled (no defaults - None = False)
+            img2img_val = pipeline.get("img2img_enabled")
+            img2img_enabled = bool(img2img_val) if img2img_val is not None else False
+            upscale_val = pipeline.get("upscale_enabled")
+            upscale_enabled = bool(upscale_val) if upscale_val is not None else False
+            
+            disable_hr = (img2img_enabled or upscale_enabled) and not pipeline.get("allow_hr_with_stages", False)
             if disable_hr:
                 txt = cfg.setdefault("txt2img", {})
                 if txt.get("enable_hr"):
@@ -1327,27 +1341,16 @@ class Pipeline:
         payload_height = actual_height or _coerce_dimension(config.get("height"), 512)
 
         # Use adetailer-specific negative prompt if provided, otherwise use txt2img negative
+        # NOTE: ADetailer has its own custom prompts and should NOT get global positive/negative applied
         base_ad_neg = config.get("adetailer_negative_prompt", "")
-        apply_global = False  # Initialize to track if we applied global negative
         if base_ad_neg:
-            # If specific adetailer negative provided, optionally add global negative
-            apply_global = (config.get("pipeline", {}) if isinstance(config, dict) else {}).get(
-                "apply_global_negative_adetailer", True
-            )
-            if apply_global:
-                ad_neg_final = self.config_manager.add_global_negative(base_ad_neg)
-                try:
-                    logger.info(
-                        "🛡️ Applied global NSFW prevention (adetailer stage) - Enhanced: '%s'",
-                        (ad_neg_final[:120] + "...") if len(ad_neg_final) > 120 else ad_neg_final,
-                    )
-                except Exception:
-                    pass
-            else:
-                ad_neg_final = base_ad_neg
+            # Use the specific adetailer negative prompt as-is (no global merging)
+            ad_neg_final = base_ad_neg
+            logger.info("🎯 Using custom ADetailer negative prompt (no global terms applied)")
         else:
             # No specific adetailer negative, use txt2img negative (already has global + aesthetic + pack)
             ad_neg_final = negative_prompt
+            logger.info("🎯 Using txt2img negative prompt for ADetailer (inherited from previous stage)")
 
         # DEBUG: Log ADetailer config received
         logger.info(
@@ -1602,11 +1605,12 @@ class Pipeline:
         logger.info("=" * 60)
         logger.info("Starting full pipeline execution")
 
-        # Check pipeline stage configuration
+        # Check pipeline stage configuration - no defaults, use actual config values
         pipeline_cfg: dict[str, Any] = config.get("pipeline", {}) or {}
-        img2img_enabled: bool = pipeline_cfg.get("img2img_enabled", True)
-        adetailer_enabled: bool = pipeline_cfg.get("adetailer_enabled", False)
-        upscale_enabled: bool = pipeline_cfg.get("upscale_enabled", True)
+        img2img_val = pipeline_cfg.get("img2img_enabled")
+        img2img_enabled: bool = bool(img2img_val) if img2img_val is not None else False
+        adetailer_enabled: bool = pipeline_cfg.get("adetailer_enabled") or False
+        upscale_enabled: bool = pipeline_cfg.get("upscale_enabled") or False
         upscale_only_last: bool = pipeline_cfg.get("upscale_only_last", False)
 
         logger.info(
@@ -1951,9 +1955,9 @@ class Pipeline:
             and str(refiner_checkpoint).strip() != ""
             and 0.0 < float(refiner_switch_at) < 1.0
         )
-        img2img_enabled = config.get("pipeline", {}).get("img2img_enabled", True)
+        img2img_enabled = config.get("pipeline", {}).get("img2img_enabled", False)
         adetailer_enabled = config.get("pipeline", {}).get("adetailer_enabled", False)
-        upscale_enabled = config.get("pipeline", {}).get("upscale_enabled", True)
+        upscale_enabled = config.get("pipeline", {}).get("upscale_enabled", False)
 
         # Phase 1: txt2img for all images
         for batch_idx in range(batch_size):
@@ -2032,12 +2036,7 @@ class Pipeline:
                         txt_settings = config.get("txt2img", {})
                         adetailer_cfg.setdefault("width", txt_settings.get("width", 512))
                         adetailer_cfg.setdefault("height", txt_settings.get("height", 512))
-                        pipe_flags = dict(config.get("pipeline", {}))
-                        adetailer_cfg["pipeline"] = {
-                            "apply_global_negative_adetailer": pipe_flags.get(
-                                "apply_global_negative_adetailer", True
-                            )
-                        }
+                        # ADetailer uses its own custom prompts, no global prompt application needed
                         cand_negative = self._resolve_negative_prompt(
                             cand.get("meta"),
                             txt2img_meta,
@@ -2108,12 +2107,7 @@ class Pipeline:
                     txt_settings = config.get("txt2img", {})
                     adetailer_cfg.setdefault("width", txt_settings.get("width", 512))
                     adetailer_cfg.setdefault("height", txt_settings.get("height", 512))
-                    pipe_flags = dict(config.get("pipeline", {}))
-                    adetailer_cfg["pipeline"] = {
-                        "apply_global_negative_adetailer": pipe_flags.get(
-                            "apply_global_negative_adetailer", True
-                        )
-                    }
+                    # ADetailer uses its own custom prompts, no global prompt application needed
                     fallback_neg = self._resolve_negative_prompt(
                         last_stage_meta,
                         txt2img_meta,
@@ -2269,15 +2263,30 @@ class Pipeline:
             stage_batch_size = config.get("batch_size", 1)
             logger.info("🔵 [BATCH_SIZE_DEBUG] executor.run_txt2img_stage: config['batch_size']=%s, stage_batch_size=%s", config.get('batch_size'), stage_batch_size)
 
-            # Optionally apply global NSFW prevention to negative prompt based on stage flag
+            # Apply global positive and negative prompts to txt2img stage only
             apply_global = config.get("pipeline", {}).get("apply_global_negative_txt2img", True)
+            
+            # Apply global positive (prepends quality/style terms)
+            original_positive_prompt = prompt
+            _, enhanced_positive, positive_global_applied, positive_global_terms = self._merge_stage_positive(
+                original_positive_prompt, apply_global
+            )
+            if positive_global_applied:
+                logger.info(
+                    "✨ Applied global positive terms (txt2img stage) - Enhanced: '%s'",
+                    (enhanced_positive[:100] + "...")
+                    if len(enhanced_positive) > 100
+                    else enhanced_positive,
+                )
+            
+            # Apply global negative (appends NSFW prevention terms)
             original_negative_prompt = negative_prompt
-            _, enhanced_negative, global_applied, global_terms = self._merge_stage_negative(
+            _, enhanced_negative, negative_global_applied, negative_global_terms = self._merge_stage_negative(
                 original_negative_prompt, apply_global
             )
-            if global_applied:
+            if negative_global_applied:
                 logger.info(
-                    "dY>нЛ,? Applied global NSFW prevention (txt2img stage) - Enhanced: '%s'",
+                    "dY>нЛ,? Applied global negative terms (txt2img stage) - Enhanced: '%s'",
                     (enhanced_negative[:100] + "...")
                     if len(enhanced_negative) > 100
                     else enhanced_negative,
@@ -2357,7 +2366,7 @@ class Pipeline:
 
             logger.info("🔵 [BATCH_SIZE_DEBUG] executor: About to create WebUI payload with batch_size=%s", stage_batch_size)
             payload = {
-                "prompt": prompt,
+                "prompt": enhanced_positive,  # Use enhanced positive with global terms
                 "negative_prompt": enhanced_negative,
                 "steps": txt2img_config.get("steps", 20),
                 "cfg_scale": txt2img_config.get("cfg_scale", 7.0),
@@ -2498,12 +2507,14 @@ class Pipeline:
                     "name": image_name,
                     "stage": "txt2img",
                     "timestamp": timestamp,
-                    "original_prompt": prompt,
-                    "final_prompt": payload.get("prompt", prompt),
-                    "original_negative_prompt": negative_prompt,
-                    "final_negative_prompt": payload.get("negative_prompt", enhanced_negative),
-                    "global_negative_applied": global_applied,
-                    "global_negative_terms": global_terms if global_applied else "",
+                    "original_prompt": original_positive_prompt,
+                    "final_prompt": enhanced_positive,
+                    "global_positive_applied": positive_global_applied,
+                    "global_positive_terms": positive_global_terms if positive_global_applied else "",
+                    "original_negative_prompt": original_negative_prompt,
+                    "final_negative_prompt": enhanced_negative,
+                    "global_negative_applied": negative_global_applied,
+                    "global_negative_terms": negative_global_terms if negative_global_applied else "",
                     "seed": payload.get("seed", -1),
                     "subseed": payload.get("subseed", -1),
                     "subseed_strength": payload.get("subseed_strength", 0.0),

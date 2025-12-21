@@ -178,12 +178,22 @@ class PipelineRunner:
                     logger.info("🔵 [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s", payload.get('batch_size'))
                     # Include prompt pack row index in naming to prevent overwrites
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build filename with matrix slot values if present to prevent overwrites
+                    base_name = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    if hasattr(njr, 'matrix_slot_values') and njr.matrix_slot_values:
+                        # Add matrix suffix: e.g., "txt2img_p00_00_wizard_forest"
+                        matrix_suffix = "_".join(str(v).replace(" ", "_") for v in njr.matrix_slot_values.values())
+                        image_name = f"{base_name}_{matrix_suffix}"
+                    else:
+                        image_name = base_name
+                    
                     result = self._pipeline.run_txt2img_stage(
                         payload["prompt"],
                         payload["negative_prompt"],
                         payload,
                         run_dir,
-                        image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}",
+                        image_name=image_name,
                         cancel_token=cancel_token,
                     )
                     # Extract ALL image paths from metadata for batch processing
@@ -234,13 +244,21 @@ class PipelineRunner:
                     # Process ALL images from previous stage through adetailer
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build base name with matrix suffix if present
+                    base_name = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    if hasattr(njr, 'matrix_slot_values') and njr.matrix_slot_values:
+                        matrix_suffix = "_".join(str(v).replace(" ", "_") for v in njr.matrix_slot_values.values())
+                        base_name = f"{base_name}_{matrix_suffix}"
+                    
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing adetailer for image {img_idx + 1}/{len(current_stage_paths)}")
+                        image_name = f"{base_name}_img{img_idx:02d}"
                         result = self._pipeline.run_adetailer_stage(
                             input_image_path=Path(input_path),
                             config=config_dict,
                             output_dir=run_dir,
-                            image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}_img{img_idx:02d}",
+                            image_name=image_name,
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
@@ -272,13 +290,21 @@ class PipelineRunner:
                     # Process ALL images from previous stage through upscaler
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build base name with matrix suffix if present
+                    base_name = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    if hasattr(njr, 'matrix_slot_values') and njr.matrix_slot_values:
+                        matrix_suffix = "_".join(str(v).replace(" ", "_") for v in njr.matrix_slot_values.values())
+                        base_name = f"{base_name}_{matrix_suffix}"
+                    
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing upscale for image {img_idx + 1}/{len(current_stage_paths)}")
+                        image_name = f"{base_name}_img{img_idx:02d}"
                         result = self._pipeline.run_upscale_stage(
                             input_image_path=Path(input_path),
                             config=config_dict,
                             output_dir=run_dir,
-                            image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}_img{img_idx:02d}",
+                            image_name=image_name,
                             cancel_token=cancel_token,
                         )
                         # Collect output path from this image
@@ -570,7 +596,8 @@ class PipelineRunner:
         img2img["model"] = config.model
         img2img["sampler_name"] = config.sampler
         img2img["steps"] = max(img2img.get("steps", 15), 1)
-        img2img.setdefault("enabled", base.get("pipeline", {}).get("img2img_enabled", False))
+        img2img_val = base.get("pipeline", {}).get("img2img_enabled")
+        img2img.setdefault("enabled", bool(img2img_val) if img2img_val is not None else False)
 
         metadata = base.setdefault("metadata", {})
         if config.pack_name:

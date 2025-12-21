@@ -105,7 +105,7 @@ class AdvancedPromptEditor:
         # Always use main Tk root as parent for Toplevel
         root = self.parent if isinstance(self.parent, tk.Tk) else self.parent.winfo_toplevel()
         self.window = tk.Toplevel(root)
-        self.window.title("Advanced Prompt Pack Editor")
+        self.window.title("Advanced Prompt Pack Editor v2.6")
         self.window.geometry("1200x800")
         self.window.configure(bg=ASWF_BLACK)
 
@@ -419,7 +419,7 @@ class AdvancedPromptEditor:
 
         shell = ttk.Frame(global_frame, style="Dark.TFrame")
         shell.pack(fill=tk.BOTH, expand=True)
-        _, body = make_scrollable(shell, style="Dark.TFrame")
+        _, body = make_scrollable(shell)
 
         # Header
         header_frame = ttk.Frame(body, style="Dark.TFrame")
@@ -483,7 +483,7 @@ class AdvancedPromptEditor:
 
         shell = ttk.Frame(validation_frame, style="Dark.TFrame")
         shell.pack(fill=tk.BOTH, expand=True)
-        _, body = make_scrollable(shell, style="Dark.TFrame")
+        _, body = make_scrollable(shell)
 
         # Validation controls
         controls_frame = ttk.Frame(body, style="Dark.TFrame")
@@ -553,7 +553,7 @@ class AdvancedPromptEditor:
 
         shell = ttk.Frame(models_frame, style="Dark.TFrame")
         shell.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        _, body = make_scrollable(shell, style="Dark.TFrame")
+        _, body = make_scrollable(shell)
 
         # Create paned window for embeddings and LoRAs
         paned_window = ttk.PanedWindow(body, orient=tk.HORIZONTAL)
@@ -608,7 +608,7 @@ class AdvancedPromptEditor:
 
         shell = ttk.Frame(help_frame, style="Dark.TFrame")
         shell.pack(fill=tk.BOTH, expand=True)
-        _, body = make_scrollable(shell, style="Dark.TFrame")
+        _, body = make_scrollable(shell)
 
         help_text = scrolledtext.ScrolledText(
             body,
@@ -913,9 +913,9 @@ Errors and warnings appear in the Validation tab.
         if not self.is_modified:
             self.is_modified = True
             if self.current_pack_path:
-                self.window.title(f"Advanced Prompt Pack Editor - {self.current_pack_path.name} *")
+                self.window.title(f"Advanced Prompt Pack Editor v2.6 - {self.current_pack_path.name} *")
             else:
-                self.window.title("Advanced Prompt Pack Editor - Untitled *")
+                self.window.title("Advanced Prompt Pack Editor v2.6 - Untitled *")
 
         # Auto-validate if enabled
         if hasattr(self, "auto_validate_var") and self.auto_validate_var.get():
@@ -954,7 +954,7 @@ neg: malformed, bad anatomy, low quality"""
 
             self.prompts_text.insert("1.0", template)
             self.is_modified = False
-            self.window.title("Advanced Prompt Pack Editor - New Pack")
+            self.window.title("Advanced Prompt Pack Editor v2.6 - New Pack")
             self._validate_pack_silent()
 
     def _open_pack(self):
@@ -1008,7 +1008,7 @@ neg: malformed, bad anatomy, low quality"""
             self.prompts_text.insert("1.0", content)
 
             self.is_modified = False
-            self.window.title(f"Advanced Prompt Pack Editor - {pack_path.name}")
+            self.window.title(f"Advanced Prompt Pack Editor v2.6 - {pack_path.name}")
 
             # Validate the loaded content
             self._validate_pack_silent()
@@ -1057,7 +1057,7 @@ neg: malformed, bad anatomy, low quality"""
                 pass
             self.is_modified = False
             if self.window:
-                self.window.title(f"Advanced Prompt Pack Editor - {path.name}")
+                self.window.title(f"Advanced Prompt Pack Editor v2.6 - {path.name}")
             if hasattr(self, "_status_var"):
                 self._status_var.set(f"Saved: {path.name}")
 
@@ -1091,7 +1091,7 @@ neg: malformed, bad anatomy, low quality"""
         self.current_pack_path = None
         self.is_modified = True
         if self.window:
-            self.window.title(f"Advanced Prompt Pack Editor - {clone_name} (Clone) *")
+            self.window.title(f"Advanced Prompt Pack Editor v2.6 - {clone_name} (Clone) *")
         if hasattr(self, "_status_var"):
             self._status_var.set(f"Cloned as: {clone_name}")
 
@@ -1112,7 +1112,7 @@ neg: malformed, bad anatomy, low quality"""
                 self.pack_name_var.set("")
                 self.prompts_text.delete("1.0", tk.END)
                 self.is_modified = False
-                self.window.title("Advanced Prompt Pack Editor - Deleted")
+                self.window.title("Advanced Prompt Pack Editor v2.6 - Deleted")
                 if hasattr(self, "status_text"):
                     self.status_text.config(text=f"Deleted: {deleted_name}")
                 # Notify parent of changes

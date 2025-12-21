@@ -41,12 +41,17 @@ class MatrixConfig:
 
 @dataclass
 class PromptPackModel:
-    """Simple prompt pack container."""
+    """Simple prompt pack container with unified JSON storage.
+    
+    Stores both pack data (slots, matrix) and preset data (pipeline config)
+    in a single JSON file to avoid conflicts.
+    """
 
     name: str
     path: str | None = None
     slots: list[PromptSlot] = field(default_factory=list)
     matrix: MatrixConfig = field(default_factory=MatrixConfig)
+    preset_data: dict = field(default_factory=dict)  # Pipeline configuration
 
     @classmethod
     def new(cls, name: str, slot_count: int = 10) -> PromptPackModel:
@@ -55,15 +60,30 @@ class PromptPackModel:
 
     @classmethod
     def load_from_file(cls, path: str | Path, min_slots: int = 10) -> PromptPackModel:
-        """Load from a simple JSON format; pads slots to min_slots."""
+        """Load from unified JSON format; supports legacy formats with backward compat."""
         data_path = Path(path)
         try:
             with data_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as exc:
             raise OSError(f"Failed to load prompt pack: {exc}") from exc
-        name = data.get("name") or data_path.stem
-        raw_slots = data.get("slots") or []
+        
+        # Handle unified format (v2.6+) vs legacy format
+        if "pack_data" in data:
+            # New unified format
+            pack_data = data["pack_data"]
+            preset_data = data.get("preset_data", {})
+            name = pack_data.get("name") or data_path.stem
+            raw_slots = pack_data.get("slots") or []
+            matrix_data = pack_data.get("matrix", {})
+        else:
+            # Legacy format (direct fields at root)
+            pack_data = data
+            preset_data = {}
+            name = data.get("name") or data_path.stem
+            raw_slots = data.get("slots") or []
+            matrix_data = data.get("matrix", {})
+        
         slots: list[PromptSlot] = []
         for idx, slot in enumerate(raw_slots):
             # Load LoRAs with backward compatibility
@@ -85,7 +105,6 @@ class PromptPackModel:
             slots.append(PromptSlot(index=len(slots), text="", negative=""))
         
         # Load matrix config (backward compatible)
-        matrix_data = data.get("matrix", {})
         matrix_slots = []
         for ms in matrix_data.get("slots", []):
             matrix_slots.append(MatrixSlot(
@@ -99,12 +118,22 @@ class PromptPackModel:
             slots=matrix_slots
         )
         
-        return cls(name=name, path=str(data_path), slots=slots, matrix=matrix)
+        pack = cls(name=name, path=str(data_path), slots=slots, matrix=matrix)
+        pack.preset_data = preset_data  # Store preset data
+        return pack
 
     def save_to_file(self, path: str | Path | None = None) -> Path:
-        """Persist to a simple JSON format; auto-export TXT if in packs/ folder."""
+        """Persist to unified JSON format with matrix and preset data; auto-export TXT if in packs/ folder."""
         target = Path(path or self.path or f"{self.name}.json")
-        payload = {
+        
+        # Filter out empty padding slots (keep only slots with content)
+        non_empty_slots = [
+            slot for slot in self.slots
+            if slot.text.strip() or slot.negative.strip() or slot.positive_embeddings or slot.negative_embeddings or slot.loras
+        ]
+        
+        # Build pack data section (matrix, slots, etc.)
+        pack_data = {
             "name": self.name,
             "slots": [
                 {
@@ -115,7 +144,7 @@ class PromptPackModel:
                     "negative_embeddings": getattr(slot, "negative_embeddings", []),
                     "loras": [[name, weight] for name, weight in getattr(slot, "loras", [])]
                 }
-                for slot in self.slots
+                for slot in non_empty_slots
             ],
             "matrix": {
                 "enabled": self.matrix.enabled,
@@ -127,6 +156,13 @@ class PromptPackModel:
                 ],
             },
         }
+        
+        # Build unified payload
+        payload = {
+            "pack_data": pack_data,
+            "preset_data": getattr(self, "preset_data", {}),  # Pipeline config
+        }
+        
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
             with target.open("w", encoding="utf-8") as f:

@@ -60,7 +60,9 @@ def get_matrix_slots_dict(metadata: dict[str, Any]) -> dict[str, list[str]]:
         Dictionary mapping slot names to value lists
         Example: {"job": ["wizard", "knight"], "environment": ["forest", "castle"]}
     """
-    matrix_config = metadata.get("matrix", {})
+    # Matrix config is in pack_data section of the JSON
+    pack_data = metadata.get("pack_data", {})
+    matrix_config = pack_data.get("matrix", {})
     if not matrix_config.get("enabled"):
         return {}
     
@@ -87,7 +89,9 @@ def get_matrix_config_summary(metadata: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Dictionary with matrix config summary
     """
-    matrix_config = metadata.get("matrix", {})
+    # Matrix config is in pack_data section of the JSON
+    pack_data = metadata.get("pack_data", {})
+    matrix_config = pack_data.get("matrix", {})
     
     return {
         "enabled": matrix_config.get("enabled", False),

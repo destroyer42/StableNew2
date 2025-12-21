@@ -1,4 +1,10 @@
-"""Prompt randomization utilities for txt2img pipeline."""
+"""Prompt randomization utilities for txt2img pipeline.
+
+v2.6 Changes:
+- Enhanced matrix 'random' mode to provide true per-slot independent randomization
+- Each matrix slot independently chooses a random value per prompt
+- No correlation between slots - each selection is independent
+"""
 
 from __future__ import annotations
 
@@ -402,12 +408,17 @@ class PromptRandomizer:
         if self._matrix_mode == "fanout":
             return self._matrix_combos
 
-        # random: pick a single random combo for this prompt
+        # random: pick a single random combo per prompt with each slot independently random
         if self._matrix_mode == "random":
-            # Defensive: if combos exist, choose one; otherwise fall back to [None]
-            if self._matrix_combos:
-                combo = self._rng.choice(self._matrix_combos)
-                return [combo]
+            if self._matrix_slots:
+                # Build a random combo with each slot independently choosing a value
+                random_combo = {}
+                for slot in self._matrix_slots:
+                    slot_name = slot.get("name", "")
+                    slot_values = slot.get("values", [])
+                    if slot_name and slot_values:
+                        random_combo[slot_name] = self._rng.choice(slot_values)
+                return [random_combo] if random_combo else [None]
             return [None]
 
         # sequential (and rotate fallback): one combo at a time in a stable order

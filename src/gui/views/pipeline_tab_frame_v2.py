@@ -193,9 +193,10 @@ class PipelineTabFrame(ttk.Frame):
         self.upscale_denoise = getattr(upscale_card, "denoise_var", tk.DoubleVar(value=0.35))
 
         # Stage toggle vars and upscale proxies (JT05 compatibility)
-        self.txt2img_enabled = tk.BooleanVar(value=True)
+        # CRITICAL: These are read by controller when applying config - defaults must be correct
+        self.txt2img_enabled = tk.BooleanVar(value=True)  # Only txt2img should default to True
         self.img2img_enabled = tk.BooleanVar(value=False)
-        self.adetailer_enabled = tk.BooleanVar(value=True)
+        self.adetailer_enabled = tk.BooleanVar(value=False)  # Fixed: was True
         self.upscale_enabled = tk.BooleanVar(value=False)
 
         self.upscale_factor = tk.DoubleVar(value=2.0)

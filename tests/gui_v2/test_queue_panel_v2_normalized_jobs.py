@@ -210,18 +210,17 @@ class TestNormalizedJobToQueueJobConversion:
         snapshot = queue_panel._jobs[0].config_snapshot
         assert snapshot.get("output_dir") == "/path/to/output"
 
-    def test_conversion_handles_filename_template(self, queue_panel):
-        """Conversion includes filename_template in snapshot."""
+    def test_conversion_handles_output_dir(self, queue_panel):
+        """Conversion includes output_dir in snapshot."""
         job = NormalizedJobRecord(
             job_id="test-id",
             config={"model": "test"},
-            path_output_dir="output",
-            filename_template="{model}_{seed}",
+            path_output_dir="/custom/output",
         )
         queue_panel.set_normalized_jobs([job])
 
         snapshot = queue_panel._jobs[0].config_snapshot
-        assert snapshot.get("filename_template") == "{model}_{seed}"
+        assert snapshot.get("output_dir") == "/custom/output"
 
 
 # ---------------------------------------------------------------------------

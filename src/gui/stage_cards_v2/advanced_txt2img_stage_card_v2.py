@@ -86,17 +86,16 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(
             row=0, column=2, sticky="w", padx=(0, 4)
         )
-        # Steps combobox with common values
-        steps_values = ["10", "15", "20", "25", "30", "40", "50", "75", "100"]
-        self.steps_combo = ttk.Combobox(
+        # Steps spinbox so users can type exact values or use arrows
+        self.steps_spinbox = ttk.Spinbox(
             self.sampler_section,
+            from_=1,
+            to=150,
             textvariable=self.steps_var,
-            values=steps_values,
-            state="readonly",
             width=6,
-            style="Dark.TCombobox",
+            style="Dark.TSpinbox",
         )
-        self.steps_combo.grid(row=0, column=3, sticky="ew")
+        self.steps_spinbox.grid(row=0, column=3, sticky="ew")
 
         ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(
             row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0)

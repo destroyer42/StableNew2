@@ -1,5 +1,11 @@
 """Simple embedding picker panel for managing positive and negative embeddings.
 
+v2.6 Changes:
+- Replaced autocomplete text entries with dropdown comboboxes
+- Both positive and negative embeddings use same sorted dropdown list
+- Select → Add workflow for simpler UX
+- Removed all autocomplete complexity
+
 This widget provides a basic interface for adding/removing embeddings.
 Resource scanning will be added in Phase C.
 """
@@ -32,10 +38,6 @@ class EmbeddingPickerPanel(ttk.Frame):
         self.scanner = get_embedding_scanner(webui_root)
         self._available_embeddings: list[str] = []
 
-        # Autocomplete widgets
-        self._pos_autocomplete_list: tk.Listbox | None = None
-        self._neg_autocomplete_list: tk.Listbox | None = None
-
         self._build_ui()
 
         # Start background scan
@@ -66,14 +68,10 @@ class EmbeddingPickerPanel(ttk.Frame):
         pos_add_frame = ttk.Frame(pos_frame)
         pos_add_frame.pack(fill="x", pady=(0, 5))
         
-        self.pos_entry = ttk.Entry(pos_add_frame, width=25)
+        self.pos_var = tk.StringVar()
+        self.pos_entry = ttk.Combobox(pos_add_frame, textvariable=self.pos_var, width=23, state="readonly")
         self.pos_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.pos_entry.insert(0, "Embedding name...")
-        self.pos_entry.bind("<FocusIn>", lambda e: self._on_entry_focus(self.pos_entry, clear=True))
-        self.pos_entry.bind("<FocusOut>", lambda e: self._on_entry_focus(self.pos_entry, clear=False))
         self.pos_entry.bind("<Return>", lambda e: self._on_add_positive())
-        self.pos_entry.bind("<KeyRelease>", self._on_pos_entry_key_release)
-        self.pos_entry.bind("<Escape>", lambda e: self._hide_pos_autocomplete())
         
         ttk.Button(pos_add_frame, text="Add", command=self._on_add_positive).pack(side="left")
         
@@ -91,14 +89,10 @@ class EmbeddingPickerPanel(ttk.Frame):
         neg_add_frame = ttk.Frame(neg_frame)
         neg_add_frame.pack(fill="x", pady=(0, 5))
         
-        self.neg_entry = ttk.Entry(neg_add_frame, width=25)
+        self.neg_var = tk.StringVar()
+        self.neg_entry = ttk.Combobox(neg_add_frame, textvariable=self.neg_var, width=23, state="readonly")
         self.neg_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.neg_entry.insert(0, "Embedding name...")
-        self.neg_entry.bind("<FocusIn>", lambda e: self._on_entry_focus(self.neg_entry, clear=True))
-        self.neg_entry.bind("<FocusOut>", lambda e: self._on_entry_focus(self.neg_entry, clear=False))
         self.neg_entry.bind("<Return>", lambda e: self._on_add_negative())
-        self.neg_entry.bind("<KeyRelease>", self._on_neg_entry_key_release)
-        self.neg_entry.bind("<Escape>", lambda e: self._hide_neg_autocomplete())
         
         ttk.Button(neg_add_frame, text="Add", command=self._on_add_negative).pack(side="left")
         
@@ -108,19 +102,11 @@ class EmbeddingPickerPanel(ttk.Frame):
         
         ttk.Button(neg_frame, text="Remove Selected", command=self._on_remove_negative).pack()
     
-    def _on_entry_focus(self, entry: ttk.Entry, clear: bool) -> None:
-        """Handle entry field focus for placeholder text."""
-        if clear:
-            if entry.get() == "Embedding name...":
-                entry.delete(0, "end")
-        else:
-            if not entry.get():
-                entry.insert(0, "Embedding name...")
-    
+
     def _on_add_positive(self) -> None:
         """Add a positive embedding."""
-        name = self.pos_entry.get().strip()
-        if not name or name == "Embedding name...":
+        name = self.pos_var.get().strip()
+        if not name:
             return
         
         if name not in self._positive_embeddings:
@@ -130,8 +116,7 @@ class EmbeddingPickerPanel(ttk.Frame):
             if self.on_change_callback:
                 self.on_change_callback()
         
-        self.pos_entry.delete(0, "end")
-        self.pos_entry.insert(0, "Embedding name...")
+        self.pos_var.set("")
     
     def _on_remove_positive(self) -> None:
         """Remove selected positive embedding."""
@@ -148,8 +133,8 @@ class EmbeddingPickerPanel(ttk.Frame):
     
     def _on_add_negative(self) -> None:
         """Add a negative embedding."""
-        name = self.neg_entry.get().strip()
-        if not name or name == "Embedding name...":
+        name = self.neg_var.get().strip()
+        if not name:
             return
         
         if name not in self._negative_embeddings:
@@ -159,8 +144,7 @@ class EmbeddingPickerPanel(ttk.Frame):
             if self.on_change_callback:
                 self.on_change_callback()
         
-        self.neg_entry.delete(0, "end")
-        self.neg_entry.insert(0, "Embedding name...")
+        self.neg_var.set("")
     
     def _on_remove_negative(self) -> None:
         """Remove selected negative embedding."""
@@ -213,6 +197,9 @@ class EmbeddingPickerPanel(ttk.Frame):
         try:
             self.scanner.scan_embeddings()
             self._available_embeddings = self.scanner.get_embedding_names()
+            sorted_embeddings = sorted(self._available_embeddings)
+            self.pos_entry["values"] = sorted_embeddings
+            self.neg_entry["values"] = sorted_embeddings
         except Exception:
             pass
 
@@ -221,6 +208,9 @@ class EmbeddingPickerPanel(ttk.Frame):
         try:
             self.scanner.scan_embeddings(force_rescan=True)
             self._available_embeddings = self.scanner.get_embedding_names()
+            sorted_embeddings = sorted(self._available_embeddings)
+            self.pos_entry["values"] = sorted_embeddings
+            self.neg_entry["values"] = sorted_embeddings
         except Exception:
             pass
 

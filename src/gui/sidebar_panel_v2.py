@@ -140,12 +140,12 @@ class SidebarPanelV2(ttk.Frame):
         self._on_apply_pack = on_apply_pack
         self._on_change = on_change
 
-        adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", True))
+        adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", False))  # Changed from True to False
         self.stage_states: dict[str, tk.BooleanVar] = {
             "txt2img": tk.BooleanVar(value=True),
-            "img2img": tk.BooleanVar(value=True),
+            "img2img": tk.BooleanVar(value=False),  # Fixed: was True, should be False
             "adetailer": tk.BooleanVar(value=adetailer_default),
-            "upscale": tk.BooleanVar(value=True),
+            "upscale": tk.BooleanVar(value=False),  # Fixed: was True, should be False
         }
         self.run_mode_var = tk.StringVar(value="direct")
         self.run_scope_var = tk.StringVar(value="full")

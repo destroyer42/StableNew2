@@ -107,6 +107,8 @@ class PipelineController(_GUIPipelineController):
         )
         njrs = builder.build_jobs(pack_entries)
         _logger.info(f"[PipelineController] Builder returned {len(njrs)} NormalizedJobRecord(s)")
+        print(f"[PipelineController] About to return {len(njrs)} jobs")
+        print(f"[PipelineController] First job: {njrs[0] if njrs else 'NONE'}")
         return njrs
 
     def _normalize_run_mode(self, pipeline_state: PipelineState) -> str:
@@ -324,8 +326,7 @@ class PipelineController(_GUIPipelineController):
                 )
             return self._build_normalized_jobs_from_state()
         except Exception as exc:
-            _logger.debug("Failed to build preview jobs: %s", exc)
-            return []
+            _logger.exception("Failed to build preview jobs - EXCEPTION DETAILS:")
             return []
 
     def _to_queue_job(

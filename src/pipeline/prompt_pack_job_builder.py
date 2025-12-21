@@ -105,19 +105,33 @@ class PromptPackNormalizedJobBuilder:
             _logger.debug(f"[Matrix Expansion] No matrix slots in {entry.pack_id}, skipping expansion")
             return [entry]
         
-        # Generate combinations (Cartesian product)
+        # Check matrix config for mode
+        pack_data = metadata.get("pack_data", {})
+        matrix_config = pack_data.get("matrix", {})
+        matrix_mode = matrix_config.get("mode", "sequential")
+        limit = matrix_config.get("limit", 0)
+        
         slot_names = list(matrix_slots_dict.keys())
         slot_values_lists = [matrix_slots_dict[name] for name in slot_names]
-        combinations = list(itertools.product(*slot_values_lists))
         
-        # Check matrix limit from metadata
-        matrix_config = metadata.get("matrix", {})
-        limit = matrix_config.get("limit", 0)
-        if limit > 0 and len(combinations) > limit:
-            combinations = combinations[:limit]
-            _logger.info(f"[Matrix Expansion] Limited combinations to {limit} (from {len(combinations)} total)")
-        
-        _logger.info(f"[Matrix Expansion] Generating {len(combinations)} combinations for {entry.pack_id} with slots: {slot_names}")
+        # Generate combinations based on mode
+        if matrix_mode == "random":
+            # Random mode: generate N random combinations (each slot independently randomized)
+            import random
+            target_count = limit if limit > 0 else 10  # Default to 10 if no limit specified
+            combinations = []
+            for _ in range(target_count):
+                # Pick a random value from each slot independently
+                combo = tuple(random.choice(slot_values_lists[i]) for i in range(len(slot_names)))
+                combinations.append(combo)
+            _logger.info(f"[Matrix Expansion] Generated {len(combinations)} random combinations for {entry.pack_id} with slots: {slot_names}")
+        else:
+            # Sequential mode: generate all Cartesian product combinations
+            combinations = list(itertools.product(*slot_values_lists))
+            if limit > 0 and len(combinations) > limit:
+                combinations = combinations[:limit]
+                _logger.info(f"[Matrix Expansion] Limited combinations to {limit} (from {len(combinations)} total)")
+            _logger.info(f"[Matrix Expansion] Generating {len(combinations)} sequential combinations for {entry.pack_id} with slots: {slot_names}")
         
         # Create one entry per combination
         expanded_entries = []
@@ -166,12 +180,17 @@ class PromptPackNormalizedJobBuilder:
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
         batch_settings = self._build_batch_settings(merged_config)
+        
+        # Output settings: just specify directory, filenames are handled by runner
+        pipeline_section = merged_config.get("pipeline", {})
+        base_output_dir = pipeline_section.get("output_dir", "output")
+        output_settings = OutputSettings(base_output_dir=base_output_dir)
 
         jobs = self._job_builder.build_jobs(
             base_config=config_for_builder,
             randomization_plan=randomizer_plan,
             batch_settings=batch_settings,
-            output_settings=OutputSettings(),
+            output_settings=output_settings,
         )
 
         pipeline_section = merged_config.get("pipeline", {})
@@ -406,28 +425,30 @@ class PromptPackNormalizedJobBuilder:
     def _build_randomizer_plan(
         self, entry: PackJobEntry, merged_config: dict[str, Any]
     ) -> RandomizationPlanV2:
-        matrix_config = merged_config.get("randomization", {})
-        metadata = entry.randomizer_metadata or {}
-        enabled = bool(metadata.get("enabled") or matrix_config.get("enabled"))
-        max_variants = int(metadata.get("max_variants", 1) or 1)
-        plan = RandomizationPlanV2(
-            enabled=enabled,
+        """Build a randomization plan from entry metadata and config."""
+        # Check if randomization is enabled in the config
+        randomization_enabled = merged_config.get("randomization_enabled", False)
+        if not randomization_enabled:
+            return RandomizationPlanV2(enabled=False, max_variants=1)
+        
+        # Extract randomization parameters from config
+        max_variants = merged_config.get("max_variants", 1)
+        base_seed = merged_config.get("seed")
+        
+        # Determine seed mode
+        seed_mode = RandomizationSeedMode.NONE
+        if base_seed is not None:
+            seed_mode = RandomizationSeedMode.PER_VARIANT
+        
+        return RandomizationPlanV2(
+            enabled=True,
             max_variants=max_variants,
-            seed_mode=RandomizationSeedMode.NONE,
-            base_seed=matrix_config.get("seed"),
+            seed_mode=seed_mode,
+            base_seed=base_seed,
+            model_choices=[],
+            sampler_choices=[],
+            scheduler_choices=[],
         )
-        return plan
-
-    def _load_pack_rows(self, pack_id: str) -> list[PackRow]:
-        path = self._resolve_pack_text_path(pack_id)
-        if not path:
-            return []
-        try:
-            content = path.read_text(encoding="utf-8")
-        except Exception as exc:
-            _logger.warning("Failed to read prompt pack '%s': %s", pack_id, exc)
-            return []
-        return parse_prompt_pack_text(content)
 
     def _resolve_pack_text_path(self, pack_id: str) -> Path | None:
         candidate = Path(pack_id)
@@ -448,6 +469,20 @@ class PromptPackNormalizedJobBuilder:
                 return path
         return None
 
+    def _load_pack_rows(self, pack_id: str) -> list[PackRow]:
+        """Load and parse pack rows from the pack file."""
+        path = self._resolve_pack_text_path(pack_id)
+        if not path:
+            _logger.warning("Pack file not found for '%s'", pack_id)
+            return []
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+        except Exception as exc:
+            _logger.warning("Failed to read prompt pack '%s': %s", pack_id, exc)
+            return []
+        return parse_prompt_pack_text(content)
+
     def _load_pack_config(self, pack_id: str) -> dict[str, Any] | None:
         try:
             return self._config_manager.load_pack_config(pack_id)
@@ -458,9 +493,13 @@ class PromptPackNormalizedJobBuilder:
     def _normalize_stage_flags(
         self, pipeline_section: dict[str, Any], overrides: dict[str, bool]
     ) -> dict[str, bool]:
+        # Get img2img value without default - calculate before dictionary construction
+        img2img_val = pipeline_section.get("img2img_enabled")
+        img2img_enabled = bool(img2img_val) if img2img_val is not None else False
+        
         defaults = {
             "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
-            "img2img": bool(pipeline_section.get("img2img_enabled", False)),
+            "img2img": img2img_enabled,
             "adetailer": bool(pipeline_section.get("adetailer_enabled", False)),
             "upscale": bool(pipeline_section.get("upscale_enabled", False)),
         }
