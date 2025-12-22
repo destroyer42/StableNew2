@@ -1,0 +1,40 @@
+{
+  "job_id": "queue-v2.6-canonical-003",
+  "prompts": {
+    "positive": "Futuristic cyberpunk cityscape at night",
+    "negative": "blurry, artifacts"
+  },
+  "config": {
+    "model": "sdxl_base_1.0.safetensors",
+    "sampler": "Euler a",
+    "steps": 30,
+    "cfg_scale": 7.0,
+    "width": 1024,
+    "height": 1024,
+    "batch_size": 1,
+    "batch_index": 0,
+    "variant_index": 0,
+    "seed": 99999,
+    "enable_hr": true,
+    "hr_scale": 2.0,
+    "adetailer_enabled": true,
+    "adetailer_configs": [
+      {
+        "model": "face_yolov8n.pt",
+        "prompt": "",
+        "negative_prompt": "",
+        "confidence": 0.3
+      }
+    ],
+    "refiner": {
+      "refiner_checkpoint": "sdxl_refiner_1.0.safetensors",
+      "refiner_switch_at": 0.8
+    }
+  },
+  "execution_metadata": {
+    "source_pack": "test_pack.json",
+    "slot_index": 0
+  },
+  "status": "pending",
+  "created_at": "2024-03-10T15:00:00Z"
+}

@@ -1,0 +1,22 @@
+{
+  "job_id": "queue-v2.4-migration-002",
+  "config": {
+    "model": "sdxl_base_1.0.safetensors",
+    "sampler": "DPM++ 2M Karras",
+    "steps": 25,
+    "cfg_scale": 7.5,
+    "width": 1024,
+    "height": 768,
+    "batch_size": 2,
+    "batch_index": 0,
+    "seed": 12345,
+    "enable_hr": false,
+    "adetailer_enabled": false
+  },
+  "prompts": {
+    "positive": "A serene lake at dawn, photorealistic",
+    "negative": "blurry, low quality"
+  },
+  "status": "pending",
+  "created_at": "2024-02-20T13:00:00Z"
+}

@@ -1352,6 +1352,9 @@ class Pipeline:
             ad_neg_final = negative_prompt
             logger.info("🎯 Using txt2img negative prompt for ADetailer (inherited from previous stage)")
 
+        # ADetailer uses custom prompts - never apply global negative merging
+        apply_global = False
+
         # DEBUG: Log ADetailer config received
         logger.info(
             "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s, mask_feather=%s",
@@ -1443,9 +1446,7 @@ class Pipeline:
                 "original_negative_prompt": base_ad_neg,
                 "final_negative_prompt": ad_neg_final,
                 "global_negative_applied": apply_global,
-                "global_negative_terms": self.config_manager.get_global_negative_prompt()
-                if apply_global
-                else "",
+                "global_negative_terms": "",  # Always empty for ADetailer per design
                 "input_image": str(input_image_path),
                 "config": self._clean_metadata_payload(payload),
                 "path": str(image_path),
@@ -2314,12 +2315,22 @@ class Pipeline:
                     computed_ratio,
                 )
                 refiner_switch_at = computed_ratio
+            # use_refiner must be explicitly True in config AND valid checkpoint/ratio
+            # Read from txt2img_config (nested) or fall back to top-level config (flat payload)
+            use_refiner_flag = txt2img_config.get("use_refiner", config.get("use_refiner", False))
             use_refiner = (
-                refiner_checkpoint
+                use_refiner_flag  # Must be explicitly True
+                and refiner_checkpoint
                 and refiner_checkpoint != "None"
                 and refiner_checkpoint.strip() != ""
                 and 0.0 < refiner_switch_at < 1.0
             )
+            
+            # Log refiner status for debugging
+            if not use_refiner_flag and refiner_checkpoint:
+                logger.info("🚫 Refiner disabled via use_refiner=False (checkpoint present but ignored)")
+            elif use_refiner:
+                logger.info("✅ Refiner enabled: checkpoint=%s, switch_at=%.3f", refiner_checkpoint, refiner_switch_at)
 
             if use_refiner:
                 # Compute expected switch step number within the base pass and within combined progress

@@ -1,6 +1,13 @@
+"""Single node runner loopback tests (LEGACY).
+
+Tests runner execution with legacy PipelineConfig.
+"""
+
 from __future__ import annotations
 
 import time
+
+import pytest
 
 from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.queue.job_model import Job, JobStatus
@@ -14,6 +21,7 @@ def _cfg():
     )
 
 
+@pytest.mark.legacy
 def test_single_node_runner_executes_jobs_and_updates_status():
     queue = JobQueue()
     executed = []

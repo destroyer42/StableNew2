@@ -739,6 +739,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         model_name = self._model_name_map.get(self.model_var.get(), self.model_var.get().strip())
         vae_name = self._vae_name_map.get(self.vae_var.get(), self.vae_var.get().strip())
         
+        # Store use_refiner flag for conditional field writing
+        use_refiner = bool(self.refiner_enabled_var.get())
+        
         config = {
             "txt2img": {
                 "model": model_name,
@@ -756,17 +759,19 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "subseed": int(self.seed_section.subseed_var.get() or -1),
                 "subseed_strength": float(self.seed_section.subseed_strength_var.get() or 0.0),
                 
-                # Refiner fields
-                "use_refiner": bool(self.refiner_enabled_var.get()),
-                "refiner_checkpoint": self._refiner_model_name_map.get(
-                    self.refiner_model_var.get(), 
-                    self.refiner_model_var.get().strip()
-                ),
-                "refiner_model_name": self._refiner_model_name_map.get(
-                    self.refiner_model_var.get(), 
-                    self.refiner_model_var.get().strip()
-                ),
-                "refiner_switch_at": float(self.refiner_switch_var.get() or 0.8),
+                # Refiner fields - only write if explicitly enabled
+                "use_refiner": use_refiner,
+                **({
+                    "refiner_checkpoint": self._refiner_model_name_map.get(
+                        self.refiner_model_var.get(), 
+                        self.refiner_model_var.get().strip()
+                    ),
+                    "refiner_model_name": self._refiner_model_name_map.get(
+                        self.refiner_model_var.get(), 
+                        self.refiner_model_var.get().strip()
+                    ),
+                    "refiner_switch_at": float(self.refiner_switch_var.get() or 0.8)
+                } if use_refiner else {}),
                 
                 # Hires fix fields
                 "enable_hr": bool(self.hires_enabled_var.get()),

@@ -1,4 +1,9 @@
-"""Integration tests for AppController -> PipelineRunner wiring."""
+"""Integration tests for AppController -> PipelineRunner wiring.
+
+LEGACY TEST: This test validates the deprecated PipelineConfig path for backward
+compatibility testing. New tests should use NJR-only patterns.
+See: tests.instructions.md - "Do not import archived legacy modules for new tests"
+"""
 
 from __future__ import annotations
 
@@ -52,6 +57,7 @@ def pack_file(tmp_path, monkeypatch):
     return pack_path
 
 
+@pytest.mark.legacy
 def test_pipeline_config_assembled_from_controller_state(pack_file):
     window = DummyWindow()
     runner = RecordingPipelineRunner()
@@ -96,6 +102,7 @@ def test_pipeline_config_assembled_from_controller_state(pack_file):
     assert "sunset" in pipeline_config.prompt
 
 
+@pytest.mark.legacy
 def test_cancel_triggers_token_and_returns_to_idle(pack_file):
     window = DummyWindow()
     runner = BlockingPipelineRunner()

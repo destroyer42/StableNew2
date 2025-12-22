@@ -155,8 +155,9 @@ class PipelineRunner:
                         if njr_config.get("hr_resize_y"):
                             payload["hr_resize_y"] = njr_config["hr_resize_y"]
                     
-                    # Add refiner settings from NJR config if present
-                    if njr_config.get("refiner_checkpoint"):
+                    # Add refiner settings only if use_refiner is explicitly True
+                    if njr_config.get("use_refiner") and njr_config.get("refiner_checkpoint"):
+                        payload["use_refiner"] = True  # Propagate flag so executor can see it
                         payload["refiner_checkpoint"] = njr_config["refiner_checkpoint"]
                         payload["refiner_switch_at"] = njr_config.get("refiner_switch_at", 0.8)
                     

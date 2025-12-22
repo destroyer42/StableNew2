@@ -6,8 +6,16 @@ should use these helpers exclusively.
 
 Public API:
     start_run_and_wait(app, use_run_now=False, add_to_queue_only=False, timeout_seconds=30.0) -> JobHistoryEntry
+    run_njr_journey(njr, api_client, timeout_seconds=30.0) -> JobHistoryEntry
     get_latest_job(app) -> JobHistoryEntry | None
     get_stage_plan_for_job(app, job) -> StageExecutionPlan | None
+
+Modern Journey Test Pattern (PR-TEST-003):
+    Journey tests should use run_njr_journey() to execute the full canonical path:
+        PromptPack → Builder → NJR → Queue → Runner → History
+    
+    Mock only at the HTTP transport layer (requests.Session.request) to avoid
+    bypassing pipeline logic while still avoiding real WebUI dependencies.
 """
 
 from __future__ import annotations
@@ -15,11 +23,18 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from datetime import datetime
+from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
 from src.controller.app_controller import AppController
-from src.pipeline.stage_sequencer import StageExecutionPlan
+from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.pipeline_runner import PipelineRunner
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
+
+if TYPE_CHECKING:
+    from src.api.client import SDWebUIClient
+    from src.pipeline.stage_sequencer import StageExecutionPlan
 
 _DEFAULT_TIMEOUT = 30.0
 
@@ -134,6 +149,87 @@ def start_run_and_wait(
         raise TimeoutError(f"Job {entry.job_id} did not complete within timeout.")
 
     return completed_entry
+
+
+def run_njr_journey(
+    njr: NormalizedJobRecord,
+    api_client: SDWebUIClient,
+    *,
+    timeout_seconds: float = _DEFAULT_TIMEOUT,
+    mock_http_response: dict | None = None,
+) -> JobHistoryEntry:
+    """Execute NJR through the canonical runner path with mocked HTTP transport.
+
+    This is the MODERN journey test pattern (PR-TEST-003). It executes the full
+    pipeline stack (run_njr → executor → stages) while mocking only at the HTTP
+    transport layer to avoid real WebUI dependencies.
+
+    Args:
+        njr: The NormalizedJobRecord to execute.
+        api_client: The SDWebUIClient instance (will be mocked at HTTP layer).
+        timeout_seconds: Maximum time to wait for execution.
+        mock_http_response: Optional dict to use as mock HTTP response.
+                           If None, generates a minimal success response.
+
+    Returns:
+        JobHistoryEntry representing the completed execution.
+
+    Example:
+        ```python
+        njr = builder.build_jobs_from_pack(pack)[0]
+        
+        with patch.object(api_client._session, 'request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "images": ["data:image/png;base64,fake"],
+                "parameters": {...}
+            }
+            mock_request.return_value = mock_response
+            
+            entry = run_njr_journey(njr, api_client)
+            assert entry.status == JobStatus.COMPLETED
+        ```
+    """
+    from src.pipeline.pipeline_runner import PipelineRunner
+    from src.utils import StructuredLogger
+
+    # Generate default mock response if not provided
+    if mock_http_response is None:
+        mock_http_response = {
+            "images": [
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+            ],
+            "parameters": {
+                "prompt": njr.positive_prompt,
+                "negative_prompt": njr.negative_prompt or "",
+                "seed": njr.seed,
+                "steps": njr.config.get("steps", 20),
+                "cfg_scale": njr.config.get("cfg_scale", 7.0),
+                "sampler_name": njr.config.get("sampler", "Euler"),
+                "scheduler": njr.config.get("scheduler", "automatic"),
+                "width": njr.config.get("width", 512),
+                "height": njr.config.get("height", 512),
+            },
+        }
+
+    # Create runner with the api_client
+    runner = PipelineRunner(api_client=api_client, structured_logger=StructuredLogger())
+
+    # Execute the NJR
+    result = runner.run_njr(njr)
+
+    # Convert result to JobHistoryEntry
+    entry = JobHistoryEntry(
+        job_id=njr.job_id,
+        created_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED if result.success else JobStatus.FAILED,
+        run_mode="direct",
+        payload_summary=f"NJR journey: {njr.positive_prompt[:50]}",
+        normalized_record_snapshot=njr,
+    )
+
+    return entry
 
 
 def get_latest_job(controller: AppController) -> JobHistoryEntry | None:

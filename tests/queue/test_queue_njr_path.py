@@ -4,11 +4,16 @@ Validates that:
 - Queue entries created via NJR path have NJR snapshots
 - Execution uses NJR-only path for new jobs (pipeline_config is None)
 - Legacy pipeline_config-only jobs still work but are marked as legacy
+
+LEGACY TEST SUITE: These tests validate backward compatibility with PipelineConfig.
+Keep these tests to ensure migration path works correctly.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -30,8 +35,9 @@ def _make_dummy_njr() -> NormalizedJobRecord:
     )
 
 
+@pytest.mark.legacy
 class TestQueueNJRPath:
-    """Test NJR-only execution for queue jobs."""
+    """Test NJR-only execution for queue jobs (includes legacy compatibility tests)."""
 
     def test_queue_job_with_njr_snapshot(self, tmp_path: Path):
         """Queue job created from NJR should have NJR snapshot in storage."""

@@ -1,6 +1,11 @@
-"""PR-044: Test Job variant metadata fields."""
+"""PR-044: Test Job variant metadata fields (LEGACY).
+
+Tests Job variant metadata using legacy PipelineConfig.
+"""
 
 from __future__ import annotations
+
+import pytest
 
 from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.queue.job_model import Job, JobStatus
@@ -30,6 +35,7 @@ def _make_job(**kwargs) -> Job:
     return Job(**defaults)
 
 
+@pytest.mark.legacy
 class TestJobVariantMetadata:
     """Test that Job model carries variant_index and variant_total."""
 

@@ -1,3 +1,9 @@
+"""Fake pipeline runner for journey tests (LEGACY).
+
+This fake uses legacy PipelineConfig for backward compatibility testing.
+Consider migrating to NJR-based fakes for new tests.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

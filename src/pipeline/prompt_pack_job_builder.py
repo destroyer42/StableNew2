@@ -314,10 +314,11 @@ class PromptPackNormalizedJobBuilder:
             "hr_resize_y": txt2img.get("hr_resize_y"),
             "hires_use_base_model": txt2img.get("hires_use_base_model"),
             "hr_checkpoint_name": txt2img.get("hr_checkpoint_name"),
-            # Add refiner settings from txt2img section
-            "use_refiner": txt2img.get("use_refiner"),
-            "refiner_checkpoint": txt2img.get("refiner_checkpoint"),
-            "refiner_switch_at": txt2img.get("refiner_switch_at"),
+            # Add refiner settings only if use_refiner is True
+            "use_refiner": txt2img.get("use_refiner", False),
+            **({"refiner_checkpoint": txt2img.get("refiner_checkpoint"),
+                "refiner_switch_at": txt2img.get("refiner_switch_at")}
+               if txt2img.get("use_refiner") else {}),
             # Add other txt2img settings
             "subseed": txt2img.get("subseed"),
             "subseed_strength": txt2img.get("subseed_strength"),
