@@ -9,6 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 import requests
@@ -28,6 +29,31 @@ from src.utils.retry_policy_v2 import (
 )
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class ProgressInfo:
+    """Progress information from WebUI /sdapi/v1/progress endpoint."""
+    
+    progress: float           # 0.0 to 1.0
+    eta_relative: float       # Seconds remaining
+    current_step: int | None
+    total_steps: int | None
+    current_image: str | None
+    state: dict[str, Any]
+    
+    @classmethod
+    def from_response(cls, data: dict[str, Any]) -> ProgressInfo:
+        """Parse from WebUI response."""
+        state = data.get("state", {})
+        return cls(
+            progress=float(data.get("progress", 0.0)),
+            eta_relative=float(data.get("eta_relative", 0.0)),
+            current_step=state.get("sampling_step"),
+            total_steps=state.get("sampling_steps"),
+            current_image=data.get("current_image"),
+            state=state,
+        )
 
 POOL_CONNECTIONS = 20
 POOL_MAXSIZE = 20
@@ -1057,6 +1083,42 @@ class SDWebUIClient:
                 GenerateErrorCode.UNKNOWN,
                 details=details,
             )
+
+    def get_progress(self, *, skip_current_image: bool = True) -> ProgressInfo | None:
+        """
+        Get current generation progress from WebUI.
+        
+        Args:
+            skip_current_image: If True, don't include preview image in response
+            
+        Returns:
+            ProgressInfo if generation in progress, None if idle or error
+        """
+        try:
+            url = f"{self.base_url}/sdapi/v1/progress"
+            params = {"skip_current_image": str(skip_current_image).lower()}
+            
+            response = self._session.get(
+                url,
+                params=params,
+                timeout=(DEFAULT_CONNECT_TIMEOUT, 5.0),  # Short read timeout
+            )
+            
+            if response.status_code != 200:
+                return None
+            
+            data = response.json()
+            
+            # Check if actually generating (progress > 0 or job running)
+            state = data.get("state", {})
+            if not state.get("job") and data.get("progress", 0) == 0:
+                return None  # Idle
+            
+            return ProgressInfo.from_response(data)
+            
+        except Exception as exc:
+            logger.debug("Progress poll failed: %s", exc)
+            return None
 
     def get_models(self) -> list[dict[str, Any]]:
         """

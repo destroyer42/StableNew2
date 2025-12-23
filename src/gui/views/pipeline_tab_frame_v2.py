@@ -87,10 +87,10 @@ class PipelineTabFrame(ttk.Frame):
         )
         self.sidebar.pack(fill="both", pady=(0, 12), expand=True)
 
-        # PR-GUI-H: prompt_text and restore_last_run_button moved to sidebar Pack Selector card
+        # PR-GUI-H: prompt_text and refresh_packs_button moved to sidebar Pack Selector card
         # Keep references for compatibility
         self.prompt_text = getattr(self.sidebar, "prompt_text", tk.Entry(self.left_inner))
-        self.restore_last_run_button = getattr(self.sidebar, "restore_last_run_button", None)
+        self.refresh_packs_button = getattr(self.sidebar, "refresh_packs_button", None)
         if self.prompt_text:
             attach_tooltip(self.prompt_text, "Primary text prompt for the active pipeline.")
         # JT05-friendly attribute for tracking the img2img/upscale input image path

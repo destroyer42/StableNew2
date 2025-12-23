@@ -396,29 +396,43 @@ class ConfigMergerV2:
         flags: StageOverrideFlags,
     ) -> dict[str, Any]:
         """Apply txt2img overrides to the merged config."""
+        txt2img = config.get("txt2img", {}) or {}
+
         # Apply top-level txt2img fields
         if overrides.model is not None:
             config["model"] = overrides.model
+            txt2img["model"] = overrides.model
+            txt2img["model_name"] = overrides.model
         if overrides.vae is not None:
             config["vae"] = overrides.vae
+            txt2img["vae"] = overrides.vae
         if overrides.sampler is not None:
             config["sampler"] = overrides.sampler
+            txt2img["sampler_name"] = overrides.sampler
         if overrides.scheduler is not None:
             config["scheduler"] = overrides.scheduler
+            txt2img["scheduler"] = overrides.scheduler
         if overrides.steps is not None:
             config["steps"] = overrides.steps
+            txt2img["steps"] = overrides.steps
         if overrides.cfg_scale is not None:
             config["cfg_scale"] = overrides.cfg_scale
+            txt2img["cfg_scale"] = overrides.cfg_scale
         if overrides.width is not None:
             config["width"] = overrides.width
+            txt2img["width"] = overrides.width
         if overrides.height is not None:
             config["height"] = overrides.height
+            txt2img["height"] = overrides.height
         if overrides.prompt is not None:
             config["prompt"] = overrides.prompt
+            txt2img["prompt"] = overrides.prompt
         if overrides.negative_prompt is not None:
             config["negative_prompt"] = overrides.negative_prompt
+            txt2img["negative_prompt"] = overrides.negative_prompt
         if overrides.seed is not None:
             config["seed"] = overrides.seed
+            txt2img["seed"] = overrides.seed
 
         # Handle nested refiner config within txt2img overrides
         if overrides.refiner is not None:
@@ -436,6 +450,9 @@ class ConfigMergerV2:
             base_hires = config.get("hires_fix", {}) or {}
             merged_hires = ConfigMergerV2.merge_hires_config(base_hires, overrides.hires, True)
             config["hires_fix"] = merged_hires
+
+        if txt2img:
+            config["txt2img"] = txt2img
 
         return config
 

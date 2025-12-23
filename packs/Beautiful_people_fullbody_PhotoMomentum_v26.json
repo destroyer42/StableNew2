@@ -19,11 +19,11 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.5508474576271186
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.5472972972972973
           ],
           [
             "DetailedEyes_V3",
@@ -34,8 +34,8 @@
             1.0
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "NSFWFilterXL_animagine",
+            0.7232142857142857
           ]
         ]
       },
@@ -225,7 +225,8 @@
           ]
         }
       ]
-    }
+    },
+    "show_preview": true
   },
   "preset_data": {
     "txt2img": {
@@ -236,7 +237,7 @@
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
       "steps": 34,
-      "cfg_scale": 7.0,
+      "cfg_scale": 6.200000000000003,
       "width": 768,
       "height": 1280,
       "clip_skip": 2,
@@ -269,7 +270,7 @@
       "steps": 15,
       "denoising_strength": 0.2,
       "upscaling_resize": 2.0,
-      "tile_size": 0,
+      "tile_size": 1024,
       "face_restore": false
     },
     "adetailer": {

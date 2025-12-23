@@ -19,7 +19,15 @@ from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_mes
 
 
 class WebUIStartupError(RuntimeError):
-    """Raised when WebUI fails to start."""
+    """Raised when WebUI fails to start.
+    
+    IMPORTANT: WebUI start/ensure_running/restart methods now check if the StableNew GUI
+    is actually running before starting WebUI. This prevents orphaned processes from
+    crashed/improperly-shutdown sessions from auto-restarting WebUI indefinitely.
+    
+    The check uses SingleInstanceLock.is_gui_running() to verify the GUI's TCP lock is held.
+    If the GUI is not running, WebUI start/restart operations are blocked with a warning.
+    """
 
 
 logger = get_logger(__name__)
@@ -87,6 +95,17 @@ class WebUIProcessManager:
         return self._process
 
     def ensure_running(self) -> bool:
+        # CRITICAL: Don't auto-restart WebUI if StableNew GUI is not running
+        # This prevents orphaned processes from crashed sessions auto-restarting WebUI
+        from src.utils.single_instance import SingleInstanceLock
+        if not SingleInstanceLock.is_gui_running():
+            logger.warning(
+                "WebUI ensure_running called but StableNew GUI is not running. "
+                "Refusing to start WebUI to prevent orphaned process. "
+                "This may indicate an orphaned queue runner from a crashed session."
+            )
+            return False
+        
         ctx = LogContext(subsystem="api")
         logging.info("WebUI ensure_running check requested")
         if self.is_running():
@@ -134,6 +153,18 @@ class WebUIProcessManager:
 
     def start(self) -> subprocess.Popen:
         """Start the WebUI process if not already running."""
+        
+        # CRITICAL: Don't start WebUI if StableNew GUI is not running
+        # This prevents orphaned processes from crashed sessions from spawning WebUI
+        from src.utils.single_instance import SingleInstanceLock
+        if not SingleInstanceLock.is_gui_running():
+            error_msg = (
+                "WebUI start requested but StableNew GUI is not running. "
+                "Refusing to start WebUI to prevent orphaned process. "
+                "This may indicate an orphaned queue runner or background process from a crashed session."
+            )
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
         if self._process and self.is_running():
             return self._process
@@ -296,6 +327,15 @@ class WebUIProcessManager:
         max_delay: float = 8.0,
     ) -> bool:
         """Restart the WebUI process and wait for its API to become available."""
+        
+        # CRITICAL: Don't restart WebUI if StableNew GUI is not running
+        from src.utils.single_instance import SingleInstanceLock
+        if not SingleInstanceLock.is_gui_running():
+            logger.warning(
+                "WebUI restart requested but StableNew GUI is not running. "
+                "Refusing to restart WebUI to prevent orphaned process."
+            )
+            return False
 
         ctx = LogContext(subsystem="api")
         log_with_ctx(logger, logging.INFO, "Restarting WebUI process", ctx=ctx)

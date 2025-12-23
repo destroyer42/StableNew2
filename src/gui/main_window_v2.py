@@ -1,6 +1,7 @@
 # Used by tests and entrypoint contract
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
@@ -20,8 +21,11 @@ from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.zone_map_v2 import get_root_zone_config
+from src.services.ui_state_store import get_ui_state_store
 from src.utils import InMemoryLogHandler
 from src.utils.config import ConfigManager
+
+logger = logging.getLogger(__name__)
 
 
 class HeaderZone(ttk.Frame):
@@ -199,6 +203,9 @@ class MainWindowV2:
 
         self.learning_tab = self.add_tab("learning", "Learning", _make_learning)
 
+        # PR-PERSIST-001: Restore selected tab
+        self._restore_tab_selection()
+
         self.left_zone = None
         self.right_zone = None
 
@@ -359,18 +366,45 @@ class MainWindowV2:
 
     def _ensure_window_geometry(self) -> None:
         """Apply default geometry/minimums so the three-column layout is visible."""
-        try:
-            geom = self.root.geometry()
-            width_str, rest = geom.split("x", 1)
-            width = int(width_str)
-            height_str = rest.split("+", 1)[0]
-            height = int(height_str)
-        except Exception:
-            width = 0
-            height = 0
+        # PR-PERSIST-001: Try to restore saved window geometry
+        ui_store = get_ui_state_store()
+        state = ui_store.load_state()
+        restored = False
+        
+        if state:
+            window_state = state.get("window", {})
+            saved_geometry = window_state.get("geometry")
+            saved_state = window_state.get("state")
+            
+            if saved_geometry:
+                try:
+                    self.root.geometry(saved_geometry)
+                    restored = True
+                    logger.debug(f"Restored window geometry: {saved_geometry}")
+                except Exception as e:
+                    logger.warning(f"Failed to restore window geometry: {e}")
+            
+            if saved_state == "zoomed":
+                try:
+                    self.root.state("zoomed")
+                except Exception:
+                    pass
+        
+        # If not restored, check current size and apply defaults if needed
+        if not restored:
+            try:
+                geom = self.root.geometry()
+                width_str, rest = geom.split("x", 1)
+                width = int(width_str)
+                height_str = rest.split("+", 1)[0]
+                height = int(height_str)
+            except Exception:
+                width = 0
+                height = 0
 
-        if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
-            self.root.geometry(f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}")
+            if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
+                self.root.geometry(f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}")
+        
         self.root.minsize(MIN_MAIN_WINDOW_WIDTH, MIN_MAIN_WINDOW_HEIGHT)
 
     def update_pack_list(self, packs: list[str]) -> None:
@@ -570,6 +604,12 @@ class MainWindowV2:
         if self._disposed:
             return
         self._disposed = True
+        
+        # PR-PERSIST-001: Save UI state before cleanup
+        try:
+            self._save_ui_state()
+        except Exception as e:
+            logger.warning(f"Failed to save UI state during cleanup: {e}")
 
         try:
             self.app_state.disable_notifications()
@@ -749,6 +789,61 @@ class MainWindowV2:
             dialog.destroy()
         except Exception:
             pass
+
+    # PR-PERSIST-001: UI state persistence methods
+    def _save_ui_state(self) -> None:
+        """Save window geometry and tab selection to disk."""
+        try:
+            ui_store = get_ui_state_store()
+            
+            # Get window geometry and state
+            geometry = self.root.geometry()
+            window_state = "normal"
+            try:
+                if self.root.state() == "zoomed":
+                    window_state = "zoomed"
+            except Exception:
+                pass
+            
+            # Get selected tab index
+            selected_tab_index = 0
+            try:
+                selected_tab_index = self.center_notebook.index(self.center_notebook.select())
+            except Exception:
+                pass
+            
+            state = {
+                "window": {
+                    "geometry": geometry,
+                    "state": window_state
+                },
+                "tabs": {
+                    "selected_index": selected_tab_index
+                }
+            }
+            
+            ui_store.save_state(state)
+            logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
+        except Exception as e:
+            logger.warning(f"Failed to save UI state: {e}")
+
+    def _restore_tab_selection(self) -> None:
+        """Restore previously selected tab."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state()
+            
+            if state:
+                tabs_state = state.get("tabs", {})
+                selected_index = tabs_state.get("selected_index", 0)
+                
+                # Validate index is in range
+                tab_count = self.center_notebook.index("end")
+                if 0 <= selected_index < tab_count:
+                    self.center_notebook.select(selected_index)
+                    logger.debug(f"Restored tab selection: index {selected_index}")
+        except Exception as e:
+            logger.warning(f"Failed to restore tab selection: {e}")
 
 
 def run_app(

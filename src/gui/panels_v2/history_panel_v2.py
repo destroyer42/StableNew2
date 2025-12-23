@@ -15,6 +15,7 @@ from src.gui.theme_v2 import (
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
+from src.gui.utils.display_helpers import format_seed_display
 from src.pipeline.job_models_v2 import JobHistoryItemDTO
 
 
@@ -159,6 +160,14 @@ class HistoryPanelV2(ttk.Frame):
             parts.append(dto.label)
 
         parts.append(f"({dto.total_images} img{'s' if dto.total_images != 1 else ''})")
+
+        # PR-PIPE-007: Add seed to display if available
+        requested_seed = getattr(dto, "seed", None)
+        actual_seed = getattr(dto, "actual_seed", None)
+        if actual_seed is not None or requested_seed is not None:
+            seed_text = format_seed_display(requested_seed, actual_seed)
+            if seed_text and seed_text != "-":
+                parts.append(f"Seed:{seed_text}")
 
         display_text = " ".join(parts)
 

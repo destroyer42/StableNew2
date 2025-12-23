@@ -99,6 +99,10 @@ class PipelineRunner:
         # Create manifests subfolder for JSON metadata
         manifests_dir = run_dir / "manifests"
         manifests_dir.mkdir(exist_ok=True)
+        
+        # PR-PIPE-001: Set current job ID on executor for manifest tracking
+        self._pipeline._current_job_id = njr.job_id
+        
         stage_events: list[dict[str, Any]] = []
         success = False
         error = None
@@ -180,14 +184,17 @@ class PipelineRunner:
                     # Include prompt pack row index in naming to prevent overwrites
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     
-                    # Build filename with matrix slot values if present to prevent overwrites
-                    base_name = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
-                    if hasattr(njr, 'matrix_slot_values') and njr.matrix_slot_values:
-                        # Add matrix suffix: e.g., "txt2img_p00_00_wizard_forest"
-                        matrix_suffix = "_".join(str(v).replace(" ", "_") for v in njr.matrix_slot_values.values())
-                        image_name = f"{base_name}_{matrix_suffix}"
-                    else:
-                        image_name = base_name
+                    # Build safe filename with hash-based uniqueness (prevents Windows MAX_PATH issues)
+                    from src.utils.file_io import build_safe_image_name
+                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    seed = payload.get("seed")
+                    image_name = build_safe_image_name(
+                        base_prefix=base_prefix,
+                        matrix_values=matrix_values,
+                        seed=seed,
+                        max_length=100  # Conservative limit for Windows paths
+                    )
                     
                     result = self._pipeline.run_txt2img_stage(
                         payload["prompt"],
@@ -207,7 +214,9 @@ class PipelineRunner:
                     else:
                         current_stage_paths = []
                     
-                    variants.append(result)
+                    # Only append non-None results to variants
+                    if result is not None:
+                        variants.append(result)
                     last_result = result
                     
                 elif stage.stage_name == "adetailer":
@@ -246,15 +255,20 @@ class PipelineRunner:
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     
-                    # Build base name with matrix suffix if present
-                    base_name = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
-                    if hasattr(njr, 'matrix_slot_values') and njr.matrix_slot_values:
-                        matrix_suffix = "_".join(str(v).replace(" ", "_") for v in njr.matrix_slot_values.values())
-                        base_name = f"{base_name}_{matrix_suffix}"
+                    # Build safe base name with hash-based uniqueness
+                    from src.utils.file_io import build_safe_image_name
+                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing adetailer for image {img_idx + 1}/{len(current_stage_paths)}")
-                        image_name = f"{base_name}_img{img_idx:02d}"
+                        image_name = build_safe_image_name(
+                            base_prefix=base_prefix,
+                            matrix_values=matrix_values,
+                            seed=None,
+                            batch_index=img_idx,
+                            max_length=100
+                        )
                         result = self._pipeline.run_adetailer_stage(
                             input_image_path=Path(input_path),
                             config=config_dict,
@@ -292,15 +306,20 @@ class PipelineRunner:
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     
-                    # Build base name with matrix suffix if present
-                    base_name = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
-                    if hasattr(njr, 'matrix_slot_values') and njr.matrix_slot_values:
-                        matrix_suffix = "_".join(str(v).replace(" ", "_") for v in njr.matrix_slot_values.values())
-                        base_name = f"{base_name}_{matrix_suffix}"
+                    # Build safe base name with hash-based uniqueness
+                    from src.utils.file_io import build_safe_image_name
+                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing upscale for image {img_idx + 1}/{len(current_stage_paths)}")
-                        image_name = f"{base_name}_img{img_idx:02d}"
+                        image_name = build_safe_image_name(
+                            base_prefix=base_prefix,
+                            matrix_values=matrix_values,
+                            seed=None,
+                            batch_index=img_idx,
+                            max_length=100
+                        )
                         result = self._pipeline.run_upscale_stage(
                             input_image_path=Path(input_path),
                             config=config_dict,
@@ -331,7 +350,10 @@ class PipelineRunner:
                         "cancelled": False,
                     }
                 )
-            success = True
+            # Success only if we have at least one successful variant
+            success = len(variants) > 0 and any(v for v in variants if v is not None)
+            if not success and error is None:
+                error = "No images were generated successfully"
         except Exception as exc:
             error = str(exc)
             logger.error(f"❌ Pipeline execution failed: {exc}", exc_info=True)
@@ -345,6 +367,10 @@ class PipelineRunner:
                     "error_message": str(exc),
                 }
             )
+        finally:
+            # PR-PIPE-001: Clear job ID from executor after execution
+            self._pipeline._current_job_id = None
+            
         result = PipelineRunResult(
             run_id=run_id,
             success=success,
@@ -762,13 +788,13 @@ class PipelineRunResult:
             "run_id": self.run_id,
             "success": self.success,
             "error": self.error,
-            "variants": [dict(variant) for variant in self.variants],
-            "learning_records": [asdict(record) for record in self.learning_records],
+            "variants": [dict(variant) for variant in (self.variants or []) if variant is not None],
+            "learning_records": [asdict(record) for record in (self.learning_records or []) if record is not None],
             "randomizer_mode": self.randomizer_mode,
             "randomizer_plan_size": self.randomizer_plan_size,
             "metadata": dict(self.metadata or {}),
             "stage_plan": self._serialize_stage_plan(),
-            "stage_events": [dict(event) for event in self.stage_events],
+            "stage_events": [dict(event) for event in (self.stage_events or []) if event is not None],
         }
 
     def _serialize_stage_plan(self) -> dict[str, Any] | None:
@@ -820,16 +846,22 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
     Ensures all execution metadata (including run_mode, source) is present in the metadata dict.
     """
     if isinstance(value, PipelineRunResult):
-        return value.to_dict()
+        try:
+            return value.to_dict()
+        except Exception as e:
+            logger.error(f"Failed to convert PipelineRunResult to dict: {e}")
+            
     if isinstance(value, Mapping):
         try:
             return PipelineRunResult.from_dict(dict(value), default_run_id=default_run_id).to_dict()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to normalize Mapping to PipelineRunResult: {e}")
+            
+    # Fallback for any case that fails
     fallback = PipelineRunResult(
         run_id=default_run_id or "",
         success=False,
-        error=str(value) if value is not None else None,
+        error=str(value) if value is not None else "Unknown error in normalize_run_result",
         variants=[],
         learning_records=[],
     )

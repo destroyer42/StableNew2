@@ -111,9 +111,15 @@ class JobExecutionController:
         self._lock = threading.Lock()
         self._callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
         self._status_dispatcher: Callable[[Callable[[], None]], None] | None = None
+        self._deferred_autostart = False  # PR-PERSIST-001: Track if we need to auto-start after init
         self._restore_queue_state()
         self._queue_persistence = QueuePersistenceManager(self)
         self._persist_queue_state()
+        
+        # PR-PERSIST-001: Execute deferred autostart if queue was restored with auto_run enabled
+        if self._deferred_autostart:
+            logger.info("Executing deferred queue autostart")
+            self.start()
 
     def start(self) -> None:
         with self._lock:
@@ -343,6 +349,12 @@ class JobExecutionController:
             self._queue_paused,
             len(restored_jobs),
         )
+        
+        # PR-PERSIST-001: Auto-start runner if it was enabled before shutdown
+        if self._auto_run_enabled and restored_jobs and not self._queue_paused:
+            logger.info("Auto-starting queue runner after restore (had %d jobs)", len(restored_jobs))
+            # Defer start until after full initialization
+            self._deferred_autostart = True
 
     def _persist_queue_state(self) -> None:
         """Persist current queued jobs and control flags."""

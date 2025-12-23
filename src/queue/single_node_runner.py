@@ -42,7 +42,7 @@ def _ensure_job_envelope(job: Job | None, exc: Exception) -> None:
 _MAX_WEBUI_CRASH_RETRIES = 1
 _QUEUE_JOB_WEBUI_CRASH_SUSPECTED = "QUEUE_JOB_WEBUI_CRASH_SUSPECTED"
 _QUEUE_JOB_WEBUI_RETRY_EXHAUSTED = "QUEUE_JOB_WEBUI_RETRY_EXHAUSTED"
-_CRASH_ELIGIBLE_STAGES = {"txt2img", "img2img", "upscale"}
+_CRASH_ELIGIBLE_STAGES = {"txt2img", "img2img", "upscale", "adetailer"}
 _CRASH_MESSAGE_KEYWORDS = ("connection refused", "actively refused", "webui unavailable")
 
 

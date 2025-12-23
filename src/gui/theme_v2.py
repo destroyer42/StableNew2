@@ -33,6 +33,12 @@ VALIDATION_WARN_FG = TEXT_PRIMARY
 VALIDATION_ERROR_BG = ASWF_ERROR_RED
 VALIDATION_ERROR_FG = TEXT_PRIMARY
 
+# PR-PIPE-003: Feedback colors for visual polish
+HIGHLIGHT_SUCCESS = "#4a9f4a"  # Green flash for successful operations
+HIGHLIGHT_MOVE = "#4a90d9"     # Blue flash for move operations
+HIGHLIGHT_WARNING = "#d9a04a"  # Orange for warnings
+HIGHLIGHT_DURATION_MS = 300    # Default flash duration
+
 CARD_FRAME_STYLE = design_system.CARD_FRAME
 SURFACE_FRAME_STYLE = design_system.SECTION_FRAME
 BODY_LABEL_STYLE = design_system.BODY_LABEL

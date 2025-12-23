@@ -1,9 +1,13 @@
 """File I/O utilities with UTF-8 support"""
 
 import base64
+import hashlib
 import logging
+import os
+import re
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
@@ -22,6 +26,13 @@ def save_image_from_base64(base64_str: str, output_path: Path) -> bool:
         True if saved successfully
     """
     try:
+        # Ensure we have a Path object
+        if isinstance(output_path, str):
+            output_path = Path(output_path)
+        
+        # Resolve to absolute path for clearer error messages
+        output_path = output_path.resolve()
+        
         # Remove data URL prefix if present
         if "," in base64_str:
             base64_str = base64_str.split(",", 1)[1]
@@ -30,13 +41,20 @@ def save_image_from_base64(base64_str: str, output_path: Path) -> bool:
         image = Image.open(BytesIO(image_data))
 
         # Ensure parent directory exists
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        parent_dir = output_path.parent
+        logger.debug(f"Ensuring parent directory exists: {parent_dir}")
+        parent_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Verify directory was created
+        if not parent_dir.exists():
+            logger.error(f"Failed to create directory: {parent_dir}")
+            return False
 
         image.save(output_path)
         logger.info(f"Saved image: {output_path.name}")
         return True
     except Exception as e:
-        logger.error(f"Failed to save image: {e}")
+        logger.error(f"Failed to save image to {output_path}: {e}")
         return False
 
 
@@ -233,3 +251,132 @@ def get_safe_filename(name: str) -> str:
         safe_name = safe_name[:200]
 
     return safe_name or "unnamed"
+
+
+def build_safe_image_name(
+    base_prefix: str,
+    matrix_values: dict[str, Any] | None = None,
+    seed: int | None = None,
+    batch_index: int | None = None,
+    max_length: int = 120,
+) -> str:
+    """
+    Build a safe, filesystem-compatible image name with hash-based uniqueness.
+    
+    Prevents Windows MAX_PATH issues by:
+    - Limiting filename length based on max_length parameter
+    - Using stable hash suffix for uniqueness when truncating
+    - Sanitizing all characters for filesystem compatibility
+    
+    Args:
+        base_prefix: Short human-readable prefix (e.g., "txt2img_p00_00")
+        matrix_values: Optional matrix slot values for hash uniqueness
+        seed: Optional seed value for hash uniqueness
+        batch_index: Optional batch index to append
+        max_length: Maximum filename length (default 120, safe for Windows with reasonable paths)
+    
+    Returns:
+        Safe filename string (without extension)
+    
+    Example:
+        build_safe_image_name("txt2img_p00_00", {"hair": "blonde", "eyes": "blue"}, seed=12345)
+        → "txt2img_p00_00_a3f2b1c9"  (short, unique, safe)
+    """
+    # Start with sanitized base prefix
+    safe_prefix = get_safe_filename(base_prefix)
+    
+    # Build hash input for uniqueness
+    hash_input_parts = [safe_prefix]
+    if matrix_values:
+        # Stable ordering for consistent hashing
+        matrix_str = "_".join(f"{k}={v}" for k, v in sorted(matrix_values.items()))
+        hash_input_parts.append(matrix_str)
+    if seed is not None:
+        hash_input_parts.append(f"seed={seed}")
+    
+    # Generate stable 8-char hash for uniqueness
+    hash_input = "|".join(hash_input_parts)
+    hash_digest = hashlib.md5(hash_input.encode("utf-8")).hexdigest()[:8]
+    
+    # Reserve space for: "_" + hash (8 chars) + optional "_batchX" + ".png" (4 chars)
+    batch_suffix = f"_batch{batch_index}" if batch_index is not None else ""
+    reserved = len("_") + 8 + len(batch_suffix) + len(".png")
+    
+    # Truncate prefix if needed to stay within max_length
+    max_prefix_len = max_length - reserved
+    if len(safe_prefix) > max_prefix_len:
+        safe_prefix = safe_prefix[:max_prefix_len]
+    
+    # Build final name: prefix_hash[_batchN]
+    final_name = f"{safe_prefix}_{hash_digest}{batch_suffix}"
+    
+    return final_name
+
+
+def build_safe_image_stem(
+    base_name: str,
+    *,
+    output_dir: Path,
+    extension: str = ".png",
+    unique_token: str | None = None,
+    max_path_len: int | None = None,
+    hash_len: int = 8,
+) -> str:
+    """
+    Build a deterministic, path-safe filename stem for image outputs.
+
+    The stem is sanitized, length-bounded for the output_dir, and can embed
+    a short unique token. If it still exceeds limits, it is truncated with
+    a deterministic hash suffix while preserving batch/img suffixes.
+    """
+    if isinstance(output_dir, str):
+        output_dir = Path(output_dir)
+
+    if not extension.startswith("."):
+        extension = f".{extension}"
+
+    safe_base = get_safe_filename(base_name)
+
+    tail = ""
+    tail_match = re.search(r"(_batch\\d+|_img\\d+)$", safe_base)
+    if tail_match:
+        tail = tail_match.group(1)
+        root = safe_base[: -len(tail)]
+    else:
+        root = safe_base
+
+    token_suffix = ""
+    if unique_token:
+        token_safe = get_safe_filename(str(unique_token))
+        token_short = token_safe[:8]
+        if token_short:
+            token_suffix = f"__{token_short}"
+
+    candidate = f"{root}{token_suffix}{tail}"
+
+    if max_path_len is None:
+        max_path_len = 240 if os.name == "nt" else 255
+
+    try:
+        output_dir = output_dir.resolve()
+    except Exception:
+        output_dir = Path(str(output_dir))
+
+    base_len = len(str(output_dir)) + 1 + len(extension)
+    max_stem_len = max(1, max_path_len - base_len)
+
+    if len(candidate) <= max_stem_len:
+        return candidate
+
+    hash_source = f"{root}|{tail}|{unique_token or ''}"
+    hash_value = hashlib.sha1(hash_source.encode("utf-8")).hexdigest()[:hash_len]
+    hash_suffix = f"__{hash_value}{tail}"
+    max_root_len = max_stem_len - len(hash_suffix)
+
+    if max_root_len < 1:
+        hash_suffix = f"__{hash_value}"
+        max_root_len = max_stem_len - len(hash_suffix)
+        if max_root_len < 1:
+            return hash_suffix.strip("_")[:max_stem_len]
+
+    return f"{root[:max_root_len]}{hash_suffix}"

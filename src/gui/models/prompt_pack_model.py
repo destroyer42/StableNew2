@@ -120,6 +120,8 @@ class PromptPackModel:
         
         pack = cls(name=name, path=str(data_path), slots=slots, matrix=matrix)
         pack.preset_data = preset_data  # Store preset data
+        # Load show_preview flag (defaults to True for backward compatibility)
+        pack.show_preview = pack_data.get("show_preview", True) if isinstance(pack_data, dict) else True
         return pack
 
     def save_to_file(self, path: str | Path | None = None) -> Path:
@@ -155,6 +157,7 @@ class PromptPackModel:
                     for s in self.matrix.slots
                 ],
             },
+            "show_preview": getattr(self, "show_preview", True),
         }
         
         # Build unified payload

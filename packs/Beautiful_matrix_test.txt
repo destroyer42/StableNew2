@@ -1,6 +1,6 @@
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-a [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed [[skin]] woman, wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, slight perspiration, glistening, looking sultry
+POV, looking down on woman, she is
+lying facing up on a bed, feet facing away, head hanging off edge upside down, a red-haired large-breasted athletic gorgeous lightly tanned woman is getting fucked in the mouth by a man, the dick is all the way down her throat,, she is wearing nothing, on knees looking up, and her hands are grabbing the man's thighs, pulling her mouth over his dick and down her throat, incredible skin, mouth with lips tight around penis shaft down to his balls, blue eyes wide, looking sultry
 <lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame

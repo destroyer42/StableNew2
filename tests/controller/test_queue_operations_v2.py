@@ -188,7 +188,7 @@ class TestControllerQueueMethods:
     def mock_job_service(self, mock_queue: MagicMock) -> MagicMock:
         """Create a mock job service with queue."""
         service = MagicMock()
-        service.queue = mock_queue
+        service.job_queue = mock_queue  # Fixed: controller looks for job_queue, not queue
         return service
 
     def test_on_queue_move_up_calls_queue_move_up(
@@ -200,7 +200,8 @@ class TestControllerQueueMethods:
         controller = AppController.__new__(AppController)
         controller.job_service = mock_job_service
         controller._append_log = MagicMock()
-
+        controller._refresh_app_state_queue = MagicMock()  # Add missing method
+        
         result = controller.on_queue_move_up_v2("j1")
 
         assert result is True
@@ -215,6 +216,7 @@ class TestControllerQueueMethods:
         controller = AppController.__new__(AppController)
         controller.job_service = mock_job_service
         controller._append_log = MagicMock()
+        controller._refresh_app_state_queue = MagicMock()
 
         result = controller.on_queue_move_down_v2("j2")
 
@@ -230,6 +232,7 @@ class TestControllerQueueMethods:
         controller = AppController.__new__(AppController)
         controller.job_service = mock_job_service
         controller._append_log = MagicMock()
+        controller._refresh_app_state_queue = MagicMock()
 
         result = controller.on_queue_remove_job_v2("j1")
 
@@ -245,6 +248,7 @@ class TestControllerQueueMethods:
         controller = AppController.__new__(AppController)
         controller.job_service = mock_job_service
         controller._append_log = MagicMock()
+        controller._refresh_app_state_queue = MagicMock()
         controller._save_queue_state = MagicMock()
         controller.app_state = None
 

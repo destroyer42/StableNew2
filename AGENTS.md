@@ -6,9 +6,9 @@ StableNew is developed collaboratively by a multi-agent system:
 
 ChatGPT — Planner/Architect
 
-Codex — Executor/Implementer
+Codex — Executor/Implementer (can also plan if using higher reasoning models)
 
-Copilot — Inline Assistant
+Copilot — Inline Assistant (can execute and plan depending on model)
 
 Human (Rob) — Product Owner & Final Authority
 
@@ -57,11 +57,6 @@ PromptPack → Builder Pipeline → NJR → Queue → Runner → History → Lea
 
 No agent may propose or implement features outside this pipeline.
 
-2.3 Deterministic, Declarative PR Planning
-
-ChatGPT produces complete, declarative PR specs before Codex touches code.
-Codex executes only those specs.
-Copilot never initiates architecture.
 
 2.4 Zero Tolerance for Tech Debt
 
@@ -115,7 +110,7 @@ Protect architectural invariants
 
 Rewrite documentation to remain consistent
 
-Provide Codex with complete file lists, explicit steps, and constraints
+Provide complete file lists, explicit steps, and constraints when producing PRs
 
 Prevent scope creep
 
@@ -123,11 +118,8 @@ Break large changes into safe, atomic PRs
 
 ChatGPT MUST NOT:
 
-Write or apply code diffs directly in the repo
 
 Modify files listed as "forbidden" in the PR template
-
-Allow Codex to execute unclear or unspecific PRs
 
 Generate partial migrations
 
@@ -143,11 +135,13 @@ Enforce multi-agent communication rules
 
 3.2 Codex — Executor / Implementer
 
-Codex is the only agent that writes or modifies source code.
+Codex writes or modifies source code.
 
 Codex MUST:
 
-Implement PRs exactly as written by ChatGPT
+Do thorough code reviews, find issues, recommend fixes that are comprehensive and don't violate architecture or introduce tech debt
+
+Implement/design PRs 
 
 Modify only the files explicitly listed as Allowed Files
 
@@ -185,8 +179,6 @@ Enforce file boundaries and ensure atomicity
 
 3.3 Copilot — Inline Assistant
 
-Copilot is a local code-editing helper, not an architect or planner.
-
 Copilot MAY:
 
 Suggest completions
@@ -202,8 +194,6 @@ Improve readability or derive small helper functions
 Copilot MUST:
 
 Never propose architectural changes
-
-Never modify files outside the scope of an active PR
 
 Never introduce alternative job paths or logic changes
 
@@ -247,10 +237,6 @@ Adjust architecture with ChatGPT’s support
 
 Human MUST NOT:
 
-Direct Codex to violate architecture constraints
-
-Request unscoped changes
-
 Allow partial migrations
 
 Human oversight ensures the entire agent ecosystem stays coordinated and aligned.
@@ -261,7 +247,7 @@ This section defines the required process for all development activity.
 
 4.1 Step 1 — Discovery (ChatGPT)
 
-ChatGPT performs:
+ChatGPT or Codex or Co-pilot performs:
 
 subsystem analysis
 
@@ -277,13 +263,13 @@ Output: D-## Discovery Report
 
 No code is generated.
 
-4.2 Step 2 — PR Planning (ChatGPT)
+4.2 Step 2 — PR Planning 
 
 Human requests:
 
 “Generate PR-### using D-##”
 
-ChatGPT produces a full PR spec using PR_TEMPLATE_v2.6, including:
+AGENT produces a full PR spec using PR_TEMPLATE_v2.6, including:
 
 Allowed & forbidden file lists
 
@@ -294,8 +280,6 @@ Test plans
 Tech debt removal actions
 
 Documentation updates
-
-Codex waits for this step.
 
 4.3 Step 3 — Human Approval
 

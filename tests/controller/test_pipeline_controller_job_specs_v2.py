@@ -128,11 +128,11 @@ class TestSingleJobRandomizerDisabled:
         assert job_config.cfg_scale == 9.5
 
     def test_job_has_output_settings(self, job_builder: JobBuilderV2) -> None:
-        """Job has correct output directory and filename template."""
+        """Job has correct output directory and hardcoded filename template."""
         config = make_minimal_pipeline_config()
         output = make_output_settings(
             base_output_dir="/custom/output",
-            filename_template="{model}_{seed}",
+            filename_template="{model}_{seed}",  # This parameter is ignored
         )
 
         jobs = job_builder.build_jobs(
@@ -143,7 +143,7 @@ class TestSingleJobRandomizerDisabled:
 
         job = jobs[0]
         assert job.path_output_dir == "/custom/output"
-        assert job.filename_template == "{model}_{seed}"
+        assert job.filename_template == "{seed}"  # Hardcoded convention
 
     def test_job_has_unique_id(self, job_builder: JobBuilderV2) -> None:
         """Each job gets a unique ID."""

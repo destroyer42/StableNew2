@@ -14,6 +14,12 @@ from src.gui.theme_v2 import (
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
+from src.gui.panels_v2.widgets.stage_timeline_widget import (
+    StageTimelineWidget,
+    TimelineData,
+    create_timeline_from_stage_chain,
+)
+from src.gui.utils.display_helpers import format_seed_display
 from src.pipeline.job_models_v2 import JobStatusV2, QueueJobV2, UnifiedJobSummary
 
 
@@ -84,6 +90,22 @@ class RunningJobPanelV2(ttk.Frame):
             wraplength=400,
         )
         self.stage_chain_label.pack(fill="x", pady=(0, 4))
+
+        # PR-PIPE-007: Seed display
+        self.seed_label = ttk.Label(
+            self,
+            text="Seed: -",
+            wraplength=400,
+        )
+        self.seed_label.pack(fill="x", pady=(0, 4))
+
+        # PR-PIPE-008: Stage timeline visualization
+        self._timeline = StageTimelineWidget(
+            self,
+            height=40,
+            show_animation=True,
+        )
+        self._timeline.pack(fill="x", padx=5, pady=(5, 10))
 
         # Progress frame
         progress_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -213,6 +235,8 @@ class RunningJobPanelV2(ttk.Frame):
             self.job_info_label.configure(text="No job running")
             self.pack_info_label.configure(text="")  # PR-CORE-D
             self.stage_chain_label.configure(text="")  # PR-CORE-D
+            self.seed_label.configure(text="Seed: -")  # PR-PIPE-007
+            self._timeline.clear()  # PR-PIPE-008
             self.progress_bar.configure(value=0)
             self.progress_label.configure(text="0%")
             self.status_label.configure(text="Status: Idle")
@@ -253,9 +277,31 @@ class RunningJobPanelV2(ttk.Frame):
                 self.stage_chain_label.configure(text=f"Stages: {stage_text}")
             else:
                 self.stage_chain_label.configure(text="")
+
+            # PR-PIPE-007: Display seed (resolved or requested)
+            requested_seed = getattr(self._current_job_summary, "seed", None)
+            actual_seed = getattr(self._current_job_summary, "actual_seed", None) or getattr(
+                self._current_job_summary, "resolved_seed", None
+            )
+            seed_text = format_seed_display(requested_seed, actual_seed)
+            self.seed_label.configure(text=f"Seed: {seed_text}")
+
+            # PR-PIPE-008: Update timeline widget with stage chain
+            stage_chain = getattr(self._current_job_summary, "stage_chain", None)
+            current_stage = getattr(self._current_job_summary, "current_stage", None)
+            if stage_chain:
+                timeline_data = create_timeline_from_stage_chain(
+                    stage_chain=stage_chain,
+                    current_stage=current_stage,
+                )
+                self._timeline.set_stages(timeline_data)
+            else:
+                self._timeline.clear()
         else:
             self.pack_info_label.configure(text="")
             self.stage_chain_label.configure(text="")
+            self.seed_label.configure(text="Seed: -")  # PR-PIPE-007
+            self._timeline.clear()  # PR-PIPE-008
 
         # PR-GUI-F2: Queue origin display
         if self._queue_origin is not None:

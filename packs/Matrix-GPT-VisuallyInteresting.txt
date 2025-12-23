@@ -1,0 +1,140 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere,
+a powerful fantasy female warrior as the central subject, [[number]],
+[[hair]] hair flowing dramatically in the wind, [[eyes]] eyes filled with resolve,
+[[pose]] while [[activity]],
+shot from a [[perspective]],
+illuminated by [[lighting]],
+set in a vast [[environment]],
+the moment feels like [[narrative]],
+wearing [[clothes]],
+epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, warped proportions,, plastic skin, flat lighting, cartoonish, anime style
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) a mystical female spellcaster standing as the clear focal point, [[number]],
+long [[hair]] hair framing her face, glowing [[eyes]] eyes,
+[[pose]] as she is [[activity]],
+captured from a [[perspective]],
+bathed in [[lighting]],
+inside a towering [[environment]],
+the scene suggests [[narrative]],
+dressed in [[clothes]],
+high fantasy realism, intricate details, dramatic atmosphere, cinematic lighting
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: modern clothing, sci-fi elements, dull colors, low detail,, distorted hands, malformed face, oversharpened
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) a mystical female spellcaster standing as the clear focal point, [[number]],
+long [[hair]] hair framing her face, glowing [[eyes]] eyes,
+[[pose]] as she is [[activity]],
+captured from a [[perspective]],
+bathed in [[lighting]],
+inside a towering [[environment]],
+the scene suggests [[narrative]],
+dressed in [[clothes]],
+high fantasy realism, intricate details, dramatic atmosphere, cinematic lighting
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: modern clothing, sci-fi elements, dull colors, low detail,, distorted hands, malformed face, oversharpened
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) a mysterious desert oracle woman as the primary focus, [[number]],
+[[hair]] hair moving gently, intense [[eyes]] eyes,
+[[pose]] while [[activity]],
+photographed from a [[perspective]],
+illuminated by [[lighting]],
+standing within a vast [[environment]],
+the scene conveys [[narrative]],
+clad in [[clothes]],
+cinematic fantasy realism, warm tones, detailed textures, dramatic composition
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: snowy environment, cold lighting, modern fashion,, low resolution, blurred face, exaggerated anatomy
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) a stealthy fantasy female assassin as the main subject, [[number]],
+[[hair]] hair partially obscured, piercing [[eyes]] eyes,
+[[pose]] while [[activity]],
+viewed from a [[perspective]],
+accented by [[lighting]],
+set against a shadowy [[environment]],
+the moment suggests [[narrative]],
+wearing [[clothes]],
+dark fantasy realism, high contrast, cinematic shadows, sharp detail
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: overexposed lighting, cartoon style, anime face,, extra limbs, malformed hands, muddy textures
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) a legendary female hero infused with dragon power as the focal point, [[number]],
+wild [[hair]] hair, glowing [[eyes]] eyes,
+[[pose]] while [[activity]],
+captured from a [[perspective]],
+surrounded by [[lighting]],
+standing within a dramatic [[environment]],
+the image represents [[narrative]],
+wearing [[clothes]],
+epic fantasy realism, dynamic motion, vivid colors, cinematic scale
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: low detail, flat colors, sci-fi armor,, distorted proportions, plastic skin, blurry focus
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) a serene fantasy priestess as the central subject, [[number]],
+soft [[hair]] hair and radiant [[eyes]] eyes,
+[[pose]] while [[activity]],
+framed from a [[perspective]],
+bathed in [[lighting]],
+inside an ancient [[environment]],
+the mood feels like [[narrative]],
+wearing [[clothes]],
+fantasy realism, glowing crystals, elegant composition, rich color depth
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: dark noisy image, modern accessories,, distorted face, uneven lighting, low resolution
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) a battle-hardened fantasy woman as the clear focal point, [[number]],
+tousled [[hair]] hair, weary [[eyes]] eyes,
+[[pose]] while [[activity]],
+shot from a [[perspective]],
+lit by [[lighting]],
+standing within a devastated [[environment]],
+the scene tells [[narrative]],
+wearing [[clothes]],
+gritty fantasy realism, cinematic storytelling, dramatic lighting, detailed textures
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: clean pristine clothing, flat lighting, cartoonish style,, extra limbs, distorted anatomy, low detail
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+(masterpiece, best quality) a high-fantasy female knight as the dominant subject, [[number]],
+wind-swept [[hair]] hair, sharp [[eyes]] eyes,
+[[pose]] while [[activity]],
+viewed from a [[perspective]],
+highlighted by [[lighting]],
+high above a vast [[environment]],
+the image conveys [[narrative]],
+wearing [[clothes]],
+cinematic fantasy realism, dramatic motion, expansive scale, vibrant sky colors
+<lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8> <lora:DetailedEyes_V3:0.8899253731343284> <lora:NSFWFilterXL_animagine:0.6136363636363636> <lora:anatomy_helper:0.8> <lora:sdxl1.0_realastic_female_lora:0.7019704433497537>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: ground-level mundane setting, dull lighting,, bad anatomy, stiff pose, plastic skin
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+(masterpiece, best quality) a mesmerizing fantasy enchantress as the central subject, [[number]],
+vivid [[hair]] hair, captivating [[eyes]] eyes,
+[[pose]] while [[activity]],
+seen from a [[perspective]],
+illuminated by [[lighting]],
+within a surreal [[environment]],
+the scene feels like [[narrative]],
+wearing [[clothes]],
+fantasy realism, colorful spectacle, magical lighting, cinematic focus
+<lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8> <lora:DetailedEyes_V3:0.8899253731343284> <lora:NSFWFilterXL_animagine:0.6136363636363636> <lora:anatomy_helper:0.8> <lora:sdxl1.0_realastic_female_lora:0.7019704433497537>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: muted colors, boring composition, low contrast,, extra fingers, distorted face, anime influence

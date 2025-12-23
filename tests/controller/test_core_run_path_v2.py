@@ -221,6 +221,7 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
 
     runner = SingleNodeJobRunner(controller.job_service.job_queue, blocking_run, poll_interval=0.01)
     controller.job_service.runner = runner
+    controller.job_service.auto_run_enabled = True  # Enable auto-run for this test
 
     njr = _make_dummy_record()
     queue_job = controller.pipeline_controller._to_queue_job(njr)

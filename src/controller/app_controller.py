@@ -74,6 +74,7 @@ from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
+from src.services.duration_stats_service import DurationStatsService
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
     UnsupportedQueueSchemaError,
@@ -322,6 +323,15 @@ class AppController:
             self.job_service = self._build_job_service()
         if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
             self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
+        
+        # PR-PIPE-002: Initialize duration stats service for queue ETA
+        history_store = getattr(self.job_service, "history_store", None) if self.job_service else None
+        self._duration_stats_service = DurationStatsService(history_store=history_store)
+        if self._duration_stats_service:
+            try:
+                self._duration_stats_service.refresh()
+            except Exception as exc:
+                self._append_log(f"[duration_stats] Initial refresh failed: {exc}")
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
         self._diagnostics_lock = threading.Lock()
@@ -481,6 +491,11 @@ class AppController:
 
     def get_gui_log_handler(self) -> InMemoryLogHandler | None:
         return self.gui_log_handler
+
+    @property
+    def duration_stats_service(self) -> DurationStatsService | None:
+        """Expose duration stats service for queue ETA estimation (PR-PIPE-002)."""
+        return getattr(self, "_duration_stats_service", None)
 
     def run_txt2img_once(self, config: dict[str, Any] | None = None) -> None:
         self._append_log("[controller] run_txt2img_once called.")
@@ -1634,6 +1649,13 @@ class AppController:
         except Exception:
             entries = []
         self.app_state.set_history_items(entries)
+        
+        # PR-PIPE-002: Refresh duration stats when history updates
+        if hasattr(self, "_duration_stats_service") and self._duration_stats_service:
+            try:
+                self._duration_stats_service.refresh()
+            except Exception as exc:
+                self._append_log(f"[duration_stats] Refresh failed: {exc}")
 
     def on_open_settings(self) -> None:
         self._append_log("[controller] Opening settings dialog.")
@@ -3435,7 +3457,7 @@ class AppController:
         Returns:
             StageOverrideFlags instance for use with ConfigMergerV2.merge_pipeline().
         """
-        from src.pipeline.config_merger_v2 import StageOverrideFlags
+        from src.pipeline.config_merger_v2 import StageOverrideFlags, ConfigMergerV2, StageOverridesBundle
         
         enabled = self.override_pack_config_enabled
         return StageOverrideFlags(
@@ -3541,10 +3563,20 @@ class AppController:
         base = self.app_state.run_config.copy() if self.app_state else {}
         if self.app_state and self.app_state.lora_strengths:
             base["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
+        
+        # Defensive checks for state access
         if "randomization_enabled" not in base:
-            base["randomization_enabled"] = self.state.current_config.randomization_enabled
+            if hasattr(self, 'state') and self.state and hasattr(self.state, 'current_config'):
+                base["randomization_enabled"] = getattr(self.state.current_config, 'randomization_enabled', False)
+            else:
+                base["randomization_enabled"] = False
+                
         if "max_variants" not in base:
-            base["max_variants"] = self.state.current_config.max_variants
+            if hasattr(self, 'state') and self.state and hasattr(self.state, 'current_config'):
+                base["max_variants"] = getattr(self.state.current_config, 'max_variants', 1)
+            else:
+                base["max_variants"] = 1
+                
         return base
 
     def _lora_settings_payload(self) -> dict[str, dict[str, Any]] | None:
@@ -3845,6 +3877,252 @@ class AppController:
             self._append_log(f"[controller] Failed to save preset '{preset_name}'")
         return success
 
+    def _collect_current_stage_configs(self) -> dict[str, Any]:
+        """Collect current stage configurations from the GUI cards.
+        
+        This is similar to the logic in on_pipeline_pack_apply_config but returns
+        the config instead of applying it to packs.
+        """
+        current_config: dict[str, Any] = {}
+        
+        # Get stage cards panel (defensive check)
+        try:
+            stage_panel = self._get_stage_cards_panel()
+        except (AttributeError, TypeError):
+            stage_panel = None
+            
+        if stage_panel:
+            # Gather from txt2img card
+            txt2img_card = getattr(stage_panel, "txt2img_card", None)
+            if txt2img_card and hasattr(txt2img_card, "to_config_dict"):
+                try:
+                    txt2img_config = txt2img_card.to_config_dict()
+                    current_config.update(txt2img_config)
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering txt2img config: {e}")
+            
+            # Gather from img2img card
+            img2img_card = getattr(stage_panel, "img2img_card", None)
+            if img2img_card and hasattr(img2img_card, "to_config_dict"):
+                try:
+                    img2img_config = img2img_card.to_config_dict()
+                    current_config.update(img2img_config)
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering img2img config: {e}")
+            
+            # Gather from upscale card
+            upscale_card = getattr(stage_panel, "upscale_card", None)
+            if upscale_card and hasattr(upscale_card, "to_config_dict"):
+                try:
+                    upscale_config = upscale_card.to_config_dict()
+                    current_config.update(upscale_config)
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering upscale config: {e}")
+            
+            # Gather from adetailer card
+            adetailer_card = getattr(stage_panel, "adetailer_card", None)
+            if adetailer_card and hasattr(adetailer_card, "to_config_dict"):
+                try:
+                    adetailer_config = adetailer_card.to_config_dict()
+                    # Wrap in "adetailer" section to match pack structure
+                    if "adetailer" not in current_config:
+                        current_config["adetailer"] = {}
+                    current_config["adetailer"].update(adetailer_config)
+                    
+                    # Include enabled flag in adetailer section
+                    if hasattr(self, 'main_window') and self.main_window:
+                        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+                        if pipeline_tab:
+                            adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
+                            if adetailer_enabled_var is not None:
+                                current_config["adetailer"]["adetailer_enabled"] = bool(adetailer_enabled_var.get())
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering adetailer config: {e}")
+        
+        # Add randomizer config (defensive check)
+        try:
+            panel_randomizer = self._get_panel_randomizer_config()
+            if panel_randomizer:
+                current_config.update(panel_randomizer)
+        except (AttributeError, TypeError):
+            pass
+        
+        return current_config
+
+    def _add_global_prompt_flags(self, config: dict[str, Any]) -> None:
+        """Add global prompt application flags from sidebar checkboxes to config.
+        
+        Args:
+            config: Configuration dict to modify (modifies in-place)
+        """
+        # Get sidebar reference from main window
+        if not self.main_window:
+            return
+        
+        sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
+        if not sidebar:
+            return
+        
+        # Get global prompt configurations from sidebar
+        try:
+            global_positive_config = sidebar.get_global_positive_config()
+            global_negative_config = sidebar.get_global_negative_config()
+            
+            # Add flags to pipeline section
+            pipeline_section = config.setdefault("pipeline", {})
+            pipeline_section["apply_global_positive_txt2img"] = global_positive_config.get("enabled", False)
+            pipeline_section["apply_global_negative_txt2img"] = global_negative_config.get("enabled", True)
+            
+        except Exception as e:
+            # Fallback: if anything goes wrong, default to safe values
+            self._append_log(f"[controller] Failed to read global prompt flags: {e}")
+            pipeline_section = config.setdefault("pipeline", {})
+            pipeline_section.setdefault("apply_global_positive_txt2img", False)
+            pipeline_section.setdefault("apply_global_negative_txt2img", True)
+
+    def _build_config_snapshot_with_override(self, pack_config: dict[str, Any]) -> dict[str, Any]:
+        """Build config snapshot considering the override checkbox state.
+        
+        Args:
+            pack_config: The base configuration from the pack
+            
+        Returns:
+            A configuration dict that either uses the pack config as-is (override disabled)
+            or merges pack config with current GUI stage configs (override enabled)
+        """
+        base_config = self._run_config_with_lora()
+        
+        # Check if override is enabled (defensive check for tests/incomplete setup)
+        override_enabled = getattr(self, 'override_pack_config_enabled', False)
+        
+        if not override_enabled:
+            # Override disabled: use pack config merged with base run config
+            merged_config = {**base_config, **pack_config}
+            # Add global prompt flags from sidebar checkboxes
+            self._add_global_prompt_flags(merged_config)
+            self._append_log("[controller] Override disabled: using pack config as-is")
+            return merged_config
+        
+        # Override enabled: merge current stage configs into pack config
+        try:
+            current_stage_configs = self._collect_current_stage_configs()
+            
+            # Build stage overrides bundle from current GUI configs
+            stage_overrides = self._build_stage_overrides_from_current_config(current_stage_configs)
+            
+            # Build override flags (all enabled when override checkbox is on)
+            override_flags = self._build_stage_override_flags()
+            
+            # Merge pack config with stage overrides using ConfigMergerV2
+            from src.pipeline.config_merger_v2 import ConfigMergerV2
+            
+            base_merged = {**base_config, **pack_config}
+            final_config = ConfigMergerV2().merge_pipeline(
+                base_config=base_merged,
+                stage_overrides=stage_overrides,
+                override_flags=override_flags
+            )
+            
+            # Add global prompt flags from sidebar checkboxes
+            self._add_global_prompt_flags(final_config)
+            
+            self._append_log("[controller] Override enabled: merged current stage configs with pack config")
+            return final_config
+        
+        except Exception as e:
+            # Fallback: if anything goes wrong with override merging, use base config
+            self._append_log(f"[controller] Override merge failed: {e}, falling back to pack config")
+            return {**base_config, **pack_config}
+
+    def _build_stage_overrides_from_current_config(self, current_config: dict[str, Any]) -> StageOverridesBundle:
+        """Build a StageOverridesBundle from the current GUI stage configurations."""
+        from src.pipeline.config_merger_v2 import (
+            StageOverridesBundle,
+            Txt2ImgOverrides,
+            Img2ImgOverrides,
+            UpscaleOverrides,
+            RefinerOverrides,
+            HiresOverrides,
+            ADetailerOverrides,
+        )
+        
+        # Extract txt2img settings (stage cards export under "txt2img")
+        txt2img_overrides = None
+        txt2img_config = current_config.get("txt2img", {}) or {}
+        if any(
+            key in txt2img_config
+            for key in ["model", "sampler_name", "scheduler", "steps", "cfg_scale", "width", "height"]
+        ):
+            txt2img_overrides = Txt2ImgOverrides(
+                model=txt2img_config.get("model"),
+                sampler=txt2img_config.get("sampler_name"),  # Note: field is "sampler", not "sampler_name"
+                scheduler=txt2img_config.get("scheduler"),
+                steps=txt2img_config.get("steps"),
+                cfg_scale=txt2img_config.get("cfg_scale"),
+                width=txt2img_config.get("width"),
+                height=txt2img_config.get("height"),
+            )
+        
+        # Extract img2img settings (if any)
+        img2img_overrides = None
+        img2img_config = current_config.get("img2img", {})
+        if img2img_config:
+            img2img_overrides = Img2ImgOverrides(
+                enabled=img2img_config.get("enabled", False),
+                denoise_strength=img2img_config.get("denoising_strength"),  # Note: field is "denoise_strength"
+            )
+        
+        # Extract upscale settings (if any)
+        upscale_overrides = None
+        upscale_config = current_config.get("upscale", {})
+        if upscale_config:
+            upscale_overrides = UpscaleOverrides(
+                enabled=upscale_config.get("enabled", False),
+                upscaler_name=upscale_config.get("upscaler"),  # Note: field is "upscaler_name"
+                scale_factor=upscale_config.get("scale_factor"),
+                denoise_strength=upscale_config.get("denoise_strength"),
+            )
+        
+        # Extract refiner settings (if any)
+        refiner_overrides = None
+        if any(key.startswith("refiner_") for key in txt2img_config.keys()) or "use_refiner" in txt2img_config:
+            refiner_overrides = RefinerOverrides(
+                enabled=txt2img_config.get("use_refiner", False),
+                model_name=txt2img_config.get("refiner_model_name") or txt2img_config.get("refiner_checkpoint"),
+                switch_at=txt2img_config.get("refiner_switch_at"),
+            )
+        
+        # Extract hires fix settings (if any)
+        hires_overrides = None
+        if any(key.startswith("hr_") for key in txt2img_config.keys()) or "enable_hr" in txt2img_config:
+            hires_overrides = HiresOverrides(
+                enabled=txt2img_config.get("enable_hr", False),
+                scale_factor=txt2img_config.get("hr_scale"),
+                upscaler_name=txt2img_config.get("hr_upscaler"),
+                steps=txt2img_config.get("hr_second_pass_steps"),
+                denoise_strength=txt2img_config.get("denoising_strength"),
+            )
+        
+        # Extract adetailer settings (if any)
+        adetailer_overrides = None
+        adetailer_config = current_config.get("adetailer", {})
+        if adetailer_config:
+            adetailer_overrides = ADetailerOverrides(  # Note: class name is "ADetailerOverrides"
+                enabled=adetailer_config.get("adetailer_enabled", False),
+                model=adetailer_config.get("model"),
+                confidence=adetailer_config.get("confidence"),
+                denoise_strength=adetailer_config.get("denoising_strength"),
+            )
+        
+        return StageOverridesBundle(
+            txt2img=txt2img_overrides,
+            img2img=img2img_overrides,
+            upscale=upscale_overrides,
+            refiner=refiner_overrides,
+            hires=hires_overrides,
+            adetailer=adetailer_overrides,
+        )
+
     def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
         """Add one or more packs to the current job draft."""
         print(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
@@ -3862,12 +4140,23 @@ class AppController:
                 print(f"[AppController] ERROR: Pack '{pack_id}' not found!")
                 continue
 
-            # Get current run config from app_state
-            run_config = self._run_config_with_lora()
+            # Get pack configuration - read the actual pack file to get its config
+            pack_config = {}
+            try:
+                pack_prompts = read_prompt_pack(pack.path)
+                if pack_prompts and len(pack_prompts) > 0:
+                    # Use first prompt's metadata as pack config (common approach)
+                    first_prompt = pack_prompts[0]
+                    pack_config = {k: v for k, v in first_prompt.items() if k not in ["positive", "negative"]}
+            except Exception as e:
+                self._append_log(f"[controller] Failed to read pack config for '{pack_id}': {e}")
+
+            # Build config snapshot considering override checkbox state
+            config_snapshot = self._build_config_snapshot_with_override(pack_config)
 
             # Ensure randomization is included
-            if "randomization_enabled" not in run_config:
-                run_config["randomization_enabled"] = (
+            if "randomization_enabled" not in config_snapshot:
+                config_snapshot["randomization_enabled"] = (
                     self.state.current_config.randomization_enabled
                 )
             
@@ -3892,10 +4181,10 @@ class AppController:
                 entry = PackJobEntry(
                     pack_id=pack_id,
                     pack_name=pack.name,
-                    config_snapshot=run_config,
+                    config_snapshot=config_snapshot,
                     prompt_text=prompt_text,
                     negative_prompt_text=negative_prompt_text,
-                    stage_flags={},  # Empty dict - let pack config determine stages
+                    stage_flags=stage_flags,  # Use the stage flags that were built
                     randomizer_metadata=randomizer_metadata,
                     pack_row_index=row_index,  # Track which prompt row this is
                 )

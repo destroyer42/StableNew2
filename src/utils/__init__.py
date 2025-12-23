@@ -28,6 +28,7 @@ __all__ = [
     "read_prompt_pack",
     "get_prompt_packs",
     "get_safe_filename",
+    "build_safe_image_stem",
     "merge_global_negative",
     "find_webui_api_port",
     "wait_for_webui_ready",
@@ -46,6 +47,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "read_prompt_pack": ("src.utils.file_io", "read_prompt_pack"),
     "get_prompt_packs": ("src.utils.file_io", "get_prompt_packs"),
     "get_safe_filename": ("src.utils.file_io", "get_safe_filename"),
+    "build_safe_image_stem": ("src.utils.file_io", "build_safe_image_stem"),
     "merge_global_negative": ("src.utils.negative_helpers_v2", "merge_global_negative"),
     "find_webui_api_port": ("src.utils.webui_discovery", "find_webui_api_port"),
     # 🔴 OLD (remove this)

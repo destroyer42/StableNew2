@@ -37,6 +37,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self._entries: dict[str, JobHistoryEntry] = {}
         self._item_to_job: dict[str, str] = {}
         self._selected_job_id: str | None = None
+        self._tooltip: tk.Toplevel | None = None
 
         header_style = theme_mod.STATUS_STRONG_LABEL_STYLE
         ttk.Label(self, text="Job History", style=header_style).pack(anchor=tk.W, pady=(0, 4))
@@ -67,24 +68,35 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         self.explain_btn.pack(side=tk.LEFT, padx=(4, 0))
 
-        columns = ("time", "status", "packs", "duration", "images", "output")
+        columns = ("time", "status", "model", "packs", "duration", "seed", "images", "output")
         headings = {
             "time": "Completed",
             "status": "Status",
-            "packs": "Packs / Payload",
+            "model": "Model",
+            "packs": "Prompt / Pack",
             "duration": "Duration",
+            "seed": "Seed",
             "images": "Images",
             "output": "Output Folder",
         }
         self.history_tree = ttk.Treeview(self, columns=columns, show="headings", height=6)
         for col in columns:
             self.history_tree.heading(col, text=headings[col])
-            width = 110
-            if col in {"packs", "output"}:
-                width = 220
+            width = {
+                "time": 100,
+                "status": 70,
+                "model": 120,
+                "packs": 180,
+                "duration": 70,
+                "seed": 85,
+                "images": 55,
+                "output": 150,
+            }.get(col, 100)
             self.history_tree.column(col, anchor=tk.W, width=width, stretch=True)
         self.history_tree.pack(fill=tk.BOTH, expand=True)
         self.history_tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.history_tree.bind("<Motion>", self._on_tree_motion)
+        self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self.history_tree.bind("<Button-3>", self._on_context_menu)
@@ -129,14 +141,17 @@ class JobHistoryPanelV2(ttk.Frame):
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
         status = entry.status.value
         
+        # Extract model
+        model = self._extract_model(entry)
+        
         # Extract better summary from NJR snapshot
         packs = self._extract_summary(entry)
         
-        # Use pre-calculated duration_ms if available, otherwise fall back to timestamp diff
-        if entry.duration_ms is not None:
-            duration = self._format_duration_ms(entry.duration_ms)
-        else:
-            duration = self._format_duration(entry.started_at, entry.completed_at)
+        # Calculate duration more robustly
+        duration = self._ensure_duration(entry)
+        
+        # Extract seed
+        seed = self._extract_seed(entry)
         
         # Extract image count from result or NJR snapshot
         images = self._extract_image_count(entry)
@@ -144,7 +159,7 @@ class JobHistoryPanelV2(ttk.Frame):
         # Get actual output folder from result or job_id
         output = self._extract_output_folder(entry)
         
-        return (time_text, status, packs, duration, images, output)
+        return (time_text, status, model, packs, duration, seed, images, output)
 
     def _on_select(self, event=None) -> None:
         selection = self.history_tree.selection()
@@ -238,6 +253,76 @@ class JobHistoryPanelV2(ttk.Frame):
         # Fallback to payload summary
         return self._shorten(entry.payload_summary or "n/a", width=40)
     
+    def _extract_model(self, entry: JobHistoryEntry) -> str:
+        """Extract model name from NJR snapshot or result."""
+        # Try NJR snapshot first (most reliable)
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            model = njr.get("base_model") or njr.get("model")
+            if model:
+                return self._shorten(str(model), width=18)
+        
+        # Try result
+        if entry.result and isinstance(entry.result, dict):
+            model = entry.result.get("model") or entry.result.get("sd_model_checkpoint")
+            if model:
+                return self._shorten(str(model), width=18)
+        
+        return "-"
+    
+    def _extract_seed(self, entry: JobHistoryEntry) -> str:
+        """Extract actual seed from result or snapshot."""
+        # Try result first (has actual resolved seed)
+        if entry.result and isinstance(entry.result, dict):
+            seed = entry.result.get("actual_seed") or entry.result.get("seed")
+            if seed is not None and seed != -1:
+                return str(seed)
+        
+        # Try NJR snapshot
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            
+            # Check for resolved seed
+            seed = njr.get("actual_seed") or njr.get("resolved_seed")
+            if seed is not None and seed != -1:
+                return str(seed)
+            
+            # Fall back to requested seed
+            seed = njr.get("seed")
+            if seed is not None:
+                if seed == -1:
+                    return "Random"
+                return str(seed)
+        
+        return "-"
+    
+    def _ensure_duration(self, entry: JobHistoryEntry) -> str:
+        """Ensure duration is calculated and formatted."""
+        # Prefer pre-calculated duration_ms
+        if entry.duration_ms is not None and entry.duration_ms > 0:
+            return self._format_duration_ms(entry.duration_ms)
+        
+        # Calculate from timestamps if available
+        if entry.started_at and entry.completed_at:
+            try:
+                start = entry.started_at
+                end = entry.completed_at
+                
+                # Handle string timestamps
+                if isinstance(start, str):
+                    start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                if isinstance(end, str):
+                    end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                
+                delta = end - start
+                duration_ms = int(delta.total_seconds() * 1000)
+                if duration_ms > 0:
+                    return self._format_duration_ms(duration_ms)
+            except Exception:
+                pass
+        
+        return "-"
+    
     def _extract_image_count(self, entry: JobHistoryEntry) -> str:
         """Extract image count from result or NJR snapshot."""
         # Try result first
@@ -288,6 +373,78 @@ class JobHistoryPanelV2(ttk.Frame):
         if base.exists():
             return str(base)
         return str(base)
+
+    def _on_tree_motion(self, event: tk.Event) -> None:
+        """Show tooltip with full model name on hover."""
+        item = self.history_tree.identify_row(event.y)
+        column = self.history_tree.identify_column(event.x)
+        
+        if not item or column != "#3":  # Model column (0-indexed: #1=time, #2=status, #3=model)
+            self._hide_tooltip()
+            return
+        
+        job_id = self._item_to_job.get(item)
+        if not job_id:
+            self._hide_tooltip()
+            return
+        
+        entry = self._entries.get(job_id)
+        if not entry:
+            self._hide_tooltip()
+            return
+        
+        # Get full model name
+        full_model = self._extract_full_model(entry)
+        if not full_model or full_model == "-":
+            self._hide_tooltip()
+            return
+        
+        self._show_tooltip(event.x_root, event.y_root, full_model)
+    
+    def _extract_full_model(self, entry: JobHistoryEntry) -> str:
+        """Extract full model name without truncation."""
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            model = njr.get("base_model") or njr.get("model")
+            if model:
+                return str(model)
+        
+        if entry.result and isinstance(entry.result, dict):
+            model = entry.result.get("model") or entry.result.get("sd_model_checkpoint")
+            if model:
+                return str(model)
+        
+        return "-"
+    
+    def _show_tooltip(self, x: int, y: int, text: str) -> None:
+        """Display tooltip near cursor."""
+        self._hide_tooltip()
+        
+        self._tooltip = tk.Toplevel(self)
+        self._tooltip.wm_overrideredirect(True)
+        self._tooltip.wm_geometry(f"+{x + 10}+{y + 10}")
+        
+        label = tk.Label(
+            self._tooltip,
+            text=text,
+            background="#ffffe0",
+            foreground="#000000",
+            relief="solid",
+            borderwidth=1,
+            font=("Segoe UI", 9),
+            padx=4,
+            pady=2,
+        )
+        label.pack()
+    
+    def _hide_tooltip(self, event: tk.Event | None = None) -> None:
+        """Hide the tooltip."""
+        if self._tooltip:
+            try:
+                self._tooltip.destroy()
+            except Exception:
+                pass
+            self._tooltip = None
 
     @staticmethod
     def _format_time(value: str | None) -> str:

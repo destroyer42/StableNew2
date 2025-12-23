@@ -7,7 +7,9 @@ import json
 import logging
 import math
 import re
+import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
@@ -28,6 +30,7 @@ from ..utils import (
     ConfigManager,
     LogContext,
     StructuredLogger,
+    build_safe_image_stem,
     load_image_to_base64,
     log_with_ctx,
     merge_global_negative,
@@ -181,6 +184,12 @@ class Pipeline:
         self._last_full_pipeline_results: dict[str, Any] = {}
         self._stage_events: list[dict[str, Any]] = []
         self._current_run_dir: Path | None = None
+        # PR-PIPE-001: Track current job ID for manifest linkage
+        self._current_job_id: str | None = None
+        # PR-PIPE-004: Progress polling infrastructure
+        self._progress_poll_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="progress_poll")
+        self._current_generation_progress: float = 0.0
+        self._progress_lock = threading.Lock()
 
     def _clean_metadata_payload(self, payload: Any) -> Any:
         """Remove large binary blobs (e.g., base64 images) from metadata payloads."""
@@ -202,6 +211,14 @@ class Pipeline:
                 continue
             cleaned[key] = value
         return cleaned
+
+    def _ensure_stage_prefix(self, image_name: str, stage: str) -> str:
+        prefix = f"{stage}_"
+        if image_name.startswith(prefix):
+            return image_name
+        if stage == "upscale" and image_name.startswith("upscaled_"):
+            return image_name
+        return f"{prefix}{image_name}"
 
     def _merge_stage_negative(
         self, base_negative: str, apply_global: bool
@@ -466,6 +483,39 @@ class Pipeline:
             )
             raise PipelineStageError(error) from exc
 
+    def _extract_generation_info(self, response: dict[str, Any]) -> dict[str, Any]:
+        """
+        Extract generation metadata from WebUI response.
+        
+        Args:
+            response: Raw WebUI API response with 'info' field
+            
+        Returns:
+            Dict with extracted seed, subseed, and other useful fields.
+            Returns empty dict if extraction fails.
+        """
+        info = response.get("info")
+        if info is None:
+            return {}
+        
+        # WebUI returns info as JSON string
+        if isinstance(info, str):
+            try:
+                info = json.loads(info)
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse WebUI info as JSON")
+                return {}
+        
+        if not isinstance(info, dict):
+            return {}
+        
+        return {
+            "seed": info.get("seed"),
+            "subseed": info.get("subseed"),
+            "all_seeds": info.get("all_seeds"),
+            "all_subseeds": info.get("all_subseeds"),
+        }
+
     def _generate_images(self, stage: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Call the shared generate_images API for the requested stage."""
 
@@ -574,6 +624,80 @@ class Pipeline:
             "stage": result.stage,
             "timings": result.timings,
         }
+
+    def _poll_progress_loop(
+        self,
+        stop_event: threading.Event,
+        poll_interval: float,
+        progress_callback: Any | None,
+        stage_label: str,
+    ) -> None:
+        """Background thread that polls WebUI for progress."""
+        highest_progress = 0.0
+        
+        while not stop_event.is_set():
+            try:
+                info = self.client.get_progress(skip_current_image=True)
+                
+                if info is not None and info.progress > highest_progress:
+                    highest_progress = info.progress
+                    
+                    with self._progress_lock:
+                        self._current_generation_progress = highest_progress
+                    
+                    if progress_callback:
+                        # Convert 0-1 to percentage
+                        percent = highest_progress * 100.0
+                        eta = info.eta_relative if info.eta_relative > 0 else None
+                        progress_callback(percent, eta)
+                        
+            except Exception:
+                pass  # Ignore polling errors
+            
+            # Wait for next poll or stop signal
+            stop_event.wait(poll_interval)
+    
+    def _generate_images_with_progress(
+        self,
+        stage: str,
+        payload: dict[str, Any],
+        *,
+        poll_interval: float = 0.5,
+        progress_callback: Any | None = None,
+        stage_label: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Call generation endpoint with concurrent progress polling."""
+        
+        if stage_label is None:
+            stage_label = stage
+        
+        stop_event = threading.Event()
+        poll_future: Future | None = None
+        
+        try:
+            # Start polling in background
+            if progress_callback:
+                poll_future = self._progress_poll_executor.submit(
+                    self._poll_progress_loop,
+                    stop_event,
+                    poll_interval,
+                    progress_callback,
+                    stage_label,
+                )
+            
+            # Make the actual generation request (blocking)
+            response = self._generate_images(stage, payload)
+            
+            return response
+            
+        finally:
+            # Stop polling
+            stop_event.set()
+            if poll_future:
+                try:
+                    poll_future.result(timeout=1.0)
+                except Exception:
+                    pass
 
     def _log_pipeline_cancellation(self, phase: str, exc: Exception) -> None:
         """Emit a consistent INFO-level log for pipeline cancellations."""
@@ -1012,7 +1136,26 @@ class Pipeline:
             payload["styles"] = config["styles"]
 
         self._apply_webui_defaults_once()
-        response = self._generate_images("txt2img", payload)
+        
+        # Create progress callback that reports to controller
+        def on_txt2img_progress(percent: float, eta: float | None) -> None:
+            if self.progress_controller:
+                eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                self.progress_controller.report_progress("txt2img", percent, eta_text)
+        
+        # Track timing for this stage
+        stage_start = time.monotonic()
+        response = self._generate_images_with_progress(
+            "txt2img",
+            payload,
+            poll_interval=0.5,
+            progress_callback=on_txt2img_progress,
+            stage_label="txt2img",
+        )
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract actual seed from response
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "txt2img post-call")
@@ -1032,19 +1175,34 @@ class Pipeline:
                 image_name = f"{name_prefix}_{timestamp}_{idx:03d}"
             else:
                 image_name = f"txt2img_{timestamp}_{idx:03d}"
-            image_path = run_dir / "txt2img" / f"{image_name}.png"
+
+            image_name = self._ensure_stage_prefix(image_name, "txt2img")
+            safe_name = build_safe_image_stem(
+                image_name,
+                output_dir=run_dir / "txt2img",
+                unique_token=self._current_job_id,
+            )
+            image_path = run_dir / "txt2img" / f"{safe_name}.png"
 
             if save_image_from_base64(img_base64, image_path):
                 metadata = {
-                    "name": image_name,
+                    "name": safe_name,
                     "stage": "txt2img",
                     "timestamp": timestamp,
                     "prompt": prompt,
                     "config": self._clean_metadata_payload(payload),
                     "path": str(image_path),
+                    # PR-PIPE-001: Enhanced metadata fields
+                    "job_id": getattr(self, "_current_job_id", None),
+                    "model": config.get("model") or config.get("sd_model_checkpoint"),
+                    "vae": config.get("vae") or "Automatic",
+                    "requested_seed": config.get("seed", -1),
+                    "actual_seed": gen_info.get("seed"),
+                    "actual_subseed": gen_info.get("subseed"),
+                    "stage_duration_ms": stage_duration_ms,
                 }
 
-                self.logger.save_manifest(run_dir, image_name, metadata)
+                self.logger.save_manifest(run_dir, safe_name, metadata)
                 results.append(metadata)
 
         logger.info(f"txt2img completed: {len(results)} images generated")
@@ -1250,7 +1408,25 @@ class Pipeline:
 
         payload.update(sampler_config)
 
-        response = self._generate_images("img2img", payload)
+        # Create progress callback that reports to controller
+        def on_img2img_progress(percent: float, eta: float | None) -> None:
+            if self.progress_controller:
+                eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                self.progress_controller.report_progress("img2img", percent, eta_text)
+
+        # Track timing for this stage
+        stage_start = time.monotonic()
+        response = self._generate_images_with_progress(
+            "img2img",
+            payload,
+            poll_interval=0.5,
+            progress_callback=on_img2img_progress,
+            stage_label="img2img",
+        )
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract actual seed from response
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "img2img post-call")
@@ -1273,6 +1449,14 @@ class Pipeline:
                 "input_image": str(input_image_path),
                 "config": self._clean_metadata_payload(payload),
                 "path": str(image_path),
+                # PR-PIPE-001: Enhanced metadata fields
+                "job_id": getattr(self, "_current_job_id", None),
+                "model": config.get("model") or config.get("sd_model_checkpoint"),
+                "vae": config.get("vae") or "Automatic",
+                "requested_seed": config.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
+                "stage_duration_ms": stage_duration_ms,
             }
 
             self.logger.save_manifest(run_dir, image_name, metadata)
@@ -1417,8 +1601,26 @@ class Pipeline:
         if config.get("scheduler"):
             payload["scheduler"] = config.get("scheduler")
 
+        # Create progress callback that reports to controller
+        def on_adetailer_progress(percent: float, eta: float | None) -> None:
+            if self.progress_controller:
+                eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                self.progress_controller.report_progress("adetailer", percent, eta_text)
+
+        # Track timing for this stage
+        stage_start = time.monotonic()
         # Call img2img endpoint with ADetailer extension
-        response = self._generate_images("img2img", payload)
+        response = self._generate_images_with_progress(
+            "img2img",
+            payload,
+            poll_interval=0.5,
+            progress_callback=on_adetailer_progress,
+            stage_label="adetailer",
+        )
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract actual seed from response
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "adetailer post-call")
@@ -1450,14 +1652,27 @@ class Pipeline:
                 "input_image": str(input_image_path),
                 "config": self._clean_metadata_payload(payload),
                 "path": str(image_path),
+                # PR-PIPE-001: Enhanced metadata fields
+                "job_id": getattr(self, "_current_job_id", None),
+                "model": config.get("model") or config.get("sd_model_checkpoint"),
+                "vae": config.get("vae") or "Automatic",
+                "requested_seed": config.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
+                "stage_duration_ms": stage_duration_ms,
             }
 
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-            manifest_dir = run_dir / "manifests"
-            manifest_dir.mkdir(exist_ok=True, parents=True)
+            manifest_dir = Path(run_dir) / "manifests"
             manifest_path = manifest_dir / f"{final_image_name}_adetailer.json"
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            try:
+                # Ensure parent directory exists before writing
+                manifest_path.parent.mkdir(exist_ok=True, parents=True)
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                logger.error(f"Error writing manifest file {manifest_path}: {e}")
+                # Continue anyway - manifest is not critical
             
             logger.info(f"adetailer completed: {final_image_name}")
             return metadata
@@ -1499,7 +1714,14 @@ class Pipeline:
             "codeformer_visibility": config.get("codeformer_visibility", 0.0),
             "codeformer_weight": config.get("codeformer_weight", 0.5),
         }
+        
+        # Track timing for this stage
+        stage_start = time.monotonic()
         response = self._generate_images("upscale", payload)
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract info from response (upscale may not return seed, but try anyway)
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "upscale stage post-call")
@@ -1520,6 +1742,14 @@ class Pipeline:
                 "input_image": str(input_image_path),
                 "config": config,
                 "path": str(image_path),
+                # PR-PIPE-001: Enhanced metadata fields
+                "job_id": getattr(self, "_current_job_id", None),
+                "model": config.get("model"),  # May be None for upscale
+                "vae": config.get("vae"),  # May be None for upscale
+                "requested_seed": config.get("seed"),  # May be None for upscale
+                "actual_seed": gen_info.get("seed"),  # Likely None for upscale
+                "actual_subseed": gen_info.get("subseed"),  # Likely None for upscale
+                "stage_duration_ms": stage_duration_ms,
             }
 
             self.logger.save_manifest(run_dir, image_name, metadata)
@@ -2252,6 +2482,13 @@ class Pipeline:
             self._ensure_not_cancelled(cancel_token, "txt2img stage start")
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Verify directory creation succeeded
+            if not output_dir.exists():
+                logger.error(f"Failed to create output directory: {output_dir}")
+                return None
+            
+            logger.debug(f"Output directory confirmed: {output_dir}")
 
             # Build txt2img payload - config may have txt2img sub-dict OR be flat
             # Support both formats for compatibility
@@ -2265,12 +2502,14 @@ class Pipeline:
             logger.info("🔵 [BATCH_SIZE_DEBUG] executor.run_txt2img_stage: config['batch_size']=%s, stage_batch_size=%s", config.get('batch_size'), stage_batch_size)
 
             # Apply global positive and negative prompts to txt2img stage only
-            apply_global = config.get("pipeline", {}).get("apply_global_negative_txt2img", True)
+            pipeline_section = config.get("pipeline", {})
+            apply_global_positive = pipeline_section.get("apply_global_positive_txt2img", True)
+            apply_global_negative = pipeline_section.get("apply_global_negative_txt2img", True)
             
             # Apply global positive (prepends quality/style terms)
             original_positive_prompt = prompt
             _, enhanced_positive, positive_global_applied, positive_global_terms = self._merge_stage_positive(
-                original_positive_prompt, apply_global
+                original_positive_prompt, apply_global_positive
             )
             if positive_global_applied:
                 logger.info(
@@ -2283,7 +2522,7 @@ class Pipeline:
             # Apply global negative (appends NSFW prevention terms)
             original_negative_prompt = negative_prompt
             _, enhanced_negative, negative_global_applied, negative_global_terms = self._merge_stage_negative(
-                original_negative_prompt, apply_global
+                original_negative_prompt, apply_global_negative
             )
             if negative_global_applied:
                 logger.info(
@@ -2705,12 +2944,16 @@ class Pipeline:
                 }
 
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-                manifest_dir = output_dir / "manifests"
-                manifest_dir.mkdir(exist_ok=True, parents=True)
+                manifest_dir = Path(output_dir) / "manifests"
                 manifest_name = f"{image_name}_img2img"
                 manifest_path = manifest_dir / f"{manifest_name}.json"
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                try:
+                    # Ensure parent directory exists before writing
+                    manifest_path.parent.mkdir(exist_ok=True, parents=True)
+                    with open(manifest_path, "w", encoding="utf-8") as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    logger.error(f"Error writing manifest file {manifest_path}: {e}")
 
                 logger.info(f"img2img completed: {image_path.name}")
                 self._record_stage_event("img2img", "exit", 1, 1, False)
@@ -2864,7 +3107,10 @@ class Pipeline:
                 except Exception:
                     pass
 
+                # Track timing for this stage
+                stage_start = time.monotonic()
                 response = self._generate_images("img2img", payload)
+                stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
                 response_key = "images"
                 image_key = 0
             else:
@@ -2898,6 +3144,8 @@ class Pipeline:
                     int(orig_height * upscaling_resize) if orig_height is not None else "?",
                 )
 
+                # Track timing for this stage
+                stage_start = time.monotonic()
                 # Call client.upscale_image() which properly formats the payload
                 response = self.client.upscale_image(
                     image_base64=input_image_b64,
@@ -2907,6 +3155,7 @@ class Pipeline:
                     codeformer_visibility=codeformer_vis,
                     codeformer_weight=codeformer_weight,
                 )
+                stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
                 response_key = "image"
                 image_key = None
 
@@ -2957,15 +3206,27 @@ class Pipeline:
                     else "",
                     "config": config_dict,
                     "path": str(image_path),
+                    # PR-PIPE-001: Enhanced metadata fields
+                    "job_id": getattr(self, "_current_job_id", None),
+                    "model": config.get("model"),  # May be None for upscale
+                    "vae": config.get("vae"),  # May be None for upscale
+                    "requested_seed": config.get("seed") if upscale_mode == "img2img" else None,
+                    "actual_seed": None,  # Upscale doesn't return seed info
+                    "actual_subseed": None,  # Upscale doesn't return seed info
+                    "stage_duration_ms": stage_duration_ms,
                 }
 
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-                manifest_dir = output_dir / "manifests"
-                manifest_dir.mkdir(exist_ok=True, parents=True)
+                manifest_dir = Path(output_dir) / "manifests"
                 manifest_name = f"{image_name}_upscale"
                 manifest_path = manifest_dir / f"{manifest_name}.json"
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                try:
+                    # Ensure parent directory exists before writing
+                    manifest_path.parent.mkdir(exist_ok=True, parents=True)
+                    with open(manifest_path, "w", encoding="utf-8") as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    logger.error(f"Error writing manifest file {manifest_path}: {e}")
 
                 logger.info(f"Upscale completed: {image_path.name}")
                 self._record_stage_event("upscale", "exit", 1, 1, False)

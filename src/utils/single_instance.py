@@ -1,4 +1,13 @@
-"""Simple localhost socket lock to enforce single StableNew V2 instance."""
+"""Simple localhost socket lock to enforce single StableNew V2 instance.
+
+This module provides a TCP-based single-instance lock mechanism that:
+1. Prevents multiple StableNew GUI instances from running simultaneously
+2. Allows orphaned processes to detect if the GUI is still running
+
+The lock is acquired when StableNew GUI starts and released on proper shutdown.
+Orphaned background processes can use is_gui_running() to check if they should
+continue operating or terminate gracefully.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +21,28 @@ class SingleInstanceLock:
         self._host = host
         self._port = port
         self._socket: socket.socket | None = None
+
+    @staticmethod
+    def is_gui_running(host: str = "127.0.0.1", port: int = 47631) -> bool:
+        """Check if StableNew GUI is currently running by attempting to connect.
+        
+        Returns:
+            True if GUI is running (port is bound), False otherwise
+        """
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            # If we can connect, the GUI is running and holding the lock
+            sock.connect((host, port))
+            sock.close()
+            return True
+        except (ConnectionRefusedError, OSError):
+            # Port is not bound = GUI is not running
+            return False
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
 
     def acquire(self) -> bool:
         """Bind the socket; return False if another instance already owns it."""

@@ -14,8 +14,8 @@ Coverage: COMPAT-1, COMPAT-2
 import json
 import pytest
 from pathlib import Path
-from src.history.job_history import JobHistoryEntry
-from src.config_models.job_config_models import NormalizedJobRecord
+from src.history.history_record import HistoryRecord
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 
 @pytest.mark.compat
@@ -35,11 +35,11 @@ class TestHistoryVersionMigration:
         assert "job_id" in entry_data
         assert "status" in entry_data
         
-        # Verify can instantiate JobHistoryEntry (may require migration logic)
+        # Verify can instantiate HistoryRecord (may require migration logic)
         # Note: This may fail if migration logic not yet implemented
         try:
-            entry = JobHistoryEntry(**entry_data)
-            assert entry.job_id == "v2.0-legacy-001"
+            entry = HistoryRecord(**entry_data)
+            assert entry.id == "v2.0-legacy-001"
         except Exception as e:
             pytest.skip(f"v2.0 migration logic not yet implemented: {e}")
 
@@ -57,8 +57,8 @@ class TestHistoryVersionMigration:
         assert "job_id" in entry_data
         
         try:
-            entry = JobHistoryEntry(**entry_data)
-            assert entry.job_id == "v2.4-migration-002"
+            entry = HistoryRecord(**entry_data)
+            assert entry.id == "v2.4-migration-002"
         except Exception as e:
             pytest.skip(f"v2.4 migration logic not yet implemented: {e}")
 
@@ -73,8 +73,8 @@ class TestHistoryVersionMigration:
         # v2.6 format: normalized_record_snapshot
         assert "normalized_record_snapshot" in entry_data, "v2.6 entries should have normalized_record_snapshot"
         
-        entry = JobHistoryEntry(**entry_data)
-        assert entry.job_id == "v2.6-canonical-003"
+        entry = HistoryRecord(**entry_data)
+        assert entry.id == "v2.6-canonical-003"
         assert entry.normalized_record_snapshot is not None
         assert isinstance(entry.normalized_record_snapshot, NormalizedJobRecord)
 
@@ -87,7 +87,7 @@ class TestHistoryVersionMigration:
             entry_data = json.loads(line)
         
         # Migration: pipeline_config → normalized_record_snapshot
-        # This would be handled by JobHistoryEntry.__init__ or migration utility
+        # This would be handled by HistoryRecord.__init__ or migration utility
         pytest.skip("Migration logic verification pending")
 
     def test_v2_4_to_njr_migration(self):
@@ -102,7 +102,7 @@ class TestHistoryVersionMigration:
         pytest.skip("Migration logic verification pending")
 
     def test_all_versions_have_required_fields(self):
-        """COMPAT-3: All versions contain job_id, status, timestamp."""
+        """COMPAT-3: All versions contain id, status, timestamp."""
         fixture_dir = Path(__file__).parent / "data" / "history_compat_v2"
         
         for version_file in ["v2.0_entry.jsonl", "v2.4_entry.jsonl", "v2.6_entry.jsonl"]:
@@ -112,6 +112,6 @@ class TestHistoryVersionMigration:
                 line = f.readline()
                 entry_data = json.loads(line)
             
-            assert "job_id" in entry_data, f"{version_file} missing job_id"
+            assert "id" in entry_data or "job_id" in entry_data, f"{version_file} missing id/job_id"
             assert "status" in entry_data, f"{version_file} missing status"
             assert "timestamp" in entry_data, f"{version_file} missing timestamp"

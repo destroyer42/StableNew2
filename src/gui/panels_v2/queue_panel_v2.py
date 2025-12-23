@@ -189,6 +189,9 @@ class QueuePanelV2(ttk.Frame):
         # Initial button state
         self._update_button_states()
 
+        # PR-PIPE-003: Bind keyboard shortcuts
+        self._bind_keyboard_shortcuts()
+
         if self.app_state and hasattr(self.app_state, "subscribe"):
             try:
                 self.app_state.subscribe("queue_job_summaries", self._on_queue_summaries_changed)
@@ -251,6 +254,40 @@ class QueuePanelV2(ttk.Frame):
             mins = int((total_seconds % 3600) // 60)
             return f"Est. total: {hours}h {mins}m"
 
+    def _compute_queue_eta(self) -> tuple[float, str]:
+        """Compute queue ETA using duration stats service.
+        
+        Returns:
+            Tuple of (total_seconds, confidence_indicator)
+            confidence_indicator: '~' for history-based, '?' for fallback, '~?' for mixed
+        """
+        count = len(self._jobs)
+        if count == 0:
+            return (0.0, "")
+
+        # Try to get stats service from controller
+        stats_service = None
+        if self.controller:
+            stats_service = getattr(self.controller, "duration_stats_service", None)
+
+        if stats_service is None:
+            # Fallback to old hardcoded estimate
+            return (count * 60.0, "?")
+
+        total_seconds, jobs_with_estimates = stats_service.get_queue_total_estimate(
+            self._jobs
+        )
+
+        # Determine confidence indicator
+        if jobs_with_estimates == count:
+            confidence = "~"  # All based on history
+        elif jobs_with_estimates > 0:
+            confidence = "~?"  # Mixed
+        else:
+            confidence = "?"  # All fallback
+
+        return (total_seconds, confidence)
+
     def _update_button_states(self) -> None:
         """Update button enabled/disabled states based on selection and queue contents."""
         idx = self._get_selected_index()
@@ -278,35 +315,171 @@ class QueuePanelV2(ttk.Frame):
         self.send_job_button.state(["!disabled"] if can_send else ["disabled"])
 
     def _on_move_up(self) -> None:
-        """Move the selected job up in the queue."""
+        """Move the selected job up in the queue with visual feedback."""
         job = self._get_selected_job()
-        if job and self.controller:
+        idx = self._get_selected_index()
+        
+        if not job or idx is None:
+            return
+        
+        # Check if already at top
+        if idx == 0:
+            # Subtle feedback: item is already at top
+            self._show_boundary_feedback("top")
+            return
+        
+        # Perform the move
+        if self.controller:
             self.controller.on_queue_move_up_v2(job.job_id)
-            # Maintain selection after move
-            idx = self._get_selected_index()
-            if idx is not None and idx > 0:
-                self._select_index(idx - 1)
+            
+            # Update selection to follow the moved item
+            new_idx = idx - 1
+            
+            # Schedule visual feedback after listbox updates
+            def _apply_feedback() -> None:
+                self._select_index(new_idx)
+                self._flash_move(new_idx)
+                self._emit_status_message(f"Moved job to position #{new_idx + 1}")
+            
+            # Small delay to let update_jobs complete
+            self.after(50, _apply_feedback)
 
     def _on_move_down(self) -> None:
-        """Move the selected job down in the queue."""
+        """Move the selected job down in the queue with visual feedback."""
         job = self._get_selected_job()
-        if job and self.controller:
+        idx = self._get_selected_index()
+        
+        if not job or idx is None:
+            return
+        
+        # Check if already at bottom
+        if idx >= len(self._jobs) - 1:
+            self._show_boundary_feedback("bottom")
+            return
+        
+        # Perform the move
+        if self.controller:
             self.controller.on_queue_move_down_v2(job.job_id)
-            # Maintain selection after move
-            idx = self._get_selected_index()
-            if idx is not None and idx < len(self._jobs) - 1:
-                self._select_index(idx + 1)
+            
+            new_idx = idx + 1
+            
+            def _apply_feedback() -> None:
+                self._select_index(new_idx)
+                self._flash_move(new_idx)
+                self._emit_status_message(f"Moved job to position #{new_idx + 1}")
+            
+            self.after(50, _apply_feedback)
 
     def _on_remove(self) -> None:
-        """Remove the selected job from the queue."""
+        """Remove the selected job from the queue with feedback."""
         job = self._get_selected_job()
-        if job and self.controller:
+        idx = self._get_selected_index()
+        
+        if not job:
+            return
+        
+        if self.controller:
             self.controller.on_queue_remove_job_v2(job.job_id)
+            self._emit_status_message(f"Removed job from position #{idx + 1}" if idx is not None else "Removed job")
+            
+            # Select next item if available
+            if self._jobs and idx is not None:
+                new_idx = min(idx, len(self._jobs) - 1)
+                if new_idx >= 0:
+                    self.after(50, lambda: self._select_index(new_idx))
 
     def _on_clear(self) -> None:
         """Clear all jobs from the queue."""
         if self.controller:
             self.controller.on_queue_clear_v2()
+
+    # PR-PIPE-003: Visual feedback methods
+    
+    def _flash_item(self, index: int, color: str = "#4a90d9", duration_ms: int = 300) -> None:
+        """Briefly highlight a listbox item to indicate action completion."""
+        if index < 0 or index >= self.job_listbox.size():
+            return
+        
+        # Store original colors
+        try:
+            original_bg = self.job_listbox.cget("bg")
+            original_select_bg = self.job_listbox.cget("selectbackground")
+        except Exception:
+            return
+        
+        # Apply highlight to the specific item
+        try:
+            self.job_listbox.itemconfig(index, bg=color, selectbackground=color)
+        except Exception:
+            return
+        
+        def _restore() -> None:
+            try:
+                if self.job_listbox.winfo_exists():
+                    self.job_listbox.itemconfig(index, bg=original_bg, selectbackground=original_select_bg)
+            except tk.TclError:
+                pass  # Widget destroyed
+        
+        # Schedule restore
+        self.after(duration_ms, _restore)
+
+    def _flash_success(self, index: int) -> None:
+        """Flash item green to indicate success."""
+        self._flash_item(index, color="#4a9f4a", duration_ms=250)
+
+    def _flash_move(self, index: int) -> None:
+        """Flash item blue to indicate move completed."""
+        self._flash_item(index, color="#4a90d9", duration_ms=300)
+
+    def _show_boundary_feedback(self, boundary: str) -> None:
+        """Show subtle feedback when job is at queue boundary."""
+        idx = self._get_selected_index()
+        if idx is not None:
+            # Brief orange flash to indicate "can't go further"
+            self._flash_item(idx, color="#d9a04a", duration_ms=150)
+
+    def _emit_status_message(self, message: str, level: str = "info") -> None:
+        """Emit a status message via controller or status bar."""
+        # Try controller's append_log
+        if self.controller and hasattr(self.controller, "_append_log"):
+            prefix = {
+                "info": "[queue]",
+                "success": "[queue] ✓",
+                "warning": "[queue] ⚠",
+                "error": "[queue] ✗"
+            }
+            self.controller._append_log(f"{prefix.get(level, '[queue]')} {message}")
+        
+        # Try status bar if available
+        if self.app_state and hasattr(self.app_state, "set_status_message"):
+            try:
+                self.app_state.set_status_message(message)
+            except Exception:
+                pass
+
+    def _bind_keyboard_shortcuts(self) -> None:
+        """Bind keyboard shortcuts for queue operations."""
+        # Alt+Up: Move selected job up
+        self.job_listbox.bind("<Alt-Up>", lambda e: self._on_move_up())
+        
+        # Alt+Down: Move selected job down
+        self.job_listbox.bind("<Alt-Down>", lambda e: self._on_move_down())
+        
+        # Delete: Remove selected job
+        self.job_listbox.bind("<Delete>", lambda e: self._on_remove())
+        
+        # Ctrl+Delete: Clear all (with confirmation)
+        self.job_listbox.bind("<Control-Delete>", lambda e: self._on_clear_with_confirm())
+
+    def _on_clear_with_confirm(self) -> None:
+        """Clear all with confirmation dialog."""
+        if not self._jobs:
+            return
+        
+        from tkinter import messagebox
+        if messagebox.askyesno("Clear Queue", f"Remove all {len(self._jobs)} jobs from queue?"):
+            self._on_clear()
+            self._emit_status_message(f"Cleared {len(self._jobs)} jobs from queue")
 
     def _select_index(self, index: int) -> None:
         """Select a specific index in the listbox."""
@@ -334,16 +507,32 @@ class QueuePanelV2(ttk.Frame):
         self._jobs = list(jobs)
         self.job_listbox.delete(0, tk.END)
 
+        # PR-PIPE-002: Get stats service for per-job ETA
+        stats_service = None
+        if self.controller:
+            stats_service = getattr(self.controller, "duration_stats_service", None)
+
         for i, job in enumerate(self._jobs):
             # PR-GUI-F2: Add 1-based order number prefix
             order_num = i + 1
             base_summary = job.get_display_summary()
 
+            # PR-PIPE-002: Add individual job ETA
+            eta_str = ""
+            if stats_service:
+                estimate = stats_service.get_estimate_for_job(job)
+                if estimate:
+                    if estimate < 60:
+                        eta_str = f" ({int(estimate)}s)"
+                    else:
+                        mins = int(estimate // 60)
+                        eta_str = f" (~{mins}m)"
+
             # PR-GUI-F2: Mark running job with indicator
             if self._running_job_id and job.job_id == self._running_job_id:
-                display_text = f"#{order_num} ▶ {base_summary}"
+                display_text = f"#{order_num} ▶ {base_summary}{eta_str}"
             else:
-                display_text = f"#{order_num}  {base_summary}"
+                display_text = f"#{order_num}  {base_summary}{eta_str}"
 
             self.job_listbox.insert(tk.END, display_text)
 
@@ -351,12 +540,13 @@ class QueuePanelV2(ttk.Frame):
         count = len(self._jobs)
         self.count_label.configure(text=f"({count} job{'s' if count != 1 else ''})")
 
-        # Update ETA label (simple placeholder - TODO: integrate with duration_stats)
+        # PR-PIPE-002: Update ETA label using duration stats
         if count > 0:
-            # Simple estimate: 60 seconds per job as placeholder
-            # TODO: Replace with actual duration stats from history
-            estimated_seconds = count * 60
-            eta_text = self._format_queue_eta(estimated_seconds)
+            total_seconds, confidence = self._compute_queue_eta()
+            eta_text = self._format_queue_eta(total_seconds)
+            # Add confidence indicator
+            if confidence:
+                eta_text = f"{eta_text} {confidence}"
             self.queue_eta_label.configure(text=eta_text)
         else:
             self.queue_eta_label.configure(text="")

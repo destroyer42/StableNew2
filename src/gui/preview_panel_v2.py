@@ -6,9 +6,12 @@ All display data comes from NJR snapshots, never from pipeline_config.
 
 from __future__ import annotations
 
+import json
+import logging
 import threading
 import tkinter as tk
 from collections.abc import Callable
+from pathlib import Path
 from tkinter import ttk
 from types import SimpleNamespace
 from typing import Any
@@ -24,7 +27,14 @@ from src.gui.theme_v2 import (
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
+from src.gui.utils.display_helpers import extract_seed_from_job, format_seed_display
+from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
+
+logger = logging.getLogger(__name__)
+
+# PR-PERSIST-001: Preview panel state persistence
+PREVIEW_STATE_PATH = Path("state") / "preview_panel_state.json"
 
 
 class PreviewPanelV2(ttk.Frame):
@@ -61,6 +71,28 @@ class PreviewPanelV2(ttk.Frame):
 
         self.body = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         self.body.pack(fill=tk.BOTH, expand=True)
+
+        # Add thumbnail widget and preview checkbox
+        self.thumbnail_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
+        self.thumbnail_frame.pack(fill="x", pady=(0, 8))
+
+        self.thumbnail = ThumbnailWidget(
+            self.thumbnail_frame,
+            width=150,
+            height=150,
+            placeholder_text="No Preview",
+        )
+        self.thumbnail.pack(anchor="center")
+
+        # Checkbox to enable/disable preview thumbnails
+        self._show_preview_var = tk.BooleanVar(value=True)
+        self.preview_checkbox = ttk.Checkbutton(
+            self.thumbnail_frame,
+            text="Show preview thumbnails",
+            variable=self._show_preview_var,
+            command=self._on_preview_checkbox_changed,
+        )
+        self.preview_checkbox.pack(anchor="center", pady=(4, 0))
 
         self.job_count_label = ttk.Label(
             self.body, text="No job selected", style=STATUS_LABEL_STYLE
@@ -155,6 +187,9 @@ class PreviewPanelV2(ttk.Frame):
 
         self._update_action_states(None)
         self._bind_app_state_previews()
+        
+        # PR-PERSIST-001: Restore saved state
+        self.restore_state()
 
     def _dispatch_to_ui(self, fn: Callable[[], None]) -> bool:
         """Run panel updates on the Tk main thread when invoked off-thread."""
@@ -483,12 +518,18 @@ class PreviewPanelV2(ttk.Frame):
             )
             self.randomizer_label.config(text="Randomizer: OFF")
             self.learning_metadata_label.config(text="Learning metadata: N/A")
+            # Clear thumbnail when no job
+            self._current_preview_job = None
+            self._current_pack_name = None
+            self._current_show_preview = True
+            self._update_thumbnail()
             return
 
         summary_obj = self._normalize_summary(summary)
         if summary_obj is None:
             print("[PreviewPanel] _normalize_summary returned None")
             self.job_count_label.config(text="No job selected")
+            self._update_thumbnail()
             return
 
         job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
@@ -517,8 +558,10 @@ class PreviewPanelV2(ttk.Frame):
         cfg_text = f"{cfg_value:.1f}" if cfg_value is not None else "-"
         print(f"[PreviewPanel] CFG: {cfg_text}")
         self.cfg_label.config(text=f"CFG: {cfg_text}")
-        seed_value = getattr(summary_obj, "seed", None)
-        seed_text = str(seed_value) if seed_value is not None else "-"
+        # PR-PIPE-007: Show resolved seed when available
+        requested_seed = getattr(summary_obj, "seed", None)
+        actual_seed = getattr(summary_obj, "actual_seed", None) or getattr(summary_obj, "resolved_seed", None)
+        seed_text = format_seed_display(requested_seed, actual_seed)
         self.seed_label.config(text=f"Seed: {seed_text}")
 
         stages_text = getattr(summary_obj, "stages_display", "-")
@@ -542,6 +585,22 @@ class PreviewPanelV2(ttk.Frame):
 
         self.randomizer_label.config(text=randomizer_text)
         self.learning_metadata_label.config(text="Learning metadata: N/A")
+
+        # Update thumbnail with pack info from summary
+        pack_name = getattr(summary_obj, "pack_name", None) or getattr(summary_obj, "label", None)
+        show_preview = getattr(summary_obj, "show_preview", True)
+
+        # Store current state for checkbox handler
+        self._current_preview_job = summary
+        self._current_pack_name = pack_name
+        self._current_show_preview = show_preview
+
+        # Update checkbox state based on pack config
+        if show_preview != self._show_preview_var.get():
+            self._show_preview_var.set(show_preview)
+
+        # Load thumbnail
+        self._update_thumbnail(summary, pack_name, show_preview)
 
     def _normalize_summary(self, summary: Any) -> Any | None:
         if summary is None:
@@ -833,3 +892,141 @@ class PreviewPanelV2(ttk.Frame):
         x = (dialog.winfo_screenwidth() // 2) - (width // 2)
         y = (dialog.winfo_screenheight() // 2) - (height // 2)
         dialog.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _find_recent_thumbnail(self, job: Any, pack_name: str | None = None) -> Any:
+        """Find a recent image that matches this job's config for preview."""
+        from pathlib import Path
+
+        # Try to get output directory from job config
+        output_dir = Path("output")
+        if not output_dir.exists():
+            return None
+
+        # Get pack name or model for matching
+        model_name = None
+
+        if pack_name is None and hasattr(job, "prompt_pack_name"):
+            pack_name = job.prompt_pack_name
+
+        if hasattr(job, "to_unified_summary"):
+            try:
+                summary = job.to_unified_summary()
+                pack_name = pack_name or getattr(summary, "prompt_pack_name", None)
+                model_name = getattr(summary, "model_name", None) or getattr(summary, "base_model", None)
+            except Exception:
+                pass
+
+        # Look for recent outputs with matching pack/model
+        try:
+            # List recent run directories
+            run_dirs = sorted(
+                [p for p in output_dir.iterdir() if p.is_dir()],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )[:10]  # Check last 10 runs
+
+            for run_dir in run_dirs:
+                # Check if pack name matches (in directory name)
+                if pack_name and pack_name.lower() in run_dir.name.lower():
+                    # Find first image in directory
+                    for img_path in sorted(run_dir.glob("*.png"))[:1]:
+                        return img_path
+
+                    # Check txt2img subdirectory
+                    txt2img_dir = run_dir / "txt2img"
+                    if txt2img_dir.exists():
+                        for img_path in sorted(txt2img_dir.glob("*.png"))[:1]:
+                            return img_path
+
+        except Exception:
+            pass
+
+        return None
+
+    def _update_thumbnail(self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True) -> None:
+        """Update the thumbnail display for the current preview job."""
+        # Check if preview is disabled
+        if not show_preview or not self._show_preview_var.get():
+            self.thumbnail.clear()
+            return
+
+        if job is None:
+            self.thumbnail.clear()
+            return
+
+        # Try to find a matching image
+        thumb_path = self._find_recent_thumbnail(job, pack_name)
+
+        if thumb_path:
+            self.thumbnail.set_image_from_path(thumb_path)
+        else:
+            self.thumbnail.clear()
+
+    def _on_preview_checkbox_changed(self) -> None:
+        """Handle preview checkbox state change."""
+        enabled = self._show_preview_var.get()
+
+        # Update thumbnail visibility
+        if enabled and self._job_summaries:
+            # Reload thumbnail for current job
+            first_job = getattr(self, "_current_preview_job", None)
+            pack_name = getattr(self, "_current_pack_name", None)
+            show_preview = getattr(self, "_current_show_preview", True)
+            self._update_thumbnail(first_job, pack_name, show_preview)
+        else:
+            self.thumbnail.clear()
+
+        # Save preference to pack config if available
+        if self.app_state:
+            job_draft = getattr(self.app_state, "job_draft", None)
+            if job_draft:
+                packs = getattr(job_draft, "packs", [])
+                if packs:
+                    # Update show_preview for the current pack
+                    # This would require storing it in the pack model
+                    pass
+        
+        # PR-PERSIST-001: Save state on checkbox change
+        self.save_state()
+
+    # PR-PERSIST-001: State persistence methods
+    def save_state(self) -> None:
+        """Save preview panel state to disk."""
+        try:
+            state = {
+                "show_preview": self._show_preview_var.get(),
+                "schema_version": "2.6"
+            }
+            PREVIEW_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            PREVIEW_STATE_PATH.write_text(json.dumps(state, indent=2))
+        except Exception as e:
+            logger.warning(f"Failed to save preview panel state: {e}")
+
+    def restore_state(self) -> None:
+        """Restore preview panel state from disk."""
+        if not PREVIEW_STATE_PATH.exists():
+            return
+        
+        try:
+            state = json.loads(PREVIEW_STATE_PATH.read_text())
+            
+            # Validate schema version
+            if state.get("schema_version") != "2.6":
+                logger.warning("Unsupported preview state schema, ignoring")
+                return
+            
+            # Restore show_preview flag
+            show_preview = state.get("show_preview", True)
+            self._show_preview_var.set(show_preview)
+            
+            logger.debug(f"Restored preview panel state: show_preview={show_preview}")
+        except Exception as e:
+            logger.warning(f"Failed to restore preview panel state: {e}")
+
+    def destroy(self) -> None:
+        """Override destroy to save state before cleanup."""
+        try:
+            self.save_state()
+        except Exception:
+            pass
+        super().destroy()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
@@ -26,6 +28,11 @@ from .model_list_adapter_v2 import ModelListAdapterV2
 from .output_settings_panel_v2 import OutputSettingsPanelV2
 from .prompt_pack_adapter_v2 import PromptPackAdapterV2, PromptPackSummary
 from .prompt_pack_list_manager import PromptPackListManager
+
+logger = logging.getLogger(__name__)
+
+# PR-PERSIST-001: Sidebar state persistence
+SIDEBAR_STATE_PATH = Path("state") / "sidebar_state.json"
 
 
 class _SidebarCard(BaseStageCardV2):
@@ -265,6 +272,9 @@ class SidebarPanelV2(ttk.Frame):
             build_child=lambda parent: OutputSettingsPanelV2(parent, embed_mode=True),
         )
         self.output_settings_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
+        
+        # PR-PERSIST-001: Restore saved state
+        self.restore_state()
 
     def _build_preset_actions_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
@@ -365,19 +375,19 @@ class SidebarPanelV2(ttk.Frame):
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
 
-        # PR-GUI-H: Add prompt text and restore button (moved from actions_card in pipeline_tab_frame)
+        # PR-GUI-H: Add prompt text and refresh button (moved from actions_card in pipeline_tab_frame)
         prompt_row = ttk.Frame(frame)
         prompt_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         prompt_row.columnconfigure(0, weight=1)
         self.prompt_text = tk.Entry(prompt_row)
         self.prompt_text.grid(row=0, column=0, sticky="ew")
-        self.restore_last_run_button = ttk.Button(
+        self.refresh_packs_button = ttk.Button(
             prompt_row,
-            text="Restore",
+            text="Refresh",
             width=8,
-            command=self._on_restore_last_run,
+            command=self.refresh_prompt_packs,
         )
-        self.restore_last_run_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self.refresh_packs_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=1, column=0, sticky="ew", pady=(0, 4))
@@ -1256,6 +1266,84 @@ class SidebarPanelV2(ttk.Frame):
         if panel:
             return panel.get_output_overrides()  # type: ignore
         return {}
+
+    # PR-PERSIST-001: State persistence methods
+    def save_state(self) -> None:
+        """Save sidebar state to disk."""
+        try:
+            # Get selected pack names
+            selected_packs = []
+            if self.pack_listbox:
+                selection = self.pack_listbox.curselection()
+                selected_packs = [
+                    self._current_pack_names[i]
+                    for i in selection
+                    if i < len(self._current_pack_names)
+                ]
+            
+            state = {
+                "selected_list": self.pack_list_var.get() if hasattr(self, "pack_list_var") else "",
+                "selected_packs": selected_packs,
+                "prompt_text": self.prompt_text.get() if hasattr(self, "prompt_text") else "",
+                "schema_version": "2.6"
+            }
+            SIDEBAR_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            SIDEBAR_STATE_PATH.write_text(json.dumps(state, indent=2))
+        except Exception as e:
+            logger.warning(f"Failed to save sidebar state: {e}")
+
+    def restore_state(self) -> None:
+        """Restore sidebar state from disk."""
+        if not SIDEBAR_STATE_PATH.exists():
+            return
+        
+        try:
+            state = json.loads(SIDEBAR_STATE_PATH.read_text())
+            
+            # Validate schema version
+            if state.get("schema_version") != "2.6":
+                logger.warning("Unsupported sidebar state schema, ignoring")
+                return
+            
+            # Restore prompt text
+            prompt_text = state.get("prompt_text", "")
+            if prompt_text and hasattr(self, "prompt_text"):
+                self.prompt_text.delete(0, tk.END)
+                self.prompt_text.insert(0, prompt_text)
+            
+            # Restore selected list
+            selected_list = state.get("selected_list", "")
+            if selected_list and hasattr(self, "pack_list_var"):
+                if selected_list in self.pack_list_names:
+                    self.pack_list_var.set(selected_list)
+                    self._populate_packs_for_selected_list()
+            
+            # Restore selected packs (defer to next frame to ensure listbox is populated)
+            selected_packs = state.get("selected_packs", [])
+            if selected_packs and hasattr(self, "pack_listbox"):
+                def restore_selection():
+                    try:
+                        self.pack_listbox.selection_clear(0, tk.END)
+                        for pack_name in selected_packs:
+                            if pack_name in self._current_pack_names:
+                                idx = self._current_pack_names.index(pack_name)
+                                self.pack_listbox.selection_set(idx)
+                    except Exception as e:
+                        logger.warning(f"Failed to restore pack selection: {e}")
+                
+                self.after(100, restore_selection)
+            
+            logger.debug(f"Restored sidebar state: {len(selected_packs)} packs selected")
+        except Exception as e:
+            logger.warning(f"Failed to restore sidebar state: {e}")
+
+    def destroy(self) -> None:
+        """Override destroy to save state before cleanup."""
+        try:
+            self.save_state()
+        except Exception:
+            pass
+        super().destroy()
 
 
 __all__ = ["SidebarPanelV2"]

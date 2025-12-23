@@ -1,13 +1,493 @@
 {
   "pack_data": {
     "name": "SDXL_beautiful_women_Fantasy",
-    "slots": [],
+    "slots": [
+      {
+        "index": 0,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nsmiling tavern owner welcoming guests, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 1,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\npriestess raising chalice in temple,  [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 2,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nroyal advisor gazing through stained glass, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 3,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nregal lady leaning against balcony, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 4,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nscholar-mage reading tome by window facing [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 5,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nwarrior princess resting on throne overlooking [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 6,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nmysterious traveler adjusting cloak within [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 7,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nmasked dancer performing under lanterns in [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 8,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nwandering minstrel reclining beside fountain in [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 9,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\n[[hair]]-haired noblewoman in intricate gown walking through [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      }
+    ],
     "matrix": {
-      "enabled": false,
-      "mode": "fanout",
-      "limit": 8,
-      "slots": []
-    }
+      "enabled": true,
+      "mode": "random",
+      "limit": 9,
+      "slots": [
+        {
+          "name": "time",
+          "values": [
+            "rim-lit silhouette",
+            "backlit through smoke",
+            "soft volumetric light rays",
+            "flickering firelight",
+            "moonlight breaking through clouds",
+            "harsh directional side lighting",
+            "diffused overcast lighting"
+          ]
+        },
+        {
+          "name": "hair",
+          "values": [
+            "brown",
+            "red",
+            "blonde",
+            "silver",
+            "black",
+            "auburn",
+            "strawberry red",
+            "fiery orange"
+          ]
+        },
+        {
+          "name": "environment",
+          "values": [
+            "ancient stone ruins",
+            "windswept mountain pass",
+            "burning battlefield",
+            "frozen forest clearing",
+            "deserted city street",
+            "torch-lit hall",
+            "stormy shoreline"
+          ]
+        },
+        {
+          "name": "number",
+          "values": [
+            "one",
+            "two",
+            "three"
+          ]
+        },
+        {
+          "name": "eyes",
+          "values": [
+            "blue",
+            "green",
+            "brown",
+            "violet",
+            "sapphire"
+          ]
+        },
+        {
+          "name": "perspective",
+          "values": [
+            "low angle",
+            "high angle",
+            "from behind",
+            "pov",
+            "cowboy shot"
+          ]
+        },
+        {
+          "name": "clothes",
+          "values": [
+            "g-string",
+            "only a open jacket with underboob",
+            "nothing",
+            "see-throuh lingerie",
+            "bikini armor",
+            "micro-kini"
+          ]
+        },
+        {
+          "name": "pose",
+          "values": [
+            "casual",
+            "spread-eagled",
+            "kneeling",
+            "bending forward",
+            "bending backward",
+            "on all fours"
+          ]
+        },
+        {
+          "name": "activity",
+          "values": [
+            "singing",
+            "dancing",
+            "stripping",
+            "masturbating",
+            "orgy",
+            "kissing"
+          ]
+        },
+        {
+          "name": "narrative",
+          "values": [
+            "after the battle",
+            "moments before impact",
+            "caught mid-escape",
+            "on the edge of conflict"
+          ]
+        }
+      ]
+    },
+    "show_preview": true
   },
   "preset_data": {
     "txt2img": {
