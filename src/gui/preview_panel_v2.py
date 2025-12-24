@@ -207,15 +207,15 @@ class PreviewPanelV2(ttk.Frame):
 
     def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
         """Render previews from NormalizedJobRecord objects."""
-        print(f"[PreviewPanel] set_preview_jobs called with {len(jobs) if jobs else 0} jobs")
+        logger.debug(f"[PreviewPanel] set_preview_jobs called with {len(jobs) if jobs else 0} jobs")
         if self._dispatch_to_ui(lambda: self.set_preview_jobs(jobs)):
-            print("[PreviewPanel] Dispatched to UI thread, returning")
+            logger.debug("[PreviewPanel] Dispatched to UI thread, returning")
             return
-        print(f"[PreviewPanel] Building summary entries from {len(jobs) if jobs else 0} jobs")
+        logger.debug(f"[PreviewPanel] Building summary entries from {len(jobs) if jobs else 0} jobs")
         summary_entries: list[Any] = []
         for job in jobs or []:
             summary_entries.append(self._summary_from_normalized_job(job))
-        print(f"[PreviewPanel] Created {len(summary_entries)} summary entries, calling set_job_summaries")
+        logger.debug(f"[PreviewPanel] Created {len(summary_entries)} summary entries, calling set_job_summaries")
         self.set_job_summaries(summary_entries)
 
     def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
@@ -335,7 +335,7 @@ class PreviewPanelV2(ttk.Frame):
         prompt_text = entry.prompt_text or str(config.get("prompt") or "")
         negative = entry.negative_prompt_text or str(config.get("negative_prompt", "") or "")
 
-        print(f"[PreviewPanel] _summary_from_pack_entry: prompt_text length={len(prompt_text)}")
+        logger.debug(f"[PreviewPanel] _summary_from_pack_entry: prompt_text length={len(prompt_text)}")
 
         stage_flags = entry.stage_flags or {}
         stages = []
@@ -369,7 +369,7 @@ class PreviewPanelV2(ttk.Frame):
 
         label = f"{model}"
 
-        print(
+        logger.debug(
             f"[PreviewPanel] Created summary: label={label}, sampler={sampler}, steps={steps}, cfg={cfg_scale}, stages={stages_display}"
         )
 
@@ -477,33 +477,33 @@ class PreviewPanelV2(ttk.Frame):
         self._update_action_states(job_draft, preview_jobs)
 
     def _bind_app_state_previews(self) -> None:
-        print(f"[PreviewPanel] _bind_app_state_previews called, app_state={self.app_state}")
+        logger.debug(f"[PreviewPanel] _bind_app_state_previews called, app_state={self.app_state}")
         if not self.app_state or not hasattr(self.app_state, "subscribe"):
-            print(f"[PreviewPanel] Cannot subscribe - app_state={self.app_state}, has_subscribe={hasattr(self.app_state, 'subscribe') if self.app_state else False}")
+            logger.debug(f"[PreviewPanel] Cannot subscribe - app_state={self.app_state}, has_subscribe={hasattr(self.app_state, 'subscribe') if self.app_state else False}")
             return
         try:
-            print("[PreviewPanel] Subscribing to preview_jobs changes")
+            logger.debug("[PreviewPanel] Subscribing to preview_jobs changes")
             self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
-            print("[PreviewPanel] Successfully subscribed to preview_jobs")
+            logger.debug("[PreviewPanel] Successfully subscribed to preview_jobs")
         except Exception as e:
-            print(f"[PreviewPanel] Failed to subscribe: {e}")
+            logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
             pass
         self._on_preview_jobs_changed()
 
     def _on_preview_jobs_changed(self) -> None:
-        print("[PreviewPanel] _on_preview_jobs_changed called")
+        logger.debug("[PreviewPanel] _on_preview_jobs_changed called")
         if not self.app_state:
-            print("[PreviewPanel] No app_state, returning")
+            logger.debug("[PreviewPanel] No app_state, returning")
             return
         records = getattr(self.app_state, "preview_jobs", None)
-        print(f"[PreviewPanel] Got {len(records) if records else 0} preview jobs from app_state")
+        logger.debug(f"[PreviewPanel] Got {len(records) if records else 0} preview jobs from app_state")
         self.set_preview_jobs(records)
 
     def _render_summary(self, summary: Any | None, total: int) -> None:
-        print(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
+        logger.debug(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
 
         if summary is None:
-            print("[PreviewPanel] Rendering empty state")
+            logger.debug("[PreviewPanel] Rendering empty state")
             self.job_count_label.config(text="No job selected")
             self._set_text_widget(self.prompt_text, "")
             self._set_text_widget(self.negative_prompt_text, "")
@@ -527,18 +527,18 @@ class PreviewPanelV2(ttk.Frame):
 
         summary_obj = self._normalize_summary(summary)
         if summary_obj is None:
-            print("[PreviewPanel] _normalize_summary returned None")
+            logger.debug("[PreviewPanel] _normalize_summary returned None")
             self.job_count_label.config(text="No job selected")
             self._update_thumbnail()
             return
 
         job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
-        print(f"[PreviewPanel] Setting job_count_label to: {job_text}")
+        logger.debug(f"[PreviewPanel] Setting job_count_label to: {job_text}")
         self.job_count_label.config(text=job_text)
 
         positive = getattr(summary_obj, "positive_preview", "") or ""
         negative = getattr(summary_obj, "negative_preview", "") or ""
-        print(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
+        logger.debug(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
         self._set_text_widget(self.prompt_text, positive)
         self._set_text_widget(self.negative_prompt_text, negative)
 
@@ -546,17 +546,17 @@ class PreviewPanelV2(ttk.Frame):
         self.update_idletasks()
 
         model_text = getattr(summary_obj, "label", None) or getattr(summary_obj, "base_model", "-")
-        print(f"[PreviewPanel] Model: {model_text}")
+        logger.debug(f"[PreviewPanel] Model: {model_text}")
         self.model_label.config(text=f"Model: {model_text}")
         sampler_text = getattr(summary_obj, "sampler_name", getattr(summary_obj, "sampler", "-"))
-        print(f"[PreviewPanel] Sampler: {sampler_text}")
+        logger.debug(f"[PreviewPanel] Sampler: {sampler_text}")
         self.sampler_label.config(text=f"Sampler: {sampler_text}")
         steps_value = self._coerce_int(getattr(summary_obj, "steps", None))
-        print(f"[PreviewPanel] Steps: {steps_value}")
+        logger.debug(f"[PreviewPanel] Steps: {steps_value}")
         self.steps_label.config(text=f"Steps: {steps_value if steps_value is not None else '-'}")
         cfg_value = self._coerce_float(getattr(summary_obj, "cfg_scale", None))
         cfg_text = f"{cfg_value:.1f}" if cfg_value is not None else "-"
-        print(f"[PreviewPanel] CFG: {cfg_text}")
+        logger.debug(f"[PreviewPanel] CFG: {cfg_text}")
         self.cfg_label.config(text=f"CFG: {cfg_text}")
         # PR-PIPE-007: Show resolved seed when available
         requested_seed = getattr(summary_obj, "seed", None)
@@ -643,9 +643,9 @@ class PreviewPanelV2(ttk.Frame):
         try:
             self.controller.on_add_to_queue()
         except ValueError as exc:
-            print(f"[PreviewPanel] _on_add_to_queue validation error: {exc}")
+            logger.debug(f"[PreviewPanel] _on_add_to_queue validation error: {exc}")
         except Exception as exc:
-            print(f"[PreviewPanel] _on_add_to_queue unexpected error: {exc}")
+            logger.debug(f"[PreviewPanel] _on_add_to_queue unexpected error: {exc}")
 
     def _on_clear_draft(self) -> None:
         """Clear the current draft job metadata."""
@@ -673,12 +673,12 @@ class PreviewPanelV2(ttk.Frame):
             has_parts = bool(getattr(part_summary, "part_count", 0))
             has_draft = bool(packs) or has_parts
         has_preview = bool(preview_jobs) and has_draft
-        print(
+        logger.debug(
             f"[PreviewPanel] _update_action_states: packs={len(packs)}, has_parts={has_parts}, has_draft={has_draft}"
         )
         can_queue = has_draft and has_preview
         state = ["!disabled"] if can_queue else ["disabled"]
-        print(f"[PreviewPanel] Setting button state to: {state}")
+        logger.debug(f"[PreviewPanel] Setting button state to: {state}")
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)
     def _show_preview_details(self) -> None:
@@ -926,8 +926,10 @@ class PreviewPanelV2(ttk.Frame):
             )[:10]  # Check last 10 runs
 
             for run_dir in run_dirs:
-                # Check if pack name matches (in directory name)
-                if pack_name and pack_name.lower() in run_dir.name.lower():
+                matches_pack = bool(pack_name and pack_name.lower() in run_dir.name.lower())
+                matches_model = bool(model_name and model_name.lower() in run_dir.name.lower())
+
+                if matches_pack or matches_model:
                     # Find first image in directory
                     for img_path in sorted(run_dir.glob("*.png"))[:1]:
                         return img_path
@@ -938,8 +940,49 @@ class PreviewPanelV2(ttk.Frame):
                         for img_path in sorted(txt2img_dir.glob("*.png"))[:1]:
                             return img_path
 
+                # Fallback: return the most recent image if no pack/model match
+                all_pngs = sorted(run_dir.rglob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+                if all_pngs:
+                    return all_pngs[0]
+
         except Exception:
             pass
+
+        return None
+
+    def _find_latest_output_image(self, summary: UnifiedJobSummary | Any | None) -> Path | None:
+        """Inspect a summary/result object to find the latest output image."""
+        if summary is None:
+            return None
+
+        # If summary carries a result dict with metadata paths, use that first
+        result = getattr(summary, "result", None)
+        if isinstance(result, dict):
+            metadata = result.get("metadata")
+            if isinstance(metadata, dict):
+                candidate = metadata.get("path") or metadata.get("output_path")
+                if candidate and Path(candidate).exists():
+                    return Path(candidate)
+            if isinstance(metadata, list):
+                for entry in reversed(metadata):
+                    if isinstance(entry, dict):
+                        candidate = entry.get("path") or entry.get("output_path")
+                        if candidate and Path(candidate).exists():
+                            return Path(candidate)
+
+        # If the summary has a job_id, look for a run folder named with it
+        job_id = getattr(summary, "job_id", None)
+        output_dir = Path("output")
+        if job_id and output_dir.exists():
+            job_dirs = sorted(
+                [p for p in output_dir.iterdir() if job_id in p.name],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for run_dir in job_dirs:
+                candidates = sorted(run_dir.rglob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+                if candidates:
+                    return candidates[0]
 
         return None
 
@@ -952,6 +995,12 @@ class PreviewPanelV2(ttk.Frame):
 
         if job is None:
             self.thumbnail.clear()
+            return
+
+        # Prefer explicit output path from summary/result if available
+        explicit_path = self._find_latest_output_image(job)
+        if explicit_path:
+            self.thumbnail.set_image_from_path(explicit_path)
             return
 
         # Try to find a matching image
@@ -988,6 +1037,95 @@ class PreviewPanelV2(ttk.Frame):
         
         # PR-PERSIST-001: Save state on checkbox change
         self.save_state()
+
+    def update_with_summary(self, summary: UnifiedJobSummary | None) -> None:
+        """Update the preview thumbnail based on a UnifiedJobSummary.
+        
+        PR-GUI-DATA-005: Load and display latest output image as thumbnail.
+        """
+        if self._dispatch_to_ui(lambda: self.update_with_summary(summary)):
+            return
+        self._current_preview_job = summary
+        self._current_pack_name = getattr(summary, "prompt_pack_name", None) if summary else None
+        self._current_show_preview = True
+        self._update_thumbnail(summary, self._current_pack_name, True)
+        
+        # PR-GUI-DATA-005: Load latest output image if preview enabled
+        if self._show_preview_var.get() and summary:
+            latest_image = self._find_latest_output_image(summary)
+            if latest_image and latest_image.exists():
+                try:
+                    self.thumbnail.load_image(str(latest_image))
+                except Exception as e:
+                    logger.debug(f"Failed to load thumbnail: {e}")
+                    self.thumbnail.clear()
+            else:
+                self.thumbnail.clear()
+        else:
+            self.thumbnail.clear()
+    
+    def _find_latest_output_image(self, summary: UnifiedJobSummary) -> Path | None:
+        """Find the most recently generated image for this job.
+        
+        PR-GUI-DATA-005: Search job output folder for latest image.
+        
+        Args:
+            summary: UnifiedJobSummary containing job_id and result metadata
+            
+        Returns:
+            Path to most recent image or None
+        """
+        # Try to get output folder from result metadata
+        if hasattr(summary, 'result') and isinstance(summary.result, dict):
+            metadata = summary.result.get('metadata', {})
+            if isinstance(metadata, dict):
+                output_path = metadata.get('path')
+                if output_path:
+                    image_path = Path(output_path)
+                    if image_path.exists():
+                        return image_path
+        
+        # Fallback: scan output folder for this job_id
+        job_id = getattr(summary, 'job_id', None)
+        if job_id:
+            output_folder = Path("output") / job_id
+            if output_folder.exists():
+                # Find most recent image file
+                image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
+                images = [
+                    f for f in output_folder.rglob("*")
+                    if f.is_file() and f.suffix.lower() in image_extensions
+                ]
+                if images:
+                    # Sort by modification time, return most recent
+                    images.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    return images[0]
+        
+        # Try output/<timestamp> pattern fallback
+        output_root = Path("output")
+        if output_root.exists():
+            # Find folders that might contain this job's outputs
+            # Look for recent folders (within last hour)
+            import time
+            now = time.time()
+            recent_threshold = now - 3600  # 1 hour ago
+            
+            recent_folders = [
+                f for f in output_root.iterdir()
+                if f.is_dir() and f.stat().st_mtime > recent_threshold
+            ]
+            
+            for folder in sorted(recent_folders, key=lambda p: p.stat().st_mtime, reverse=True):
+                image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
+                images = [
+                    f for f in folder.rglob("*")
+                    if f.is_file() and f.suffix.lower() in image_extensions
+                ]
+                if images:
+                    images.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    return images[0]
+        
+        return None
 
     # PR-PERSIST-001: State persistence methods
     def save_state(self) -> None:

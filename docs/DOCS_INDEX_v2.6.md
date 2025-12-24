@@ -72,6 +72,8 @@ Queue_and_Runner_Lifecycle_Spec_v2.6.md (implicit in CORE-C; may be explicitized
 
 History_and_Restore_Spec_v2.6.md (if applicable)
 
+Image_Metadata_Contract_v2.6.md
+
 These documents may evolve as long as they do not contradict Tiers 1–2.
 
 1.4 Tier 4 — PR-CORE Documents (Implementation-Level Governance)
@@ -200,6 +202,7 @@ docs/
   PromptPack_Lifecycle_v2.6.md
   Builder_Pipeline_Deep_Dive_v2.6.md
   DebugHub_v2.6.md
+  Image_Metadata_Contract_v2.6.md
   StableNew_Coding_and_Testing_v2.6.md
   PR_TEMPLATE_v2.6.md
   Agents_v2.6.md

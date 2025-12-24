@@ -285,11 +285,12 @@ class AppController:
         self._last_run_auto_restored = False
         self._last_run_store = LastRunStoreV2_5()
         self._last_run_config: RunConfigDict | None = None
-        # GUI log handler for LogTracePanelV2 (must be set before any access)
-        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
+        # GUI log handler for LogTracePanelV2 (captures DEBUG and above for GUI display)
+        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.DEBUG)
         root_logger = logging.getLogger()
-        if root_logger.level > logging.INFO or root_logger.level == logging.NOTSET:
-            root_logger.setLevel(logging.INFO)
+        # Ensure root logger level allows DEBUG messages to reach handlers
+        if root_logger.level > logging.DEBUG or root_logger.level == logging.NOTSET:
+            root_logger.setLevel(logging.INFO)  # Changed from DEBUG to reduce noise
         root_logger.addHandler(self.gui_log_handler)
         json_config = get_jsonl_log_config()
         self.json_log_handler = attach_jsonl_log_handler(json_config, level=logging.INFO)
@@ -975,6 +976,275 @@ class AppController:
             self._append_log(f"[controller] Replay job {job_id} failed: {exc!r}")
         return False
 
+    def on_reprocess_images(
+        self, 
+        image_paths: list[str], 
+        stages: list[str],
+        batch_size: int = 1,
+    ) -> int:
+        """Reprocess existing images through specified pipeline stages.
+        
+        Args:
+            image_paths: List of paths to images to reprocess
+            stages: List of stage names to apply (e.g., ["img2img", "adetailer", "upscale"])
+            batch_size: Number of images per job (default 1 = one job per image)
+            
+        Returns:
+            Number of jobs submitted to queue
+            
+        Raises:
+            ValueError: If no images or stages provided, or if invalid stage names
+        """
+        from src.pipeline.reprocess_builder import ReprocessJobBuilder
+        from src.queue.job_model import Job, JobPriority
+        
+        if not image_paths:
+            raise ValueError("No images provided for reprocessing")
+        if not stages:
+            raise ValueError("No stages specified for reprocessing")
+        
+        # Validate stages
+        valid_stages = {"adetailer", "upscale", "img2img"}
+        invalid_stages = set(stages) - valid_stages
+        if invalid_stages:
+            raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
+        
+        builder = ReprocessJobBuilder()
+        
+        try:
+            # Get current GUI configs for stages
+            config = self._build_reprocess_config(stages)
+            
+            # Debug logging
+            self._append_log(f"[reprocess] Stages enabled: {', '.join(stages)}")
+            if "upscale" in stages:
+                self._append_log(f"[reprocess] DEBUG: config['upscale'] = {config.get('upscale', 'NOT SET')}")
+                self._append_log(f"[reprocess] DEBUG: config['upscaler'] flat key = {config.get('upscaler', 'NOT SET')}")
+            
+            # Build reprocess jobs (batched or individual)
+            if batch_size > 1:
+                njrs = builder.build_reprocess_jobs_batched(
+                    input_image_paths=image_paths,
+                    stages=stages,
+                    batch_size=batch_size,
+                    config=config,
+                )
+            else:
+                # One job per image
+                njrs = []
+                for image_path in image_paths:
+                    njr = builder.build_reprocess_job(
+                        input_image_paths=[image_path],
+                        stages=stages,
+                        config=config,
+                    )
+                    njrs.append(njr)
+            
+            # Submit all jobs
+            submitted_count = 0
+            client_ref = getattr(self, "_api_client", None)
+            for njr in njrs:
+                # Create Job from NJR with proper metadata
+                config_snapshot = njr.to_queue_snapshot()
+                job = Job(
+                    job_id=njr.job_id,
+                    priority=JobPriority.NORMAL,
+                    run_mode="queue",
+                    source="reprocess_panel",
+                    prompt_source="reprocess",
+                    prompt_pack_id=None,
+                    config_snapshot=config_snapshot,
+                    learning_enabled=False,
+                )
+                
+                # Attach NJR for execution
+                job._normalized_record = njr  # type: ignore[attr-defined]
+                
+                # Attach execution payload
+                def _run_reprocess_job(j: Job, client_ref=client_ref) -> dict:
+                    """Execute reprocess job through pipeline runner."""
+                    from src.pipeline.pipeline_runner import run_njr_v2
+                    njr_obj = getattr(j, "_normalized_record", None)
+                    if njr_obj is None:
+                        raise RuntimeError("Reprocess job missing NormalizedJobRecord")
+                    
+                    # Clear VRAM caches before each reprocess job to prevent memory exhaustion
+                    try:
+                        if client_ref and hasattr(client_ref, "free_vram"):
+                            client_ref.free_vram(unload_model=False)
+                    except Exception:
+                        pass  # Non-fatal: best effort VRAM clearing
+                    
+                    result = run_njr_v2(
+                        njr_obj,
+                        client=client_ref,
+                        cancel_token=self.cancel_token,
+                    )
+                    return result or {}
+                
+                job.payload = lambda j=job: _run_reprocess_job(j)
+                
+                # Submit to queue via job service
+                if self.job_service:
+                    self.job_service.submit_queued(job)
+                    submitted_count += 1
+                else:
+                    raise RuntimeError("Job service not available")
+            
+            self._append_log(
+                f"[reprocess] Submitted {submitted_count} job(s) for {len(image_paths)} image(s) "
+                f"through stages: {' → '.join(stages)}"
+            )
+            
+            return submitted_count
+                
+        except Exception as exc:
+            self._append_log(f"[reprocess] Failed to submit reprocess jobs: {exc!r}")
+            raise
+    
+    def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
+        """Build configuration dict for reprocess jobs.
+        
+        Respects the "Override pack configs with current stages" checkbox:
+        - When checked: Uses current stage card GUI values
+        - When unchecked: Uses pack config values
+        
+        Args:
+            stages: List of stage names that will be used
+            
+        Returns:
+            Config dict with both nested stage-specific settings and flat global settings
+        """
+        config: dict[str, Any] = {}
+        
+        # Check if override is enabled
+        override_enabled = getattr(self, 'override_pack_config_enabled', False)
+        
+        if override_enabled:
+            # Override enabled: Extract configs from current stage card GUI values
+            try:
+                current_stage_configs = self._collect_current_stage_configs()
+                
+                # Extract global settings from current configs
+                config["cfg_scale"] = current_stage_configs.get("cfg_scale", 7.0)
+                config["sampler_name"] = current_stage_configs.get("sampler_name", "DPM++ 2M Karras")
+                config["steps"] = current_stage_configs.get("steps", 28)
+                
+                # Extract stage-specific configs from current GUI
+                if "img2img" in stages:
+                    img2img_cfg = current_stage_configs.get("img2img", {})
+                    config["img2img"] = {
+                        "denoising_strength": img2img_cfg.get("denoising_strength", 0.3),
+                        "width": img2img_cfg.get("width", 512),
+                        "height": img2img_cfg.get("height", 512),
+                    }
+                    config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
+                
+                if "adetailer" in stages:
+                    ad_cfg = current_stage_configs.get("adetailer", {})
+                    config["adetailer"] = {
+                        "adetailer_model": ad_cfg.get("adetailer_model", "mediapipe_face_full"),
+                        "adetailer_confidence": ad_cfg.get("adetailer_confidence", 0.69),
+                        "adetailer_dilate": ad_cfg.get("adetailer_dilate", 4),
+                        "adetailer_denoise": ad_cfg.get("adetailer_denoise", 0.25),
+                        "adetailer_steps": ad_cfg.get("adetailer_steps") or 12,
+                        "adetailer_cfg": ad_cfg.get("adetailer_cfg") or 5.7,
+                        "adetailer_sampler": ad_cfg.get("adetailer_sampler") or "DPM++ 2M Karras",
+                        "adetailer_prompt": ad_cfg.get("adetailer_prompt", "<stable_yogis_pdxl_positives>,<stable_yogis_realism_positives_v1>, highly realistic human face, natural skin texture, clear skin pores, balanced facial proportions, symmetrical facial features, well-defined eyes, natural eye reflections, accurate facial anatomy, sharp focus, photorealistic details, 8k resolution, professional lighting"),
+                        "adetailer_negative_prompt": ad_cfg.get("adetailer_negative_prompt", "<stable_yogis_pdxl_negatives2-neg>,<stable_yogis_anatomy_negatives_v1-neg>,<sdxl_cyberrealistic_simpleneg-neg>,<negative_hands>,low quality,blurry,out of focus,distorted face,asymmetrical face,deformed facial features,warped eyes,crossed eyes,extra eyes,extra face,multiple faces,mutated face,plastic skin,over-smoothed skin,over-sharpened,harsh shadows,unrealistic skin texture,uncanny "),
+                    }
+                    if ad_cfg.get("adetailer_denoise") is not None:
+                        config["adetailer_denoising_strength"] = ad_cfg["adetailer_denoise"]
+                    if ad_cfg.get("adetailer_steps") is not None:
+                        config["adetailer_steps"] = ad_cfg["adetailer_steps"]
+                    if ad_cfg.get("adetailer_cfg") is not None:
+                        config["adetailer_cfg_scale"] = ad_cfg["adetailer_cfg"]
+                
+                if "upscale" in stages:
+                    upscale_cfg = current_stage_configs.get("upscale", {})
+                    config["upscale"] = {
+                        "upscaler": upscale_cfg.get("upscaler", "4xUltrasharp_4xUltrasharpV10"),
+                        "upscale_by": upscale_cfg.get("upscale_by") or upscale_cfg.get("upscale_factor", 2.0),
+                        "tile_size": upscale_cfg.get("tile_size", 512),
+                        "denoising_strength": upscale_cfg.get("denoising_strength", 0.35),
+                    }
+                    config["upscale_denoising_strength"] = config["upscale"]["denoising_strength"]
+                    config["upscaler"] = config["upscale"]["upscaler"]
+                    config["upscale_factor"] = config["upscale"]["upscale_by"]
+                
+                self._append_log("[reprocess] Using current stage configs (override enabled)")
+            except Exception as e:
+                self._append_log(f"[reprocess] Failed to extract current stage configs: {e}, falling back to pack config")
+                override_enabled = False  # Fall back to pack config
+        
+        if not override_enabled:
+            # Override disabled: Extract configs from currently selected pack
+            pack_config = {}
+            
+            # Get currently selected pack from GUI dropdown
+            selected_pack = self._get_selected_pack()
+            if selected_pack and hasattr(selected_pack, 'config'):
+                pack_config = selected_pack.config or {}
+                self._append_log(f"[reprocess] Using config from selected pack: {selected_pack.name}")
+            else:
+                self._append_log("[reprocess] WARNING: No pack selected, using defaults")
+            
+            # Extract global settings (flat keys at root level)
+            config["cfg_scale"] = pack_config.get("cfg_scale", 7.0)
+            config["sampler_name"] = pack_config.get("sampler_name", "DPM++ 2M Karras")
+            config["steps"] = pack_config.get("steps", 28)
+            
+            # Extract stage-specific configs (nested dicts)
+            if "img2img" in stages:
+                img2img_config = pack_config.get("img2img", {})
+                config["img2img"] = {
+                    "denoising_strength": img2img_config.get("denoising_strength", 0.3),
+                    "width": img2img_config.get("width", 512),
+                    "height": img2img_config.get("height", 512),
+                }
+                # Also set flat key for builder
+                config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
+            
+            # adetailer config (use current pack's adetailer settings)
+            if "adetailer" in stages:
+                ad_config = pack_config.get("adetailer", {})
+                config["adetailer"] = {
+                    "adetailer_model": ad_config.get("adetailer_model", "mediapipe_face_full"),
+                    "adetailer_confidence": ad_config.get("adetailer_confidence", 0.69),
+                    "adetailer_dilate": ad_config.get("adetailer_dilate", 4),
+                    "adetailer_denoise": ad_config.get("adetailer_denoise", 0.25),
+                    "adetailer_steps": ad_config.get("adetailer_steps") or 12,
+                    "adetailer_cfg": ad_config.get("adetailer_cfg") or 5.7,
+                    "adetailer_sampler": ad_config.get("adetailer_sampler") or "DPM++ 2M Karras",
+                    "adetailer_prompt": ad_config.get("adetailer_prompt", "<stable_yogis_pdxl_positives>,<stable_yogis_realism_positives_v1>, highly realistic human face, natural skin texture, clear skin pores, balanced facial proportions, symmetrical facial features, well-defined eyes, natural eye reflections, accurate facial anatomy, sharp focus, photorealistic details, 8k resolution, professional lighting"),
+                    "adetailer_negative_prompt": ad_config.get("adetailer_negative_prompt", "<stable_yogis_pdxl_negatives2-neg>,<stable_yogis_anatomy_negatives_v1-neg>,<sdxl_cyberrealistic_simpleneg-neg>,<negative_hands>,low quality,blurry,out of focus,distorted face,asymmetrical face,deformed facial features,warped eyes,crossed eyes,extra eyes,extra face,multiple faces,mutated face,plastic skin,over-smoothed skin,over-sharpened,harsh shadows,unrealistic skin texture,uncanny "),
+                }
+                # Also set flat keys
+                if ad_config.get("adetailer_denoise") is not None:
+                    config["adetailer_denoising_strength"] = ad_config["adetailer_denoise"]
+                if ad_config.get("adetailer_steps") is not None:
+                    config["adetailer_steps"] = ad_config["adetailer_steps"]
+                if ad_config.get("adetailer_cfg") is not None:
+                    config["adetailer_cfg_scale"] = ad_config["adetailer_cfg"]
+            
+            # upscale config (use current pack's upscale settings)
+            if "upscale" in stages:
+                upscale_config = pack_config.get("upscale", {})
+                config["upscale"] = {
+                    "upscaler": upscale_config.get("upscaler", "4xUltrasharp_4xUltrasharpV10"),
+                    "upscale_by": upscale_config.get("upscale_by") or upscale_config.get("upscale_factor", 2.0),
+                    "tile_size": upscale_config.get("tile_size", 512),
+                    "denoising_strength": upscale_config.get("denoising_strength", 0.35),
+                }
+                # Also set flat keys
+                config["upscale_denoising_strength"] = config["upscale"]["denoising_strength"]
+                config["upscaler"] = config["upscale"]["upscaler"]
+                config["upscale_factor"] = config["upscale"]["upscale_by"]
+            
+            self._append_log("[reprocess] Using pack config (override disabled)")
+        
+        return config
+
     def set_main_window(self, main_window: MainWindow) -> None:
         """Set the main window and wire GUI callbacks."""
         self.main_window = main_window
@@ -999,7 +1269,7 @@ class AppController:
             name for name in ("header_zone", "left_zone", "bottom_zone") if not hasattr(mw, name)
         ]
         if missing:
-            print(
+            logger.debug(
                 f"AppController._attach_to_gui: main_window missing zones {missing}; deferring wiring"
             )
             return
@@ -1186,7 +1456,7 @@ class AppController:
         # a different job model. This is a limitation of the current architecture.
         # The V1 queue doesn't persist job payloads - they're typically callables.
         # For PR-GUI-F3, we'll at least restore the flags.
-        logger.info(
+        logger.debug(
             f"Restored queue state: auto_run={snapshot.auto_run_enabled}, "
             f"paused={snapshot.paused}, {len(snapshot.jobs)} jobs (jobs not restored in V1 queue)"
         )
@@ -1446,6 +1716,8 @@ class AppController:
                 tab_frame = getattr(self.main_window, "pipeline_tab", None)
                 if tab_frame and hasattr(tab_frame, "running_job_panel"):
                     tab_frame.running_job_panel.update_job_with_summary(None, None, None)
+                if tab_frame and hasattr(tab_frame, "preview_panel"):
+                    tab_frame.preview_panel.update_with_summary(None)
             return
         queue_job = job_to_queue_job(job)
         self.app_state.set_running_job(queue_job)
@@ -1464,6 +1736,8 @@ class AppController:
             tab_frame = getattr(self.main_window, "pipeline_tab", None)
             if tab_frame and hasattr(tab_frame, "running_job_panel"):
                 tab_frame.running_job_panel.update_job_with_summary(queue_job, summary, None)
+            if tab_frame and hasattr(tab_frame, "preview_panel"):
+                tab_frame.preview_panel.update_with_summary(summary)
 
     # ------------------------------------------------------------------
     # PR-203: Queue Manipulation APIs
@@ -1471,6 +1745,14 @@ class AppController:
 
     def on_queue_move_up_v2(self, job_id: str) -> bool:
         """Move a job up in the queue."""
+        return self.move_queue_job_up(job_id)
+
+    def on_queue_move_down_v2(self, job_id: str) -> bool:
+        """Move a job down in the queue."""
+        return self.move_queue_job_down(job_id)
+
+    def move_queue_job_up(self, job_id: str) -> bool:
+        """Move a job up in the queue and persist the new ordering."""
         if not self.job_service:
             return False
         queue = getattr(self.job_service, "job_queue", None)
@@ -1479,13 +1761,14 @@ class AppController:
                 result = bool(queue.move_up(job_id))
                 if result:
                     self._refresh_app_state_queue()
+                    self._save_queue_state()
                 return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_up_v2 error: {exc!r}")
         return False
 
-    def on_queue_move_down_v2(self, job_id: str) -> bool:
-        """Move a job down in the queue."""
+    def move_queue_job_down(self, job_id: str) -> bool:
+        """Move a job down in the queue and persist the new ordering."""
         if not self.job_service:
             return False
         queue = getattr(self.job_service, "job_queue", None)
@@ -1494,6 +1777,7 @@ class AppController:
                 result = bool(queue.move_down(job_id))
                 if result:
                     self._refresh_app_state_queue()
+                    self._save_queue_state()
                 return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_down_v2 error: {exc!r}")
@@ -2446,7 +2730,7 @@ class AppController:
             "adetailer": bool(adetailer_val) if adetailer_val is not None else False,
             "upscale": bool(upscale_val) if upscale_val is not None else False,
         }
-        logger.info(
+        logger.debug(
             "[controller] Loading stage flags from config: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
             stage_defaults["txt2img"],
             stage_defaults["img2img"],
@@ -3376,7 +3660,7 @@ class AppController:
             f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
         )
         self._append_log(f"[resources] {msg}")
-        logger.info(msg)
+        logger.debug(msg)
         return normalized
 
     def on_webui_ready(self) -> None:
@@ -4055,6 +4339,7 @@ class AppController:
         ):
             txt2img_overrides = Txt2ImgOverrides(
                 model=txt2img_config.get("model"),
+                vae=txt2img_config.get("vae"),
                 sampler=txt2img_config.get("sampler_name"),  # Note: field is "sampler", not "sampler_name"
                 scheduler=txt2img_config.get("scheduler"),
                 steps=txt2img_config.get("steps"),
@@ -4125,19 +4410,19 @@ class AppController:
 
     def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
         """Add one or more packs to the current job draft."""
-        print(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
+        logger.debug(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
         self._append_log(f"[controller] Adding packs to job: {pack_ids}")
 
         entries = []
         stage_flags = self._build_stage_flags()
         randomizer_metadata = self._build_randomizer_metadata()
-        print(f"[AppController] Stage flags: {stage_flags}")
+        logger.debug(f"[AppController] Stage flags: {stage_flags}")
         for pack_id in pack_ids:
             pack = self._find_pack_by_id(pack_id)
-            print(f"[AppController] Looking for pack '{pack_id}': {pack}")
+            logger.debug(f"[AppController] Looking for pack '{pack_id}': {pack}")
             if pack is None:
                 self._append_log(f"[controller] Pack not found: {pack_id}")
-                print(f"[AppController] ERROR: Pack '{pack_id}' not found!")
+                logger.debug(f"[AppController] ERROR: Pack '{pack_id}' not found!")
                 continue
 
             # Get pack configuration - read the actual pack file to get its config
@@ -4171,7 +4456,7 @@ class AppController:
                 self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
                 continue
             
-            print(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
+            logger.debug(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
             
             # Create one PackJobEntry per prompt row
             for row_index, prompt_row in enumerate(all_prompts):
@@ -4190,7 +4475,7 @@ class AppController:
                 )
                 entries.append(entry)
             
-            print(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
+            logger.debug(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
 
         if entries and self.app_state:
             self.app_state.add_packs_to_job_draft(entries)

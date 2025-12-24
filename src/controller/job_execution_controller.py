@@ -343,7 +343,7 @@ class JobExecutionController:
                 restored_jobs.append(job)
         if restored_jobs:
             self._queue.restore_jobs(restored_jobs)
-        logger.info(
+        logger.debug(
             "Restored queue state: auto_run=%s, paused=%s, %d restored job(s)",
             self._auto_run_enabled,
             self._queue_paused,

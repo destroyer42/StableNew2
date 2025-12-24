@@ -55,6 +55,13 @@ QueueSnapshotV1 = QueueSnapshot
 _QUEUE_CODEC = JSONLCodec(logger=logger.warning)
 
 
+def _swap(jobs: list[dict[str, Any]], i: int, j: int) -> None:
+    """Swap two entries in-place if indices are valid."""
+    if i < 0 or j < 0 or i >= len(jobs) or j >= len(jobs):
+        return
+    jobs[i], jobs[j] = jobs[j], jobs[i]
+
+
 def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
     """Ensure a normalized queue job matches schema v2.6."""
     errors: list[str] = []
@@ -123,7 +130,7 @@ def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | Non
         schema_version=SCHEMA_VERSION,
     )
 
-    logger.info(
+    logger.debug(
         "Loaded queue state: %d jobs, auto_run=%s, paused=%s",
         len(snapshot.jobs),
         snapshot.auto_run_enabled,
@@ -163,7 +170,7 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
         temp_path.replace(state_path)
 
         logger.debug("Saved queue state: %d jobs", len(validated_jobs))
-        logger.info(
+        logger.debug(
             "QUEUE_STATE_SAVED | Persisted queue state",
             extra={
                 "job_count": len(validated_jobs),
@@ -194,6 +201,28 @@ def delete_queue_snapshot(path: Path | str | None = None) -> bool:
         return False
 
 
+def move_job_up(snapshot: QueueSnapshotV1, queue_id: str) -> bool:
+    """Move a job up one position within a QueueSnapshot."""
+    for idx, job in enumerate(snapshot.jobs):
+        if str(job.get("queue_id")) == queue_id:
+            if idx == 0:
+                return False
+            _swap(snapshot.jobs, idx, idx - 1)
+            return True
+    return False
+
+
+def move_job_down(snapshot: QueueSnapshotV1, queue_id: str) -> bool:
+    """Move a job down one position within a QueueSnapshot."""
+    for idx, job in enumerate(snapshot.jobs):
+        if str(job.get("queue_id")) == queue_id:
+            if idx >= len(snapshot.jobs) - 1:
+                return False
+            _swap(snapshot.jobs, idx, idx + 1)
+            return True
+    return False
+
+
 __all__ = [
     "QueueSnapshotV1",
     "UnsupportedQueueSchemaError",
@@ -202,4 +231,6 @@ __all__ = [
     "save_queue_snapshot",
     "delete_queue_snapshot",
     "get_queue_state_path",
+    "move_job_up",
+    "move_job_down",
 ]

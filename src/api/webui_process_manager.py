@@ -86,7 +86,15 @@ class WebUIProcessManager:
         self._pid: int | None = None
         self._stdout_tail: deque[str] = deque(maxlen=200)
         self._stderr_tail: deque[str] = deque(maxlen=200)
+        self._stdout_log_path: Path | None = None
+        self._stderr_log_path: Path | None = None
+        self._stdout_log_file = None
+        self._stderr_log_file = None
+        self._stdout_thread: threading.Thread | None = None
+        self._stderr_thread: threading.Thread | None = None
         self._stopped: bool = False
+        self._orphan_monitor_thread: threading.Thread | None = None
+        self._orphan_monitor_stop = threading.Event()
         global _GLOBAL_WEBUI_PROCESS_MANAGER
         _GLOBAL_WEBUI_PROCESS_MANAGER = self
 
@@ -95,29 +103,22 @@ class WebUIProcessManager:
         return self._process
 
     def ensure_running(self) -> bool:
-        # CRITICAL: Don't auto-restart WebUI if StableNew GUI is not running
-        # This prevents orphaned processes from crashed sessions auto-restarting WebUI
-        from src.utils.single_instance import SingleInstanceLock
-        if not SingleInstanceLock.is_gui_running():
-            logger.warning(
-                "WebUI ensure_running called but StableNew GUI is not running. "
-                "Refusing to start WebUI to prevent orphaned process. "
-                "This may indicate an orphaned queue runner from a crashed session."
-            )
-            return False
+        # Note: The orphan monitor thread now handles preventing orphaned processes.
+        # We don't need to check SingleInstanceLock here during normal startup,
+        # as it would block legitimate WebUI launches during app initialization.
         
         ctx = LogContext(subsystem="api")
-        logging.info("WebUI ensure_running check requested")
+        logger.debug("WebUI ensure_running check requested")
         if self.is_running():
-            logging.info("WebUI process already running; verifying health")
+            logger.debug("WebUI process already running; verifying health")
             try:
                 healthy = self.check_health()
                 if healthy:
-                    log_with_ctx(logger, logging.INFO, "WebUI already healthy", ctx=ctx)
+                    log_with_ctx(logger, logging.DEBUG, "WebUI already healthy", ctx=ctx)
                     return True
-                logging.warning("Existing WebUI process unhealthy; restarting")
+                logger.warning("Existing WebUI process unhealthy; restarting")
             except Exception:
-                logging.warning("Health check failed while WebUI claimed running")
+                logger.warning("Health check failed while WebUI claimed running")
             self.stop()
 
         try:
@@ -174,7 +175,7 @@ class WebUIProcessManager:
         ctx = LogContext(subsystem="api")
         log_with_ctx(
             logger,
-            logging.INFO,
+            logging.DEBUG,
             "Starting WebUI process",
             ctx=ctx,
             extra_fields={"command": self._config.command, "working_dir": self._config.working_dir},
@@ -182,20 +183,31 @@ class WebUIProcessManager:
         run_session_id = build_run_session_id()
 
         try:
-            # CRITICAL FIX: Don't capture stdout/stderr at all - let WebUI write directly to console
-            # This prevents any potential file locking or buffer blocking issues
-            
             # For .bat files on Windows, we MUST use shell=True, otherwise they won't execute.
-            # The orphan process issue will be handled by aggressive cleanup in _kill_process_tree.
+            # Use CREATE_NEW_PROCESS_GROUP to allow clean termination and prevent orphans.
             use_shell = os.name == "nt" and self._config.command[0].endswith(".bat")
-            
+
+            # On Windows, use CREATE_NEW_PROCESS_GROUP + CREATE_BREAKAWAY_FROM_JOB flags
+            # This allows us to send CTRL_BREAK_EVENT for clean shutdown.
+            creationflags = 0
+            if os.name == "nt":
+                import subprocess
+                # CREATE_NEW_PROCESS_GROUP = 0x00000200
+                # CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+                creationflags = 0x00000200 | 0x01000000
+
             self._process = subprocess.Popen(
                 self._config.command,
                 cwd=self._config.working_dir or None,
                 env=self._config.build_env(),
-                stdout=None,  # Inherit parent's stdout (console)
-                stderr=None,  # Inherit parent's stderr (console)
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 shell=use_shell,
+                creationflags=creationflags if os.name == "nt" else 0,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
             )
             self._pid = self._process.pid
             self._start_time = time.time()
@@ -205,20 +217,100 @@ class WebUIProcessManager:
                 command=self._config.command,
                 cwd=self._config.working_dir,
             )
-            logger.info(launch_msg)
-            logger.info("WebUI stdout/stderr will appear directly in console (not captured)")
+            logger.debug(launch_msg)
             self._stdout_tail.clear()
             self._stderr_tail.clear()
+            self._start_output_capture(run_session_id)
+            
+            # Start orphan monitor thread to kill WebUI if StableNew GUI exits
+            self._start_orphan_monitor()
         except Exception as exc:  # noqa: BLE001 - surface structured error
             raise WebUIStartupError(f"Failed to start WebUI: {exc}") from exc
 
         return self._process
+
+    def _start_output_capture(self, run_session_id: str) -> None:
+        process = self._process
+        if process is None:
+            return
+        if process.stdout is None or process.stderr is None:
+            logger.warning("WebUI stdout/stderr capture unavailable (no pipes attached)")
+            return
+
+        log_dir = Path("logs") / "webui"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        self._stdout_log_path = log_dir / f"webui_stdout_{run_session_id}.log"
+        self._stderr_log_path = log_dir / f"webui_stderr_{run_session_id}.log"
+        self._stdout_log_file = self._stdout_log_path.open("a", encoding="utf-8", errors="replace")
+        self._stderr_log_file = self._stderr_log_path.open("a", encoding="utf-8", errors="replace")
+
+        def _read_stream(stream, sink, tail, label: str) -> None:
+            try:
+                for line in iter(stream.readline, ""):
+                    if not line:
+                        break
+                    tail.append(line.rstrip("\n"))
+                    try:
+                        sink.write(line)
+                        sink.flush()
+                    except Exception:
+                        pass
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.debug("WebUI %s reader stopped: %s", label, exc)
+            finally:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+
+        self._stdout_thread = threading.Thread(
+            target=_read_stream,
+            args=(process.stdout, self._stdout_log_file, self._stdout_tail, "stdout"),
+            daemon=True,
+        )
+        self._stderr_thread = threading.Thread(
+            target=_read_stream,
+            args=(process.stderr, self._stderr_log_file, self._stderr_tail, "stderr"),
+            daemon=True,
+        )
+        self._stdout_thread.start()
+        self._stderr_thread.start()
+        logger.debug(
+            "WebUI stdout/stderr captured to %s and %s",
+            str(self._stdout_log_path),
+            str(self._stderr_log_path),
+        )
+
+    def _stop_output_capture(self) -> None:
+        for stream in (
+            getattr(self._process, "stdout", None),
+            getattr(self._process, "stderr", None),
+        ):
+            try:
+                if stream is not None:
+                    stream.close()
+            except Exception:
+                pass
+        for thread in (self._stdout_thread, self._stderr_thread):
+            if thread and thread.is_alive():
+                thread.join(timeout=2.0)
+        for handle in (self._stdout_log_file, self._stderr_log_file):
+            try:
+                if handle is not None:
+                    handle.flush()
+                    handle.close()
+            except Exception:
+                pass
+        self._stdout_log_file = None
+        self._stderr_log_file = None
 
     def stop(self) -> None:
         """Attempt to terminate the process if running (idempotent)."""
         if self._stopped:
             return
         self._stopped = True
+        # Stop orphan monitor first
+        self._stop_orphan_monitor()
         try:
             self.stop_webui()
         except Exception:
@@ -249,6 +341,7 @@ class WebUIProcessManager:
             process.terminated = False
         if process.poll() is not None:
             logger.info("stop_webui called but process already exited")
+            self._stop_output_capture()
             self._finalize_process(process)
             # Already exited; terminated remains False
             return True
@@ -299,6 +392,7 @@ class WebUIProcessManager:
             logger.info("Main WebUI process exited gracefully, now cleaning up child processes...")
             self._kill_process_tree(pid)  # Kill children even after graceful exit
         
+        self._stop_output_capture()
         self._finalize_process(process)
         exit_code = self._last_exit_code
         running = self.is_running()
@@ -578,11 +672,12 @@ class WebUIProcessManager:
                                 except Exception:
                                     pass
                             
-                            # Check 3: FAILSAFE - Memory > 500MB (likely a leaked WebUI process)
-                            # Normal Python processes are 17-150MB, WebUI processes are much larger
-                            if mem_mb > 500:
+                            # Check 3: FAILSAFE - Memory > 2000MB (likely a leaked WebUI process)
+                            # Raised from 500MB to 2000MB to avoid killing legitimate Python processes
+                            # WebUI typically uses 4-12GB; this only catches obvious leaks
+                            if mem_mb > 2000:
                                 is_webui = True
-                                match_reason.append(f"memory {mem_mb:.1f} MB > 500 MB threshold")
+                                match_reason.append(f"memory {mem_mb:.1f} MB > 2000 MB threshold")
                                 logger.warning(
                                     "Found large python.exe process PID %s (%.1f MB) - likely WebUI leak",
                                     proc.pid,
@@ -714,6 +809,8 @@ class WebUIProcessManager:
         return {
             "stdout_tail": _join_tail(self._stdout_tail),
             "stderr_tail": _join_tail(self._stderr_tail),
+            "stdout_log_path": str(self._stdout_log_path) if self._stdout_log_path else "",
+            "stderr_log_path": str(self._stderr_log_path) if self._stderr_log_path else "",
             "pid": self.pid,
             "running": self.is_running(),
         }
@@ -726,6 +823,64 @@ class WebUIProcessManager:
         if max_lines > 0 and len(lines) > max_lines:
             lines = lines[-max_lines:]
         return "\n".join(lines)
+
+    def _start_orphan_monitor(self) -> None:
+        """Start background thread to monitor if GUI is still running."""
+        if self._orphan_monitor_thread and self._orphan_monitor_thread.is_alive():
+            return
+        
+        self._orphan_monitor_stop.clear()
+        self._orphan_monitor_thread = threading.Thread(
+            target=self._orphan_monitor_loop,
+            daemon=True,
+            name="WebUI-Orphan-Monitor"
+        )
+        self._orphan_monitor_thread.start()
+        logger.info("[Orphan Monitor] Started monitoring thread to prevent orphaned WebUI processes")
+
+    def _stop_orphan_monitor(self) -> None:
+        """Stop the orphan monitor thread."""
+        self._orphan_monitor_stop.set()
+        if self._orphan_monitor_thread and self._orphan_monitor_thread.is_alive():
+            self._orphan_monitor_thread.join(timeout=2.0)
+
+    def _orphan_monitor_loop(self) -> None:
+        """Monitor loop that checks if StableNew GUI is still running."""
+        from src.utils.single_instance import SingleInstanceLock
+        
+        check_interval = 5.0  # Check every 5 seconds
+        
+        logger.info("[Orphan Monitor] Starting lock monitoring (checks every %.1fs)", check_interval)
+        
+        while not self._orphan_monitor_stop.is_set():
+            try:
+                # Check if GUI is still running
+                if not SingleInstanceLock.is_gui_running():
+                    logger.error(
+                        "[Orphan Monitor] StableNew GUI has exited! "
+                        "Terminating WebUI to prevent orphaned process (PID=%s)",
+                        self._pid
+                    )
+                    # Force kill WebUI immediately
+                    try:
+                        self.stop_webui(grace_seconds=2.0)
+                        logger.warning("[Orphan Monitor] WebUI terminated due to GUI exit")
+                    except Exception as exc:
+                        logger.exception("[Orphan Monitor] Error terminating WebUI: %s", exc)
+                    break
+                
+                # Check if process is still running
+                if not self.is_running():
+                    logger.debug("[Orphan Monitor] WebUI process has exited naturally, stopping monitor")
+                    break
+                    
+            except Exception as exc:
+                logger.exception("[Orphan Monitor] Error in monitor loop: %s", exc)
+            
+            # Wait for next check or stop signal
+            self._orphan_monitor_stop.wait(check_interval)
+        
+        logger.debug("[Orphan Monitor] Monitor thread exiting")
 
 
 def detect_default_webui_workdir(base_dir: str | None = None) -> str | None:
@@ -765,7 +920,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             # Verify the cached command still exists
             command_path = workdir_path / cached_command[0] if cached_command else None
             if command_path and command_path.exists():
-                print(f"Using cached WebUI location: {cached_workdir}")
+                logger.debug(f"Using cached WebUI location: {cached_workdir}")
                 config = WebUIProcessConfig(
                     command=cached_command,
                     working_dir=cached_workdir,
@@ -780,7 +935,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
 
     if workdir and command:
         # Cache this valid configuration
-        print(f"Caching WebUI location: {workdir}")
+        logger.debug(f"Caching WebUI location: {workdir}")
         _save_webui_cache({"workdir": workdir, "command": command, "timestamp": time.time()})
         return WebUIProcessConfig(
             command=command,
@@ -790,7 +945,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         )
 
     # Last resort: detect automatically (expensive)
-    print("No cached or configured WebUI location found, performing auto-detection...")
+    logger.debug("No cached or configured WebUI location found, performing auto-detection...")
     workdir = detect_default_webui_workdir()
     if workdir:
         workdir_path = Path(workdir)
@@ -804,7 +959,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         command_path = workdir_path / command[0]
         if command_path.exists():
             # Cache the detected configuration
-            print(f"Caching detected WebUI location: {workdir}")
+            logger.debug(f"Caching detected WebUI location: {workdir}")
             _save_webui_cache({"workdir": workdir, "command": command, "timestamp": time.time()})
             return WebUIProcessConfig(
                 command=command,
@@ -814,6 +969,63 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             )
 
     return None
+
+
+    def _start_orphan_monitor(self) -> None:
+        """Start background thread to monitor if GUI is still running."""
+        if self._orphan_monitor_thread and self._orphan_monitor_thread.is_alive():
+            return
+        
+        self._orphan_monitor_stop.clear()
+        self._orphan_monitor_thread = threading.Thread(
+            target=self._orphan_monitor_loop,
+            daemon=True,
+            name="WebUI-Orphan-Monitor"
+        )
+        self._orphan_monitor_thread.start()
+        logger.info("[Orphan Monitor] Started monitoring thread to prevent orphaned WebUI processes")
+
+    def _stop_orphan_monitor(self) -> None:
+        """Stop the orphan monitor thread."""
+        self._orphan_monitor_stop.set()
+        if self._orphan_monitor_thread and self._orphan_monitor_thread.is_alive():
+            self._orphan_monitor_thread.join(timeout=2.0)
+
+    def _orphan_monitor_loop(self) -> None:
+        """Monitor loop that checks if StableNew GUI is still running."""
+        from src.utils.single_instance import SingleInstanceLock
+        
+        check_interval = 5.0  # Check every 5 seconds
+        
+        while not self._orphan_monitor_stop.is_set():
+            try:
+                # Check if GUI is still running
+                if not SingleInstanceLock.is_gui_running():
+                    logger.error(
+                        "[Orphan Monitor] StableNew GUI has exited! "
+                        "Terminating WebUI to prevent orphaned process (PID=%s)",
+                        self._pid
+                    )
+                    # Force kill WebUI immediately
+                    try:
+                        self.stop_webui(grace_seconds=2.0)
+                        logger.warning("[Orphan Monitor] WebUI terminated due to GUI exit")
+                    except Exception as exc:
+                        logger.exception("[Orphan Monitor] Error terminating WebUI: %s", exc)
+                    break
+                
+                # Check if process is still running
+                if not self.is_running():
+                    logger.debug("[Orphan Monitor] WebUI process has exited naturally, stopping monitor")
+                    break
+                    
+            except Exception as exc:
+                logger.exception("[Orphan Monitor] Error in monitor loop: %s", exc)
+            
+            # Wait for next check or stop signal
+            self._orphan_monitor_stop.wait(check_interval)
+        
+        logger.debug("[Orphan Monitor] Monitor thread exiting")
 
 
 _GLOBAL_WEBUI_PROCESS_MANAGER: WebUIProcessManager | None = None

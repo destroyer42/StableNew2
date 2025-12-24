@@ -7,14 +7,18 @@ import os
 import re
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 
-def save_image_from_base64(base64_str: str, output_path: Path) -> bool:
+def save_image_from_base64(
+    base64_str: str,
+    output_path: Path,
+    metadata_builder: Callable[[Image.Image], dict[str, str] | None] | None = None,
+) -> bool:
     """
     Save base64 encoded image to file.
 
@@ -51,6 +55,14 @@ def save_image_from_base64(base64_str: str, output_path: Path) -> bool:
             return False
 
         image.save(output_path)
+        if metadata_builder is not None:
+            try:
+                from src.utils.image_metadata import write_image_metadata
+                metadata_kv = metadata_builder(image)
+                if metadata_kv:
+                    write_image_metadata(output_path, metadata_kv)
+            except Exception as exc:
+                logger.debug("Failed to embed image metadata: %s", exc)
         logger.info(f"Saved image: {output_path.name}")
         return True
     except Exception as e:
@@ -70,10 +82,27 @@ def load_image_to_base64(image_path: Path) -> str | None:
     """
     try:
         with Image.open(image_path) as img:
+            # Log image dimensions and file size for diagnostics
+            img_width, img_height = img.size
+            file_size_mb = image_path.stat().st_size / (1024 * 1024)
+            
             buffered = BytesIO()
             img.save(buffered, format=img.format or "PNG")
-            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        logger.info(f"Loaded image to base64: {image_path.name}")
+            base64_bytes = buffered.getvalue()
+            base64_size_mb = len(base64_bytes) / (1024 * 1024)
+            img_str = base64.b64encode(base64_bytes).decode("utf-8")
+            
+            # Warn if base64 payload is large (may cause timeouts)
+            if base64_size_mb > 10.0:
+                logger.warning(
+                    f"Large image loaded: {image_path.name} {img_width}×{img_height} "
+                    f"file={file_size_mb:.1f}MB base64={base64_size_mb:.1f}MB"
+                )
+            else:
+                logger.info(
+                    f"Loaded image: {image_path.name} {img_width}×{img_height} "
+                    f"base64={base64_size_mb:.1f}MB"
+                )
         return img_str
     except Exception as e:
         logger.error(f"Failed to load image: {e}")
@@ -189,7 +218,7 @@ def read_prompt_pack(pack_path: Path) -> list[dict[str, str]]:
 
                 prompts.append({"positive": positive, "negative": negative})
 
-        logger.info(f"Read {len(prompts)} prompts from {pack_path.name}")
+        logger.debug(f"Read {len(prompts)} prompts from {pack_path.name}")
         return prompts
 
     except Exception as e:
@@ -218,7 +247,7 @@ def get_prompt_packs(packs_dir: Path) -> list[Path]:
             pack_files.extend(packs_dir.glob(ext))
 
         pack_files.sort()
-        logger.info(f"Found {len(pack_files)} prompt packs in {packs_dir}")
+        logger.debug(f"Found {len(pack_files)} prompt packs in {packs_dir}")
         return pack_files
 
     except Exception as e:

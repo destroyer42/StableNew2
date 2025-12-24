@@ -534,6 +534,11 @@ class NormalizedJobRecord:
     completed_at: datetime | None = None
     status: JobStatusV2 = JobStatusV2.QUEUED
     error_message: str | None = None
+    # Reprocessing support: provide input images to skip txt2img
+    input_image_paths: list[str] = field(default_factory=list)
+    # Start stage for reprocessing: skip stages before this one
+    # Options: "txt2img", "img2img", "adetailer", "upscale"
+    start_stage: str | None = None
 
     @property
     def created_at(self) -> datetime:

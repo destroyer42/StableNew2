@@ -156,14 +156,15 @@ class JobQueue:
         with self._lock:
             # Find queued jobs in order
             queued = self._get_ordered_queued_jobs()
-            for i, (priority, _counter, jid) in enumerate(queued):
+            for i, (priority, counter, jid) in enumerate(queued):
                 if jid == job_id:
                     if i == 0:
                         return False  # Already at top
-                    # Swap priorities with the job above
+                    # Swap counters with the job above to change ordering
                     prev_priority, prev_counter, prev_jid = queued[i - 1]
-                    # Adjust internal queue entries
-                    self._swap_queue_positions(job_id, prev_jid, priority, prev_priority)
+                    if priority != prev_priority:
+                        return False
+                    self._swap_queue_positions(job_id, prev_jid, counter, prev_counter)
                     self._notify_state_listeners()
                     return True
             return False
@@ -179,13 +180,15 @@ class JobQueue:
         """
         with self._lock:
             queued = self._get_ordered_queued_jobs()
-            for i, (priority, _counter, jid) in enumerate(queued):
+            for i, (priority, counter, jid) in enumerate(queued):
                 if jid == job_id:
                     if i == len(queued) - 1:
                         return False  # Already at bottom
-                    # Swap priorities with the job below
+                    # Swap counters with the job below to change ordering
                     next_priority, next_counter, next_jid = queued[i + 1]
-                    self._swap_queue_positions(job_id, next_jid, priority, next_priority)
+                    if priority != next_priority:
+                        return False
+                    self._swap_queue_positions(job_id, next_jid, counter, next_counter)
                     self._notify_state_listeners()
                     return True
             return False
@@ -246,17 +249,16 @@ class JobQueue:
         return queued
 
     def _swap_queue_positions(
-        self, job_id1: str, job_id2: str, priority1: int, priority2: int
+        self, job_id1: str, job_id2: str, counter1: int, counter2: int
     ) -> None:
         """Swap queue positions between two jobs (internal, must hold lock)."""
-        # We swap by adjusting counter values since priority might be the same
+        # Swap counters to preserve priority ordering while reordering within priority.
         new_queue = []
         for priority, counter, jid in self._queue:
             if jid == job_id1:
-                # Give it the other job's counter (position)
-                new_queue.append((priority2, counter, jid))
+                new_queue.append((priority, counter2, jid))
             elif jid == job_id2:
-                new_queue.append((priority1, counter, jid))
+                new_queue.append((priority, counter1, jid))
             else:
                 new_queue.append((priority, counter, jid))
         self._queue = new_queue

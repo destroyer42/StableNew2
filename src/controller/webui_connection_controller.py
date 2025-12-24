@@ -103,7 +103,7 @@ class WebUIConnectionController:
                 base_url, timeout=initial_timeout, poll_interval=retry_interval
             ):
                 self._set_state(WebUIConnectionState.READY)
-                self._logger.info("WebUI models/options are ready at %s", base_url)
+                self._logger.debug("WebUI models/options are ready at %s", base_url)
                 self._notify_ready()
                 return self._state
         except Exception:
@@ -136,7 +136,7 @@ class WebUIConnectionController:
                     base_url, timeout=retry_interval, poll_interval=retry_interval
                 ):
                     self._set_state(WebUIConnectionState.READY)
-                    self._logger.info("WebUI models/options are ready at %s", base_url)
+                    self._logger.debug("WebUI models/options are ready at %s", base_url)
                     self._notify_ready()
                     return self._state
             except WebUIHealthCheckTimeout:
@@ -157,7 +157,7 @@ class WebUIConnectionController:
             try:
                 if wait_for_webui_ready(detected_url, timeout=5.0, poll_interval=1.0):
                     self._set_state(WebUIConnectionState.READY)
-                    self._logger.info("WebUI models/options are ready at %s", detected_url)
+                    self._logger.debug("WebUI models/options are ready at %s", detected_url)
                     self._notify_ready()
                     return self._state
             except Exception as e:

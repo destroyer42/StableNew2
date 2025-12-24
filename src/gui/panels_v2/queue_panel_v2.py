@@ -7,11 +7,14 @@ Panel consumers must only invoke its API from the Tk main thread (e.g., via `App
 
 from __future__ import annotations
 
+import logging
 import threading
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from src.gui.theme_v2 import (
     ACCENT_GOLD,
@@ -274,9 +277,12 @@ class QueuePanelV2(ttk.Frame):
             # Fallback to old hardcoded estimate
             return (count * 60.0, "?")
 
-        total_seconds, jobs_with_estimates = stats_service.get_queue_total_estimate(
-            self._jobs
-        )
+        try:
+            total_seconds, jobs_with_estimates = stats_service.get_queue_total_estimate(
+                self._jobs
+            )
+        except Exception:
+            return (count * 60.0, "?")
 
         # Determine confidence indicator
         if jobs_with_estimates == count:
@@ -330,7 +336,11 @@ class QueuePanelV2(ttk.Frame):
         
         # Perform the move
         if self.controller:
-            self.controller.on_queue_move_up_v2(job.job_id)
+            move_fn = getattr(self.controller, "move_queue_job_up", None) or getattr(
+                self.controller, "on_queue_move_up_v2", None
+            )
+            if callable(move_fn):
+                move_fn(job.job_id)
             
             # Update selection to follow the moved item
             new_idx = idx - 1
@@ -359,7 +369,11 @@ class QueuePanelV2(ttk.Frame):
         
         # Perform the move
         if self.controller:
-            self.controller.on_queue_move_down_v2(job.job_id)
+            move_fn = getattr(self.controller, "move_queue_job_down", None) or getattr(
+                self.controller, "on_queue_move_down_v2", None
+            )
+            if callable(move_fn):
+                move_fn(job.job_id)
             
             new_idx = idx + 1
             
@@ -521,11 +535,15 @@ class QueuePanelV2(ttk.Frame):
             eta_str = ""
             if stats_service:
                 estimate = stats_service.get_estimate_for_job(job)
-                if estimate:
-                    if estimate < 60:
-                        eta_str = f" ({int(estimate)}s)"
+                try:
+                    estimate_val = float(estimate) if estimate is not None else None
+                except (TypeError, ValueError):
+                    estimate_val = None
+                if estimate_val:
+                    if estimate_val < 60:
+                        eta_str = f" ({int(estimate_val)}s)"
                     else:
-                        mins = int(estimate // 60)
+                        mins = int(estimate_val // 60)
                         eta_str = f" (~{mins}m)"
 
             # PR-GUI-F2: Mark running job with indicator
@@ -841,7 +859,7 @@ class QueuePanelV2(ttk.Frame):
         try:
             self.update_jobs(queue_jobs)
         except Exception as exc:
-            print(f"[QueuePanelV2] Failed to refresh display: {exc}")
+            logger.debug(f"[QueuePanelV2] Failed to refresh display: {exc}")
 
     def _on_running_summary_changed(self) -> None:
         """Handle running job summary changes (legacy compatibility)."""

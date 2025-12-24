@@ -202,11 +202,15 @@ class InMemoryLogHandler(logging.Handler):
 
 
 def attach_gui_log_handler(max_entries: int = 500) -> InMemoryLogHandler:
-    """Attach an in-memory log handler to the root logger for GUI mode."""
-    handler = InMemoryLogHandler(max_entries=max_entries, level=logging.INFO)
+    """Attach an in-memory log handler to the root logger for GUI mode.
+    
+    Captures DEBUG and above for GUI log panel display with filtering.
+    """
+    handler = InMemoryLogHandler(max_entries=max_entries, level=logging.DEBUG)
     root = logging.getLogger()
-    if root.level > logging.INFO or root.level == logging.NOTSET:
-        root.setLevel(logging.INFO)
+    # Ensure root logger allows DEBUG messages to reach the handler
+    if root.level > logging.DEBUG or root.level == logging.NOTSET:
+        root.setLevel(logging.DEBUG)
     root.addHandler(handler)
     return handler
 
@@ -557,21 +561,44 @@ class StructuredLogger:
 
 def setup_logging(log_level: str = "INFO", log_file: str | None = None):
     """
-    Setup logging configuration.
+    Setup logging configuration for console and file output.
+    
+    Note: The root logger level may be set to DEBUG by the GUI log handler
+    to capture all messages for GUI display. This function sets the level
+    for console/file handlers only.
 
     Args:
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
+        log_level: Logging level for console output (DEBUG, INFO, WARNING, ERROR)
         log_file: Optional log file path
     """
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-    handlers = [logging.StreamHandler()]
+    
+    # Create console handler with specified level
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(getattr(logging, log_level.upper()))
+    console_handler.setFormatter(logging.Formatter(log_format))
+    
+    handlers = [console_handler]
+    
     if log_file:
         # Ensure the log file directory exists
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(getattr(logging, log_level.upper()))
+        file_handler.setFormatter(logging.Formatter(log_format))
+        handlers.append(file_handler)
 
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()), format=log_format, handlers=handlers
-    )
+    # Configure root logger - but don't force its level if GUI handler needs DEBUG
+    root_logger = logging.getLogger()
+    
+    # Only set root level if it's higher than the console level or not set
+    # This allows GUI handler to capture DEBUG while console shows WARNING
+    current_level = root_logger.level
+    desired_level = getattr(logging, log_level.upper())
+    if current_level == logging.NOTSET or current_level > desired_level:
+        root_logger.setLevel(desired_level)
+    
+    # Add handlers
+    for handler in handlers:
+        root_logger.addHandler(handler)

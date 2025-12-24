@@ -74,10 +74,15 @@ class StageCardsPanel(ttk.Frame):
             builder = self._stage_builders.get(stage_name)
             if not builder:
                 continue
-            card = builder(self)
-            self._stage_cards[stage_name] = card
-            setattr(self, f"{stage_name}_card", card)
-            self.stage_order.append(stage_name)
+            try:
+                card = builder(self)
+                self._stage_cards[stage_name] = card
+                setattr(self, f"{stage_name}_card", card)
+                self.stage_order.append(stage_name)
+            except Exception as exc:
+                print(f"[ERROR] Failed to create {stage_name} card: {exc}")
+                import traceback
+                traceback.print_exc()
         self._layout_stage_cards()
         self._attach_watchers()
         self._adetailer_listeners: list[Callable[[dict[str, Any]], None]] = []

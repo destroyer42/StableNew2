@@ -163,7 +163,7 @@ class SDWebUIClient:
             else bool(ConfigManager().get_setting("webui_options_write_enabled", False))
         )
         self._options_write_enabled = resolved_flag
-        logger.info(
+        logger.debug(
             "WebUI options writes %s",
             "enabled" if self._options_write_enabled else "disabled (SafeMode)",
         )
@@ -352,9 +352,22 @@ class SDWebUIClient:
             payload_capture = dict(payload_capture)
 
         json_payload = kwargs.get("json")
+        payload_size_mb = 0.0
         if json_payload is not None:
             try:
-                json.dumps(json_payload, ensure_ascii=False)
+                payload_json_str = json.dumps(json_payload, ensure_ascii=False)
+                payload_size_mb = len(payload_json_str) / (1024 * 1024)
+                # Log large payloads (over 10MB) as these may cause timeouts
+                if payload_size_mb > 10.0:
+                    log_with_ctx(
+                        logger,
+                        logging.WARNING,
+                        f"Large payload detected for {method.upper()} {endpoint}: {payload_size_mb:.1f}MB",
+                        ctx=context,
+                        extra_fields={"payload_size_mb": payload_size_mb, "stage": stage_key},
+                    )
+                else:
+                    logger.debug(f"Payload size for {method.upper()} {endpoint}: {payload_size_mb:.1f}MB")
             except (TypeError, ValueError) as json_exc:
                 raise WebUIPayloadValidationError(
                     f"Failed to serialize payload for {method.upper()} {endpoint}: {json_exc}"
@@ -766,6 +779,46 @@ class SDWebUIClient:
         except Exception as exc:  # noqa: BLE001 - log and continue
             logger.warning("Failed to apply WebUI upscale defaults: %s", exc)
 
+    def free_vram(self, unload_model: bool = False) -> bool:
+        """
+        Free VRAM by unloading cached data.
+        
+        Useful between batch jobs to prevent memory exhaustion.
+        
+        Args:
+            unload_model: If True, also unload the SD model (slower but frees more memory)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # First try the unload-checkpoint endpoint if available (A1111 1.6+)
+            if unload_model:
+                with self._request_context(
+                    "post",
+                    "/sdapi/v1/unload-checkpoint",
+                    timeout=30,
+                ) as response:
+                    if response is not None:
+                        logger.info("Unloaded SD model to free VRAM")
+                        return True
+            
+            # Alternative: POST to /sdapi/v1/refresh-checkpoints which clears caches
+            with self._request_context(
+                "post",
+                "/sdapi/v1/refresh-checkpoints",
+                timeout=30,
+            ) as response:
+                if response is not None:
+                    logger.info("Refreshed checkpoints to free VRAM caches")
+                    return True
+            
+            return False
+            
+        except Exception as exc:
+            logger.debug("free_vram failed (non-fatal): %s", exc)
+            return False
+
     def check_api_ready(self, max_retries: int = 5, retry_delay: float = 2.0) -> bool:
         """
         Check if the API is ready to accept requests.
@@ -815,6 +868,12 @@ class SDWebUIClient:
 
             try:
                 data = response.json()
+                # Log response size for diagnostics
+                response_size_mb = len(response.content) / (1024 * 1024)
+                if response_size_mb > 10.0:
+                    logger.warning(f"Large txt2img response: {response_size_mb:.1f}MB")
+                else:
+                    logger.debug(f"txt2img response size: {response_size_mb:.1f}MB")
             except ValueError as exc:
                 logger.error(f"txt2img response parsing failed: {exc}")
                 return None
@@ -873,6 +932,12 @@ class SDWebUIClient:
 
             try:
                 data = response.json()
+                # Log response size for diagnostics
+                response_size_mb = len(response.content) / (1024 * 1024)
+                if response_size_mb > 10.0:
+                    logger.warning(f"Large img2img response: {response_size_mb:.1f}MB")
+                else:
+                    logger.debug(f"img2img response size: {response_size_mb:.1f}MB")
             except ValueError as exc:
                 logger.error(f"img2img response parsing failed: {exc}")
                 return None
@@ -1138,7 +1203,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse models response: {exc}")
                 return []
 
-        logger.info("Retrieved %s models", len(data))
+        logger.debug("Retrieved %s models", len(data))
         return data
 
     def get_vae_models(self) -> list[dict[str, Any]]:
@@ -1158,7 +1223,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse VAE models response: {exc}")
                 return []
 
-        logger.info("Retrieved %s VAE models", len(data))
+        logger.debug("Retrieved %s VAE models", len(data))
         return data
 
     def get_samplers(self) -> list[dict[str, Any]]:
@@ -1178,7 +1243,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse samplers response: {exc}")
                 return []
 
-        logger.info("Retrieved %s samplers", len(data))
+        logger.debug("Retrieved %s samplers", len(data))
         self.samplers = data
         return data
 
@@ -1199,7 +1264,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse upscalers response: {exc}")
                 return []
 
-        logger.info("Retrieved %s upscalers", len(data))
+        logger.debug("Retrieved %s upscalers", len(data))
         self.upscalers = data
         return data
 
@@ -1222,7 +1287,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse hypernetworks response: {exc}")
                 return []
 
-        logger.info("Retrieved %s hypernetworks", len(data))
+        logger.debug("Retrieved %s hypernetworks", len(data))
         return data
 
     def get_schedulers(self) -> list[str]:
@@ -1268,7 +1333,7 @@ class SDWebUIClient:
         ]
         # Ensure proper capitalization for scheduler names (WebUI expects "Karras" not "karras")
         schedulers = [s.capitalize() if s and s.lower() in {"karras", "exponential", "normal", "simple", "beta", "linear", "cosine"} else s for s in schedulers]
-        logger.info("Retrieved %s schedulers", len(schedulers))
+        logger.debug("Retrieved %s schedulers", len(schedulers))
         return schedulers
 
     def get_adetailer_models(self) -> list[str]:
@@ -1304,21 +1369,21 @@ class SDWebUIClient:
                                 if "choices" in arg:
                                     choices = arg.get("choices", [])
                                     if choices and len(choices) > 3:  # Sanity check
-                                        logger.info("Retrieved %s ADetailer models from scripts API (arg %s)", len(choices), i)
+                                        logger.debug("Retrieved %s ADetailer models from scripts API (arg %s)", len(choices), i)
                                         return choices
                                 # Also check label for model-related args
                                 label = arg.get("label", "").lower()
                                 if "model" in label and "choices" in arg:
                                     choices = arg.get("choices", [])
                                     if choices:
-                                        logger.info("Retrieved %s ADetailer models from scripts API (via label)", len(choices))
+                                        logger.debug("Retrieved %s ADetailer models from scripts API (via label)", len(choices))
                                         return choices
             except Exception as exc:
                 logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
         
         # Fallback defaults
         defaults = self._get_default_adetailer_models()
-        logger.info("Using default ADetailer models: %s", len(defaults))
+        logger.debug("Using default ADetailer models: %s", len(defaults))
         return defaults
     
     @staticmethod

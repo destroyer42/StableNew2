@@ -107,8 +107,8 @@ class PipelineController(_GUIPipelineController):
         )
         njrs = builder.build_jobs(pack_entries)
         _logger.info(f"[PipelineController] Builder returned {len(njrs)} NormalizedJobRecord(s)")
-        print(f"[PipelineController] About to return {len(njrs)} jobs")
-        print(f"[PipelineController] First job: {njrs[0] if njrs else 'NONE'}")
+        _logger.debug(f"[PipelineController] About to return {len(njrs)} jobs")
+        _logger.debug(f"[PipelineController] First job: {njrs[0] if njrs else 'NONE'}")
         return njrs
 
     def _normalize_run_mode(self, pipeline_state: PipelineState) -> str:

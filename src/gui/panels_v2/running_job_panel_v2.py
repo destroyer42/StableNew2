@@ -187,7 +187,10 @@ class RunningJobPanelV2(ttk.Frame):
         return False
 
     def _format_eta(self, seconds: float | None) -> str:
-        """Format ETA seconds to a human-readable string."""
+        """Format ETA seconds to a human-readable string.
+        
+        PR-GUI-DATA-005: Display estimated time remaining.
+        """
         if seconds is None or seconds <= 0:
             return ""
 
@@ -200,7 +203,23 @@ class RunningJobPanelV2(ttk.Frame):
         else:
             hours = int(seconds // 3600)
             mins = int((seconds % 3600) // 60)
-            return f"ETA: {hours}h {mins}m"
+        return f"ETA: {hours}h {mins}m"
+
+    @staticmethod
+    def _estimate_eta_from_progress(progress: float, started_at: datetime | None) -> float | None:
+        """Estimate ETA using current progress percentage and start time."""
+        if started_at is None:
+            return None
+        if progress <= 0.0:
+            return None
+        elapsed = (datetime.now() - started_at).total_seconds()
+        if elapsed <= 0:
+            return None
+        try:
+            total_estimated = elapsed / progress
+            return max(total_estimated - elapsed, 0.0)
+        except Exception:
+            return None
 
     def _format_elapsed(self, started_at: datetime | None) -> str:
         """Format elapsed time since job started."""
@@ -322,8 +341,12 @@ class RunningJobPanelV2(ttk.Frame):
         elapsed_text = self._format_elapsed(job.started_at)
         self.elapsed_label.configure(text=elapsed_text)
 
-        # ETA
-        self.eta_label.configure(text=self._format_eta(job.eta_seconds))
+        # PR-GUI-DATA-005: Enhanced ETA calculation
+        eta_seconds = job.eta_seconds
+        if eta_seconds is None and job.progress > 0 and job.started_at:
+            # Calculate ETA based on elapsed time and progress percentage
+            eta_seconds = self._estimate_eta_from_progress(job.progress, job.started_at)
+        self.eta_label.configure(text=self._format_eta(eta_seconds))
 
         # Button states
         is_running = job.status == JobStatusV2.RUNNING
@@ -424,6 +447,10 @@ class RunningJobPanelV2(ttk.Frame):
             return
         if self._current_job:
             self._current_job.progress = progress
+            if eta_seconds is None:
+                eta_seconds = self._estimate_eta_from_progress(
+                    progress, getattr(self._current_job, "started_at", None)
+                )
             self._current_job.eta_seconds = eta_seconds
 
             progress_pct = int(progress * 100)

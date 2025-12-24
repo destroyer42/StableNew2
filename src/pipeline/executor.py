@@ -186,6 +186,7 @@ class Pipeline:
         self._current_run_dir: Path | None = None
         # PR-PIPE-001: Track current job ID for manifest linkage
         self._current_job_id: str | None = None
+        self._current_njr_sha256: str | None = None
         # PR-PIPE-004: Progress polling infrastructure
         self._progress_poll_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="progress_poll")
         self._current_generation_progress: float = 0.0
@@ -211,6 +212,69 @@ class Pipeline:
                 continue
             cleaned[key] = value
         return cleaned
+
+    def _build_image_metadata_payload(
+        self,
+        *,
+        image_path: Path,
+        stage: str,
+        run_dir: Path,
+        manifest: dict[str, Any],
+        image_size: tuple[int, int] | None,
+    ) -> dict[str, Any]:
+        from src.utils.image_metadata import build_payload_from_manifest
+
+        payload = build_payload_from_manifest(
+            image_path=image_path,
+            run_dir=run_dir,
+            stage=stage,
+            manifest=manifest,
+            image_size=image_size,
+            njr_sha256=self._current_njr_sha256,
+        )
+        if not payload.get("job_id"):
+            payload["job_id"] = getattr(self, "_current_job_id", "") or ""
+        return payload
+
+    def _resolve_run_dir(self, output_dir: Path) -> Path:
+        stage_dirs = {"txt2img", "img2img", "adetailer", "upscaled", "upscale"}
+        if output_dir.name in stage_dirs and output_dir.parent.exists():
+            return output_dir.parent
+        return output_dir
+
+    def _build_image_metadata_builder(
+        self,
+        *,
+        image_path: Path,
+        stage: str,
+        run_dir: Path,
+        manifest: dict[str, Any],
+    ):
+        from datetime import timezone
+        from src.utils.image_metadata import build_contract_kv
+
+        def _builder(image: Image.Image) -> dict[str, str] | None:
+            try:
+                payload = self._build_image_metadata_payload(
+                    image_path=image_path,
+                    stage=stage,
+                    run_dir=run_dir,
+                    manifest=manifest,
+                    image_size=image.size if image else None,
+                )
+                created_utc = datetime.now(timezone.utc).isoformat()
+                return build_contract_kv(
+                    payload,
+                    job_id=str(manifest.get("job_id") or getattr(self, "_current_job_id", "") or ""),
+                    run_id=run_dir.name,
+                    stage=stage,
+                    created_utc=created_utc,
+                    njr_sha256=self._current_njr_sha256,
+                )
+            except Exception:
+                return None
+
+        return _builder
 
     def _ensure_stage_prefix(self, image_name: str, stage: str) -> str:
         prefix = f"{stage}_"
@@ -1084,11 +1148,17 @@ class Pipeline:
         sampler_config = self._parse_sampler_config(config)
 
         # Set model and VAE if specified
-        model_name = config.get("model") or config.get("sd_model_checkpoint")
+        model_name = (
+            config.get("model")
+            or config.get("model_name")
+            or config.get("base_model")
+            or config.get("sd_model_checkpoint")
+        )
         if model_name:
             self.client.set_model(model_name)
-        if config.get("vae"):
-            self.client.set_vae(config["vae"])
+        vae_name = config.get("vae") or config.get("vae_name")
+        if vae_name:
+            self.client.set_vae(vae_name)
 
         payload = {
             "prompt": prompt,
@@ -1110,6 +1180,9 @@ class Pipeline:
         }
 
         # Always include hires.fix parameters (will be ignored if enable_hr is False)
+        hires_denoise = config.get("denoising_strength")
+        if hires_denoise is None:
+            hires_denoise = config.get("hr_denoising_strength") or config.get("hires_denoise")
         payload.update(
             {
                 "enable_hr": config.get("enable_hr", False),
@@ -1118,7 +1191,7 @@ class Pipeline:
                 "hr_second_pass_steps": config.get("hr_second_pass_steps", 0),
                 "hr_resize_x": config.get("hr_resize_x", 0),
                 "hr_resize_y": config.get("hr_resize_y", 0),
-                "denoising_strength": config.get("denoising_strength", 0.7),
+                "denoising_strength": hires_denoise if hires_denoise is not None else 0.7,
             }
         )
         # Optional separate sampler for hires second pass
@@ -1184,24 +1257,41 @@ class Pipeline:
             )
             image_path = run_dir / "txt2img" / f"{safe_name}.png"
 
-            if save_image_from_base64(img_base64, image_path):
-                metadata = {
-                    "name": safe_name,
-                    "stage": "txt2img",
-                    "timestamp": timestamp,
-                    "prompt": prompt,
-                    "config": self._clean_metadata_payload(payload),
-                    "path": str(image_path),
-                    # PR-PIPE-001: Enhanced metadata fields
-                    "job_id": getattr(self, "_current_job_id", None),
-                    "model": config.get("model") or config.get("sd_model_checkpoint"),
-                    "vae": config.get("vae") or "Automatic",
-                    "requested_seed": config.get("seed", -1),
-                    "actual_seed": gen_info.get("seed"),
-                    "actual_subseed": gen_info.get("subseed"),
-                    "stage_duration_ms": stage_duration_ms,
+            metadata = {
+                "name": safe_name,
+                "stage": "txt2img",
+                "timestamp": timestamp,
+                "prompt": prompt,
+                "config": self._clean_metadata_payload(payload),
+                "path": str(image_path),
+                # PR-PIPE-001: Enhanced metadata fields
+                "job_id": getattr(self, "_current_job_id", None),
+                "model": model_name or "Unknown",
+                "vae": vae_name or "Automatic",
+                "requested_seed": config.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
+                "subseed_strength": gen_info.get("subseed_strength", 0.0),
+                "stage_duration_ms": stage_duration_ms,
+            }
+            
+            # PR-GUI-DATA-001: Add refiner configuration
+            refiner_model = config.get("refiner_model_name") or config.get("refiner_checkpoint")
+            if config.get("use_refiner") and refiner_model:
+                metadata["refiner"] = {
+                    "enabled": True,
+                    "model": refiner_model,
+                    "switch_at": config.get("refiner_switch_at", 0.8),
                 }
-
+            else:
+                metadata["refiner"] = {"enabled": False}
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="txt2img",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            if save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder):
                 self.logger.save_manifest(run_dir, safe_name, metadata)
                 results.append(metadata)
 
@@ -1304,16 +1394,21 @@ class Pipeline:
                 image_name = f"txt2img_{timestamp}_{idx:03d}"
             image_path = run_dir / "txt2img" / f"{image_name}.png"
 
-            if save_image_from_base64(img_base64, image_path):
-                metadata = {
-                    "name": image_name,
-                    "stage": "txt2img",
-                    "timestamp": timestamp,
-                    "prompt": prompt,
-                    "config": self._clean_metadata_payload(payload),
-                    "path": str(image_path),
-                }
-
+            metadata = {
+                "name": image_name,
+                "stage": "txt2img",
+                "timestamp": timestamp,
+                "prompt": prompt,
+                "config": self._clean_metadata_payload(payload),
+                "path": str(image_path),
+            }
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="txt2img",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            if save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder):
                 self.logger.save_manifest(run_dir, image_name, metadata)
                 results.append(metadata)
 
@@ -1440,25 +1535,32 @@ class Pipeline:
         image_name = f"img2img_{timestamp}"
         image_path = run_dir / "img2img" / f"{image_name}.png"
 
-        if save_image_from_base64(response["images"][0], image_path):
-            metadata = {
-                "name": image_name,
-                "stage": "img2img",
-                "timestamp": timestamp,
-                "prompt": prompt,
-                "input_image": str(input_image_path),
-                "config": self._clean_metadata_payload(payload),
-                "path": str(image_path),
-                # PR-PIPE-001: Enhanced metadata fields
-                "job_id": getattr(self, "_current_job_id", None),
-                "model": config.get("model") or config.get("sd_model_checkpoint"),
-                "vae": config.get("vae") or "Automatic",
-                "requested_seed": config.get("seed", -1),
-                "actual_seed": gen_info.get("seed"),
-                "actual_subseed": gen_info.get("subseed"),
-                "stage_duration_ms": stage_duration_ms,
-            }
-
+        metadata = {
+            "name": image_name,
+            "stage": "img2img",
+            "timestamp": timestamp,
+            "prompt": prompt,
+            "input_image": str(input_image_path),
+            "config": self._clean_metadata_payload(payload),
+            "path": str(image_path),
+            # PR-PIPE-001: Enhanced metadata fields
+            "job_id": getattr(self, "_current_job_id", None),
+            "model": config.get("model") or config.get("sd_model_checkpoint"),
+            "vae": config.get("vae") or "Automatic",
+            "requested_seed": config.get("seed", -1),
+            "actual_seed": gen_info.get("seed"),
+            "actual_subseed": gen_info.get("subseed"),
+            "stage_duration_ms": stage_duration_ms,
+        }
+        metadata_builder = self._build_image_metadata_builder(
+            image_path=image_path,
+            stage="img2img",
+            run_dir=run_dir,
+            manifest=metadata,
+        )
+        if save_image_from_base64(
+            response["images"][0], image_path, metadata_builder=metadata_builder
+        ):
             self.logger.save_manifest(run_dir, image_name, metadata)
             self._last_img2img_result = metadata
             logger.info(f"img2img completed: {image_name}")
@@ -1565,34 +1667,79 @@ class Pipeline:
                     final_prompt[:60] if final_prompt else "(empty)")
         
         # Build ADetailer payload
+        face_args = {
+            "ad_model": config.get("adetailer_model", "face_yolov8n.pt"),
+            "ad_tab_enable": True,
+            "ad_confidence": config.get("adetailer_confidence", 0.35),
+            "ad_mask_filter_method": config.get("ad_mask_filter_method", "Area"),
+            "ad_mask_k": config.get("ad_mask_k", 3),
+            "ad_mask_min_ratio": config.get("ad_mask_min_ratio", 0.01),
+            "ad_mask_max_ratio": config.get("ad_mask_max_ratio", 1.0),
+            "ad_dilate_erode": config.get("ad_dilate_erode", 4),
+            "ad_mask_blur": config.get("adetailer_mask_feather", 4),
+            "ad_mask_merge_invert": config.get("ad_mask_merge_invert", "None"),
+            "ad_inpaint_only_masked": True,
+            "ad_inpaint_only_masked_padding": config.get("adetailer_padding", 32),
+            "ad_use_steps": True,
+            "ad_steps": config.get("adetailer_steps", 14),
+            "ad_use_cfg_scale": True,
+            "ad_cfg_scale": config.get("adetailer_cfg", 5.5),
+            "ad_denoising_strength": config.get("adetailer_denoise", 0.32),
+            "ad_use_sampler": True,
+            "ad_sampler": config.get("adetailer_sampler", "DPM++ 2M Karras"),
+            "ad_scheduler": config.get("ad_scheduler", "Use same scheduler"),
+            "ad_prompt": config.get("adetailer_prompt", final_prompt),
+            "ad_negative_prompt": config.get("adetailer_negative_prompt", ad_neg_final),
+        }
+
+        hand_args = {
+            "ad_model": config.get("adetailer_hands_model", "hand_yolov8n.pt"),
+            "ad_tab_enable": config.get("ad_hands_enabled", True),
+            "ad_confidence": config.get("adetailer_hands_confidence", 0.30),
+            "ad_mask_filter_method": config.get("ad_hands_mask_filter_method", "Area"),
+            "ad_mask_k": config.get("ad_hands_mask_k", 6),
+            "ad_mask_min_ratio": config.get("ad_hands_mask_min_ratio", 0.003),
+            "ad_mask_max_ratio": config.get("ad_hands_mask_max_ratio", 1.0),
+            "ad_dilate_erode": config.get("ad_hands_dilate_erode", 6),
+            "ad_mask_blur": config.get("ad_hands_mask_blur", 4),
+            "ad_mask_merge_invert": config.get("ad_hands_mask_merge_invert", "None"),
+            "ad_inpaint_only_masked": True,
+            "ad_inpaint_only_masked_padding": config.get("ad_hands_padding", 16),
+            "ad_use_steps": True,
+            "ad_steps": config.get("adetailer_hands_steps", 12),
+            "ad_use_cfg_scale": True,
+            "ad_cfg_scale": config.get("adetailer_hands_cfg", 5.0),
+            "ad_denoising_strength": config.get("adetailer_hands_denoise", 0.25),
+            "ad_use_sampler": True,
+            "ad_sampler": config.get("adetailer_hands_sampler", "DPM++ 2M Karras"),
+            "ad_scheduler": config.get("ad_hands_scheduler", "Use same scheduler"),
+            "ad_prompt": config.get(
+                "adetailer_hands_prompt",
+                "well-formed fingers, natural knuckles, correct hand anatomy, sharp details",
+            ),
+            "ad_negative_prompt": config.get(
+                "adetailer_hands_negative_prompt",
+                "extra fingers, fused fingers, broken fingers, deformed hands, missing fingers",
+            ),
+        }
+
         payload = {
             "init_images": [init_image],
             "prompt": final_prompt,
             "negative_prompt": ad_neg_final,
-            "sampler_name": config.get("adetailer_sampler", "DPM++ 2M"),
+            "sampler_name": config.get("adetailer_sampler", "DPM++ 2M Karras"),
             "steps": config.get("adetailer_steps", 28),
             "cfg_scale": config.get("adetailer_cfg", 7.0),
             "denoising_strength": config.get("adetailer_denoise", 0.4),
             "width": payload_width,
             "height": payload_height,
-            # ADetailer specific parameters
             "alwayson_scripts": {
                 "ADetailer": {
                     "args": [
-                        {
-                            "ad_model": config.get("adetailer_model", "face_yolov8n.pt"),
-                            "ad_confidence": config.get("adetailer_confidence", 0.3),
-                            "ad_mask_blur": config.get("adetailer_mask_feather", 4),
-                            "ad_denoising_strength": config.get("adetailer_denoise", 0.4),
-                            "ad_inpaint_only_masked": True,
-                            "ad_inpaint_only_masked_padding": 32,
-                            "ad_use_inpaint_width_height": False,
-                            "ad_sampler": config.get("adetailer_sampler", "DPM++ 2M"),
-                            "ad_steps": config.get("adetailer_steps", 28),
-                            "ad_cfg_scale": config.get("adetailer_cfg", 7.0),
-                            "ad_prompt": final_prompt,  # Use final_prompt (adetailer override or original txt2img prompt)
-                            "ad_negative_prompt": ad_neg_final,
-                        }
+                        True,
+                        False,
+                        face_args,
+                        hand_args,
                     ]
                 }
             },
@@ -1638,30 +1785,37 @@ class Pipeline:
             final_image_name = f"adetailer_{timestamp}"
         image_path = run_dir / f"{final_image_name}.png"
 
-        if save_image_from_base64(response["images"][0], image_path):
-            metadata = {
-                "name": final_image_name,
-                "stage": "adetailer",
-                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
-                "original_prompt": prompt,
-                "final_prompt": payload.get("prompt", prompt),
-                "original_negative_prompt": base_ad_neg,
-                "final_negative_prompt": ad_neg_final,
-                "global_negative_applied": apply_global,
-                "global_negative_terms": "",  # Always empty for ADetailer per design
-                "input_image": str(input_image_path),
-                "config": self._clean_metadata_payload(payload),
-                "path": str(image_path),
-                # PR-PIPE-001: Enhanced metadata fields
-                "job_id": getattr(self, "_current_job_id", None),
-                "model": config.get("model") or config.get("sd_model_checkpoint"),
-                "vae": config.get("vae") or "Automatic",
-                "requested_seed": config.get("seed", -1),
-                "actual_seed": gen_info.get("seed"),
-                "actual_subseed": gen_info.get("subseed"),
-                "stage_duration_ms": stage_duration_ms,
-            }
-
+        metadata = {
+            "name": final_image_name,
+            "stage": "adetailer",
+            "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+            "original_prompt": prompt,
+            "final_prompt": payload.get("prompt", prompt),
+            "original_negative_prompt": base_ad_neg,
+            "final_negative_prompt": ad_neg_final,
+            "global_negative_applied": apply_global,
+            "global_negative_terms": "",  # Always empty for ADetailer per design
+            "input_image": str(input_image_path),
+            "config": self._clean_metadata_payload(payload),
+            "path": str(image_path),
+            # PR-PIPE-001: Enhanced metadata fields
+            "job_id": getattr(self, "_current_job_id", None),
+            "model": config.get("model") or config.get("sd_model_checkpoint"),
+            "vae": config.get("vae") or "Automatic",
+            "requested_seed": config.get("seed", -1),
+            "actual_seed": gen_info.get("seed"),
+            "actual_subseed": gen_info.get("subseed"),
+            "stage_duration_ms": stage_duration_ms,
+        }
+        metadata_builder = self._build_image_metadata_builder(
+            image_path=image_path,
+            stage="adetailer",
+            run_dir=run_dir,
+            manifest=metadata,
+        )
+        if save_image_from_base64(
+            response["images"][0], image_path, metadata_builder=metadata_builder
+        ):
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
             manifest_dir = Path(run_dir) / "manifests"
             manifest_path = manifest_dir / f"{final_image_name}_adetailer.json"
@@ -1734,24 +1888,31 @@ class Pipeline:
         image_name = f"upscaled_{input_image_path.stem}_{timestamp}"
         image_path = run_dir / "upscaled" / f"{image_name}.png"
 
-        if save_image_from_base64(response["image"], image_path):
-            metadata = {
-                "name": image_name,
-                "stage": "upscale",
-                "timestamp": timestamp,
-                "input_image": str(input_image_path),
-                "config": config,
-                "path": str(image_path),
-                # PR-PIPE-001: Enhanced metadata fields
-                "job_id": getattr(self, "_current_job_id", None),
-                "model": config.get("model"),  # May be None for upscale
-                "vae": config.get("vae"),  # May be None for upscale
-                "requested_seed": config.get("seed"),  # May be None for upscale
-                "actual_seed": gen_info.get("seed"),  # Likely None for upscale
-                "actual_subseed": gen_info.get("subseed"),  # Likely None for upscale
-                "stage_duration_ms": stage_duration_ms,
-            }
-
+        metadata = {
+            "name": image_name,
+            "stage": "upscale",
+            "timestamp": timestamp,
+            "input_image": str(input_image_path),
+            "config": config,
+            "path": str(image_path),
+            # PR-PIPE-001: Enhanced metadata fields
+            "job_id": getattr(self, "_current_job_id", None),
+            "model": config.get("model"),  # May be None for upscale
+            "vae": config.get("vae"),  # May be None for upscale
+            "requested_seed": config.get("seed"),  # May be None for upscale
+            "actual_seed": gen_info.get("seed"),  # Likely None for upscale
+            "actual_subseed": gen_info.get("subseed"),  # Likely None for upscale
+            "stage_duration_ms": stage_duration_ms,
+        }
+        metadata_builder = self._build_image_metadata_builder(
+            image_path=image_path,
+            stage="upscale",
+            run_dir=run_dir,
+            manifest=metadata,
+        )
+        if save_image_from_base64(
+            response["image"], image_path, metadata_builder=metadata_builder
+        ):
             self.logger.save_manifest(run_dir, image_name, metadata)
             logger.info("Upscale completed successfully")
             return metadata
@@ -2714,6 +2875,8 @@ class Pipeline:
                 logger.error("txt2img failed - no images returned")
                 return None
 
+            gen_info = self._extract_generation_info(response) if response else {}
+
             # Log how many images were actually generated
             num_images_received = len(response["images"])
             logger.info("🔵 [BATCH_SIZE_DEBUG] WebUI returned %s images (expected %s)", num_images_received, payload.get('batch_size', 1) * payload.get('n_iter', 1))
@@ -2723,6 +2886,27 @@ class Pipeline:
             saved_paths = []
             batch_size = payload.get('batch_size', 1)
             n_iter = payload.get('n_iter', 1)
+            run_dir = self._resolve_run_dir(output_dir)
+            base_metadata = {
+                "stage": "txt2img",
+                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+                "original_prompt": original_positive_prompt,
+                "final_prompt": enhanced_positive,
+                "global_positive_applied": positive_global_applied,
+                "global_positive_terms": positive_global_terms if positive_global_applied else "",
+                "original_negative_prompt": original_negative_prompt,
+                "final_negative_prompt": enhanced_negative,
+                "global_negative_applied": negative_global_applied,
+                "global_negative_terms": negative_global_terms if negative_global_applied else "",
+                "seed": payload.get("seed", -1),
+                "subseed": payload.get("subseed", -1),
+                "subseed_strength": payload.get("subseed_strength", 0.0),
+                "config": self._clean_metadata_payload(payload),
+                "job_id": getattr(self, "_current_job_id", None),
+                "requested_seed": payload.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
+            }
             
             for batch_idx in range(num_images_received):
                 # Multiple images: use suffix _batch0, _batch1, etc.
@@ -2736,7 +2920,21 @@ class Pipeline:
                     batch_image_name = image_name
                 
                 logger.info("🔵 [BATCH_SIZE_DEBUG] Saving image %s/%s: %s", batch_idx + 1, num_images_received, image_path.name)
-                if not save_image_from_base64(response["images"][batch_idx], image_path):
+                image_metadata = dict(base_metadata)
+                image_metadata["name"] = batch_image_name
+                image_metadata["path"] = str(image_path)
+                image_metadata["output_path"] = str(image_path)
+                metadata_builder = self._build_image_metadata_builder(
+                    image_path=image_path,
+                    stage="txt2img",
+                    run_dir=run_dir,
+                    manifest=image_metadata,
+                )
+                if not save_image_from_base64(
+                    response["images"][batch_idx],
+                    image_path,
+                    metadata_builder=metadata_builder,
+                ):
                     logger.error("Failed to save image %s", image_path)
                     continue
                     
@@ -2923,26 +3121,37 @@ class Pipeline:
             # Save image
             image_path = output_dir / f"{image_name}.png"
 
-            if save_image_from_base64(response["images"][0], image_path):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                metadata = {
-                    "name": image_name,
-                    "stage": "img2img",
-                    "timestamp": timestamp,
-                    "original_prompt": prompt,
-                    "final_prompt": payload.get("prompt", prompt),
-                    "original_negative_prompt": original_negative_prompt,
-                    "final_negative_prompt": payload.get("negative_prompt", ""),
-                    "global_negative_applied": global_applied,
-                    "global_negative_terms": global_terms if global_applied else "",
-                    "seed": payload.get("seed", -1),
-                    "subseed": payload.get("subseed", -1),
-                    "subseed_strength": payload.get("subseed_strength", 0.0),
-                    "input_image": str(input_image_path),
-                    "config": self._clean_metadata_payload(payload),
-                    "path": str(image_path),
-                }
-
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            metadata = {
+                "name": image_name,
+                "stage": "img2img",
+                "timestamp": timestamp,
+                "original_prompt": prompt,
+                "final_prompt": payload.get("prompt", prompt),
+                "original_negative_prompt": original_negative_prompt,
+                "final_negative_prompt": payload.get("negative_prompt", ""),
+                "global_negative_applied": global_applied,
+                "global_negative_terms": global_terms if global_applied else "",
+                "seed": payload.get("seed", -1),
+                "subseed": payload.get("subseed", -1),
+                "subseed_strength": payload.get("subseed_strength", 0.0),
+                "input_image": str(input_image_path),
+                "config": self._clean_metadata_payload(payload),
+                "path": str(image_path),
+                "requested_seed": payload.get("seed", -1),
+                "actual_seed": None,
+                "actual_subseed": None,
+            }
+            run_dir = self._resolve_run_dir(output_dir)
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="img2img",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            if save_image_from_base64(
+                response["images"][0], image_path, metadata_builder=metadata_builder
+            ):
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
                 manifest_name = f"{image_name}_img2img"
@@ -3175,47 +3384,55 @@ class Pipeline:
                     return None
                 image_data = response[response_key][image_key]
 
-            if save_image_from_base64(image_data, image_path):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                # Build metadata config based on upscale mode
-                if upscale_mode == "img2img":
-                    config_dict = self._clean_metadata_payload(payload)
-                    neg_prompt = payload.get("negative_prompt")
-                else:
-                    # Single-image mode doesn't have full payload
-                    config_dict = {
-                        "upscaler": upscaler,
-                        "upscaling_resize": upscaling_resize,
-                        "gfpgan_visibility": gfpgan_vis,
-                        "codeformer_visibility": codeformer_vis,
-                        "codeformer_weight": codeformer_weight,
-                    }
-                    neg_prompt = None
-                
-                metadata = {
-                    "name": image_name,
-                    "stage": "upscale",
-                    "timestamp": timestamp,
-                    "input_image": str(input_image_path),
-                    "final_negative_prompt": neg_prompt,
-                    "global_negative_applied": global_applied
-                    if "global_applied" in locals()
-                    else False,
-                    "global_negative_terms": global_terms
-                    if "global_terms" in locals() and global_applied
-                    else "",
-                    "config": config_dict,
-                    "path": str(image_path),
-                    # PR-PIPE-001: Enhanced metadata fields
-                    "job_id": getattr(self, "_current_job_id", None),
-                    "model": config.get("model"),  # May be None for upscale
-                    "vae": config.get("vae"),  # May be None for upscale
-                    "requested_seed": config.get("seed") if upscale_mode == "img2img" else None,
-                    "actual_seed": None,  # Upscale doesn't return seed info
-                    "actual_subseed": None,  # Upscale doesn't return seed info
-                    "stage_duration_ms": stage_duration_ms,
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Build metadata config based on upscale mode
+            if upscale_mode == "img2img":
+                config_dict = self._clean_metadata_payload(payload)
+                neg_prompt = payload.get("negative_prompt")
+            else:
+                # Single-image mode doesn't have full payload
+                config_dict = {
+                    "upscaler": upscaler,
+                    "upscaling_resize": upscaling_resize,
+                    "gfpgan_visibility": gfpgan_vis,
+                    "codeformer_visibility": codeformer_vis,
+                    "codeformer_weight": codeformer_weight,
                 }
-
+                neg_prompt = None
+            
+            metadata = {
+                "name": image_name,
+                "stage": "upscale",
+                "timestamp": timestamp,
+                "input_image": str(input_image_path),
+                "final_negative_prompt": neg_prompt,
+                "global_negative_applied": global_applied
+                if "global_applied" in locals()
+                else False,
+                "global_negative_terms": global_terms
+                if "global_terms" in locals() and global_applied
+                else "",
+                "config": config_dict,
+                "path": str(image_path),
+                # PR-PIPE-001: Enhanced metadata fields
+                "job_id": getattr(self, "_current_job_id", None),
+                "model": config.get("model"),  # May be None for upscale
+                "vae": config.get("vae"),  # May be None for upscale
+                "requested_seed": config.get("seed") if upscale_mode == "img2img" else None,
+                "actual_seed": None,  # Upscale doesn't return seed info
+                "actual_subseed": None,  # Upscale doesn't return seed info
+                "stage_duration_ms": stage_duration_ms,
+            }
+            run_dir = self._resolve_run_dir(output_dir)
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="upscale",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            if save_image_from_base64(
+                image_data, image_path, metadata_builder=metadata_builder
+            ):
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
                 manifest_name = f"{image_name}_upscale"

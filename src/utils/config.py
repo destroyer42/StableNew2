@@ -178,7 +178,7 @@ class ConfigManager:
             List of preset names
         """
         presets = [p.stem for p in self.presets_dir.glob("*.json")]
-        logger.info(f"Found {len(presets)} presets")
+        logger.debug(f"Found {len(presets)} presets")
         return sorted(presets)
 
     def delete_preset(self, name: str) -> bool:

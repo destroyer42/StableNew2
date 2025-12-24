@@ -21,6 +21,8 @@ from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
 
 logger = logging.getLogger(__name__)
 QUEUE_JOB_SOFT_TIMEOUT_SECONDS = 600  # seconds
+# Cooldown between reprocess jobs to let WebUI stabilize and free VRAM
+REPROCESS_JOB_COOLDOWN_SECONDS = 2.0
 
 
 def _ensure_job_envelope(job: Job | None, exc: Exception) -> None:
@@ -44,6 +46,8 @@ _QUEUE_JOB_WEBUI_CRASH_SUSPECTED = "QUEUE_JOB_WEBUI_CRASH_SUSPECTED"
 _QUEUE_JOB_WEBUI_RETRY_EXHAUSTED = "QUEUE_JOB_WEBUI_RETRY_EXHAUSTED"
 _CRASH_ELIGIBLE_STAGES = {"txt2img", "img2img", "upscale", "adetailer"}
 _CRASH_MESSAGE_KEYWORDS = ("connection refused", "actively refused", "webui unavailable")
+# Timeout keywords indicate slow processing, NOT a crash - don't restart WebUI for these
+_TIMEOUT_KEYWORDS = ("read timed out", "readtimeout", "timeout", "timed out")
 
 
 def _select_request_summary_stage(summary: dict[str, Any] | None) -> str | None:
@@ -83,6 +87,18 @@ def _is_webui_crash_exception(exc: Exception) -> tuple[bool, str | None]:
     method = (summary.get("method") or "").upper()
     attempt_stage = _select_request_summary_stage(summary)
     stage_name = attempt_stage or (getattr(exc, "stage", None) or summary.get("stage"))
+    
+    # Check if this is a timeout error - timeouts are slow processing, NOT crashes
+    # Don't restart WebUI just because a generation took too long
+    error_message_lower = str(diag.get("error_message") or exc).lower()
+    exc_message_lower = str(exc).lower()
+    if any(kw in error_message_lower or kw in exc_message_lower for kw in _TIMEOUT_KEYWORDS):
+        logger.info(
+            "Timeout detected but NOT treating as crash (slow processing, not WebUI failure): %s",
+            str(exc)[:200],
+        )
+        return False, stage_name
+    
     try:
         status_code = int(status)
     except (TypeError, ValueError):
@@ -95,8 +111,7 @@ def _is_webui_crash_exception(exc: Exception) -> tuple[bool, str | None]:
     ):
         return True, stage_name
     if diag.get("webui_unavailable"):
-        error_message = str(diag.get("error_message") or exc).lower()
-        if any(keyword in error_message for keyword in _CRASH_MESSAGE_KEYWORDS):
+        if any(keyword in error_message_lower for keyword in _CRASH_MESSAGE_KEYWORDS):
             return True, stage_name
     message = str(exc).lower()
     if "webui unavailable" in message:
@@ -349,6 +364,15 @@ class SingleNodeJobRunner:
                 self._notify(job, JobStatus.FAILED)
             finally:
                 self._current_job = None
+                # Apply cooldown for reprocess jobs to let WebUI stabilize
+                job_source = getattr(job, "source", None) or ""
+                if job_source == "reprocess_panel":
+                    logger.debug(
+                        "Applying %.1fs cooldown after reprocess job %s",
+                        REPROCESS_JOB_COOLDOWN_SECONDS,
+                        job.job_id,
+                    )
+                    time.sleep(REPROCESS_JOB_COOLDOWN_SECONDS)
         return
 
     def run_once(self, job: Job) -> dict | None:

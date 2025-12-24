@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
+from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 from src.history.history_record import HistoryRecord
 from src.pipeline.job_models_v2 import JobView
@@ -11,6 +15,7 @@ from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+from src.utils.image_metadata import build_payload_from_manifest, extract_embedded_metadata
 
 
 class JobHistoryService:
@@ -281,6 +286,171 @@ class JobHistoryService:
             worker_id=record.runtime.get("worker_id") if record.runtime else None,
             result=result,
         )
+
+    def reconcile_image_metadata(
+        self,
+        image_path: Path,
+        history_record: HistoryRecord | JobHistoryEntry | None = None,
+    ) -> dict[str, Any]:
+        """
+        Extract embedded metadata and reconcile with history.
+
+        Returns a dict with payload (if available), status, source, and conflicts.
+        History values win for conflicts when provided.
+        """
+        embedded = extract_embedded_metadata(image_path)
+        payload = embedded.payload
+        status = embedded.status
+        source = "embedded" if payload else "none"
+        error = embedded.error
+
+        if payload is None:
+            recovered = self._recover_payload_from_sidecar(image_path)
+            payload = recovered.get("payload")
+            if payload:
+                status = recovered.get("status", "ok")
+                source = recovered.get("source", "sidecar")
+                error = recovered.get("error")
+
+        if payload is None:
+            return {
+                "status": status,
+                "source": source,
+                "payload": None,
+                "reconciled_payload": None,
+                "conflicts": [],
+                "error": error,
+            }
+
+        reconciled = dict(payload)
+        conflicts: list[str] = []
+        history_job_id = self._get_history_job_id(history_record)
+        if history_job_id:
+            if reconciled.get("job_id") and reconciled.get("job_id") != history_job_id:
+                conflicts.append("job_id")
+            reconciled["job_id"] = history_job_id
+
+        return {
+            "status": status,
+            "source": source,
+            "payload": payload,
+            "reconciled_payload": reconciled,
+            "conflicts": conflicts,
+            "error": error,
+        }
+
+    def _get_history_job_id(
+        self, history_record: HistoryRecord | JobHistoryEntry | None
+    ) -> str | None:
+        if history_record is None:
+            return None
+        if isinstance(history_record, HistoryRecord):
+            return history_record.id or history_record.njr_snapshot.get("job_id")
+        return getattr(history_record, "job_id", None)
+
+    def _recover_payload_from_sidecar(self, image_path: Path) -> dict[str, Any]:
+        manifest_path = self._find_manifest_path(image_path)
+        if manifest_path:
+            manifest = self._read_json(manifest_path)
+            if isinstance(manifest, dict):
+                run_dir = self._resolve_run_dir_from_manifest(manifest_path, image_path)
+                payload = build_payload_from_manifest(
+                    image_path=image_path,
+                    run_dir=run_dir,
+                    stage=self._infer_stage(image_path),
+                    manifest=manifest,
+                    image_size=self._get_image_size(image_path),
+                    njr_sha256=manifest.get("njr_sha256"),
+                )
+                return {
+                    "status": "ok",
+                    "source": "sidecar",
+                    "payload": payload,
+                    "error": None,
+                }
+
+        run_dir = self._find_run_dir(image_path)
+        run_metadata = self._read_json(run_dir / "run_metadata.json") if run_dir else None
+        if isinstance(run_metadata, dict):
+            payload = self._build_payload_from_run_metadata(image_path, run_dir, run_metadata)
+            return {
+                "status": "ok",
+                "source": "sidecar",
+                "payload": payload,
+                "error": None,
+            }
+
+        return {"status": "missing", "source": "none", "payload": None, "error": None}
+
+    def _find_manifest_path(self, image_path: Path) -> Path | None:
+        candidates = [image_path.with_suffix(".json")]
+        for parent in (image_path.parent, image_path.parent.parent, image_path.parent.parent.parent):
+            if not parent or not parent.exists():
+                continue
+            candidates.append(parent / "manifests" / f"{image_path.stem}.json")
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _resolve_run_dir_from_manifest(self, manifest_path: Path, image_path: Path) -> Path:
+        if manifest_path.parent.name == "manifests":
+            return manifest_path.parent.parent
+        return self._find_run_dir(image_path) or manifest_path.parent
+
+    def _find_run_dir(self, image_path: Path) -> Path | None:
+        for parent in (image_path.parent, image_path.parent.parent, image_path.parent.parent.parent):
+            if not parent or not parent.exists():
+                continue
+            if (parent / "run_metadata.json").exists() or (parent / "manifests").exists():
+                return parent
+        return None
+
+    def _infer_stage(self, image_path: Path) -> str:
+        stage_dir = image_path.parent.name.lower()
+        if stage_dir in {"txt2img", "img2img", "adetailer", "upscale", "upscaled"}:
+            return "upscale" if stage_dir == "upscaled" else stage_dir
+        return ""
+
+    def _build_payload_from_run_metadata(
+        self, image_path: Path, run_dir: Path, run_metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        run_id = str(run_metadata.get("run_id") or run_dir.name)
+        return {
+            "job_id": "",
+            "run_id": run_id,
+            "stage": self._infer_stage(image_path),
+            "image": {
+                "path": image_path.name,
+                "width": None,
+                "height": None,
+                "format": image_path.suffix.lstrip(".").lower(),
+            },
+            "seeds": {"requested_seed": None, "actual_seed": None, "actual_subseed": None},
+            "njr": {"snapshot_version": "2.6", "sha256": ""},
+            "stage_manifest": {
+                "name": image_path.stem,
+                "timestamp": str(run_metadata.get("timestamp") or ""),
+                "config_hash": "",
+            },
+        }
+
+    def _read_json(self, path: Path) -> dict[str, Any] | None:
+        try:
+            if not path.exists():
+                return None
+            with path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            return data if isinstance(data, dict) else None
+        except Exception:
+            return None
+
+    def _get_image_size(self, image_path: Path) -> tuple[int, int] | None:
+        try:
+            with Image.open(image_path) as img:
+                return img.size
+        except Exception:
+            return None
 
 
 class NullHistoryService(JobHistoryService):

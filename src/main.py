@@ -153,7 +153,7 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
             if webui_manager:
                 # Update the window with the WebUI manager
                 root.after(0, lambda: _update_window_webui_manager(window, webui_manager))
-                logging.info("WebUI bootstrap completed asynchronously")
+                logging.debug("WebUI bootstrap completed asynchronously")
         except Exception as e:
             logging.warning(f"Async WebUI bootstrap failed: {e}")
 
@@ -227,7 +227,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                     try:
                         state = connection_controller.get_state()
                         if state != last_logged_state and log_changes:
-                            logging.info(f"WebUI status update: state = {state}")
+                            logging.debug(f"WebUI status update: state = {state}")
                             last_logged_state = state
 
                         if state == WebUIConnectionState.DISCONNECTED:
@@ -407,7 +407,10 @@ def main() -> None:
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         log_file = str(diag_dir / f"gui-shutdown-{timestamp}.log")
 
-    setup_logging("INFO", log_file=log_file)
+    # Allow user to control log verbosity via environment variable
+    # Default to WARNING (quiet) - use DEBUG or INFO for more verbose output
+    log_level = os.environ.get("STABLENEW_LOG_LEVEL", "WARNING").upper()
+    setup_logging(log_level, log_file=log_file)
 
     # Optional V2.5 file-access logging, controlled by env var
     file_access_logger = None

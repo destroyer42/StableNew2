@@ -158,8 +158,8 @@ class SidebarPanelV2(ttk.Frame):
         self.run_scope_var = tk.StringVar(value="full")
 
         self.columnconfigure(0, weight=1)
-        # PR-GUI-H: Now 5 rows (0-4) after removing standalone config_source_label
-        for i in range(5):
+        # PR-GUI-H: Now 6 rows (0-5) including reprocess panel
+        for i in range(6):
             self.rowconfigure(i, weight=1 if i >= 1 else 0)
 
         # PR-GUI-H: config_source_label moved into Pipeline Presets panel
@@ -272,6 +272,26 @@ class SidebarPanelV2(ttk.Frame):
             build_child=lambda parent: OutputSettingsPanelV2(parent, embed_mode=True),
         )
         self.output_settings_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
+        
+        # Reprocess panel for sending existing images through pipeline stages
+        # Import inside lambda to avoid circular import at module load time
+        def _build_reprocess_panel(parent):
+            from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
+            return ReprocessPanelV2(
+                parent,
+                controller=self.controller,
+                app_state=self.app_state,
+                embed_mode=True,
+            )
+        
+        self.reprocess_card = _SidebarCard(
+            self,
+            title="Reprocess Images",
+            build_child=_build_reprocess_panel,
+            collapsible=True,
+        )
+        self.reprocess_panel = self.reprocess_card.child
+        self.reprocess_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
         
         # PR-PERSIST-001: Restore saved state
         self.restore_state()
@@ -666,18 +686,18 @@ class SidebarPanelV2(ttk.Frame):
         PR-CORE-D/E: PromptPack-only architecture - button should only be enabled when pack(s) selected.
         Routes to controller's on_pipeline_add_packs_to_job.
         """
-        print("[SidebarPanel] _on_add_to_job called")
+        logger.debug("[SidebarPanel] _on_add_to_job called")
         if not self.pack_listbox:
-            print("[SidebarPanel] No pack_listbox, returning")
+            logger.debug("[SidebarPanel] No pack_listbox, returning")
             return
 
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         controller = self.controller
-        print(f"[SidebarPanel] Selection: {selection}, Controller: {controller}")
+        logger.debug(f"[SidebarPanel] Selection: {selection}, Controller: {controller}")
 
         # PromptPack-only: This should not execute if button state is correct, but guard anyway
         if not selection:
-            print("[SidebarPanel] No selection, falling back to single prompt handler")
+            logger.debug("[SidebarPanel] No selection, falling back to single prompt handler")
             if controller and hasattr(controller, "add_single_prompt_to_draft"):
                 try:
                     controller.add_single_prompt_to_draft()
@@ -689,19 +709,19 @@ class SidebarPanelV2(ttk.Frame):
         pack_ids = [
             self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
         ]
-        print(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
+        logger.debug(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
         if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
-            print(f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})")
+            logger.debug(f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})")
             try:
                 controller.on_pipeline_add_packs_to_job(pack_ids)
-                print("[SidebarPanel] Successfully called on_pipeline_add_packs_to_job")
+                logger.debug("[SidebarPanel] Successfully called on_pipeline_add_packs_to_job")
             except Exception as e:
                 import logging
 
-                print(f"[SidebarPanel] EXCEPTION: {e}")
+                logger.debug(f"[SidebarPanel] EXCEPTION: {e}")
                 logging.exception(f"Error adding packs to job: {e}")
         else:
-            print(
+            logger.debug(
                 "[SidebarPanel] Controller missing or doesn't have on_pipeline_add_packs_to_job method"
             )
 

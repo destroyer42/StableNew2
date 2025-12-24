@@ -14,6 +14,7 @@ from src.config.app_config import get_jsonl_log_config
 from src.utils.logger import InMemoryLogHandler
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 from src.utils.system_info_v2 import collect_system_snapshot
+from src.utils.image_metadata import decode_payload, read_image_metadata
 
 """Utilities for building diagnostics crash bundles."""
 
@@ -46,6 +47,7 @@ def build_async(
     job_service: Any | None = None,
     extra_context: Mapping[str, Any] | None = None,
     output_dir: Path | None = None,
+    image_roots: list[Path] | None = None,
     include_process_state: bool = False,
     include_queue_state: bool = False,
     cooldown_s: float = 30.0,
@@ -72,6 +74,7 @@ def build_async(
                 extra_context=extra_context,
                 webui_tail=webui_tail,
                 output_dir=output_dir,
+                image_roots=image_roots,
             )
         finally:
             with _BUNDLE_LOCK:
@@ -93,6 +96,7 @@ def build_crash_bundle(
     extra_context: Mapping[str, Any] | None = None,
     output_dir: Path | None = None,
     webui_tail: Mapping[str, Any] | None = None,
+    image_roots: list[Path] | None = None,
     context: dict | None = None,
 ) -> Path | None:
     """Create a diagnostics zip bundle for the given reason."""
@@ -135,6 +139,7 @@ def build_crash_bundle(
                 if inspector_lines:
                     zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
                 _include_jsonl_logs(zf)
+                _include_image_metadata(zf, image_roots)
                 if sanitized_tail:
                     zf.writestr(
                         "artifacts/webui_tail.json",
@@ -174,6 +179,53 @@ def _include_jsonl_logs(zf: zipfile.ZipFile) -> None:
             zf.write(log_path, arcname)
         except Exception:
             logger.debug("Failed to include JSONL log %s in bundle", log_path)
+
+
+def _include_image_metadata(zf: zipfile.ZipFile, image_roots: list[Path] | None) -> None:
+    roots = image_roots or [ROOT / "output", ROOT / "outputs"]
+    image_paths = _collect_image_paths(roots, limit=25)
+    if not image_paths:
+        return
+    for image_path in image_paths:
+        try:
+            kv = read_image_metadata(image_path)
+            payload_result = decode_payload(kv)
+            meta_name = image_path.name
+            if payload_result.payload is not None:
+                payload = {
+                    "status": payload_result.status,
+                    "payload": payload_result.payload,
+                    "kv": kv,
+                    "path": str(image_path),
+                }
+                zf.writestr(
+                    f"artifacts/image_metadata/{meta_name}.meta.json",
+                    json.dumps(_anonymize(payload), indent=2),
+                )
+            else:
+                note = f"metadata missing or invalid: {payload_result.status}"
+                zf.writestr(
+                    f"artifacts/image_metadata/{meta_name}.meta.missing.txt",
+                    note,
+                )
+        except Exception:
+            logger.debug("Failed to include image metadata for %s", image_path)
+
+
+def _collect_image_paths(roots: list[Path], *, limit: int = 25) -> list[Path]:
+    seen: set[Path] = set()
+    images: list[Path] = []
+    for root in roots:
+        if not root or not root.exists():
+            continue
+        for ext in (".png", ".jpg", ".jpeg"):
+            for path in root.rglob(f"*{ext}"):
+                if path in seen or not path.is_file():
+                    continue
+                seen.add(path)
+                images.append(path)
+    images.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return images[:limit]
 
 
 def _sanitize_filename(token: str) -> str:

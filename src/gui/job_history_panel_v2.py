@@ -231,69 +231,51 @@ class JobHistoryPanelV2(ttk.Frame):
         self._history_menu.tk_popup(event.x_root, event.y_root)
 
     def _extract_summary(self, entry: JobHistoryEntry) -> str:
-        """Extract meaningful summary from NJR snapshot."""
+        """Extract pack name + prompt preview when available."""
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
             if njr:
-                # Get model and prompt info
-                model = njr.get("base_model", "")
+                pack_name = None
+                if njr.get("source") == "pack":
+                    pack_name = njr.get("pack_name") or njr.get("prompt_pack_id")
                 prompt = njr.get("positive_prompt", "")
-                seed = njr.get("seed")
-                
-                if model or prompt:
-                    parts = []
-                    if model:
-                        parts.append(f"Model: {self._shorten(model, width=20)}")
-                    if prompt:
-                        parts.append(f"Prompt: {self._shorten(prompt, width=30)}")
-                    if seed is not None:
-                        parts.append(f"Seed: {seed}")
-                    return " | ".join(parts)
-        
-        # Fallback to payload summary
-        return self._shorten(entry.payload_summary or "n/a", width=40)
+                if pack_name:
+                    prompt_preview = self._shorten(prompt, width=40)
+                    return f"{pack_name}: {prompt_preview}"
+                if prompt:
+                    return self._shorten(prompt, width=60)
+        if entry.payload_summary:
+            return self._shorten(entry.payload_summary, width=60)
+        job_id = entry.job_id or "unknown"
+        return f"Job {job_id[:8]}"
     
     def _extract_model(self, entry: JobHistoryEntry) -> str:
         """Extract model name from NJR snapshot or result."""
-        # Try NJR snapshot first (most reliable)
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
             model = njr.get("base_model") or njr.get("model")
             if model:
-                return self._shorten(str(model), width=18)
-        
-        # Try result
-        if entry.result and isinstance(entry.result, dict):
-            model = entry.result.get("model") or entry.result.get("sd_model_checkpoint")
-            if model:
-                return self._shorten(str(model), width=18)
-        
+                return Path(str(model)).stem
+        metadata = self._extract_result_metadata(entry)
+        model = metadata.get("model") or metadata.get("sd_model_checkpoint")
+        if model:
+            return Path(str(model)).stem
         return "-"
     
     def _extract_seed(self, entry: JobHistoryEntry) -> str:
         """Extract actual seed from result or snapshot."""
-        # Try result first (has actual resolved seed)
-        if entry.result and isinstance(entry.result, dict):
-            seed = entry.result.get("actual_seed") or entry.result.get("seed")
-            if seed is not None and seed != -1:
-                return str(seed)
-        
-        # Try NJR snapshot
+        metadata = self._extract_result_metadata(entry)
+        seed = metadata.get("actual_seed") or metadata.get("requested_seed")
+        if seed is not None and seed != -1:
+            return str(seed)
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
-            
-            # Check for resolved seed
             seed = njr.get("actual_seed") or njr.get("resolved_seed")
             if seed is not None and seed != -1:
                 return str(seed)
-            
-            # Fall back to requested seed
             seed = njr.get("seed")
             if seed is not None:
-                if seed == -1:
-                    return "Random"
-                return str(seed)
-        
+                return "Random" if seed == -1 else str(seed)
         return "-"
     
     def _ensure_duration(self, entry: JobHistoryEntry) -> str:
@@ -303,9 +285,9 @@ class JobHistoryPanelV2(ttk.Frame):
             return self._format_duration_ms(entry.duration_ms)
         
         # Calculate from timestamps if available
-        if entry.started_at and entry.completed_at:
+        if (entry.started_at or entry.created_at) and entry.completed_at:
             try:
-                start = entry.started_at
+                start = entry.started_at or entry.created_at
                 end = entry.completed_at
                 
                 # Handle string timestamps
@@ -322,6 +304,19 @@ class JobHistoryPanelV2(ttk.Frame):
                 pass
         
         return "-"
+
+    def _extract_result_metadata(self, entry: JobHistoryEntry) -> dict[str, Any]:
+        """Extract metadata dict from result payload if present."""
+        if not entry.result or not isinstance(entry.result, dict):
+            return {}
+        metadata = entry.result.get("metadata")
+        if isinstance(metadata, dict):
+            return metadata
+        if isinstance(metadata, list) and metadata:
+            for item in reversed(metadata):
+                if isinstance(item, dict):
+                    return item
+        return {}
     
     def _extract_image_count(self, entry: JobHistoryEntry) -> str:
         """Extract image count from result or NJR snapshot."""

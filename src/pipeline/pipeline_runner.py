@@ -57,6 +57,14 @@ class PipelineRunner:
         Execute the pipeline using a NormalizedJobRecord (NJR-only, v2.6+ contract).
         This is the ONLY supported production entrypoint.
         """
+        # Best-effort VRAM refresh before every job to avoid long-run buildup.
+        try:
+            client = getattr(self._pipeline, "client", None)
+            if client and hasattr(client, "free_vram"):
+                logger.info("Freeing VRAM caches before job execution.")
+                client.free_vram(unload_model=False)
+        except Exception:
+            pass
         # Build run plan directly from NJR
         from src.pipeline.run_plan import build_run_plan_from_njr
 
@@ -100,8 +108,18 @@ class PipelineRunner:
         manifests_dir = run_dir / "manifests"
         manifests_dir.mkdir(exist_ok=True)
         
+        logger.info(f"🎯 [OUTPUT_PATH] Images will be saved to: {run_dir.absolute()}")
+        logger.info(f"🎯 [OUTPUT_PATH] Manifests will be saved to: {manifests_dir.absolute()}")
+        
         # PR-PIPE-001: Set current job ID on executor for manifest tracking
         self._pipeline._current_job_id = njr.job_id
+        try:
+            from src.utils.image_metadata import canonical_json_bytes, sha256_hex
+
+            snapshot = njr.to_queue_snapshot()
+            self._pipeline._current_njr_sha256 = sha256_hex(canonical_json_bytes(snapshot))
+        except Exception:
+            self._pipeline._current_njr_sha256 = None
         
         stage_events: list[dict[str, Any]] = []
         success = False
@@ -117,7 +135,36 @@ class PipelineRunner:
             prompt = getattr(njr, "positive_prompt", "") or ""
             negative_prompt = getattr(njr, "negative_prompt", "") or ""
             
+            # REPROCESSING SUPPORT: Check if this is a reprocessing job
+            # If input_image_paths are provided, use them as starting images
+            input_images = getattr(njr, "input_image_paths", None) or []
+            start_stage = getattr(njr, "start_stage", None)
+            if input_images:
+                current_stage_paths = list(input_images)
+                logger.info(f"🔄 [REPROCESS] Starting with {len(current_stage_paths)} input images: {[str(p) for p in input_images[:3]]}")
+                # Verify input files exist
+                for img_path in input_images:
+                    if not Path(img_path).exists():
+                        logger.error(f"🔄 [REPROCESS] ERROR: Input image not found: {img_path}")
+                        raise FileNotFoundError(f"Reprocess input image not found: {img_path}")
+                if start_stage:
+                    logger.info(f"🔄 [REPROCESS] Will start from stage: {start_stage}")
+            else:
+                logger.info("🔵 [PIPELINE] Normal job (not reprocessing)")
+            
+            # Track whether we've reached the start_stage (for reprocessing mode)
+            reached_start_stage = (start_stage is None)  # If no start_stage, begin immediately
+            
             for stage in plan.jobs:
+                # REPROCESSING: Skip stages before start_stage
+                if not reached_start_stage:
+                    if stage.stage_name == start_stage:
+                        # We've reached the start stage, process this and all subsequent stages
+                        reached_start_stage = True
+                    else:
+                        # Skip this stage - we haven't reached start_stage yet
+                        logger.info(f"⏭️  [REPROCESS] Skipping stage '{stage.stage_name}' (before start_stage '{start_stage}')")
+                        continue
                 # Dispatch to the appropriate stage executor based on stage_name
                 if stage.stage_name == "txt2img":
                     # Build payload for txt2img
@@ -219,6 +266,71 @@ class PipelineRunner:
                         variants.append(result)
                     last_result = result
                     
+                elif stage.stage_name == "img2img":
+                    if not current_stage_paths:
+                        logger.warning("img2img stage skipped: no input images from previous stage")
+                        continue
+                    
+                    # Get stage config from njr.stage_chain
+                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "img2img"), None)
+                    if stage_config:
+                        config_dict = asdict(stage_config)
+                        # Flatten 'extra' dict to top level for executor
+                        if "extra" in config_dict:
+                            config_dict.update(config_dict.pop("extra"))
+                    else:
+                        config_dict = {}
+                    
+                    # Add scheduler from NJR if present
+                    if njr.scheduler:
+                        config_dict["scheduler"] = njr.scheduler
+                    
+                    # Process ALL images from previous stage through img2img
+                    next_stage_paths = []
+                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build safe base name with hash-based uniqueness
+                    from src.utils.file_io import build_safe_image_name
+                    from pathlib import Path as PathLib
+                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    
+                    # For reprocess jobs, get original input filename for uniqueness
+                    original_inputs = getattr(njr, 'input_image_paths', None)
+                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
+                    
+                    for img_idx, input_path in enumerate(current_stage_paths):
+                        logger.info(f"🔵 [BATCH_PIPELINE] Processing img2img for image {img_idx + 1}/{len(current_stage_paths)}")
+                        # For reprocess jobs, include original filename to prevent collisions
+                        if use_original_name and img_idx < len(original_inputs):
+                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]  # First 30 chars of original filename
+                            unique_prefix = f"{base_prefix}_{input_stem}"
+                        else:
+                            unique_prefix = base_prefix
+                        image_name = build_safe_image_name(
+                            base_prefix=unique_prefix,
+                            matrix_values=matrix_values,
+                            seed=None,
+                            batch_index=img_idx,
+                            max_length=100
+                        )
+                        result = self._pipeline.run_img2img_stage(
+                            input_image_path=Path(input_path),
+                            prompt=prompt,
+                            config=config_dict,
+                            output_dir=run_dir,
+                            image_name=image_name,
+                            cancel_token=cancel_token,
+                        )
+                        # Collect output path from this image
+                        if result and "path" in result:
+                            next_stage_paths.append(result["path"])
+                        variants.append(result)
+                    
+                    # Update current_stage_paths for next stage
+                    current_stage_paths = next_stage_paths
+                    logger.info(f"🔵 [BATCH_PIPELINE] img2img completed {len(current_stage_paths)} images")
+                    
                 elif stage.stage_name == "adetailer":
                     if not current_stage_paths:
                         logger.warning("adetailer stage skipped: no input images from previous stage")
@@ -247,6 +359,10 @@ class PipelineRunner:
                     
                     # Debug logging
                     logger.info("🔵 [ADETAILER_CONFIG_DEBUG] config_dict keys: %s", list(config_dict.keys()))
+                    logger.info("🔵 [ADETAILER_CONFIG_DEBUG] adetailer_steps=%s, adetailer_denoise=%s, adetailer_cfg=%s",
+                               config_dict.get("adetailer_steps", "NOT SET"),
+                               config_dict.get("adetailer_denoise", "NOT SET"),
+                               config_dict.get("adetailer_cfg", "NOT SET"))
                     logger.info("🔵 [ADETAILER_PROMPT_DEBUG] adetailer_prompt='%s', adetailer_negative='%s'",
                                config_dict.get("adetailer_prompt", "(not set)")[:60],
                                config_dict.get("adetailer_negative_prompt", "(not set)")[:60])
@@ -257,13 +373,36 @@ class PipelineRunner:
                     
                     # Build safe base name with hash-based uniqueness
                     from src.utils.file_io import build_safe_image_name
+                    from pathlib import Path as PathLib
                     base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     
+                    # For reprocess jobs, get original input filename for uniqueness
+                    original_inputs = getattr(njr, 'input_image_paths', None)
+                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
+                    
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing adetailer for image {img_idx + 1}/{len(current_stage_paths)}")
+                        
+                        # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
+                        if use_original_name and img_idx > 0:  # Not first image (first one is fresh)
+                            try:
+                                if client and hasattr(client, "free_vram"):
+                                    logger.info("🧹 Freeing VRAM BEFORE adetailer image...")
+                                    client.free_vram(unload_model=False)
+                                    import time
+                                    time.sleep(1.0)  # Give WebUI time to stabilize
+                            except Exception:
+                                pass  # Non-fatal
+                        
+                        # For reprocess jobs, include original filename to prevent collisions
+                        if use_original_name and img_idx < len(original_inputs):
+                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]  # First 30 chars of original filename
+                            unique_prefix = f"{base_prefix}_{input_stem}"
+                        else:
+                            unique_prefix = base_prefix
                         image_name = build_safe_image_name(
-                            base_prefix=base_prefix,
+                            base_prefix=unique_prefix,
                             matrix_values=matrix_values,
                             seed=None,
                             batch_index=img_idx,
@@ -280,8 +419,21 @@ class PipelineRunner:
                         )
                         # Collect output path from this image
                         if result and "path" in result:
+                            logger.info(f"✅ [ADETAILER_OUTPUT] Saved: {result['path']}")
                             next_stage_paths.append(result["path"])
+                        else:
+                            logger.warning(f"❌ [ADETAILER_OUTPUT] No output from image {img_idx}")
                         variants.append(result)
+                        
+
+                        # For reprocess jobs, aggressively free VRAM after each image to prevent timeout
+                        if use_original_name and img_idx < len(current_stage_paths) - 1:  # Not last image
+                            try:
+                                if client and hasattr(client, "free_vram"):
+                                    logger.info("🧹 Freeing VRAM between adetailer images...")
+                                    client.free_vram(unload_model=False)
+                            except Exception:
+                                pass  # Non-fatal
                     
                     # Update current_stage_paths for next stage
                     current_stage_paths = next_stage_paths
@@ -298,9 +450,12 @@ class PipelineRunner:
                         config_dict = asdict(stage_config)
                         # Flatten 'extra' dict to top level for executor
                         if "extra" in config_dict:
+                            logger.info(f"🔵 [UPSCALE_CONFIG_DEBUG] extra dict before flatten: {config_dict['extra']}")
                             config_dict.update(config_dict.pop("extra"))
+                            logger.info(f"🔵 [UPSCALE_CONFIG_DEBUG] config_dict after flatten - upscaler={config_dict.get('upscaler')}")
                     else:
                         config_dict = {}
+                        logger.warning("[UPSCALE_CONFIG_DEBUG] No upscale stage config found in stage_chain")
                     
                     # Process ALL images from previous stage through upscaler
                     next_stage_paths = []
@@ -308,13 +463,36 @@ class PipelineRunner:
                     
                     # Build safe base name with hash-based uniqueness
                     from src.utils.file_io import build_safe_image_name
+                    from pathlib import Path as PathLib
                     base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     
+                    # For reprocess jobs, get original input filename for uniqueness
+                    original_inputs = getattr(njr, 'input_image_paths', None)
+                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
+                    
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing upscale for image {img_idx + 1}/{len(current_stage_paths)}")
+                        
+                        # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
+                        if use_original_name and img_idx > 0:  # Not first image
+                            try:
+                                if client and hasattr(client, "free_vram"):
+                                    logger.info("🧹 Freeing VRAM BEFORE upscale image...")
+                                    client.free_vram(unload_model=False)
+                                    import time
+                                    time.sleep(1.0)  # Give WebUI time to stabilize
+                            except Exception:
+                                pass  # Non-fatal
+                        
+                        # For reprocess jobs, include original filename to prevent collisions
+                        if use_original_name and img_idx < len(original_inputs):
+                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]  # First 30 chars of original filename
+                            unique_prefix = f"{base_prefix}_{input_stem}"
+                        else:
+                            unique_prefix = base_prefix
                         image_name = build_safe_image_name(
-                            base_prefix=base_prefix,
+                            base_prefix=unique_prefix,
                             matrix_values=matrix_values,
                             seed=None,
                             batch_index=img_idx,
@@ -329,9 +507,12 @@ class PipelineRunner:
                         )
                         # Collect output path from this image
                         if result and "path" in result:
+                            logger.info(f"✅ [UPSCALE_OUTPUT] Saved: {result['path']}")
                             next_stage_paths.append(result["path"])
+                        else:
+                            logger.warning(f"❌ [UPSCALE_OUTPUT] No output from image {img_idx}")
                         variants.append(result)
-                    
+                        
                     # Update current_stage_paths for next stage
                     current_stage_paths = next_stage_paths
                     logger.info(f"🔵 [BATCH_PIPELINE] upscale completed {len(current_stage_paths)} images")
@@ -370,6 +551,7 @@ class PipelineRunner:
         finally:
             # PR-PIPE-001: Clear job ID from executor after execution
             self._pipeline._current_job_id = None
+            self._pipeline._current_njr_sha256 = None
             
         result = PipelineRunResult(
             run_id=run_id,
