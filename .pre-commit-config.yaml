@@ -3,6 +3,29 @@
 # Run manually: pre-commit run --all-files
 
 repos:
+  # Custom StableNew architectural guardrails (PR-THREAD-001)
+  - repo: local
+    hooks:
+      # Prevent daemon=True threads
+      - id: no-daemon-threads
+        name: Check for daemon=True thread usage
+        entry: python scripts/check_daemon_threads.py
+        language: python
+        types: [python]
+        pass_filenames: false
+        stages: [commit]
+        description: "Ensures no new daemon threads are introduced (use ThreadRegistry instead)"
+      
+      # Ensure ThreadRegistry is used for new threads
+      - id: require-thread-registry
+        name: Verify threading.Thread() uses ThreadRegistry
+        entry: python scripts/check_thread_registry_usage.py
+        language: python
+        types: [python]
+        files: ^src/
+        pass_filenames: true
+        stages: [commit]
+        description: "Validates all new threading.Thread() calls use ThreadRegistry.spawn()"
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:

@@ -229,16 +229,30 @@ class SingleNodeJobRunner:
         return None
 
     def start(self) -> None:
+        """Start the worker thread if not already running.
+        
+        PR-THREAD-001: Changed to non-daemon thread for clean shutdown.
+        """
         if self._worker and self._worker.is_alive():
             return
         self._stop_event.clear()
-        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+        # PR-THREAD-001: Use non-daemon thread with proper tracking
+        self._worker = threading.Thread(
+            target=self._worker_loop,
+            daemon=False,  # Changed from True for clean shutdown
+            name="QueueWorker"
+        )
         self._worker.start()
 
     def stop(self) -> None:
+        """Stop the worker thread gracefully.
+        
+        PR-THREAD-001: Increased timeout from 2s to 10s for clean shutdown.
+        """
         self._stop_event.set()
         if self._worker:
-            self._worker.join(timeout=2.0)
+            # PR-THREAD-001: Increased timeout for more reliable shutdown
+            self._worker.join(timeout=10.0)
 
     def _worker_loop(self) -> None:
         logger.debug("SingleNodeJobRunner worker loop started")

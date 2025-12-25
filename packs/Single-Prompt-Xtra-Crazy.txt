@@ -1,0 +1,17 @@
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a highly detailed fantasy scene centered on [[number]],
+a female figure as the clear primary subject,
+[[hair]] hair, [[eyes]] eyes,
+[[pose]] while [[activity]],
+captured from a [[perspective]],
+lit by [[lighting]],
+set within a visually rich [[environment]],
+the scene conveys [[narrative]],
+wearing [[clothes]],
+strong subject focus, balanced composition,
+fantasy realism, cinematic atmosphere,
+natural proportions, realistic anatomy,
+high detail, sharp focus, rich color depth
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting

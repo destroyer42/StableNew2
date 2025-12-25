@@ -11,6 +11,7 @@ upon for new queue jobs.
 from __future__ import annotations
 
 import heapq
+from collections import deque
 from collections.abc import Callable, Iterable
 from threading import Lock
 from typing import TYPE_CHECKING
@@ -33,6 +34,8 @@ class JobQueue:
         self._counter = 0
         self._lock = Lock()
         self._history_store = history_store
+        # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
+        self._finalized_jobs_order: deque[str] = deque(maxlen=100)
         self._finalized_jobs: dict[str, Job] = {}
         self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
         self._state_listeners: list[Callable[[], None]] = []
@@ -98,12 +101,33 @@ class JobQueue:
             ts = job.updated_at
             should_prune = status in self._FINAL_STATUSES and self._history_store is not None
             if should_prune:
-                self._finalized_jobs[job_id] = job
+                # PR-MEMORY-001: Add to bounded finalized jobs collection
+                self._add_finalized_job(job_id, job)
                 self._prune_job(job_id)
         self._record_status(job_id, status, ts, error_message, result=result)
         self._notify_status(job, status)
         self._notify_state_listeners()
         return job
+
+    def _add_finalized_job(self, job_id: str, job: Job) -> None:
+        """Add job to bounded finalized collection.
+        
+        PR-MEMORY-001: Maintains max 100 finalized jobs. When full, evicts oldest.
+        Also clears job payload to free memory.
+        """
+        # Clear payload to free memory (PR-MEMORY-001)
+        job.payload = None
+        
+        # Check if deque is full and will evict oldest
+        if len(self._finalized_jobs_order) == self._finalized_jobs_order.maxlen:
+            # Get the oldest job_id that will be evicted
+            oldest_jid = self._finalized_jobs_order[0] if self._finalized_jobs_order else None
+            if oldest_jid and oldest_jid in self._finalized_jobs:
+                self._finalized_jobs.pop(oldest_jid, None)
+        
+        # Add new job (deque will auto-evict if at maxlen)
+        self._finalized_jobs_order.append(job_id)
+        self._finalized_jobs[job_id] = job
 
     def _record_submission(self, job: Job) -> None:
         if not self._history_store:

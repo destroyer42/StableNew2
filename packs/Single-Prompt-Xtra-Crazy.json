@@ -1,0 +1,313 @@
+{
+  "pack_data": {
+    "name": "Single-Prompt-Crazy",
+    "slots": [
+      {
+        "index": 0,
+        "text": "a highly detailed fantasy scene centered on [[number]],\na female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nwearing [[clothes]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy,\nhigh detail, sharp focus, rich color depth",
+        "negative": "low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4945054945054945
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5604395604395604
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
+          ]
+        ]
+      }
+    ],
+    "matrix": {
+      "enabled": true,
+      "mode": "random",
+      "limit": 10,
+      "slots": [
+        {
+          "name": "hair",
+          "values": [
+            "silver",
+            "platinum blonde",
+            "ash blonde",
+            "golden blonde",
+            "deep auburn",
+            "copper red",
+            "chestnut brown",
+            "jet black",
+            "midnight blue",
+            "raven black",
+            "snow white",
+            "pastel pink",
+            "violet",
+            "emerald green",
+            "fiery red",
+            "sun-bleached blonde",
+            "braided hair",
+            "loose flowing hair",
+            "windswept hair",
+            "intricately braided hair",
+            "partially tied hair",
+            "wild untamed hair"
+          ]
+        },
+        {
+          "name": "eyes",
+          "values": [
+            "ice blue",
+            "storm gray",
+            "emerald green",
+            "golden amber",
+            "glowing violet",
+            "glowing cyan",
+            "molten gold",
+            "deep brown",
+            "piercing blue",
+            "soft hazel",
+            "luminous teal",
+            "fiery orange",
+            "silver-gray",
+            "glowing runic eyes"
+          ]
+        },
+        {
+          "name": "lighting",
+          "values": [
+            "cinematic rim lighting",
+            "dramatic backlighting",
+            "soft volumetric light rays",
+            "glowing magical light",
+            "flickering firelight",
+            "moonlit illumination",
+            "golden hour sunlight",
+            "storm-lit sky glow",
+            "bioluminescent glow",
+            "diffused overcast light",
+            "harsh directional side lighting",
+            "ethereal ambient glow",
+            "neon magical highlights"
+          ]
+        },
+        {
+          "name": "perspective",
+          "values": [
+            "slightly low angle",
+            "eye-level cinematic framing",
+            "three-quarter view",
+            "off-center composition",
+            "rule-of-thirds framing",
+            "dynamic diagonal framing",
+            "subtle over-the-shoulder view",
+            "cinematic wide framing with subject centered"
+          ]
+        },
+        {
+          "name": "pose",
+          "values": [
+            "standing firm",
+            "mid-stride",
+            "kneeling with head raised",
+            "leaning forward with intent",
+            "turning sharply mid-motion",
+            "seated calmly",
+            "braced against the wind",
+            "relaxed confident stance",
+            "poised battle-ready stance",
+            "balanced grounded posture"
+          ]
+        },
+        {
+          "name": "activity",
+          "values": [
+            "summoning magic",
+            "preparing for battle",
+            "surveying the horizon",
+            "walking through ruins",
+            "casting a spell",
+            "gripping a weapon",
+            "channeling elemental energy",
+            "watching silently",
+            "advancing forward",
+            "standing guard",
+            "resting after combat",
+            "invoking ancient power"
+          ]
+        },
+        {
+          "name": "environment",
+          "values": [
+            "ancient stone ruins",
+            "windswept mountain pass",
+            "burning battlefield",
+            "moonlit forest clearing",
+            "crystal-lit cavern",
+            "desert temple ruins",
+            "floating sky islands",
+            "arcane library hall",
+            "torch-lit cathedral interior",
+            "frozen tundra battlefield",
+            "stormy coastal cliffs",
+            "glowing underground sanctuary"
+          ]
+        },
+        {
+          "name": "narrative",
+          "values": [
+            "before the final battle",
+            "calm before the storm",
+            "moments after victory",
+            "ancient power awakening",
+            "standing at the edge of destiny",
+            "after the magic was unleashed",
+            "guarding an ancient secret",
+            "the moment history changed",
+            "watching the world burn",
+            "holding the line alone"
+          ]
+        },
+        {
+          "name": "number",
+          "values": [
+            "one lone figure",
+            "a single central figure",
+            "two allied figures",
+            "a small group of three women",
+            "twin mirrored figures"
+          ]
+        },
+        {
+          "name": "clothes",
+          "values": [
+            "nothing",
+            "nothing but an open cloak",
+            "nothing but some ornate jewelry",
+            "nothing but a g-string",
+            "nothing but an underboob tight shirt",
+            "nothing but beads"
+          ]
+        }
+      ]
+    },
+    "show_preview": true
+  },
+  "preset_data": {
+    "txt2img": {
+      "model": "juggernautXL_ragnarokBy",
+      "model_name": "juggernautXL_ragnarokBy",
+      "vae": "",
+      "vae_name": "",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 34,
+      "cfg_scale": 6.1,
+      "width": 768,
+      "height": 1024,
+      "clip_skip": 2,
+      "seed": -1,
+      "subseed": -1,
+      "subseed_strength": 0.0,
+      "use_refiner": false,
+      "enable_hr": false,
+      "hr_upscaler": "Latent",
+      "hr_scale": 1.5,
+      "hr_second_pass_steps": 12,
+      "denoising_strength": 0.27,
+      "hires_use_base_model": true,
+      "hr_checkpoint_name": "Use base model"
+    },
+    "img2img": {
+      "model": "",
+      "model_name": "",
+      "vae": "",
+      "vae_name": "",
+      "sampler_name": "Euler a",
+      "steps": 15,
+      "cfg_scale": 7.0,
+      "denoising_strength": 0.3,
+      "mask_mode": "none"
+    },
+    "upscale": {
+      "upscaler": "4xUltrasharp_4xUltrasharpV10",
+      "upscale_mode": "single",
+      "steps": 15,
+      "denoising_strength": 0.2,
+      "upscaling_resize": 2.0,
+      "tile_size": 0,
+      "face_restore": false
+    },
+    "adetailer": {
+      "adetailer_model": "face_yolov8n.pt",
+      "ad_model": "face_yolov8n.pt",
+      "adetailer_confidence": 0.59,
+      "ad_confidence": 0.59,
+      "max_detections": 3,
+      "mask_blur": 4,
+      "ad_mask_blur": 4,
+      "mask_merge_mode": "keep",
+      "only_faces": true,
+      "only_hands": false,
+      "adetailer_steps": 12,
+      "ad_steps": 12,
+      "adetailer_cfg": 6.0,
+      "ad_cfg_scale": 6.0,
+      "adetailer_sampler": "DPM++ 2M",
+      "ad_sampler": "DPM++ 2M",
+      "adetailer_denoise": 0.25833333333333336,
+      "ad_denoising_strength": 0.25833333333333336,
+      "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nhighly realistic human face,\nnatural skin texture,\nclear skin pores,\nbalanced facial proportions,\nsymmetrical facial features,\nwell-defined eyes,\nnatural eye reflections,\naccurate facial anatomy,\nsharp focus,\nphotorealistic detail\n",
+      "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nhighly realistic human face,\nnatural skin texture,\nclear skin pores,\nbalanced facial proportions,\nsymmetrical facial features,\nwell-defined eyes,\nnatural eye reflections,\naccurate facial anatomy,\nsharp focus,\nphotorealistic detail\n",
+      "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nlow quality,\nblurry,\nout of focus,\ndistorted face,\nasymmetrical face,\ndeformed facial features,\nwarped eyes,\ncrossed eyes,\nextra eyes,\nextra face,\nmultiple faces,\nmutated face,\nplastic skin,\nover-smoothed skin,\nover-sharpened,\nharsh shadows,\nunrealistic skin texture,\nuncanny valley",
+      "ad_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nlow quality,\nblurry,\nout of focus,\ndistorted face,\nasymmetrical face,\ndeformed facial features,\nwarped eyes,\ncrossed eyes,\nextra eyes,\nextra face,\nmultiple faces,\nmutated face,\nplastic skin,\nover-smoothed skin,\nover-sharpened,\nharsh shadows,\nunrealistic skin texture,\nuncanny valley",
+      "ad_inpaint_only_masked": true,
+      "ad_inpaint_only_masked_padding": 32,
+      "ad_use_inpaint_width_height": false,
+      "enable_face_pass": true,
+      "face_model": "mediapipe_face_full",
+      "face_padding": 32,
+      "enable_hands_pass": true,
+      "hands_model": "hand_yolov8s.pt",
+      "hands_padding": 32,
+      "mask_filter_method": "largest",
+      "mask_k_largest": 3,
+      "ad_mask_k_largest": 3,
+      "mask_min_ratio": 0.01,
+      "ad_mask_min_ratio": 0.01,
+      "mask_max_ratio": 1.0,
+      "ad_mask_max_ratio": 1.0,
+      "mask_dilate_erode": 4,
+      "ad_dilate_erode": 4,
+      "mask_feather": 5,
+      "ad_mask_feather": 5,
+      "scheduler": "Karras",
+      "ad_scheduler": "Karras",
+      "ad_mask_filter_method": "Area",
+      "ad_mask_merge_invert": "None",
+      "adetailer_enabled": true
+    },
+    "pipeline": {
+      "images_per_prompt": 2,
+      "n_iter": 1,
+      "output_dir": "output",
+      "filename_pattern": "{seed}",
+      "image_format": "png",
+      "seed_mode": "fixed",
+      "txt2img_enabled": true,
+      "img2img_enabled": false,
+      "adetailer_enabled": true,
+      "upscale_enabled": true
+    }
+  }
+}

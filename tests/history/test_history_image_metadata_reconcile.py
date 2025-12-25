@@ -60,12 +60,15 @@ def test_reconcile_metadata_falls_back_to_manifest(tmp_path: Path) -> None:
     image_path.parent.mkdir()
     _write_png(image_path)
 
+    # PR-METADATA-001: Manifests now include run_id cross-reference
     manifest_path = run_dir / "manifests" / "sample.json"
     manifest_path.write_text(
-        '{"name":"sample","stage":"txt2img","timestamp":"t","config":{},"job_id":"job-1"}',
+        '{"name":"sample","stage":"txt2img","timestamp":"t","config":{},"job_id":"job-1","run_id":"run-1"}',
         encoding="utf-8",
     )
 
     resolved = service.reconcile_image_metadata(image_path)
     assert resolved["source"] == "sidecar"
     assert resolved["payload"]["job_id"] == "job-1"
+    # PR-METADATA-001: Verify run_id is present in manifest
+    assert resolved["payload"].get("run_id") == "run-1"

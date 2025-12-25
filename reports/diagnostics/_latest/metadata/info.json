@@ -1,0 +1,39 @@
+{
+  "reason": "ui_heartbeat_stall",
+  "timestamp": "20251225_072014",
+  "system": {
+    "timestamp": "2025-12-25T07:20:14.358657Z",
+    "hostname": "Rob-Gaming-Desk",
+    "platform": {
+      "system": "Windows",
+      "release": "10",
+      "version": "10.0.26100",
+      "machine": "AMD64",
+      "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel"
+    },
+    "python": {
+      "implementation": "CPython",
+      "version": "3.10.6",
+      "executable": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\python.exe"
+    },
+    "user": "rob",
+    "cwd": "<USER_HOME>\\projects\\StableNew",
+    "repo_root": "<USER_HOME>\\projects\\StableNew",
+    "memory": {
+      "total_mb": 32527.05859375,
+      "available_mb": 14671.78125,
+      "used_mb": 17855.27734375,
+      "percent": 54.9
+    },
+    "cpu": {
+      "percent": 0.0,
+      "count_logical": 32,
+      "count_physical": 24
+    },
+    "disk": {
+      "total_mb": 1952658.99609375,
+      "used_mb": 430891.8046875,
+      "free_mb": 1521767.19140625
+    }
+  }
+}

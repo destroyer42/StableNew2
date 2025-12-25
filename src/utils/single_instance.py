@@ -90,13 +90,16 @@ class SingleInstanceLock:
         self._socket = sock
         
         # Start accept loop thread to handle is_gui_running() checks
+        # PR-THREAD-001: Use ThreadRegistry for accept loop
         self._stop_accepting.clear()
-        self._accept_thread = threading.Thread(
+        from src.utils.thread_registry import get_thread_registry
+        registry = get_thread_registry()
+        self._accept_thread = registry.spawn(
             target=self._accept_loop,
-            daemon=True,
-            name="SingleInstanceLock-Accept"
+            name="SingleInstanceLock-Accept",
+            daemon=False,
+            purpose="Accept socket connections for single instance lock"
         )
-        self._accept_thread.start()
         
         return True
 

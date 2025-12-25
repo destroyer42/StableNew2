@@ -59,7 +59,8 @@ class JobWatchdog(threading.Thread):
         process_provider: Callable[[int], Any] | None = None,
         time_provider: Callable[[], float] | None = None,
     ) -> None:
-        super().__init__(daemon=True)
+        # PR-THREAD-001: Changed daemon=True to daemon=False
+        super().__init__(daemon=False)
         self.job_id = job_id
         self._metadata = metadata
         self._config = config

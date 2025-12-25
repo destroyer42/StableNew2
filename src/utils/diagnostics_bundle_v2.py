@@ -85,7 +85,7 @@ def build_async(
                 except Exception:
                     pass
 
-    threading.Thread(target=_worker, daemon=True, name=f"DiagBundle-{reason}").start()
+    threading.Thread(target=_worker, daemon=False, name=f"DiagBundle-{reason}").start()
 
 
 def build_crash_bundle(

@@ -383,11 +383,13 @@ class Pipeline:
             if desired_normalized == current_normalized:
                 return
             if not self.client.options_write_enabled:
-                logger.warning(
-                    "Model switch to %s requested but options writes are disabled (SafeMode); keeping %s",
-                    model_name,
-                    self._current_model or "current WebUI model",
-                )
+                # Only warn if models are actually different (avoids false warnings when normalized names match)
+                if current_normalized != desired_normalized:
+                    logger.warning(
+                        "Model switch to %s requested but options writes are disabled (SafeMode); keeping %s",
+                        model_name,
+                        self._current_model or "current WebUI model",
+                    )
                 return
             try:
                 logger.info(f"Switching to model: {model_name}")
@@ -1266,6 +1268,7 @@ class Pipeline:
                 "path": str(image_path),
                 # PR-PIPE-001: Enhanced metadata fields
                 "job_id": getattr(self, "_current_job_id", None),
+                "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
                 "model": model_name or "Unknown",
                 "vae": vae_name or "Automatic",
                 "requested_seed": config.get("seed", -1),
@@ -1401,6 +1404,7 @@ class Pipeline:
                 "prompt": prompt,
                 "config": self._clean_metadata_payload(payload),
                 "path": str(image_path),
+                "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
             }
             metadata_builder = self._build_image_metadata_builder(
                 image_path=image_path,
@@ -1545,6 +1549,7 @@ class Pipeline:
             "path": str(image_path),
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
+            "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
             "model": config.get("model") or config.get("sd_model_checkpoint"),
             "vae": config.get("vae") or "Automatic",
             "requested_seed": config.get("seed", -1),
@@ -1641,6 +1646,9 @@ class Pipeline:
         # ADetailer uses custom prompts - never apply global negative merging
         apply_global = False
 
+        # Import fallback tracking helper
+        from src.utils.config_helpers import get_with_fallback_warning
+
         # DEBUG: Log ADetailer config received
         logger.info(
             "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s, mask_feather=%s",
@@ -1666,28 +1674,29 @@ class Pipeline:
                     prompt[:60] if prompt else "(empty)",
                     final_prompt[:60] if final_prompt else "(empty)")
         
-        # Build ADetailer payload
+        # Build ADetailer payload using smart fallback tracking
+        # Warns only when keys are actually missing (true fallback), not when user chose defaults
         face_args = {
-            "ad_model": config.get("adetailer_model", "face_yolov8n.pt"),
+            "ad_model": get_with_fallback_warning(config, "adetailer_model", "face_yolov8n.pt", source="run_adetailer"),
             "ad_tab_enable": True,
-            "ad_confidence": config.get("adetailer_confidence", 0.35),
-            "ad_mask_filter_method": config.get("ad_mask_filter_method", "Area"),
-            "ad_mask_k": config.get("ad_mask_k", 3),
-            "ad_mask_min_ratio": config.get("ad_mask_min_ratio", 0.01),
-            "ad_mask_max_ratio": config.get("ad_mask_max_ratio", 1.0),
-            "ad_dilate_erode": config.get("ad_dilate_erode", 4),
-            "ad_mask_blur": config.get("adetailer_mask_feather", 4),
-            "ad_mask_merge_invert": config.get("ad_mask_merge_invert", "None"),
+            "ad_confidence": get_with_fallback_warning(config, "adetailer_confidence", 0.35, source="run_adetailer"),
+            "ad_mask_filter_method": get_with_fallback_warning(config, "ad_mask_filter_method", "Area", source="run_adetailer", warn=False),
+            "ad_mask_k": get_with_fallback_warning(config, "ad_mask_k", 3, source="run_adetailer", warn=False),
+            "ad_mask_min_ratio": get_with_fallback_warning(config, "ad_mask_min_ratio", 0.01, source="run_adetailer", warn=False),
+            "ad_mask_max_ratio": get_with_fallback_warning(config, "ad_mask_max_ratio", 1.0, source="run_adetailer", warn=False),
+            "ad_dilate_erode": get_with_fallback_warning(config, "ad_dilate_erode", 4, source="run_adetailer", warn=False),
+            "ad_mask_blur": get_with_fallback_warning(config, "adetailer_mask_feather", 4, source="run_adetailer", warn=False),
+            "ad_mask_merge_invert": get_with_fallback_warning(config, "ad_mask_merge_invert", "None", source="run_adetailer", warn=False),
             "ad_inpaint_only_masked": True,
-            "ad_inpaint_only_masked_padding": config.get("adetailer_padding", 32),
+            "ad_inpaint_only_masked_padding": get_with_fallback_warning(config, "adetailer_padding", 32, source="run_adetailer", warn=False),
             "ad_use_steps": True,
-            "ad_steps": config.get("adetailer_steps", 14),
+            "ad_steps": get_with_fallback_warning(config, "adetailer_steps", 14, source="run_adetailer"),
             "ad_use_cfg_scale": True,
-            "ad_cfg_scale": config.get("adetailer_cfg", 5.5),
-            "ad_denoising_strength": config.get("adetailer_denoise", 0.32),
+            "ad_cfg_scale": get_with_fallback_warning(config, "adetailer_cfg", 5.5, source="run_adetailer"),
+            "ad_denoising_strength": get_with_fallback_warning(config, "adetailer_denoise", 0.32, source="run_adetailer"),
             "ad_use_sampler": True,
-            "ad_sampler": config.get("adetailer_sampler", "DPM++ 2M Karras"),
-            "ad_scheduler": config.get("ad_scheduler", "Use same scheduler"),
+            "ad_sampler": get_with_fallback_warning(config, "adetailer_sampler", "DPM++ 2M Karras", source="run_adetailer"),
+            "ad_scheduler": get_with_fallback_warning(config, "ad_scheduler", "Use same scheduler", source="run_adetailer", warn=False),
             "ad_prompt": config.get("adetailer_prompt", final_prompt),
             "ad_negative_prompt": config.get("adetailer_negative_prompt", ad_neg_final),
         }
@@ -1800,6 +1809,7 @@ class Pipeline:
             "path": str(image_path),
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
+            "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
             "model": config.get("model") or config.get("sd_model_checkpoint"),
             "vae": config.get("vae") or "Automatic",
             "requested_seed": config.get("seed", -1),
@@ -1897,6 +1907,7 @@ class Pipeline:
             "path": str(image_path),
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
+            "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
             "model": config.get("model"),  # May be None for upscale
             "vae": config.get("vae"),  # May be None for upscale
             "requested_seed": config.get("seed"),  # May be None for upscale

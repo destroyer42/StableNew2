@@ -31,19 +31,39 @@ class SystemWatchdogV2:
         )
 
     def start(self) -> None:
-        t = threading.Thread(target=self._loop, daemon=True, name="SystemWatchdogV2")
+        """Start the watchdog monitoring thread.
+        
+        PR-WATCHDOG-001: Changed to non-daemon for clean shutdown.
+        """
+        # PR-WATCHDOG-001: Changed from daemon=True to daemon=False
+        t = threading.Thread(
+            target=self._loop,
+            daemon=False,  # Changed for clean shutdown
+            name="SystemWatchdogV2"
+        )
         t.start()
         self._thread = t
 
     def stop(self) -> None:
+        """Stop the watchdog thread gracefully.
+        
+        PR-WATCHDOG-001: Increased timeout from 2s to 10s for clean shutdown.
+        """
         self._stop.set()
         if self._thread and self._thread.is_alive():
-            # best effort join; don't hang shutdown
-            self._thread.join(timeout=2.0)
+            # PR-WATCHDOG-001: Increased timeout for reliable shutdown
+            self._thread.join(timeout=10.0)
 
     def _loop(self) -> None:
+        """Main watchdog loop - monitors system health.
+        
+        PR-WATCHDOG-001: Added shutdown check to prevent diagnostics during shutdown.
+        """
         while not self._stop.is_set():
             try:
+                # PR-WATCHDOG-001: Skip checks if shutdown requested
+                if hasattr(self.app, '_is_shutting_down') and self.app._is_shutting_down:
+                    break
                 self._check()
             except Exception:
                 # watchdog must never crash the app
@@ -115,9 +135,15 @@ class SystemWatchdogV2:
                         finally:
                             _done_callback()
 
-                    threading.Thread(
-                        target=_fallback_worker, daemon=True, name=f"DiagTrigger-{reason}"
-                    ).start()
+                    # PR-THREAD-001: Use ThreadRegistry for fallback worker
+                    from src.utils.thread_registry import get_thread_registry
+                    registry = get_thread_registry()
+                    registry.spawn(
+                        target=_fallback_worker,
+                        name=f"DiagTrigger-{reason}",
+                        daemon=False,
+                        purpose=f"Fallback diagnostics trigger for {reason}"
+                    )
             else:
                 # Fall back to spawning a thread here.
                 def _worker():
@@ -126,6 +152,14 @@ class SystemWatchdogV2:
                     finally:
                         _done_callback()
 
-                threading.Thread(target=_worker, daemon=True, name=f"DiagTrigger-{reason}").start()
+                # PR-THREAD-001: Use ThreadRegistry for worker
+                from src.utils.thread_registry import get_thread_registry
+                registry = get_thread_registry()
+                registry.spawn(
+                    target=_worker,
+                    name=f"DiagTrigger-{reason}",
+                    daemon=False,
+                    purpose=f"Diagnostics trigger for {reason}"
+                )
         except Exception:
             _done_callback()

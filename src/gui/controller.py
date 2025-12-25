@@ -142,10 +142,25 @@ class PipelineController:
             if self._sync_cleanup:
                 cleanup()
             else:
-                threading.Thread(target=cleanup, daemon=True).start()
+                # PR-THREAD-001: Use ThreadRegistry for cleanup
+                from src.utils.thread_registry import get_thread_registry
+                registry = get_thread_registry()
+                registry.spawn(
+                    target=cleanup,
+                    name="GUI-Pipeline-Cleanup",
+                    daemon=False,
+                    purpose="Cleanup after GUI pipeline execution"
+                )
 
-        self._worker = threading.Thread(target=worker, daemon=True)
-        self._worker.start()
+        # PR-THREAD-001: Use ThreadRegistry for worker
+        from src.utils.thread_registry import get_thread_registry
+        registry = get_thread_registry()
+        self._worker = registry.spawn(
+            target=worker,
+            name="GUI-Pipeline-Worker",
+            daemon=False,
+            purpose="Execute GUI pipeline in background"
+        )
         return True
 
     def stop_pipeline(self) -> bool:
@@ -177,7 +192,15 @@ class PipelineController:
             logger.debug("Sync cleanup requested (tests only); running inline")
             cleanup()
         else:
-            threading.Thread(target=cleanup, daemon=True).start()
+            # PR-THREAD-001: Use ThreadRegistry for cleanup
+            from src.utils.thread_registry import get_thread_registry
+            registry = get_thread_registry()
+            registry.spawn(
+                target=cleanup,
+                name="GUI-Stop-Cleanup",
+                daemon=False,
+                purpose="Cleanup after stopping GUI pipeline"
+            )
         return True
 
     def _do_cleanup(self, eid: int, error_occurred: bool):

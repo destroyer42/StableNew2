@@ -263,18 +263,25 @@ class WebUIProcessManager:
                 except Exception:
                     pass
 
-        self._stdout_thread = threading.Thread(
+        # PR-THREAD-001: Use ThreadRegistry for stream readers
+        from src.utils.thread_registry import get_thread_registry
+        registry = get_thread_registry()
+        
+        self._stdout_thread = registry.spawn(
             target=_read_stream,
             args=(process.stdout, self._stdout_log_file, self._stdout_tail, "stdout"),
-            daemon=True,
+            name="WebUI-stdout-reader",
+            daemon=False,
+            purpose="Read WebUI process stdout stream"
         )
-        self._stderr_thread = threading.Thread(
+        self._stderr_thread = registry.spawn(
             target=_read_stream,
             args=(process.stderr, self._stderr_log_file, self._stderr_tail, "stderr"),
-            daemon=True,
+            name="WebUI-stderr-reader",
+            daemon=False,
+            purpose="Read WebUI process stderr stream"
         )
-        self._stdout_thread.start()
-        self._stderr_thread.start()
+        # Threads already started by ThreadRegistry.spawn()
         logger.debug(
             "WebUI stdout/stderr captured to %s and %s",
             str(self._stdout_log_path),
@@ -830,12 +837,15 @@ class WebUIProcessManager:
             return
         
         self._orphan_monitor_stop.clear()
-        self._orphan_monitor_thread = threading.Thread(
+        # PR-THREAD-001: Use ThreadRegistry for orphan monitor
+        from src.utils.thread_registry import get_thread_registry
+        registry = get_thread_registry()
+        self._orphan_monitor_thread = registry.spawn(
             target=self._orphan_monitor_loop,
-            daemon=True,
-            name="WebUI-Orphan-Monitor"
+            name="WebUI-Orphan-Monitor",
+            daemon=False,
+            purpose="Monitor and cleanup orphaned WebUI processes"
         )
-        self._orphan_monitor_thread.start()
         logger.info("[Orphan Monitor] Started monitoring thread to prevent orphaned WebUI processes")
 
     def _stop_orphan_monitor(self) -> None:
@@ -977,12 +987,15 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             return
         
         self._orphan_monitor_stop.clear()
-        self._orphan_monitor_thread = threading.Thread(
+        # PR-THREAD-001: Use ThreadRegistry for orphan monitor
+        from src.utils.thread_registry import get_thread_registry
+        registry = get_thread_registry()
+        self._orphan_monitor_thread = registry.spawn(
             target=self._orphan_monitor_loop,
-            daemon=True,
-            name="WebUI-Orphan-Monitor"
+            name="WebUI-Orphan-Monitor",
+            daemon=False,
+            purpose="Monitor and cleanup orphaned WebUI processes"
         )
-        self._orphan_monitor_thread.start()
         logger.info("[Orphan Monitor] Started monitoring thread to prevent orphaned WebUI processes")
 
     def _stop_orphan_monitor(self) -> None:

@@ -98,6 +98,7 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
     wrap_exception,
 )
+from src.utils.thread_registry import get_thread_registry
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils.queue_helpers_v2 import job_to_queue_job
@@ -226,9 +227,14 @@ class AppController:
         self._queue_submit_in_progress = True
         jobs = getattr(self, "_draft_job_bundle", [])
         self._draft_job_bundle = []
-        import threading
-
-        threading.Thread(target=self._submit_jobs_async, args=(jobs,), daemon=True).start()
+        
+        # PR-THREAD-001: Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=self._submit_jobs_async,
+            args=(jobs,),
+            name="QueueSubmit",
+            purpose="Submit jobs to queue asynchronously"
+        )
 
     def _submit_jobs_async(self, jobs):
         try:
@@ -236,6 +242,44 @@ class AppController:
                 self.job_service.submit_queued(job)
         finally:
             self._queue_submit_in_progress = False
+    
+    def _spawn_tracked_thread(
+        self,
+        target: Callable,
+        args: tuple = (),
+        kwargs: dict | None = None,
+        name: str | None = None,
+        daemon: bool = False,
+        purpose: str | None = None,
+    ) -> threading.Thread:
+        """
+        Spawn a tracked thread for clean shutdown.
+        
+        PR-THREAD-001: All background operations must use this method
+        to ensure proper cleanup during shutdown.
+        
+        Args:
+            target: Function to run in thread
+            args: Positional arguments for target
+            kwargs: Keyword arguments for target
+            name: Thread name (required)
+            daemon: Whether to use daemon mode (discouraged)
+            purpose: Description of thread purpose
+        
+        Returns:
+            The spawned thread
+        """
+        if kwargs is None:
+            kwargs = {}
+        
+        return self._thread_registry.spawn(
+            target=target,
+            args=args,
+            kwargs=kwargs,
+            name=name or "UnnamedThread",
+            daemon=daemon,
+            purpose=purpose,
+        )
 
     def __init__(
         self,
@@ -263,6 +307,8 @@ class AppController:
         self.diagnostics_service = None
         self._system_watchdog = None
         # --- END PR-CORE1-D21A ---
+        # PR-THREAD-001: Thread registry for clean shutdown
+        self._thread_registry = get_thread_registry()
         self._is_shutting_down = False
         self.job_service = job_service  # Ensure job_service is always set, even if None
         self.last_ui_heartbeat_ts = time.monotonic()
@@ -406,9 +452,11 @@ class AppController:
                         pass
         except Exception:
             pass
+        # PR-SCANNER-001: Disable ProcessAutoScanner by default to prevent self-kill
         self.process_auto_scanner = ProcessAutoScannerService(
             config=ProcessAutoScannerConfig(),
             protected_pids=self._get_protected_process_pids,
+            start_thread=False,  # DISABLED - prevents GUI from being killed
         )
         # Wire GUI overrides into PipelineController so config assembler can access GUI state
         if hasattr(self.pipeline_controller, "get_gui_overrides"):
@@ -422,11 +470,44 @@ class AppController:
         self._setup_diagnostics_hooks()
 
     def shutdown(self) -> None:
-        """Shutdown the AppController and all background services cleanly."""
-        self._is_shutting_down = True
+        """
+        Shutdown the AppController and all background services cleanly.
+        
+        PR-SHUTDOWN-001: Enhanced to stop SystemWatchdog, join all tracked threads,
+        close file handles, and verify clean exit.
+        """
+        logger.info("[controller] shutdown(): Stopping system watchdog...")
         if hasattr(self, "_system_watchdog") and self._system_watchdog:
-            self._system_watchdog.stop()
-        # ...existing shutdown logic if any...
+            try:
+                self._system_watchdog.stop()
+                logger.info("[controller] shutdown(): System watchdog stopped")
+            except Exception as e:
+                logger.error(f"[controller] shutdown(): Error stopping watchdog: {e}")
+        
+        # PR-SHUTDOWN-001: Shutdown history store background writer
+        logger.info("[controller] shutdown(): Shutting down history store writer...")
+        if self.job_service:
+            history_store = getattr(self.job_service, "history_store", None)
+            if history_store and hasattr(history_store, "shutdown"):
+                try:
+                    history_store.shutdown()
+                    logger.info("[controller] shutdown(): History store writer shut down")
+                except Exception as e:
+                    logger.error(f"[controller] shutdown(): Error shutting down history store: {e}")
+        
+        # PR-THREAD-001: Join all tracked threads
+        logger.info("[controller] shutdown(): Joining all tracked threads...")
+        try:
+            stats = self._thread_registry.shutdown_all(timeout=10.0)
+            logger.info(
+                f"[controller] shutdown(): Thread shutdown complete - "
+                f"joined={stats['joined']}, timeout={stats['timeout']}, "
+                f"orphaned={stats['orphaned']}"
+            )
+            if stats['timeout'] > 0 or stats['orphaned'] > 0:
+                logger.warning(f"[controller] shutdown(): {stats['timeout']} threads timed out, {stats['orphaned']} daemon threads orphaned")
+        except Exception as e:
+            logger.error(f"[controller] shutdown(): Error during thread shutdown: {e}")
 
     def _ui_dispatch(self, fn: Callable[[], None]) -> None:
         import threading
@@ -2581,12 +2662,14 @@ class AppController:
         self._set_lifecycle(LifecycleState.RUNNING)
 
         if self.threaded:
-            self._worker_thread = threading.Thread(
+            # PR-THREAD-001: Use ThreadRegistry for pipeline worker
+            self._worker_thread = self._spawn_tracked_thread(
                 target=self._run_pipeline_thread,
                 args=(self._cancel_token,),
-                daemon=True,
+                name="Pipeline-Worker",
+                daemon=False,
+                purpose="Run pipeline execution in background thread"
             )
-            self._worker_thread.start()
         else:
             # Synchronous run (for tests and journeys) via worker routine directly
             self._run_pipeline_thread(self._cancel_token)
@@ -2615,6 +2698,10 @@ class AppController:
         self._update_webui_state("connected" if healthy else "error")
 
     def _run_pipeline_thread(self, cancel_token: CancelToken) -> None:
+        """Execute pipeline with proper cleanup.
+        
+        PR-MEMORY-001: Clears cancel token after completion to prevent memory leaks.
+        """
         try:
             pipeline_config = self.build_pipeline_config_v2()
             self._append_log_threadsafe("[controller] Starting pipeline execution.")
@@ -2641,6 +2728,9 @@ class AppController:
             self._append_log_threadsafe(f"[controller] Pipeline error: {exc!r}")
             self._set_lifecycle_threadsafe(LifecycleState.ERROR, error=str(exc))
             cancel_token.clear_stop_requirement()
+        finally:
+            # PR-MEMORY-001: Clear cancel token reference to prevent memory leaks
+            self._cancel_token = None
 
     def _cache_last_run_payload(
         self, executor_config: dict[str, Any], pipeline_config: PipelineConfig
@@ -2941,12 +3031,19 @@ class AppController:
             logger.info("[controller] shutdown_app: Already shutting down, skipping")
             return
         self._is_shutting_down = True
-        if self._shutdown_started_at is None:
-            self._shutdown_started_at = time.time()
-            threading.Thread(target=self._shutdown_watchdog, daemon=True).start()
         label = reason or "shutdown"
         logger.info("[controller] ===== SHUTDOWN_APP CALLED (%s) =====", label)
-
+        
+        # PR-THREAD-001: Use tracked thread for shutdown watchdog
+        if self._shutdown_started_at is None:
+            self._shutdown_started_at = time.time()
+            self._spawn_tracked_thread(
+                target=self._shutdown_watchdog,
+                name="ShutdownWatchdog",
+                daemon=False,
+                purpose="Monitor shutdown for hangs"
+            )
+        
         try:
             logger.info("[controller] Step 1/8: Cancelling active jobs...")
             self._cancel_active_jobs(label)
@@ -2980,6 +3077,14 @@ class AppController:
             logger.info("[controller] Step 5/8: Job service shutdown complete")
         except Exception:
             logger.exception("Error shutting down job service")
+        
+        # PR-SHUTDOWN-001: Call enhanced shutdown() for watchdog and thread cleanup
+        try:
+            logger.info("[controller] Step 5.5/8: Running enhanced shutdown sequence...")
+            self.shutdown()
+            logger.info("[controller] Step 5.5/8: Enhanced shutdown complete")
+        except Exception:
+            logger.exception("Error during enhanced shutdown")
 
         if is_debug_shutdown_inspector_enabled():
             try:

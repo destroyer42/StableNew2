@@ -85,7 +85,8 @@ class PreviewPanelV2(ttk.Frame):
         self.thumbnail.pack(anchor="center")
 
         # Checkbox to enable/disable preview thumbnails
-        self._show_preview_var = tk.BooleanVar(value=True)
+        # PR-PREVIEW-001: Default to False
+        self._show_preview_var = tk.BooleanVar(value=False)
         self.preview_checkbox = ttk.Checkbutton(
             self.thumbnail_frame,
             text="Show preview thumbnails",
@@ -521,7 +522,8 @@ class PreviewPanelV2(ttk.Frame):
             # Clear thumbnail when no job
             self._current_preview_job = None
             self._current_pack_name = None
-            self._current_show_preview = True
+            # PR-PREVIEW-001: Preserve checkbox state, don't reset to True
+            self._current_show_preview = self._show_preview_var.get()
             self._update_thumbnail()
             return
 
@@ -588,19 +590,16 @@ class PreviewPanelV2(ttk.Frame):
 
         # Update thumbnail with pack info from summary
         pack_name = getattr(summary_obj, "pack_name", None) or getattr(summary_obj, "label", None)
-        show_preview = getattr(summary_obj, "show_preview", True)
-
+        
+        # PR-PREVIEW-001: Don't override user's checkbox preference from pack config
+        # The checkbox state is the authoritative source, not the pack
         # Store current state for checkbox handler
         self._current_preview_job = summary
         self._current_pack_name = pack_name
-        self._current_show_preview = show_preview
-
-        # Update checkbox state based on pack config
-        if show_preview != self._show_preview_var.get():
-            self._show_preview_var.set(show_preview)
+        self._current_show_preview = self._show_preview_var.get()
 
         # Load thumbnail
-        self._update_thumbnail(summary, pack_name, show_preview)
+        self._update_thumbnail(summary, pack_name, self._show_preview_var.get())
 
     def _normalize_summary(self, summary: Any) -> Any | None:
         if summary is None:
@@ -1020,7 +1019,8 @@ class PreviewPanelV2(ttk.Frame):
             # Reload thumbnail for current job
             first_job = getattr(self, "_current_preview_job", None)
             pack_name = getattr(self, "_current_pack_name", None)
-            show_preview = getattr(self, "_current_show_preview", True)
+            # PR-PREVIEW-001: Use current checkbox state, not stored value
+            show_preview = self._show_preview_var.get()
             self._update_thumbnail(first_job, pack_name, show_preview)
         else:
             self.thumbnail.clear()
@@ -1047,8 +1047,9 @@ class PreviewPanelV2(ttk.Frame):
             return
         self._current_preview_job = summary
         self._current_pack_name = getattr(summary, "prompt_pack_name", None) if summary else None
-        self._current_show_preview = True
-        self._update_thumbnail(summary, self._current_pack_name, True)
+        # PR-PREVIEW-001: Preserve checkbox state, don't hardcode True
+        self._current_show_preview = self._show_preview_var.get()
+        self._update_thumbnail(summary, self._current_pack_name, self._show_preview_var.get())
         
         # PR-GUI-DATA-005: Load latest output image if preview enabled
         if self._show_preview_var.get() and summary:
@@ -1153,8 +1154,8 @@ class PreviewPanelV2(ttk.Frame):
                 logger.warning("Unsupported preview state schema, ignoring")
                 return
             
-            # Restore show_preview flag
-            show_preview = state.get("show_preview", True)
+            # Restore show_preview flag (PR-PREVIEW-001: default False)
+            show_preview = state.get("show_preview", False)
             self._show_preview_var.set(show_preview)
             
             logger.debug(f"Restored preview panel state: show_preview={show_preview}")

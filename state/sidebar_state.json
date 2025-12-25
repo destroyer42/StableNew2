@@ -1,6 +1,8 @@
 {
   "selected_list": "CharactersList",
-  "selected_packs": [],
+  "selected_packs": [
+    "A_Beautiful_Test_LoRA"
+  ],
   "prompt_text": "A futuristic city with flying vehicles",
   "schema_version": "2.6"
 }

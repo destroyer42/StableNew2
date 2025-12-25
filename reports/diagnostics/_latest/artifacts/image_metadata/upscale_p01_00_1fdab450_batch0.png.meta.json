@@ -1,0 +1,39 @@
+{
+  "status": "ok",
+  "payload": {
+    "image": {
+      "format": "png",
+      "height": 2560,
+      "path": "upscale_p01_00_1fdab450_batch0.png",
+      "width": 1536
+    },
+    "job_id": "ed7cdc5cfbef440d8bd2b52faf66ed8a",
+    "njr": {
+      "sha256": "04a067cb5f1227466ed94cb22b5c8d143d41552c077a4695de06e09f82c47069",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20251224_224227_CrazyCoolVariety",
+    "seeds": {
+      "actual_seed": null,
+      "actual_subseed": null,
+      "requested_seed": null
+    },
+    "stage": "upscale",
+    "stage_manifest": {
+      "config_hash": "9e46eef37da9725049b80a9bf818571b9f733b4110192b38807ee02bc6180e0c",
+      "name": "upscale_p01_00_1fdab450_batch0",
+      "timestamp": "20251224_231030"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "ed7cdc5cfbef440d8bd2b52faf66ed8a",
+    "stablenew:run_id": "20251224_224227_CrazyCoolVariety",
+    "stablenew:stage": "upscale",
+    "stablenew:created_utc": "2025-12-25T05:10:31.055200+00:00",
+    "stablenew:payload_sha256": "5656574cce5b871f5ec46b2089c468a0f61122c599bdeddeaf41838a060aaa85",
+    "stablenew:payload": "{\"image\":{\"format\":\"png\",\"height\":2560,\"path\":\"upscale_p01_00_1fdab450_batch0.png\",\"width\":1536},\"job_id\":\"ed7cdc5cfbef440d8bd2b52faf66ed8a\",\"njr\":{\"sha256\":\"04a067cb5f1227466ed94cb22b5c8d143d41552c077a4695de06e09f82c47069\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20251224_224227_CrazyCoolVariety\",\"seeds\":{\"actual_seed\":null,\"actual_subseed\":null,\"requested_seed\":null},\"stage\":\"upscale\",\"stage_manifest\":{\"config_hash\":\"9e46eef37da9725049b80a9bf818571b9f733b4110192b38807ee02bc6180e0c\",\"name\":\"upscale_p01_00_1fdab450_batch0\",\"timestamp\":\"20251224_231030\"}}",
+    "stablenew:njr_sha256": "04a067cb5f1227466ed94cb22b5c8d143d41552c077a4695de06e09f82c47069"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20251224_224227_CrazyCoolVariety\\upscale_p01_00_1fdab450_batch0.png"
+}

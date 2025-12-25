@@ -1,0 +1,5 @@
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner>
+(masterpiece, 8k) A grizzled veteran of a fighter, skull helm with nordic beard, icy blue eyes, in furs and armor dressed for the winter, carrying a great axe on his back, stands at the edge of an icy cliff looking down, cloak blowing in the wind, high noon.
+<lora:Heroes_of_Valhalla_SDXL:0.8> <lora:add-detail-xl:0.7161290322580645> <lora:detailed_notrigger:0.8>
+neg: <embedding:NEGATIVE_HANDS> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:easynegative> <embedding:ac_neg1>
+neg: blurry, extra fingers, extra limbs, bad anatomy, fuzzy, low resolution

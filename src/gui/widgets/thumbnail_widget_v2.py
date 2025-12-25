@@ -98,8 +98,15 @@ class ThumbnailWidget(ttk.Frame):
             if self.winfo_exists():
                 self.after(0, lambda: self._on_image_loaded(thumb))
 
-        self._load_thread = threading.Thread(target=_load, daemon=True)
-        self._load_thread.start()
+        # PR-THREAD-001: Use ThreadRegistry for thumbnail loading
+        from src.utils.thread_registry import get_thread_registry
+        registry = get_thread_registry()
+        self._load_thread = registry.spawn(
+            target=_load,
+            name=f"Thumbnail-Loader-{id(self)}",
+            daemon=False,
+            purpose="Load and cache thumbnail image asynchronously"
+        )
 
     def _on_image_loaded(self, image: "Image.Image | None") -> None:
         """Handle async image load completion."""

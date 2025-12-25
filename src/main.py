@@ -157,9 +157,15 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
         except Exception as e:
             logging.warning(f"Async WebUI bootstrap failed: {e}")
 
-    # Start bootstrap in background thread
-    thread = threading.Thread(target=_bootstrap_worker, daemon=True)
-    thread.start()
+    # Start bootstrap in background thread (PR-THREAD-001)
+    from src.utils.thread_registry import get_thread_registry
+    registry = get_thread_registry()
+    thread = registry.spawn(
+        target=_bootstrap_worker,
+        name="WebUI-Bootstrap",
+        daemon=False,
+        purpose="Async WebUI bootstrap during startup"
+    )
 
 
 def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> None:

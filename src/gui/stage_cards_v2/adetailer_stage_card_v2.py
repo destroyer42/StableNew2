@@ -15,7 +15,6 @@ from src.gui.theme_v2 import (
     DARK_SPINBOX_STYLE,
     SURFACE_FRAME_STYLE,
 )
-from src.utils.config_helpers import track_defaults
 
 
 class ADetailerStageCardV2(BaseStageCardV2):
@@ -432,15 +431,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
         # PR-GUI-DATA-008: Scheduler control
         self.scheduler_var.set(cfg.get("scheduler", "Use sampler default"))
 
-    @track_defaults(
-        {
-            "adetailer_model": "face_yolov8n.pt",
-            "adetailer_steps": 28,
-            "adetailer_cfg": 7.0,
-            "adetailer_sampler": "DPM++ 2M",
-            "adetailer_denoise": 0.4,
-        }
-    )
     def to_config_dict(self) -> dict[str, Any]:
         """Export config with keys matching executor.py expectations and PR-GUI-DATA-008 enhancements."""
         return {

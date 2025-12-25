@@ -1,7 +1,0 @@
-<embedding:BadDream>
-<embedding:UnrealisticDream>
-(masterpiece, best quality), a [[job]] in [[environment]], highly detailed
-<lora:add-detail-xl:0.65>
-<lora:style-enhance:0.8>
-neg: <embedding:bad-hands-5>
-neg: bad quality, blurry, watermark, signature
