@@ -3201,7 +3201,9 @@ class AppController:
                 logger.exception("Error stopping job service")
 
     def _shutdown_watchdog(self) -> None:
-        timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "8"))
+        # PR-SHUTDOWN-002: Increased default from 8s to 15s to reduce false alarms
+        # Normal shutdown takes 8-12s (thread joins, WebUI stop, etc.)
+        timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "15"))
         hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
         time.sleep(timeout)
         if not self._shutdown_completed:

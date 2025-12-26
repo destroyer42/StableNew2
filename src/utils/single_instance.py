@@ -117,7 +117,9 @@ class SingleInstanceLock:
         # Stop accept thread first
         self._stop_accepting.set()
         if self._accept_thread and self._accept_thread.is_alive():
-            self._accept_thread.join(timeout=2.0)
+            # PR-SHUTDOWN-002: Increased timeout from 2.0s to 3.0s
+            # Accounts for 1s socket timeout in accept loop (allows 3 check cycles)
+            self._accept_thread.join(timeout=3.0)
         
         # Close and clear the socket
         if self._socket is not None:

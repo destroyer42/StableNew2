@@ -287,59 +287,128 @@ def build_safe_image_name(
     matrix_values: dict[str, Any] | None = None,
     seed: int | None = None,
     batch_index: int | None = None,
+    pack_name: str | None = None,
     max_length: int = 120,
+    use_one_based_indexing: bool = True,
 ) -> str:
     """
-    Build a safe, filesystem-compatible image name with hash-based uniqueness.
+    Build a safe, filesystem-compatible image name with human-readable identifiers.
     
     Prevents Windows MAX_PATH issues by:
     - Limiting filename length based on max_length parameter
-    - Using stable hash suffix for uniqueness when truncating
+    - Using pack name or hash for uniqueness when truncating
     - Sanitizing all characters for filesystem compatibility
     
     Args:
-        base_prefix: Short human-readable prefix (e.g., "txt2img_p00_00")
+        base_prefix: Prefix with prompt/variant indices (e.g., "txt2img_p01_v01")
         matrix_values: Optional matrix slot values for hash uniqueness
         seed: Optional seed value for hash uniqueness
-        batch_index: Optional batch index to append
-        max_length: Maximum filename length (default 120, safe for Windows with reasonable paths)
+        batch_index: Optional batch index (0-based internally, converted to 1-based in filename)
+        pack_name: Optional prompt pack name (first 10 chars used, sanitized)
+        max_length: Maximum filename length (default 120, safe for Windows)
+        use_one_based_indexing: Convert batch_index to 1-based in filename (default True)
     
     Returns:
         Safe filename string (without extension)
     
-    Example:
-        build_safe_image_name("txt2img_p00_00", {"hair": "blonde", "eyes": "blue"}, seed=12345)
-        → "txt2img_p00_00_a3f2b1c9"  (short, unique, safe)
+    Example (new format):
+        build_safe_image_name(
+            "txt2img_p01_v01",
+            pack_name="Fantasy_Heroes_v2",
+            batch_index=0
+        )
+        → "txt2img_p01_v01_FantasyHer_batch1"
     """
     # Start with sanitized base prefix
     safe_prefix = get_safe_filename(base_prefix)
     
-    # Build hash input for uniqueness
-    hash_input_parts = [safe_prefix]
-    if matrix_values:
-        # Stable ordering for consistent hashing
-        matrix_str = "_".join(f"{k}={v}" for k, v in sorted(matrix_values.items()))
-        hash_input_parts.append(matrix_str)
-    if seed is not None:
-        hash_input_parts.append(f"seed={seed}")
+    # Build identifier: prefer pack name over hash
+    identifier = ""
+    if pack_name and pack_name.strip():
+        # Sanitize and truncate pack name to 10 chars max
+        safe_pack = get_safe_filename(pack_name.strip())[:10]
+        if safe_pack:
+            identifier = safe_pack
     
-    # Generate stable 8-char hash for uniqueness
-    hash_input = "|".join(hash_input_parts)
-    hash_digest = hashlib.md5(hash_input.encode("utf-8")).hexdigest()[:8]
+    # Fallback to hash if no pack name
+    if not identifier:
+        hash_input_parts = [safe_prefix]
+        if matrix_values:
+            # Stable ordering for consistent hashing
+            matrix_str = "_".join(f"{k}={v}" for k, v in sorted(matrix_values.items()))
+            hash_input_parts.append(matrix_str)
+        if seed is not None:
+            hash_input_parts.append(f"seed={seed}")
+        hash_input = "|".join(hash_input_parts)
+        identifier = hashlib.md5(hash_input.encode("utf-8")).hexdigest()[:8]
     
-    # Reserve space for: "_" + hash (8 chars) + optional "_batchX" + ".png" (4 chars)
-    batch_suffix = f"_batch{batch_index}" if batch_index is not None else ""
-    reserved = len("_") + 8 + len(batch_suffix) + len(".png")
+    # Build batch suffix with 1-based indexing
+    batch_suffix = ""
+    if batch_index is not None:
+        display_index = batch_index + 1 if use_one_based_indexing else batch_index
+        batch_suffix = f"_batch{display_index}"
     
-    # Truncate prefix if needed to stay within max_length
+    # Calculate space: prefix + "_" + identifier + batch_suffix + ".png"
+    reserved = len("_") + len(identifier) + len(batch_suffix) + len(".png")
     max_prefix_len = max_length - reserved
+    
     if len(safe_prefix) > max_prefix_len:
         safe_prefix = safe_prefix[:max_prefix_len]
     
-    # Build final name: prefix_hash[_batchN]
-    final_name = f"{safe_prefix}_{hash_digest}{batch_suffix}"
+    # Build final name
+    final_name = f"{safe_prefix}_{identifier}{batch_suffix}"
     
     return final_name
+
+
+def get_unique_output_path(
+    base_path: Path,
+    max_attempts: int = 100
+) -> Path:
+    """
+    Ensure output path is unique by appending _copy1, _copy2, etc. if needed.
+    
+    This failsafe prevents silent overwrites if filename generation somehow
+    produces duplicates. Normal operation should never trigger this.
+    
+    Args:
+        base_path: Desired output path
+        max_attempts: Maximum collision resolution attempts
+    
+    Returns:
+        Unique path that doesn't exist
+    
+    Raises:
+        ValueError: If max_attempts exceeded (indicates serious bug)
+    
+    Example:
+        path = Path("output/image.png")  # exists
+        unique = get_unique_output_path(path)
+        # → Path("output/image_copy1.png")
+    """
+    if not base_path.exists():
+        return base_path
+    
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "[COLLISION] Output file already exists: %s (this indicates a filename generation bug)",
+        base_path
+    )
+    
+    stem = base_path.stem
+    suffix = base_path.suffix
+    parent = base_path.parent
+    
+    for i in range(1, max_attempts + 1):
+        candidate = parent / f"{stem}_copy{i}{suffix}"
+        if not candidate.exists():
+            logger.warning("[COLLISION] Using unique filename: %s", candidate.name)
+            return candidate
+    
+    raise ValueError(
+        f"Could not find unique filename after {max_attempts} attempts for {base_path}. "
+        "This indicates a serious filename generation bug."
+    )
 
 
 def build_safe_image_stem(

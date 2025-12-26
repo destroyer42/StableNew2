@@ -1793,6 +1793,9 @@ class Pipeline:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             final_image_name = f"adetailer_{timestamp}"
         image_path = run_dir / f"{final_image_name}.png"
+        # PR-FILENAME-001: Apply collision failsafe
+        from src.utils.file_io import get_unique_output_path
+        image_path = get_unique_output_path(image_path)
 
         metadata = {
             "name": final_image_name,
@@ -1828,7 +1831,8 @@ class Pipeline:
         ):
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
             manifest_dir = Path(run_dir) / "manifests"
-            manifest_path = manifest_dir / f"{final_image_name}_adetailer.json"
+            # PR-FILENAME-001: No redundant suffix, image_name already has all info
+            manifest_path = manifest_dir / f"{final_image_name}.json"
             try:
                 # Ensure parent directory exists before writing
                 manifest_path.parent.mkdir(exist_ok=True, parents=True)
@@ -2930,6 +2934,10 @@ class Pipeline:
                     image_path = output_dir / f"{image_name}.png"
                     batch_image_name = image_name
                 
+                # PR-FILENAME-001: Apply collision failsafe
+                from src.utils.file_io import get_unique_output_path
+                image_path = get_unique_output_path(image_path)
+                
                 logger.info("🔵 [BATCH_SIZE_DEBUG] Saving image %s/%s: %s", batch_idx + 1, num_images_received, image_path.name)
                 image_metadata = dict(base_metadata)
                 image_metadata["name"] = batch_image_name
@@ -2986,8 +2994,8 @@ class Pipeline:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = output_dir / "manifests"
                 manifest_dir.mkdir(exist_ok=True, parents=True)
-                manifest_name = f"{image_name}_txt2img"
-                manifest_path = manifest_dir / f"{manifest_name}.json"
+                # PR-FILENAME-001: No redundant suffix, image_name already has all info
+                manifest_path = manifest_dir / f"{image_name}.json"
                 with open(manifest_path, "w", encoding="utf-8") as f:
                     json.dump(metadata, f, indent=2, ensure_ascii=False)
 
@@ -3131,6 +3139,9 @@ class Pipeline:
 
             # Save image
             image_path = output_dir / f"{image_name}.png"
+            # PR-FILENAME-001: Apply collision failsafe
+            from src.utils.file_io import get_unique_output_path
+            image_path = get_unique_output_path(image_path)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             metadata = {
@@ -3165,8 +3176,8 @@ class Pipeline:
             ):
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
-                manifest_name = f"{image_name}_img2img"
-                manifest_path = manifest_dir / f"{manifest_name}.json"
+                # PR-FILENAME-001: No redundant suffix, image_name already has all info
+                manifest_path = manifest_dir / f"{image_name}.json"
                 try:
                     # Ensure parent directory exists before writing
                     manifest_path.parent.mkdir(exist_ok=True, parents=True)
@@ -3385,6 +3396,9 @@ class Pipeline:
 
             # Save image
             image_path = output_dir / f"{image_name}.png"
+            # PR-FILENAME-001: Apply collision failsafe
+            from src.utils.file_io import get_unique_output_path
+            image_path = get_unique_output_path(image_path)
 
             # Extract the correct image data based on upscale mode
             if image_key is None:
@@ -3446,8 +3460,8 @@ class Pipeline:
             ):
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
-                manifest_name = f"{image_name}_upscale"
-                manifest_path = manifest_dir / f"{manifest_name}.json"
+                # PR-FILENAME-001: No redundant suffix, image_name already has all info
+                manifest_path = manifest_dir / f"{image_name}.json"
                 try:
                     # Ensure parent directory exists before writing
                     manifest_path.parent.mkdir(exist_ok=True, parents=True)

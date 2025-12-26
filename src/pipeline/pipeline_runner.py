@@ -231,15 +231,18 @@ class PipelineRunner:
                     # Include prompt pack row index in naming to prevent overwrites
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     
-                    # Build safe filename with hash-based uniqueness (prevents Windows MAX_PATH issues)
+                    # Build safe filename with human-readable identifiers (PR-FILENAME-001)
                     from src.utils.file_io import build_safe_image_name
-                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    # Use 1-based indexing to match GUI display (p01 = "Prompt 1", v01 = "Variant 1")
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     seed = payload.get("seed")
                     image_name = build_safe_image_name(
                         base_prefix=base_prefix,
                         matrix_values=matrix_values,
                         seed=seed,
+                        pack_name=pack_name,
                         max_length=100  # Conservative limit for Windows paths
                     )
                     
@@ -289,11 +292,13 @@ class PipelineRunner:
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     
-                    # Build safe base name with hash-based uniqueness
+                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
                     from src.utils.file_io import build_safe_image_name
                     from pathlib import Path as PathLib
-                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    # Use 1-based indexing to match GUI display
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     
                     # For reprocess jobs, get original input filename for uniqueness
                     original_inputs = getattr(njr, 'input_image_paths', None)
@@ -312,6 +317,7 @@ class PipelineRunner:
                             matrix_values=matrix_values,
                             seed=None,
                             batch_index=img_idx,
+                            pack_name=pack_name,
                             max_length=100
                         )
                         result = self._pipeline.run_img2img_stage(
@@ -371,11 +377,13 @@ class PipelineRunner:
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     
-                    # Build safe base name with hash-based uniqueness
+                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
                     from src.utils.file_io import build_safe_image_name
                     from pathlib import Path as PathLib
-                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    # Use 1-based indexing to match GUI display
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     
                     # For reprocess jobs, get original input filename for uniqueness
                     original_inputs = getattr(njr, 'input_image_paths', None)
@@ -406,6 +414,7 @@ class PipelineRunner:
                             matrix_values=matrix_values,
                             seed=None,
                             batch_index=img_idx,
+                            pack_name=pack_name,
                             max_length=100
                         )
                         result = self._pipeline.run_adetailer_stage(
@@ -461,11 +470,13 @@ class PipelineRunner:
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     
-                    # Build safe base name with hash-based uniqueness
+                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
                     from src.utils.file_io import build_safe_image_name
                     from pathlib import Path as PathLib
-                    base_prefix = f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}"
+                    # Use 1-based indexing to match GUI display
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     
                     # For reprocess jobs, get original input filename for uniqueness
                     original_inputs = getattr(njr, 'input_image_paths', None)
@@ -496,6 +507,7 @@ class PipelineRunner:
                             matrix_values=matrix_values,
                             seed=None,
                             batch_index=img_idx,
+                            pack_name=pack_name,
                             max_length=100
                         )
                         result = self._pipeline.run_upscale_stage(
