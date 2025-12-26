@@ -51,8 +51,8 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
             PlannedJob(
                 stage_name=stage_type,
                 prompt_text=getattr(njr, "positive_prompt", "") or "",
-                variant_id=getattr(njr, "variant_index", 0) or 0,
-                batch_index=getattr(njr, "batch_index", 0) or 0,
+                variant_id=getattr(njr, "variant_index", 0),
+                batch_index=getattr(njr, "batch_index", 0),
                 seed=getattr(njr, "seed", None),
                 cfg_scale=getattr(njr, "cfg_scale", None),
                 sampler=getattr(njr, "sampler_name", None),
@@ -66,8 +66,8 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
             PlannedJob(
                 stage_name="txt2img",
                 prompt_text=getattr(njr, "positive_prompt", "") or "",
-                variant_id=getattr(njr, "variant_index", 0) or 0,
-                batch_index=getattr(njr, "batch_index", 0) or 0,
+                variant_id=getattr(njr, "variant_index", 0),
+                batch_index=getattr(njr, "batch_index", 0),
                 seed=getattr(njr, "seed", None),
                 cfg_scale=getattr(njr, "cfg_scale", None),
                 sampler=getattr(njr, "sampler_name", None),

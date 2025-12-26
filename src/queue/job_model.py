@@ -80,6 +80,9 @@ class Job:
     variant_total: int | None = None
     snapshot: dict[str, Any] | None = None
     execution_metadata: JobExecutionMetadata = field(default_factory=JobExecutionMetadata)
+    # Runtime tracking attributes for GUI (not persisted)
+    progress: float = 0.0
+    eta_seconds: float | None = None
     # Note: `pipeline_config` is a compat field and is excluded from `to_dict`.
 
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:

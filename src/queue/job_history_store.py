@@ -169,6 +169,9 @@ class JSONLJobHistoryStore(JobHistoryStore):
         self._lock = threading.Lock()
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._callbacks: list[Callable[[JobHistoryEntry], None]] = []
+        # Performance optimization: Cache loaded entries to avoid re-reading file on every list_jobs()
+        self._cached_entries: dict[str, JobHistoryEntry] | None = None
+        self._cache_mtime: float | None = None
 
     def record_job_submission(self, job: Job) -> None:
         entry = JobHistoryEntry(
@@ -237,6 +240,8 @@ class JSONLJobHistoryStore(JobHistoryStore):
         with self._lock:
             with self._path.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
+            # Invalidate cache after appending - file has been modified
+            self._cache_mtime = None
         self._emit(entry)
 
     def save_entry(self, entry: JobHistoryEntry) -> None:
@@ -253,21 +258,41 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 continue
 
     def _load_latest_by_job(self) -> dict[str, JobHistoryEntry]:
+        """Load history entries with file mtime-based caching for performance."""
         with self._lock:
             if not self._path.exists():
+                self._cached_entries = {}
+                self._cache_mtime = None
                 return {}
+            
             try:
+                # Check if file has been modified since last cache
+                current_mtime = self._path.stat().st_mtime
+                
+                if self._cached_entries is not None and self._cache_mtime == current_mtime:
+                    # Cache is valid, return it
+                    return self._cached_entries
+                
+                # Cache miss or stale - reload from disk
                 lines = self._path.read_text(encoding="utf-8").splitlines()
+                latest: dict[str, JobHistoryEntry] = {}
+                for line in lines:
+                    try:
+                        entry = JobHistoryEntry.from_json(line)
+                        latest[entry.job_id] = entry
+                    except Exception:
+                        continue
+                
+                # Update cache
+                self._cached_entries = latest
+                self._cache_mtime = current_mtime
+                return latest
+                
             except Exception:
+                # On error, invalidate cache and return empty
+                self._cached_entries = {}
+                self._cache_mtime = None
                 return {}
-        latest: dict[str, JobHistoryEntry] = {}
-        for line in lines:
-            try:
-                entry = JobHistoryEntry.from_json(line)
-                latest[entry.job_id] = entry
-            except Exception:
-                continue
-        return latest
 
     def _summarize_job(self, job: Job) -> str:
         result = getattr(job, "result", None) or {}

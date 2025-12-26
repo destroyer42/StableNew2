@@ -68,32 +68,61 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         self.explain_btn.pack(side=tk.LEFT, padx=(4, 0))
 
-        columns = ("time", "status", "model", "packs", "duration", "seed", "images", "output")
+        # D-GUI-003: Enhanced columns with row/variant/batch info
+        columns = ("time", "status", "model", "pack", "row", "v", "b", "duration", "seed", "images", "output")
         headings = {
             "time": "Completed",
             "status": "Status",
             "model": "Model",
-            "packs": "Prompt / Pack",
+            "pack": "Pack Name",
+            "row": "Row",
+            "v": "V",
+            "b": "B",
             "duration": "Duration",
             "seed": "Seed",
             "images": "Images",
             "output": "Output Folder",
         }
-        self.history_tree = ttk.Treeview(self, columns=columns, show="headings", height=6)
+        
+        # D-GUI-003: Add container frame with scrollbar
+        tree_frame = ttk.Frame(self, style=style_name)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical")
+        
+        # Create treeview with scrollbar
+        self.history_tree = ttk.Treeview(
+            tree_frame,
+            columns=columns,
+            show="headings",
+            height=6,
+            yscrollcommand=scrollbar.set
+        )
+        scrollbar.configure(command=self.history_tree.yview)
+        
         for col in columns:
             self.history_tree.heading(col, text=headings[col])
             width = {
                 "time": 100,
                 "status": 70,
                 "model": 120,
-                "packs": 180,
+                "pack": 150,
+                "row": 40,
+                "v": 30,
+                "b": 30,
                 "duration": 70,
-                "seed": 85,
+                "seed": 95,
                 "images": 55,
                 "output": 150,
             }.get(col, 100)
             self.history_tree.column(col, anchor=tk.W, width=width, stretch=True)
-        self.history_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Layout treeview and scrollbar
+        self.history_tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
         self.history_tree.bind("<<TreeviewSelect>>", self._on_select)
         self.history_tree.bind("<Motion>", self._on_tree_motion)
         self.history_tree.bind("<Leave>", self._hide_tooltip)
@@ -139,27 +168,30 @@ class JobHistoryPanelV2(ttk.Frame):
 
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
-        status = entry.status.value
+        status = self._get_display_status(entry)  # D-GUI-003: Success/Failed instead of Completed
         
         # Extract model
         model = self._extract_model(entry)
         
-        # Extract better summary from NJR snapshot
-        packs = self._extract_summary(entry)
+        # D-GUI-003: Extract pack name (never show full prompt or hash)
+        pack_name = self._extract_pack_name(entry)
+        
+        # D-GUI-003: Extract row, variant, batch indices
+        row_idx, variant_idx, batch_idx = self._extract_indices(entry)
         
         # Calculate duration more robustly
         duration = self._ensure_duration(entry)
         
-        # Extract seed
+        # D-GUI-003: Extract seed (use final_seed from seeds object)
         seed = self._extract_seed(entry)
         
         # Extract image count from result or NJR snapshot
         images = self._extract_image_count(entry)
         
-        # Get actual output folder from result or job_id
+        # D-GUI-003: Get actual output folder name (20251226_HHMMSS_PackName format)
         output = self._extract_output_folder(entry)
         
-        return (time_text, status, model, packs, duration, seed, images, output)
+        return (time_text, status, model, pack_name, row_idx, variant_idx, batch_idx, duration, seed, images, output)
 
     def _on_select(self, event=None) -> None:
         selection = self.history_tree.selection()
@@ -230,6 +262,62 @@ class JobHistoryPanelV2(ttk.Frame):
         self.explain_btn.configure(state=tk.NORMAL)
         self._history_menu.tk_popup(event.x_root, event.y_root)
 
+    def _get_display_status(self, entry: JobHistoryEntry) -> str:
+        """D-GUI-003: Determine status: Success, Failed, or Cancelled."""
+        # Check for explicit error
+        if entry.result and isinstance(entry.result, dict):
+            error = entry.result.get("error")
+            if error:
+                return "Failed"
+        
+        # Check snapshot for error
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            if njr.get("error"):
+                return "Failed"
+        
+        # Check for cancellation
+        if entry.status.value.lower() in ("cancelled", "canceled"):
+            return "Cancelled"
+        
+        # Default: Success if completed without error
+        if entry.status.value.lower() == "completed":
+            return "Success"
+        
+        return entry.status.value.title()
+    
+    def _extract_pack_name(self, entry: JobHistoryEntry) -> str:
+        """D-GUI-003: Extract pack name, never show full prompt or hash."""
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            if njr:
+                # Priority: pack name > job_id
+                pack_name = njr.get("prompt_pack_name") or njr.get("pack_name") or njr.get("prompt_pack_id")
+                if pack_name:
+                    return str(pack_name)
+        
+        # Fall back to truncated job_id
+        job_id = entry.job_id or "unknown"
+        return job_id[:12] if len(job_id) > 12 else job_id
+    
+    def _extract_indices(self, entry: JobHistoryEntry) -> tuple[str, str, str]:
+        """D-GUI-003: Extract row, variant, batch indices (1-based for display)."""
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            if njr:
+                row = njr.get("prompt_pack_row_index")
+                variant = njr.get("variant_index")
+                batch = njr.get("batch_index")
+                
+                # Convert to 1-based display
+                row_str = str(row + 1) if row is not None else "-"
+                variant_str = str(variant + 1) if variant is not None else "-"
+                batch_str = str(batch + 1) if batch is not None else "-"
+                
+                return (row_str, variant_str, batch_str)
+        
+        return ("-", "-", "-")
+    
     def _extract_summary(self, entry: JobHistoryEntry) -> str:
         """Extract pack name + prompt preview when available."""
         if entry.snapshot:
@@ -263,19 +351,31 @@ class JobHistoryPanelV2(ttk.Frame):
         return "-"
     
     def _extract_seed(self, entry: JobHistoryEntry) -> str:
-        """Extract actual seed from result or snapshot."""
+        """D-GUI-003: Extract actual seed from seeds.final_seed, never show 'Random'."""
+        # Try manifest seeds structure first (D-MANIFEST-001)
         metadata = self._extract_result_metadata(entry)
-        seed = metadata.get("actual_seed") or metadata.get("requested_seed")
+        seeds = metadata.get("seeds")
+        if isinstance(seeds, dict):
+            final_seed = seeds.get("final_seed")
+            if final_seed is not None and final_seed != -1:
+                return str(final_seed)
+        
+        # Fall back to legacy fields
+        seed = metadata.get("actual_seed") or metadata.get("final_seed")
         if seed is not None and seed != -1:
             return str(seed)
+        
+        # Try NJR snapshot
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
             seed = njr.get("actual_seed") or njr.get("resolved_seed")
             if seed is not None and seed != -1:
                 return str(seed)
+            # Last resort: show requested seed even if -1
             seed = njr.get("seed")
-            if seed is not None:
-                return "Random" if seed == -1 else str(seed)
+            if seed is not None and seed != -1:
+                return str(seed)
+        
         return "-"
     
     def _ensure_duration(self, entry: JobHistoryEntry) -> str:
@@ -338,27 +438,24 @@ class JobHistoryPanelV2(ttk.Frame):
         return "-"
     
     def _extract_output_folder(self, entry: JobHistoryEntry) -> str:
-        """Extract actual output folder from result or derive from job_id."""
+        """D-GUI-003: Extract actual output folder name (20251226_HHMMSS_PackName)."""
         # Try result first for actual output path
         if entry.result and isinstance(entry.result, dict):
             output_dir = entry.result.get("output_dir") or entry.result.get("output_folder")
             if output_dir:
-                return str(Path(output_dir).name)  # Just show the folder name
+                folder_name = Path(output_dir).name
+                return folder_name if folder_name else "-"
         
-        # Try to derive from job_id
-        base = Path("output")
-        candidates = [
-            base / entry.job_id,
-            Path("runs") / entry.job_id,
-            Path("outputs") / entry.job_id,
-        ]
+        # Try to derive from NJR snapshot run_id
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            run_id = njr.get("run_id")
+            if run_id:
+                return str(run_id)
         
-        for candidate in candidates:
-            if candidate.exists():
-                return str(candidate)
-        
-        # Default: show output/job_id (even if doesn't exist yet)
-        return str(base / entry.job_id)
+        # Fall back to job_id (truncated)
+        job_id = entry.job_id or "unknown"
+        return job_id[:20] if len(job_id) > 20 else job_id
     
     def _derive_output_folder(self, entry: JobHistoryEntry) -> str:
         base = Path("runs")

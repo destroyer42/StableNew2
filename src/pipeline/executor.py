@@ -582,6 +582,35 @@ class Pipeline:
             "all_subseeds": info.get("all_subseeds"),
         }
 
+    def _build_seed_metadata(self, config: dict[str, Any], gen_info: dict[str, Any]) -> dict[str, Any]:
+        """
+        Build comprehensive seed tracking structure for manifests (D-MANIFEST-001).
+        
+        Creates nested seeds object with both user input (original) and final values used by WebUI.
+        This enables full reproducibility by tracking what the user requested vs what was actually used.
+        
+        Args:
+            config: Pipeline config with user's seed/subseed input
+            gen_info: Extracted generation info from WebUI response
+            
+        Returns:
+            Dict with nested seed structure containing original and final values
+        """
+        original_seed = config.get("seed", -1)
+        original_subseed = config.get("subseed", -1)
+        original_subseed_strength = config.get("subseed_strength", 0.0)
+        
+        final_seed = gen_info.get("seed", -1)
+        final_subseed = gen_info.get("subseed", -1)
+        
+        return {
+            "original_seed": original_seed,
+            "final_seed": final_seed,
+            "original_subseed": original_subseed,
+            "final_subseed": final_subseed,
+            "subseed_strength": original_subseed_strength,
+        }
+
     def _generate_images(self, stage: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Call the shared generate_images API for the requested stage."""
 
@@ -1271,11 +1300,11 @@ class Pipeline:
                 "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
                 "model": model_name or "Unknown",
                 "vae": vae_name or "Automatic",
+                "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
+                "stage_duration_ms": stage_duration_ms,
+                # Legacy fields for backward compatibility
                 "requested_seed": config.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),
-                "actual_subseed": gen_info.get("subseed"),
-                "subseed_strength": gen_info.get("subseed_strength", 0.0),
-                "stage_duration_ms": stage_duration_ms,
             }
             
             # PR-GUI-DATA-001: Add refiner configuration
@@ -1815,10 +1844,12 @@ class Pipeline:
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
             "model": config.get("model") or config.get("sd_model_checkpoint"),
             "vae": config.get("vae") or "Automatic",
+            "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
+            "stage_duration_ms": stage_duration_ms,
+            # Legacy fields for backward compatibility
             "requested_seed": config.get("seed", -1),
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
-            "stage_duration_ms": stage_duration_ms,
         }
         metadata_builder = self._build_image_metadata_builder(
             image_path=image_path,
@@ -1914,10 +1945,12 @@ class Pipeline:
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
             "model": config.get("model"),  # May be None for upscale
             "vae": config.get("vae"),  # May be None for upscale
+            "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
+            "stage_duration_ms": stage_duration_ms,
+            # Legacy fields for backward compatibility
             "requested_seed": config.get("seed"),  # May be None for upscale
             "actual_seed": gen_info.get("seed"),  # Likely None for upscale
             "actual_subseed": gen_info.get("subseed"),  # Likely None for upscale
-            "stage_duration_ms": stage_duration_ms,
         }
         metadata_builder = self._build_image_metadata_builder(
             image_path=image_path,
@@ -3144,6 +3177,7 @@ class Pipeline:
             image_path = get_unique_output_path(image_path)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            gen_info = self._extract_generation_info(response)
             metadata = {
                 "name": image_name,
                 "stage": "img2img",
@@ -3160,9 +3194,11 @@ class Pipeline:
                 "input_image": str(input_image_path),
                 "config": self._clean_metadata_payload(payload),
                 "path": str(image_path),
+                "seeds": self._build_seed_metadata(payload, gen_info),  # D-MANIFEST-001
+                # Legacy fields for backward compatibility
                 "requested_seed": payload.get("seed", -1),
-                "actual_seed": None,
-                "actual_subseed": None,
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
             }
             run_dir = self._resolve_run_dir(output_dir)
             metadata_builder = self._build_image_metadata_builder(

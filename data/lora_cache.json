@@ -103,6 +103,14 @@
     "source": "none",
     "description": ""
   },
+  "finenude_v0_2a": {
+    "name": "finenude_v0_2a",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\finenude_v0_2a.safetensors",
+    "file_size": 393841960,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
   "Heroes_of_Valhalla_SDXL": {
     "name": "Heroes_of_Valhalla_SDXL",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Heroes_of_Valhalla_SDXL.safetensors",
@@ -139,6 +147,14 @@
     "name": "NSFWFilterXL_animagine",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\NSFWFilterXL_animagine.safetensors",
     "file_size": 57476788,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "NsfwPovAllInOneLoraSdxl-000009": {
+    "name": "NsfwPovAllInOneLoraSdxl-000009",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\NsfwPovAllInOneLoraSdxl-000009.safetensors",
+    "file_size": 1824882988,
     "keywords": [],
     "source": "none",
     "description": ""

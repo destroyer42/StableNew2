@@ -23,6 +23,7 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
+from src.gui.dialogs import MultiFolderSelector
 from src.gui.theme_v2 import (
     BODY_LABEL_STYLE,
     CARD_FRAME_STYLE,
@@ -353,121 +354,23 @@ class ReprocessPanelV2(ttk.Frame):
     def _on_select_folders(self) -> None:
         """Handle Select Folder(s) button click - allows multiple folder selection.
         
-        Uses a custom multi-folder selection dialog since tkinter doesn't provide
-        native multi-folder selection. Users can:
-        - Click "Add Folder" repeatedly to build a list
-        - Click "Done" when finished
-        - Click "Clear All" to start over
+        Uses MultiFolderSelector dialog for improved UX - allows adding multiple
+        folders in one dialog session instead of opening repeated file dialogs.
         """
-        # Create a modal dialog for multi-folder selection
-        dialog = tk.Toplevel(self)
-        dialog.title("Select Multiple Folders")
-        dialog.geometry("600x400")
-        try:
-            dialog.transient(self.winfo_toplevel())  # type: ignore[arg-type]
-        except Exception:
-            pass  # transient is optional for dialog behavior
-        dialog.grab_set()
-        
-        # Center dialog on parent
-        dialog.update_idletasks()
-        x = self.winfo_rootx() + (self.winfo_width() - dialog.winfo_width()) // 2
-        y = self.winfo_rooty() + (self.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{x}+{y}")
-        
-        # State
-        selected_folders: list[Path] = list(self.selected_folders)  # Start with existing selection
-        
-        # Top frame with instructions
-        top_frame = ttk.Frame(dialog, padding=8)
-        top_frame.pack(fill="x", side="top")
-        
-        ttk.Label(
-            top_frame,
-            text="Select folders to scan for images. Click 'Add Folder' to add more.",
-            wraplength=580,
-        ).pack(anchor="w")
-        
-        # Listbox to show selected folders
-        list_frame = ttk.Frame(dialog, padding=8)
-        list_frame.pack(fill="both", expand=True, side="top")
-        
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
-        scrollbar.pack(side="right", fill="y")
-        
-        folder_listbox = tk.Listbox(
-            list_frame,
-            yscrollcommand=scrollbar.set,
-            selectmode="extended",  # Allow multi-select for removal
-            height=12,
+        folders = MultiFolderSelector.ask_folders(
+            parent=self,
+            title="Select Folders for Reprocessing"
         )
-        folder_listbox.pack(side="left", fill="both", expand=True)
-        scrollbar.config(command=folder_listbox.yview)
         
-        def update_listbox() -> None:  # type: ignore[misc]
-            """Refresh listbox with current folder selection."""
-            folder_listbox.delete(0, tk.END)
-            for folder in selected_folders:
-                folder_listbox.insert(tk.END, str(folder))
-        
-        def add_folder() -> None:  # type: ignore[misc]
-            """Open dialog to add a folder."""
-            folder = filedialog.askdirectory(
-                title="Select Folder with Images",
-                parent=dialog,
-            )
-            
-            if folder:
+        if folders:
+            # Add all selected folders (dialog already prevents duplicates)
+            for folder in folders:
                 folder_path = Path(folder)
-                if folder_path not in selected_folders:
-                    selected_folders.append(folder_path)
-                    update_listbox()
-                    logger.info(f"Added folder: {folder_path}")
-                else:
-                    logger.warning(f"Folder already in list: {folder_path}")
-        
-        def remove_selected() -> None:  # type: ignore[misc]
-            """Remove selected folders from list."""
-            indices = list(folder_listbox.curselection())  # type: ignore[no-untyped-call]
-            if not indices:
-                return
+                if folder_path not in self.selected_folders:
+                    self.selected_folders.append(folder_path)
             
-            # Remove in reverse order to avoid index shifting
-            for idx in reversed(indices):
-                folder_path = Path(folder_listbox.get(idx))
-                if folder_path in selected_folders:
-                    selected_folders.remove(folder_path)
-            
-            update_listbox()
-        
-        def clear_all() -> None:  # type: ignore[misc]
-            """Clear all folders."""
-            selected_folders.clear()
-            update_listbox()
-        
-        def done() -> None:  # type: ignore[misc]
-            """Close dialog and apply selection."""
-            dialog.destroy()
-        
-        # Initialize listbox with existing folders
-        update_listbox()
-        
-        # Button frame
-        button_frame = ttk.Frame(dialog, padding=8)
-        button_frame.pack(fill="x", side="bottom")
-        
-        ttk.Button(button_frame, text="Add Folder...", command=add_folder).pack(side="left", padx=2)
-        ttk.Button(button_frame, text="Remove Selected", command=remove_selected).pack(side="left", padx=2)
-        ttk.Button(button_frame, text="Clear All", command=clear_all).pack(side="left", padx=2)
-        ttk.Button(button_frame, text="Done", command=done, style="Primary.TButton").pack(side="right", padx=2)
-        
-        # Wait for dialog to close
-        self.wait_window(dialog)
-        
-        # Apply selection if any folders were chosen
-        if selected_folders:
-            self.selected_folders = selected_folders
-            logger.info(f"Selected {len(selected_folders)} folder(s)")
+            self._update_display()
+            logger.info(f"Selected {len(folders)} folder(s), total: {len(self.selected_folders)}")
             # Scan folders for images with filters
             self._scan_folders_for_images()
         else:

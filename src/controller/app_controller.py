@@ -1912,11 +1912,12 @@ class AppController:
         
         self.app_state.set_running_job(summary)
         
-        # Update running job panel with summary if available
+        # Update running job panel - pass Job object with runtime tracking, not just summary
         if hasattr(self, "main_window") and self.main_window:
             tab_frame = getattr(self.main_window, "pipeline_tab", None)
             if tab_frame and hasattr(tab_frame, "running_job_panel"):
-                tab_frame.running_job_panel.update_job_with_summary(summary, summary, None)
+                # Pass the actual Job object (with runtime attrs) and summary separately
+                tab_frame.running_job_panel.update_job_with_summary(job, summary, None)
             if tab_frame and hasattr(tab_frame, "preview_panel"):
                 tab_frame.preview_panel.update_with_summary(summary)
 

@@ -7,7 +7,7 @@ import tkinter as tk
 from collections.abc import Callable
 from datetime import datetime
 from tkinter import ttk
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
@@ -21,6 +21,9 @@ from src.gui.panels_v2.widgets.stage_timeline_widget import (
 )
 from src.gui.utils.display_helpers import format_seed_display
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
+
+if TYPE_CHECKING:
+    from src.queue.job_model import Job
 
 
 class RunningJobPanelV2(ttk.Frame):
@@ -121,38 +124,28 @@ class RunningJobPanelV2(ttk.Frame):
         self.eta_label = ttk.Label(status_frame, text="")
         self.eta_label.pack(side="right")
 
-        # Control buttons
+        # Control buttons (D-GUI-002: Improved button labels)
         button_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         button_frame.pack(fill="x")
-        button_frame.columnconfigure((0, 1, 2), weight=1)
+        button_frame.columnconfigure((0, 1), weight=1)
 
         self.pause_resume_button = ttk.Button(
             button_frame,
-            text="Pause",
+            text="Pause Job",
             style=SECONDARY_BUTTON_STYLE,
             command=self._on_pause_resume,
-            width=8,
+            width=10,
         )
         self.pause_resume_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
 
         self.cancel_button = ttk.Button(
             button_frame,
-            text="Cancel",
+            text="Cancel Job",
             style=SECONDARY_BUTTON_STYLE,
             command=self._on_cancel,
-            width=8,
+            width=10,
         )
-        self.cancel_button.grid(row=0, column=1, sticky="ew", padx=(2, 2))
-
-        # PR-GUI-F3: Cancel + Return to Queue button
-        self.cancel_return_button = ttk.Button(
-            button_frame,
-            text="Cancel→Queue",
-            style=SECONDARY_BUTTON_STYLE,
-            command=self._on_cancel_and_return,
-            width=11,
-        )
-        self.cancel_return_button.grid(row=0, column=2, sticky="ew", padx=(2, 0))
+        self.cancel_button.grid(row=0, column=1, sticky="ew", padx=(2, 0))
 
         # Initial state
         self._update_display()
@@ -241,10 +234,9 @@ class RunningJobPanelV2(ttk.Frame):
             self.elapsed_label.configure(text="")
             self.eta_label.configure(text="")
             self.queue_origin_label.configure(text="")  # PR-GUI-F2
-            self.pause_resume_button.configure(text="Pause")
+            self.pause_resume_button.configure(text="Pause Job")
             self.pause_resume_button.state(["disabled"])
             self.cancel_button.state(["disabled"])
-            self.cancel_return_button.state(["disabled"])
             return
 
         # Job info
@@ -261,18 +253,26 @@ class RunningJobPanelV2(ttk.Frame):
                 variant_idx = getattr(self._current_job_summary, "variant_index", None)
                 batch_idx = getattr(self._current_job_summary, "batch_index", None)
                 if variant_idx is not None or batch_idx is not None:
-                    v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
-                    b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
+                    # D-GUI-002: Use 1-based indexing for display (v1/b1)
+                    v_text = f"v{variant_idx + 1}" if variant_idx is not None else "v?"
+                    b_text = f"b{batch_idx + 1}" if batch_idx is not None else "b?"
                     pack_text += f" [{v_text}/{b_text}]"
                 self.pack_info_label.configure(text=pack_text)
             else:
                 self.pack_info_label.configure(text="")
 
-            # Display stage chain (could add current stage highlighting later)
+            # D-GUI-002: Display current stage with progress instead of all stages
             stage_labels = getattr(self._current_job_summary, "stage_chain_labels", None)
+            current_stage = getattr(self._current_job_summary, "current_stage", None)
             if stage_labels:
-                stage_text = " → ".join(stage_labels)
-                self.stage_chain_label.configure(text=f"Stages: {stage_text}")
+                # Try to determine current stage index
+                current_idx = 0
+                if current_stage and current_stage in stage_labels:
+                    current_idx = stage_labels.index(current_stage)
+                current_stage_name = stage_labels[current_idx] if current_idx < len(stage_labels) else stage_labels[0]
+                total_stages = len(stage_labels)
+                stage_text = f"Current Stage: {current_stage_name} ({current_idx + 1}/{total_stages})"
+                self.stage_chain_label.configure(text=stage_text)
             else:
                 self.stage_chain_label.configure(text="")
 
@@ -308,36 +308,44 @@ class RunningJobPanelV2(ttk.Frame):
             self.queue_origin_label.configure(text="")
 
         # Status (progress is shown visually in timeline widget above)
-        status_text = f"Status: {job.status.value.title()}"
-        progress_pct = int(job.progress * 100)
+        # Handle status as string (UnifiedJobSummary stores it as string, not enum)
+        status_value = job.status if isinstance(job.status, str) else job.status.value
+        status_text = f"Status: {status_value.title()}"
+        # UnifiedJobSummary may not have progress attribute
+        progress = getattr(job, 'progress', 0.0)
+        progress_pct = int(progress * 100)
         if progress_pct > 0:
             status_text += f" ({progress_pct}%)"
         self.status_label.configure(text=status_text)
 
         # Elapsed time (if job has started)
-        elapsed_text = self._format_elapsed(job.started_at)
+        # UnifiedJobSummary may not have started_at, use created_at or None
+        started_at = getattr(job, 'started_at', None) or getattr(job, 'created_at', None)
+        elapsed_text = self._format_elapsed(started_at)
         self.elapsed_label.configure(text=elapsed_text)
 
         # PR-GUI-DATA-005: Enhanced ETA calculation
-        eta_seconds = job.eta_seconds
-        if eta_seconds is None and job.progress > 0 and job.started_at:
+        # UnifiedJobSummary may not have eta_seconds attribute
+        eta_seconds = getattr(job, 'eta_seconds', None)
+        if eta_seconds is None and progress > 0 and started_at:
             # Calculate ETA based on elapsed time and progress percentage
-            eta_seconds = self._estimate_eta_from_progress(job.progress, job.started_at)
+            eta_seconds = self._estimate_eta_from_progress(progress, started_at)
         self.eta_label.configure(text=self._format_eta(eta_seconds))
 
         # Button states
-        is_running = job.status == JobStatusV2.RUNNING
-        is_paused = job.status == JobStatusV2.PAUSED
+        # Handle status as string or enum (UnifiedJobSummary uses strings)
+        status_str = job.status if isinstance(job.status, str) else job.status.value
+        is_running = status_str.upper() == "RUNNING"
+        is_paused = status_str.upper() == "PAUSED"
         can_control = is_running or is_paused
 
         if is_paused:
-            self.pause_resume_button.configure(text="Resume")
+            self.pause_resume_button.configure(text="Resume Job")
         else:
-            self.pause_resume_button.configure(text="Pause")
+            self.pause_resume_button.configure(text="Pause Job")
 
         self.pause_resume_button.state(["!disabled"] if can_control else ["disabled"])
         self.cancel_button.state(["!disabled"] if can_control else ["disabled"])
-        self.cancel_return_button.state(["!disabled"] if can_control else ["disabled"])
 
         # Start timer for elapsed time updates (if job is running or paused)
         if is_running or is_paused:
@@ -350,7 +358,9 @@ class RunningJobPanelV2(ttk.Frame):
         if not self.controller or not self._current_job:
             return
 
-        is_paused = self._current_job.status == JobStatusV2.PAUSED
+        # Handle status as string or enum (UnifiedJobSummary uses strings)
+        status_str = self._current_job.status if isinstance(self._current_job.status, str) else self._current_job.status.value
+        is_paused = status_str.upper() == "PAUSED"
 
         if is_paused:
             method = getattr(self.controller, "on_resume_job_v2", None)
@@ -400,15 +410,15 @@ class RunningJobPanelV2(ttk.Frame):
 
     def update_job_with_summary(
         self,
-        job: UnifiedJobSummary | None,
+        job: Job | UnifiedJobSummary | None,
         summary: UnifiedJobSummary | None = None,
         queue_origin: int | None = None,
     ) -> None:
         """PR-CORE-D: Update the panel with job and UnifiedJobSummary.
 
         Args:
-            job: The running job, or None if no job is running.
-            summary: UnifiedJobSummary with PromptPack metadata.
+            job: The running Job object (with runtime attrs) or UnifiedJobSummary, or None if no job is running.
+            summary: UnifiedJobSummary with PromptPack metadata (optional, for display).
             queue_origin: 1-based queue position the job came from, or None.
         """
         if self._dispatch_to_ui(lambda: self.update_job_with_summary(job, summary, queue_origin)):
@@ -427,16 +437,22 @@ class RunningJobPanelV2(ttk.Frame):
         if self._dispatch_to_ui(lambda: self.update_progress(progress, eta_seconds)):
             return
         if self._current_job:
-            self._current_job.progress = progress
+            # Safely set progress if attribute exists
+            if hasattr(self._current_job, 'progress'):
+                self._current_job.progress = progress
             if eta_seconds is None:
                 eta_seconds = self._estimate_eta_from_progress(
                     progress, getattr(self._current_job, "started_at", None)
                 )
-            self._current_job.eta_seconds = eta_seconds
+            # Safely set eta_seconds if attribute exists
+            if hasattr(self._current_job, 'eta_seconds'):
+                self._current_job.eta_seconds = eta_seconds
 
             # Update status text with percentage
             progress_pct = int(progress * 100)
-            status_text = f"Status: {self._current_job.status.value.title()}"
+            # Handle status as string or enum (UnifiedJobSummary uses strings)
+            status_value = self._current_job.status if isinstance(self._current_job.status, str) else self._current_job.status.value
+            status_text = f"Status: {status_value.title()}"
             if progress_pct > 0:
                 status_text += f" ({progress_pct}%)"
             self.status_label.configure(text=status_text)
@@ -459,9 +475,12 @@ class RunningJobPanelV2(ttk.Frame):
     def _tick(self) -> None:
         """Update elapsed time and schedule next tick."""
         # Update elapsed time if job is running
-        if self._current_job and self._current_job.started_at:
-            elapsed_text = self._format_elapsed(self._current_job.started_at)
-            self.elapsed_label.configure(text=elapsed_text)
+        if self._current_job:
+            # Safely access started_at or created_at
+            started_at = getattr(self._current_job, 'started_at', None) or getattr(self._current_job, 'created_at', None)
+            if started_at:
+                elapsed_text = self._format_elapsed(started_at)
+                self.elapsed_label.configure(text=elapsed_text)
         
         # Schedule next tick in 1 second
         self._timer_id = self.after(1000, self._tick)
