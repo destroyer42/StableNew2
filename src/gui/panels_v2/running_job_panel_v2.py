@@ -20,7 +20,7 @@ from src.gui.panels_v2.widgets.stage_timeline_widget import (
     create_timeline_from_stage_chain,
 )
 from src.gui.utils.display_helpers import format_seed_display
-from src.pipeline.job_models_v2 import JobStatusV2, QueueJobV2, UnifiedJobSummary
+from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 
 
 class RunningJobPanelV2(ttk.Frame):
@@ -46,7 +46,7 @@ class RunningJobPanelV2(ttk.Frame):
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state
-        self._current_job: QueueJobV2 | None = None
+        self._current_job: UnifiedJobSummary | None = None
         self._current_job_summary: UnifiedJobSummary | None = None  # PR-CORE-D
         self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
         self._timer_id: str | None = None  # Tk after() timer ID for elapsed time updates
@@ -382,7 +382,7 @@ class RunningJobPanelV2(ttk.Frame):
         if callable(method):
             method()
 
-    def update_job(self, job: QueueJobV2 | None, queue_origin: int | None = None) -> None:
+    def update_job(self, job: UnifiedJobSummary | None, queue_origin: int | None = None) -> None:
         """Update the panel with a new job or None.
 
         PR-GUI-F2: Now accepts queue_origin to show which queue position
@@ -400,7 +400,7 @@ class RunningJobPanelV2(ttk.Frame):
 
     def update_job_with_summary(
         self,
-        job: QueueJobV2 | None,
+        job: UnifiedJobSummary | None,
         summary: UnifiedJobSummary | None = None,
         queue_origin: int | None = None,
     ) -> None:

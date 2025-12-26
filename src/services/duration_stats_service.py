@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 if TYPE_CHECKING:
     from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
     from src.pipeline.job_models_v2 import NormalizedJobRecord
-    from src.queue.job_model import QueueJobV2
+    # QueueJobV2 removed - use UnifiedJobSummary or NormalizedJobRecord instead
 
 # Fallback estimates per stage in seconds
 STAGE_FALLBACK_SECONDS: dict[str, float] = {

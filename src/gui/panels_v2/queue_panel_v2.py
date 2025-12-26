@@ -28,7 +28,6 @@ from src.gui.theme_v2 import (
 from src.pipeline.job_models_v2 import (
     JobQueueItemDTO,
     NormalizedJobRecord,
-    QueueJobV2,
     UnifiedJobSummary,
 )
 
@@ -55,7 +54,7 @@ class QueuePanelV2(ttk.Frame):
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state
-        self._jobs: list[QueueJobV2] = []
+        self._jobs: list[UnifiedJobSummary] = []
         self._is_queue_paused = False
         self._auto_run_enabled = False
         self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
@@ -257,7 +256,7 @@ class QueuePanelV2(ttk.Frame):
             return int(selection[0])
         return None
 
-    def _get_selected_job(self) -> QueueJobV2 | None:
+    def _get_selected_job(self) -> UnifiedJobSummary | None:
         """Get the currently selected job, or None if nothing selected."""
         idx = self._get_selected_index()
         if idx is not None and 0 <= idx < len(self._jobs):
@@ -590,7 +589,7 @@ class QueuePanelV2(ttk.Frame):
             self.job_listbox.see(index)
         self._update_button_states()
 
-    def update_jobs(self, jobs: list[QueueJobV2]) -> None:
+    def update_jobs(self, jobs: list[UnifiedJobSummary]) -> None:
         """Update the job list display.
 
         PR-GUI-F2: Displays order numbers and highlights the running job.
@@ -673,28 +672,16 @@ class QueuePanelV2(ttk.Frame):
     def set_normalized_jobs(self, jobs: list[NormalizedJobRecord]) -> None:
         """Update the job list from NormalizedJobRecord objects.
 
-        Converts each NormalizedJobRecord to QueueJobV2 and displays.
+        Converts each NormalizedJobRecord to UnifiedJobSummary and displays.
         This provides a bridge from JobBuilderV2 output to the queue display.
 
         Args:
             jobs: List of NormalizedJobRecord instances from JobBuilderV2.
         """
-        queue_jobs: list[QueueJobV2] = []
+        queue_jobs: list[UnifiedJobSummary] = []
         for record in jobs:
-            # Convert NormalizedJobRecord to QueueJobV2
-            snapshot = record.to_queue_snapshot() if hasattr(record, "to_queue_snapshot") else {}
-            queue_job = QueueJobV2.create(
-                config_snapshot=snapshot,
-                metadata={
-                    "variant_index": record.variant_index,
-                    "variant_total": record.variant_total,
-                    "batch_index": record.batch_index,
-                    "batch_total": record.batch_total,
-                },
-            )
-            # Use the original job_id if available
-            if hasattr(record, "job_id"):
-                queue_job.job_id = record.job_id
+            # Convert NormalizedJobRecord to UnifiedJobSummary
+            queue_job = UnifiedJobSummary.from_normalized_record(record)
             queue_jobs.append(queue_job)
 
         self.update_jobs(queue_jobs)
@@ -710,11 +697,7 @@ class QueuePanelV2(ttk.Frame):
         queue_jobs = getattr(app_state, "queue_jobs", None)
         if queue_jobs:
             self.update_jobs(queue_jobs)
-        else:
-            queue_items = getattr(app_state, "queue_items", None)
-            if queue_items is not None:
-                placeholders = [QueueJobV2.create({"prompt": str(item)}) for item in queue_items]
-                self.update_jobs(placeholders)
+        # Note: queue_items is legacy, we only display UnifiedJobSummary objects now
 
         # Update queue control states
         is_paused = getattr(app_state, "is_queue_paused", False)
@@ -807,14 +790,14 @@ class QueuePanelV2(ttk.Frame):
     # PR-GUI-F2: Running Job Integration
     # ------------------------------------------------------------------
 
-    def set_running_job(self, job: QueueJobV2 | None) -> None:
+    def set_running_job(self, job: UnifiedJobSummary | None) -> None:
         """Set the currently running job for highlighting in the queue list.
 
         PR-GUI-F2: When a job is running, its entry in the queue list
         is visually distinguished with a ▶ indicator.
 
         Args:
-            job: The running QueueJobV2, or None if no job is running.
+            job: The running UnifiedJobSummary, or None if no job is running.
         """
         if self._dispatch_to_ui(lambda: self.set_running_job(job)):
             return
@@ -854,30 +837,14 @@ class QueuePanelV2(ttk.Frame):
         # Check if job already exists
         for i, job in enumerate(self._jobs):
             if job.job_id == dto.job_id:
-                # Update existing job with DTO data
-                # Convert DTO back to QueueJobV2 (simplified)
-                self._jobs[i] = QueueJobV2(
-                    job_id=dto.job_id,
-                    label=dto.label,
-                    prompt_preview=dto.label,  # Use label as fallback
-                    estimated_images=dto.estimated_images,
-                    created_at=dto.created_at,
-                    status=dto.status,
-                )
-                self.update_jobs(self._jobs)
+                # Job already in list - update_jobs will be called by controller
+                # We don't modify in place since UnifiedJobSummary is frozen
                 return
 
-        # Add new job
-        new_job = QueueJobV2(
-            job_id=dto.job_id,
-            label=dto.label,
-            prompt_preview=dto.label,
-            estimated_images=dto.estimated_images,
-            created_at=dto.created_at,
-            status=dto.status,
-        )
-        self._jobs.append(new_job)
-        self.update_jobs(self._jobs)
+        # Job not found - this method is deprecated in favor of update_jobs with full list
+        # Just trigger a refresh from app state
+        logger.warning(f"upsert_job called for new job {dto.job_id} - should use update_jobs instead")
+        self.update_from_app_state()
 
     def remove_job(self, job_id: str) -> None:
         """Remove a job from the queue by ID.

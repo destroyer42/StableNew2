@@ -929,7 +929,7 @@ def save_queue_state(queue_data: dict[str, Any]) -> bool:
     Save the queue state to disk for persistence across sessions.
 
     Args:
-        queue_data: Serialized queue state from JobQueueV2.serialize()
+        queue_data: Serialized queue state (QueueSnapshotV1 format)
 
     Returns:
         True if saved successfully
@@ -952,7 +952,7 @@ def load_queue_state() -> dict[str, Any] | None:
     Load the queue state from disk.
 
     Returns:
-        Serialized queue state to pass to JobQueueV2.restore(), or None if no state exists
+        Serialized queue state (QueueSnapshotV1 format), or None if no state exists
     """
     if not QUEUE_STATE_PATH.exists():
         return None

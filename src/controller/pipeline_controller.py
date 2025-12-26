@@ -73,7 +73,6 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
     wrap_exception,
 )
-from src.utils.queue_helpers_v2 import job_to_queue_job
 from src.utils.snapshot_builder_v2 import build_job_snapshot, normalized_job_from_snapshot
 
 # Logger for this module
@@ -1048,8 +1047,20 @@ class PipelineController(_GUIPipelineController):
         if not self._app_state or not self._job_service:
             return
         jobs = self._list_service_jobs()
-        queue_jobs = [job_to_queue_job(job) for job in jobs]
-        summaries = [queue_job.get_display_summary() for queue_job in queue_jobs]
+        # Convert Job objects to UnifiedJobSummary via their NJRs
+        queue_jobs = []
+        summaries = []
+        for job in jobs:
+            njr = getattr(job, "_normalized_record", None)
+            if njr:
+                try:
+                    summary = UnifiedJobSummary.from_normalized_record(njr)
+                    queue_jobs.append(summary)
+                    summaries.append(summary.positive_prompt_preview or job.job_id)
+                except Exception:
+                    summaries.append(job.job_id)
+            else:
+                summaries.append(job.job_id)
         self._app_state.set_queue_items(summaries)
         setter = getattr(self._app_state, "set_queue_jobs", None)
         if callable(setter):
@@ -1087,7 +1098,14 @@ class PipelineController(_GUIPipelineController):
         if job is None:
             self._app_state.set_running_job(None)
             return
-        self._app_state.set_running_job(job_to_queue_job(job))
+        # Convert Job to UnifiedJobSummary via NJR
+        njr = getattr(job, "_normalized_record", None)
+        if njr:
+            try:
+                summary = UnifiedJobSummary.from_normalized_record(njr)
+                self._app_state.set_running_job(summary)
+            except Exception:
+                pass
 
     def _get_draft_part_count(self) -> int:
         if not self._app_state:

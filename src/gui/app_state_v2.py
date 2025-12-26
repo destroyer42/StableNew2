@@ -9,7 +9,6 @@ from src.gui.gui_invoker import GuiInvoker
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
     NormalizedJobRecord,
-    QueueJobV2,
     UnifiedJobSummary,
 )
 from src.queue.job_history_store import JobHistoryEntry
@@ -136,8 +135,8 @@ class AppStateV2:
         }
     )
     queue_items: list[str] = field(default_factory=list)
-    queue_jobs: list[QueueJobV2] = field(default_factory=list)
-    running_job: QueueJobV2 | None = None
+    queue_jobs: list[UnifiedJobSummary] = field(default_factory=list)
+    running_job: UnifiedJobSummary | None = None
     queue_status: str = "idle"
     history_items: list[JobHistoryEntry] = field(default_factory=list)
     run_config: dict[str, Any] = field(default_factory=dict)
@@ -364,14 +363,14 @@ class AppStateV2:
         self.queue_items = list(items)
         self._notify("queue_items")
 
-    def set_queue_jobs(self, jobs: list[QueueJobV2] | None) -> None:
+    def set_queue_jobs(self, jobs: list[UnifiedJobSummary] | None) -> None:
         if jobs is None:
             jobs = []
         if self.queue_jobs != jobs:
             self.queue_jobs = list(jobs)
             self._notify("queue_jobs")
 
-    def set_running_job(self, job: QueueJobV2 | None) -> None:
+    def set_running_job(self, job: UnifiedJobSummary | None) -> None:
         if self.running_job != job:
             self.running_job = job
             self._notify("running_job")

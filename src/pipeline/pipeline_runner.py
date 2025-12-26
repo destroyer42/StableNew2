@@ -397,7 +397,7 @@ class PipelineRunner:
                             try:
                                 if client and hasattr(client, "free_vram"):
                                     logger.info("🧹 Freeing VRAM BEFORE adetailer image...")
-                                    client.free_vram(unload_model=False)
+                                    client.free_vram(unload_model=True)
                                     import time
                                     time.sleep(1.0)  # Give WebUI time to stabilize
                             except Exception:
@@ -440,7 +440,7 @@ class PipelineRunner:
                             try:
                                 if client and hasattr(client, "free_vram"):
                                     logger.info("🧹 Freeing VRAM between adetailer images...")
-                                    client.free_vram(unload_model=False)
+                                    client.free_vram(unload_model=True)
                             except Exception:
                                 pass  # Non-fatal
                     
@@ -490,7 +490,7 @@ class PipelineRunner:
                             try:
                                 if client and hasattr(client, "free_vram"):
                                     logger.info("🧹 Freeing VRAM BEFORE upscale image...")
-                                    client.free_vram(unload_model=False)
+                                    client.free_vram(unload_model=True)
                                     import time
                                     time.sleep(1.0)  # Give WebUI time to stabilize
                             except Exception:

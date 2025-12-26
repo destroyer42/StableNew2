@@ -101,7 +101,6 @@ from src.utils.error_envelope_v2 import (
 from src.utils.thread_registry import get_thread_registry
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
-from src.utils.queue_helpers_v2 import job_to_queue_job
 
 logger = logging.getLogger(__name__)
 
@@ -1152,7 +1151,7 @@ class AppController:
                     # Clear VRAM caches before each reprocess job to prevent memory exhaustion
                     try:
                         if client_ref and hasattr(client_ref, "free_vram"):
-                            client_ref.free_vram(unload_model=False)
+                            client_ref.free_vram(unload_model=True)
                     except Exception:
                         pass  # Non-fatal: best effort VRAM clearing
                     
@@ -1503,7 +1502,8 @@ class AppController:
     def _load_queue_state(self) -> None:
         """Load persisted queue state on startup.
 
-        PR-GUI-F3: Restores queue jobs and control flags from disk.
+        PR-QUEUE-PERSIST: Restores queue jobs from NJR snapshots and control flags from disk.
+        Jobs are restored via their NormalizedJobRecord snapshots, which are serializable.
         """
         try:
             snapshot = load_queue_snapshot()
@@ -1524,7 +1524,7 @@ class AppController:
             self.app_state.set_auto_run_queue(snapshot.auto_run_enabled)
             self.app_state.set_is_queue_paused(snapshot.paused)
 
-        # PR-GUI-F3: Also restore auto_run_enabled to job_service
+        # PR-QUEUE-PERSIST: Also restore auto_run_enabled to job_service
         if (
             hasattr(self, "pipeline_controller")
             and self.pipeline_controller
@@ -1533,30 +1533,107 @@ class AppController:
         ):
             self.pipeline_controller.job_service.auto_run_enabled = snapshot.auto_run_enabled
 
-        # Note: We can't easily restore jobs to the V1 JobQueue since it uses
-        # a different job model. This is a limitation of the current architecture.
-        # The V1 queue doesn't persist job payloads - they're typically callables.
-        # For PR-GUI-F3, we'll at least restore the flags.
+        # PR-QUEUE-PERSIST: Restore jobs from NJR snapshots
+        jobs_to_restore = []
+        for job_data in snapshot.jobs:
+            try:
+                # Extract NJR from snapshot
+                njr_data = job_data.get("njr_snapshot")
+                if not njr_data:
+                    logger.warning(f"Job {job_data.get('job_id', 'unknown')} missing NJR snapshot, skipping")
+                    continue
+                
+                # Deserialize NJR
+                from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+                njr = normalized_job_from_snapshot(njr_data)
+                if njr is None:
+                    logger.warning(f"Failed to deserialize NJR for job {job_data.get('job_id', 'unknown')}")
+                    continue
+                
+                # Create Job wrapper with NJR attached
+                from src.queue.job_model import Job, JobPriority, JobStatus
+                from datetime import datetime
+                job = Job(
+                    job_id=job_data.get("job_id", str(uuid.uuid4())),
+                    priority=JobPriority(job_data.get("priority", 1)),
+                    status=JobStatus.QUEUED,
+                    created_at=datetime.fromisoformat(job_data["created_at"]) if "created_at" in job_data else datetime.utcnow(),
+                    config_snapshot=job_data.get("config_snapshot"),
+                    source=job_data.get("source", "restored"),
+                )
+                job._normalized_record = njr  # Attach NJR for execution
+                jobs_to_restore.append(job)
+                
+            except Exception as exc:
+                logger.warning(f"Failed to restore job from snapshot: {exc}", exc_info=True)
+                continue
+        
+        # Restore jobs to queue
+        if jobs_to_restore and self.job_service and self.job_service.job_queue:
+            try:
+                self.job_service.job_queue.restore_jobs(jobs_to_restore)
+                logger.info(f"Restored {len(jobs_to_restore)} jobs from persisted queue state")
+            except Exception as exc:
+                logger.error(f"Failed to restore jobs to queue: {exc}", exc_info=True)
+        
         logger.debug(
             f"Restored queue state: auto_run={snapshot.auto_run_enabled}, "
-            f"paused={snapshot.paused}, {len(snapshot.jobs)} jobs (jobs not restored in V1 queue)"
+            f"paused={snapshot.paused}, {len(jobs_to_restore)}/{len(snapshot.jobs)} jobs restored"
         )
 
     def _save_queue_state(self) -> None:
         """Save current queue state for persistence.
 
-        PR-GUI-F3: Persists queue control flags to disk.
-        Note: V1 JobQueue jobs contain callables and can't be serialized.
+        PR-QUEUE-PERSIST: Persists queue jobs via their NJR snapshots plus control flags to disk.
+        Jobs with NormalizedJobRecord attached are fully serializable and restorable.
         """
         auto_run = getattr(self.app_state, "auto_run_queue", False) if self.app_state else False
         paused = getattr(self.app_state, "is_queue_paused", False) if self.app_state else False
 
+        # PR-QUEUE-PERSIST: Extract and serialize jobs with NJR snapshots
+        jobs_data = []
+        if self.job_service and self.job_service.job_queue:
+            try:
+                queued_jobs = self.job_service.job_queue.list_jobs(status_filter=JobStatus.QUEUED)
+                for job in queued_jobs:
+                    try:
+                        # Only persist jobs that have NJR attached
+                        njr = getattr(job, "_normalized_record", None)
+                        if njr is None:
+                            logger.debug(f"Job {job.job_id} missing NJR, skipping persistence")
+                            continue
+                        
+                        # Serialize NJR to dict
+                        from src.utils.snapshot_builder_v2 import _serialize_normalized_job
+                        njr_snapshot = _serialize_normalized_job(njr)
+                        
+                        job_data = {
+                            "job_id": job.job_id,
+                            "priority": int(job.priority),
+                            "status": job.status.value,
+                            "created_at": job.created_at.isoformat(),
+                            "njr_snapshot": njr_snapshot,
+                            "config_snapshot": job.config_snapshot,
+                            "source": job.source,
+                        }
+                        jobs_data.append(job_data)
+                    except Exception as exc:
+                        logger.warning(f"Failed to serialize job {job.job_id}: {exc}")
+                        continue
+            except Exception as exc:
+                logger.error(f"Failed to extract jobs for persistence: {exc}")
+
         snapshot = QueueSnapshotV1(
-            jobs=[],  # V1 queue jobs can't be serialized (contain callables)
+            jobs=jobs_data,
             auto_run_enabled=auto_run,
             paused=paused,
         )
-        save_queue_snapshot(snapshot)
+        try:
+            save_queue_snapshot(snapshot)
+            if jobs_data:
+                logger.debug(f"Persisted queue state: {len(jobs_data)} jobs saved")
+        except Exception as exc:
+            logger.error(f"Failed to save queue state: {exc}")
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
         """Execute a job via NJR only (PR-CORE1-D11 pack-only path)."""
@@ -1773,8 +1850,20 @@ class AppController:
         if not self.app_state or not self.job_service:
             return
         jobs = self._list_service_jobs()
-        queue_jobs = [job_to_queue_job(job) for job in jobs]
-        summaries = [queue_job.get_display_summary() for queue_job in queue_jobs]
+        # Convert Job objects to UnifiedJobSummary via their NJRs
+        queue_jobs = []
+        summaries = []
+        for job in jobs:
+            njr = getattr(job, "_normalized_record", None)
+            if njr:
+                try:
+                    summary = UnifiedJobSummary.from_normalized_record(njr)
+                    queue_jobs.append(summary)
+                    summaries.append(summary.positive_prompt_preview or job.job_id)
+                except Exception:
+                    summaries.append(job.job_id)
+            else:
+                summaries.append(job.job_id)
         self.app_state.set_queue_items(summaries)
         self.app_state.set_queue_jobs(queue_jobs)
 
@@ -1800,23 +1889,23 @@ class AppController:
                 if tab_frame and hasattr(tab_frame, "preview_panel"):
                     tab_frame.preview_panel.update_with_summary(None)
             return
-        queue_job = job_to_queue_job(job)
-        self.app_state.set_running_job(queue_job)
         
-        # Try to get UnifiedJobSummary from job's normalized record
+        # Convert Job to UnifiedJobSummary via NJR
         summary = None
         njr = getattr(job, "_normalized_record", None)
-        if njr and hasattr(njr, "to_unified_summary"):
+        if njr:
             try:
-                summary = njr.to_unified_summary()
+                summary = UnifiedJobSummary.from_normalized_record(njr)
             except Exception:
                 pass
+        
+        self.app_state.set_running_job(summary)
         
         # Update running job panel with summary if available
         if hasattr(self, "main_window") and self.main_window:
             tab_frame = getattr(self.main_window, "pipeline_tab", None)
             if tab_frame and hasattr(tab_frame, "running_job_panel"):
-                tab_frame.running_job_panel.update_job_with_summary(queue_job, summary, None)
+                tab_frame.running_job_panel.update_job_with_summary(summary, summary, None)
             if tab_frame and hasattr(tab_frame, "preview_panel"):
                 tab_frame.preview_panel.update_with_summary(summary)
 
