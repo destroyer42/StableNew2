@@ -358,6 +358,41 @@ class UnifiedJobSummary:
             completed_at=getattr(job, "completed_at", None),
         )
 
+    def get_display_summary(self) -> str:
+        """Get a short display string for the job.
+        
+        Shows: Pack Name [row=X, v=Y/Z, b=A/B] | estimated images | resolution | steps
+        """
+        # Primary label is pack name or model
+        primary_label = self.prompt_pack_name if self.prompt_pack_name else self.base_model
+        
+        # Build identifying info: prompt row, variant, batch
+        id_parts = []
+        # Always show row number (0-based in data, show as 1-based)
+        id_parts.append(f"row={self.prompt_pack_row_index}")
+        # Show variant if not the first or if there's a config variant
+        if self.variant_index > 0:
+            id_parts.append(f"v={self.variant_index + 1}")
+        # Show batch if not the first
+        if self.batch_index > 0:
+            id_parts.append(f"b={self.batch_index + 1}")
+        # Add config variant if not base
+        if self.config_variant_label and self.config_variant_label != "base":
+            id_parts.append(self.config_variant_label)
+        
+        id_info = f" [{', '.join(id_parts)}]" if id_parts else ""
+        
+        # Image count info
+        if self.estimated_image_count > 1:
+            image_info = f" | {self.estimated_image_count} imgs"
+        else:
+            image_info = " | 1 img"
+        
+        # Resolution and settings
+        settings_info = f" | {self.width}×{self.height} | {self.steps}s"
+        
+        return f"{primary_label}{id_info}{image_info}{settings_info}"
+
 
 @dataclass
 class JobUiSummary:

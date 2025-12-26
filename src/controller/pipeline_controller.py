@@ -58,6 +58,7 @@ from src.pipeline.job_models_v2 import (
     BatchSettings,
     NormalizedJobRecord,
     OutputSettings,
+    UnifiedJobSummary,
 )
 
 # PR-CORE1-12: Legacy adapter still used by deprecated run_pipeline() method
@@ -1057,9 +1058,11 @@ class PipelineController(_GUIPipelineController):
                     summary = UnifiedJobSummary.from_normalized_record(njr)
                     queue_jobs.append(summary)
                     summaries.append(summary.positive_prompt_preview or job.job_id)
-                except Exception:
+                except Exception as exc:
+                    _logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
                     summaries.append(job.job_id)
             else:
+                _logger.debug(f"Job {job.job_id} missing NJR, cannot display in GUI")
                 summaries.append(job.job_id)
         self._app_state.set_queue_items(summaries)
         setter = getattr(self._app_state, "set_queue_jobs", None)
@@ -1104,8 +1107,10 @@ class PipelineController(_GUIPipelineController):
             try:
                 summary = UnifiedJobSummary.from_normalized_record(njr)
                 self._app_state.set_running_job(summary)
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
+        else:
+            _logger.warning(f"Running job {job.job_id} missing NJR, cannot display in GUI")
 
     def _get_draft_part_count(self) -> int:
         if not self._app_state:

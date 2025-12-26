@@ -91,13 +91,15 @@ class SingleInstanceLock:
         
         # Start accept loop thread to handle is_gui_running() checks
         # PR-THREAD-001: Use ThreadRegistry for accept loop
+        # PR-SHUTDOWN-003: Made daemon=True to prevent blocking shutdown
+        # This thread is not critical - it only services is_gui_running() checks
         self._stop_accepting.clear()
         from src.utils.thread_registry import get_thread_registry
         registry = get_thread_registry()
         self._accept_thread = registry.spawn(
             target=self._accept_loop,
             name="SingleInstanceLock-Accept",
-            daemon=False,
+            daemon=True,  # Don't block shutdown waiting for this thread
             purpose="Accept socket connections for single instance lock"
         )
         

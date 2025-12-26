@@ -63,8 +63,6 @@
       "mask_blur": 4,
       "ad_mask_blur": 4,
       "mask_merge_mode": "keep",
-      "only_faces": true,
-      "only_hands": false,
       "adetailer_steps": 8,
       "ad_steps": 8,
       "adetailer_cfg": 5.0,

@@ -53,6 +53,7 @@ from src.pipeline.last_run_store_v2_5 import (
     update_current_config_from_last_run,
 )
 from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
+from src.pipeline.job_models_v2 import UnifiedJobSummary
 
 if TYPE_CHECKING:  # pragma: no cover - type-only import
     from src.controller.archive.pipeline_config_types import PipelineConfig
@@ -77,6 +78,7 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.duration_stats_service import DurationStatsService
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
+    SCHEMA_VERSION,
     UnsupportedQueueSchemaError,
     load_queue_snapshot,
     save_queue_snapshot,
@@ -1605,16 +1607,21 @@ class AppController:
                         
                         # Serialize NJR to dict
                         from src.utils.snapshot_builder_v2 import _serialize_normalized_job
-                        njr_snapshot = _serialize_normalized_job(njr)
+                        njr_dict = _serialize_normalized_job(njr)
                         
                         job_data = {
-                            "job_id": job.job_id,
+                            "queue_id": job.job_id,  # queue_store_v2 expects 'queue_id'
                             "priority": int(job.priority),
                             "status": job.status.value,
                             "created_at": job.created_at.isoformat(),
-                            "njr_snapshot": njr_snapshot,
-                            "config_snapshot": job.config_snapshot,
-                            "source": job.source,
+                            "njr_snapshot": {
+                                "normalized_job": njr_dict  # Wrap in normalized_job key
+                            },
+                            "queue_schema": SCHEMA_VERSION,  # Required by queue_store_v2
+                            "metadata": {
+                                "config_snapshot": job.config_snapshot,
+                                "source": job.source,
+                            },
                         }
                         jobs_data.append(job_data)
                     except Exception as exc:
@@ -1860,9 +1867,11 @@ class AppController:
                     summary = UnifiedJobSummary.from_normalized_record(njr)
                     queue_jobs.append(summary)
                     summaries.append(summary.positive_prompt_preview or job.job_id)
-                except Exception:
+                except Exception as exc:
+                    logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
                     summaries.append(job.job_id)
             else:
+                logger.debug(f"Job {job.job_id} missing NJR, cannot display in GUI")
                 summaries.append(job.job_id)
         self.app_state.set_queue_items(summaries)
         self.app_state.set_queue_jobs(queue_jobs)
@@ -1896,8 +1905,10 @@ class AppController:
         if njr:
             try:
                 summary = UnifiedJobSummary.from_normalized_record(njr)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
+        else:
+            logger.warning(f"Running job {job.job_id} missing NJR, cannot display in GUI")
         
         self.app_state.set_running_job(summary)
         
