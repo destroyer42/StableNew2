@@ -27,10 +27,14 @@
           ],
           [
             "DetailedEyes_V3",
-            0.7135922330097088
+            0.7936893203883495
           ],
           [
-            "Realism_Lora_By_Stable_yogi_SDXL8.1",
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            0.8
+          ],
+          [
+            "dreamshaperXL10_lora",
             0.8
           ]
         ]

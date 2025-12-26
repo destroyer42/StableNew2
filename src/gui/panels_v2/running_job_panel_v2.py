@@ -107,26 +107,7 @@ class RunningJobPanelV2(ttk.Frame):
         )
         self._timeline.pack(fill="x", padx=5, pady=(5, 10))
 
-        # Progress frame
-        progress_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
-        progress_frame.pack(fill="x", pady=(4, 4))
-
-        self.progress_bar = ttk.Progressbar(
-            progress_frame,
-            mode="determinate",
-            length=200,
-        )
-        self.progress_bar.pack(side="left", fill="x", expand=True)
-
-        self.progress_label = ttk.Label(
-            progress_frame,
-            text="0%",
-            width=5,
-            anchor="e",
-        )
-        self.progress_label.pack(side="right", padx=(8, 0))
-
-        # Status and ETA
+        # Status and ETA (progress is shown in timeline above)
         status_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         status_frame.pack(fill="x", pady=(4, 8))
 
@@ -256,8 +237,6 @@ class RunningJobPanelV2(ttk.Frame):
             self.stage_chain_label.configure(text="")  # PR-CORE-D
             self.seed_label.configure(text="Seed: -")  # PR-PIPE-007
             self._timeline.clear()  # PR-PIPE-008
-            self.progress_bar.configure(value=0)
-            self.progress_label.configure(text="0%")
             self.status_label.configure(text="Status: Idle")
             self.elapsed_label.configure(text="")
             self.eta_label.configure(text="")
@@ -328,13 +307,11 @@ class RunningJobPanelV2(ttk.Frame):
         else:
             self.queue_origin_label.configure(text="")
 
-        # Progress
-        progress_pct = int(job.progress * 100)
-        self.progress_bar.configure(value=progress_pct)
-        self.progress_label.configure(text=f"{progress_pct}%")
-
-        # Status
+        # Status (progress is shown visually in timeline widget above)
         status_text = f"Status: {job.status.value.title()}"
+        progress_pct = int(job.progress * 100)
+        if progress_pct > 0:
+            status_text += f" ({progress_pct}%)"
         self.status_label.configure(text=status_text)
 
         # Elapsed time (if job has started)
@@ -442,7 +419,11 @@ class RunningJobPanelV2(ttk.Frame):
         self._update_display()
 
     def update_progress(self, progress: float, eta_seconds: float | None = None) -> None:
-        """Update just the progress display (more efficient than full update)."""
+        """Update just the progress display (updates status text with percentage).
+        
+        Note: Visual progress is shown in the timeline widget, this just updates
+        the status text percentage.
+        """
         if self._dispatch_to_ui(lambda: self.update_progress(progress, eta_seconds)):
             return
         if self._current_job:
@@ -453,9 +434,12 @@ class RunningJobPanelV2(ttk.Frame):
                 )
             self._current_job.eta_seconds = eta_seconds
 
+            # Update status text with percentage
             progress_pct = int(progress * 100)
-            self.progress_bar.configure(value=progress_pct)
-            self.progress_label.configure(text=f"{progress_pct}%")
+            status_text = f"Status: {self._current_job.status.value.title()}"
+            if progress_pct > 0:
+                status_text += f" ({progress_pct}%)"
+            self.status_label.configure(text=status_text)
             self.eta_label.configure(text=self._format_eta(eta_seconds))
 
     def _start_timer(self) -> None:

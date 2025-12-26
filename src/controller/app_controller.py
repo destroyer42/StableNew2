@@ -1864,6 +1864,38 @@ class AppController:
                 self._append_log(f"[controller] on_queue_move_down_v2 error: {exc!r}")
         return False
 
+    def move_queue_job_to_front(self, job_id: str) -> bool:
+        """Move a job to the front of the queue."""
+        if not self.job_service:
+            return False
+        queue = getattr(self.job_service, "job_queue", None)
+        if queue and hasattr(queue, "move_to_front"):
+            try:
+                result = bool(queue.move_to_front(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                    self._save_queue_state()
+                return result
+            except Exception as exc:
+                self._append_log(f"[controller] move_queue_job_to_front error: {exc!r}")
+        return False
+
+    def move_queue_job_to_back(self, job_id: str) -> bool:
+        """Move a job to the back of the queue."""
+        if not self.job_service:
+            return False
+        queue = getattr(self.job_service, "job_queue", None)
+        if queue and hasattr(queue, "move_to_back"):
+            try:
+                result = bool(queue.move_to_back(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                    self._save_queue_state()
+                return result
+            except Exception as exc:
+                self._append_log(f"[controller] move_queue_job_to_back error: {exc!r}")
+        return False
+
     def on_queue_remove_job_v2(self, job_id: str) -> bool:
         """Remove a job from the queue."""
         if not self.job_service:
@@ -2010,7 +2042,13 @@ class AppController:
         if store is None:
             return
         try:
+            # Only show completed and failed jobs in history (not queued/running/cancelled)
             entries = store.list_jobs(limit=limit or 20)
+            # Filter to only show terminal states that made it through the pipeline
+            from src.queue.job_model import JobStatus
+            terminal_states = {JobStatus.COMPLETED, JobStatus.FAILED}
+            filtered_entries = [e for e in entries if e.status in terminal_states]
+            entries = filtered_entries
         except Exception:
             entries = []
         self.app_state.set_history_items(entries)

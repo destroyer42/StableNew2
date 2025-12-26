@@ -713,5 +713,82 @@ Its restrictions:
 
 StableNew v2.6's reliability depends on DebugHub producing exact, deterministic introspection of the pipeline and providing clear diagnostic guidance for infrastructure failures.
 
+---
+
+## Troubleshooting: Orphaned WebUI Processes
+
+### Issue: Orphaned WebUI Processes After Crash
+
+**Symptoms**:
+- Port 7860 already in use on next launch
+- Task Manager shows multiple python.exe processes
+- WebUI appears to be running but GUI is not
+- "Address already in use" error when starting StableNew
+
+**Root Cause**:
+When StableNew crashes during startup or exits abnormally, WebUI processes may not be cleaned up properly. This is especially common when WebUI is launched via `.bat` or `.cmd` files, which create intermediate shell processes that can leave orphaned Python children.
+
+**Resolution** (Automatic as of PR-PROCESS-001):
+1. Emergency atexit handler kills WebUI processes
+2. Orphan monitor detects reparented processes
+3. CMD/shell wrappers explicitly cleaned up
+
+**Manual Resolution** (if needed):
+
+**Windows PowerShell**:
+```powershell
+# Find and kill all WebUI-related python.exe
+Get-Process python | Where-Object {
+    $_.CommandLine -like '*webui*' -or 
+    $_.Path -like '*webui*'
+} | Stop-Process -Force
+
+# Find and kill cmd.exe wrappers
+Get-Process cmd | Where-Object {
+    $_.CommandLine -like '*webui*'
+} | Stop-Process -Force
+
+# Verify port 7860 is free
+Test-NetConnection -ComputerName localhost -Port 7860
+```
+
+**Windows Command Prompt**:
+```cmd
+REM Kill all python.exe processes (use with caution)
+taskkill /F /IM python.exe
+
+REM Kill specific WebUI process by PID (safer)
+taskkill /F /PID <pid_number>
+```
+
+**Diagnostic Steps**:
+
+1. **List all Python processes**:
+   ```powershell
+   Get-Process python | Select-Object Id, ProcessName, CPU, WorkingSet, CommandLine
+   ```
+
+2. **Check port 7860 usage**:
+   ```powershell
+   netstat -ano | findstr :7860
+   ```
+
+3. **Check logs for crash details**:
+   - Check `logs/webui/webui_stdout_*.log`
+   - Check `logs/gui-shutdown/gui-shutdown-*.log` (if `STABLENEW_DEBUG_SHUTDOWN=1`)
+
+**Prevention**:
+- Upgrade to v2.6+ (includes PR-PROCESS-001 fixes)
+- Avoid launching WebUI manually outside of StableNew
+- Enable shutdown logging: `set STABLENEW_DEBUG_SHUTDOWN=1`
+- Check logs for crash patterns before reporting issues
+
+**Known Limitations**:
+- Emergency cleanup runs via atexit, which may not trigger on forced termination (Task Manager kill)
+- Orphan monitor scans every 2 seconds, brief window where orphans can exist
+- If StableNew is force-killed (Task Manager), manual cleanup required
+
+---
+
 END — DebugHub_v2.6 (Canonical Edition)
 

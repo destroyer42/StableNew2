@@ -151,7 +151,7 @@ class AppStateV2:
     lora_strengths: list[LoraRuntimeConfig] = field(default_factory=list)
     adetailer_models: list[str] = field(default_factory=list)
     adetailer_detectors: list[str] = field(default_factory=list)
-    adetailer_enabled: bool = False
+    adetailer_enabled: bool = True  # PR-DEFAULT-ADETAILER: Default to True for visibility
     adetailer_config: dict[str, Any] = field(default_factory=dict)
     collapse_states: dict[str, bool] = field(default_factory=dict)
 

@@ -747,7 +747,65 @@ class WebUIProcessManager:
                              len(remaining_python_pids), len(all_python_pids))
                 logger.warning("=" * 80)
                 
-                logger.info("Killed %d WebUI-related processes", len(killed_pids))
+                # PR-PROCESS-001: Kill cmd.exe and conhost.exe shell wrappers
+                # These are left behind when .bat/.cmd files spawn python.exe then exit
+                logger.warning("")
+                logger.warning(">>> SCANNING FOR CMD/SHELL WRAPPER PROCESSES:")
+                shell_pids_killed = []
+                
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cwd', 'memory_info']):
+                    try:
+                        name = proc.info['name']
+                        if name and name.lower() in ('cmd.exe', 'conhost.exe'):
+                            cmdline = proc.info.get('cmdline', [])
+                            cwd = proc.info.get('cwd', '')
+                            mem_info = proc.info.get('memory_info')
+                            mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
+                            
+                            # Match by working directory
+                            is_webui_dir = False
+                            if webui_dir and cwd:
+                                try:
+                                    is_webui_dir = Path(cwd).resolve() == Path(webui_dir).resolve()
+                                except Exception:
+                                    pass
+                            
+                            # Match by cmdline mentioning webui or launch
+                            is_webui_cmdline = any(
+                                'webui' in str(arg).lower() or 
+                                'launch' in str(arg).lower()
+                                for arg in cmdline
+                            )
+                            
+                            if is_webui_dir or is_webui_cmdline:
+                                logger.warning(
+                                    ">>> Killing shell process: PID=%s name=%s cwd=%s mem=%.1fMB cmdline=%s",
+                                    proc.pid,
+                                    name,
+                                    cwd[:40] + "..." if len(cwd) > 40 else cwd,
+                                    mem_mb,
+                                    ' '.join(cmdline[:3]) if cmdline else "N/A"
+                                )
+                                proc.kill()
+                                shell_pids_killed.append(proc.pid)
+                                logger.info("✓ Successfully killed shell wrapper PID %s", proc.pid)
+                                    
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                    except Exception as exc:
+                        logger.debug("Error checking shell process: %s", exc)
+                
+                if shell_pids_killed:
+                    logger.warning(
+                        ">>> Killed %d shell wrapper processes: %s",
+                        len(shell_pids_killed), shell_pids_killed
+                    )
+                else:
+                    logger.warning(">>> No shell wrapper processes found")
+                logger.warning("=" * 80)
+                
+                logger.info("Killed %d WebUI-related processes (python: %d, shell: %d)", 
+                           len(killed_pids) + len(shell_pids_killed), len(killed_pids), len(shell_pids_killed))
                 
             except ImportError:
                 logger.error("psutil not available - cannot kill orphaned processes! Install psutil.")
@@ -855,16 +913,26 @@ class WebUIProcessManager:
             self._orphan_monitor_thread.join(timeout=2.0)
 
     def _orphan_monitor_loop(self) -> None:
-        """Monitor loop that checks if StableNew GUI is still running."""
+        """
+        Monitor loop that checks if StableNew GUI is still running.
+        
+        PR-PROCESS-001: Enhanced to detect reparented WebUI processes and
+        scan for orphaned processes without valid parents.
+        """
         from src.utils.single_instance import SingleInstanceLock
         
-        check_interval = 5.0  # Check every 5 seconds
+        gui_pid = os.getpid()
+        webui_dir = self._config.working_dir
+        check_interval = 2.0  # Check every 2 seconds (increased from 5s for faster detection)
         
-        logger.info("[Orphan Monitor] Starting lock monitoring (checks every %.1fs)", check_interval)
+        logger.info(
+            "[Orphan Monitor] Started: GUI_PID=%s, WebUI_PID=%s, check_interval=%.1fs",
+            gui_pid, self.pid, check_interval
+        )
         
         while not self._orphan_monitor_stop.is_set():
             try:
-                # Check if GUI is still running
+                # Check 1: GUI process still alive?
                 if not SingleInstanceLock.is_gui_running():
                     logger.error(
                         "[Orphan Monitor] StableNew GUI has exited! "
@@ -872,17 +940,33 @@ class WebUIProcessManager:
                         self._pid
                     )
                     # Force kill WebUI immediately
-                    try:
-                        self.stop_webui(grace_seconds=2.0)
-                        logger.warning("[Orphan Monitor] WebUI terminated due to GUI exit")
-                    except Exception as exc:
-                        logger.exception("[Orphan Monitor] Error terminating WebUI: %s", exc)
+                    self._kill_all_webui_processes()
                     break
                 
-                # Check if process is still running
+                # Check 2: WebUI process still running?
                 if not self.is_running():
                     logger.debug("[Orphan Monitor] WebUI process has exited naturally, stopping monitor")
                     break
+                
+                # PR-PROCESS-001: Check 3: Scan for orphaned WebUI processes
+                try:
+                    import psutil
+                    orphaned_webui_pids = self._scan_for_orphaned_webui_processes()
+                    if orphaned_webui_pids:
+                        logger.warning(
+                            "[Orphan Monitor] Found %d orphaned WebUI processes: %s",
+                            len(orphaned_webui_pids), orphaned_webui_pids
+                        )
+                        # Kill them if GUI is still alive
+                        if SingleInstanceLock.is_gui_running():
+                            for orphan_pid in orphaned_webui_pids:
+                                try:
+                                    psutil.Process(orphan_pid).kill()
+                                    logger.warning("[Orphan Monitor] Killed orphan PID %s", orphan_pid)
+                                except Exception as exc:
+                                    logger.debug("Failed to kill orphan %s: %s", orphan_pid, exc)
+                except ImportError:
+                    pass  # psutil not available, skip orphan scan
                     
             except Exception as exc:
                 logger.exception("[Orphan Monitor] Error in monitor loop: %s", exc)
@@ -890,6 +974,91 @@ class WebUIProcessManager:
             # Wait for next check or stop signal
             self._orphan_monitor_stop.wait(check_interval)
         
+        logger.info("[Orphan Monitor] Stopped")
+
+    def _scan_for_orphaned_webui_processes(self) -> list[int]:
+        """
+        Scan for WebUI python.exe processes that have no valid parent.
+        
+        PR-PROCESS-001: Detects processes that were reparented to system
+        after shell wrapper exits.
+        """
+        try:
+            import psutil
+        except ImportError:
+            return []
+        
+        webui_dir = self._config.working_dir
+        orphans = []
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'ppid', 'cwd']):
+            try:
+                name = proc.info['name']
+                if not name or 'python' not in name.lower():
+                    continue
+                
+                cmdline = proc.info.get('cmdline', [])
+                cwd = proc.info.get('cwd', '')
+                ppid = proc.info.get('ppid')
+                
+                # Is this a WebUI process?
+                is_webui = False
+                
+                # Check by working directory
+                if webui_dir and cwd:
+                    try:
+                        if Path(cwd).resolve() == Path(webui_dir).resolve():
+                            is_webui = True
+                    except Exception:
+                        pass
+                
+                # Check by cmdline
+                if not is_webui:
+                    cmdline_str = ' '.join(cmdline).lower() if cmdline else ''
+                    webui_keywords = ['webui', 'launch.py', 'launch_webui', 'stable-diffusion', 'gradio']
+                    for keyword in webui_keywords:
+                        if keyword in cmdline_str:
+                            is_webui = True
+                            break
+                
+                if is_webui and ppid:
+                    # Check if parent is system or nonexistent
+                    try:
+                        parent = psutil.Process(ppid)
+                        # System PIDs: 0 (System Idle), 1 (init/systemd), 4 (System on Windows)
+                        if ppid in (0, 1, 4):
+                            orphans.append(proc.pid)
+                            logger.debug(
+                                "[Orphan Monitor] Found reparented WebUI process: PID=%s, parent=%s",
+                                proc.pid, ppid
+                            )
+                    except psutil.NoSuchProcess:
+                        # Parent doesn't exist - process is orphaned
+                        orphans.append(proc.pid)
+                        logger.debug(
+                            "[Orphan Monitor] Found orphaned WebUI process: PID=%s, parent PID=%s (dead)",
+                            proc.pid, ppid
+                        )
+                        
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+            except Exception as exc:
+                logger.debug("Error scanning for orphans: %s", exc)
+        
+        return orphans
+
+    def _kill_all_webui_processes(self) -> None:
+        """
+        Kill all WebUI-related processes (used by orphan monitor).
+        
+        PR-PROCESS-001: Calls _kill_process_tree() which now includes
+        CMD/shell wrapper cleanup.
+        """
+        if self.pid:
+            self._kill_process_tree(self.pid)
+        else:
+            logger.warning("[Orphan Monitor] No WebUI PID tracked, cannot kill processes")
+
         logger.debug("[Orphan Monitor] Monitor thread exiting")
 
 

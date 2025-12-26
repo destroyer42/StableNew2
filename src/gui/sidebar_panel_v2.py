@@ -147,7 +147,8 @@ class SidebarPanelV2(ttk.Frame):
         self._on_apply_pack = on_apply_pack
         self._on_change = on_change
 
-        adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", False))  # Changed from True to False
+        # PR-DEFAULT-ADETAILER: Default to True for visibility
+        adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", True))
         self.stage_states: dict[str, tk.BooleanVar] = {
             "txt2img": tk.BooleanVar(value=True),
             "img2img": tk.BooleanVar(value=False),  # Fixed: was True, should be False

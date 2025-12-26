@@ -23,6 +23,14 @@
     "source": "none",
     "description": ""
   },
+  "ArmorSentinelV2": {
+    "name": "ArmorSentinelV2",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\ArmorSentinelV2.safetensors",
+    "file_size": 228489004,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
   "Artistic Image Enhancement v1.1 Lite": {
     "name": "Artistic Image Enhancement v1.1 Lite",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\Artistic Image Enhancement v1.1 Lite.safetensors",
@@ -75,6 +83,14 @@
     "name": "dreamshaperXL10_lora",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\dreamshaperXL10_lora.safetensors",
     "file_size": 681230644,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "DTStyle": {
+    "name": "DTStyle",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\DTStyle.safetensors",
+    "file_size": 228450180,
     "keywords": [],
     "source": "none",
     "description": ""
@@ -179,6 +195,14 @@
     "name": "RPGAngelsXL",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\RPGAngelsXL.safetensors",
     "file_size": 85427260,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "sai_xl_recolor_256lora": {
+    "name": "sai_xl_recolor_256lora",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\sai_xl_recolor_256lora.safetensors",
+    "file_size": 774423040,
     "keywords": [],
     "source": "none",
     "description": ""

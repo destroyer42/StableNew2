@@ -33,8 +33,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.max_detections_var = tk.IntVar(value=8)
         self.mask_blur_var = tk.IntVar(value=4)
         self.merge_var = tk.StringVar(value=self.MERGE_MODES[0])
-        self.only_faces_var = tk.BooleanVar(value=True)
-        self.only_hands_var = tk.BooleanVar(value=False)
         
         # Generation settings (from executor.py lines 1358-1366)
         self.steps_var = tk.IntVar(value=28)
@@ -200,22 +198,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.MERGE_MODES,
             row,
         )
-        row += 1
-
-        toggle_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
-        toggle_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        ttk.Checkbutton(
-            toggle_frame,
-            text="Only faces",
-            variable=self.only_faces_var,
-            style=DARK_CHECKBUTTON_STYLE,
-        ).pack(side="left", padx=(0, 6))
-        ttk.Checkbutton(
-            toggle_frame,
-            text="Only hands",
-            variable=self.only_hands_var,
-            style=DARK_CHECKBUTTON_STYLE,
-        ).pack(side="left")
         row += 1
         
         # PR-GUI-DATA-008: Mask Filter Controls
@@ -392,8 +374,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.max_detections_var.set(int(cfg.get("max_detections", 8)))
         self.mask_blur_var.set(int(cfg.get("mask_blur") or cfg.get("ad_mask_blur", 4)))
         self.merge_var.set(cfg.get("mask_merge_mode") or self.MERGE_MODES[0])
-        self.only_faces_var.set(bool(cfg.get("only_faces", True)))
-        self.only_hands_var.set(bool(cfg.get("only_hands", False)))
         
         # Generation settings (from executor.py fields)
         self.steps_var.set(int(cfg.get("adetailer_steps") or cfg.get("ad_steps", 28)))
@@ -443,8 +423,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "mask_blur": self.mask_blur_var.get(),
             "ad_mask_blur": self.mask_blur_var.get(),  # Dual key
             "mask_merge_mode": self.merge_var.get(),
-            "only_faces": self.only_faces_var.get(),
-            "only_hands": self.only_hands_var.get(),
             
             # Generation settings
             "adetailer_steps": self.steps_var.get(),
@@ -508,8 +486,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.max_detections_var,
             self.mask_blur_var,
             self.merge_var,
-            self.only_faces_var,
-            self.only_hands_var,
             # Generation settings
             self.steps_var,
             self.cfg_var,

@@ -196,7 +196,7 @@ class PipelineTabFrame(ttk.Frame):
         # CRITICAL: These are read by controller when applying config - defaults must be correct
         self.txt2img_enabled = tk.BooleanVar(value=True)  # Only txt2img should default to True
         self.img2img_enabled = tk.BooleanVar(value=False)
-        self.adetailer_enabled = tk.BooleanVar(value=False)  # Fixed: was True
+        self.adetailer_enabled = tk.BooleanVar(value=True)  # PR-DEFAULT-ADETAILER: Default to True for visibility
         self.upscale_enabled = tk.BooleanVar(value=False)
 
         self.upscale_factor = tk.DoubleVar(value=2.0)

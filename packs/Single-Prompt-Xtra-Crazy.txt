@@ -12,6 +12,6 @@ strong subject focus, balanced composition,
 fantasy realism, cinematic atmosphere,
 natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
-<lora:add-detail-xl:0.75> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.7135922330097088> <lora:Realism_Lora_By_Stable_yogi_SDXL8.1:0.8>
+<lora:add-detail-xl:0.75> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.7936893203883495> <lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8> <lora:dreamshaperXL10_lora:0.8>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
 neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes,  glassy eyes, doll-like eyes

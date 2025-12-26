@@ -151,7 +151,17 @@ class QueuePanelV2(ttk.Frame):
         # Button row
         button_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         button_frame.pack(fill="x")
-        button_frame.columnconfigure((0, 1, 2, 3), weight=1)
+        button_frame.columnconfigure((0, 1, 2, 3, 4, 5), weight=1)
+
+        # Move to front button
+        self.move_to_front_button = ttk.Button(
+            button_frame,
+            text="⇈ Front",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_move_to_front,
+            width=8,
+        )
+        self.move_to_front_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
 
         self.move_up_button = ttk.Button(
             button_frame,
@@ -160,7 +170,7 @@ class QueuePanelV2(ttk.Frame):
             command=self._on_move_up,
             width=8,
         )
-        self.move_up_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
+        self.move_up_button.grid(row=0, column=1, sticky="ew", padx=(2, 2))
 
         self.move_down_button = ttk.Button(
             button_frame,
@@ -169,7 +179,17 @@ class QueuePanelV2(ttk.Frame):
             command=self._on_move_down,
             width=8,
         )
-        self.move_down_button.grid(row=0, column=1, sticky="ew", padx=(2, 2))
+        self.move_down_button.grid(row=0, column=2, sticky="ew", padx=(2, 2))
+
+        # Move to back button
+        self.move_to_back_button = ttk.Button(
+            button_frame,
+            text="⇊ Back",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_move_to_back,
+            width=8,
+        )
+        self.move_to_back_button.grid(row=0, column=3, sticky="ew", padx=(2, 2))
 
         self.remove_button = ttk.Button(
             button_frame,
@@ -178,7 +198,7 @@ class QueuePanelV2(ttk.Frame):
             command=self._on_remove,
             width=8,
         )
-        self.remove_button.grid(row=0, column=2, sticky="ew", padx=(2, 2))
+        self.remove_button.grid(row=0, column=4, sticky="ew", padx=(2, 2))
 
         self.clear_button = ttk.Button(
             button_frame,
@@ -187,7 +207,7 @@ class QueuePanelV2(ttk.Frame):
             command=self._on_clear,
             width=8,
         )
-        self.clear_button.grid(row=0, column=3, sticky="ew", padx=(2, 0))
+        self.clear_button.grid(row=0, column=5, sticky="ew", padx=(2, 0))
 
         # Initial button state
         self._update_button_states()
@@ -299,6 +319,11 @@ class QueuePanelV2(ttk.Frame):
         idx = self._get_selected_index()
         has_selection = idx is not None
         has_jobs = len(self._jobs) > 0
+        has_multiple_jobs = len(self._jobs) > 1
+
+        # Move to front: enabled if selection exists and not already first
+        can_move_to_front = has_selection and idx is not None and idx > 0
+        self.move_to_front_button.state(["!disabled"] if can_move_to_front else ["disabled"])
 
         # Move up: enabled if selection is not first
         can_move_up = has_selection and idx is not None and idx > 0
@@ -307,6 +332,10 @@ class QueuePanelV2(ttk.Frame):
         # Move down: enabled if selection is not last
         can_move_down = has_selection and idx is not None and idx < len(self._jobs) - 1
         self.move_down_button.state(["!disabled"] if can_move_down else ["disabled"])
+
+        # Move to back: enabled if selection exists and not already last
+        can_move_to_back = has_selection and idx is not None and idx < len(self._jobs) - 1
+        self.move_to_back_button.state(["!disabled"] if can_move_to_back else ["disabled"])
 
         # Remove: enabled if something is selected
         self.remove_button.state(["!disabled"] if has_selection else ["disabled"])
@@ -381,6 +410,64 @@ class QueuePanelV2(ttk.Frame):
                 self._select_index(new_idx)
                 self._flash_move(new_idx)
                 self._emit_status_message(f"Moved job to position #{new_idx + 1}")
+            
+            self.after(50, _apply_feedback)
+
+    def _on_move_to_front(self) -> None:
+        """Move the selected job to the front of the queue."""
+        job = self._get_selected_job()
+        idx = self._get_selected_index()
+        
+        if not job or idx is None:
+            return
+        
+        # Check if already at front
+        if idx == 0:
+            self._show_boundary_feedback("top")
+            return
+        
+        # Perform the move
+        if self.controller:
+            move_fn = getattr(self.controller, "move_queue_job_to_front", None)
+            if callable(move_fn):
+                move_fn(job.job_id)
+            
+            # Update selection to follow the moved item (now at front)
+            new_idx = 0
+            
+            def _apply_feedback() -> None:
+                self._select_index(new_idx)
+                self._flash_move(new_idx)
+                self._emit_status_message(f"Moved job to front (position #1)")
+            
+            self.after(50, _apply_feedback)
+
+    def _on_move_to_back(self) -> None:
+        """Move the selected job to the back of the queue."""
+        job = self._get_selected_job()
+        idx = self._get_selected_index()
+        
+        if not job or idx is None:
+            return
+        
+        # Check if already at back
+        if idx >= len(self._jobs) - 1:
+            self._show_boundary_feedback("bottom")
+            return
+        
+        # Perform the move
+        if self.controller:
+            move_fn = getattr(self.controller, "move_queue_job_to_back", None)
+            if callable(move_fn):
+                move_fn(job.job_id)
+            
+            # Update selection to follow the moved item (now at back)
+            new_idx = len(self._jobs) - 1
+            
+            def _apply_feedback() -> None:
+                self._select_index(new_idx)
+                self._flash_move(new_idx)
+                self._emit_status_message(f"Moved job to back (position #{new_idx + 1})")
             
             self.after(50, _apply_feedback)
 

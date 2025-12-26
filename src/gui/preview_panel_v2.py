@@ -1154,11 +1154,10 @@ class PreviewPanelV2(ttk.Frame):
                 logger.warning("Unsupported preview state schema, ignoring")
                 return
             
-            # Restore show_preview flag (PR-PREVIEW-001: default False)
-            show_preview = state.get("show_preview", False)
-            self._show_preview_var.set(show_preview)
+            # NOTE: show_preview is NOT restored - always starts False (unchecked)
+            # User must manually enable preview each session if desired
             
-            logger.debug(f"Restored preview panel state: show_preview={show_preview}")
+            logger.debug("Restored preview panel state (show_preview always defaults to False)")
         except Exception as e:
             logger.warning(f"Failed to restore preview panel state: {e}")
 

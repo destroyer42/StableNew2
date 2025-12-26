@@ -5,6 +5,11 @@
     "file_size": 426136
   },
   {
+    "name": "bad_prompt",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\bad_prompt.safetensors",
+    "file_size": 131224
+  },
+  {
     "name": "easynegative",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\easynegative.safetensors",
     "file_size": 24655
@@ -23,6 +28,11 @@
     "name": "sdxl_cyberrealistic_simpleneg-neg",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\sdxl_cyberrealistic_simpleneg-neg.safetensors",
     "file_size": 360600
+  },
+  {
+    "name": "SDXLnegXL",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\SDXLnegXL.safetensors",
+    "file_size": 614552
   },
   {
     "name": "Stable-Yogis-Makeup-Enhancer-XL",

@@ -217,6 +217,108 @@ class JobQueue:
                     return True
             return False
 
+    def move_to_front(self, job_id: str) -> bool:
+        """Move a queued job to the front of the queue (highest priority within its priority level).
+
+        Args:
+            job_id: The ID of the job to move.
+
+        Returns:
+            True if the job was moved, False if not found or already at front.
+        """
+        with self._lock:
+            queued = self._get_ordered_queued_jobs()
+            if not queued:
+                return False
+            
+            # Find the job
+            job_index = None
+            job_priority = None
+            for i, (priority, counter, jid) in enumerate(queued):
+                if jid == job_id:
+                    job_index = i
+                    job_priority = priority
+                    break
+            
+            if job_index is None:
+                return False  # Job not found
+            
+            if job_index == 0:
+                return False  # Already at front
+            
+            # Get the minimum counter value (front of queue) for this priority
+            # We want to assign a counter lower than the first job in the same priority level
+            min_counter_for_priority = float('inf')
+            for priority, counter, jid in queued:
+                if priority == job_priority:
+                    min_counter_for_priority = min(min_counter_for_priority, counter)
+            
+            # Assign a new lower counter (move to front)
+            new_counter = min_counter_for_priority - 1
+            
+            # Update the queue with the new counter
+            new_queue = []
+            for priority, counter, jid in self._queue:
+                if jid == job_id:
+                    new_queue.append((priority, new_counter, jid))
+                else:
+                    new_queue.append((priority, counter, jid))
+            self._queue = new_queue
+            heapq.heapify(self._queue)
+            self._notify_state_listeners()
+            return True
+
+    def move_to_back(self, job_id: str) -> bool:
+        """Move a queued job to the back of the queue (lowest priority within its priority level).
+
+        Args:
+            job_id: The ID of the job to move.
+
+        Returns:
+            True if the job was moved, False if not found or already at back.
+        """
+        with self._lock:
+            queued = self._get_ordered_queued_jobs()
+            if not queued:
+                return False
+            
+            # Find the job
+            job_index = None
+            job_priority = None
+            for i, (priority, counter, jid) in enumerate(queued):
+                if jid == job_id:
+                    job_index = i
+                    job_priority = priority
+                    break
+            
+            if job_index is None:
+                return False  # Job not found
+            
+            if job_index == len(queued) - 1:
+                return False  # Already at back
+            
+            # Get the maximum counter value (back of queue) for this priority
+            # We want to assign a counter higher than the last job in the same priority level
+            max_counter_for_priority = float('-inf')
+            for priority, counter, jid in queued:
+                if priority == job_priority:
+                    max_counter_for_priority = max(max_counter_for_priority, counter)
+            
+            # Assign a new higher counter (move to back)
+            new_counter = max_counter_for_priority + 1
+            
+            # Update the queue with the new counter
+            new_queue = []
+            for priority, counter, jid in self._queue:
+                if jid == job_id:
+                    new_queue.append((priority, new_counter, jid))
+                else:
+                    new_queue.append((priority, counter, jid))
+            self._queue = new_queue
+            heapq.heapify(self._queue)
+            self._notify_state_listeners()
+            return True
+
     def remove(self, job_id: str) -> Job | None:
         """Remove a job from the queue.
 
