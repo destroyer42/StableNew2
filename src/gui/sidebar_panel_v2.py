@@ -341,7 +341,7 @@ class SidebarPanelV2(ttk.Frame):
             text="+ New",
             width=8,
             command=self._create_preset_from_stages,
-            style="Primary.TButton",
+            style="Dark.TButton",
         )
         create_button.grid(row=0, column=0, sticky="w")
 
@@ -407,6 +407,7 @@ class SidebarPanelV2(ttk.Frame):
             text="Refresh",
             width=8,
             command=self.refresh_prompt_packs,
+            style="Dark.TButton",
         )
         self.refresh_packs_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
@@ -417,19 +418,19 @@ class SidebarPanelV2(ttk.Frame):
         btn_frame.columnconfigure(2, weight=1)
         btn_frame.columnconfigure(3, weight=1)
         self.load_config_button = ttk.Button(
-            btn_frame, text="Load Config", command=self._on_pack_load_config
+            btn_frame, text="Load Config", command=self._on_pack_load_config, style="Dark.TButton"
         )
         self.load_config_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
         self.apply_config_button = ttk.Button(
-            btn_frame, text="Apply Config", command=self._on_pack_apply_config
+            btn_frame, text="Apply Config", command=self._on_pack_apply_config, style="Dark.TButton"
         )
         self.apply_config_button.grid(row=0, column=1, sticky="ew", padx=(0, 2))
         self.add_to_job_button = ttk.Button(
-            btn_frame, text="Add to Job", command=self._on_add_to_job
+            btn_frame, text="Add to Job", command=self._on_add_to_job, style="Dark.TButton"
         )
         self.add_to_job_button.grid(row=0, column=2, sticky="ew", padx=(0, 2))
         self.preview_toggle_button = ttk.Button(
-            btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED
+            btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED, style="Dark.TButton"
         )
         self.preview_toggle_button.grid(row=0, column=3, sticky="ew")
 

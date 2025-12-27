@@ -286,3 +286,33 @@ def get_stage_plan(controller: AppController) -> StageExecutionPlan | None:
     if pipeline_ctrl is None:
         return None
     return getattr(pipeline_ctrl, "get_last_stage_execution_plan_for_tests", lambda: None)()
+
+
+# ========================================
+# CI Mode Detection Helpers
+# ========================================
+
+
+def is_ci_mode() -> bool:
+    """
+    Check if running in CI environment.
+
+    Returns:
+        True if CI environment variable is set (GitHub Actions, etc.)
+    """
+    import os
+
+    return os.getenv("CI", "").lower() in ("true", "1", "yes")
+
+
+def should_skip_real_webui_test() -> bool:
+    """
+    Determine if test should be skipped due to WebUI dependency.
+
+    Some tests require real WebUI (e.g., image quality validation).
+    These should skip in CI mode.
+
+    Returns:
+        True if test should skip (CI mode without real WebUI)
+    """
+    return is_ci_mode()

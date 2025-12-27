@@ -167,7 +167,21 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
 
         temp_path = state_path.with_suffix(state_path.suffix + ".tmp")
         _QUEUE_CODEC.write_jsonl(temp_path, [data])
-        temp_path.replace(state_path)
+        
+        # Windows-safe atomic replace: delete target first if it exists
+        try:
+            if state_path.exists():
+                state_path.unlink()
+            temp_path.rename(state_path)
+        except (OSError, PermissionError) as e:
+            logger.warning(f"Failed atomic rename, trying direct write: {e}")
+            # Fallback: write directly to target (less safe but works)
+            _QUEUE_CODEC.write_jsonl(state_path, [data])
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass
 
         logger.debug("Saved queue state: %d jobs", len(validated_jobs))
         logger.debug(

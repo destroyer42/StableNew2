@@ -97,6 +97,8 @@ E2E_Golden_Path_Test_Matrix_v2.6.md
 
 KNOWN_PITFALLS_QUEUE_TESTING.md
 
+PR-CI-JOURNEY-001.md ← NEW: CI Journey Tests with WebUI Mocks
+
 Test_Fixtures_Guide_v2.6.md (if present in repo)
 
 These ensure fidelity to the architectural guarantees.

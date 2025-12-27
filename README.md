@@ -295,6 +295,39 @@ Risk tiering & safety rules → /docs/GOVERNANCE_v2.5.md
 
 Testing is required for any PR that touches pipeline or controller logic.
 
+CI/CD
+
+StableNew uses GitHub Actions for continuous integration:
+
+Unit Tests
+- Runs on every push/PR to `main` and `cooking`
+- Python 3.11 & 3.12 on ubuntu-latest
+- Badge: ![CI](https://github.com/destroyer42/StableNew2/workflows/CI/badge.svg)
+
+Journey Tests (Mocked)
+- Runs on every push/PR to `main` and `cooking`
+- Uses WebUI mocks (no real SD WebUI required)
+- Validates clean shutdown, thread management, E2E workflows
+- Badge: ![Journey Tests](https://github.com/destroyer42/StableNew2/workflows/Journey%20Tests%20(CI%20-%20Mocked)/badge.svg)
+
+Journey Tests (Real WebUI)
+- Runs on self-hosted Windows runner (scheduled daily)
+- Requires real SD WebUI for actual image generation
+- Validates full E2E with real models
+
+Running Tests Locally
+
+```bash
+# Unit tests
+pytest tests/ -v
+
+# Journey tests with mocks (CI mode)
+CI=true pytest tests/journeys/ -v
+
+# Journey tests with real WebUI
+pytest tests/journeys/ -v  # requires WebUI at localhost:7860
+```
+
 Getting Started
 Prerequisites
 

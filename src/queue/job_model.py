@@ -164,6 +164,10 @@ class Job:
             return str(payload)[:64]
         return self.job_id
 
+    def get_display_summary(self) -> str:
+        """Alias for summary() for GUI compatibility."""
+        return self.summary()
+
 
 @dataclass
 class PromptPackEntryResult:
