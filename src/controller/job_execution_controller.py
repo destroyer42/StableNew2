@@ -103,6 +103,9 @@ class JobExecutionController:
                     self._fn = fn
 
                 def run_njr(self, record: NormalizedJobRecord, *_: Any, **__: Any) -> Any:
+                    # Call run_njr method on the runner, not the runner as a function
+                    if hasattr(self._fn, "run_njr"):
+                        return self._fn.run_njr(record, *_, **__)
                     return self._fn(record)  # type: ignore[arg-type]
 
             replay_target = _ExecuteAdapter(self._execute_job)

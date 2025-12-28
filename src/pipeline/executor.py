@@ -242,6 +242,42 @@ class Pipeline:
             return output_dir.parent
         return output_dir
 
+    def _extract_stage_history_from_input(self, input_image_path: Path) -> list[dict[str, Any]]:
+        """Extract stage history from input image metadata.
+        
+        Reads embedded metadata from the input image and extracts the stage_history
+        array plus the current stage's manifest, building a complete history chain.
+        
+        Args:
+            input_image_path: Path to input image
+            
+        Returns:
+            List of stage manifests in chronological order
+        """
+        try:
+            from src.utils.image_metadata import extract_embedded_metadata
+            
+            result = extract_embedded_metadata(input_image_path)
+            if result.status == "ok" and result.payload:
+                # Get existing stage history
+                stage_history = result.payload.get("stage_history", [])
+                
+                # Add the current stage's manifest to history
+                if "stage_manifest" in result.payload:
+                    current_manifest = {
+                        "stage": result.payload.get("stage", "unknown"),
+                        "timestamp": result.payload.get("stage_manifest", {}).get("timestamp", ""),
+                        "name": result.payload.get("stage_manifest", {}).get("name", ""),
+                        "config_hash": result.payload.get("stage_manifest", {}).get("config_hash", ""),
+                        "seeds": result.payload.get("seeds", {}),
+                    }
+                    # Create new history with current manifest appended
+                    return stage_history + [current_manifest]
+                return stage_history
+        except Exception as exc:
+            logger.debug(f"Could not extract stage history from {input_image_path.name}: {exc}")
+        return []
+
     def _build_image_metadata_builder(
         self,
         *,
@@ -1302,6 +1338,8 @@ class Pipeline:
                 "vae": vae_name or "Automatic",
                 "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
                 "stage_duration_ms": stage_duration_ms,
+                # Stage history for full pipeline tracking
+                "stage_history": [],  # txt2img is first stage, no prior history
                 # Legacy fields for backward compatibility
                 "requested_seed": config.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),
@@ -1323,8 +1361,9 @@ class Pipeline:
                 run_dir=run_dir,
                 manifest=metadata,
             )
-            if save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder):
-                self.logger.save_manifest(run_dir, safe_name, metadata)
+            actual_path = save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder)
+            if actual_path:
+                self.logger.save_manifest(run_dir, actual_path.stem, metadata)
                 results.append(metadata)
 
         logger.info(f"txt2img completed: {len(results)} images generated")
@@ -1441,8 +1480,9 @@ class Pipeline:
                 run_dir=run_dir,
                 manifest=metadata,
             )
-            if save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder):
-                self.logger.save_manifest(run_dir, image_name, metadata)
+            actual_path = save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder)
+            if actual_path:
+                self.logger.save_manifest(run_dir, actual_path.stem, metadata)
                 results.append(metadata)
 
         logger.info(f"txt2img completed: {len(results)} images generated")
@@ -1568,6 +1608,9 @@ class Pipeline:
         image_name = f"img2img_{timestamp}"
         image_path = run_dir / "img2img" / f"{image_name}.png"
 
+        # Extract stage history from input image
+        stage_history = self._extract_stage_history_from_input(input_image_path)
+
         metadata = {
             "name": image_name,
             "stage": "img2img",
@@ -1585,6 +1628,8 @@ class Pipeline:
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
             "stage_duration_ms": stage_duration_ms,
+            # Accumulated stage history from input image
+            "stage_history": stage_history,
         }
         metadata_builder = self._build_image_metadata_builder(
             image_path=image_path,
@@ -1592,12 +1637,13 @@ class Pipeline:
             run_dir=run_dir,
             manifest=metadata,
         )
-        if save_image_from_base64(
+        actual_path = save_image_from_base64(
             response["images"][0], image_path, metadata_builder=metadata_builder
-        ):
-            self.logger.save_manifest(run_dir, image_name, metadata)
+        )
+        if actual_path:
+            self.logger.save_manifest(run_dir, actual_path.stem, metadata)
             self._last_img2img_result = metadata
-            logger.info(f"img2img completed: {image_name}")
+            logger.info(f"img2img completed: {actual_path.name}")
             return metadata
         return None
 
@@ -1826,6 +1872,9 @@ class Pipeline:
         from src.utils.file_io import get_unique_output_path
         image_path = get_unique_output_path(image_path)
 
+        # Extract stage history from input image
+        stage_history = self._extract_stage_history_from_input(input_image_path)
+
         metadata = {
             "name": final_image_name,
             "stage": "adetailer",
@@ -1846,6 +1895,8 @@ class Pipeline:
             "vae": config.get("vae") or "Automatic",
             "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
             "stage_duration_ms": stage_duration_ms,
+            # Accumulated stage history from input image
+            "stage_history": stage_history,
             # Legacy fields for backward compatibility
             "requested_seed": config.get("seed", -1),
             "actual_seed": gen_info.get("seed"),
@@ -1857,13 +1908,14 @@ class Pipeline:
             run_dir=run_dir,
             manifest=metadata,
         )
-        if save_image_from_base64(
+        actual_path = save_image_from_base64(
             response["images"][0], image_path, metadata_builder=metadata_builder
-        ):
+        )
+        if actual_path:
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
             manifest_dir = Path(run_dir) / "manifests"
-            # PR-FILENAME-001: No redundant suffix, image_name already has all info
-            manifest_path = manifest_dir / f"{final_image_name}.json"
+            # Use actual image stem (includes _copy suffix if collision occurred)
+            manifest_path = manifest_dir / f"{actual_path.stem}.json"
             try:
                 # Ensure parent directory exists before writing
                 manifest_path.parent.mkdir(exist_ok=True, parents=True)
@@ -1933,6 +1985,9 @@ class Pipeline:
         image_name = f"upscaled_{input_image_path.stem}_{timestamp}"
         image_path = run_dir / "upscaled" / f"{image_name}.png"
 
+        # Extract stage history from input image
+        stage_history = self._extract_stage_history_from_input(input_image_path)
+
         metadata = {
             "name": image_name,
             "stage": "upscale",
@@ -1947,6 +2002,8 @@ class Pipeline:
             "vae": config.get("vae"),  # May be None for upscale
             "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
             "stage_duration_ms": stage_duration_ms,
+            # Accumulated stage history from input image
+            "stage_history": stage_history,
             # Legacy fields for backward compatibility
             "requested_seed": config.get("seed"),  # May be None for upscale
             "actual_seed": gen_info.get("seed"),  # Likely None for upscale
@@ -1958,10 +2015,11 @@ class Pipeline:
             run_dir=run_dir,
             manifest=metadata,
         )
-        if save_image_from_base64(
+        actual_path = save_image_from_base64(
             response["image"], image_path, metadata_builder=metadata_builder
-        ):
-            self.logger.save_manifest(run_dir, image_name, metadata)
+        )
+        if actual_path:
+            self.logger.save_manifest(run_dir, actual_path.stem, metadata)
             logger.info("Upscale completed successfully")
             return metadata
 
@@ -2982,15 +3040,16 @@ class Pipeline:
                     run_dir=run_dir,
                     manifest=image_metadata,
                 )
-                if not save_image_from_base64(
+                actual_path = save_image_from_base64(
                     response["images"][batch_idx],
                     image_path,
                     metadata_builder=metadata_builder,
-                ):
+                )
+                if not actual_path:
                     logger.error("Failed to save image %s", image_path)
                     continue
                     
-                saved_paths.append(image_path)
+                saved_paths.append(actual_path)
             
             # Use the first image for metadata and return value (backward compatibility)
             if saved_paths:
@@ -3207,13 +3266,14 @@ class Pipeline:
                 run_dir=run_dir,
                 manifest=metadata,
             )
-            if save_image_from_base64(
+            actual_path = save_image_from_base64(
                 response["images"][0], image_path, metadata_builder=metadata_builder
-            ):
+            )
+            if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
-                # PR-FILENAME-001: No redundant suffix, image_name already has all info
-                manifest_path = manifest_dir / f"{image_name}.json"
+                # Use actual stem from saved path (includes _copy suffix if collision)
+                manifest_path = manifest_dir / f"{actual_path.stem}.json"
                 try:
                     # Ensure parent directory exists before writing
                     manifest_path.parent.mkdir(exist_ok=True, parents=True)
@@ -3491,13 +3551,14 @@ class Pipeline:
                 run_dir=run_dir,
                 manifest=metadata,
             )
-            if save_image_from_base64(
+            actual_path = save_image_from_base64(
                 image_data, image_path, metadata_builder=metadata_builder
-            ):
+            )
+            if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
-                # PR-FILENAME-001: No redundant suffix, image_name already has all info
-                manifest_path = manifest_dir / f"{image_name}.json"
+                # Use actual stem from saved path (includes _copy suffix if collision)
+                manifest_path = manifest_dir / f"{actual_path.stem}.json"
                 try:
                     # Ensure parent directory exists before writing
                     manifest_path.parent.mkdir(exist_ok=True, parents=True)

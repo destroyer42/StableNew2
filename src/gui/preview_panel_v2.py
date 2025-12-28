@@ -158,25 +158,26 @@ class PreviewPanelV2(ttk.Frame):
         self.stage_summary_label.pack(anchor=tk.W, pady=(4, 0))
 
         self.stage_flags_label = ttk.Label(
-            self.body,
+            left_frame,  # PR-GUI-FIX: pack into left_frame, not body (grid/pack conflict)
             text=self._format_flags(refiner=False, hires=False, upscale=False),
             style=STATUS_LABEL_STYLE,
         )
         self.stage_flags_label.pack(anchor=tk.W, pady=(0, 4))
 
         self.randomizer_label = ttk.Label(
-            self.body, text="Randomizer: OFF", style=STATUS_LABEL_STYLE
+            left_frame,  # PR-GUI-FIX: pack into left_frame, not body
+            text="Randomizer: OFF", style=STATUS_LABEL_STYLE
         )
         self.randomizer_label.pack(anchor=tk.W, pady=(0, 4))
 
         self.learning_metadata_label = ttk.Label(
-            self.body,
+            left_frame,  # PR-GUI-FIX: pack into left_frame, not body
             text="Learning metadata: N/A",
             style=STATUS_LABEL_STYLE,
         )
         self.learning_metadata_label.pack(anchor=tk.W)
 
-        self.actions_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
+        self.actions_frame = ttk.Frame(left_frame, style=SURFACE_FRAME_STYLE)  # PR-GUI-FIX: parent is left_frame
         self.actions_frame.pack(fill=tk.X, pady=(12, 0))
         self.actions_frame.columnconfigure((0, 1), weight=1)
 

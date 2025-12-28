@@ -1,18 +1,19 @@
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.5508474576271186> <lora:CinematicStyle_v1:0.5472972972972973> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:NSFWFilterXL_animagine:0.7232142857142857>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere, a
+[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
+<lora:add-detail-xl:0.8109756097560976> <lora:CinematicStyle_v1:0.7258064516129032> <lora:DetailedEyes_V3:0.5567685589519651> <lora:Super_Eye_Detailer_By_Stable_Yogi_SDPD0:0.5439560439560439>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere,
 [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
 <lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame
 
-<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner>
 (masterpiece, best quality) [[time]], [[perspective]],  [[number]] women of various adventuring classes (cleric, warrior, archer, rogue), traveling through [[environment]], [[narrative]] with [[eyes]] eyes and [[hair]]-hair, wearing [[clothes]] are clustered around [[pose]], and [[activity]]
-<lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8> <lora:DetailedEyes_V3:0.8899253731343284> <lora:NSFWFilterXL_animagine:0.6136363636363636> <lora:anatomy_helper:0.8> <lora:sdxl1.0_realastic_female_lora:0.7019704433497537>
-neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+<lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8> <lora:DetailedEyes_V3:0.8899253731343284> <lora:NsfwPovAllInOneLoraSdxl-000009:0.8> <lora:WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,:0.8> <lora:PerfectEyesXL:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:bad_prompt>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame

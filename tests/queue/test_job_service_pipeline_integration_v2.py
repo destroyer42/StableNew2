@@ -198,7 +198,9 @@ def runner(job_queue: JobQueue, recording_callable: RecordingRunCallable) -> Sin
 @pytest.fixture
 def job_service(job_queue: JobQueue, runner: SingleNodeJobRunner) -> JobService:
     """JobService wired to queue and runner."""
-    return JobService(job_queue=job_queue, runner=runner)
+    service = JobService(job_queue=job_queue, runner=runner)
+    service.auto_run_enabled = True  # Enable auto-start for tests
+    return service
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +363,7 @@ class TestQueuedModeExecution:
             job_queue=job_queue, run_callable=blocking_callable, poll_interval=0.01
         )
         service = JobService(job_queue=job_queue, runner=runner)
+        service.auto_run_enabled = True  # Enable auto-start
 
         job = make_job("queued-block-001")
 

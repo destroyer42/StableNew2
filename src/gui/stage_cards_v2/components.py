@@ -83,23 +83,57 @@ class LabeledSlider(ttk.Frame):
 
 
 class PromptSection(ttk.Frame):
+    """Prompt text area with optional scrollbar (PR-GUI-LAYOUT-002).
+
+    Args:
+        master: Parent widget
+        title: Label text ("Prompt", "Positive", etc.)
+        height: Number of visible lines (default 3)
+        show_scrollbar: Whether to show vertical scrollbar (default True)
+    """
+
     def __init__(
-        self, master: tk.Misc, *, title: str = "Prompt", height: int = 3, **kwargs
+        self,
+        master: tk.Misc,
+        *,
+        title: str = "Prompt",
+        height: int = 3,
+        show_scrollbar: bool = True,
+        **kwargs,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=4, **kwargs)
         ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=(0, 2)
         )
+
+        # Text area with scrollbar
+        text_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
+        text_frame.grid(row=1, column=0, sticky="nsew")
+        text_frame.columnconfigure(0, weight=1)
+        text_frame.rowconfigure(0, weight=1)
+
         self.text = tk.Text(
-            self,
+            text_frame,
             height=height,
             wrap="word",
             bg=theme_v2.BACKGROUND_ELEVATED,
             fg=theme_v2.TEXT_PRIMARY,
             insertbackground=theme_v2.TEXT_PRIMARY,
-            relief="flat",
+            relief="solid",
+            borderwidth=1,
+            highlightthickness=0,
         )
-        self.text.grid(row=1, column=0, sticky="nsew")
+        self.text.grid(row=0, column=0, sticky="nsew")
+
+        if show_scrollbar:
+            scrollbar = ttk.Scrollbar(
+                text_frame,
+                orient="vertical",
+                command=self.text.yview,
+            )
+            scrollbar.grid(row=0, column=1, sticky="ns")
+            self.text.configure(yscrollcommand=scrollbar.set)
+
         self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
 

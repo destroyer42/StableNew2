@@ -4,7 +4,7 @@
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\n[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
@@ -19,29 +19,25 @@
         "loras": [
           [
             "add-detail-xl",
-            0.5508474576271186
+            0.8109756097560976
           ],
           [
             "CinematicStyle_v1",
-            0.5472972972972973
+            0.7258064516129032
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.5567685589519651
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
-          ],
-          [
-            "NSFWFilterXL_animagine",
-            0.7232142857142857
+            "Super_Eye_Detailer_By_Stable_Yogi_SDPD0",
+            0.5439560439560439
           ]
         ]
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\n[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere,\n[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
@@ -79,15 +75,17 @@
       {
         "index": 2,
         "text": "(masterpiece, best quality) [[time]], [[perspective]],  [[number]] women of various adventuring classes (cleric, warrior, archer, rogue), traveling through [[environment]], [[narrative]] with [[eyes]] eyes and [[hair]]-hair, wearing [[clothes]] are clustered around [[pose]], and [[activity]]",
-        "negative": "",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
-          "Stable_Yogis_Realism_Positives_V1"
+          "Stable_Yogis_Realism_Positives_V1",
+          "face_refiner"
         ],
         "negative_embeddings": [
           "Stable_Yogis_Anatomy_Negatives_V1-neg",
           "ac_neg1",
-          "sdxl_cyberrealistic_simpleneg-neg"
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "bad_prompt"
         ],
         "loras": [
           [
@@ -99,16 +97,16 @@
             0.8899253731343284
           ],
           [
-            "NSFWFilterXL_animagine",
-            0.6136363636363636
-          ],
-          [
-            "anatomy_helper",
+            "NsfwPovAllInOneLoraSdxl-000009",
             0.8
           ],
           [
-            "sdxl1.0_realastic_female_lora",
-            0.7019704433497537
+            "WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,",
+            0.8
+          ],
+          [
+            "PerfectEyesXL",
+            0.8
           ]
         ]
       }
@@ -121,11 +119,10 @@
         {
           "name": "time",
           "values": [
-            "rim-lit silhouette",
-            "backlit through smoke",
-            "soft volumetric light rays",
-            "flickering firelight",
-            "moonlight breaking through clouds",
+            "full natural light",
+            "well lit",
+            "bright firelight",
+            "bright moonlight breaking through clouds",
             "harsh directional side lighting",
             "diffused overcast lighting"
           ]
@@ -133,12 +130,12 @@
         {
           "name": "clothes",
           "values": [
-            "g-string",
+            "nothing",
             "only a tight shirt with underboob",
             "nothing",
-            "lingerie",
-            "bikini armor",
-            "micro-kini"
+            "only an open jacket",
+            "only a translucent robe",
+            "see through thong"
           ]
         },
         {
@@ -150,27 +147,25 @@
             "silver",
             "black",
             "auburn",
-            "strawberry",
+            "strawberry-blonde",
             "fiery"
           ]
         },
         {
           "name": "pose",
           "values": [
-            "casual",
+            "wide stance",
             "spread-eagled",
-            "kneeling",
-            "bending forward",
-            "bending backward",
-            "on all fours"
+            "kneeling with hands behind head",
+            "bending forward suggestively"
           ]
         },
         {
           "name": "activity",
           "values": [
-            "singing",
+            "sex",
             "dancing",
-            "hiking",
+            "squatting",
             "masturbating",
             "orgy"
           ]
@@ -202,7 +197,6 @@
           "values": [
             "low angle",
             "high angle",
-            "from behind",
             "pov",
             "cowboy shot"
           ]
@@ -243,7 +237,7 @@
       "clip_skip": 2,
       "seed": -1,
       "subseed": -1,
-      "subseed_strength": 0.0,
+      "subseed_strength": 0.5,
       "use_refiner": false,
       "enable_hr": false,
       "hr_upscaler": "Latent",
@@ -251,7 +245,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.27,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "Use base model"
+      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
     },
     "img2img": {
       "model": "",
@@ -268,30 +262,29 @@
       "upscaler": "4xUltrasharp_4xUltrasharpV10",
       "upscale_mode": "single",
       "steps": 15,
-      "denoising_strength": 0.2,
+      "denoising_strength": 0.25,
       "upscaling_resize": 2.0,
       "tile_size": 0,
-      "face_restore": false
+      "face_restore": false,
+      "face_restore_method": "CodeFormer"
     },
     "adetailer": {
       "adetailer_model": "mediapipe_face_full",
       "ad_model": "mediapipe_face_full",
-      "adetailer_confidence": 0.59,
-      "ad_confidence": 0.59,
-      "max_detections": 3,
-      "mask_blur": 4,
-      "ad_mask_blur": 4,
+      "adetailer_confidence": 0.39,
+      "ad_confidence": 0.39,
+      "max_detections": 4,
+      "mask_blur": 5,
+      "ad_mask_blur": 5,
       "mask_merge_mode": "keep",
-      "only_faces": true,
-      "only_hands": false,
-      "adetailer_steps": 8,
-      "ad_steps": 8,
-      "adetailer_cfg": 5.0,
-      "ad_cfg_scale": 5.0,
+      "adetailer_steps": 10,
+      "ad_steps": 10,
+      "adetailer_cfg": 6.0,
+      "ad_cfg_scale": 6.0,
       "adetailer_sampler": "DPM++ 2M",
       "ad_sampler": "DPM++ 2M",
-      "adetailer_denoise": 0.16,
-      "ad_denoising_strength": 0.16,
+      "adetailer_denoise": 0.26,
+      "ad_denoising_strength": 0.26,
       "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nhighly realistic human face,\nnatural skin texture,\nclear skin pores,\nnatural eye reflections,\nsharp focus,\nphotorealistic detainatural facial detail,\nsubtle skin texture,\nrealistic eyes,\npreserve original expression\n",
       "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nhighly realistic human face,\nnatural skin texture,\nclear skin pores,\nnatural eye reflections,\nsharp focus,\nphotorealistic detainatural facial detail,\nsubtle skin texture,\nrealistic eyes,\npreserve original expression\n",
       "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nlow quality,\nblurry,\nout of focus,\ndistorted face,\nasymmetrical face,\ndeformed facial features,\nwarped eyes,\ncrossed eyes,\nextra eyes,\nextra face,\nmultiple faces,\nmutated face,\nplastic skin,\nover-smoothed skin,\nover-sharpened,\nharsh shadows,\nunrealistic skin texture,\nuncanny valley",
@@ -305,7 +298,7 @@
       "enable_hands_pass": true,
       "hands_model": "hand_yolov8s.pt",
       "hands_padding": 32,
-      "mask_filter_method": "largest",
+      "mask_filter_method": "all",
       "mask_k_largest": 3,
       "ad_mask_k_largest": 3,
       "mask_min_ratio": 0.01,
@@ -328,7 +321,7 @@
       "output_dir": "output",
       "filename_pattern": "{seed}",
       "image_format": "png",
-      "seed_mode": "fixed",
+      "seed_mode": "random",
       "txt2img_enabled": true,
       "img2img_enabled": false,
       "adetailer_enabled": true,

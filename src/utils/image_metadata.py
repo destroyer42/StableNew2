@@ -297,7 +297,8 @@ def build_payload_from_manifest(
             config_hash = sha256_hex(canonical_json_bytes(config_value))
         except Exception:
             config_hash = ""
-    return {
+    
+    payload = {
         "job_id": manifest.get("job_id") or "",
         "run_id": run_dir.name,
         "stage": stage,
@@ -321,4 +322,8 @@ def build_payload_from_manifest(
             "timestamp": manifest.get("timestamp") or "",
             "config_hash": config_hash,
         },
+        # Include full stage history chain for complete pipeline tracking
+        "stage_history": manifest.get("stage_history", []),
     }
+    
+    return payload

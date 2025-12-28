@@ -298,9 +298,11 @@ class WebUIProcessManager:
                     stream.close()
             except Exception:
                 pass
+        # PR-SHUTDOWN-FIX: Increase timeout to 5s since stdout/stderr threads
+        # may be blocked reading from pipes that take time to close
         for thread in (self._stdout_thread, self._stderr_thread):
             if thread and thread.is_alive():
-                thread.join(timeout=2.0)
+                thread.join(timeout=5.0)
         for handle in (self._stdout_log_file, self._stderr_log_file):
             try:
                 if handle is not None:

@@ -1,4 +1,4 @@
-<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner>
 a highly detailed fantasy scene centered on [[number]],
 a female figure as the clear primary subject,
 [[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,
@@ -12,6 +12,6 @@ strong subject focus, balanced composition,
 fantasy realism, cinematic atmosphere,
 natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
-<lora:add-detail-xl:0.75> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.7936893203883495> <lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8> <lora:dreamshaperXL10_lora:0.8>
-neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+<lora:add-detail-xl:0.6875> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.4660194174757281> <lora:finenude_v0_2a:0.4528301886792453>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:bad_prompt> <embedding:easynegative>
 neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes,  glassy eyes, doll-like eyes

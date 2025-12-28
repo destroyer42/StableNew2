@@ -1,0 +1,153 @@
+{
+  "repo_root": "C:\\Users\\rob\\projects\\StableNew\\scripts",
+  "created_at": "2025-12-28T12:45:45",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\scripts\\snapshots\\StableNew-snapshot-20251228-124545.zip",
+  "file_count": 23,
+  "total_size_bytes": 54776,
+  "excludes": [
+    ".DS_Store",
+    ".git",
+    ".idea",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "archive",
+    "archive_tmp",
+    "build",
+    "dist",
+    "env",
+    "htmlcov",
+    "logs",
+    "node_modules",
+    "output",
+    "runs",
+    "snapshots",
+    "venv"
+  ],
+  "excluded_exts": [
+    ".log",
+    ".pyc",
+    ".pyd",
+    ".pyo",
+    ".tmp"
+  ],
+  "files": [
+    {
+      "path": "a1111_batch_run.py",
+      "size_bytes": 2522,
+      "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "a1111_upscale_folder.py",
+      "size_bytes": 1189,
+      "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "bootstrap_agents.py",
+      "size_bytes": 3190,
+      "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "check_daemon_threads.py",
+      "size_bytes": 3945,
+      "mtime_iso": "2025-12-25T16:07:33"
+    },
+    {
+      "path": "check_thread_registry_usage.py",
+      "size_bytes": 5522,
+      "mtime_iso": "2025-12-25T16:07:33"
+    },
+    {
+      "path": "check_webui_process.py",
+      "size_bytes": 954,
+      "mtime_iso": "2025-12-25T15:23:32"
+    },
+    {
+      "path": "create_desktop_shortcut.ps1",
+      "size_bytes": 1056,
+      "mtime_iso": "2025-11-13T16:22:05"
+    },
+    {
+      "path": "create_shortcuts.ps1",
+      "size_bytes": 3598,
+      "mtime_iso": "2025-11-13T16:22:05"
+    },
+    {
+      "path": "launch_stablenew.bat",
+      "size_bytes": 219,
+      "mtime_iso": "2025-11-13T16:22:05"
+    },
+    {
+      "path": "launch_stablenew_advanced.bat",
+      "size_bytes": 1614,
+      "mtime_iso": "2025-11-13T16:22:05"
+    },
+    {
+      "path": "launch_webui.py",
+      "size_bytes": 4584,
+      "mtime_iso": "2025-11-13T16:22:05"
+    },
+    {
+      "path": "list_pipeline_config_refs.py",
+      "size_bytes": 1729,
+      "mtime_iso": "2025-12-25T15:23:33"
+    },
+    {
+      "path": "manual_acceptance_add_to_queue.py",
+      "size_bytes": 1266,
+      "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "manual_acceptance_add_to_queue2.py",
+      "size_bytes": 1266,
+      "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "migrate_pack_json.py",
+      "size_bytes": 4679,
+      "mtime_iso": "2025-12-25T15:23:32"
+    },
+    {
+      "path": "monitor_webui.py",
+      "size_bytes": 1350,
+      "mtime_iso": "2025-12-25T15:23:32"
+    },
+    {
+      "path": "reorg_repo.py",
+      "size_bytes": 3095,
+      "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "run_failing_test.py",
+      "size_bytes": 605,
+      "mtime_iso": "2025-12-25T15:23:33"
+    },
+    {
+      "path": "run_journey_tests.ps1",
+      "size_bytes": 1663,
+      "mtime_iso": "2025-12-02T08:04:20"
+    },
+    {
+      "path": "run_shutdown_diag.ps1",
+      "size_bytes": 722,
+      "mtime_iso": "2025-12-02T08:04:20"
+    },
+    {
+      "path": "stablenew_snapshot_and_inventory.py",
+      "size_bytes": 7559,
+      "mtime_iso": "2025-12-25T15:23:33"
+    },
+    {
+      "path": "webui_wrapper.py",
+      "size_bytes": 2387,
+      "mtime_iso": "2025-12-22T20:14:50"
+    },
+    {
+      "path": "__init__.py",
+      "size_bytes": 62,
+      "mtime_iso": "2025-12-08T08:04:45"
+    }
+  ]
+}

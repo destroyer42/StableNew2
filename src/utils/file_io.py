@@ -18,16 +18,17 @@ def save_image_from_base64(
     base64_str: str,
     output_path: Path,
     metadata_builder: Callable[[Image.Image], dict[str, str] | None] | None = None,
-) -> bool:
+) -> Path | None:
     """
     Save base64 encoded image to file.
 
     Args:
         base64_str: Base64 encoded image string
         output_path: Path to save the image
+        metadata_builder: Optional function to build metadata for embedding
 
     Returns:
-        True if saved successfully
+        Path of saved image if successful, None otherwise
     """
     try:
         # Ensure we have a Path object
@@ -52,7 +53,7 @@ def save_image_from_base64(
         # Verify directory was created
         if not parent_dir.exists():
             logger.error(f"Failed to create directory: {parent_dir}")
-            return False
+            return None
 
         image.save(output_path)
         if metadata_builder is not None:
@@ -64,10 +65,10 @@ def save_image_from_base64(
             except Exception as exc:
                 logger.debug("Failed to embed image metadata: %s", exc)
         logger.info(f"Saved image: {output_path.name}")
-        return True
+        return output_path
     except Exception as e:
         logger.error(f"Failed to save image to {output_path}: {e}")
-        return False
+        return None
 
 
 def load_image_to_base64(image_path: Path) -> str | None:

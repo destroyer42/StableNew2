@@ -8,18 +8,21 @@
         "negative": "low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes,  glassy eyes, doll-like eyes",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
-          "Stable_Yogis_Realism_Positives_V1"
+          "Stable_Yogis_Realism_Positives_V1",
+          "face_refiner"
         ],
         "negative_embeddings": [
           "Stable_Yogis_Anatomy_Negatives_V1-neg",
           "Stable_Yogis_PDXL_Negatives2-neg",
           "NEGATIVE_HANDS",
-          "sdxl_cyberrealistic_simpleneg-neg"
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "bad_prompt",
+          "easynegative"
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.75
+            0.6875
           ],
           [
             "CinematicStyle_v1",
@@ -27,15 +30,11 @@
           ],
           [
             "DetailedEyes_V3",
-            0.7936893203883495
+            0.4660194174757281
           ],
           [
-            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
-            0.8
-          ],
-          [
-            "dreamshaperXL10_lora",
-            0.8
+            "finenude_v0_2a",
+            0.4528301886792453
           ]
         ]
       }
@@ -43,7 +42,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 10,
+      "limit": 3,
       "slots": [
         {
           "name": "hair",
@@ -94,17 +93,14 @@
         {
           "name": "lighting",
           "values": [
-            "cinematic rim lighting",
+            "warm natural light",
             "soft volumetric light rays",
             "glowing magical light",
             "intense firelight",
             "full moon-lit illumination",
             "golden hour sunlight",
             "bioluminescent glow",
-            "bright day-light",
-            "harsh directional side lighting",
-            "ethereal ambient bright glow",
-            "neon magical highlights"
+            "bright day-light"
           ]
         },
         {
