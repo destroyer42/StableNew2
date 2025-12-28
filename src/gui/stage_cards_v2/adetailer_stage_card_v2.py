@@ -15,6 +15,9 @@ from src.gui.theme_v2 import (
     DARK_SPINBOX_STYLE,
     SURFACE_FRAME_STYLE,
 )
+# PR-GUI-TOOLTIPS-001: Import tooltip system and help text
+from src.gui.widgets.tooltip_widget import HoverTooltip
+from src.gui.help_text import ADETAILER_HELP_TEXT
 
 
 class ADetailerStageCardV2(BaseStageCardV2):
@@ -177,6 +180,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             1.0,
             0.05,
             format_str="%.2f",
+            help_key="confidence",  # PR-GUI-TOOLTIPS-001
         )
 
         row = self._add_spin_section(
@@ -187,9 +191,19 @@ class ADetailerStageCardV2(BaseStageCardV2):
             1,
             32,
             1,
+            help_key="max_detections",  # PR-GUI-TOOLTIPS-001
         )
 
-        row = self._add_spin_section(parent, row, "Mask blur:", self.mask_blur_var, 0, 16, 1)
+        row = self._add_spin_section(
+            parent,
+            row,
+            "Mask blur:",
+            self.mask_blur_var,
+            0,
+            16,
+            1,
+            help_key="mask_blur",  # PR-GUI-TOOLTIPS-001
+        )
 
         self._add_labeled_combo(
             parent,
@@ -197,6 +211,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.merge_var,
             self.MERGE_MODES,
             row,
+            help_key="mask_merge_mode",  # PR-GUI-TOOLTIPS-001
+            width=15,  # PR-GUI-LAYOUT-002: Limit width to align with spinboxes
         )
         row += 1
         
@@ -212,17 +228,18 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.mask_filter_method_var,
             ["largest", "all"],
             row,
+            help_key="filter_method",  # PR-GUI-TOOLTIPS-001
         )
         row += 1
         
         row = self._add_spin_section(
-            parent, row, "Max K:", self.mask_k_largest_var, 1, 10, 1
+            parent, row, "Max K:", self.mask_k_largest_var, 1, 10, 1, help_key="max_k"
         )
         row = self._add_spin_section(
-            parent, row, "Min Ratio:", self.mask_min_ratio_var, 0.0, 1.0, 0.01, format_str="%.2f"
+            parent, row, "Min Ratio:", self.mask_min_ratio_var, 0.0, 1.0, 0.01, format_str="%.2f", help_key="min_ratio"
         )
         row = self._add_spin_section(
-            parent, row, "Max Ratio:", self.mask_max_ratio_var, 0.0, 1.0, 0.01, format_str="%.2f"
+            parent, row, "Max Ratio:", self.mask_max_ratio_var, 0.0, 1.0, 0.01, format_str="%.2f", help_key="max_ratio"
         )
         
         # PR-GUI-DATA-008: Mask Processing Controls
@@ -232,10 +249,10 @@ class ADetailerStageCardV2(BaseStageCardV2):
         row += 1
         
         row = self._add_spin_section(
-            parent, row, "Dilate/Erode:", self.dilate_erode_var, -32, 32, 1
+            parent, row, "Dilate/Erode:", self.dilate_erode_var, -32, 32, 1, help_key="dilate_erode"
         )
         row = self._add_spin_section(
-            parent, row, "Feather:", self.mask_feather_var, 0, 64, 1
+            parent, row, "Feather:", self.mask_feather_var, 0, 64, 1, help_key="feather"
         )
         
         # Generation parameters section
@@ -321,18 +338,75 @@ class ADetailerStageCardV2(BaseStageCardV2):
         variable: tk.StringVar,
         options: Iterable[str],
         row: int,
+        help_key: str | None = None,  # PR-GUI-TOOLTIPS-001: Optional help text key
+        width: int | None = None,  # PR-GUI-LAYOUT-002: Optional width limit
     ) -> ttk.Combobox:
-        ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, sticky="w", pady=2
-        )
-        combo = ttk.Combobox(
-            parent,
-            values=list(options),
-            textvariable=variable,
-            state="readonly",
-            style=DARK_COMBOBOX_STYLE,
-        )
-        combo.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
+        """Add a labeled combobox with optional inline help and hover tooltip.
+        
+        Args:
+            parent: Parent frame
+            label: Label text
+            variable: Variable to bind to combobox
+            options: Available options
+            row: Grid row number
+            help_key: Key in ADETAILER_HELP_TEXT for tooltip (PR-GUI-TOOLTIPS-001)
+            width: Optional width in characters (PR-GUI-LAYOUT-002)
+            
+        Returns:
+            The created combobox widget
+        """
+        # PR-GUI-TOOLTIPS-001: Only create row_frame if help_key is provided
+        if help_key and help_key in ADETAILER_HELP_TEXT:
+            # Create horizontal frame for label + combobox + help text
+            row_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
+            row_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
+            row_frame.columnconfigure(2, weight=1)
+            
+            # Label
+            ttk.Label(row_frame, text=label, style=BODY_LABEL_STYLE).grid(
+                row=0, column=0, sticky="w"
+            )
+            
+            # Combobox
+            combo_kwargs = {
+                "values": list(options),
+                "textvariable": variable,
+                "state": "readonly",
+                "style": DARK_COMBOBOX_STYLE,
+            }
+            if width is not None:
+                combo_kwargs["width"] = width
+            combo = ttk.Combobox(row_frame, **combo_kwargs)
+            combo.grid(row=0, column=1, sticky="w", padx=(8, 8))
+            
+            # Add inline help text and hover tooltip
+            help_info = ADETAILER_HELP_TEXT[help_key]
+            help_label = ttk.Label(
+                row_frame,
+                text=f"ⓘ {help_info['short']}",
+                style=BODY_LABEL_STYLE,
+            )
+            help_label.configure(foreground="#888888", cursor="question_arrow")
+            help_label.grid(row=0, column=2, sticky="w", padx=(4, 0))
+            HoverTooltip(help_label, help_info["long"])
+        else:
+            # Original layout: simple label + combobox in parent's 2-column grid
+            ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
+                row=row, column=0, sticky="w", pady=2
+            )
+            combo_kwargs = {
+                "values": list(options),
+                "textvariable": variable,
+                "state": "readonly",
+                "style": DARK_COMBOBOX_STYLE,
+            }
+            if width is not None:
+                combo_kwargs["width"] = width
+            combo = ttk.Combobox(parent, **combo_kwargs)
+            # PR-GUI-LAYOUT-002: Use "w" sticky if width specified, otherwise "ew"
+            sticky = "w" if width is not None else "ew"
+            combo.grid(row=row, column=1, sticky=sticky, pady=2, padx=(8, 0))
+        
         return combo
 
     def _add_spin_section(
@@ -345,23 +419,80 @@ class ADetailerStageCardV2(BaseStageCardV2):
         maximum: float,
         increment: float,
         format_str: str = "%.1f",
+        help_key: str | None = None,  # PR-GUI-TOOLTIPS-001: Optional help text key
     ) -> int:
-        ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, sticky="w", pady=2
-        )
-        spin_kwargs: dict[str, Any] = {
-            "from_": minimum,
-            "to": maximum,
-            "increment": increment,
-            "textvariable": variable,
-            "width": 8,
-            "style": DARK_SPINBOX_STYLE,
-        }
-        if isinstance(variable, tk.DoubleVar):
-            spin_kwargs["format"] = format_str
+        """Add a labeled spinbox with optional inline help and hover tooltip.
         
-        spin = ttk.Spinbox(parent, **spin_kwargs)
-        spin.grid(row=row, column=1, sticky="w", pady=2, padx=(8, 0))
+        Args:
+            parent: Parent frame
+            row: Grid row number
+            label: Label text
+            variable: Variable to bind to spinbox
+            minimum: Minimum value
+            maximum: Maximum value
+            increment: Step increment
+            format_str: Format string for floats
+            help_key: Key in ADETAILER_HELP_TEXT for tooltip (PR-GUI-TOOLTIPS-001)
+            
+        Returns:
+            Next available row number
+        """
+        # PR-GUI-TOOLTIPS-001: Only create row_frame if help_key is provided
+        if help_key and help_key in ADETAILER_HELP_TEXT:
+            # Create horizontal frame for label + spinbox + help text
+            row_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
+            row_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
+            row_frame.columnconfigure(2, weight=1)
+            
+            # Label
+            ttk.Label(row_frame, text=label, style=BODY_LABEL_STYLE).grid(
+                row=0, column=0, sticky="w"
+            )
+            
+            # Spinbox
+            spin_kwargs: dict[str, Any] = {
+                "from_": minimum,
+                "to": maximum,
+                "increment": increment,
+                "textvariable": variable,
+                "width": 8,
+                "style": DARK_SPINBOX_STYLE,
+            }
+            if isinstance(variable, tk.DoubleVar):
+                spin_kwargs["format"] = format_str
+            
+            spin = ttk.Spinbox(row_frame, **spin_kwargs)
+            spin.grid(row=0, column=1, sticky="w", padx=(8, 8))
+            
+            # Add inline help text and hover tooltip
+            help_info = ADETAILER_HELP_TEXT[help_key]
+            help_label = ttk.Label(
+                row_frame,
+                text=f"ⓘ {help_info['short']}",
+                style=BODY_LABEL_STYLE,
+            )
+            help_label.configure(foreground="#888888", cursor="question_arrow")
+            help_label.grid(row=0, column=2, sticky="w", padx=(4, 0))
+            HoverTooltip(help_label, help_info["long"])
+        else:
+            # Original layout: simple label + spinbox in parent's 2-column grid
+            ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
+                row=row, column=0, sticky="w", pady=2
+            )
+            spin_kwargs: dict[str, Any] = {
+                "from_": minimum,
+                "to": maximum,
+                "increment": increment,
+                "textvariable": variable,
+                "width": 8,
+                "style": DARK_SPINBOX_STYLE,
+            }
+            if isinstance(variable, tk.DoubleVar):
+                spin_kwargs["format"] = format_str
+            
+            spin = ttk.Spinbox(parent, **spin_kwargs)
+            spin.grid(row=row, column=1, sticky="w", pady=2, padx=(8, 0))
+        
         return row + 1
 
     def load_from_dict(self, cfg: dict[str, Any] | None) -> None:

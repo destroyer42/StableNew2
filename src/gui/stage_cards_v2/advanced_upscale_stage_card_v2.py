@@ -8,7 +8,7 @@ from typing import Any
 
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.validation_result import ValidationResult
-from src.gui.theme_v2 import BODY_LABEL_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 
 
 class AdvancedUpscaleStageCardV2(BaseStageCardV2):
@@ -34,6 +34,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         self.factor_var.trace_add("write", self._on_factor_changed)
         self.tile_size_var = tk.IntVar(value=0)
         self.face_restore_var = tk.BooleanVar(value=False)
+        self.face_restore_method_var = tk.StringVar(value="CodeFormer")
 
         ttk.Label(parent, text="Upscaler", style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", padx=(0, 4)
@@ -111,12 +112,27 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TSpinbox",
         ).grid(row=2, column=3, sticky="ew")
 
+        # Face restore row with checkbox and method dropdown
+        face_restore_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
+        face_restore_frame.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        
         ttk.Checkbutton(
-            parent,
+            face_restore_frame,
             text="Face restore",
             variable=self.face_restore_var,
+            command=self._on_face_restore_toggle,
             style="Dark.TCheckbutton",
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ).pack(side="left")
+        
+        self.face_restore_method_combo = ttk.Combobox(
+            face_restore_frame,
+            textvariable=self.face_restore_method_var,
+            values=["CodeFormer", "GFPGAN"],
+            state="disabled",  # Start disabled
+            width=12,
+            style="Dark.TCombobox",
+        )
+        self.face_restore_method_combo.pack(side="left", padx=(8, 0))
 
         # Final dimensions display
         ttk.Label(parent, text="Final size", style=BODY_LABEL_STYLE).grid(
@@ -131,6 +147,13 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
 
         for col in range(4):
             parent.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+    
+    def _on_face_restore_toggle(self) -> None:
+        """Show/hide face restore method dropdown based on checkbox state."""
+        if self.face_restore_var.get():
+            self.face_restore_method_combo.configure(state="readonly")
+        else:
+            self.face_restore_method_combo.configure(state="disabled")
 
     def load_from_config(self, cfg: dict[str, Any]) -> None:
         section = (cfg or {}).get("upscale", {}) or {}
@@ -152,6 +175,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         )
         self.tile_size_var.set(int(self._safe_int(section.get("tile_size", 0), 0)))
         self.face_restore_var.set(bool(section.get("face_restore", False)))
+        self.face_restore_method_var.set(section.get("face_restore_method", "CodeFormer"))
+        # Update dropdown state
+        self._on_face_restore_toggle()
 
     def to_config_dict(self) -> dict[str, Any]:
         upscaler_name = self._upscaler_name_map.get(
@@ -166,6 +192,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
                 "upscaling_resize": float(self.factor_var.get() or 2.0),
                 "tile_size": int(self.tile_size_var.get() or 0),
                 "face_restore": bool(self.face_restore_var.get()),
+                "face_restore_method": self.face_restore_method_var.get(),
             }
         }
 

@@ -103,13 +103,13 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # CFG slider with fixed range 1.0-30.0
         from src.gui.enhanced_slider import EnhancedSlider
 
+        # PR-GUI-LAYOUT-002: Remove fixed width to allow slider to expand
         self.cfg_slider = EnhancedSlider(
             self.sampler_section,
             from_=1.0,
             to=30.0,
             variable=self.cfg_var,
             resolution=0.1,
-            width=120,
             label="",
             command=self._on_cfg_changed,
         )
@@ -285,6 +285,16 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.height_combo.grid(row=2, column=3, sticky="ew")
+        
+        # Final Size display (calculated from width x height x hires x upscale)
+        ttk.Label(meta, text="Final Size", style=BODY_LABEL_STYLE).grid(
+            row=3, column=0, sticky="w", pady=(6, 2)
+        )
+        self.final_size_label = ttk.Label(
+            meta, text="512 x 512", style=BODY_LABEL_STYLE
+        )
+        self.final_size_label.grid(row=3, column=1, columnspan=3, sticky="w", pady=(6, 2))
+        
         for col in range(4):
             meta.columnconfigure(col, weight=1 if col in (1, 3) else 0)
 
@@ -305,6 +315,10 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         except Exception:
             pass
 
+        # Wire up Final Size calculator traces (PR-GUI-FUNC-002)
+        self.width_var.trace_add("write", lambda *_: self._update_final_size())
+        self.height_var.trace_add("write", lambda *_: self._update_final_size())
+
         parent.columnconfigure(0, weight=1)
 
         # --- Refiner & Hires helpers --------------------------------------------
@@ -322,12 +336,16 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
 
         self._apply_refiner_hiress_defaults()
 
+        # Wire up Final Size calculator for hires variables (PR-GUI-FUNC-002)
+        self.hires_enabled_var.trace_add("write", lambda *_: self._update_final_size())
+        self.hires_factor_var.trace_add("write", lambda *_: self._update_final_size())
+
         self.refiner_enabled_var.trace_add("write", lambda *_: self._on_refiner_toggle())
         self.refiner_model_var.trace_add("write", lambda *_: self._on_refiner_model_changed())
         self.refiner_switch_var.trace_add("write", lambda *_: self._on_refiner_switch_changed())
 
         # --- Refiner Frame with collapsible options (PR-GUI-E) ---
-        refiner_frame = ttk.LabelFrame(parent, text="SDXL Refiner", style=SURFACE_FRAME_STYLE)
+        refiner_frame = ttk.LabelFrame(parent, text="SDXL Refiner", style="Dark.TLabelframe")
         refiner_frame.grid(row=3, column=0, sticky="ew", pady=(8, 4))
         refiner_frame.columnconfigure(1, weight=1)
         self._refiner_frame = refiner_frame
@@ -372,7 +390,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self._refiner_slider.grid(row=1, column=1, sticky="ew", pady=(4, 0))
 
         # --- Hires Frame with collapsible options (PR-GUI-E) ---
-        hires_frame = ttk.LabelFrame(parent, text="Hires fix", style=SURFACE_FRAME_STYLE)
+        hires_frame = ttk.LabelFrame(parent, text="Hires fix", style="Dark.TLabelframe")
         hires_frame.grid(row=4, column=0, sticky="ew", pady=(0, 4))
         hires_frame.columnconfigure(1, weight=1)
         self._hires_frame = hires_frame
@@ -470,6 +488,10 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.hires_enabled_var.trace_add("write", lambda *_: self._on_hires_toggle())
         self.hires_upscaler_var.trace_add("write", lambda *_: self._on_hires_upscaler_changed())
         self.hires_factor_var.trace_add("write", lambda *_: self._on_hires_factor_changed())
+        # PR-GUI-FUNC-003: Sync hires model when base model changes (if "Use base model" is enabled)
+        self.model_var.trace_add("write", lambda *_: self._on_base_model_changed())
+        # PR-GUI-FUNC-003: Update hires model and dropdown state when "Use base model" checkbox toggles
+        self.hires_use_base_model_var.trace_add("write", lambda *_: self._on_hires_use_base_model_toggled())
         self.hires_steps_var.trace_add("write", lambda *_: self._on_hires_steps_changed())
         self.hires_denoise_var.trace_add("write", lambda *_: self._on_hires_denoise_changed())
         self.hires_use_base_model_var.trace_add(
@@ -669,6 +691,28 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         """Handle CFG slider changes"""
         self.cfg_var.set(value)
         self._notify_change()
+
+    def _update_final_size(self) -> None:
+        """Calculate and display final image size after hires fix (PR-GUI-FUNC-002)."""
+        try:
+            # Base size from width/height
+            base_width = int(self.width_var.get() or 512)
+            base_height = int(self.height_var.get() or 512)
+            
+            # Apply hires fix scale if enabled
+            if self.hires_enabled_var.get():
+                hires_scale = float(self.hires_factor_var.get() or 1.0)
+                final_width = int(base_width * hires_scale)
+                final_height = int(base_height * hires_scale)
+            else:
+                final_width = base_width
+                final_height = base_height
+            
+            self.final_size_label.configure(
+                text=f"{final_width} x {final_height}"
+            )
+        except (ValueError, AttributeError):
+            self.final_size_label.configure(text="-")
 
     def load_from_section(self, section: dict[str, Any] | None) -> None:
         data = section or {}
@@ -960,3 +1004,42 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             return float(value)
         except Exception:
             return default
+
+    def _on_base_model_changed(self) -> None:
+        """Sync hires model when base model changes (if 'Use base model' is enabled).
+        
+        PR-GUI-FUNC-003: When the user changes the base model and 'Use base model during hires'
+        is checked, automatically update the hires model dropdown to match.
+        """
+        if self.hires_use_base_model_var.get():
+            # Sync hires model to match base model
+            base_model = self.model_var.get()
+            self.hires_model_var.set(base_model)
+            self._on_hires_model_changed()
+
+    def _on_hires_use_base_model_toggled(self) -> None:
+        """Handle 'Use base model during hires' checkbox toggle.
+        
+        PR-GUI-FUNC-003: When checked, sync hires model to base model and disable dropdown.
+        When unchecked, enable dropdown for manual selection.
+        """
+        use_base = self.hires_use_base_model_var.get()
+        
+        if use_base:
+            # Sync hires model to base model
+            base_model = self.model_var.get()
+            self.hires_model_var.set(base_model)
+            # Disable dropdown (can't manually select when using base model)
+            try:
+                self._hires_model_combo.configure(state="disabled")
+            except Exception:
+                pass
+        else:
+            # Enable dropdown for manual selection
+            try:
+                self._hires_model_combo.configure(state="readonly")
+            except Exception:
+                pass
+        
+        # Notify config changed
+        self._on_hires_model_changed()

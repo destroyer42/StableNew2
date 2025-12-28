@@ -102,7 +102,7 @@ class ReprocessPanelV2(ttk.Frame):
             self,
             text="Select existing images to send through pipeline stages",
             style=BODY_LABEL_STYLE,
-            wraplength=300,
+            wraplength=600,
         )
         desc.grid(row=current_row, column=0, sticky="w", padx=4, pady=(0, 8))
         current_row += 1
@@ -111,28 +111,33 @@ class ReprocessPanelV2(ttk.Frame):
         selection_frame = ttk.Frame(self, style=CARD_FRAME_STYLE)
         selection_frame.grid(row=current_row, column=0, sticky="ew", padx=4, pady=(0, 8))
         selection_frame.columnconfigure(0, weight=1)
+        selection_frame.columnconfigure(1, weight=1)
+        selection_frame.columnconfigure(2, weight=1)
         current_row += 1
         
         self.select_images_button = ttk.Button(
             selection_frame,
             text="Select Images...",
             command=self._on_select_images,
+            style="Dark.TButton",
         )
-        self.select_images_button.grid(row=0, column=0, sticky="ew", pady=2)
+        self.select_images_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         
         self.select_folder_button = ttk.Button(
             selection_frame,
             text="Select Folder(s)...",
             command=self._on_select_folders,
+            style="Dark.TButton",
         )
-        self.select_folder_button.grid(row=1, column=0, sticky="ew", pady=2)
+        self.select_folder_button.grid(row=0, column=1, sticky="ew", padx=(0, 4))
         
         self.clear_button = ttk.Button(
             selection_frame,
             text="Clear Selection",
             command=self._on_clear_selection,
+            style="Dark.TButton",
         )
-        self.clear_button.grid(row=2, column=0, sticky="ew", pady=2)
+        self.clear_button.grid(row=0, column=2, sticky="ew")
         
         # Selected images display
         self.images_label = ttk.Label(
@@ -145,7 +150,7 @@ class ReprocessPanelV2(ttk.Frame):
         current_row += 1
         
         # Folder scanning options
-        folder_options_frame = ttk.LabelFrame(self, text="Folder Scan Options", padding=8)
+        folder_options_frame = ttk.LabelFrame(self, text="Folder Scan Options", padding=8, style="Dark.TLabelframe")
         folder_options_frame.grid(row=current_row, column=0, sticky="ew", padx=4, pady=(0, 8))
         current_row += 1
 
@@ -205,52 +210,64 @@ class ReprocessPanelV2(ttk.Frame):
         )
         self.filename_filter_entry.pack(side="left", fill="x", expand=True)
         
-        # Dimension filter
-        self.dimension_filter_check = ttk.Checkbutton(
-            folder_options_frame,
-            text="Filter by max dimensions:" if PIL_AVAILABLE else "Filter by dimensions (PIL required)",
-            variable=self.dimension_filter_enabled_var,
-            style="Dark.TCheckbutton",
-            state="normal" if PIL_AVAILABLE else "disabled",
-        )
-        self.dimension_filter_check.pack(anchor="w", pady=2)
-        
+        # Dimension filter - checkbox and spinboxes on same row
         if PIL_AVAILABLE:
-            dim_frame = ttk.Frame(folder_options_frame)
-            dim_frame.pack(fill="x", pady=2, padx=(20, 0))
+            dim_row = ttk.Frame(folder_options_frame)
+            dim_row.pack(fill="x", pady=2)
             
-            ttk.Label(dim_frame, text="Max width:", style=BODY_LABEL_STYLE).pack(side="left", padx=(0, 4))
+            self.dimension_filter_check = ttk.Checkbutton(
+                dim_row,
+                text="Filter by max dimensions:",
+                variable=self.dimension_filter_enabled_var,
+                style="Dark.TCheckbutton",
+                state="normal",
+            )
+            self.dimension_filter_check.pack(side="left", padx=(0, 12))
+            
+            ttk.Label(dim_row, text="Max width:", style=BODY_LABEL_STYLE).pack(side="left", padx=(0, 4))
             self.max_width_spinbox = ttk.Spinbox(
-                dim_frame,
+                dim_row,
                 from_=64,
                 to=8192,
                 increment=64,
                 textvariable=self.max_width_var,
                 width=8,
+                style="Dark.TSpinbox",
             )
             self.max_width_spinbox.pack(side="left", padx=(0, 12))
             
-            ttk.Label(dim_frame, text="Max height:", style=BODY_LABEL_STYLE).pack(side="left", padx=(0, 4))
+            ttk.Label(dim_row, text="Max height:", style=BODY_LABEL_STYLE).pack(side="left", padx=(0, 4))
             self.max_height_spinbox = ttk.Spinbox(
-                dim_frame,
+                dim_row,
                 from_=64,
                 to=8192,
                 increment=64,
                 textvariable=self.max_height_var,
                 width=8,
+                style="Dark.TSpinbox",
             )
             self.max_height_spinbox.pack(side="left")
+        else:
+            self.dimension_filter_check = ttk.Checkbutton(
+                folder_options_frame,
+                text="Filter by dimensions (PIL required)",
+                variable=self.dimension_filter_enabled_var,
+                style="Dark.TCheckbutton",
+                state="disabled",
+            )
+            self.dimension_filter_check.pack(anchor="w", pady=2)
         
         # Refresh filter button - reapply filters to current folder selection
         refresh_button = ttk.Button(
             folder_options_frame,
             text="Refresh Filter",
             command=self._scan_folders_for_images,
+            style="Dark.TButton",
         )
         refresh_button.pack(anchor="w", pady=(4, 0))
         
         # Stage selection section
-        stages_frame = ttk.LabelFrame(self, text="Stages to Apply", padding=8)
+        stages_frame = ttk.LabelFrame(self, text="Stages to Apply", padding=8, style="Dark.TLabelframe")
         stages_frame.grid(row=current_row, column=0, sticky="ew", padx=4, pady=(0, 8))
         current_row += 1
         
@@ -263,29 +280,33 @@ class ReprocessPanelV2(ttk.Frame):
         )
         help_text.pack(anchor="w", pady=(0, 4))
         
+        # Consolidate checkboxes to single row
+        stages_row = ttk.Frame(stages_frame)
+        stages_row.pack(fill="x", pady=2)
+        
         self.img2img_check = ttk.Checkbutton(
-            stages_frame,
+            stages_row,
             text="img2img (fix grainy/bad images)",
             variable=self.img2img_var,
             style="Dark.TCheckbutton",
         )
-        self.img2img_check.pack(anchor="w", pady=2)
+        self.img2img_check.pack(side="left", padx=(0, 16))
         
         self.adetailer_check = ttk.Checkbutton(
-            stages_frame,
+            stages_row,
             text="ADetailer (face fix)",
             variable=self.adetailer_var,
             style="Dark.TCheckbutton",
         )
-        self.adetailer_check.pack(anchor="w", pady=2)
+        self.adetailer_check.pack(side="left", padx=(0, 16))
         
         self.upscale_check = ttk.Checkbutton(
-            stages_frame,
+            stages_row,
             text="Upscale",
             variable=self.upscale_var,
             style="Dark.TCheckbutton",
         )
-        self.upscale_check.pack(anchor="w", pady=2)
+        self.upscale_check.pack(side="left")
         
         # Batch size options
         batch_frame = ttk.LabelFrame(self, text="Job Batching", padding=8)
@@ -311,6 +332,7 @@ class ReprocessPanelV2(ttk.Frame):
             increment=1,
             textvariable=self.batch_size_var,
             width=8,
+            style="Dark.TSpinbox",
         )
         self.batch_size_spinbox.pack(side="left")
         

@@ -7,7 +7,6 @@ from typing import Any
 
 from src.gui import design_system_v2 as design_system
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
-from src.gui.panels_v2.debug_log_panel_v2 import DebugLogPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -15,7 +14,7 @@ from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.state import PipelineState
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
-from src.gui.views.diagnostics_dashboard_v2 import DiagnosticsDashboardV2
+
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
@@ -159,15 +158,6 @@ class PipelineTabFrame(ttk.Frame):
         self.history_panel.grid(row=0, column=0, sticky="nsew")
 
         self.right_scroll.inner.rowconfigure(4, weight=0)
-        diagnostics_card = _create_card(self.right_scroll.inner)
-        diagnostics_card.grid(row=4, column=0, sticky="ew", padx=(0, 12), pady=(0, 0))
-        diagnostics_card.rowconfigure(0, weight=1)
-        self.diagnostics_dashboard = DiagnosticsDashboardV2(
-            diagnostics_card,
-            controller=queue_controller,
-            app_state=self.app_state,
-        )
-        self.diagnostics_dashboard.grid(row=0, column=0, sticky="nsew")
 
         self.stage_cards_panel = StageCardsPanel(
             self.stage_cards_frame,
@@ -278,14 +268,6 @@ class PipelineTabFrame(ttk.Frame):
         self.pack_loader_compat = self.sidebar
         self.left_compat = self.sidebar
 
-        log_card = _create_card(self.right_scroll.inner)
-        log_card.grid(row=5, column=0, sticky="ew", padx=(0, 12), pady=(0, 0))
-        self.log_panel = DebugLogPanelV2(
-            log_card,
-            app_state=self.app_state,
-        )
-        self.log_panel.grid(row=0, column=0, sticky="nsew")
-
         # PR-GUI-D: Ensure minimum window width on first show
         self._width_ensured = False
         self.bind("<Map>", self._on_first_map)
@@ -393,7 +375,7 @@ class PipelineTabFrame(ttk.Frame):
             card.grid(row=idx, column=0, sticky="nsew", pady=(0, 0) if is_last else (0, 6))
 
         for card in mapping.values():
-            if card not in ordered_cards:
+            if card and card not in ordered_cards:
                 card.grid_remove()
 
     def _bind_process_inspector_shortcut(self) -> None:

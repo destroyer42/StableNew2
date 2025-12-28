@@ -1,7 +1,7 @@
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
 a dryad, gorgeous faced women, brown-haired fine-breasted athletic beautiful , wearing nothing in a forest, [[activity]], hands massage and plays with her clitoris and vulva, legs spread wide, knees bent, leaning back against a tree, bright daylight, full body shot, direct view, looking directly into camera with a lusty expression, detailed juicy pink vagina with viscous liquid and cum dribbling out, very wet vagina, incredible skin,  glistening, looking sultry
-<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.7582417582417582>
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, watermark, text
 

@@ -7,6 +7,7 @@ Every job entry stores exactly one NormalizedJobRecord snapshot plus metadata.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -168,20 +169,28 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
         temp_path = state_path.with_suffix(state_path.suffix + ".tmp")
         _QUEUE_CODEC.write_jsonl(temp_path, [data])
         
-        # Windows-safe atomic replace: delete target first if it exists
-        try:
-            if state_path.exists():
-                state_path.unlink()
-            temp_path.rename(state_path)
-        except (OSError, PermissionError) as e:
-            logger.warning(f"Failed atomic rename, trying direct write: {e}")
-            # Fallback: write directly to target (less safe but works)
-            _QUEUE_CODEC.write_jsonl(state_path, [data])
-            if temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except Exception:
-                    pass
+        # Windows-safe atomic replace with retry
+        # On Windows, file locks can persist briefly after closing
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if state_path.exists():
+                    state_path.unlink()
+                temp_path.rename(state_path)
+                break  # Success
+            except (OSError, PermissionError) as e:
+                if attempt < max_retries - 1:
+                    # Brief delay to allow file system to release lock
+                    time.sleep(0.05)
+                else:
+                    # Final attempt failed - use direct write fallback
+                    logger.warning(f"Failed atomic rename after {max_retries} attempts, using direct write: {e}")
+                    _QUEUE_CODEC.write_jsonl(state_path, [data])
+                    if temp_path.exists():
+                        try:
+                            temp_path.unlink()
+                        except Exception:
+                            pass
 
         logger.debug("Saved queue state: %d jobs", len(validated_jobs))
         logger.debug(

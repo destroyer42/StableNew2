@@ -59,20 +59,31 @@ class SingleInstanceLock:
         
         self._socket.settimeout(1.0)  # Non-blocking accept with timeout
         
-        while not self._stop_accepting.is_set():
-            try:
-                client_sock, _addr = self._socket.accept()
-                # Immediately close the connection - we just need to drain the backlog
+        try:
+            while not self._stop_accepting.is_set():
                 try:
-                    client_sock.close()
+                    client_sock, _addr = self._socket.accept()
+                    # Immediately close the connection - we just need to drain the backlog
+                    try:
+                        client_sock.close()
+                    except Exception:
+                        pass
+                except socket.timeout:
+                    # Timeout is normal - just check stop flag and continue
+                    continue
                 except Exception:
-                    pass
-            except socket.timeout:
-                # Timeout is normal - just check stop flag and continue
-                continue
+                    # Socket closed or other error - exit loop
+                    break
+        finally:
+            # Unregister ourselves from thread registry to avoid "orphaned thread" warnings
+            # This is a daemon thread that's designed to exit on its own
+            try:
+                from src.utils.thread_registry import get_thread_registry
+                import threading
+                registry = get_thread_registry()
+                registry.unregister(threading.current_thread())
             except Exception:
-                # Socket closed or other error - exit loop
-                break
+                pass
 
     def acquire(self) -> bool:
         """Bind the socket; return False if another instance already owns it."""
@@ -100,7 +111,8 @@ class SingleInstanceLock:
             target=self._accept_loop,
             name="SingleInstanceLock-Accept",
             daemon=True,  # Don't block shutdown waiting for this thread
-            purpose="Accept socket connections for single instance lock"
+            purpose="Accept socket connections for single instance lock",
+            suppress_daemon_warning=True,  # Intentional daemon - self-unregisters on exit
         )
         
         return True
@@ -118,18 +130,24 @@ class SingleInstanceLock:
 
         # Stop accept thread first
         self._stop_accepting.set()
-        if self._accept_thread and self._accept_thread.is_alive():
-            # PR-SHUTDOWN-002: Increased timeout from 2.0s to 3.0s
-            # Accounts for 1s socket timeout in accept loop (allows 3 check cycles)
-            self._accept_thread.join(timeout=3.0)
         
-        # Close and clear the socket
+        # Close socket BEFORE joining thread to force accept() to fail immediately
+        # This prevents the thread from waiting up to 1 second in socket.accept()
         if self._socket is not None:
             try:
                 self._socket.close()
             except Exception:
                 pass
             self._socket = None
+        
+        # Now wait for thread - should exit quickly since socket is closed
+        if self._accept_thread and self._accept_thread.is_alive():
+            # Since we closed the socket first, thread should exit almost immediately
+            # But still use a reasonable timeout in case of unexpected delays
+            self._accept_thread.join(timeout=2.0)
+            
+            # If still alive after join timeout, it's a daemon so Python will clean it up
+            # No need to log warning - daemon threads are expected to be orphaned
         
         self._accept_thread = None
 

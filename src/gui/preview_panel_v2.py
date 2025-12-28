@@ -69,41 +69,66 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.details_button.pack(side=tk.RIGHT)
 
+        # PR-GUI-LAYOUT-002: Two-column layout with thumbnail on right
         self.body = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         self.body.pack(fill=tk.BOTH, expand=True)
+        self.body.columnconfigure(0, weight=1)  # Left column expands
+        self.body.columnconfigure(1, weight=0)  # Right column fixed
 
-        # Add thumbnail widget and preview checkbox
-        self.thumbnail_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
-        self.thumbnail_frame.pack(fill="x", pady=(0, 8))
+        # Right column: Thumbnail + checkbox
+        right_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
+        right_frame.grid(row=0, column=1, sticky="ne", padx=(8, 0))
 
         self.thumbnail = ThumbnailWidget(
-            self.thumbnail_frame,
+            right_frame,
             width=150,
             height=150,
             placeholder_text="No Preview",
         )
-        self.thumbnail.pack(anchor="center")
+        self.thumbnail.pack(anchor="ne")
 
         # Checkbox to enable/disable preview thumbnails
         # PR-PREVIEW-001: Default to False
         self._show_preview_var = tk.BooleanVar(value=False)
         self.preview_checkbox = ttk.Checkbutton(
-            self.thumbnail_frame,
+            right_frame,
             text="Show preview thumbnails",
             variable=self._show_preview_var,
             command=self._on_preview_checkbox_changed,
+            style="Dark.TCheckbutton",
         )
-        self.preview_checkbox.pack(anchor="center", pady=(4, 0))
+        self.preview_checkbox.pack(anchor="ne", pady=(4, 0))
+
+        # Left column: Job info + prompts + settings
+        left_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
+        left_frame.grid(row=0, column=0, sticky="nsew")
 
         self.job_count_label = ttk.Label(
-            self.body, text="No job selected", style=STATUS_LABEL_STYLE
+            left_frame, text="No job selected", style=STATUS_LABEL_STYLE
         )
         self.job_count_label.pack(anchor=tk.W, pady=(0, 4))
 
-        self.prompt_label = ttk.Label(self.body, text="Prompt (+)", style=STATUS_LABEL_STYLE)
+        self.prompt_label = ttk.Label(left_frame, text="Prompt (+)", style=STATUS_LABEL_STYLE)
         self.prompt_label.pack(anchor=tk.W)
+        # PR-GUI-LAYOUT-002: Increased height from 3 to 4
         self.prompt_text = tk.Text(
-            self.body,
+            left_frame,
+            height=4,
+            wrap="word",
+            bg=BACKGROUND_ELEVATED,
+            fg=TEXT_PRIMARY,
+            relief="flat",
+            state="disabled",
+        )
+        self.prompt_text.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+
+        self.negative_prompt_label = ttk.Label(
+            left_frame, text="Prompt (–)", style=STATUS_LABEL_STYLE
+        )
+        self.negative_prompt_label.pack(anchor=tk.W)
+        # PR-GUI-LAYOUT-002: Increased height from 2 to 3
+        self.negative_prompt_text = tk.Text(
+            left_frame,
             height=3,
             wrap="word",
             bg=BACKGROUND_ELEVATED,
@@ -111,24 +136,9 @@ class PreviewPanelV2(ttk.Frame):
             relief="flat",
             state="disabled",
         )
-        self.prompt_text.pack(fill=tk.X, pady=(0, 4))
+        self.negative_prompt_text.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        self.negative_prompt_label = ttk.Label(
-            self.body, text="Prompt (–)", style=STATUS_LABEL_STYLE
-        )
-        self.negative_prompt_label.pack(anchor=tk.W)
-        self.negative_prompt_text = tk.Text(
-            self.body,
-            height=2,
-            wrap="word",
-            bg=BACKGROUND_ELEVATED,
-            fg=TEXT_PRIMARY,
-            relief="flat",
-            state="disabled",
-        )
-        self.negative_prompt_text.pack(fill=tk.X, pady=(0, 8))
-
-        settings_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
+        settings_frame = ttk.Frame(left_frame, style=SURFACE_FRAME_STYLE)
         settings_frame.pack(fill=tk.X, pady=(0, 4))
         settings_frame.columnconfigure(0, weight=1)
         settings_frame.columnconfigure(1, weight=1)
@@ -144,7 +154,7 @@ class PreviewPanelV2(ttk.Frame):
         self.seed_label = ttk.Label(settings_frame, text="Seed: -", style=STATUS_LABEL_STYLE)
         self.seed_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        self.stage_summary_label = ttk.Label(self.body, text="Stages: -", style=STATUS_LABEL_STYLE)
+        self.stage_summary_label = ttk.Label(left_frame, text="Stages: -", style=STATUS_LABEL_STYLE)
         self.stage_summary_label.pack(anchor=tk.W, pady=(4, 0))
 
         self.stage_flags_label = ttk.Label(

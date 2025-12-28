@@ -185,6 +185,22 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         foreground=[("disabled", TEXT_MUTED)],
     )
 
+    # PR-GUI-DARKMODE-002: LabelFrame styles for dark mode
+    style.configure(
+        "Dark.TLabelframe",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "Dark.TLabelframe.Label",  # Style for the label text
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        font=(design_system.Typography.FAMILY, design_system.Typography.SM, "bold"),
+    )
+
     # Slider value label style for numeric displays next to sliders
     style.configure(
         "SliderValue.TLabel",

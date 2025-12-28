@@ -458,13 +458,36 @@ class JobHistoryPanelV2(ttk.Frame):
         return job_id[:20] if len(job_id) > 20 else job_id
     
     def _derive_output_folder(self, entry: JobHistoryEntry) -> str:
-        base = Path("runs")
-        candidate = base / entry.job_id
-        if candidate.exists():
-            return str(candidate)
-        if base.exists():
-            return str(base)
-        return str(base)
+        """PR-GUI-FUNC-003: Derive actual output folder path from job entry."""
+        # Try to get output_dir from result first (most accurate)
+        if entry.result and isinstance(entry.result, dict):
+            output_dir = entry.result.get("output_dir") or entry.result.get("output_folder")
+            if output_dir:
+                output_path = Path(output_dir)
+                if output_path.exists():
+                    return str(output_path)
+        
+        # Try to get path_output_dir from snapshot
+        if entry.snapshot:
+            njr = entry.snapshot.get("normalized_job", {})
+            path_output_dir = njr.get("path_output_dir")
+            if path_output_dir:
+                output_path = Path(path_output_dir)
+                if output_path.exists():
+                    return str(output_path)
+        
+        # Fall back to checking runs/{job_id}
+        runs_candidate = Path("runs") / entry.job_id
+        if runs_candidate.exists():
+            return str(runs_candidate)
+        
+        # Last resort: return base runs directory
+        runs_base = Path("runs")
+        if runs_base.exists():
+            return str(runs_base)
+        
+        # If nothing exists, return the expected location
+        return str(runs_base)
 
     def _on_tree_motion(self, event: tk.Event) -> None:
         """Show tooltip with full model name on hover."""

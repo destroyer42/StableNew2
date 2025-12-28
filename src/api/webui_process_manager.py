@@ -991,15 +991,23 @@ class WebUIProcessManager:
         webui_dir = self._config.working_dir
         orphans = []
         
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'ppid', 'cwd']):
+        # Don't request 'cwd' upfront - get it separately with error handling
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'ppid']):
             try:
                 name = proc.info['name']
                 if not name or 'python' not in name.lower():
                     continue
                 
                 cmdline = proc.info.get('cmdline', [])
-                cwd = proc.info.get('cwd', '')
                 ppid = proc.info.get('ppid')
+                
+                # Try to get cwd separately with error handling
+                cwd = ''
+                try:
+                    cwd = proc.cwd()
+                except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
+                    # Process terminated, access denied, or cwd not available
+                    pass
                 
                 # Is this a WebUI process?
                 is_webui = False

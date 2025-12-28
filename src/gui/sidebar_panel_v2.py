@@ -314,7 +314,7 @@ class SidebarPanelV2(ttk.Frame):
         self.preset_combo.grid(row=0, column=0, sticky="ew")
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_selected)
 
-        self.preset_menu_button = ttk.Menubutton(combo_frame, text="Actions", direction="below")
+        self.preset_menu_button = ttk.Menubutton(combo_frame, text="Actions", direction="below", style="Dark.TButton")
         self.preset_menu_button.grid(row=0, column=1, padx=(4, 0))
         self.preset_dropdown = self.preset_menu_button
         self.preset_menu = tk.Menu(self.preset_menu_button, tearoff=0)
@@ -872,10 +872,18 @@ class SidebarPanelV2(ttk.Frame):
     def refresh_prompt_packs(self) -> None:
         if not self.prompt_pack_adapter:
             return
+        # Clear preview cache to force reload
+        self._preview_cache.clear()
+        # Reload packs from disk
         self._load_prompt_summaries()
         self.pack_list_manager.refresh()  # type: ignore[no-untyped-call]
         self._set_pack_list_values(self.pack_list_manager.get_list_names())
         self._populate_packs_for_selected_list()
+        # Show brief visual feedback
+        if hasattr(self, 'refresh_packs_button'):
+            original_text = self.refresh_packs_button.cget('text')
+            self.refresh_packs_button.configure(text="✓ Refreshed")
+            self.after(1500, lambda: self.refresh_packs_button.configure(text=original_text))
 
     def set_pack_names(self, names: list[str]) -> None:
         """Best-effort helper for simple string lists (used by AppController)."""

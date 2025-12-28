@@ -11,6 +11,7 @@ from typing import Any, TYPE_CHECKING
 
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
+    STATUS_LABEL_STYLE,  # PR-GUI-DARKMODE-002: Import for pack/stage/seed labels
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
@@ -82,6 +83,7 @@ class RunningJobPanelV2(ttk.Frame):
         self.pack_info_label = ttk.Label(
             self,
             text="",
+            style=STATUS_LABEL_STYLE,  # PR-GUI-DARKMODE-002: Add dark mode style
             wraplength=400,
         )
         self.pack_info_label.pack(fill="x", pady=(0, 4))
@@ -90,6 +92,7 @@ class RunningJobPanelV2(ttk.Frame):
         self.stage_chain_label = ttk.Label(
             self,
             text="",
+            style=STATUS_LABEL_STYLE,  # PR-GUI-DARKMODE-002: Add dark mode style
             wraplength=400,
         )
         self.stage_chain_label.pack(fill="x", pady=(0, 4))
@@ -98,6 +101,7 @@ class RunningJobPanelV2(ttk.Frame):
         self.seed_label = ttk.Label(
             self,
             text="Seed: -",
+            style=STATUS_LABEL_STYLE,  # PR-GUI-DARKMODE-002: Add dark mode style
             wraplength=400,
         )
         self.seed_label.pack(fill="x", pady=(0, 4))
@@ -363,9 +367,16 @@ class RunningJobPanelV2(ttk.Frame):
         is_paused = status_str.upper() == "PAUSED"
 
         if is_paused:
-            method = getattr(self.controller, "on_resume_job_v2", None)
+            # Try multiple method names for compatibility
+            method = (
+                getattr(self.controller, "on_resume_current_job", None) or
+                getattr(self.controller, "on_resume_job_v2", None)
+            )
         else:
-            method = getattr(self.controller, "on_pause_job_v2", None)
+            method = (
+                getattr(self.controller, "on_pause_current_job", None) or
+                getattr(self.controller, "on_pause_job_v2", None)
+            )
 
         if callable(method):
             method()
@@ -375,7 +386,11 @@ class RunningJobPanelV2(ttk.Frame):
         if not self.controller:
             return
 
-        method = getattr(self.controller, "on_cancel_job_v2", None)
+        # Try multiple method names for compatibility
+        method = (
+            getattr(self.controller, "on_cancel_current_job", None) or
+            getattr(self.controller, "on_cancel_job_v2", None)
+        )
         if callable(method):
             method()
 

@@ -3342,9 +3342,19 @@ class AppController:
     def _shutdown_watchdog(self) -> None:
         # PR-SHUTDOWN-002: Increased default from 8s to 15s to reduce false alarms
         # Normal shutdown takes 8-12s (thread joins, WebUI stop, etc.)
+        # PR-SHUTDOWN-FIX: Poll shutdown_completed periodically instead of one long sleep
         timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "15"))
         hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
-        time.sleep(timeout)
+        
+        # Poll every 0.5s for early exit when shutdown completes
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._shutdown_completed:
+                logger.info("[controller] Shutdown watchdog: Clean shutdown detected, exiting early")
+                return
+            time.sleep(0.5)
+        
+        # Timeout reached - check if shutdown completed
         if not self._shutdown_completed:
             logger.error(
                 "Shutdown watchdog triggered after %.1fs (completed=%s)",
@@ -4806,6 +4816,20 @@ class AppController:
             return
         self.job_service.cancel_current()
         self._append_log("[controller] Cancelled current job")
+
+    def on_pause_current_job(self) -> None:
+        """Pause the currently running job."""
+        if not self.job_service:
+            return
+        self.job_service.pause()
+        self._append_log("[controller] Paused current job")
+
+    def on_resume_current_job(self) -> None:
+        """Resume the paused job."""
+        if not self.job_service:
+            return
+        self.job_service.resume()
+        self._append_log("[controller] Resumed current job")
 
     def on_pipeline_preset_apply_to_default(self, preset_name: str) -> None:
         """Apply preset config to the current run config and optionally mark default."""

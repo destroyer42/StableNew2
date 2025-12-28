@@ -44,41 +44,38 @@ class OutputSettingsPanelV2(ttk.Frame):
         # Build output dir row with browse button
         self._build_dir_row(parent, "Output Dir", self.output_dir_var, 1, 0)
         
-        self._build_row(
-            parent, "Filename", ttk.Entry(parent, textvariable=self.filename_pattern_var), 2, 0
+        # Consolidate Format, Batch Size, and Seed Mode on one row
+        controls_row = ttk.Frame(parent)
+        controls_row.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 4))
+        
+        ttk.Label(controls_row, text="Format:", style="TLabel").pack(side="left", padx=(0, 4))
+        format_combo = ttk.Combobox(
+            controls_row,
+            textvariable=self.image_format_var,
+            values=self.FORMATS,
+            state="readonly",
+            width=8,
+            style="Dark.TCombobox",
         )
-        self._build_row(
-            parent,
-            "Format",
-            ttk.Combobox(
-                parent,
-                textvariable=self.image_format_var,
-                values=self.FORMATS,
-                state="readonly",
-                width=8,
-            ),
-            3,
-            0,
-        )
+        format_combo.pack(side="left", padx=(0, 16))
+        
+        ttk.Label(controls_row, text="Batch Size:", style="TLabel").pack(side="left", padx=(0, 4))
         batch_spin = ttk.Spinbox(
-            parent, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6
+            controls_row, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6, style="Dark.TSpinbox"
         )
-        self._build_row(parent, "Batch Size", batch_spin, 3, 2)
+        batch_spin.pack(side="left", padx=(0, 16))
         self._create_tooltip(batch_spin, "Number of images to generate per prompt")
         
-        self._build_row(
-            parent,
-            "Seed Mode",
-            ttk.Combobox(
-                parent,
-                textvariable=self.seed_mode_var,
-                values=self.SEED_MODES,
-                state="readonly",
-                width=10,
-            ),
-            4,
-            2,
+        ttk.Label(controls_row, text="Seed Mode:", style="TLabel").pack(side="left", padx=(0, 4))
+        seed_combo = ttk.Combobox(
+            controls_row,
+            textvariable=self.seed_mode_var,
+            values=self.SEED_MODES,
+            state="readonly",
+            width=10,
+            style="Dark.TCombobox",
         )
+        seed_combo.pack(side="left")
 
         parent.columnconfigure(1, weight=1)
 
@@ -97,7 +94,7 @@ class OutputSettingsPanelV2(ttk.Frame):
         entry = ttk.Entry(container, textvariable=variable)
         entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
 
-        browse_btn = ttk.Button(container, text="Browse...", command=self._on_browse_output_dir)
+        browse_btn = ttk.Button(container, text="Browse...", command=self._on_browse_output_dir, style="Dark.TButton")
         browse_btn.grid(row=0, column=1, sticky="e")
 
     def _on_browse_output_dir(self) -> None:

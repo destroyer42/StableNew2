@@ -28,10 +28,6 @@
           [
             "DetailedEyes_V3",
             0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7582417582417582
           ]
         ]
       },
@@ -82,7 +78,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 8,
+      "limit": 4,
       "slots": [
         {
           "name": "activity",

@@ -81,6 +81,7 @@ class ThreadRegistry:
         name: str | None = None,
         daemon: bool = False,
         purpose: str | None = None,
+        suppress_daemon_warning: bool = False,
     ) -> threading.Thread:
         """
         Spawn a new tracked thread.
@@ -92,6 +93,7 @@ class ThreadRegistry:
             name: Thread name (required for tracking)
             daemon: Whether to use daemon mode (discouraged)
             purpose: Human-readable description of thread purpose
+            suppress_daemon_warning: If True, don't warn about daemon=True
         
         Returns:
             The spawned and started thread
@@ -105,7 +107,7 @@ class ThreadRegistry:
         if name is None:
             raise ValueError("Thread name is required for tracking")
         
-        if daemon:
+        if daemon and not suppress_daemon_warning:
             logger.warning(
                 f"[thread_registry] Spawning daemon thread '{name}' - "
                 f"consider using daemon=False for clean shutdown"

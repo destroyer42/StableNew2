@@ -234,7 +234,7 @@ class PipelineRunner:
                     # Build safe filename with human-readable identifiers (PR-FILENAME-001)
                     from src.utils.file_io import build_safe_image_name
                     # Use 1-based indexing to match GUI display (p01 = "Prompt 1", v01 = "Variant 1")
-                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     seed = payload.get("seed")
@@ -296,7 +296,7 @@ class PipelineRunner:
                     from src.utils.file_io import build_safe_image_name
                     from pathlib import Path as PathLib
                     # Use 1-based indexing to match GUI display
-                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     
@@ -381,7 +381,7 @@ class PipelineRunner:
                     from src.utils.file_io import build_safe_image_name
                     from pathlib import Path as PathLib
                     # Use 1-based indexing to match GUI display
-                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     
@@ -474,7 +474,7 @@ class PipelineRunner:
                     from src.utils.file_io import build_safe_image_name
                     from pathlib import Path as PathLib
                     # Use 1-based indexing to match GUI display
-                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{stage.variant_id+1:02d}"
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
                     matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
                     pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
                     
