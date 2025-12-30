@@ -61,3 +61,18 @@ def test_model_switch_is_avoided_when_safemode_blocks_changes() -> None:
 
     assert client.set_model_calls == []
     assert pipeline._current_model == "stable_default.safetensors"
+
+
+def test_model_switch_noop_with_hash_and_extension_equivalence() -> None:
+    # Current model has extension and hash, desired is base name
+    client = _ModelSwitchClient("model.safetensors [abc123]", safe_mode=False)
+    pipeline = Pipeline(client=client, structured_logger=_NoOpStructuredLogger())
+
+    pipeline._current_model = None
+    pipeline._model_discovery_attempted = False
+
+    pipeline._ensure_model_and_vae("model", None)
+
+    # set_model should NOT be called, as names normalize equal
+    assert client.set_model_calls == []
+    assert pipeline._current_model == "model.safetensors [abc123]"

@@ -1477,6 +1477,44 @@ class PipelineController(_GUIPipelineController):
         if prompt_pack_name and not getattr(record, "prompt_pack_name", None):
             record.prompt_pack_name = prompt_pack_name
 
+    def _sort_jobs_by_model(self, records: list[NormalizedJobRecord]) -> list[NormalizedJobRecord]:
+        """Sort jobs by model name to group same-model jobs together.
+        
+        This minimizes model switching in the WebUI, which can cause crashes.
+        Jobs using the same model will be processed consecutively.
+        """
+        def get_model_name(record: NormalizedJobRecord) -> str:
+            """Extract model name from record config."""
+            config = record.config or {}
+            if not isinstance(config, dict):
+                return ""
+            
+            # Try various config locations for model name
+            model = config.get("model_name") or config.get("model") or ""
+            if not model:
+                # Check txt2img section
+                txt2img = config.get("txt2img", {})
+                if isinstance(txt2img, dict):
+                    model = txt2img.get("model_name") or txt2img.get("model") or ""
+            
+            return str(model).lower()
+        
+        # Sort by model name, with empty models at the end
+        sorted_records = sorted(records, key=lambda r: (get_model_name(r) == "", get_model_name(r)))
+        
+        # Log the grouping for visibility
+        if len(sorted_records) > 1:
+            model_groups: dict[str, int] = {}
+            for record in sorted_records:
+                model = get_model_name(record)
+                model_groups[model] = model_groups.get(model, 0) + 1
+            _logger.info(
+                "[PipelineController] Job grouping by model: %s",
+                ", ".join(f"{model or '(none)'}: {count}" for model, count in model_groups.items())
+            )
+        
+        return sorted_records
+
     def _submit_normalized_jobs(
         self,
         records: list[NormalizedJobRecord],
@@ -1489,6 +1527,10 @@ class PipelineController(_GUIPipelineController):
             return 0
         
         _logger.info(f"[PipelineController] _submit_normalized_jobs called with {len(records)} NormalizedJobRecord(s)")
+        
+        # Sort jobs by model to minimize model switches and reduce crash risk
+        records = self._sort_jobs_by_model(records)
+        _logger.info(f"[PipelineController] Sorted {len(records)} jobs by model to minimize WebUI crashes")
         
         submitted = 0
         run_config_to_use = run_config or getattr(self, "_last_run_config", None)

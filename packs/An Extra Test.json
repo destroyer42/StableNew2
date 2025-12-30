@@ -376,17 +376,15 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 9,
+      "limit": 1,
       "slots": [
         {
           "name": "time",
           "values": [
-            "rim-lit silhouette",
-            "backlit through smoke",
+            "full sunlight",
+            "natural light",
             "soft volumetric light rays",
-            "flickering firelight",
-            "moonlight breaking through clouds",
-            "harsh directional side lighting",
+            "bright full moonlight breaking through clouds",
             "diffused overcast lighting"
           ]
         },
@@ -418,9 +416,7 @@
         {
           "name": "number",
           "values": [
-            "one",
-            "two",
-            "three"
+            "one"
           ]
         },
         {
@@ -450,7 +446,7 @@
             "only a open jacket with underboob",
             "nothing",
             "see-throuh lingerie",
-            "bikini armor",
+            "nothing",
             "micro-kini"
           ]
         },
@@ -461,19 +457,17 @@
             "spread-eagled",
             "kneeling",
             "bending forward",
-            "bending backward",
-            "on all fours"
+            "wide stance"
           ]
         },
         {
           "name": "activity",
           "values": [
-            "singing",
-            "dancing",
+            "female masturbation",
             "stripping",
             "masturbating",
             "orgy",
-            "kissing"
+            "kissing and petting"
           ]
         },
         {

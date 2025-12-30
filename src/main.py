@@ -465,8 +465,9 @@ def main() -> None:
         log_file = str(diag_dir / f"gui-shutdown-{timestamp}.log")
 
     # Allow user to control log verbosity via environment variable
-    # Default to WARNING (quiet) - use DEBUG or INFO for more verbose output
-    log_level = os.environ.get("STABLENEW_LOG_LEVEL", "WARNING").upper()
+    # Default to INFO (shows stage progress, VRAM clearing, job status)
+    # Use WARNING for quiet mode, DEBUG for verbose troubleshooting
+    log_level = os.environ.get("STABLENEW_LOG_LEVEL", "INFO").upper()
     setup_logging(log_level, log_file=log_file)
 
     # Optional V2.5 file-access logging, controlled by env var

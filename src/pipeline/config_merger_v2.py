@@ -104,6 +104,22 @@ class ADetailerOverrides:
     confidence: float | None = None
     mask_blur: int | None = None
     denoise_strength: float | None = None
+    # Additional override fields for full ADetailer support
+    sampler: str | None = None
+    scheduler: str | None = None
+    steps: int | None = None
+    cfg_scale: float | None = None
+    prompt: str | None = None
+    negative_prompt: str | None = None
+    # Mask processing
+    mask_feather: int | None = None
+    dilate_erode: int | None = None
+    inpaint_padding: int | None = None
+    # Mask filtering
+    mask_filter_method: str | None = None
+    mask_k_largest: int | None = None
+    mask_min_ratio: float | None = None
+    mask_max_ratio: float | None = None
 
 
 @dataclass
@@ -359,14 +375,66 @@ class ConfigMergerV2:
             if not override_adetailer.enabled:
                 return merged
 
+        # Core detection settings
         if override_adetailer.model is not None:
             merged["model"] = override_adetailer.model
+            merged["adetailer_model"] = override_adetailer.model  # Dual key
         if override_adetailer.confidence is not None:
             merged["confidence"] = override_adetailer.confidence
-        if override_adetailer.mask_blur is not None:
-            merged["mask_blur"] = override_adetailer.mask_blur
+            merged["adetailer_confidence"] = override_adetailer.confidence  # Dual key
+        
+        # Generation settings
+        if override_adetailer.sampler is not None:
+            merged["sampler_name"] = override_adetailer.sampler
+            merged["adetailer_sampler"] = override_adetailer.sampler  # Dual key
+        if override_adetailer.scheduler is not None:
+            merged["scheduler"] = override_adetailer.scheduler
+            merged["adetailer_scheduler"] = override_adetailer.scheduler  # Dual key
+        if override_adetailer.steps is not None:
+            merged["steps"] = override_adetailer.steps
+            merged["adetailer_steps"] = override_adetailer.steps  # Dual key
+        if override_adetailer.cfg_scale is not None:
+            merged["cfg_scale"] = override_adetailer.cfg_scale
+            merged["adetailer_cfg"] = override_adetailer.cfg_scale  # Dual key
         if override_adetailer.denoise_strength is not None:
             merged["denoise_strength"] = override_adetailer.denoise_strength
+            merged["adetailer_denoise"] = override_adetailer.denoise_strength  # Dual key
+        
+        # Prompt settings
+        if override_adetailer.prompt is not None:
+            merged["adetailer_prompt"] = override_adetailer.prompt
+        if override_adetailer.negative_prompt is not None:
+            merged["adetailer_negative_prompt"] = override_adetailer.negative_prompt
+        
+        # Mask processing settings
+        if override_adetailer.mask_blur is not None:
+            merged["mask_blur"] = override_adetailer.mask_blur
+            merged["ad_mask_blur"] = override_adetailer.mask_blur  # Dual key
+        if override_adetailer.mask_feather is not None:
+            merged["mask_feather"] = override_adetailer.mask_feather
+            merged["adetailer_mask_feather"] = override_adetailer.mask_feather  # Dual key
+            merged["ad_mask_feather"] = override_adetailer.mask_feather  # Dual key
+        if override_adetailer.dilate_erode is not None:
+            merged["mask_dilate_erode"] = override_adetailer.dilate_erode
+            merged["ad_dilate_erode"] = override_adetailer.dilate_erode  # Dual key
+        if override_adetailer.inpaint_padding is not None:
+            merged["inpaint_padding"] = override_adetailer.inpaint_padding
+            merged["adetailer_padding"] = override_adetailer.inpaint_padding  # Dual key
+            merged["ad_inpaint_only_masked_padding"] = override_adetailer.inpaint_padding  # Dual key
+        
+        # Mask filtering settings
+        if override_adetailer.mask_filter_method is not None:
+            merged["mask_filter_method"] = override_adetailer.mask_filter_method
+            merged["ad_mask_filter_method"] = override_adetailer.mask_filter_method  # Dual key
+        if override_adetailer.mask_k_largest is not None:
+            merged["mask_k_largest"] = override_adetailer.mask_k_largest
+            merged["ad_mask_k_largest"] = override_adetailer.mask_k_largest  # Dual key
+        if override_adetailer.mask_min_ratio is not None:
+            merged["mask_min_ratio"] = override_adetailer.mask_min_ratio
+            merged["ad_mask_min_ratio"] = override_adetailer.mask_min_ratio  # Dual key
+        if override_adetailer.mask_max_ratio is not None:
+            merged["mask_max_ratio"] = override_adetailer.mask_max_ratio
+            merged["ad_mask_max_ratio"] = override_adetailer.mask_max_ratio  # Dual key
 
         return merged
 

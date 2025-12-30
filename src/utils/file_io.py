@@ -343,21 +343,26 @@ def build_safe_image_name(
         hash_input = "|".join(hash_input_parts)
         identifier = hashlib.md5(hash_input.encode("utf-8")).hexdigest()[:8]
     
+    # Add timestamp suffix for uniqueness (MMDDhhmmss format, 10 chars)
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%m%d%H%M%S")
+    timestamp_suffix = f"_{timestamp}"
+    
     # Build batch suffix with 1-based indexing
     batch_suffix = ""
     if batch_index is not None:
         display_index = batch_index + 1 if use_one_based_indexing else batch_index
         batch_suffix = f"_batch{display_index}"
     
-    # Calculate space: prefix + "_" + identifier + batch_suffix + ".png"
-    reserved = len("_") + len(identifier) + len(batch_suffix) + len(".png")
+    # Calculate space: prefix + "_" + identifier + timestamp_suffix + batch_suffix + ".png"
+    reserved = len("_") + len(identifier) + len(timestamp_suffix) + len(batch_suffix) + len(".png")
     max_prefix_len = max_length - reserved
     
     if len(safe_prefix) > max_prefix_len:
         safe_prefix = safe_prefix[:max_prefix_len]
     
     # Build final name
-    final_name = f"{safe_prefix}_{identifier}{batch_suffix}"
+    final_name = f"{safe_prefix}_{identifier}{timestamp_suffix}{batch_suffix}"
     
     return final_name
 

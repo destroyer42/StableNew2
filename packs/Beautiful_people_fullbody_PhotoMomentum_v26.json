@@ -19,15 +19,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.8109756097560976
+            0.8
           ],
           [
             "CinematicStyle_v1",
-            0.7258064516129032
+            0.7252747252747253
           ],
           [
             "DetailedEyes_V3",
-            0.5567685589519651
+            0.5388349514563107
           ],
           [
             "Super_Eye_Detailer_By_Stable_Yogi_SDPD0",
@@ -52,7 +52,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.3220338983050847
           ],
           [
             "CinematicStyle_v1",
@@ -60,7 +60,7 @@
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.28125
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -90,23 +90,23 @@
         "loras": [
           [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
-            0.8
+            0.18367346938775508
           ],
           [
             "DetailedEyes_V3",
-            0.8899253731343284
+            0.6709090909090909
           ],
           [
             "NsfwPovAllInOneLoraSdxl-000009",
-            0.8
+            0.1574585635359116
           ],
           [
             "WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,",
-            0.8
+            0.2967032967032967
           ],
           [
-            "PerfectEyesXL",
-            0.8
+            "add-detail-xl",
+            0.3339041095890411
           ]
         ]
       }
@@ -224,16 +224,16 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "juggernautXL_ragnarokBy",
-      "model_name": "juggernautXL_ragnarokBy",
+      "model": "babesByStableYogiPony_xlV4",
+      "model_name": "babesByStableYogiPony_xlV4",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
       "steps": 34,
       "cfg_scale": 6.1,
-      "width": 768,
-      "height": 1024,
+      "width": 1024,
+      "height": 1408,
       "clip_skip": 2,
       "seed": -1,
       "subseed": -1,
@@ -243,9 +243,9 @@
       "hr_upscaler": "Latent",
       "hr_scale": 1.5,
       "hr_second_pass_steps": 12,
-      "denoising_strength": 0.27,
+      "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
+      "hr_checkpoint_name": "babesByStableYogiPony_xlV4.safetensors [c75622b71d]"
     },
     "img2img": {
       "model": "",
@@ -262,38 +262,38 @@
       "upscaler": "4xUltrasharp_4xUltrasharpV10",
       "upscale_mode": "single",
       "steps": 15,
-      "denoising_strength": 0.25,
+      "denoising_strength": 0.35,
       "upscaling_resize": 2.0,
       "tile_size": 0,
       "face_restore": false,
       "face_restore_method": "CodeFormer"
     },
     "adetailer": {
-      "adetailer_model": "mediapipe_face_full",
-      "ad_model": "mediapipe_face_full",
-      "adetailer_confidence": 0.39,
-      "ad_confidence": 0.39,
-      "max_detections": 4,
-      "mask_blur": 5,
-      "ad_mask_blur": 5,
-      "mask_merge_mode": "keep",
-      "adetailer_steps": 10,
-      "ad_steps": 10,
-      "adetailer_cfg": 6.0,
-      "ad_cfg_scale": 6.0,
+      "adetailer_model": "mediapipe_face_mesh_eyes_only",
+      "ad_model": "mediapipe_face_mesh_eyes_only",
+      "adetailer_confidence": 0.34,
+      "ad_confidence": 0.34,
+      "max_detections": 3,
+      "mask_blur": 6,
+      "ad_mask_blur": 6,
+      "mask_merge_mode": "merge",
+      "adetailer_steps": 8,
+      "ad_steps": 8,
+      "adetailer_cfg": 5.5,
+      "ad_cfg_scale": 5.5,
       "adetailer_sampler": "DPM++ 2M",
       "ad_sampler": "DPM++ 2M",
-      "adetailer_denoise": 0.26,
-      "ad_denoising_strength": 0.26,
-      "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nhighly realistic human face,\nnatural skin texture,\nclear skin pores,\nnatural eye reflections,\nsharp focus,\nphotorealistic detainatural facial detail,\nsubtle skin texture,\nrealistic eyes,\npreserve original expression\n",
-      "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nhighly realistic human face,\nnatural skin texture,\nclear skin pores,\nnatural eye reflections,\nsharp focus,\nphotorealistic detainatural facial detail,\nsubtle skin texture,\nrealistic eyes,\npreserve original expression\n",
-      "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nlow quality,\nblurry,\nout of focus,\ndistorted face,\nasymmetrical face,\ndeformed facial features,\nwarped eyes,\ncrossed eyes,\nextra eyes,\nextra face,\nmultiple faces,\nmutated face,\nplastic skin,\nover-smoothed skin,\nover-sharpened,\nharsh shadows,\nunrealistic skin texture,\nuncanny valley",
-      "ad_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nlow quality,\nblurry,\nout of focus,\ndistorted face,\nasymmetrical face,\ndeformed facial features,\nwarped eyes,\ncrossed eyes,\nextra eyes,\nextra face,\nmultiple faces,\nmutated face,\nplastic skin,\nover-smoothed skin,\nover-sharpened,\nharsh shadows,\nunrealistic skin texture,\nuncanny valley",
+      "adetailer_denoise": 0.21,
+      "ad_denoising_strength": 0.21,
+      "adetailer_prompt": "\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure",
+      "ad_prompt": "\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure",
+      "adetailer_negative_prompt": "\n<sdxl_cyberrealistic_simpleneg-neg>, cartoon, anime,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting",
+      "ad_negative_prompt": "\n<sdxl_cyberrealistic_simpleneg-neg>, cartoon, anime,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting",
       "ad_inpaint_only_masked": true,
       "ad_inpaint_only_masked_padding": 32,
       "ad_use_inpaint_width_height": false,
       "enable_face_pass": true,
-      "face_model": "mediapipe_face_full",
+      "face_model": "face_yolov8s.pt",
       "face_padding": 32,
       "enable_hands_pass": true,
       "hands_model": "hand_yolov8s.pt",
@@ -305,10 +305,10 @@
       "ad_mask_min_ratio": 0.01,
       "mask_max_ratio": 1.0,
       "ad_mask_max_ratio": 1.0,
-      "mask_dilate_erode": 4,
-      "ad_dilate_erode": 4,
-      "mask_feather": 5,
-      "ad_mask_feather": 5,
+      "mask_dilate_erode": 5,
+      "ad_dilate_erode": 5,
+      "mask_feather": 6,
+      "ad_mask_feather": 6,
       "scheduler": "Karras",
       "ad_scheduler": "Karras",
       "ad_mask_filter_method": "Area",

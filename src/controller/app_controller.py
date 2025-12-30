@@ -3967,13 +3967,39 @@ class AppController:
         self.app_state.set_lora_strengths(strengths)
 
     def on_stage_toggled(self, stage: str, enabled: bool) -> None:
-        if stage != "adetailer" or not self.app_state:
-            return
+        """Sync sidebar checkbox changes to pipeline_tab variables.
+        
+        This ensures that when user toggles a stage checkbox in the sidebar,
+        the corresponding pipeline_tab.{stage}_enabled variable is updated
+        so that Apply Config saves the correct state.
+        """
         normalized = bool(enabled)
-        self.app_state.set_adetailer_enabled(normalized)
-        config_snapshot = self._collect_adetailer_panel_config()
-        config_snapshot["enabled"] = normalized
-        self.app_state.set_adetailer_config(config_snapshot)
+        
+        # Sync to pipeline_tab so Apply Config captures the checkbox state
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab:
+            enabled_var = getattr(pipeline_tab, f"{stage}_enabled", None)
+            if enabled_var is not None:
+                try:
+                    enabled_var.set(normalized)
+                    logger.debug(
+                        "[controller] on_stage_toggled: synced %s to %s in pipeline_tab",
+                        stage,
+                        normalized,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[controller] Failed to sync %s toggle to pipeline_tab: %s",
+                        stage,
+                        exc,
+                    )
+        
+        # Handle adetailer-specific app_state updates
+        if stage == "adetailer" and self.app_state:
+            self.app_state.set_adetailer_enabled(normalized)
+            config_snapshot = self._collect_adetailer_panel_config()
+            config_snapshot["enabled"] = normalized
+            self.app_state.set_adetailer_config(config_snapshot)
 
     def on_override_pack_config_changed(self, enabled: bool) -> None:
         """Handle override pack config checkbox state change.
@@ -4650,9 +4676,26 @@ class AppController:
         if adetailer_config:
             adetailer_overrides = ADetailerOverrides(  # Note: class name is "ADetailerOverrides"
                 enabled=adetailer_config.get("adetailer_enabled", False),
-                model=adetailer_config.get("model"),
-                confidence=adetailer_config.get("confidence"),
-                denoise_strength=adetailer_config.get("denoising_strength"),
+                model=adetailer_config.get("model") or adetailer_config.get("adetailer_model"),
+                confidence=adetailer_config.get("confidence") or adetailer_config.get("adetailer_confidence"),
+                denoise_strength=adetailer_config.get("denoising_strength") or adetailer_config.get("adetailer_denoise"),
+                # Additional settings from GUI
+                sampler=adetailer_config.get("sampler_name") or adetailer_config.get("adetailer_sampler"),
+                scheduler=adetailer_config.get("scheduler") or adetailer_config.get("adetailer_scheduler"),
+                steps=adetailer_config.get("steps") or adetailer_config.get("adetailer_steps"),
+                cfg_scale=adetailer_config.get("cfg_scale") or adetailer_config.get("adetailer_cfg"),
+                prompt=adetailer_config.get("adetailer_prompt"),
+                negative_prompt=adetailer_config.get("adetailer_negative_prompt"),
+                # Mask processing
+                mask_blur=adetailer_config.get("mask_blur") or adetailer_config.get("ad_mask_blur"),
+                mask_feather=adetailer_config.get("mask_feather") or adetailer_config.get("ad_mask_feather"),
+                dilate_erode=adetailer_config.get("mask_dilate_erode") or adetailer_config.get("ad_dilate_erode"),
+                inpaint_padding=adetailer_config.get("ad_inpaint_only_masked_padding") or adetailer_config.get("inpaint_padding"),
+                # Mask filtering
+                mask_filter_method=adetailer_config.get("mask_filter_method") or adetailer_config.get("ad_mask_filter_method"),
+                mask_k_largest=adetailer_config.get("mask_k_largest") or adetailer_config.get("ad_mask_k_largest"),
+                mask_min_ratio=adetailer_config.get("mask_min_ratio") or adetailer_config.get("ad_mask_min_ratio"),
+                mask_max_ratio=adetailer_config.get("mask_max_ratio") or adetailer_config.get("ad_mask_max_ratio"),
             )
         
         return StageOverridesBundle(
@@ -4694,6 +4737,13 @@ class AppController:
 
             # Build config snapshot considering override checkbox state
             config_snapshot = self._build_config_snapshot_with_override(pack_config)
+
+            # Add stage enable flags to pipeline section so executor can check them
+            pipeline_section = config_snapshot.setdefault("pipeline", {})
+            pipeline_section["adetailer_enabled"] = stage_flags.get("adetailer", False)
+            pipeline_section["upscale_enabled"] = stage_flags.get("upscale", False)
+            pipeline_section["txt2img_enabled"] = stage_flags.get("txt2img", True)
+            pipeline_section["img2img_enabled"] = stage_flags.get("img2img", False)
 
             # Ensure randomization is included
             if "randomization_enabled" not in config_snapshot:

@@ -567,7 +567,32 @@ class ConfigManager:
         if not config_path.exists():
             return None
         raw = self.get_pack_config(pack_name)
-        return self._merge_config_with_defaults(raw)
+        
+        # Debug: Log raw config before merging
+        raw_pipeline = raw.get("pipeline", {})
+        logger.info(
+            "Loading pack config '%s' (before merge): pipeline flags: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
+            pack_name,
+            raw_pipeline.get("txt2img_enabled"),
+            raw_pipeline.get("img2img_enabled"),
+            raw_pipeline.get("adetailer_enabled"),
+            raw_pipeline.get("upscale_enabled"),
+        )
+        
+        merged = self._merge_config_with_defaults(raw)
+        
+        # Debug: Log merged config after merging
+        merged_pipeline = merged.get("pipeline", {})
+        logger.info(
+            "Loading pack config '%s' (after merge): pipeline flags: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
+            pack_name,
+            merged_pipeline.get("txt2img_enabled"),
+            merged_pipeline.get("img2img_enabled"),
+            merged_pipeline.get("adetailer_enabled"),
+            merged_pipeline.get("upscale_enabled"),
+        )
+        
+        return merged
 
     def save_pack_config(self, pack_name: str, config: dict[str, Any]) -> bool:
         """
@@ -714,6 +739,7 @@ class ConfigManager:
             "webui_health_retry_count": app_config.get_webui_health_retry_count(),
             "webui_health_retry_interval_seconds": app_config.get_webui_health_retry_interval_seconds(),
             "webui_health_total_timeout_seconds": app_config.get_webui_health_total_timeout_seconds(),
+            "webui_options_write_enabled": False,
             "output_dir": str(Path("output")),
             "model_dir": str(Path("models")),
         }

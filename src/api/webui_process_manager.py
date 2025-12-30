@@ -150,6 +150,26 @@ class WebUIProcessManager:
         try:
             return wait_for_webui_ready(url, timeout=15.0, poll_interval=3.0)
         except Exception:
+            # PR-PORT-DISCOVERY: If health check failed on expected port, try to discover
+            # WebUI on alternate ports in case previous shutdown left orphan on port 7860
+            # and WebUI auto-incremented to 7861
+            logger.warning("[PORT-DISCOVERY] Health check failed on %s, scanning for WebUI on alternate ports...", url)
+            try:
+                discovered_port = discover_webui_port(base_port=7860, max_offset=10)
+                if discovered_port and discovered_port != 7860:
+                    logger.warning(
+                        "[PORT-DISCOVERY] ⚠ Found WebUI on port %d instead of expected 7860. "
+                        "This indicates an orphaned process was blocking port 7860. "
+                        "Updating base_url to use discovered port.",
+                        discovered_port
+                    )
+                    # Update the config to use the discovered port
+                    self._config.base_url = f"http://127.0.0.1:{discovered_port}"
+                    # Try health check again with the correct port
+                    return wait_for_webui_ready(self._config.base_url, timeout=5.0, poll_interval=1.0)
+            except Exception as exc:
+                logger.debug("[PORT-DISCOVERY] Port discovery failed: %s", exc)
+            
             return False
 
     def start(self) -> subprocess.Popen:
@@ -183,6 +203,31 @@ class WebUIProcessManager:
         run_session_id = build_run_session_id()
 
         try:
+            # PR-PORT-DISCOVERY: Clean up any orphaned WebUI processes blocking the target port
+            # This handles cases where a previous StableNew session crashed and left WebUI running
+            # Extract port from base_url (default to 7860 if not specified)
+            port = 7860
+            if self._config.base_url:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(self._config.base_url)
+                    if parsed.port:
+                        port = parsed.port
+                except Exception:
+                    pass
+            
+            killed_orphans = kill_orphaned_webui_processes_blocking_port(
+                port=port, 
+                working_dir=self._config.working_dir
+            )
+            if killed_orphans:
+                logger.info(
+                    "[PORT-DISCOVERY] Cleaned up %d orphaned process(es) blocking port %d: %s",
+                    len(killed_orphans), port, killed_orphans
+                )
+                # Give the OS time to release the port
+                time.sleep(1.0)
+            
             # For .bat files on Windows, we MUST use shell=True, otherwise they won't execute.
             # Use CREATE_NEW_PROCESS_GROUP to allow clean termination and prevent orphans.
             use_shell = os.name == "nt" and self._config.command[0].endswith(".bat")
@@ -570,7 +615,13 @@ class WebUIProcessManager:
         return self._pid
 
     def _kill_process_tree(self, pid: int | None) -> None:
-        """Kill the process and all WebUI-related python.exe processes."""
+        """Kill the process and all WebUI-related python.exe processes.
+        
+        PR-PROCESS-CLEANUP: Enhanced to handle CMD parent processes and their
+        Python children. When WebUI is launched via .bat file with shell=True,
+        the tracked PID is the CMD shell, and the actual Python WebUI process
+        is a child that must also be killed.
+        """
         if pid is None:
             logger.warning("_kill_process_tree called with None pid")
             return
@@ -583,27 +634,47 @@ class WebUIProcessManager:
                 import psutil
                 killed_pids = []
                 
+                # PR-PROCESS-CLEANUP: Check if the tracked PID is a CMD shell
+                # If so, we need to kill its Python children AND the CMD parent
+                is_cmd_parent = False
+                try:
+                    tracked_proc = psutil.Process(pid)
+                    tracked_name = tracked_proc.name().lower()
+                    if 'cmd' in tracked_name or 'powershell' in tracked_name or 'bash' in tracked_name:
+                        is_cmd_parent = True
+                        logger.warning(
+                            "Tracked PID %s is a shell wrapper (%s) - will kill shell AND Python children",
+                            pid, tracked_proc.name()
+                        )
+                except psutil.NoSuchProcess:
+                    pass
+                
                 # First, try to kill the tracked PID and its children
                 try:
                     parent = psutil.Process(pid)
                     children = parent.children(recursive=True)
                     logger.info("Found %d direct child processes for PID %s", len(children), pid)
                     
-                    # Kill children first
+                    # PR-PROCESS-CLEANUP: Kill children first (includes Python WebUI processes)
                     for child in children:
                         try:
-                            logger.info("Killing direct child process PID %s (%s)", child.pid, child.name())
+                            child_name = child.name()
+                            logger.info("Killing direct child process PID %s (%s)", child.pid, child_name)
                             child.kill()
+                            child.wait(timeout=2.0)  # Wait for confirmation
                             killed_pids.append(child.pid)
+                        except psutil.TimeoutExpired:
+                            logger.warning("Child PID %s did not exit after kill, using taskkill", child.pid)
+                            self._force_kill_with_taskkill(child.pid)
                         except psutil.NoSuchProcess:
                             pass
                         except Exception as exc:
                             logger.warning("Failed to kill child PID %s: %s", child.pid, exc)
                     
-                    # Kill parent
+                    # Kill parent (CMD shell if shell=True was used)
                     try:
                         parent.kill()
-                        logger.info("Killed parent process PID %s", pid)
+                        logger.info("Killed parent process PID %s (%s)", pid, parent.name())
                         killed_pids.append(pid)
                     except psutil.NoSuchProcess:
                         pass
@@ -1057,6 +1128,20 @@ class WebUIProcessManager:
         
         return orphans
 
+    def _force_kill_with_taskkill(self, pid: int) -> None:
+        """Last resort: use Windows taskkill command to force-kill a process."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid), "/T"],
+                capture_output=True,
+                text=True,
+                timeout=5.0
+            )
+            logger.info("taskkill PID %s: %s", pid, result.stdout.strip())
+        except Exception as exc:
+            logger.warning("taskkill failed for PID %s: %s", pid, exc)
+    
     def _kill_all_webui_processes(self) -> None:
         """
         Kill all WebUI-related processes (used by orphan monitor).
@@ -1070,6 +1155,162 @@ class WebUIProcessManager:
             logger.warning("[Orphan Monitor] No WebUI PID tracked, cannot kill processes")
 
         logger.debug("[Orphan Monitor] Monitor thread exiting")
+
+
+def discover_webui_port(base_port: int = 7860, max_offset: int = 10) -> int | None:
+    """
+    Discover which port the WebUI is actually running on.
+    
+    PR-PORT-DISCOVERY: Scans ports starting from base_port, checking if WebUI
+    is responding on any of them. This handles cases where port 7860 is blocked
+    and WebUI auto-increments to 7861, 7862, etc.
+    
+    Args:
+        base_port: Starting port to check (default 7860)
+        max_offset: Maximum port offset to scan (checks base_port through base_port+max_offset)
+    
+    Returns:
+        Port number where WebUI is responding, or None if not found
+    """
+    import socket
+    from src.api.healthcheck import check_webui_health
+    
+    logger.info("[PORT-DISCOVERY] Scanning for WebUI on ports %d-%d...", base_port, base_port + max_offset)
+    
+    for offset in range(max_offset + 1):
+        port = base_port + offset
+        
+        # Quick TCP connection test first
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.5)
+                result = sock.connect_ex(('127.0.0.1', port))
+                if result != 0:
+                    # Port not listening, skip health check
+                    continue
+        except Exception:
+            continue
+        
+        # Port is listening - verify it's actually WebUI
+        test_url = f"http://127.0.0.1:{port}"
+        logger.info("[PORT-DISCOVERY] Port %d is listening, testing if it's WebUI...", port)
+        
+        try:
+            if check_webui_health(test_url, timeout=2.0):
+                logger.info("[PORT-DISCOVERY] ✓ Found WebUI on port %d", port)
+                return port
+        except Exception as exc:
+            logger.debug("[PORT-DISCOVERY] Port %d health check failed: %s", port, exc)
+    
+    logger.warning("[PORT-DISCOVERY] WebUI not found on any port in range %d-%d", base_port, base_port + max_offset)
+    return None
+
+
+def kill_orphaned_webui_processes_blocking_port(port: int = 7860, working_dir: str | None = None) -> list[int]:
+    """
+    Find and kill orphaned WebUI processes that are blocking the specified port.
+    
+    PR-PORT-DISCOVERY: Identifies processes listening on the port and kills them
+    if they appear to be WebUI processes. This handles the case where a previous
+    StableNew session crashed and left WebUI running.
+    
+    Args:
+        port: Port to check for blocking processes
+        working_dir: Optional WebUI working directory to verify process identity
+    
+    Returns:
+        List of PIDs that were killed
+    """
+    killed_pids = []
+    
+    try:
+        import psutil
+        
+        # Find process(es) listening on the port
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.laddr.port == port and conn.status == 'LISTEN':
+                pid = conn.pid
+                if pid is None:
+                    continue
+                
+                try:
+                    proc = psutil.Process(pid)
+                    proc_name = proc.name().lower()
+                    cmdline = ' '.join(proc.cmdline()).lower() if proc.cmdline() else ''
+                    
+                    # Check if this looks like a WebUI process
+                    is_webui = False
+                    
+                    # Check by process name
+                    if 'python' in proc_name or 'cmd' in proc_name:
+                        # Check cmdline for WebUI indicators
+                        webui_keywords = ['webui', 'launch.py', 'launch_webui', 'stable-diffusion', 'gradio']
+                        for keyword in webui_keywords:
+                            if keyword in cmdline:
+                                is_webui = True
+                                break
+                    
+                    # Check by working directory if provided
+                    if working_dir and not is_webui:
+                        try:
+                            proc_cwd = proc.cwd()
+                            if Path(proc_cwd).resolve() == Path(working_dir).resolve():
+                                is_webui = True
+                        except Exception:
+                            pass
+                    
+                    if is_webui:
+                        logger.warning(
+                            "[PORT-DISCOVERY] Found orphaned WebUI process blocking port %d: "
+                            "PID=%d, name=%s, cmdline=%s",
+                            port, pid, proc.name(), ' '.join(proc.cmdline()[:3]) if proc.cmdline() else 'N/A'
+                        )
+                        
+                        # Kill the process and its children
+                        try:
+                            # Kill children first
+                            children = proc.children(recursive=True)
+                            for child in children:
+                                try:
+                                    logger.info("[PORT-DISCOVERY] Killing child PID %d (%s)", child.pid, child.name())
+                                    child.kill()
+                                    killed_pids.append(child.pid)
+                                except Exception as exc:
+                                    logger.debug("Failed to kill child %d: %s", child.pid, exc)
+                            
+                            # Kill parent
+                            proc.kill()
+                            proc.wait(timeout=3.0)
+                            killed_pids.append(pid)
+                            logger.info("[PORT-DISCOVERY] ✓ Killed orphaned WebUI PID %d", pid)
+                        except psutil.TimeoutExpired:
+                            logger.warning("[PORT-DISCOVERY] Process %d did not exit, using taskkill", pid)
+                            try:
+                                subprocess.run(["taskkill", "/F", "/PID", str(pid), "/T"], 
+                                             capture_output=True, timeout=5.0, check=False)
+                                killed_pids.append(pid)
+                            except Exception:
+                                pass
+                        except Exception as exc:
+                            logger.warning("[PORT-DISCOVERY] Failed to kill PID %d: %s", pid, exc)
+                    else:
+                        logger.info(
+                            "[PORT-DISCOVERY] Process on port %d doesn't look like WebUI: "
+                            "PID=%d, name=%s",
+                            port, pid, proc.name()
+                        )
+                
+                except psutil.NoSuchProcess:
+                    pass
+                except Exception as exc:
+                    logger.debug("[PORT-DISCOVERY] Error checking process on port %d: %s", port, exc)
+    
+    except ImportError:
+        logger.warning("[PORT-DISCOVERY] psutil not available, cannot check for orphaned processes")
+    except Exception as exc:
+        logger.error("[PORT-DISCOVERY] Error scanning for orphaned processes: %s", exc)
+    
+    return killed_pids
 
 
 def detect_default_webui_workdir(base_dir: str | None = None) -> str | None:

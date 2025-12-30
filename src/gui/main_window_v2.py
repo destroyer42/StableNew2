@@ -275,6 +275,38 @@ class MainWindowV2:
 
         # --- UI Heartbeat: Tk thread liveness signal ---
         self._install_ui_heartbeat()
+        
+        # PR-STARTUP-PERF: Trigger deferred queue autostart after GUI renders
+        # This prevents blocking startup when there are queued jobs (was ~10s delay)
+        # TEMPORARILY DISABLED FOR TESTING
+        # self.root.after(100, self._trigger_deferred_queue_autostart)
+
+    def _trigger_deferred_queue_autostart(self) -> None:
+        """Trigger deferred queue autostart after GUI is fully rendered."""
+        logger.info("[STARTUP-PERF] Attempting to trigger deferred queue autostart...")
+        try:
+            # Access JobExecutionController via pipeline_controller
+            if not self.pipeline_controller:
+                logger.warning("[STARTUP-PERF] No pipeline_controller available")
+                return
+            if not hasattr(self.pipeline_controller, '_job_controller'):
+                logger.warning("[STARTUP-PERF] pipeline_controller has no _job_controller attribute")
+                return
+            
+            job_controller = self.pipeline_controller._job_controller
+            if not job_controller:
+                logger.warning("[STARTUP-PERF] _job_controller is None")
+                return
+            if not hasattr(job_controller, 'trigger_deferred_autostart'):
+                logger.warning("[STARTUP-PERF] job_controller has no trigger_deferred_autostart method")
+                return
+            
+            logger.info("[STARTUP-PERF] Calling trigger_deferred_autostart()...")
+            job_controller.trigger_deferred_autostart()
+            logger.info("[STARTUP-PERF] Deferred autostart trigger completed")
+        except Exception:
+            # Log but don't crash GUI if autostart fails
+            logger.exception("[STARTUP-PERF] Failed to trigger deferred queue autostart")
 
     def run_in_main_thread(self, cb: Callable[[], None]) -> None:
         """Schedule the callback on the Tk main thread (safe from any thread)."""

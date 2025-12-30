@@ -1,19 +1,19 @@
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere, a
 [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8109756097560976> <lora:CinematicStyle_v1:0.7258064516129032> <lora:DetailedEyes_V3:0.5567685589519651> <lora:Super_Eye_Detailer_By_Stable_Yogi_SDPD0:0.5439560439560439>
+<lora:add-detail-xl:0.8> <lora:CinematicStyle_v1:0.7252747252747253> <lora:DetailedEyes_V3:0.5388349514563107> <lora:Super_Eye_Detailer_By_Stable_Yogi_SDPD0:0.5439560439560439>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere,
 [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.3220338983050847> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.28125> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner>
 (masterpiece, best quality) [[time]], [[perspective]],  [[number]] women of various adventuring classes (cleric, warrior, archer, rogue), traveling through [[environment]], [[narrative]] with [[eyes]] eyes and [[hair]]-hair, wearing [[clothes]] are clustered around [[pose]], and [[activity]]
-<lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8> <lora:DetailedEyes_V3:0.8899253731343284> <lora:NsfwPovAllInOneLoraSdxl-000009:0.8> <lora:WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,:0.8> <lora:PerfectEyesXL:0.8>
+<lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.18367346938775508> <lora:DetailedEyes_V3:0.6709090909090909> <lora:NsfwPovAllInOneLoraSdxl-000009:0.1574585635359116> <lora:WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,:0.2967032967032967> <lora:add-detail-xl:0.3339041095890411>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:bad_prompt>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame

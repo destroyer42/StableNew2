@@ -390,10 +390,19 @@ class Pipeline:
             logger.warning("Could not apply WebUI defaults: %s", exc)
 
     def _normalize_model_name(self, raw: str | None) -> str | None:
+        """Normalize model name for comparison by removing extensions and hashes."""
         if not raw:
             return None
         cleaned = str(raw).strip()
-        return cleaned.lower() if cleaned else None
+        if not cleaned:
+            return None
+        
+        # Remove hash in brackets like [dd08fa32f9] first
+        import re
+        cleaned = re.sub(r'\s*\[[a-f0-9]+\]$', '', cleaned, flags=re.IGNORECASE)
+        # Then remove file extension (.safetensors, .ckpt, .pt, etc.)
+        cleaned = re.sub(r'\.(safetensors|ckpt|pt|pth)$', '', cleaned, flags=re.IGNORECASE)
+        return cleaned.lower()
 
     def _discover_current_model_if_needed(self) -> None:
         if self._model_discovery_attempted or self._current_model is not None:
@@ -780,7 +789,8 @@ class Pipeline:
                         # Convert 0-1 to percentage
                         percent = highest_progress * 100.0
                         eta = info.eta_relative if info.eta_relative > 0 else None
-                        progress_callback(percent, eta)
+                        # Pass step info if available
+                        progress_callback(percent, eta, info.current_step, info.total_steps)
                         
             except Exception:
                 pass  # Ignore polling errors
@@ -1278,9 +1288,11 @@ class Pipeline:
         self._apply_webui_defaults_once()
         
         # Create progress callback that reports to controller
-        def on_txt2img_progress(percent: float, eta: float | None) -> None:
+        def on_txt2img_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
             if self.progress_controller:
                 eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                if current_step is not None and total_steps is not None:
+                    eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
                 self.progress_controller.report_progress("txt2img", percent, eta_text)
         
         # Track timing for this stage
@@ -1577,9 +1589,11 @@ class Pipeline:
         payload.update(sampler_config)
 
         # Create progress callback that reports to controller
-        def on_img2img_progress(percent: float, eta: float | None) -> None:
+        def on_img2img_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
             if self.progress_controller:
                 eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                if current_step is not None and total_steps is not None:
+                    eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
                 self.progress_controller.report_progress("img2img", percent, eta_text)
 
         # Track timing for this stage
@@ -1756,14 +1770,20 @@ class Pipeline:
             "ad_tab_enable": True,
             "ad_confidence": get_with_fallback_warning(config, "adetailer_confidence", 0.35, source="run_adetailer"),
             "ad_mask_filter_method": get_with_fallback_warning(config, "ad_mask_filter_method", "Area", source="run_adetailer", warn=False),
-            "ad_mask_k": get_with_fallback_warning(config, "ad_mask_k", 3, source="run_adetailer", warn=False),
+            "ad_mask_k": get_with_fallback_warning(config, "ad_mask_k_largest", 3, source="run_adetailer", warn=False),
             "ad_mask_min_ratio": get_with_fallback_warning(config, "ad_mask_min_ratio", 0.01, source="run_adetailer", warn=False),
             "ad_mask_max_ratio": get_with_fallback_warning(config, "ad_mask_max_ratio", 1.0, source="run_adetailer", warn=False),
             "ad_dilate_erode": get_with_fallback_warning(config, "ad_dilate_erode", 4, source="run_adetailer", warn=False),
-            "ad_mask_blur": get_with_fallback_warning(config, "adetailer_mask_feather", 4, source="run_adetailer", warn=False),
+            "ad_mask_blur": get_with_fallback_warning(config, "ad_mask_blur", 6, source="run_adetailer", warn=False),
             "ad_mask_merge_invert": get_with_fallback_warning(config, "ad_mask_merge_invert", "None", source="run_adetailer", warn=False),
             "ad_inpaint_only_masked": True,
             "ad_inpaint_only_masked_padding": get_with_fallback_warning(config, "adetailer_padding", 32, source="run_adetailer", warn=False),
+            "ad_use_inpaint_width_height": False,  # Disable dimension optimization to prevent crashes on large images
+            "ad_inpaint_width": payload_width,  # Lock to source dimensions - prevent resizing
+            "ad_inpaint_height": payload_height,  # Lock to source dimensions - prevent resizing
+            "ad_x_offset": 0,  # Disable x tiling
+            "ad_y_offset": 0,  # Disable y tiling
+            "ad_mask_only_top_k_largest": True,  # Process only largest detection
             "ad_use_steps": True,
             "ad_steps": get_with_fallback_warning(config, "adetailer_steps", 14, source="run_adetailer"),
             "ad_use_cfg_scale": True,
@@ -1771,7 +1791,7 @@ class Pipeline:
             "ad_denoising_strength": get_with_fallback_warning(config, "adetailer_denoise", 0.32, source="run_adetailer"),
             "ad_use_sampler": True,
             "ad_sampler": get_with_fallback_warning(config, "adetailer_sampler", "DPM++ 2M Karras", source="run_adetailer"),
-            "ad_scheduler": get_with_fallback_warning(config, "ad_scheduler", "Use same scheduler", source="run_adetailer", warn=False),
+            "ad_scheduler": get_with_fallback_warning(config, "adetailer_scheduler", "Use same scheduler", source="run_adetailer", warn=False),
             "ad_prompt": config.get("adetailer_prompt", final_prompt),
             "ad_negative_prompt": config.get("adetailer_negative_prompt", ad_neg_final),
         }
@@ -1789,6 +1809,12 @@ class Pipeline:
             "ad_mask_merge_invert": config.get("ad_hands_mask_merge_invert", "None"),
             "ad_inpaint_only_masked": True,
             "ad_inpaint_only_masked_padding": config.get("ad_hands_padding", 16),
+            "ad_use_inpaint_width_height": False,  # Disable dimension optimization to prevent crashes on large images
+            "ad_inpaint_width": payload_width,  # Lock to source dimensions - prevent resizing
+            "ad_inpaint_height": payload_height,  # Lock to source dimensions - prevent resizing
+            "ad_x_offset": 0,  # Disable x tiling
+            "ad_y_offset": 0,  # Disable y tiling
+            "ad_mask_only_top_k_largest": True,  # Process only largest detection
             "ad_use_steps": True,
             "ad_steps": config.get("adetailer_hands_steps", 12),
             "ad_use_cfg_scale": True,
@@ -1796,7 +1822,7 @@ class Pipeline:
             "ad_denoising_strength": config.get("adetailer_hands_denoise", 0.25),
             "ad_use_sampler": True,
             "ad_sampler": config.get("adetailer_hands_sampler", "DPM++ 2M Karras"),
-            "ad_scheduler": config.get("ad_hands_scheduler", "Use same scheduler"),
+            "ad_scheduler": config.get("adetailer_hands_scheduler", "Use same scheduler"),
             "ad_prompt": config.get(
                 "adetailer_hands_prompt",
                 "well-formed fingers, natural knuckles, correct hand anatomy, sharp details",
@@ -1832,10 +1858,22 @@ class Pipeline:
         if config.get("scheduler"):
             payload["scheduler"] = config.get("scheduler")
 
+        # DEBUG: Log ADetailer payload dimensions to verify no resizing
+        logger.warning(
+            "🔍 ADETAILER PAYLOAD: width=%s, height=%s, face[ad_use_inpaint_width_height]=%s, face[ad_inpaint_width]=%s, face[ad_inpaint_height]=%s",
+            payload_width,
+            payload_height,
+            face_args.get("ad_use_inpaint_width_height"),
+            face_args.get("ad_inpaint_width"),
+            face_args.get("ad_inpaint_height"),
+        )
+
         # Create progress callback that reports to controller
-        def on_adetailer_progress(percent: float, eta: float | None) -> None:
+        def on_adetailer_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
             if self.progress_controller:
                 eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                if current_step is not None and total_steps is not None:
+                    eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
                 self.progress_controller.report_progress("adetailer", percent, eta_text)
 
         # Track timing for this stage
@@ -2477,6 +2515,21 @@ class Pipeline:
         if not results["txt2img"]:
             logger.error("No txt2img outputs produced; aborting pack pipeline early")
             return results
+        
+        # Log phase completion at WARNING level for visibility
+        logger.warning(f"✅ txt2img phase completed: {len(results['txt2img'])} image(s) generated")
+        
+        # CRITICAL: Free VRAM after txt2img phase completes
+        # Prevents VRAM accumulation before refinement stages
+        try:
+            logger.warning("🧹 Clearing VRAM after txt2img phase...")
+            if hasattr(self.client, 'free_vram'):
+                if self.client.free_vram(unload_model=False):
+                    logger.warning("✅ VRAM cleared successfully after txt2img phase")
+                else:
+                    logger.warning("⚠️  VRAM clear returned False after txt2img phase")
+        except Exception as exc:
+            logger.warning(f"❌ Failed to clear VRAM after txt2img phase: {exc}")
 
         # Phase 2: refinement (img2img/adetailer/upscale) per base image
         for batch_idx, txt2img_meta in enumerate(results["txt2img"]):
@@ -2600,6 +2653,19 @@ class Pipeline:
                         last_image_path = img2img_meta["path"]
                         last_stage_meta = img2img_meta
                         final_image_path = last_image_path
+                        
+                        # CRITICAL: Free VRAM after img2img before next stage
+                        logger.warning("✅ img2img stage completed")
+                        try:
+                            logger.warning("🧹 Clearing VRAM after img2img stage...")
+                            if hasattr(self.client, 'free_vram'):
+                                if self.client.free_vram(unload_model=False):
+                                    logger.warning("✅ VRAM cleared successfully after img2img")
+                                else:
+                                    logger.warning("⚠️  VRAM clear returned False after img2img")
+                        except Exception as exc:
+                            logger.warning(f"❌ Failed to clear VRAM after img2img: {exc}")
+                            
                 if adetailer_enabled:
                     adetailer_cfg = dict(config.get("adetailer", {}))
                     txt_settings = config.get("txt2img", {})
@@ -2622,6 +2688,20 @@ class Pipeline:
                         last_image_path = adetailer_meta["path"]
                         last_stage_meta = adetailer_meta
                         final_image_path = last_image_path
+                        
+                        # CRITICAL: Free VRAM before upscale to prevent OOM
+                        # ADetailer can leave models loaded consuming 14+ GB
+                        logger.warning("✅ adetailer stage completed")
+                        try:
+                            logger.warning("🧹 Clearing VRAM after ADetailer before upscale...")
+                            if hasattr(self.client, 'free_vram'):
+                                if self.client.free_vram(unload_model=False):
+                                    logger.warning("✅ VRAM cleared successfully after ADetailer")
+                                else:
+                                    logger.warning("⚠️  VRAM clear returned False after ADetailer")
+                        except Exception as exc:
+                            logger.warning(f"❌ Failed to clear VRAM after ADetailer: {exc}")
+                
                 if upscale_enabled:
                     upscale_dir = pack_dir / "upscaled"
                     upscaled_meta = self.run_upscale_stage(
@@ -2636,6 +2716,19 @@ class Pipeline:
                         )
                         results["upscaled"].append(upscaled_meta)
                         final_image_path = upscaled_meta["path"]
+                        
+                        # CRITICAL: Free VRAM after upscale for cleanup
+                        # Ensures next job starts with clean VRAM state
+                        logger.warning("✅ upscale stage completed")
+                        try:
+                            logger.warning("🧹 Clearing VRAM after upscale for next job...")
+                            if hasattr(self.client, 'free_vram'):
+                                if self.client.free_vram(unload_model=False):
+                                    logger.warning("✅ VRAM cleared successfully after upscale")
+                                else:
+                                    logger.warning("⚠️  VRAM clear returned False after upscale")
+                        except Exception as exc:
+                            logger.warning(f"❌ Failed to clear VRAM after upscale: {exc}")
                     else:
                         final_image_path = last_image_path
                 else:
@@ -2890,6 +2983,8 @@ class Pipeline:
                 "width": txt2img_config.get("width", 512),
                 "height": txt2img_config.get("height", 512),
                 "seed": txt2img_config.get("seed", -1),
+                "subseed": txt2img_config.get("subseed", -1),
+                "subseed_strength": txt2img_config.get("subseed_strength", 0.0),
                 "seed_resize_from_h": txt2img_config.get("seed_resize_from_h", -1),
                 "seed_resize_from_w": txt2img_config.get("seed_resize_from_w", -1),
                 "clip_skip": txt2img_config.get("clip_skip", 2),
@@ -3050,6 +3145,17 @@ class Pipeline:
                     continue
                     
                 saved_paths.append(actual_path)
+                
+                # Save separate manifest for each variant using the batch_image_name
+                manifest_dir = output_dir / "manifests"
+                manifest_dir.mkdir(exist_ok=True, parents=True)
+                variant_manifest_path = manifest_dir / f"{actual_path.stem}.json"
+                try:
+                    with open(variant_manifest_path, "w", encoding="utf-8") as f:
+                        json.dump(image_metadata, f, indent=2, ensure_ascii=False)
+                    logger.debug(f"Saved variant manifest: {variant_manifest_path.name}")
+                except Exception as e:
+                    logger.error(f"Failed to save variant manifest {variant_manifest_path}: {e}")
             
             # Use the first image for metadata and return value (backward compatibility)
             if saved_paths:
@@ -3083,14 +3189,7 @@ class Pipeline:
                     "all_paths": [str(p) for p in saved_paths],  # All generated images for batch processing
                 }
 
-                # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-                manifest_dir = output_dir / "manifests"
-                manifest_dir.mkdir(exist_ok=True, parents=True)
-                # PR-FILENAME-001: No redundant suffix, image_name already has all info
-                manifest_path = manifest_dir / f"{image_name}.json"
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
-
+                # Manifests already saved per-variant in the loop above
                 self._record_stage_event("txt2img", "exit", 1, 1, False)
                 return metadata
             else:
@@ -3320,6 +3419,7 @@ class Pipeline:
         self._record_stage_event("upscale", "enter", 1, 1, False)
         try:
             self._ensure_not_cancelled(cancel_token, "upscale stage start")
+            
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -3342,17 +3442,9 @@ class Pipeline:
                 config.get("denoising_strength", "NOT_SET"),
             )
 
-            # Set conservative tile sizes to prevent CUDA OOM
-            if hasattr(self.client, "ensure_safe_upscale_defaults"):
-                try:
-                    # Use smaller tiles for safety (512 vs default 768)
-                    self.client.ensure_safe_upscale_defaults(
-                        max_img_mp=8.0,
-                        max_tile=512,
-                        max_overlap=64,
-                    )
-                except Exception as exc:  # noqa: BLE001 - best-effort safety clamp
-                    logger.debug("ensure_safe_upscale_defaults failed: %s", exc)
+            # REMOVED: ensure_safe_upscale_defaults() was interfering with user's tile_size=0 config
+            # Forcing ESRGAN_tile to 512 broke the upscaler's tiling logic
+            # User has been running tile_size=0 successfully - don't override it
 
             if upscale_mode == "img2img":
                 # Use img2img for upscaling with denoising
