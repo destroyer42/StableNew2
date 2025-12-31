@@ -304,7 +304,7 @@ class ConfigManager:
             },
             "video": {"fps": 24, "codec": "libx264", "quality": "medium"},
             "api": {"base_url": "http://127.0.0.1:7860", "timeout": 300},
-            "webui_options_write_enabled": False,
+            "webui_options_write_enabled": True,
             "randomization": {
                 "enabled": False,
                 # Optional seed for deterministic randomization.
@@ -739,7 +739,7 @@ class ConfigManager:
             "webui_health_retry_count": app_config.get_webui_health_retry_count(),
             "webui_health_retry_interval_seconds": app_config.get_webui_health_retry_interval_seconds(),
             "webui_health_total_timeout_seconds": app_config.get_webui_health_total_timeout_seconds(),
-            "webui_options_write_enabled": False,
+            "webui_options_write_enabled": True,
             "output_dir": str(Path("output")),
             "model_dir": str(Path("models")),
         }

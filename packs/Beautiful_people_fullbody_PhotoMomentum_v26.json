@@ -28,16 +28,12 @@
           [
             "DetailedEyes_V3",
             0.5388349514563107
-          ],
-          [
-            "Super_Eye_Detailer_By_Stable_Yogi_SDPD0",
-            0.5439560439560439
           ]
         ]
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere,\n[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] [[narrative]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
@@ -52,15 +48,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.3220338983050847
+            0.6864406779661016
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.8310810810810811
           ],
           [
             "DetailedEyes_V3",
-            0.28125
+            0.39375000000000004
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -74,12 +70,11 @@
       },
       {
         "index": 2,
-        "text": "(masterpiece, best quality) [[time]], [[perspective]],  [[number]] women of various adventuring classes (cleric, warrior, archer, rogue), traveling through [[environment]], [[narrative]] with [[eyes]] eyes and [[hair]]-hair, wearing [[clothes]] are clustered around [[pose]], and [[activity]]",
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere a brown-haired perky-large-breasted athletic beautiful green-eyed sun-kissed tan woman, in a bedroom, wearing only nothing, bending forward, is grabbing breasts in the evening light, detailed shaved vagina, incredible skin, slight perspiration, glistening, looking sultry",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
-          "Stable_Yogis_Realism_Positives_V1",
-          "face_refiner"
+          "Stable_Yogis_Realism_Positives_V1"
         ],
         "negative_embeddings": [
           "Stable_Yogis_Anatomy_Negatives_V1-neg",
@@ -89,24 +84,16 @@
         ],
         "loras": [
           [
-            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
-            0.18367346938775508
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.4945054945054945
           ],
           [
             "DetailedEyes_V3",
-            0.6709090909090909
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.1574585635359116
-          ],
-          [
-            "WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,",
-            0.2967032967032967
-          ],
-          [
-            "add-detail-xl",
-            0.3339041095890411
+            0.8
           ]
         ]
       }
@@ -209,14 +196,6 @@
             "caught mid-escape",
             "on the edge of conflict"
           ]
-        },
-        {
-          "name": "number",
-          "values": [
-            "one",
-            "two",
-            "three"
-          ]
         }
       ]
     },
@@ -224,16 +203,16 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "babesByStableYogiPony_xlV4",
-      "model_name": "babesByStableYogiPony_xlV4",
+      "model": "juggernautXL_ragnarokBy",
+      "model_name": "juggernautXL_ragnarokBy",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
       "steps": 34,
-      "cfg_scale": 6.1,
-      "width": 1024,
-      "height": 1408,
+      "cfg_scale": 6.499999999999998,
+      "width": 768,
+      "height": 1280,
       "clip_skip": 2,
       "seed": -1,
       "subseed": -1,
@@ -245,7 +224,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "babesByStableYogiPony_xlV4.safetensors [c75622b71d]"
+      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
     },
     "img2img": {
       "model": "",
@@ -263,14 +242,14 @@
       "upscale_mode": "single",
       "steps": 15,
       "denoising_strength": 0.35,
-      "upscaling_resize": 2.0,
+      "upscaling_resize": 1.5,
       "tile_size": 0,
       "face_restore": false,
       "face_restore_method": "CodeFormer"
     },
     "adetailer": {
-      "adetailer_model": "mediapipe_face_mesh_eyes_only",
-      "ad_model": "mediapipe_face_mesh_eyes_only",
+      "adetailer_model": "mediapipe_face_full",
+      "ad_model": "mediapipe_face_full",
       "adetailer_confidence": 0.34,
       "ad_confidence": 0.34,
       "max_detections": 3,
@@ -285,10 +264,10 @@
       "ad_sampler": "DPM++ 2M",
       "adetailer_denoise": 0.21,
       "ad_denoising_strength": 0.21,
-      "adetailer_prompt": "\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure",
-      "ad_prompt": "\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure",
-      "adetailer_negative_prompt": "\n<sdxl_cyberrealistic_simpleneg-neg>, cartoon, anime,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting",
-      "ad_negative_prompt": "\n<sdxl_cyberrealistic_simpleneg-neg>, cartoon, anime,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting",
+      "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+      "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+      "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n",
+      "ad_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n",
       "ad_inpaint_only_masked": true,
       "ad_inpaint_only_masked_padding": 32,
       "ad_use_inpaint_width_height": false,
@@ -316,7 +295,7 @@
       "adetailer_enabled": true
     },
     "pipeline": {
-      "images_per_prompt": 2,
+      "images_per_prompt": 1,
       "n_iter": 1,
       "output_dir": "output",
       "filename_pattern": "{seed}",

@@ -224,6 +224,11 @@ class JobService:
         # Optional dispatcher used to schedule event delivery (e.g., onto UI thread).
         # Signature: dispatch_fn(callable_zero_arg) -> None
         self._event_dispatcher: Callable[[Callable[[], None]], None] | None = None
+        # PR-LEARN-003: Completion handlers for learning experiments
+        self._completion_handlers: list[Callable[[Job, Any], None]] = []
+        self._callbacks: dict[str, list[Callable[..., None]]] = {}
+        self._status_callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
+        self._callback_lock = Lock()
 
     @property
     def queue(self) -> JobQueue:
@@ -232,6 +237,31 @@ class JobService:
 
     def register_callback(self, event: str, callback: Callable[..., None]) -> None:
         self._listeners.setdefault(event, []).append(callback)
+    
+    def register_completion_handler(
+        self, 
+        handler: Callable[[Job, Any], None]
+    ) -> None:
+        """Register a callback to be invoked when jobs complete.
+        
+        PR-LEARN-003: Completion handlers are called after job finishes
+        (success or failure) to notify subsystems like learning experiments.
+        """
+        with self._callback_lock:
+            if handler not in self._completion_handlers:
+                self._completion_handlers.append(handler)
+    
+    def unregister_completion_handler(
+        self,
+        handler: Callable[[Job, Any], None]
+    ) -> None:
+        """Remove a completion handler.
+        
+        PR-LEARN-003: Unregister learning completion callbacks.
+        """
+        with self._callback_lock:
+            if handler in self._completion_handlers:
+                self._completion_handlers.remove(handler)
 
     def set_event_dispatcher(self, dispatch_fn: Callable[[Callable[[], None]], None]) -> None:
         """Set an optional dispatcher used to schedule listener callbacks.
@@ -557,7 +587,8 @@ class JobService:
         if running:
             self.cancel_job(running.job_id, reason="cancel_requested")
         self.runner.cancel_current()
-        self._set_queue_status("idle")
+        # Don't force queue to "idle" - let runner continue processing if auto-run enabled
+        # The runner will naturally pick up the next job or go idle when queue is empty
         return running
 
     def cancel_job(self, job_id: str, *, reason: str | None = None) -> None:
@@ -567,7 +598,7 @@ class JobService:
         job = self.job_queue.mark_cancelled(job_id, reason or "cancelled")
         if job is not None:
             self.cleanup_external_processes(job_id, reason=reason)
-        self._set_queue_status("idle")
+        # Don't force queue to "idle" - let runner continue processing if auto-run enabled
 
     def register_external_process(self, job_id: str, pid: int) -> None:
         """Track an external PID so we can clean it up when the job terminates."""
@@ -837,13 +868,19 @@ class JobService:
             self._log_job_finished(job.job_id, "completed", "Job completed successfully.")
             self._emit(self.EVENT_JOB_FINISHED, job)
             self._record_job_history(job, status)
+            # PR-LEARN-003: Notify completion handlers
+            self._notify_completion(job, {"success": True, "status": status})
         elif status == JobStatus.CANCELLED:
             self._log_job_finished(job.job_id, "cancelled", job.error_message or "Job cancelled.")
             self._emit(self.EVENT_JOB_FAILED, job)
+            # PR-LEARN-003: Notify completion handlers
+            self._notify_completion(job, {"success": False, "status": status, "error": job.error_message})
         elif status == JobStatus.FAILED:
             self._log_job_finished(job.job_id, "failed", job.error_message or "Job failed.")
             self._emit(self.EVENT_JOB_FAILED, job)
             self._record_job_history(job, status)
+            # PR-LEARN-003: Notify completion handlers
+            self._notify_completion(job, {"success": False, "status": status, "error": job.error_message})
         if status in {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED}:
             self._stop_watchdog(job.job_id)
             self.cleanup_external_processes(job.job_id, reason=status.value.lower())
@@ -956,6 +993,25 @@ class JobService:
             except Exception:
                 # Preserve existing behavior: swallow listener exceptions
                 continue
+    
+    def _notify_completion(self, job: Job, result: Any) -> None:
+        """Notify all registered completion handlers of job completion.
+        
+        PR-LEARN-003: Called after job completes (success or failure) to
+        notify subsystems like learning experiments of job outcomes.
+        """
+        with self._callback_lock:
+            handlers = list(self._completion_handlers)
+        for handler in handlers:
+            try:
+                handler(job, result)
+            except Exception:
+                log_with_ctx(
+                    logger,
+                    logging.ERROR,
+                    "Completion handler raised exception",
+                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                )
 
     def _emit_status_callbacks(self, job: Job, status: JobStatus) -> None:
         """PR-D: Emit status callbacks registered via set_status_callback."""

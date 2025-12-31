@@ -1225,17 +1225,23 @@ class Pipeline:
         sampler_config = self._parse_sampler_config(config)
 
         # Set model and VAE if specified
-        model_name = (
+        requested_model = (
             config.get("model")
             or config.get("model_name")
             or config.get("base_model")
             or config.get("sd_model_checkpoint")
         )
-        if model_name:
-            self.client.set_model(model_name)
-        vae_name = config.get("vae") or config.get("vae_name")
-        if vae_name:
-            self.client.set_vae(vae_name)
+        if requested_model:
+            self.client.set_model(requested_model)
+        
+        requested_vae = config.get("vae") or config.get("vae_name")
+        if requested_vae:
+            self.client.set_vae(requested_vae)
+        
+        # Query WebUI for ACTUAL current model and VAE (what's really being used)
+        # This ensures manifest reflects reality, not just what we requested
+        model_name = self.client.get_current_model() or requested_model or "Unknown"
+        vae_name = self.client.get_current_vae() or "Automatic"
 
         payload = {
             "prompt": prompt,
@@ -1286,6 +1292,31 @@ class Pipeline:
             payload["styles"] = config["styles"]
 
         self._apply_webui_defaults_once()
+        
+        # Pre-generation memory management for hires fix (only if memory pressure detected)
+        if payload.get("enable_hr", False):
+            try:
+                import gc
+                import psutil
+                
+                mem = psutil.virtual_memory()
+                mem_percent = mem.percent
+                mem_available_gb = mem.available / (1024**3)
+                
+                # Only intervene if memory pressure is HIGH (>85% or <3GB available)
+                if mem_percent > 85.0 or mem_available_gb < 3.0:
+                    logger.warning(
+                        "⚠️ High memory pressure before hires fix: %.1f%% used, %.1fGB available - freeing caches",
+                        mem_percent, mem_available_gb
+                    )
+                    
+                    # Force GC and VRAM clear
+                    gc.collect()
+                    if hasattr(self.client, 'free_vram'):
+                        self.client.free_vram(unload_model=False, force_gc=True)
+                        
+            except Exception as exc:
+                logger.debug("Pre-generation memory check failed (non-fatal): %s", exc)
         
         # Create progress callback that reports to controller
         def on_txt2img_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
@@ -1358,15 +1389,23 @@ class Pipeline:
             }
             
             # PR-GUI-DATA-001: Add refiner configuration
+            refiner_enabled = config.get("use_refiner", False)
             refiner_model = config.get("refiner_model_name") or config.get("refiner_checkpoint")
-            if config.get("use_refiner") and refiner_model:
+            refiner_switch_at = config.get("refiner_switch_at", 0.8)
+            
+            if refiner_enabled and refiner_model:
                 metadata["refiner"] = {
                     "enabled": True,
                     "model": refiner_model,
-                    "switch_at": config.get("refiner_switch_at", 0.8),
+                    "switch_at": refiner_switch_at,
                 }
             else:
-                metadata["refiner"] = {"enabled": False}
+                # Include refiner block even when disabled so manifest is complete
+                metadata["refiner"] = {
+                    "enabled": False,
+                    "model": refiner_model or None,
+                    "switch_at": refiner_switch_at if refiner_model else None,
+                }
             metadata_builder = self._build_image_metadata_builder(
                 image_path=image_path,
                 stage="txt2img",
@@ -1379,6 +1418,20 @@ class Pipeline:
                 results.append(metadata)
 
         logger.info(f"txt2img completed: {len(results)} images generated")
+        
+        # Post-generation memory check for hires fix (warn if still under pressure)
+        if payload.get("enable_hr", False):
+            try:
+                import psutil
+                mem = psutil.virtual_memory()
+                if mem.percent > 90.0:
+                    logger.warning(
+                        "⚠️ Memory still high after generation: %.1f%% used - consider reducing batch size or disabling hires fix",
+                        mem.percent
+                    )
+            except Exception:
+                pass
+        
         return results
         """
         Run txt2img generation.
@@ -3445,6 +3498,30 @@ class Pipeline:
             # REMOVED: ensure_safe_upscale_defaults() was interfering with user's tile_size=0 config
             # Forcing ESRGAN_tile to 512 broke the upscaler's tiling logic
             # User has been running tile_size=0 successfully - don't override it
+            
+            # Pre-upscale memory management (upscale is memory-intensive)
+            try:
+                import gc
+                import psutil
+                
+                mem = psutil.virtual_memory()
+                mem_percent = mem.percent
+                mem_available_gb = mem.available / (1024**3)
+                
+                # Upscale can use a lot of RAM - check memory pressure
+                if mem_percent > 85.0 or mem_available_gb < 3.0:
+                    logger.warning(
+                        "⚠️ High memory pressure before upscale: %.1f%% used, %.1fGB available - freeing caches",
+                        mem_percent, mem_available_gb
+                    )
+                    
+                    # Force GC and VRAM clear to free memory
+                    gc.collect()
+                    if hasattr(self.client, 'free_vram'):
+                        self.client.free_vram(unload_model=False, force_gc=True)
+                        
+            except Exception as exc:
+                logger.debug("Pre-upscale memory check failed (non-fatal): %s", exc)
 
             if upscale_mode == "img2img":
                 # Use img2img for upscaling with denoising
@@ -3660,6 +3737,19 @@ class Pipeline:
                     logger.error(f"Error writing manifest file {manifest_path}: {e}")
 
                 logger.info(f"Upscale completed: {image_path.name}")
+                
+                # Post-upscale memory check (warn if still under pressure)
+                try:
+                    import psutil
+                    mem = psutil.virtual_memory()
+                    if mem.percent > 90.0:
+                        logger.warning(
+                            "⚠️ Memory still high after upscale: %.1f%% used - consider reducing upscale factor or batch size",
+                            mem.percent
+                        )
+                except Exception:
+                    pass
+                
                 self._record_stage_event("upscale", "exit", 1, 1, False)
                 return metadata
             else:

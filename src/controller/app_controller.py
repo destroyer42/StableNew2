@@ -404,6 +404,18 @@ class AppController:
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
             )
+        
+        # PR-LEARN-002: Initialize LearningExecutionController for learning experiments
+        from src.controller.learning_execution_controller import LearningExecutionController
+        self.learning_execution_controller = LearningExecutionController(
+            run_callable=self._learning_run_callable
+        )
+        
+        # PR-LEARN-003: Register learning completion handler
+        if self.job_service:
+            self._learning_completion_handler = self._create_learning_completion_handler()
+            self.job_service.register_completion_handler(self._learning_completion_handler)
+        
         self.webui_connection_controller = getattr(
             self.pipeline_controller, "_webui_connection", None
         )
@@ -600,6 +612,38 @@ class AppController:
         except Exception as exc:
             self._append_log(f"Pipeline error: {exc!r}")
             self._update_status(f"Error: {exc!r}")
+
+    def _learning_run_callable(self, config: dict, step: Any) -> Any:
+        """Callable passed to LearningExecutionController for running pipeline steps.
+
+        PR-LEARN-002: Provides learning experiments with access to the pipeline execution system.
+        """
+        try:
+            # Run through the pipeline runner with the learning experiment config
+            result = self.pipeline_runner.run_txt2img_once(config)
+            return normalize_run_result(result)
+        except Exception as exc:
+            logger.exception(f"[learning] Pipeline run failed for step {step}: {exc}")
+            return normalize_run_result({
+                "success": False,
+                "error": str(exc),
+            })
+    
+    def _create_learning_completion_handler(self):
+        """Create a completion handler that routes to learning subsystem.
+        
+        PR-LEARN-003: Routes job completion events to the learning controller
+        so experiments can update variant status as jobs complete.
+        """
+        def handler(job, result):
+            # Route to learning controller via main window
+            if hasattr(self, "main_window") and self.main_window:
+                learning_tab = getattr(self.main_window, "learning_tab", None)
+                if learning_tab and hasattr(learning_tab, "controller"):
+                    callback = getattr(learning_tab.controller, "on_job_completed_callback", None)
+                    if callable(callback):
+                        callback(job, result)
+        return handler
 
     def update_ui_heartbeat(self) -> None:
         import time

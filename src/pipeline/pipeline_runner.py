@@ -72,14 +72,51 @@ class PipelineRunner:
         
         # Prepare output dir with datetime_packname structure (flat)
         # Format: output/{YYYYMMDD_HHMMSS}_{pack_name}/
-        # All jobs from the same pack share the same folder (cached for 30 minutes)
+        # Jobs from the same pack share folder ONLY if config parameters match
+        # Learning experiments always share folder (by experiment_id)
         pack_name = getattr(njr, "prompt_pack_name", "") or getattr(njr, "job_id", "unknown")
         # Sanitize pack name for filesystem
         safe_pack_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in pack_name)
         
-        # Check cache for existing folder for this pack
+        # Determine cache key based on learning context or config parameters
+        learning_context = getattr(njr, "learning_context", None)
+        
+        if learning_context:
+            # Learning experiments: use experiment_id so all variants share same folder
+            cache_key = f"learning_{learning_context.experiment_id}"
+            logger.debug(f"Using learning experiment folder: {cache_key}")
+        else:
+            # Regular jobs: include config hash so different configs get different folders
+            # Hash relevant parameters that affect generation (model, steps, size, cfg, etc.)
+            import hashlib
+            config = njr.config or {}
+            
+            # Extract key parameters that should trigger new folder
+            config_params = {
+                "model": config.get("txt2img", {}).get("model") or config.get("txt2img", {}).get("sd_model_checkpoint"),
+                "vae": config.get("txt2img", {}).get("vae"),
+                "steps": config.get("txt2img", {}).get("steps"),
+                "cfg_scale": config.get("txt2img", {}).get("cfg_scale"),
+                "width": config.get("txt2img", {}).get("width"),
+                "height": config.get("txt2img", {}).get("height"),
+                "sampler": config.get("txt2img", {}).get("sampler_name"),
+                "scheduler": config.get("txt2img", {}).get("scheduler"),
+                "enable_hr": config.get("txt2img", {}).get("enable_hr"),
+                "hr_scale": config.get("txt2img", {}).get("hr_scale"),
+                "hr_upscaler": config.get("txt2img", {}).get("hr_upscaler"),
+                "use_refiner": config.get("txt2img", {}).get("use_refiner"),
+                "refiner_model": config.get("txt2img", {}).get("refiner_model_name"),
+            }
+            
+            # Create hash of config params (8 chars is enough to avoid collisions)
+            config_str = str(sorted(config_params.items()))
+            config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
+            cache_key = f"{safe_pack_name}_{config_hash}"
+            logger.debug(f"Using config-based cache key: {cache_key}")
+        
+        # Check cache for existing folder for this pack+config
         now = datetime.now()
-        cached_entry = PipelineRunner._pack_folder_cache.get(safe_pack_name)
+        cached_entry = PipelineRunner._pack_folder_cache.get(cache_key)
         
         if cached_entry:
             timestamp_created, run_dir = cached_entry
@@ -94,14 +131,14 @@ class PipelineRunner:
                 run_id = f"{timestamp}_{safe_pack_name}"
                 run_dir = Path(self._runs_base_dir) / run_id
                 run_dir.mkdir(parents=True, exist_ok=True)
-                PipelineRunner._pack_folder_cache[safe_pack_name] = (now, run_dir)
+                PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
         else:
             # No cached folder, create new one
             timestamp = now.strftime("%Y%m%d_%H%M%S")
             run_id = f"{timestamp}_{safe_pack_name}"
             run_dir = Path(self._runs_base_dir) / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
-            PipelineRunner._pack_folder_cache[safe_pack_name] = (now, run_dir)
+            PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
             logger.info(f"📁 Created new folder for pack '{pack_name}': {run_dir}")
         
         # Create manifests subfolder for JSON metadata

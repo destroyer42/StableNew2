@@ -72,6 +72,29 @@ def _format_batch_label(index: int, total: int) -> str | None:
 
 
 @dataclass(frozen=True)
+class LearningJobContext:
+    """Metadata for jobs that are part of a learning experiment.
+    
+    PR-LEARN-003: This context is attached to NJRs for learning experiments
+    so completion handlers can route results back to the learning subsystem.
+    """
+    experiment_id: str
+    experiment_name: str
+    variant_index: int
+    variable_under_test: str
+    variant_value: Any
+    
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "experiment_id": self.experiment_id,
+            "experiment_name": self.experiment_name,
+            "variant_index": self.variant_index,
+            "variable_under_test": self.variable_under_test,
+            "variant_value": self.variant_value,
+        }
+
+
+@dataclass(frozen=True)
 class JobQueueItemDTO:
     """Queue display DTO derived from NormalizedJobRecord snapshot.
 
@@ -574,6 +597,8 @@ class NormalizedJobRecord:
     # Start stage for reprocessing: skip stages before this one
     # Options: "txt2img", "img2img", "adetailer", "upscale"
     start_stage: str | None = None
+    # PR-LEARN-003: Learning experiment context for completion routing
+    learning_context: LearningJobContext | None = None
 
     @property
     def created_at(self) -> datetime:

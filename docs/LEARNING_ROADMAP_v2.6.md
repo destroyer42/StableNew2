@@ -24,13 +24,13 @@ This document provides:
 
 | Component | File | Status | Notes |
 |-----------|------|--------|-------|
-| LearningTabFrame | `src/gui/views/learning_tab_frame_v2.py` | ✅ Complete | 3-column layout, header with toggle, wired to LearningController |
+| LearningTabFrame | `src/gui/views/learning_tab_frame_v2.py` | ✅ Complete | 3-column layout, header with toggle, wired to LearningController, **NOW WIRED TO EXECUTION CONTROLLER** |
 | ExperimentDesignPanel | `src/gui/views/experiment_design_panel.py` | ✅ Complete | Full UI: name, stage, variable, range, prompt source, buttons |
 | LearningPlanTable | `src/gui/views/learning_plan_table.py` | ✅ Complete | Treeview with status, selection, highlight support |
 | LearningReviewPanel | `src/gui/views/learning_review_panel.py` | ✅ Complete | Status, metadata, image list, rating controls |
 | LearningReviewDialogV2 | `src/gui/learning_review_dialog_v2.py` | ✅ Complete | Modal dialog for reviewing historical records |
 
-**GUI Assessment:** The UI layer is substantially complete. All panels render correctly and have proper event handlers.
+**GUI Assessment:** The UI layer is substantially complete. All panels render correctly and have proper event handlers. **PR-LEARN-001 & PR-LEARN-002 COMPLETE: Controllers now properly wired.**
 
 ### 1.2 State Layer — COMPLETE ✅
 
@@ -43,19 +43,22 @@ This document provides:
 
 **State Assessment:** The state layer is complete and well-designed.
 
-### 1.3 Controller Layer — PARTIALLY WIRED ⚠️
+### 1.3 Controller Layer — ✅ **PHASE 1 COMPLETE (PR-LEARN-001 & PR-LEARN-002)**
 
 | Component | File | Status | Critical Issues |
 |-----------|------|--------|-----------------|
-| LearningController | `src/gui/controllers/learning_controller.py` | ⚠️ 70% | Has methods but `pipeline_controller.start_pipeline()` call is **BROKEN** — passes wrong args |
-| LearningExecutionController | `src/controller/learning_execution_controller.py` | ✅ Complete | Works but **NOT CONNECTED** to GUI LearningController |
+| LearningController | `src/gui/controllers/learning_controller.py` | ✅ **COMPLETE** | ✅ **PR-LEARN-001**: Fixed to use proper queue submission API; ✅ **PR-LEARN-002**: Now accepts execution_controller |
+| LearningExecutionController | `src/controller/learning_execution_controller.py` | ✅ **COMPLETE** | ✅ **PR-LEARN-002**: Now initialized by AppController and wired through GUI |
 
-**Controller Issues:**
-1. `LearningController._submit_variant_job()` calls `pipeline_controller.start_pipeline()` with `on_complete`/`on_error` callbacks — but `start_pipeline()` doesn't accept these parameters
-2. No integration between `LearningController` (GUI) and `LearningExecutionController` (backend)
-3. Main window creates `LearningTabFrame` but does NOT pass `pipeline_controller` to it (see `main_window_v2.py:189-195`)
+**Controller Assessment:**
+- ✅ **PR-LEARN-001 COMPLETE**: `LearningController._submit_variant_job()` now uses correct PackJobEntry queue submission
+- ✅ **PR-LEARN-001 COMPLETE**: MainWindow passes `pipeline_controller` to `LearningTabFrame`
+- ✅ **PR-LEARN-001 COMPLETE**: `PackJobEntry.learning_metadata` field added for provenance tracking
+- ✅ **PR-LEARN-002 COMPLETE**: `AppController` creates `LearningExecutionController` with `_learning_run_callable`
+- ✅ **PR-LEARN-002 COMPLETE**: `LearningTabFrame` extracts and passes `execution_controller` to `LearningController`
+- ✅ **PR-LEARN-002 COMPLETE**: Full wiring: AppController → MainWindow → LearningTabFrame → LearningController
 
-### 1.4 Backend Layer — COMPLETE BUT DISCONNECTED ✅/⚠️
+### 1.4 Backend Layer — COMPLETE AND **NOW CONNECTED** ✅
 
 | Component | File | Status | Notes |
 |-----------|------|--------|-------|
@@ -67,14 +70,15 @@ This document provides:
 | LearningAdapter | `src/learning/learning_adapter.py` | ✅ Complete | Builds plans from config |
 | FeedbackManager | `src/learning/feedback_manager.py` | ✅ Complete | Per-run feedback.json |
 
-**Backend Assessment:** Core data structures and algorithms are complete. The issue is **integration** — the GUI controller doesn't invoke the backend correctly.
+**Backend Assessment:** Core data structures and algorithms are complete. ✅ **PR-LEARN-002: Now integrated with GUI via LearningExecutionController.**
 
-### 1.5 AppController Integration — MINIMAL ❌
+### 1.5 AppController Integration — ✅ **PHASE 1 COMPLETE**
 
 | Integration Point | Status | Issue |
 |-------------------|--------|-------|
-| learning_controller attribute | ❌ Missing | AppController has `_shutdown_learning_hooks()` but never creates `learning_controller` |
-| Pipeline completion hooks | ❌ Missing | No mechanism to route job completion to learning subsystem |
+| learning_execution_controller attribute | ✅ **COMPLETE** | ✅ **PR-LEARN-002**: AppController creates LearningExecutionController in `__init__` |
+| _learning_run_callable method | ✅ **COMPLETE** | ✅ **PR-LEARN-002**: Provides pipeline execution callable for learning experiments |
+| Pipeline completion hooks | ❌ Missing | **PR-LEARN-003**: No mechanism to route job completion to learning subsystem (NEXT PHASE) |
 | WebUI resource discovery | ⚠️ Partial | No learning-specific resource integration |
 
 ---
@@ -201,15 +205,41 @@ When a pipeline job completes (via `SingleNodeJobRunner` or `JobService`), there
 
 **Goal:** Make "Run Experiment" button actually execute variants.
 
-### Phase 2: Job Completion Integration (Medium-Term, 2-3 PRs)
+### Phase 2: Job Completion Integration (Medium-Term, 2-3 PRs) ✅ **COMPLETE**
 
-| PR | Title | Priority | Scope |
-|----|-------|----------|-------|
-| PR-LEARN-003 | Add Learning Job Completion Hooks | P1 | Route job completion events to learning subsystem |
-| PR-LEARN-004 | Live Variant Status Updates | P1 | Real-time table updates as jobs complete |
-| PR-LEARN-005 | Image Result Integration | P1 | Connect output images to variant records |
+| PR | Title | Priority | Scope | Status |
+|----|-------|----------|-------|--------|
+| PR-LEARN-003 | Add Learning Job Completion Hooks | P1 | Route job completion events to learning subsystem | ✅ **COMPLETE** |
+| PR-LEARN-004 | Live Variant Status Updates | P1 | Real-time table updates as jobs complete | ✅ **COMPLETE** |
+| PR-LEARN-005 | Image Result Integration | P1 | Connect output images to variant records | ✅ **COMPLETE** |
 
 **Goal:** Full closed-loop from experiment → job → result → variant update.
+
+**Implementation Summary:**
+
+**PR-LEARN-003 (Complete)**:
+- Added `LearningJobContext` dataclass to `job_models_v2.py` with experiment metadata
+- Added `learning_context` field to `NormalizedJobRecord`
+- Implemented completion handler registration in `JobService` (`register_completion_handler`, `unregister_completion_handler`, `_notify_completion`)
+- Added `on_job_completed_callback` to `LearningController` to route completions
+- Wired completion handler in `AppController` via `_create_learning_completion_handler`
+- Completion handlers called after job finishes (COMPLETED, CANCELLED, FAILED)
+
+**PR-LEARN-004 (Complete)**:
+- Variant status updates automatically on job completion
+- `_on_variant_job_completed` updates variant status to "completed"
+- `_on_variant_job_failed` updates variant status to "failed"
+- Live table updates via `_update_variant_status`, `_update_variant_images`, `_highlight_variant`
+- Error states properly handled and displayed
+
+**PR-LEARN-005 (Complete)**:
+- Enhanced `_on_variant_job_completed` to extract images from multiple result formats
+- Supports "images", "output_paths", and "image_paths" keys
+- Image paths added to `variant.image_refs` list
+- Automatic deduplication prevents duplicate image references
+- Images linked to variants for review and rating
+
+**Tests:** `tests/learning_v2/test_phase2_job_completion_integration.py` (12/12 passing)
 
 ### Phase 3: Review & Rating Polish (Medium-Term, 2 PRs)
 

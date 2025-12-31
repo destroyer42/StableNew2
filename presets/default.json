@@ -64,7 +64,7 @@
   "adetailer": {
     "enabled": false,
     "adetailer_enabled": true,
-    "adetailer_model": "face_yolov8n.pt",
+    "adetailer_model": "face_yolov8s.pt",
     "adetailer_confidence": 0.6916666666666667,
     "adetailer_mask_feather": 8,
     "adetailer_sampler": "DPM++ 2M",

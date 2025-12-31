@@ -742,17 +742,20 @@ class SDWebUIClient:
     def apply_upscale_performance_defaults(self) -> None:
         """
         Apply conservative tiling and resolution defaults to the WebUI options.
+        
+        These are SAFE defaults that prevent memory explosion during upscaling.
+        Smaller tiles = less VRAM per chunk = more stable upscaling.
 
         Best-effort: failures are logged but do not raise.
         """
 
         payload = {
-            "img_max_size_mp": 16,
-            "ESRGAN_tile": 1920,
-            "ESRGAN_tile_overlap": 64,
-            "DAT_tile": 1920,
-            "DAT_tile_overlap": 64,
-            "upscaling_max_images_in_cache": 8,
+            "img_max_size_mp": 8.0,      # 8 megapixels max (2828x2828) - safe for most GPUs
+            "ESRGAN_tile": 768,           # 768px tiles = 589k pixels per tile (SAFE)
+            "ESRGAN_tile_overlap": 64,    # Moderate overlap for quality
+            "DAT_tile": 768,              # 768px tiles = 589k pixels per tile (SAFE)
+            "DAT_tile_overlap": 64,       # Moderate overlap for quality
+            "upscaling_max_images_in_cache": 4,  # Reduced cache to free memory
         }
 
         can_send, reason = self._options_can_send()
@@ -771,7 +774,7 @@ class SDWebUIClient:
                     raise RuntimeError("No response from /sdapi/v1/options")
 
             logger.info(
-                "Applied WebUI upscale defaults: img_max_size_mp=%s, ESRGAN_tile=%s, DAT_tile=%s",
+                "Applied SAFE WebUI upscale defaults: img_max_size_mp=%.1f, ESRGAN_tile=%s, DAT_tile=%s (768px tiles = 589k pixels/tile, SAFE for memory)",
                 payload.get("img_max_size_mp"),
                 payload.get("ESRGAN_tile"),
                 payload.get("DAT_tile"),
@@ -779,7 +782,7 @@ class SDWebUIClient:
         except Exception as exc:  # noqa: BLE001 - log and continue
             logger.warning("Failed to apply WebUI upscale defaults: %s", exc)
 
-    def free_vram(self, unload_model: bool = False) -> bool:
+    def free_vram(self, unload_model: bool = False, force_gc: bool = True) -> bool:
         """
         Free VRAM by unloading cached data.
         
@@ -787,10 +790,13 @@ class SDWebUIClient:
         
         Args:
             unload_model: If True, also unload the SD model (slower but frees more memory)
+            force_gc: If True, also run Python garbage collection
             
         Returns:
             True if successful, False otherwise
         """
+        freed = False
+        
         try:
             # First try the unload-checkpoint endpoint if available (A1111 1.6+)
             if unload_model:
@@ -801,7 +807,7 @@ class SDWebUIClient:
                 ) as response:
                     if response is not None:
                         logger.info("Unloaded SD model to free VRAM")
-                        return True
+                        freed = True
             
             # Alternative: POST to /sdapi/v1/refresh-checkpoints which clears caches
             with self._request_context(
@@ -811,9 +817,19 @@ class SDWebUIClient:
             ) as response:
                 if response is not None:
                     logger.info("Refreshed checkpoints to free VRAM caches")
-                    return True
+                    freed = True
             
-            return False
+            # Optional: Force Python garbage collection
+            if force_gc:
+                try:
+                    import gc
+                    collected = gc.collect()
+                    if collected > 100:  # Only log if significant
+                        logger.debug("Python GC freed %d objects", collected)
+                except Exception:
+                    pass
+            
+            return freed
             
         except Exception as exc:
             logger.debug("free_vram failed (non-fatal): %s", exc)
@@ -1620,7 +1636,30 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse current model response: {exc}")
                 return None
 
-        return data.get("sd_model_checkpoint")
+            return data.get("sd_model_checkpoint")
+
+    def get_current_vae(self) -> str | None:
+        """
+        Get the currently loaded VAE.
+
+        Returns:
+            Current VAE name or None if using default/Automatic
+        """
+        with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
+            if response is None:
+                return None
+
+            try:
+                data = response.json()
+            except ValueError as exc:
+                logger.error(f"Failed to parse current VAE response: {exc}")
+                return None
+
+            vae = data.get("sd_vae")
+            # WebUI returns "Automatic" or "None" when no VAE is explicitly set
+            if vae in ("Automatic", "None", None, ""):
+                return "Automatic"
+            return vae
 
 
 def validate_webui_health(*args, **kwargs):

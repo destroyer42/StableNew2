@@ -24,11 +24,13 @@ class LearningController:
         review_panel: Any | None = None,  # LearningReviewPanel reference
         learning_record_writer: LearningRecordWriter
         | None = None,  # LearningRecordWriter reference
+        execution_controller: Any | None = None,  # PR-LEARN-002: LearningExecutionController
     ) -> None:
         self.learning_state = learning_state
         self.prompt_workspace_state = prompt_workspace_state
         self.pipeline_state = pipeline_state
         self.pipeline_controller = pipeline_controller
+        self.execution_controller = execution_controller  # PR-LEARN-002: Backend controller
         self._plan_table = plan_table
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
@@ -151,32 +153,65 @@ class LearningController:
         experiment = self.learning_state.current_experiment
 
         # Build overrides for this variant based on variable_under_test
-        _overrides = self._build_variant_overrides(variant, experiment)
+        overrides = self._build_variant_overrides(variant, experiment)
+        
+        # Build learning metadata for provenance
+        learning_metadata = {
+            "learning_enabled": True,
+            "learning_experiment_name": experiment.name,
+            "learning_stage": experiment.stage,
+            "learning_variable": experiment.variable_under_test,
+            "learning_variant_value": variant.param_value,
+            "variant_index": self._get_variant_index(variant),
+        }
 
-        # Submit the job
+        # Submit the job via queue submission (not broken start_pipeline)
         try:
-            success = self.pipeline_controller.start_pipeline(
-                pipeline_func=None,
-                on_complete=lambda result: self._on_variant_job_completed(variant, result),
-                on_error=lambda error: self._on_variant_job_failed(variant, error),
+            from src.gui.app_state_v2 import PackJobEntry
+            
+            # Build PackJobEntry with learning metadata
+            pack_entry = PackJobEntry(
+                pack_id=f"learning_{experiment.name}_{variant.param_value}",
+                pack_name=f"Learning: {experiment.name} ({experiment.variable_under_test}={variant.param_value})",
+                config_snapshot=overrides,
+                prompt_text=experiment.prompt_text or "",
+                negative_prompt_text="",
+                learning_metadata=learning_metadata,  # PR-LEARN-001: Add learning provenance
             )
-
-            if success and variant.status != "completed":
-                variant.status = "running"
-                # Update table with new status
-                variant_index = self._get_variant_index(variant)
-                if variant_index >= 0:
-                    self._update_variant_status(variant_index, "running")
-                    self._highlight_variant(variant_index, True)
-            elif not success:
+            
+            # Submit via pipeline controller's queue submission
+            if hasattr(self.pipeline_controller, "queue_controller"):
+                queue_controller = self.pipeline_controller.queue_controller
+                if hasattr(queue_controller, "submit_pack_job"):
+                    success = queue_controller.submit_pack_job(pack_entry)
+                    
+                    if success:
+                        variant.status = "queued"
+                        variant_index = self._get_variant_index(variant)
+                        if variant_index >= 0:
+                            self._update_variant_status(variant_index, "queued")
+                            self._highlight_variant(variant_index, True)
+                    else:
+                        variant.status = "failed"
+                        variant_index = self._get_variant_index(variant)
+                        if variant_index >= 0:
+                            self._update_variant_status(variant_index, "failed")
+                else:
+                    # Fallback: Try app_state queue submission
+                    if hasattr(self.pipeline_controller, "app_state"):
+                        app_state = self.pipeline_controller.app_state
+                        if hasattr(app_state, "job_draft"):
+                            app_state.job_draft.packs.append(pack_entry)
+                            variant.status = "queued"
+            else:
+                # No queue controller available
                 variant.status = "failed"
-                # Update table with failed status
-                variant_index = self._get_variant_index(variant)
-                if variant_index >= 0:
-                    self._update_variant_status(variant_index, "failed")
 
-        except Exception:
+        except Exception as exc:
             variant.status = "failed"
+            variant_index = self._get_variant_index(variant)
+            if variant_index >= 0:
+                self._update_variant_status(variant_index, "failed")
 
     def _build_variant_overrides(
         self, variant: LearningVariant, experiment: LearningExperiment
@@ -213,16 +248,31 @@ class LearningController:
         return overrides
 
     def _on_variant_job_completed(self, variant: LearningVariant, result: dict[str, Any]) -> None:
-        """Handle completion of a variant job."""
+        """Handle completion of a variant job.
+        
+        PR-LEARN-004: Updates variant status and refreshes UI table.
+        PR-LEARN-005: Extracts and links output images to variant.
+        """
         variant.status = "completed"
         variant.completed_images += 1
 
-        # Extract image references from result
-        if "images" in result:
-            for image_path in result["images"]:
+        # PR-LEARN-005: Extract image references from result
+        image_paths = []
+        if isinstance(result, dict):
+            # Try multiple possible result structures
+            if "images" in result:
+                image_paths.extend(result["images"])
+            elif "output_paths" in result:
+                image_paths.extend(result["output_paths"])
+            elif "image_paths" in result:
+                image_paths.extend(result["image_paths"])
+        
+        # Add image references to variant
+        for image_path in image_paths:
+            if image_path and image_path not in variant.image_refs:
                 variant.image_refs.append(image_path)
 
-        # Update UI with live updates
+        # PR-LEARN-004: Update UI with live updates
         variant_index = self._get_variant_index(variant)
         if variant_index >= 0:
             self._update_variant_status(variant_index, "completed")
@@ -335,6 +385,61 @@ class LearningController:
             # Update review panel with new recommendations
             if self._review_panel and hasattr(self._review_panel, "update_recommendations"):
                 self._review_panel.update_recommendations(recommendations)
+
+    def get_recommendations_for_current_prompt(self) -> Any | None:
+        """Get recommendations for the current prompt and stage."""
+        if not self._recommendation_engine:
+            return None
+
+        # Get current prompt and stage
+        prompt_text = ""
+    
+    def on_job_completed_callback(
+        self, 
+        job: Any, 
+        result: Any
+    ) -> None:
+        """Handle job completion events from the pipeline.
+        
+        PR-LEARN-003: This is registered as a callback with JobService to receive
+        notifications when learning-related jobs complete.
+        
+        Args:
+            job: Job object (contains snapshot with NJR)
+            result: Result dict with 'success', 'status', 'error' fields
+        """
+        # Extract NJR from job snapshot
+        njr = getattr(job, "snapshot", None)
+        if not njr:
+            return
+        
+        # Check if this is a learning job
+        learning_ctx = getattr(njr, "learning_context", None)
+        if not learning_ctx:
+            return
+        
+        # Check if it belongs to our current experiment
+        if not self.learning_state.current_experiment:
+            return
+        
+        if learning_ctx.experiment_id != self.learning_state.current_experiment.name:
+            return
+        
+        # Find the variant by index
+        variant_index = learning_ctx.variant_index
+        if variant_index < 0 or variant_index >= len(self.learning_state.plan):
+            return
+        
+        variant = self.learning_state.plan[variant_index]
+        
+        # Update variant based on result
+        success = result.get("success", False) if isinstance(result, dict) else getattr(result, "success", False)
+        if success:
+            self._on_variant_job_completed(variant, result)
+        else:
+            error_msg = result.get("error", "Unknown error") if isinstance(result, dict) else getattr(result, "error", "Unknown error")
+            error = Exception(str(error_msg))
+            self._on_variant_job_failed(variant, error)
 
     def get_recommendations_for_current_prompt(self) -> Any | None:
         """Get recommendations for the current prompt and stage."""

@@ -1,5 +1,11 @@
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner>
-(masterpiece, 8k) A female fighter, viking helm under arm, nordic braided hair and tatoos, icy blue clear eyes with a distant expression, in furs and armor dressed for the winter, carrying a great axe on back, stands at the edge of an icy cliff looking down, cloak blowing in the wind, high noon.
+(masterpiece, 8k, close up cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, blonde-hair woman, icy blue clear eyes with a cute smile, next to a mountain lake, posed gracefully, legs spread vivaciously, grabbing her inner thighs suggestively, beautiful skin glistening in the sunlight, lightly tanned
 <lora:add-detail-xl:0.30000000000000004> <lora:CinematicStyle_v1:0.8> <lora:DetailedEyes_V3:0.2912621359223301>
 neg: <embedding:NEGATIVE_HANDS> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:easynegative> <embedding:ac_neg1>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+(masterpiece, 8k, cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, amber colored eyes, gorgeous smile, knowing expression, detailed skin, natural light, high fantasy, magical atmosphere, a powerful fantasy female warrior as the central subject, wide stance, arched back, hands up and behind head, illuminated by soft directional side lighting, set in a vast torch-lit hall, epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:DetailedEyes_V3:0.33495145631067963>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:ac_neg1> <embedding:bad_prompt>
+neg: amber, deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi

@@ -187,7 +187,13 @@ class MainWindowV2:
         # Learning tab (optional; attach via registry)
         def _make_learning(parent):
             try:
-                tab = LearningTabFrame(parent)
+                # PR-LEARN-001: Pass pipeline_controller and app_controller for proper wiring
+                tab = LearningTabFrame(
+                    parent,
+                    app_state=self.app_state,
+                    pipeline_controller=self.pipeline_controller,
+                    app_controller=self.app_controller,
+                )
             except Exception:
                 try:
                     tab = LearningTabFrame(parent, app_state=self.app_state)

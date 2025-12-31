@@ -36,6 +36,7 @@ class PackJobEntry:
     pack_row_index: int | None = None
     pack_version: str | None = None
     matrix_slot_values: dict[str, str] = field(default_factory=dict)
+    learning_metadata: dict[str, Any] | None = None  # PR-LEARN-001: Learning experiment provenance
 
 
 @dataclass

@@ -24,18 +24,24 @@ class LearningTabFrame(ttk.Frame):
         master: tk.Misc,
         app_state: AppStateV2 | None = None,
         pipeline_controller: Any | None = None,
+        app_controller: Any | None = None,  # PR-LEARN-002: For LearningExecutionController access
         *args: Any,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, *args, **kwargs)
         self.app_state = app_state
         self.pipeline_controller = pipeline_controller
+        self.app_controller = app_controller  # PR-LEARN-002: Store app_controller reference
 
         # Initialize learning record writer
         self.learning_record_writer = LearningRecordWriter("data/learning_records.jsonl")
 
         # Initialize learning state and controller
         self.learning_state = LearningState()
+        
+        # PR-LEARN-002: Get LearningExecutionController from app_controller if available
+        execution_controller = getattr(app_controller, "learning_execution_controller", None) if app_controller else None
+        
         self.learning_controller = LearningController(
             learning_state=self.learning_state,
             prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
@@ -43,6 +49,7 @@ class LearningTabFrame(ttk.Frame):
             else None,
             pipeline_controller=self.pipeline_controller,
             learning_record_writer=self.learning_record_writer,
+            execution_controller=execution_controller,  # PR-LEARN-002: Pass execution controller
         )
 
         # Configure main layout

@@ -187,7 +187,9 @@ class UnifiedPromptResolver:
         
         lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in pack_row.lora_tags)
         positive_parts = []
-        positive_parts.extend(pack_row.embeddings)
+        # Fix: Wrap embeddings in <embedding:> syntax
+        if pack_row.embeddings:
+            positive_parts.extend(f"<embedding:{emb}>" for emb in pack_row.embeddings)
         if quality:  # Use substituted quality_line
             positive_parts.append(quality)
         if subject:
@@ -202,10 +204,13 @@ class UnifiedPromptResolver:
         if apply_global_negative and global_negative:
             negative_parts.append(global_negative.strip())
             global_applied = True
+        # Fix: Add pack_negative BEFORE pack row negative embeddings/phrases
         if pack_negative:
             negative_parts.append(pack_negative.strip())
+        # Fix: Wrap negative embeddings in <embedding:> syntax
+        if pack_row.negative_embeddings:
+            negative_parts.extend(f"<embedding:{tag}>" for tag in pack_row.negative_embeddings)
         negative_parts.extend(phrase for phrase in pack_row.negative_phrases if phrase)
-        negative_parts.extend(f"<embedding:{tag}>" for tag in pack_row.negative_embeddings)
         if self._safety_negative:
             negative_parts.append(self._safety_negative)
 

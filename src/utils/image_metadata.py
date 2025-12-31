@@ -298,6 +298,35 @@ def build_payload_from_manifest(
         except Exception:
             config_hash = ""
     
+    # Extract generation parameters from config for reproducibility
+    generation_params = {}
+    if isinstance(config_value, dict):
+        generation_params = {
+            "model": manifest.get("model"),
+            "vae": manifest.get("vae"),
+            "steps": config_value.get("steps"),
+            "cfg_scale": config_value.get("cfg_scale"),
+            "width": config_value.get("width"),
+            "height": config_value.get("height"),
+            "sampler_name": config_value.get("sampler_name"),
+            "scheduler": config_value.get("scheduler"),
+            "clip_skip": config_value.get("clip_skip"),
+            "denoising_strength": config_value.get("denoising_strength"),
+            "prompt": manifest.get("prompt"),
+            "negative_prompt": config_value.get("negative_prompt"),
+        }
+        # Remove None values
+        generation_params = {k: v for k, v in generation_params.items() if v is not None}
+    
+    # Extract seeds metadata (D-MANIFEST-001)
+    seeds_data = manifest.get("seeds", {})
+    if not isinstance(seeds_data, dict):
+        seeds_data = {
+            "requested_seed": manifest.get("requested_seed"),
+            "actual_seed": manifest.get("actual_seed"),
+            "actual_subseed": manifest.get("actual_subseed"),
+        }
+    
     payload = {
         "job_id": manifest.get("job_id") or "",
         "run_id": run_dir.name,
@@ -308,11 +337,8 @@ def build_payload_from_manifest(
             "height": height,
             "format": image_path.suffix.lstrip(".").lower(),
         },
-        "seeds": {
-            "requested_seed": manifest.get("requested_seed"),
-            "actual_seed": manifest.get("actual_seed"),
-            "actual_subseed": manifest.get("actual_subseed"),
-        },
+        "generation": generation_params,  # All parameters needed for reproducibility
+        "seeds": seeds_data,
         "njr": {
             "snapshot_version": "2.6",
             "sha256": njr_sha256 or "",
@@ -325,5 +351,9 @@ def build_payload_from_manifest(
         # Include full stage history chain for complete pipeline tracking
         "stage_history": manifest.get("stage_history", []),
     }
+    
+    # Add refiner info if present (PR-GUI-DATA-001)
+    if "refiner" in manifest:
+        payload["refiner"] = manifest["refiner"]
     
     return payload
