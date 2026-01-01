@@ -5,7 +5,7 @@
       {
         "index": 0,
         "text": "(masterpiece, best quality, photorealistic) portrait, detailed lightly tanned glistening skin, natural pores, highly detailed face, shy smile, natural light, high fantasy, magical atmosphere, [[number]] [[hair]]-haired perky-large-breasted sexy athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -42,16 +42,22 @@
       {
         "index": 0,
         "text": "(masterpiece, best quality, photorealistic) portrait, detailed lightly tanned glistening skin, natural pores, highly detailed face, shy smile, natural light, high fantasy, magical atmosphere, [[number]] [[hair]]-haired perky-large-breasted sexy athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          "stable_yogis_realism_positives_v1",
+          "Stable-Yogis-Makeup-Enhancer-XL",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable_Yogis_General_Positives_V1",
+          "Stable_Yogis_PDXL_Positives2"
         ],
         "negative_embeddings": [
           "negative_hands",
           "stable_yogis_anatomy_negatives_v1-neg",
           "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          "SDXLnegXL",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "bad_prompt"
         ],
         "loras": [
           [

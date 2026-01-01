@@ -1,13 +1,398 @@
 {
   "pack_data": {
     "name": "SDXL_female_fantasy_heroes_Fantasy",
-    "slots": [],
+    "slots": [
+      {
+        "index": 0,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom witch-knight commanding spectral chains in [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1",
+          "Stable-Yogis-Makeup-Enhancer-XL",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable_Yogis_General_Positives_V1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg",
+          "SDXLnegXL",
+          "bad_prompt",
+          "ac_neg1"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "Realism_Lora_By_Stable_yogi_SDXL8.1",
+            0.510989010989011
+          ]
+        ]
+      },
+      {
+        "index": 1,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom holy cleric with radiant staff healing allies in [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 2,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom valiant shieldmaiden on castle ramparts, [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 3,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom quick-footed elven ranger drawing her bow in [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 4,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom armored dragon rider gazing toward the horizon above [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 5,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nbattle-hardened paladin raising glowing hammer in [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 6,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom shadow rogue stepping from the gloom of [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 7,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom silver-haired battle mage standing within swirling runes in [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 8,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom battlefield bard strumming enchanted lute amidst [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      },
+      {
+        "index": 9,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\ngorgeous buxom fire sorceress weaving burning sigils through the air in [[environment]]",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.65
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.75
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.7
+          ]
+        ]
+      }
+    ],
     "matrix": {
-      "enabled": false,
-      "mode": "fanout",
-      "limit": 8,
-      "slots": []
-    }
+      "enabled": true,
+      "mode": "random",
+      "limit": 1,
+      "slots": [
+        {
+          "name": "environment",
+          "values": [
+            "dungeon",
+            "castle",
+            "dark forest",
+            "underground grotto",
+            "ancient ruins"
+          ]
+        }
+      ]
+    },
+    "show_preview": true
   },
   "preset_data": {
     "txt2img": {

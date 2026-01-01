@@ -1,0 +1,40 @@
+{
+  "status": "ok",
+  "payload": {
+    "image": {
+      "format": "png",
+      "height": 1408,
+      "path": "txt2img_p01_v01_A test_1231090327.png",
+      "width": 768
+    },
+    "job_id": "5aefce72f710405ab3e665c2a4c5c0a8",
+    "njr": {
+      "sha256": "1b9992c654553e19ca799530cb02dfd6bbe7769fac701788120819bb09b764b9",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20251231_085958_A_test",
+    "seeds": {
+      "actual_seed": 32231516,
+      "actual_subseed": 1859956524,
+      "requested_seed": -1
+    },
+    "stage": "txt2img",
+    "stage_history": [],
+    "stage_manifest": {
+      "config_hash": "ff65b2c176ce6ad12fb1d91c499de010ac9535ebbbbb5bbcf8f09fadad79eeb6",
+      "name": "txt2img_p01_v01_A test_1231090327",
+      "timestamp": "20251231_090355"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "5aefce72f710405ab3e665c2a4c5c0a8",
+    "stablenew:run_id": "20251231_085958_A_test",
+    "stablenew:stage": "txt2img",
+    "stablenew:created_utc": "2025-12-31T15:03:55.494360+00:00",
+    "stablenew:payload_sha256": "af0d6fa2a2bd051e72ce49b6b27ff472114a3f3f44a7082cd113b764849791a5",
+    "stablenew:payload": "{\"image\":{\"format\":\"png\",\"height\":1408,\"path\":\"txt2img_p01_v01_A test_1231090327.png\",\"width\":768},\"job_id\":\"5aefce72f710405ab3e665c2a4c5c0a8\",\"njr\":{\"sha256\":\"1b9992c654553e19ca799530cb02dfd6bbe7769fac701788120819bb09b764b9\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20251231_085958_A_test\",\"seeds\":{\"actual_seed\":32231516,\"actual_subseed\":1859956524,\"requested_seed\":-1},\"stage\":\"txt2img\",\"stage_history\":[],\"stage_manifest\":{\"config_hash\":\"ff65b2c176ce6ad12fb1d91c499de010ac9535ebbbbb5bbcf8f09fadad79eeb6\",\"name\":\"txt2img_p01_v01_A test_1231090327\",\"timestamp\":\"20251231_090355\"}}",
+    "stablenew:njr_sha256": "1b9992c654553e19ca799530cb02dfd6bbe7769fac701788120819bb09b764b9"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20251231_085958_A_test\\txt2img_p01_v01_A test_1231090327.png"
+}

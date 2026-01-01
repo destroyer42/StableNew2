@@ -241,14 +241,41 @@ When a pipeline job completes (via `SingleNodeJobRunner` or `JobService`), there
 
 **Tests:** `tests/learning_v2/test_phase2_job_completion_integration.py` (12/12 passing)
 
-### Phase 3: Review & Rating Polish (Medium-Term, 2 PRs)
+### Phase 3: Review & Rating Polish (Medium-Term, 2 PRs) ✅ **COMPLETE**
 
-| PR | Title | Priority | Scope |
-|----|-------|----------|-------|
-| PR-LEARN-006 | Image Preview in Review Panel | P2 | Display actual images, not just paths |
-| PR-LEARN-007 | Rating Persistence & Retrieval | P2 | Save ratings, reload on session start |
+| PR | Title | Priority | Scope | Status |
+|----|-------|----------|-------|--------|
+| PR-LEARN-006 | Image Preview in Review Panel | P2 | Display actual images, not just paths | ✅ **COMPLETE** |
+| PR-LEARN-007 | Rating Persistence & Retrieval | P2 | Save ratings, reload on session start | ✅ **COMPLETE** |
 
 **Goal:** Complete rating workflow with visual feedback.
+
+**Implementation Summary:**
+
+**PR-LEARN-006 (Complete)**:
+- Created `ImageThumbnail` widget in `src/gui/widgets/image_thumbnail.py`
+- Supports PIL image loading with automatic resizing and aspect ratio preservation
+- Graceful degradation without PIL (shows installation message)
+- Error handling for missing/corrupt images
+- Integrated into `LearningReviewPanel` with thumbnail display
+- Images load automatically when selected from list
+- Debounced resize handling for smooth UX
+
+**PR-LEARN-007 (Complete)**:
+- Added rating query methods to `LearningRecordWriter`:
+  - `get_ratings_for_experiment()` - returns {image_path: rating} dict
+  - `get_average_rating_for_variant()` - calculates average for variant
+  - `is_image_rated()` - checks if image already rated
+- Added rating cache to `LearningController` (`_rating_cache` dict)
+- `load_existing_ratings()` called when building plan
+- `get_rating_for_image()` and `is_image_rated()` helper methods
+- Rating indicators (⭐) shown in image list for rated images
+- Duplicate rating prevention with confirmation dialog
+- Refresh display after rating to show new indicators
+- Added "Avg Rating" column to `LearningPlanTable` with star display
+- `update_row_rating()` method updates table with average ratings
+
+**Tests:** `tests/gui/test_image_thumbnail.py` (3/3 passing), `tests/learning_v2/test_rating_persistence.py` (7/7 passing)
 
 ### Phase 4: Recommendations & Analytics (Long-Term, 3 PRs)
 

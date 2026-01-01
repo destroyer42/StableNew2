@@ -62,6 +62,10 @@ DEFAULT_CONNECT_TIMEOUT = 3.0
 DEFAULT_READ_TIMEOUT = 60.0
 OPTIONS_POST_MIN_INTERVAL = 6.0
 
+# PR-HARDEN-001: Reduced generation timeout for faster failure detection
+DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
+PROGRESS_STALL_THRESHOLD_SEC = 60.0  # If no progress update for this long, consider stalled
+
 
 class WebUIUnavailableError(Exception):
     """Raised when the WebUI cannot be reached after retrying a POST."""
@@ -116,7 +120,7 @@ class SDWebUIClient:
     def __init__(
         self,
         base_url: str = "http://127.0.0.1:7860",
-        timeout: int = 300,
+        timeout: int | float = DEFAULT_GENERATION_TIMEOUT,  # PR-HARDEN-001: Reduced from 300s
         max_retries: int = 3,
         backoff_factor: float = 1.0,
         max_backoff: float = 30.0,
@@ -1628,15 +1632,17 @@ class SDWebUIClient:
         """
         with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
             if response is None:
+                logger.warning("get_current_model: response is None")
                 return None
 
             try:
                 data = response.json()
+                model = data.get("sd_model_checkpoint")
+                logger.info(f"✅ get_current_model: {model}")
+                return model
             except ValueError as exc:
                 logger.error(f"Failed to parse current model response: {exc}")
                 return None
-
-            return data.get("sd_model_checkpoint")
 
     def get_current_vae(self) -> str | None:
         """
@@ -1647,19 +1653,21 @@ class SDWebUIClient:
         """
         with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
             if response is None:
+                logger.warning("get_current_vae: response is None")
                 return None
 
             try:
                 data = response.json()
+                vae = data.get("sd_vae")
+                # WebUI returns "Automatic" or "None" when no VAE is explicitly set
+                if vae in ("Automatic", "None", None, ""):
+                    logger.info("✅ get_current_vae: Automatic")
+                    return "Automatic"
+                logger.info(f"✅ get_current_vae: {vae}")
+                return vae
             except ValueError as exc:
                 logger.error(f"Failed to parse current VAE response: {exc}")
                 return None
-
-            vae = data.get("sd_vae")
-            # WebUI returns "Automatic" or "None" when no VAE is explicitly set
-            if vae in ("Automatic", "None", None, ""):
-                return "Automatic"
-            return vae
 
 
 def validate_webui_health(*args, **kwargs):

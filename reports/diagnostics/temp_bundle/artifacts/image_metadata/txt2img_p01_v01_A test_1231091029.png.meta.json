@@ -1,0 +1,40 @@
+{
+  "status": "ok",
+  "payload": {
+    "image": {
+      "format": "png",
+      "height": 1408,
+      "path": "txt2img_p01_v01_A test_1231091029.png",
+      "width": 768
+    },
+    "job_id": "1239e0cd29394a2597d8531a96edbf47",
+    "njr": {
+      "sha256": "14e0de19aaff1ee2998791e981a446c83075e542c2fcaac0ace3beeb90b6f88f",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20251231_085958_A_test",
+    "seeds": {
+      "actual_seed": 1165123369,
+      "actual_subseed": 1005188214,
+      "requested_seed": -1
+    },
+    "stage": "txt2img",
+    "stage_history": [],
+    "stage_manifest": {
+      "config_hash": "ff65b2c176ce6ad12fb1d91c499de010ac9535ebbbbb5bbcf8f09fadad79eeb6",
+      "name": "txt2img_p01_v01_A test_1231091029",
+      "timestamp": "20251231_091057"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "1239e0cd29394a2597d8531a96edbf47",
+    "stablenew:run_id": "20251231_085958_A_test",
+    "stablenew:stage": "txt2img",
+    "stablenew:created_utc": "2025-12-31T15:10:57.343878+00:00",
+    "stablenew:payload_sha256": "9c7a4db3c6378025ce0df01a3a79aa5d1ef7de067538dd1225858e32f89a8048",
+    "stablenew:payload": "{\"image\":{\"format\":\"png\",\"height\":1408,\"path\":\"txt2img_p01_v01_A test_1231091029.png\",\"width\":768},\"job_id\":\"1239e0cd29394a2597d8531a96edbf47\",\"njr\":{\"sha256\":\"14e0de19aaff1ee2998791e981a446c83075e542c2fcaac0ace3beeb90b6f88f\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20251231_085958_A_test\",\"seeds\":{\"actual_seed\":1165123369,\"actual_subseed\":1005188214,\"requested_seed\":-1},\"stage\":\"txt2img\",\"stage_history\":[],\"stage_manifest\":{\"config_hash\":\"ff65b2c176ce6ad12fb1d91c499de010ac9535ebbbbb5bbcf8f09fadad79eeb6\",\"name\":\"txt2img_p01_v01_A test_1231091029\",\"timestamp\":\"20251231_091057\"}}",
+    "stablenew:njr_sha256": "14e0de19aaff1ee2998791e981a446c83075e542c2fcaac0ace3beeb90b6f88f"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20251231_085958_A_test\\txt2img_p01_v01_A test_1231091029.png"
+}

@@ -1,6 +1,6 @@
-<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere, gorgeous smile
-a powerful gorgeous large breasted, flawless skin, naked fantasy female warrior as the central subject,
+a powerful gorgeous, athletic and fit, large breasted, flawless skin, naked fantasy female warrior as the central subject,
 [[hair]] hair flowing dramatically in the wind, [[eyes]] eyes filled with resolve,
 [[pose]] while [[activity]],
 shot from a [[perspective]],
@@ -10,11 +10,11 @@ the moment feels like [[narrative]],
 wearing [[clothes]],
 epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus
 <lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.8> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
-neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:SDXLnegXL>
 neg: low quality, blurry, bad anatomy, extra limbs, distorted face, warped proportions,, plastic skin, flat lighting, cartoonish, anime style, glowing eyes
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) a mystical gorgeous large breasted, flawless skin, naked female spellcaster standing as the clear focal point, [[number]], gorgeous smile
+(masterpiece, best quality) a mystical gorgeous, athletic and fit, large breasted, flawless skin, naked female spellcaster standing as the clear focal point, [[number]], gorgeous smile
 long [[hair]] hair framing her face, glowing [[eyes]] eyes,
 [[pose]] as she is [[activity]],
 captured from a [[perspective]],
@@ -28,7 +28,7 @@ neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg
 neg: modern clothing, sci-fi elements, dull colors, low detail,, distorted hands, malformed face, oversharpened, glowing eyes
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) a gorgeous large breasted, flawless skin, naked, mystical female spellcaster standing as the clear focal point, [[number]], gorgeous smile
+(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, mystical female spellcaster standing as the clear focal point, [[number]], gorgeous smile
 long [[hair]] hair framing her face, glowing [[eyes]] eyes,
 [[pose]] as she is [[activity]],
 captured from a [[perspective]],
@@ -42,7 +42,7 @@ neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg
 neg: modern clothing, sci-fi elements, dull colors, low detail,, distorted hands, malformed face, oversharpened, glowing eyes
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) a gorgeous large breasted, flawless skin, naked, mysterious desert oracle woman as the primary focus, [[number]], gorgeous smile
+(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, mysterious desert oracle woman as the primary focus, [[number]], gorgeous smile
 [[hair]] hair moving gently, intense [[eyes]] eyes,
 [[pose]] while [[activity]],
 photographed from a [[perspective]],
@@ -56,7 +56,7 @@ neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg
 neg: snowy environment, cold lighting, modern fashion,, low resolution, blurred face, exaggerated anatomy, glowing eyes
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) a gorgeous large breasted, flawless skin, naked, stealthy fantasy female assassin as the main subject, [[number]], gorgeous smile
+(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, stealthy fantasy female assassin as the main subject, [[number]], gorgeous smile
 [[hair]] hair partially obscured, piercing [[eyes]] eyes,
 [[pose]] while [[activity]],
 viewed from a [[perspective]],
@@ -70,7 +70,7 @@ neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg
 neg: overexposed lighting, cartoon style, anime face,, extra limbs, malformed hands, muddy textures, glowing eyes
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) a gorgeous large breasted, flawless skin, naked, legendary female hero infused with dragon power as the focal point, [[number]], gorgeous smile
+(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, legendary female hero infused with dragon power as the focal point, [[number]], gorgeous smile
 wild [[hair]] hair, glowing [[eyes]] eyes,
 [[pose]] while [[activity]],
 captured from a [[perspective]],
@@ -84,7 +84,7 @@ neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg
 neg: low detail, flat colors, sci-fi armor,, distorted proportions, plastic skin, blurry focus, glowing eyes
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) a gorgeous large breasted, flawless skin, naked, serene fantasy priestess as the central subject, [[number]], gorgeous smile
+(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, serene fantasy priestess as the central subject, [[number]], gorgeous smile
 soft [[hair]] hair and radiant [[eyes]] eyes,
 [[pose]] while [[activity]],
 framed from a [[perspective]],
@@ -98,7 +98,7 @@ neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg
 neg: dark noisy image, modern accessories,, distorted face, uneven lighting, low resolution, glowing eyes
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) a gorgeous large breasted, flawless skin, naked, battle-hardened fantasy woman as the clear focal point, [[number]], gorgeous smile
+(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, battle-hardened fantasy woman as the clear focal point, [[number]], gorgeous smile
 tousled [[hair]] hair, weary [[eyes]] eyes,
 [[pose]] while [[activity]],
 shot from a [[perspective]],
@@ -112,7 +112,7 @@ neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg
 neg: clean pristine clothing, flat lighting, cartoonish style,, extra limbs, distorted anatomy, low detail, glowing eyes
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
-(masterpiece, best quality) a gorgeous large breasted, flawless skin, naked, high-fantasy female knight as the dominant subject, [[number]], gorgeous smile
+(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, high-fantasy female knight as the dominant subject, [[number]], gorgeous smile
 wind-swept [[hair]] hair, sharp [[eyes]] eyes,
 [[pose]] while [[activity]],
 viewed from a [[perspective]],
@@ -126,7 +126,7 @@ neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embe
 neg: ground-level mundane setting, dull lighting,, bad anatomy, stiff pose, plastic skin, glowing eyes
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
-(masterpiece, best quality) a mesmerizing gorgeous large breasted, flawless skin, naked fantasy enchantress as the central subject, [[number]], gorgeous smile
+(masterpiece, best quality) a mesmerizing gorgeous, athletic and fit, large breasted, flawless skin, naked fantasy enchantress as the central subject, [[number]], gorgeous smile
 vivid [[hair]] hair, captivating [[eyes]] eyes,
 [[pose]] while [[activity]],
 seen from a [[perspective]],

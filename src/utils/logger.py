@@ -1,15 +1,17 @@
 """Logging utilities with structured JSON output"""
 
+import atexit
 import copy
 import csv
 import json
 import logging
+import queue
 import weakref
 from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from logging.handlers import RotatingFileHandler
+from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -17,6 +19,9 @@ from typing import Any
 # Module-level registry for StructuredLogger lifecycle management
 _structured_logger_registry: weakref.WeakSet[Any] = weakref.WeakSet()
 
+# PR-HARDEN-002: Global async logging infrastructure
+_async_log_queue: queue.Queue[logging.LogRecord] | None = None
+_async_queue_listener: QueueListener | None = None
 
 def get_structured_logger_registry_count() -> int:
     """Return the current count of active StructuredLogger instances."""
@@ -43,6 +48,79 @@ def close_all_structured_loggers() -> None:
 def get_logger(name: str) -> logging.Logger:
     """Return a module logger with a single indirection for future tweaks."""
     return logging.getLogger(name)
+
+
+def install_async_logging(
+    *handlers: logging.Handler,
+    queue_size: int = 10000,
+) -> QueueListener | None:
+    """
+    PR-HARDEN-002: Install async logging to prevent UI thread blocking.
+    
+    Wraps the provided handlers with a QueueHandler/QueueListener pattern.
+    Log records are placed on a queue and processed by a background thread,
+    preventing synchronous file I/O from blocking the calling thread.
+    
+    Args:
+        *handlers: One or more logging handlers to wrap asynchronously
+        queue_size: Maximum queue size (default 10000, drops oldest on overflow)
+        
+    Returns:
+        QueueListener if installed, None if no handlers provided
+        
+    Usage:
+        handler = logging.FileHandler("app.log")
+        listener = install_async_logging(handler)
+        # At shutdown: listener.stop()
+    """
+    global _async_log_queue, _async_queue_listener
+    
+    if not handlers:
+        return None
+    
+    # Create bounded queue to prevent memory exhaustion
+    _async_log_queue = queue.Queue(maxsize=queue_size)
+    
+    # Create listener that processes records from queue
+    _async_queue_listener = QueueListener(
+        _async_log_queue,
+        *handlers,
+        respect_handler_level=True,
+    )
+    
+    # Start background processing thread
+    _async_queue_listener.start()
+    
+    # Register cleanup at exit
+    atexit.register(_shutdown_async_logging)
+    
+    return _async_queue_listener
+
+
+def get_async_queue_handler() -> QueueHandler | None:
+    """
+    PR-HARDEN-002: Get a QueueHandler for the async logging queue.
+    
+    Returns a handler that can be added to loggers. Records sent to this
+    handler are processed asynchronously by the background listener.
+    
+    Returns:
+        QueueHandler if async logging is installed, None otherwise
+    """
+    if _async_log_queue is None:
+        return None
+    return QueueHandler(_async_log_queue)
+
+
+def _shutdown_async_logging() -> None:
+    """Cleanup async logging on shutdown."""
+    global _async_queue_listener
+    if _async_queue_listener is not None:
+        try:
+            _async_queue_listener.stop()
+        except Exception:
+            pass
+        _async_queue_listener = None
 
 
 @dataclass

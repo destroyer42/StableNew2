@@ -154,5 +154,81 @@ class LearningRecordWriter:
 
         self.append_record(record)
 
+    def get_ratings_for_experiment(self, experiment_id: str) -> dict[str, int]:
+        """Get all ratings for an experiment as {image_path: rating} dict."""
+        ratings: dict[str, int] = {}
+
+        if not self.records_path.exists():
+            return ratings
+
+        try:
+            with open(self.records_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        metadata = record.get("metadata", {})
+
+                        # Check if this record is for our experiment
+                        if metadata.get("experiment_name") != experiment_id:
+                            continue
+
+                        # Extract rating and image path
+                        rating = metadata.get("user_rating")
+                        image_path = metadata.get("image_path")
+
+                        if rating is not None and image_path:
+                            ratings[image_path] = int(rating)
+
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+        except Exception:
+            pass
+
+        return ratings
+
+    def get_average_rating_for_variant(
+        self,
+        experiment_id: str,
+        variant_value: Any,
+    ) -> float | None:
+        """Get average rating for a specific variant."""
+        ratings = []
+
+        if not self.records_path.exists():
+            return None
+
+        try:
+            with open(self.records_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        metadata = record.get("metadata", {})
+
+                        if (metadata.get("experiment_name") == experiment_id and
+                            metadata.get("variant_value") == variant_value):
+                            rating = metadata.get("user_rating")
+                            if rating is not None:
+                                ratings.append(int(rating))
+
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+        except Exception:
+            pass
+
+        if ratings:
+            return sum(ratings) / len(ratings)
+        return None
+
+    def is_image_rated(self, experiment_id: str, image_path: str) -> bool:
+        """Check if an image has already been rated."""
+        ratings = self.get_ratings_for_experiment(experiment_id)
+        return image_path in ratings
+
 
 logger = logging.getLogger(__name__)

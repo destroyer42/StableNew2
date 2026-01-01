@@ -20,6 +20,8 @@ __all__ = [
     "attach_jsonl_log_handler",
     "close_all_structured_loggers",
     "get_structured_logger_registry_count",
+    "install_async_logging",  # PR-HARDEN-002
+    "get_async_queue_handler",  # PR-HARDEN-002
     "PreferencesManager",
     "save_image_from_base64",
     "load_image_to_base64",
@@ -67,6 +69,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
         "src.utils.logger",
         "get_structured_logger_registry_count",
     ),
+    # PR-HARDEN-002: Async logging utilities
+    "install_async_logging": ("src.utils.logger", "install_async_logging"),
+    "get_async_queue_handler": ("src.utils.logger", "get_async_queue_handler"),
 }
 
 

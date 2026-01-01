@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
-from src.api.client import WebUIPayloadValidationError
+from src.api.client import WebUIPayloadValidationError, PROGRESS_STALL_THRESHOLD_SEC
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
@@ -247,6 +247,7 @@ class Pipeline:
         
         Reads embedded metadata from the input image and extracts the stage_history
         array plus the current stage's manifest, building a complete history chain.
+        Each stage includes full config, model, VAE, seeds for complete reproducibility.
         
         Args:
             input_image_path: Path to input image
@@ -262,14 +263,20 @@ class Pipeline:
                 # Get existing stage history
                 stage_history = result.payload.get("stage_history", [])
                 
-                # Add the current stage's manifest to history
-                if "stage_manifest" in result.payload:
+                # Build complete stage manifest with all reproducibility info
+                stage_manifest = result.payload.get("stage_manifest", {})
+                if stage_manifest:
                     current_manifest = {
-                        "stage": result.payload.get("stage", "unknown"),
-                        "timestamp": result.payload.get("stage_manifest", {}).get("timestamp", ""),
-                        "name": result.payload.get("stage_manifest", {}).get("name", ""),
-                        "config_hash": result.payload.get("stage_manifest", {}).get("config_hash", ""),
-                        "seeds": result.payload.get("seeds", {}),
+                        "stage": stage_manifest.get("stage", "unknown"),
+                        "timestamp": stage_manifest.get("timestamp", ""),
+                        "name": stage_manifest.get("name", ""),
+                        # Include full config for reproducibility
+                        "config": stage_manifest.get("config", {}),
+                        "model": stage_manifest.get("model", "Unknown"),
+                        "vae": stage_manifest.get("vae", "Automatic"),
+                        "seeds": stage_manifest.get("seeds", {}),
+                        "prompt": stage_manifest.get("prompt", ""),
+                        "negative_prompt": stage_manifest.get("negative_prompt", ""),
                     }
                     # Create new history with current manifest appended
                     return stage_history + [current_manifest]
@@ -594,6 +601,46 @@ class Pipeline:
             )
             raise PipelineStageError(error) from exc
 
+    def _check_webui_health_before_stage(self, stage: str) -> None:
+        """
+        PR-HARDEN-003: Lightweight per-stage health check.
+
+        Unlike _ensure_webui_true_ready() which runs once per pipeline,
+        this runs before EACH stage to detect mid-pipeline WebUI failures
+        (e.g., VRAM exhaustion, crash between stages) early rather than
+        waiting for a full generation timeout.
+
+        Args:
+            stage: Current stage name for error reporting
+
+        Raises:
+            PipelineStageError: If WebUI is not responding
+        """
+        try:
+            # Quick 5s check - just verify WebUI is responding
+            if not self.client.check_connection(timeout=5.0):
+                error = GenerateError(
+                    code=GenerateErrorCode.CONNECTION,
+                    message=f"WebUI health check failed before {stage} stage",
+                    stage=stage,
+                    details={"check_type": "pre-stage-health", "timeout": 5.0},
+                )
+                logger.error(
+                    "PR-HARDEN-003: Pre-stage health check failed for %s - WebUI not responding",
+                    stage,
+                )
+                raise PipelineStageError(error)
+            logger.debug("PR-HARDEN-003: Pre-stage health check passed for %s", stage)
+        except PipelineStageError:
+            raise
+        except Exception as exc:
+            # Don't fail the pipeline for unexpected check errors - log and continue
+            logger.warning(
+                "PR-HARDEN-003: Pre-stage health check error for %s (continuing): %s",
+                stage,
+                exc,
+            )
+
     def _extract_generation_info(self, response: dict[str, Any]) -> dict[str, Any]:
         """
         Extract generation metadata from WebUI response.
@@ -661,6 +708,9 @@ class Pipeline:
 
         # Defensive gate: ensure WebUI is truly ready before first generation call
         self._ensure_webui_true_ready()
+
+        # PR-HARDEN-003: Lightweight per-stage health check
+        self._check_webui_health_before_stage(stage)
 
         try:
             payload = _validate_webui_payload(stage, payload)
@@ -771,26 +821,51 @@ class Pipeline:
         poll_interval: float,
         progress_callback: Any | None,
         stage_label: str,
+        stall_detected_event: threading.Event | None = None,
     ) -> None:
-        """Background thread that polls WebUI for progress."""
+        """
+        Background thread that polls WebUI for progress.
+        
+        PR-HARDEN-004: Enhanced with stall detection - if no progress update
+        for PROGRESS_STALL_THRESHOLD_SEC, sets stall_detected_event.
+        """
         highest_progress = 0.0
+        last_progress_time = time.monotonic()
         
         while not stop_event.is_set():
             try:
                 info = self.client.get_progress(skip_current_image=True)
                 
-                if info is not None and info.progress > highest_progress:
-                    highest_progress = info.progress
+                if info is not None:
+                    if info.progress > highest_progress:
+                        highest_progress = info.progress
+                        last_progress_time = time.monotonic()
+                        
+                        with self._progress_lock:
+                            self._current_generation_progress = highest_progress
+                        
+                        if progress_callback:
+                            # Convert 0-1 to percentage
+                            percent = highest_progress * 100.0
+                            eta = info.eta_relative if info.eta_relative > 0 else None
+                            # Pass step info if available
+                            progress_callback(percent, eta, info.current_step, info.total_steps)
                     
-                    with self._progress_lock:
-                        self._current_generation_progress = highest_progress
-                    
-                    if progress_callback:
-                        # Convert 0-1 to percentage
-                        percent = highest_progress * 100.0
-                        eta = info.eta_relative if info.eta_relative > 0 else None
-                        # Pass step info if available
-                        progress_callback(percent, eta, info.current_step, info.total_steps)
+                    # PR-HARDEN-004: Check for stall (no progress for too long)
+                    elapsed_since_progress = time.monotonic() - last_progress_time
+                    if (
+                        elapsed_since_progress > PROGRESS_STALL_THRESHOLD_SEC
+                        and highest_progress > 0
+                        and highest_progress < 0.99
+                    ):
+                        logger.warning(
+                            "PR-HARDEN-004: Generation stall detected for %s - no progress for %.1fs (stuck at %.1f%%)",
+                            stage_label,
+                            elapsed_since_progress,
+                            highest_progress * 100,
+                        )
+                        if stall_detected_event:
+                            stall_detected_event.set()
                         
             except Exception:
                 pass  # Ignore polling errors
@@ -807,27 +882,40 @@ class Pipeline:
         progress_callback: Any | None = None,
         stage_label: str | None = None,
     ) -> dict[str, Any] | None:
-        """Call generation endpoint with concurrent progress polling."""
+        """
+        Call generation endpoint with concurrent progress polling.
+        
+        PR-HARDEN-004: Always starts progress polling for stall detection,
+        even when no progress_callback is provided.
+        """
         
         if stage_label is None:
             stage_label = stage
         
         stop_event = threading.Event()
+        stall_detected_event = threading.Event()
         poll_future: Future | None = None
         
         try:
-            # Start polling in background
-            if progress_callback:
-                poll_future = self._progress_poll_executor.submit(
-                    self._poll_progress_loop,
-                    stop_event,
-                    poll_interval,
-                    progress_callback,
-                    stage_label,
-                )
+            # PR-HARDEN-004: ALWAYS start polling for stall detection
+            poll_future = self._progress_poll_executor.submit(
+                self._poll_progress_loop,
+                stop_event,
+                poll_interval,
+                progress_callback,  # May be None - that's fine
+                stage_label,
+                stall_detected_event,
+            )
             
             # Make the actual generation request (blocking)
             response = self._generate_images(stage, payload)
+            
+            # Check if stall was detected during generation
+            if stall_detected_event.is_set():
+                logger.warning(
+                    "PR-HARDEN-004: Generation for %s completed but stall was detected during execution",
+                    stage_label,
+                )
             
             return response
             
@@ -1240,8 +1328,10 @@ class Pipeline:
         
         # Query WebUI for ACTUAL current model and VAE (what's really being used)
         # This ensures manifest reflects reality, not just what we requested
+        logger.info(f"🔍 Querying WebUI for current model and VAE...")
         model_name = self.client.get_current_model() or requested_model or "Unknown"
         vae_name = self.client.get_current_vae() or "Automatic"
+        logger.info(f"📝 Manifest will use - Model: {model_name}, VAE: {vae_name}")
 
         payload = {
             "prompt": prompt,
@@ -1966,6 +2056,11 @@ class Pipeline:
         # Extract stage history from input image
         stage_history = self._extract_stage_history_from_input(input_image_path)
 
+        # Query WebUI for ACTUAL current model and VAE
+        model_name = self.client.get_current_model() or config.get("model") or config.get("sd_model_checkpoint") or "Unknown"
+        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+        logger.info(f"📝 ADetailer manifest - Model: {model_name}, VAE: {vae_name}")
+
         metadata = {
             "name": final_image_name,
             "stage": "adetailer",
@@ -1982,8 +2077,8 @@ class Pipeline:
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
-            "model": config.get("model") or config.get("sd_model_checkpoint"),
-            "vae": config.get("vae") or "Automatic",
+            "model": model_name,
+            "vae": vae_name,
             "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
             "stage_duration_ms": stage_duration_ms,
             # Accumulated stage history from input image
@@ -3689,6 +3784,14 @@ class Pipeline:
                     "codeformer_weight": codeformer_weight,
                 }
                 neg_prompt = None
+
+            # Extract stage history from input image
+            stage_history = self._extract_stage_history_from_input(input_image_path)
+
+            # Query WebUI for ACTUAL current model and VAE
+            model_name = self.client.get_current_model() or config.get("model") or "Unknown"
+            vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+            logger.info(f"📝 Upscale manifest - Model: {model_name}, VAE: {vae_name}")
             
             metadata = {
                 "name": image_name,
@@ -3706,12 +3809,14 @@ class Pipeline:
                 "path": str(image_path),
                 # PR-PIPE-001: Enhanced metadata fields
                 "job_id": getattr(self, "_current_job_id", None),
-                "model": config.get("model"),  # May be None for upscale
-                "vae": config.get("vae"),  # May be None for upscale
+                "model": model_name,
+                "vae": vae_name,
                 "requested_seed": config.get("seed") if upscale_mode == "img2img" else None,
                 "actual_seed": None,  # Upscale doesn't return seed info
                 "actual_subseed": None,  # Upscale doesn't return seed info
                 "stage_duration_ms": stage_duration_ms,
+                # Accumulated stage history from previous stages
+                "stage_history": stage_history,
             }
             run_dir = self._resolve_run_dir(output_dir)
             metadata_builder = self._build_image_metadata_builder(

@@ -45,6 +45,16 @@
     "file_size": 508056
   },
   {
+    "name": "Stable_Yogis_Anatomy_Positives_V1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\Stable_Yogis_Anatomy_Positives_V1.safetensors",
+    "file_size": 426136
+  },
+  {
+    "name": "Stable_Yogis_General_Positives_V1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\Stable_Yogis_General_Positives_V1.safetensors",
+    "file_size": 376984
+  },
+  {
     "name": "Stable_Yogis_PDXL_Negatives2-neg",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\Stable_Yogis_PDXL_Negatives2-neg.safetensors",
     "file_size": 581784
@@ -53,6 +63,11 @@
     "name": "Stable_Yogis_PDXL_Positives",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\Stable_Yogis_PDXL_Positives.safetensors",
     "file_size": 393368
+  },
+  {
+    "name": "Stable_Yogis_PDXL_Positives2",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\Stable_Yogis_PDXL_Positives2.safetensors",
+    "file_size": 606360
   },
   {
     "name": "Stable_Yogis_Realism_Positives_V1",

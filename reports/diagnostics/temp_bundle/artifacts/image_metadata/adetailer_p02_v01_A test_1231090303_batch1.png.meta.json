@@ -1,0 +1,52 @@
+{
+  "status": "ok",
+  "payload": {
+    "image": {
+      "format": "png",
+      "height": 1408,
+      "path": "adetailer_p02_v01_A test_1231090303_batch1.png",
+      "width": 768
+    },
+    "job_id": "342e52c6f40641cdaa05dfb9d15944c3",
+    "njr": {
+      "sha256": "25592f9fb3f1c1a1c51145d70643c4eb1c215abd07282b236439425f005ab32e",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20251231_085958_A_test",
+    "seeds": {
+      "actual_seed": 2640440484,
+      "actual_subseed": 3929033137,
+      "requested_seed": -1
+    },
+    "stage": "adetailer",
+    "stage_history": [
+      {
+        "config_hash": "ff65b2c176ce6ad12fb1d91c499de010ac9535ebbbbb5bbcf8f09fadad79eeb6",
+        "name": "txt2img_p02_v01_A test_1231090242",
+        "seeds": {
+          "actual_seed": 2297499129,
+          "actual_subseed": 1631564158,
+          "requested_seed": -1
+        },
+        "stage": "txt2img",
+        "timestamp": "20251231_090303"
+      }
+    ],
+    "stage_manifest": {
+      "config_hash": "c7d5f2723df1cfcf7ca5a8d2df94a433b0afb45a1bfbad35d7b11de54175dfc9",
+      "name": "adetailer_p02_v01_A test_1231090303_batch1",
+      "timestamp": "20251231_090312"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "342e52c6f40641cdaa05dfb9d15944c3",
+    "stablenew:run_id": "20251231_085958_A_test",
+    "stablenew:stage": "adetailer",
+    "stablenew:created_utc": "2025-12-31T15:03:12.982231+00:00",
+    "stablenew:payload_sha256": "cfaa0a66dc883ed4180dc2da50809e8396c7635a294867ce739d263eaa6e9b01",
+    "stablenew:payload": "{\"image\":{\"format\":\"png\",\"height\":1408,\"path\":\"adetailer_p02_v01_A test_1231090303_batch1.png\",\"width\":768},\"job_id\":\"342e52c6f40641cdaa05dfb9d15944c3\",\"njr\":{\"sha256\":\"25592f9fb3f1c1a1c51145d70643c4eb1c215abd07282b236439425f005ab32e\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20251231_085958_A_test\",\"seeds\":{\"actual_seed\":2640440484,\"actual_subseed\":3929033137,\"requested_seed\":-1},\"stage\":\"adetailer\",\"stage_history\":[{\"config_hash\":\"ff65b2c176ce6ad12fb1d91c499de010ac9535ebbbbb5bbcf8f09fadad79eeb6\",\"name\":\"txt2img_p02_v01_A test_1231090242\",\"seeds\":{\"actual_seed\":2297499129,\"actual_subseed\":1631564158,\"requested_seed\":-1},\"stage\":\"txt2img\",\"timestamp\":\"20251231_090303\"}],\"stage_manifest\":{\"config_hash\":\"c7d5f2723df1cfcf7ca5a8d2df94a433b0afb45a1bfbad35d7b11de54175dfc9\",\"name\":\"adetailer_p02_v01_A test_1231090303_batch1\",\"timestamp\":\"20251231_090312\"}}",
+    "stablenew:njr_sha256": "25592f9fb3f1c1a1c51145d70643c4eb1c215abd07282b236439425f005ab32e"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20251231_085958_A_test\\adetailer_p02_v01_A test_1231090303_batch1.png"
+}

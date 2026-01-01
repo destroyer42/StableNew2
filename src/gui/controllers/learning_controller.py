@@ -35,6 +35,9 @@ class LearningController:
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
 
+        # Rating cache for current experiment
+        self._rating_cache: dict[str, int] = {}  # {image_path: rating}
+
         # Initialize recommendation engine if record writer is available
         self._recommendation_engine: RecommendationEngine | None = None
         if learning_record_writer:
@@ -79,6 +82,9 @@ class LearningController:
         # Store the current experiment
         self.learning_state.current_experiment = experiment
 
+        # Load existing ratings for this experiment
+        self.load_existing_ratings()
+
         # Clear any existing plan
         self.learning_state.plan = []
 
@@ -102,6 +108,26 @@ class LearningController:
         """Update the learning plan table with current plan data."""
         if self._plan_table and hasattr(self._plan_table, "update_plan"):
             self._plan_table.update_plan(self.learning_state.plan)
+
+    def load_existing_ratings(self) -> None:
+        """Load existing ratings for the current experiment."""
+        if not self._learning_record_writer:
+            return
+        if not self.learning_state.current_experiment:
+            return
+
+        experiment_id = self.learning_state.current_experiment.name
+        self._rating_cache = self._learning_record_writer.get_ratings_for_experiment(
+            experiment_id
+        )
+
+    def get_rating_for_image(self, image_path: str) -> int | None:
+        """Get the rating for an image if it exists."""
+        return self._rating_cache.get(image_path)
+
+    def is_image_rated(self, image_path: str) -> bool:
+        """Check if an image has been rated."""
+        return image_path in self._rating_cache
 
     def _update_variant_status(self, variant_index: int, status: str) -> None:
         """Update the status of a specific variant in the table."""

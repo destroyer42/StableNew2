@@ -344,9 +344,17 @@ def build_payload_from_manifest(
             "sha256": njr_sha256 or "",
         },
         "stage_manifest": {
+            "stage": stage,
             "name": manifest.get("name") or image_path.stem,
             "timestamp": manifest.get("timestamp") or "",
             "config_hash": config_hash,
+            # Include current stage's full config for reproducibility
+            "config": config_value if isinstance(config_value, dict) else {},
+            "model": manifest.get("model", "Unknown"),
+            "vae": manifest.get("vae", "Automatic"),
+            "seeds": seeds_data,
+            "prompt": manifest.get("prompt", ""),
+            "negative_prompt": manifest.get("negative_prompt", ""),
         },
         # Include full stage history chain for complete pipeline tracking
         "stage_history": manifest.get("stage_history", []),

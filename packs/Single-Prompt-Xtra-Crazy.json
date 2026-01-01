@@ -9,7 +9,11 @@
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1",
-          "face_refiner"
+          "face_refiner",
+          "Stable-Yogis-Makeup-Enhancer-XL",
+          "Stable_Yogis_General_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable_Yogis_PDXL_Positives2"
         ],
         "negative_embeddings": [
           "Stable_Yogis_Anatomy_Negatives_V1-neg",
@@ -17,7 +21,8 @@
           "NEGATIVE_HANDS",
           "sdxl_cyberrealistic_simpleneg-neg",
           "bad_prompt",
-          "easynegative"
+          "SDXLnegXL",
+          "ac_neg1"
         ],
         "loras": [
           [
@@ -31,10 +36,6 @@
           [
             "DetailedEyes_V3",
             0.4660194174757281
-          ],
-          [
-            "finenude_v0_2a",
-            0.4528301886792453
           ]
         ]
       }
