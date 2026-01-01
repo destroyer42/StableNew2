@@ -158,6 +158,11 @@ class PipelineRunner:
         except Exception:
             self._pipeline._current_njr_sha256 = None
         
+        # Initialize stage tracking for runtime status
+        stage_chain = [stage.stage_name for stage in plan.jobs]
+        self._pipeline._current_stage_chain = stage_chain
+        self._pipeline._current_stage_index = 0
+        
         stage_events: list[dict[str, Any]] = []
         success = False
         error = None
@@ -201,7 +206,12 @@ class PipelineRunner:
                     else:
                         # Skip this stage - we haven't reached start_stage yet
                         logger.info(f"⏭️  [REPROCESS] Skipping stage '{stage.stage_name}' (before start_stage '{start_stage}')")
+                        # Don't increment stage_index when skipping
                         continue
+                
+                # Increment stage index for runtime status tracking
+                # (Will be reset to 0 at the start of next NJR execution)
+                
                 # Dispatch to the appropriate stage executor based on stage_name
                 if stage.stage_name == "txt2img":
                     # Build payload for txt2img
@@ -580,6 +590,10 @@ class PipelineRunner:
                         "cancelled": False,
                     }
                 )
+                
+                # Increment stage index for next iteration
+                self._pipeline._current_stage_index += 1
+                
             # Success only if we have at least one successful variant
             success = len(variants) > 0 and any(v for v in variants if v is not None)
             if not success and error is None:
@@ -662,11 +676,12 @@ class PipelineRunner:
         runs_base_dir: str | None = None,
         learning_enabled: bool = False,
         sequencer: StageSequencer | None = None,
+        status_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._api_client = api_client
         self._structured_logger = structured_logger
         self._config_manager = config_manager or ConfigManager()
-        self._pipeline = Pipeline(api_client, structured_logger)
+        self._pipeline = Pipeline(api_client, structured_logger, status_callback=status_callback)
         self._learning_record_writer = learning_record_writer
         self._learning_record_callback = on_learning_record
         self._last_run_result: PipelineRunResult | None = None

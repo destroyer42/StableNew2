@@ -418,6 +418,49 @@ class UnifiedJobSummary:
 
 
 @dataclass
+class RuntimeJobStatus:
+    """Runtime execution status for the currently running job.
+    
+    This dataclass contains dynamic execution state that changes during job execution.
+    It's separate from UnifiedJobSummary (which contains static NJR-derived data).
+    
+    Populated by SingleNodeJobRunner during execution and consumed by RunningJobPanelV2.
+    """
+    job_id: str
+    current_stage: str  # e.g., "txt2img", "img2img", "upscale"
+    stage_index: int  # 0-based current stage index
+    total_stages: int  # Total number of stages in the job
+    progress: float  # 0.0 to 1.0, percentage through current stage
+    eta_seconds: float | None  # Estimated seconds remaining for current stage
+    started_at: datetime  # When this stage started
+    actual_seed: int | None  # The actual seed used (may differ from config if random)
+    current_step: int  # Current step within stage (for progress bar)
+    total_steps: int  # Total steps for current stage
+    
+    def get_stage_label(self) -> str:
+        """Get formatted stage label like '2/3 img2img'."""
+        return f"{self.stage_index + 1}/{self.total_stages} {self.current_stage}"
+    
+    def get_progress_percentage(self) -> int:
+        """Get progress as integer percentage (0-100)."""
+        return int(self.progress * 100)
+    
+    def get_eta_display(self) -> str:
+        """Get formatted ETA string like '2m 30s' or 'calculating...'."""
+        if self.eta_seconds is None:
+            return "calculating..."
+        if self.eta_seconds < 0:
+            return "unknown"
+        
+        minutes = int(self.eta_seconds // 60)
+        seconds = int(self.eta_seconds % 60)
+        
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
+
+
+@dataclass
 class JobUiSummary:
     """Unified UI summary derived from NormalizedJobRecord for display panels.
 

@@ -9,6 +9,7 @@ from src.gui.gui_invoker import GuiInvoker
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
     NormalizedJobRecord,
+    RuntimeJobStatus,
     UnifiedJobSummary,
 )
 from src.queue.job_history_store import JobHistoryEntry
@@ -138,6 +139,7 @@ class AppStateV2:
     queue_items: list[str] = field(default_factory=list)
     queue_jobs: list[UnifiedJobSummary] = field(default_factory=list)
     running_job: UnifiedJobSummary | None = None
+    runtime_status: RuntimeJobStatus | None = None  # Dynamic execution state for running job
     queue_status: str = "idle"
     history_items: list[JobHistoryEntry] = field(default_factory=list)
     run_config: dict[str, Any] = field(default_factory=dict)
@@ -375,6 +377,16 @@ class AppStateV2:
         if self.running_job != job:
             self.running_job = job
             self._notify("running_job")
+
+    def set_runtime_status(self, status: RuntimeJobStatus | None) -> None:
+        """Set the runtime execution status for the currently running job.
+        
+        This should be updated periodically during job execution to reflect
+        current stage, progress, seed, and ETA information.
+        """
+        if self.runtime_status != status:
+            self.runtime_status = status
+            self._notify("runtime_status")
 
     def set_queue_status(self, status: str) -> None:
         if self.queue_status != status:

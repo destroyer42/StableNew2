@@ -1356,7 +1356,14 @@ class PipelineController(_GUIPipelineController):
                 base_url="http://127.0.0.1:7860",
             )
             structured_logger = StructuredLogger()
-            runner = PipelineRunner(api_client, structured_logger)
+            
+            # Get status callback from app_controller if available
+            status_callback = None
+            app_controller = getattr(self, "app_controller", None)
+            if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
+                status_callback = app_controller._get_runtime_status_callback()
+            
+            runner = PipelineRunner(api_client, structured_logger, status_callback=status_callback)
             try:
                 result = runner.run_njr(record, self.cancel_token)
                 return result.to_dict() if hasattr(result, "to_dict") else {"result": result}

@@ -1,5 +1,5 @@
-<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2>
-a highly detailed fantasy scene centered on [[number]],
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1>
+close up, portrait, a highly detailed fantasy scene centered on [[number]],
 a female figure as the clear primary subject,
 [[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,
 [[pose]] while [[activity]],
@@ -12,6 +12,6 @@ strong subject focus, balanced composition,
 fantasy realism, cinematic atmosphere,
 natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
-<lora:add-detail-xl:0.6875> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.4660194174757281>
-neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:bad_prompt> <embedding:SDXLnegXL> <embedding:ac_neg1>
+<lora:add-detail-xl:0.26249999999999996> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS>
 neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes,  glassy eyes, doll-like eyes

@@ -516,3 +516,6 @@ class SingleNodeJobRunner:
     def current_job_id(self) -> str | None:
         job = self._current_job
         return job.job_id if job else None
+    def get_current_job(self) -> Job | None:
+        """Get the currently executing job, if any."""
+        return self._current_job

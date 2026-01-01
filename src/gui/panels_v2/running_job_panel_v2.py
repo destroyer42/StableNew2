@@ -21,7 +21,7 @@ from src.gui.panels_v2.widgets.stage_timeline_widget import (
     create_timeline_from_stage_chain,
 )
 from src.gui.utils.display_helpers import format_seed_display
-from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
+from src.pipeline.job_models_v2 import JobStatusV2, RuntimeJobStatus, UnifiedJobSummary
 
 if TYPE_CHECKING:
     from src.queue.job_model import Job
@@ -52,6 +52,7 @@ class RunningJobPanelV2(ttk.Frame):
         self.app_state = app_state
         self._current_job: UnifiedJobSummary | None = None
         self._current_job_summary: UnifiedJobSummary | None = None  # PR-CORE-D
+        self._runtime_status: RuntimeJobStatus | None = None  # Dynamic execution state
         self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
         self._timer_id: str | None = None  # Tk after() timer ID for elapsed time updates
 
@@ -225,6 +226,7 @@ class RunningJobPanelV2(ttk.Frame):
     def _update_display(self) -> None:
         """Update the display based on current job state."""
         job = self._current_job
+        runtime = self._runtime_status
 
         if job is None:
             # Stop timer when no job running
@@ -243,7 +245,7 @@ class RunningJobPanelV2(ttk.Frame):
             self.cancel_button.state(["disabled"])
             return
 
-        # Job info
+        # Job info (from UnifiedJobSummary - static data)
         self.job_info_label.configure(text=job.get_display_summary())
 
         # PR-CORE-D: Display PromptPack metadata if available
@@ -265,38 +267,37 @@ class RunningJobPanelV2(ttk.Frame):
             else:
                 self.pack_info_label.configure(text="")
 
-            # D-GUI-002: Display current stage with progress instead of all stages
-            stage_labels = getattr(self._current_job_summary, "stage_chain_labels", None)
-            current_stage = getattr(self._current_job_summary, "current_stage", None)
-            if stage_labels:
-                # Try to determine current stage index
-                current_idx = 0
-                if current_stage and current_stage in stage_labels:
-                    current_idx = stage_labels.index(current_stage)
-                current_stage_name = stage_labels[current_idx] if current_idx < len(stage_labels) else stage_labels[0]
-                total_stages = len(stage_labels)
-                stage_text = f"Current Stage: {current_stage_name} ({current_idx + 1}/{total_stages})"
+            # D-GUI-002: Display current stage with progress
+            # Use RuntimeJobStatus if available, otherwise fall back to static stage chain
+            if runtime:
+                # Runtime status available - show current execution state
+                stage_text = f"Stage: {runtime.get_stage_label()}"
                 self.stage_chain_label.configure(text=stage_text)
             else:
-                self.stage_chain_label.configure(text="")
+                # No runtime status - show stage chain from job config
+                stage_labels = getattr(self._current_job_summary, "stage_chain_labels", None)
+                if stage_labels:
+                    # Show all stages since we don't know which is current
+                    stage_text = f"Stages: {' → '.join(stage_labels)}"
+                    self.stage_chain_label.configure(text=stage_text)
+                else:
+                    self.stage_chain_label.configure(text="")
 
-            # PR-PIPE-007: Display seed (resolved or requested)
-            requested_seed = getattr(self._current_job_summary, "seed", None)
-            actual_seed = getattr(self._current_job_summary, "actual_seed", None) or getattr(
-                self._current_job_summary, "resolved_seed", None
-            )
-            seed_text = format_seed_display(requested_seed, actual_seed)
+            # PR-PIPE-007: Display seed
+            # Use actual_seed from runtime if available, otherwise show "calculating..."
+            if runtime and runtime.actual_seed is not None:
+                seed_text = str(runtime.actual_seed)
+            else:
+                seed_text = "calculating..."
             self.seed_label.configure(text=f"Seed: {seed_text}")
 
-            # PR-PIPE-008: Update timeline widget with stage chain
-            stage_chain = getattr(self._current_job_summary, "stage_chain", None)
-            current_stage = getattr(self._current_job_summary, "current_stage", None)
-            if stage_chain:
-                timeline_data = create_timeline_from_stage_chain(
-                    stage_chain=stage_chain,
-                    current_stage=current_stage,
-                )
-                self._timeline.set_stages(timeline_data)
+            # PR-PIPE-008: Update timeline widget
+            # TODO: Need stage_chain structure from runtime for timeline
+            # For now, clear timeline if no runtime data
+            if runtime:
+                # We don't have stage_chain structure in runtime yet
+                # This will be enhanced in future phase
+                self._timeline.clear()
             else:
                 self._timeline.clear()
         else:
@@ -311,33 +312,40 @@ class RunningJobPanelV2(ttk.Frame):
         else:
             self.queue_origin_label.configure(text="")
 
-        # Status (progress is shown visually in timeline widget above)
-        # Handle status as string (UnifiedJobSummary stores it as string, not enum)
+        # Status (progress from runtime if available)
         status_value = job.status if isinstance(job.status, str) else job.status.value
         status_text = f"Status: {status_value.title()}"
-        # UnifiedJobSummary may not have progress attribute
-        progress = getattr(job, 'progress', 0.0)
-        progress_pct = int(progress * 100)
-        if progress_pct > 0:
-            status_text += f" ({progress_pct}%)"
+        
+        if runtime:
+            # Use progress from runtime status
+            progress_pct = runtime.get_progress_percentage()
+            if progress_pct > 0:
+                status_text += f" ({progress_pct}%)"
+        
         self.status_label.configure(text=status_text)
 
-        # Elapsed time (if job has started)
-        # UnifiedJobSummary may not have started_at, use created_at or None
-        started_at = getattr(job, 'started_at', None) or getattr(job, 'created_at', None)
+        # Elapsed time
+        # Use runtime.started_at if available, otherwise use job.created_at
+        if runtime:
+            started_at = runtime.started_at
+        else:
+            started_at = getattr(job, 'created_at', None)
         elapsed_text = self._format_elapsed(started_at)
         self.elapsed_label.configure(text=elapsed_text)
 
-        # PR-GUI-DATA-005: Enhanced ETA calculation
-        # UnifiedJobSummary may not have eta_seconds attribute
-        eta_seconds = getattr(job, 'eta_seconds', None)
-        if eta_seconds is None and progress > 0 and started_at:
-            # Calculate ETA based on elapsed time and progress percentage
-            eta_seconds = self._estimate_eta_from_progress(progress, started_at)
-        self.eta_label.configure(text=self._format_eta(eta_seconds))
+        # ETA display
+        if runtime and runtime.eta_seconds is not None:
+            # Use ETA from runtime status
+            self.eta_label.configure(text=runtime.get_eta_display())
+        elif runtime and runtime.progress > 0 and runtime.started_at:
+            # Calculate ETA from progress
+            eta_seconds = self._estimate_eta_from_progress(runtime.progress, runtime.started_at)
+            self.eta_label.configure(text=self._format_eta(eta_seconds))
+        else:
+            # No ETA available
+            self.eta_label.configure(text="ETA: calculating...")
 
         # Button states
-        # Handle status as string or enum (UnifiedJobSummary uses strings)
         status_str = job.status if isinstance(job.status, str) else job.status.value
         is_running = status_str.upper() == "RUNNING"
         is_paused = status_str.upper() == "PAUSED"
@@ -509,9 +517,14 @@ class RunningJobPanelV2(ttk.Frame):
         if app_state is None:
             return
 
-        # Get running job from app state
+        # Get running job (static NJR-derived data) from app state
         running_job = getattr(app_state, "running_job", None)
-        self.update_job(running_job)
-
-
-__all__ = ["RunningJobPanelV2"]
+        self._current_job = running_job
+        self._current_job_summary = running_job
+        
+        # Get runtime status (dynamic execution state) from app state
+        runtime_status = getattr(app_state, "runtime_status", None)
+        self._runtime_status = runtime_status
+        
+        # Update display with both static and dynamic data
+        self._update_display()

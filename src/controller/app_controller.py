@@ -569,6 +569,42 @@ class AppController:
 
         return _wrapped
 
+    def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None]:
+        """Return a callback for runtime status updates from pipeline execution.
+        
+        This callback receives status updates during job execution and forwards them
+        to app_state for display in the running job panel.
+        """
+        def _status_callback(status_data: dict[str, Any]) -> None:
+            try:
+                from datetime import datetime
+                from src.pipeline.job_models_v2 import RuntimeJobStatus
+                
+                # Create RuntimeJobStatus from status_data
+                runtime_status = RuntimeJobStatus(
+                    job_id=status_data.get("job_id", ""),
+                    current_stage=status_data.get("current_stage", ""),
+                    stage_index=status_data.get("stage_index", 0),
+                    total_stages=status_data.get("total_stages", 1),
+                    progress=status_data.get("progress", 0.0),
+                    eta_seconds=status_data.get("eta_seconds"),
+                    started_at=status_data.get("started_at") or datetime.utcnow(),
+                    actual_seed=status_data.get("actual_seed"),
+                    current_step=status_data.get("current_step", 0),
+                    total_steps=status_data.get("total_steps", 0),
+                )
+                
+                # Update app_state on GUI thread
+                def _update_state() -> None:
+                    if hasattr(self.app_state, "set_runtime_status"):
+                        self.app_state.set_runtime_status(runtime_status)
+                
+                self._ui_dispatch(_update_state)
+            except Exception as exc:
+                logger.warning(f"Failed to process runtime status update: {exc}")
+        
+        return _status_callback
+
     def list_models(self) -> list[WebUIResource]:
         return self.resource_service.list_models()
 

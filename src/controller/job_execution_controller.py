@@ -115,6 +115,7 @@ class JobExecutionController:
         self._callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
         self._status_dispatcher: Callable[[Callable[[], None]], None] | None = None
         self._deferred_autostart = False  # PR-PERSIST-001: Track if we need to auto-start after init
+        self._app_state: Any | None = None  # For runtime status updates
         self._restore_queue_state()
         self._queue_persistence = QueuePersistenceManager(self)
         self._persist_queue_state()
@@ -149,6 +150,42 @@ class JobExecutionController:
                     self._worker_thread_name or "pending",
                 )
                 self._started = True
+
+    def set_app_state(self, app_state: Any) -> None:
+        """Set the app state for runtime status updates."""
+        self._app_state = app_state
+
+    def _handle_runtime_status_update(self, status_data: dict[str, Any]) -> None:
+        """Handle runtime status updates from pipeline execution.
+        
+        Converts status dict to RuntimeJobStatus and forwards to app_state.
+        """
+        if not self._app_state:
+            return
+        
+        try:
+            from datetime import datetime
+            from src.pipeline.job_models_v2 import RuntimeJobStatus
+            
+            # Create RuntimeJobStatus from status_data
+            runtime_status = RuntimeJobStatus(
+                job_id=status_data.get("job_id", ""),
+                current_stage=status_data.get("current_stage", ""),
+                stage_index=status_data.get("stage_index", 0),
+                total_stages=status_data.get("total_stages", 1),
+                progress=status_data.get("progress", 0.0),
+                eta_seconds=status_data.get("eta_seconds"),
+                started_at=status_data.get("started_at") or datetime.utcnow(),
+                actual_seed=status_data.get("actual_seed"),
+                current_step=status_data.get("current_step", 0),
+                total_steps=status_data.get("total_steps", 0),
+            )
+            
+            # Update app_state
+            if hasattr(self._app_state, "set_runtime_status"):
+                self._app_state.set_runtime_status(runtime_status)
+        except Exception as exc:
+            logger.warning(f"Failed to process runtime status update: {exc}")
 
     def stop(self) -> None:
         with self._lock:

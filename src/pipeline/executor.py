@@ -158,18 +158,20 @@ class PipelineStageError(Exception):
 class Pipeline:
     """Main pipeline orchestrator for txt2img → img2img → upscale → video"""
 
-    def __init__(self, client: SDWebUIClient, structured_logger: StructuredLogger):
+    def __init__(self, client: SDWebUIClient, structured_logger: StructuredLogger, status_callback: Callable[[dict[str, Any]], None] | None = None):
         """
         Initialize pipeline.
 
         Args:
             client: SD WebUI API client
             structured_logger: Structured logger instance
+            status_callback: Optional callback for runtime status updates during execution
         """
         self.client = client
         self.logger = structured_logger
         self.config_manager = ConfigManager()  # For global negative prompt handling
         self.progress_controller = None
+        self._status_callback = status_callback
         self._current_model: str | None = None
         self._current_vae: str | None = None
         self._current_hypernetwork: str | None = None
@@ -187,6 +189,11 @@ class Pipeline:
         # PR-PIPE-001: Track current job ID for manifest linkage
         self._current_job_id: str | None = None
         self._current_njr_sha256: str | None = None
+        # Stage tracking for runtime status
+        self._current_stage_chain: list[str] = []
+        self._current_stage_index: int = 0
+        self._current_stage_start_time: datetime | None = None
+        self._current_actual_seed: int | None = None
         # PR-PIPE-004: Progress polling infrastructure
         self._progress_poll_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="progress_poll")
         self._current_generation_progress: float = 0.0
@@ -376,6 +383,53 @@ class Pipeline:
         """Attach a progress reporting controller."""
 
         self.progress_controller = controller
+
+    def _emit_status_update(self, status_data: dict[str, Any]) -> None:
+        """Emit runtime status update if callback is configured.
+        
+        Args:
+            status_data: Dictionary containing status fields like:
+                - job_id: str
+                - current_stage: str (e.g., "txt2img", "img2img")
+                - stage_index: int (0-based current stage)
+                - total_stages: int
+                - progress: float (0.0 to 1.0)
+                - actual_seed: int | None
+                - current_step: int
+                - total_steps: int
+        """
+        if self._status_callback:
+            try:
+                self._status_callback(status_data)
+            except Exception as exc:
+                logger.warning(f"Status callback error: {exc}")
+
+    def _emit_stage_start(self, stage_name: str, total_steps: int = 0) -> None:
+        """Emit status update at the start of a pipeline stage.
+        
+        Args:
+            stage_name: Name of the stage starting (e.g., "txt2img", "img2img")
+            total_steps: Total steps for this stage (if known)
+        """
+        if not self._status_callback or not self._current_job_id:
+            return
+        
+        self._current_stage_start_time = datetime.utcnow()
+        
+        status_data = {
+            "job_id": self._current_job_id,
+            "current_stage": stage_name,
+            "stage_index": self._current_stage_index,
+            "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
+            "progress": 0.0,
+            "eta_seconds": None,
+            "started_at": self._current_stage_start_time,
+            "actual_seed": self._current_actual_seed,
+            "current_step": 0,
+            "total_steps": total_steps,
+        }
+        
+        self._emit_status_update(status_data)
 
     def _apply_webui_defaults_once(self) -> None:
         """
@@ -844,12 +898,42 @@ class Pipeline:
                         with self._progress_lock:
                             self._current_generation_progress = highest_progress
                         
+                        # Extract actual seed if available
+                        if hasattr(info, 'seed') and info.seed is not None:
+                            self._current_actual_seed = info.seed
+                        
+                        # Emit runtime status update
+                        if self._status_callback and self._current_job_id:
+                            elapsed = time.monotonic() - (self._current_stage_start_time.timestamp() if self._current_stage_start_time else time.monotonic())
+                            eta_seconds = info.eta_relative if (hasattr(info, 'eta_relative') and info.eta_relative > 0) else None
+                            
+                            # If no ETA from WebUI, estimate from progress
+                            if eta_seconds is None and highest_progress > 0.01:
+                                total_estimated = elapsed / highest_progress
+                                eta_seconds = max(total_estimated - elapsed, 0.0)
+                            
+                            status_data = {
+                                "job_id": self._current_job_id,
+                                "current_stage": stage_label,
+                                "stage_index": self._current_stage_index,
+                                "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
+                                "progress": highest_progress,
+                                "eta_seconds": eta_seconds,
+                                "started_at": self._current_stage_start_time,
+                                "actual_seed": self._current_actual_seed,
+                                "current_step": getattr(info, 'current_step', 0),
+                                "total_steps": getattr(info, 'total_steps', 0),
+                            }
+                            self._emit_status_update(status_data)
+                        
                         if progress_callback:
                             # Convert 0-1 to percentage
                             percent = highest_progress * 100.0
-                            eta = info.eta_relative if info.eta_relative > 0 else None
+                            eta = info.eta_relative if (hasattr(info, 'eta_relative') and info.eta_relative > 0) else None
                             # Pass step info if available
-                            progress_callback(percent, eta, info.current_step, info.total_steps)
+                            current_step = getattr(info, 'current_step', 0)
+                            total_steps = getattr(info, 'total_steps', 0)
+                            progress_callback(percent, eta, current_step, total_steps)
                     
                     # PR-HARDEN-004: Check for stall (no progress for too long)
                     elapsed_since_progress = time.monotonic() - last_progress_time
@@ -981,6 +1065,9 @@ class Pipeline:
 
         # Early cancel
         self._ensure_not_cancelled(cancel_token, "upscale start")
+
+        # Emit status update for stage start
+        self._emit_stage_start("upscale", total_steps=0)
 
         result = self.run_upscale_stage(
             input_image_path,
@@ -1294,6 +1381,10 @@ class Pipeline:
         # Check for cancellation before starting
         self._ensure_not_cancelled(cancel_token, "txt2img start")
 
+        # Emit status update for stage start
+        total_steps = config.get("steps", 20)
+        self._emit_stage_start("txt2img", total_steps=total_steps)
+
         logger.info(f"Starting txt2img with prompt: {prompt[:50]}...")
         # Extract name prefix if present
         name_prefix = self._extract_name_prefix(prompt)
@@ -1322,9 +1413,9 @@ class Pipeline:
         if requested_model:
             self.client.set_model(requested_model)
         
-        requested_vae = config.get("vae") or config.get("vae_name")
-        if requested_vae:
-            self.client.set_vae(requested_vae)
+        # Always set VAE, treating empty string as "Automatic"
+        requested_vae = config.get("vae") or config.get("vae_name") or "Automatic"
+        self.client.set_vae(requested_vae)
         
         # Query WebUI for ACTUAL current model and VAE (what's really being used)
         # This ensures manifest reflects reality, not just what we requested
@@ -1556,8 +1647,10 @@ class Pipeline:
         model_name = config.get("model") or config.get("sd_model_checkpoint")
         if model_name:
             self.client.set_model(model_name)
-        if config.get("vae"):
-            self.client.set_vae(config["vae"])
+        
+        # Always set VAE, treating empty string as "Automatic"
+        requested_vae = config.get("vae") or "Automatic"
+        self.client.set_vae(requested_vae)
 
         payload = {
             "prompt": prompt,
@@ -1689,6 +1782,10 @@ class Pipeline:
         # Check for cancellation before starting
         self._ensure_not_cancelled(cancel_token, "img2img start")
 
+        # Emit status update for stage start
+        total_steps = config.get("steps", 20)
+        self._emit_stage_start("img2img", total_steps=total_steps)
+
         logger.info(f"Starting img2img cleanup for: {input_image_path.name}")
 
         # Load input image
@@ -1707,8 +1804,10 @@ class Pipeline:
         # Set model and VAE if specified
         if config.get("model"):
             self.client.set_model(config["model"])
-        if config.get("vae"):
-            self.client.set_vae(config["vae"])
+        
+        # Always set VAE, treating empty string as "Automatic"
+        requested_vae = config.get("vae") or "Automatic"
+        self.client.set_vae(requested_vae)
 
         # Apply optional prompt adjustments from config
         prompt_adjust = (config.get("prompt_adjust") or "").strip()
@@ -1768,6 +1867,11 @@ class Pipeline:
         # Extract stage history from input image
         stage_history = self._extract_stage_history_from_input(input_image_path)
 
+        # Query WebUI for ACTUAL current model and VAE (what's really being used)
+        model_name = self.client.get_current_model() or config.get("model") or config.get("sd_model_checkpoint") or "Unknown"
+        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+        logger.info(f"📝 img2img manifest - Model: {model_name}, VAE: {vae_name}")
+
         metadata = {
             "name": image_name,
             "stage": "img2img",
@@ -1779,8 +1883,8 @@ class Pipeline:
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
-            "model": config.get("model") or config.get("sd_model_checkpoint"),
-            "vae": config.get("vae") or "Automatic",
+            "model": model_name,
+            "vae": vae_name,
             "requested_seed": config.get("seed", -1),
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
@@ -1835,6 +1939,10 @@ class Pipeline:
         if not config.get("adetailer_enabled", False):
             logger.info("ADetailer is disabled, skipping")
             return None
+
+        # Emit status update for stage start
+        total_steps = config.get("steps", 20)
+        self._emit_stage_start("adetailer", total_steps=total_steps)
 
         logger.info(f"Starting ADetailer for: {input_image_path.name}")
 
@@ -2174,6 +2282,11 @@ class Pipeline:
         # Extract stage history from input image
         stage_history = self._extract_stage_history_from_input(input_image_path)
 
+        # Query WebUI for ACTUAL current model and VAE
+        model_name = self.client.get_current_model() or config.get("model") or "Unknown"
+        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+        logger.info(f"📝 run_upscale manifest - Model: {model_name}, VAE: {vae_name}")
+
         metadata = {
             "name": image_name,
             "stage": "upscale",
@@ -2184,8 +2297,8 @@ class Pipeline:
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
-            "model": config.get("model"),  # May be None for upscale
-            "vae": config.get("vae"),  # May be None for upscale
+            "model": model_name,
+            "vae": vae_name,
             "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
             "stage_duration_ms": stage_duration_ms,
             # Accumulated stage history from input image
