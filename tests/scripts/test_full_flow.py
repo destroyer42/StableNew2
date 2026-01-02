@@ -70,9 +70,9 @@ def main() -> None:
     adetailer_result = bool(loaded_pipeline.get("adetailer_enabled"))
 
     if img2img_result == False and adetailer_result == True:
-        print("ƒo. VALUES CORRECT")
+        print("OK. VALUES CORRECT")
     else:
-        print("ƒ?O BUG PRESENT:")
+        print("FAIL. BUG PRESENT:")
         print("   Expected: img2img=False, adetailer=True")
         print(f"   Got: img2img={img2img_result}, adetailer={adetailer_result}")
 

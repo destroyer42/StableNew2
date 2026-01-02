@@ -91,9 +91,9 @@ def main() -> None:
     print("RESULT:")
     print("=" * 80)
     if stage_defaults["img2img"] == False and stage_defaults["adetailer"] == True:
-        print("ƒo. BUG FIXED - Values are correct!")
+        print("OK. BUG FIXED - Values are correct!")
     else:
-        print("ƒ?O BUG STILL PRESENT")
+        print("FAIL. BUG STILL PRESENT")
         print("   Expected: img2img=False, adetailer=True")
         print(f"   Got: img2img={stage_defaults['img2img']}, adetailer={stage_defaults['adetailer']}")
 

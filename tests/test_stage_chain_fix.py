@@ -13,9 +13,9 @@ njr = NormalizedJobRecord(
     filename_template="test_{index}",
     positive_prompt="beautiful woman portrait",
     stage_chain=[
-        StageConfig(stage_type="txt2img"),
-        StageConfig(stage_type="adetailer"),
-        StageConfig(stage_type="upscale"),
+        StageConfig(stage_type="txt2img", enabled=True),
+        StageConfig(stage_type="adetailer", enabled=True),
+        StageConfig(stage_type="upscale", enabled=True),
     ],
 )
 

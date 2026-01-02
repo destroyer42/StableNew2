@@ -1,0 +1,4 @@
+[PROC] inspector pid=1636 name=python.exe cmd="'C:\Users\rob\AppData\Local\Programs\Python\Python310\python.exe' -m src.main" cwd="C:\Users\rob\projects\StableNew" uptime=217s
+[PROC] inspector pid=3216 name=python.exe cmd="'C:\Users\rob\AppData\Local\Programs\Python\Python310\python.exe' 'c:\Users\rob\.vscode\extensions\ms-python.mypy-type-checker-2025.2.0\bundled\tool\lsp_server.py'" cwd="c:\Users\rob\projects\StableNew" uptime=266s
+[PROC] inspector pid=21540 name=python.exe cmd="'c:\Users\rob\projects\StableNew\.venv\Scripts\python.exe' 'c:\Users\rob\.vscode\extensions\ms-python.mypy-type-checker-2025.2.0\bundled\tool\lsp_server.py'" cwd="c:\Users\rob\projects\StableNew" uptime=267s
+[PROC] inspector pid=27780 name=python.exe cmd="'C:\Users\rob\projects\StableNew\.venv\Scripts\python.exe' -m src.main" cwd="C:\Users\rob\projects\StableNew" uptime=218s

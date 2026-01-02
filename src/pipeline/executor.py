@@ -481,14 +481,16 @@ class Pipeline:
     # ------------------------------------------------------------------
 
     def _ensure_model_and_vae(self, model_name: str | None, vae_name: str | None) -> None:
-        """Only call into WebUI when the requested weights change."""
+        """Set model and/or VAE. Model and VAE switches are independent operations."""
+        # Handle model switching (if requested)
         desired_normalized = self._normalize_model_name(model_name)
         if desired_normalized:
             self._discover_current_model_if_needed()
             current_normalized = self._normalize_model_name(self._current_model)
             if desired_normalized == current_normalized:
-                return
-            if not self.client.options_write_enabled:
+                # Model already loaded - no switch needed, but continue to VAE logic
+                logger.debug(f"Model already loaded: {model_name}")
+            elif not self.client.options_write_enabled:
                 # Only warn if models are actually different (avoids false warnings when normalized names match)
                 if current_normalized != desired_normalized:
                     logger.warning(
@@ -496,20 +498,28 @@ class Pipeline:
                         model_name,
                         self._current_model or "current WebUI model",
                     )
-                return
-            try:
-                logger.info(f"Switching to model: {model_name}")
-                self.client.set_model(model_name)
-                self._current_model = model_name
-            except Exception:
-                self._current_model = None
-                raise
+            else:
+                # Model needs switching
+                try:
+                    logger.info(f"Switching to model: {model_name}")
+                    self.client.set_model(model_name)
+                    self._current_model = model_name
+                except Exception:
+                    self._current_model = None
+                    raise
 
+        # Handle VAE switching (independent of model - always execute if vae_name provided)
         try:
-            if vae_name and vae_name != self._current_vae:
-                logger.info(f"Switching to VAE: {vae_name}")
-                self.client.set_vae(vae_name)
-                self._current_vae = vae_name
+            if vae_name:
+                if vae_name != self._current_vae:
+                    logger.info(f"Switching to VAE: {vae_name}")
+                    self.client.set_vae(vae_name)
+                    self._current_vae = vae_name
+                else:
+                    # Even if cached VAE matches, ensure it's set in WebUI
+                    # (WebUI may have reverted to Automatic)
+                    logger.info(f"Ensuring VAE is set: {vae_name}")
+                    self.client.set_vae(vae_name)
         except Exception:
             self._current_vae = None
             raise
@@ -1944,6 +1954,12 @@ class Pipeline:
         total_steps = config.get("steps", 20)
         self._emit_stage_start("adetailer", total_steps=total_steps)
 
+        # Set model and VAE if specified (ensure consistency across pipeline stages)
+        requested_model = config.get("model") or config.get("sd_model_checkpoint")
+        requested_vae = config.get("vae") or config.get("sd_vae") or config.get("vae_name")
+        if requested_model or requested_vae:
+            self._ensure_model_and_vae(requested_model, requested_vae)
+
         logger.info(f"Starting ADetailer for: {input_image_path.name}")
 
         # Load input image
@@ -3219,10 +3235,31 @@ class Pipeline:
                 )
 
             # Set model and VAE if specified
-            model_name = txt2img_config.get("model") or txt2img_config.get("sd_model_checkpoint")
-            vae_name = txt2img_config.get("vae")
-            if model_name or vae_name:
-                self._ensure_model_and_vae(model_name, vae_name)
+            requested_model = txt2img_config.get("model") or txt2img_config.get("sd_model_checkpoint")
+            requested_vae = txt2img_config.get("vae")
+            
+            # Debug: log what config we received
+            logger.info(f"🔍 [EXECUTOR] Config keys: {list(txt2img_config.keys())}")
+            logger.info(f"🔍 [EXECUTOR] Received requested_model='{requested_model}', requested_vae='{requested_vae}'")
+            
+            if requested_model or requested_vae:
+                self._ensure_model_and_vae(requested_model, requested_vae)
+            
+            # Use the requested model/VAE for manifest (what we asked for)
+            # Query WebUI only as fallback if not specified in config
+            if requested_model:
+                model_name = requested_model
+            else:
+                logger.info(f"🔍 Querying WebUI for current model...")
+                model_name = self.client.get_current_model() or "Unknown"
+            
+            if requested_vae:
+                vae_name = requested_vae
+            else:
+                logger.info(f"🔍 Querying WebUI for current VAE...")
+                vae_name = self.client.get_current_vae() or "Automatic"
+            
+            logger.info(f"📝 Manifest will use - Model: {model_name}, VAE: {vae_name}")
 
             self._ensure_hypernetwork(
                 txt2img_config.get("hypernetwork"),
@@ -3255,6 +3292,9 @@ class Pipeline:
                 "tiling": txt2img_config.get("tiling", False),
                 "do_not_save_samples": txt2img_config.get("do_not_save_samples", False),
                 "do_not_save_grid": txt2img_config.get("do_not_save_grid", False),
+                # Include model and VAE in payload so WebUI uses them for this specific generation
+                "sd_model": requested_model,
+                "sd_vae": requested_vae,
             }
 
             # Always include hires.fix parameters (will be ignored if enable_hr is False)
@@ -3368,6 +3408,8 @@ class Pipeline:
                 "requested_seed": payload.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),
                 "actual_subseed": gen_info.get("subseed"),
+                "model": model_name,
+                "vae": vae_name,
             }
             
             for batch_idx in range(num_images_received):
@@ -3680,6 +3722,12 @@ class Pipeline:
         self._record_stage_event("upscale", "enter", 1, 1, False)
         try:
             self._ensure_not_cancelled(cancel_token, "upscale stage start")
+            
+            # Set model and VAE if specified (ensure consistency across pipeline stages)
+            requested_model = config.get("model") or config.get("sd_model_checkpoint")
+            requested_vae = config.get("vae") or config.get("sd_vae") or config.get("vae_name")
+            if requested_model or requested_vae:
+                self._ensure_model_and_vae(requested_model, requested_vae)
             
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)

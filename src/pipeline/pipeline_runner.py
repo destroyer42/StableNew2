@@ -252,6 +252,10 @@ class PipelineRunner:
                             payload["hr_resize_x"] = njr_config["hr_resize_x"]
                         if njr_config.get("hr_resize_y"):
                             payload["hr_resize_y"] = njr_config["hr_resize_y"]
+                        if njr_config.get("hires_use_base_model") is not None:
+                            payload["hires_use_base_model"] = njr_config["hires_use_base_model"]
+                        if njr_config.get("hr_checkpoint_name"):
+                            payload["hr_checkpoint_name"] = njr_config["hr_checkpoint_name"]
                     
                     # Add refiner settings only if use_refiner is explicitly True
                     if njr_config.get("use_refiner") and njr_config.get("refiner_checkpoint"):
@@ -262,7 +266,8 @@ class PipelineRunner:
                     # Add other settings that might be in config
                     for key in ["clip_skip", "seed", "subseed", "subseed_strength",
                                 "seed_resize_from_h", "seed_resize_from_w",
-                                "restore_faces", "tiling", "do_not_save_samples", "do_not_save_grid"]:
+                                "restore_faces", "tiling", "do_not_save_samples", "do_not_save_grid",
+                                "vae"]:
                         if key in njr_config:
                             payload[key] = njr_config[key]
                     

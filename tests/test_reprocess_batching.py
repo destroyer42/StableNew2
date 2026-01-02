@@ -1,16 +1,9 @@
 """Quick test to verify reprocessing batching logic."""
 import sys
 from pathlib import Path
-import importlib.util
 
-# Load reprocess_builder directly
-spec = importlib.util.spec_from_file_location(
-    "reprocess_builder",
-    Path(__file__).parent / "src" / "pipeline" / "reprocess_builder.py"
-)
-reprocess_builder = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(reprocess_builder)
-ReprocessJobBuilder = reprocess_builder.ReprocessJobBuilder
+# Use standard import
+from src.pipeline.reprocess_builder import ReprocessJobBuilder
 
 def test_batching():
     """Test that we create the right number of jobs."""

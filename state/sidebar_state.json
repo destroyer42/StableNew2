@@ -1,8 +1,6 @@
 {
   "selected_list": "CharactersList",
-  "selected_packs": [
-    "Single-Prompt-Xtra-Crazy"
-  ],
+  "selected_packs": [],
   "prompt_text": "A futuristic city with flying vehicles",
   "schema_version": "2.6"
 }

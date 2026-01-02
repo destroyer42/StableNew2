@@ -3215,7 +3215,19 @@ class AppController:
 
     def on_refresh_clicked(self) -> None:
         self._append_log("[controller] Refresh clicked.")
-        self.refresh_resources_from_webui()
+        # Run refresh in background thread to avoid GUI freeze
+        import threading
+        
+        def _refresh_worker():
+            try:
+                self.refresh_resources_from_webui()
+            except Exception as exc:
+                logger.warning(f"Background refresh failed: {exc}")
+                self._append_log(f"[controller] Refresh failed: {exc}")
+        
+        thread = threading.Thread(target=_refresh_worker, daemon=True, name="RefreshResourcesWorker")
+        thread.start()
+        self._append_log("[controller] Refresh started in background...")
 
     def stop_all_background_work(self) -> None:
         """Best-effort shutdown used by GUI teardown to avoid late Tk calls."""

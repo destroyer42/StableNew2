@@ -103,6 +103,12 @@ Test_Fixtures_Guide_v2.6.md (if present in repo)
 
 These ensure fidelity to the architectural guarantees.
 
+**1.5.5 Technical Debt Discovery Documents**
+
+D-TECH-DEBT-001-Duplicate-Txt2Img-Paths.md ← NEW: Documents duplicate txt2img execution paths
+
+These documents track known architectural issues requiring consolidation.
+
 1.6 Tier 6 — Reference & Ancillary Docs
 
 Developer_Onboarding_v2.6.md (future recommended doc)

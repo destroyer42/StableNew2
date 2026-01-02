@@ -781,7 +781,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
     def to_config_dict(self) -> dict[str, Any]:
         # Use internal names for model/vae, and all selected values for payload correctness
         model_name = self._model_name_map.get(self.model_var.get(), self.model_var.get().strip())
-        vae_name = self._vae_name_map.get(self.vae_var.get(), self.vae_var.get().strip())
+        vae_display = self.vae_var.get()
+        vae_name = self._vae_name_map.get(vae_display, vae_display.strip() if vae_display else "")
         
         # Store use_refiner flag for conditional field writing
         use_refiner = bool(self.refiner_enabled_var.get())

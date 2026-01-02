@@ -4,8 +4,8 @@
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, 8k, close up cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, blonde-hair woman, icy blue clear eyes with a cute smile, next to a mountain lake, posed gracefully, legs spread vivaciously, grabbing her inner thighs suggestively, beautiful skin glistening in the sunlight, lightly tanned",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi",
+        "text": "(masterpiece, 8k, close up cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, blonde-hair woman, icy blue clear eyes with a cute smile, next to a mountain lake, posed gracefully, legs spread vivaciously, grabbing her inner thighs suggestively, beautiful skin glistening in the sunlight, lightly tanned, focused gaze",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1",
@@ -21,7 +21,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.30000000000000004
+            0.28750000000000003
           ],
           [
             "CinematicStyle_v1",
@@ -35,23 +35,23 @@
       },
       {
         "index": 1,
-        "text": "(masterpiece, 8k, cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, amber colored eyes, gorgeous smile, knowing expression, detailed skin, natural light, high fantasy, magical atmosphere, a powerful fantasy female warrior as the central subject, wide stance, arched back, hands up and behind head, illuminated by soft directional side lighting, set in a vast torch-lit hall, epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus",
-        "negative": "amber, deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi",
+        "text": "(masterpiece, 8k, close-up cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, amber colored eyes, gorgeous smile, knowing expression, detailed skin, natural light, high fantasy, magical atmosphere, a powerful fantasy female warrior as the central subject, wide stance, arched back, hands up and behind head, illuminated by soft warm lighting, set in a vast torch-lit hall, epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus, clear focused gaze",
+        "negative": "amber, deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
-          "Stable_Yogis_Realism_Positives_V1"
+          "Stable_Yogis_Realism_Positives_V1",
+          "face_refiner"
         ],
         "negative_embeddings": [
-          "SDXLnegXL",
           "Stable_Yogis_Anatomy_Negatives_V1-neg",
           "Stable_Yogis_PDXL_Negatives2-neg",
           "ac_neg1",
-          "bad_prompt"
+          "easynegative"
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.2967032967032967
+            0.325
           ],
           [
             "CinematicStyle_v1",
@@ -59,7 +59,7 @@
           ],
           [
             "DetailedEyes_V3",
-            0.33495145631067963
+            0.3203883495145631
           ]
         ]
       }
@@ -74,16 +74,16 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "epicrealismXL_vxviiCrystalclear",
-      "model_name": "epicrealismXL_vxviiCrystalclear",
-      "vae": "",
-      "vae_name": "",
+      "model": "batchCOREALISMXLSFW_v80",
+      "model_name": "batchCOREALISMXLSFW_v80",
+      "vae": "sdxl_vae.safetensors",
+      "vae_name": "sdxl_vae.safetensors",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
       "steps": 34,
       "cfg_scale": 6.499999999999998,
-      "width": 1024,
-      "height": 1408,
+      "width": 512,
+      "height": 1024,
       "clip_skip": 2,
       "seed": -1,
       "subseed": -1,
@@ -95,7 +95,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "epicrealismXL_vxviiCrystalclear.safetensors [3267fd6443]"
+      "hr_checkpoint_name": "batchCOREALISMXLSFW_v80.safetensors [881e9f7ddf]"
     },
     "img2img": {
       "model": "",
@@ -113,7 +113,7 @@
       "upscale_mode": "single",
       "steps": 15,
       "denoising_strength": 0.15,
-      "upscaling_resize": 2.0,
+      "upscaling_resize": 1.5,
       "tile_size": 0,
       "face_restore": false,
       "face_restore_method": "CodeFormer"
@@ -166,7 +166,7 @@
       "adetailer_enabled": true
     },
     "pipeline": {
-      "images_per_prompt": 2,
+      "images_per_prompt": 1,
       "n_iter": 1,
       "output_dir": "output",
       "filename_pattern": "{seed}",

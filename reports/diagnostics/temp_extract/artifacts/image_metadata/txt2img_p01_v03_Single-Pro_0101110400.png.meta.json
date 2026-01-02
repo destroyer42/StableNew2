@@ -1,0 +1,82 @@
+{
+  "status": "ok",
+  "payload": {
+    "generation": {
+      "cfg_scale": 6.499999999999998,
+      "clip_skip": 2,
+      "denoising_strength": 0.7,
+      "height": 1408,
+      "negative_prompt": "blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 34,
+      "width": 1024
+    },
+    "image": {
+      "format": "png",
+      "height": 1408,
+      "path": "txt2img_p01_v03_Single-Pro_0101110400.png",
+      "width": 1024
+    },
+    "job_id": "ee3e8c778a804df9ad6882fd5569a199",
+    "njr": {
+      "sha256": "b640632c4ea9e8855fbcca2c02854a16713187a17f553c43f9195bfce9badef6",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "seeds": {},
+    "stage": "txt2img",
+    "stage_history": [],
+    "stage_manifest": {
+      "config": {
+        "batch_size": 1,
+        "cfg_scale": 6.499999999999998,
+        "clip_skip": 2,
+        "denoising_strength": 0.7,
+        "do_not_save_grid": null,
+        "do_not_save_samples": null,
+        "enable_hr": false,
+        "height": 1408,
+        "hr_resize_x": 0,
+        "hr_resize_y": 0,
+        "hr_scale": 2.0,
+        "hr_second_pass_steps": 0,
+        "hr_upscaler": "Latent",
+        "n_iter": 1,
+        "negative_prompt": "blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
+        "prompt": "<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> close up, portrait, a highly detailed fantasy scene centered on two allied figures, a female figure as the clear primary subject, standing firm while surveying the horizon, captured from a subtle over-the-shoulder view, lit by glowing magical light, set within a visually rich crystal-lit cavern, the scene conveys ancient power awakening, wearing nothing but an underboob tight shirt, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.26249999999999996> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963>",
+        "restore_faces": null,
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": -1,
+        "seed_resize_from_h": -1,
+        "seed_resize_from_w": -1,
+        "steps": 34,
+        "subseed": -1,
+        "subseed_strength": 0.5,
+        "tiling": null,
+        "width": 1024
+      },
+      "config_hash": "2e899dd54e538b11ed30d3b141712a43f7ae19cd5355f159c443937430108d60",
+      "model": "Unknown",
+      "name": "txt2img_p01_v03_Single-Pro_0101110400",
+      "negative_prompt": "",
+      "prompt": "",
+      "seeds": {},
+      "stage": "txt2img",
+      "timestamp": "20260101_110434",
+      "vae": "Automatic"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "ee3e8c778a804df9ad6882fd5569a199",
+    "stablenew:run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "stablenew:stage": "txt2img",
+    "stablenew:created_utc": "2026-01-01T17:04:34.664682+00:00",
+    "stablenew:payload_sha256": "6eb0ee8b30122a6e7867e3fa001ce0f05b839ec73b5bf01b4c9fe0906e002256",
+    "stablenew:payload": "{\"generation\":{\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"height\":1408,\"negative_prompt\":\"blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":34,\"width\":1024},\"image\":{\"format\":\"png\",\"height\":1408,\"path\":\"txt2img_p01_v03_Single-Pro_0101110400.png\",\"width\":1024},\"job_id\":\"ee3e8c778a804df9ad6882fd5569a199\",\"njr\":{\"sha256\":\"b640632c4ea9e8855fbcca2c02854a16713187a17f553c43f9195bfce9badef6\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20260101_104229_Single-Prompt-Xtra-Crazy\",\"seeds\":{},\"stage\":\"txt2img\",\"stage_history\":[],\"stage_manifest\":{\"config\":{\"batch_size\":1,\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"do_not_save_grid\":null,\"do_not_save_samples\":null,\"enable_hr\":false,\"height\":1408,\"hr_resize_x\":0,\"hr_resize_y\":0,\"hr_scale\":2.0,\"hr_second_pass_steps\":0,\"hr_upscaler\":\"Latent\",\"n_iter\":1,\"negative_prompt\":\"blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes\",\"prompt\":\"<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> close up, portrait, a highly detailed fantasy scene centered on two allied figures, a female figure as the clear primary subject, standing firm while surveying the horizon, captured from a subtle over-the-shoulder view, lit by glowing magical light, set within a visually rich crystal-lit cavern, the scene conveys ancient power awakening, wearing nothing but an underboob tight shirt, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.26249999999999996> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963>\",\"restore_faces\":null,\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":-1,\"seed_resize_from_h\":-1,\"seed_resize_from_w\":-1,\"steps\":34,\"subseed\":-1,\"subseed_strength\":0.5,\"tiling\":null,\"width\":1024},\"config_hash\":\"2e899dd54e538b11ed30d3b141712a43f7ae19cd5355f159c443937430108d60\",\"model\":\"Unknown\",\"name\":\"txt2img_p01_v03_Single-Pro_0101110400\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{},\"stage\":\"txt2img\",\"timestamp\":\"20260101_110434\",\"vae\":\"Automatic\"}}",
+    "stablenew:njr_sha256": "b640632c4ea9e8855fbcca2c02854a16713187a17f553c43f9195bfce9badef6"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20260101_104229_Single-Prompt-Xtra-Crazy\\txt2img_p01_v03_Single-Pro_0101110400.png"
+}
