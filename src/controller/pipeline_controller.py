@@ -1015,6 +1015,7 @@ class PipelineController(_GUIPipelineController):
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self._app_state:
             return
+        _logger.debug(f"_on_queue_updated: Received {len(summaries)} summaries, refreshing app_state")
         self._refresh_app_state_queue()
 
     def _on_queue_status_changed(self, status: str) -> None:
@@ -1064,13 +1065,16 @@ class PipelineController(_GUIPipelineController):
             else:
                 _logger.debug(f"Job {job.job_id} missing NJR, cannot display in GUI")
                 summaries.append(job.job_id)
+        
+        _logger.debug(f"_refresh_app_state_queue: Setting {len(queue_jobs)} jobs")
         self._app_state.set_queue_items(summaries)
         setter = getattr(self._app_state, "set_queue_jobs", None)
         if callable(setter):
             try:
                 setter(queue_jobs)
-            except Exception:
-                pass
+                _logger.debug(f"_refresh_app_state_queue: set_queue_jobs called successfully")
+            except Exception as exc:
+                _logger.error(f"_refresh_app_state_queue: set_queue_jobs failed: {exc}", exc_info=True)
 
     def _refresh_app_state_history(self) -> None:
         if not self._app_state or not self._job_service:

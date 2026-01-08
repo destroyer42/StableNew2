@@ -198,6 +198,10 @@ class UnifiedPromptResolver:
             positive_parts.append(lora_tokens)
 
         positive = " ".join(part for part in positive_parts if part).strip()
+        
+        # BUGFIX: Ensure positive prompt is never empty - prevents negative becoming positive
+        if not positive:
+            positive = "professional photo, high quality"
 
         negative_parts = []
         global_applied = False

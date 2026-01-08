@@ -1423,9 +1423,10 @@ class Pipeline:
         if requested_model:
             self.client.set_model(requested_model)
         
-        # Always set VAE, treating empty string as "Automatic"
-        requested_vae = config.get("vae") or config.get("vae_name") or "Automatic"
-        self.client.set_vae(requested_vae)
+        # Handle VAE: distinguish between not specified (None) and explicitly empty ("") 
+        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
+        if requested_vae:  # Only set if non-empty
+            self.client.set_vae(requested_vae)
         
         # Query WebUI for ACTUAL current model and VAE (what's really being used)
         # This ensures manifest reflects reality, not just what we requested
@@ -1658,9 +1659,10 @@ class Pipeline:
         if model_name:
             self.client.set_model(model_name)
         
-        # Always set VAE, treating empty string as "Automatic"
-        requested_vae = config.get("vae") or "Automatic"
-        self.client.set_vae(requested_vae)
+        # Handle VAE: only set if non-empty
+        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
+        if requested_vae:  # Only set if non-empty
+            self.client.set_vae(requested_vae)
 
         payload = {
             "prompt": prompt,
@@ -1815,9 +1817,10 @@ class Pipeline:
         if config.get("model"):
             self.client.set_model(config["model"])
         
-        # Always set VAE, treating empty string as "Automatic"
-        requested_vae = config.get("vae") or "Automatic"
-        self.client.set_vae(requested_vae)
+        # Handle VAE: only set if non-empty
+        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
+        if requested_vae:  # Only set if non-empty
+            self.client.set_vae(requested_vae)
 
         # Apply optional prompt adjustments from config
         prompt_adjust = (config.get("prompt_adjust") or "").strip()
@@ -1955,8 +1958,25 @@ class Pipeline:
         self._emit_stage_start("adetailer", total_steps=total_steps)
 
         # Set model and VAE if specified (ensure consistency across pipeline stages)
+        # BUGFIX: Don't treat ADetailer model names as SD model checkpoints
         requested_model = config.get("model") or config.get("sd_model_checkpoint")
-        requested_vae = config.get("vae") or config.get("sd_vae") or config.get("vae_name")
+        # Handle VAE: get from config but don't default to fallback if empty
+        requested_vae = config.get("vae") if "vae" in config else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
+        
+        # Filter out ADetailer model names (they end with .pt and start with face_/hand_/person_/mediapipe)
+        if requested_model:
+            model_lower = requested_model.lower()
+            is_adetailer_model = (
+                model_lower.endswith('.pt') and 
+                any(model_lower.startswith(prefix) for prefix in ['face_', 'hand_', 'person_', 'mediapipe'])
+            )
+            if is_adetailer_model:
+                logger.warning(
+                    "ADetailer detected adetailer model name '%s' in model field; ignoring SD model switch",
+                    requested_model
+                )
+                requested_model = None  # Don't try to set this as SD model
+        
         if requested_model or requested_vae:
             self._ensure_model_and_vae(requested_model, requested_vae)
 
@@ -3253,8 +3273,9 @@ class Pipeline:
                 logger.info(f"🔍 Querying WebUI for current model...")
                 model_name = self.client.get_current_model() or "Unknown"
             
-            if requested_vae:
-                vae_name = requested_vae
+            # For VAE: check if key exists in config (even if empty string)
+            if "vae" in txt2img_config:
+                vae_name = requested_vae or ""  # Use empty string if explicitly set to empty
             else:
                 logger.info(f"🔍 Querying WebUI for current VAE...")
                 vae_name = self.client.get_current_vae() or "Automatic"
@@ -3725,7 +3746,8 @@ class Pipeline:
             
             # Set model and VAE if specified (ensure consistency across pipeline stages)
             requested_model = config.get("model") or config.get("sd_model_checkpoint")
-            requested_vae = config.get("vae") or config.get("sd_vae") or config.get("vae_name")
+            # Handle VAE: get from config but don't default to fallback if empty
+            requested_vae = config.get("vae") if "vae" in config else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
             if requested_model or requested_vae:
                 self._ensure_model_and_vae(requested_model, requested_vae)
             
@@ -3936,13 +3958,18 @@ class Pipeline:
                 config_dict = self._clean_metadata_payload(payload)
                 neg_prompt = payload.get("negative_prompt")
             else:
-                # Single-image mode doesn't have full payload
+                # Single-image mode doesn't have full payload - include all relevant params
+                # BUGFIX: Include steps, sampler, scheduler, denoise in manifest for single mode
                 config_dict = {
                     "upscaler": upscaler,
                     "upscaling_resize": upscaling_resize,
                     "gfpgan_visibility": gfpgan_vis,
                     "codeformer_visibility": codeformer_vis,
                     "codeformer_weight": codeformer_weight,
+                    "steps": config.get("steps", 20),
+                    "denoising_strength": config.get("denoising_strength", 0.35),
+                    "sampler_name": config.get("sampler_name", "Euler a"),
+                    "scheduler": config.get("scheduler", "normal"),
                 }
                 neg_prompt = None
 

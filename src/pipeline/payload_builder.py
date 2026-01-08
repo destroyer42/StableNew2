@@ -109,9 +109,9 @@ def _build_base_payload(config: dict[str, Any]) -> dict[str, Any]:
         "seed": config.get("seed", -1),
         "subseed": config.get("subseed", -1),
         "subseed_strength": config.get("subseed_strength", 0.0),
-        # model / VAE
+        # model / VAE - preserve empty strings (don't use 'or' fallback)
         "sd_model": config.get("model") or config.get("model_name"),
-        "sd_vae": config.get("vae") or config.get("vae_name"),
+        "sd_vae": config.get("vae") if "vae" in config else config.get("vae_name"),
         # input images placeholder
         "input_images": [],
         # batch configuration

@@ -32,7 +32,7 @@ class LearningTabFrame(ttk.Frame):
         self.app_state = app_state
         self.pipeline_controller = pipeline_controller
         self.app_controller = app_controller  # PR-LEARN-002: Store app_controller reference
-
+        
         # Initialize learning record writer
         self.learning_record_writer = LearningRecordWriter("data/learning_records.jsonl")
 
@@ -42,12 +42,29 @@ class LearningTabFrame(ttk.Frame):
         # PR-LEARN-002: Get LearningExecutionController from app_controller if available
         execution_controller = getattr(app_controller, "learning_execution_controller", None) if app_controller else None
         
+        # PR-LEARN-012: If execution controller doesn't exist on app_controller, create it
+        if not execution_controller and app_controller:
+            from src.learning.execution_controller import LearningExecutionController
+            job_service = getattr(app_controller, "job_service", None)
+            if not job_service and pipeline_controller:
+                job_service = getattr(pipeline_controller, "_job_service", None)
+            
+            if job_service:
+                execution_controller = LearningExecutionController(
+                    learning_state=self.learning_state,
+                    job_service=job_service,
+                )
+                # Store on app_controller for future use
+                if hasattr(app_controller, "__dict__"):
+                    app_controller.learning_execution_controller = execution_controller
+        
         self.learning_controller = LearningController(
             learning_state=self.learning_state,
             prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
             if self.app_state
             else None,
             pipeline_controller=self.pipeline_controller,
+            app_controller=app_controller,  # BUGFIX: Pass app_controller for stage card access
             learning_record_writer=self.learning_record_writer,
             execution_controller=execution_controller,  # PR-LEARN-002: Pass execution controller
         )
@@ -98,7 +115,12 @@ class LearningTabFrame(ttk.Frame):
 
         # Left panel: Experiment Design
         self.experiment_panel = ExperimentDesignPanel(
-            self.body_frame, learning_controller=self.learning_controller, style=CARD_FRAME_STYLE
+            self.body_frame,
+            learning_controller=self.learning_controller,
+            prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
+            if self.app_state
+            else None,
+            style=CARD_FRAME_STYLE,
         )
         self.experiment_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
@@ -113,8 +135,9 @@ class LearningTabFrame(ttk.Frame):
         self.review_panel = LearningReviewPanel(self.body_frame, style=CARD_FRAME_STYLE)
         self.review_panel.grid(row=0, column=2, sticky="nsew", padx=(2, 0), pady=4)
 
-        # Connect controller to review panel
+        # Connect controller to review panel (bidirectional)
         self.learning_controller._review_panel = self.review_panel
+        self.review_panel.learning_controller = self.learning_controller  # PR-LEARN-014: Fix rating submission
 
     def _on_learning_toggle(self) -> None:
         """Handle the learning mode toggle button."""

@@ -70,51 +70,54 @@ class PipelineRunner:
 
         plan = build_run_plan_from_njr(njr)
         
-        # Prepare output dir with datetime_packname structure (flat)
-        # Format: output/{YYYYMMDD_HHMMSS}_{pack_name}/
-        # Jobs from the same pack share folder ONLY if config parameters match
+        # Prepare output dir with pack-model-vae naming structure
+        # Format: output/{pack_12chars}-{model_10+5chars}-{vae_12chars}/
+        # Jobs from the same pack+model+vae share folder within cache timeout
         # Learning experiments always share folder (by experiment_id)
         pack_name = getattr(njr, "prompt_pack_name", "") or getattr(njr, "job_id", "unknown")
-        # Sanitize pack name for filesystem
-        safe_pack_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in pack_name)
         
-        # Determine cache key based on learning context or config parameters
+        # Extract model and VAE from config
+        config = njr.config or {}
+        model_name = config.get("txt2img", {}).get("model") or config.get("txt2img", {}).get("sd_model_checkpoint") or njr.base_model or "unknown"
+        vae_name = config.get("txt2img", {}).get("vae") or njr.vae or "none"
+        
+        # Helper function to sanitize names for filesystem
+        def sanitize_for_fs(name: str) -> str:
+            """Sanitize string for filesystem, keeping only alphanumeric, dash, underscore."""
+            return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in name)
+        
+        # Helper function to shorten model name (first 10 + last 5 chars)
+        def shorten_model_name(name: str) -> str:
+            """Shorten model name to first 10 + last 5 characters."""
+            # Remove common extensions first
+            for ext in [".safetensors", ".ckpt", ".pt"]:
+                if name.lower().endswith(ext):
+                    name = name[:-len(ext)]
+                    break
+            if len(name) <= 15:
+                return name
+            return name[:10] + name[-5:]
+        
+        # Build folder name components
+        pack_part = sanitize_for_fs(pack_name[:12])
+        model_part = sanitize_for_fs(shorten_model_name(model_name))
+        vae_part = sanitize_for_fs(vae_name[:12]) if vae_name.lower() not in ["none", "", "automatic"] else "none"
+        
+        # Determine cache key based on learning context or pack+model+vae
         learning_context = getattr(njr, "learning_context", None)
         
         if learning_context:
             # Learning experiments: use experiment_id so all variants share same folder
             cache_key = f"learning_{learning_context.experiment_id}"
+            folder_name = f"learning_{sanitize_for_fs(learning_context.experiment_id)}"
             logger.debug(f"Using learning experiment folder: {cache_key}")
         else:
-            # Regular jobs: include config hash so different configs get different folders
-            # Hash relevant parameters that affect generation (model, steps, size, cfg, etc.)
-            import hashlib
-            config = njr.config or {}
-            
-            # Extract key parameters that should trigger new folder
-            config_params = {
-                "model": config.get("txt2img", {}).get("model") or config.get("txt2img", {}).get("sd_model_checkpoint"),
-                "vae": config.get("txt2img", {}).get("vae"),
-                "steps": config.get("txt2img", {}).get("steps"),
-                "cfg_scale": config.get("txt2img", {}).get("cfg_scale"),
-                "width": config.get("txt2img", {}).get("width"),
-                "height": config.get("txt2img", {}).get("height"),
-                "sampler": config.get("txt2img", {}).get("sampler_name"),
-                "scheduler": config.get("txt2img", {}).get("scheduler"),
-                "enable_hr": config.get("txt2img", {}).get("enable_hr"),
-                "hr_scale": config.get("txt2img", {}).get("hr_scale"),
-                "hr_upscaler": config.get("txt2img", {}).get("hr_upscaler"),
-                "use_refiner": config.get("txt2img", {}).get("use_refiner"),
-                "refiner_model": config.get("txt2img", {}).get("refiner_model_name"),
-            }
-            
-            # Create hash of config params (8 chars is enough to avoid collisions)
-            config_str = str(sorted(config_params.items()))
-            config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
-            cache_key = f"{safe_pack_name}_{config_hash}"
-            logger.debug(f"Using config-based cache key: {cache_key}")
+            # Regular jobs: folder name includes pack+model+vae for clarity
+            folder_name = f"{pack_part}-{model_part}-{vae_part}"
+            cache_key = folder_name
+            logger.debug(f"Using pack-model-vae folder: {folder_name}")
         
-        # Check cache for existing folder for this pack+config
+        # Check cache for existing folder for this pack+model+vae
         now = datetime.now()
         cached_entry = PipelineRunner._pack_folder_cache.get(cache_key)
         
@@ -122,24 +125,24 @@ class PipelineRunner:
             timestamp_created, run_dir = cached_entry
             # Reuse if created within timeout window
             if (now - timestamp_created).total_seconds() < (PipelineRunner._folder_cache_timeout_minutes * 60):
-                logger.info(f"♻️ Reusing existing folder for pack '{pack_name}': {run_dir}")
+                logger.info(f"♻️ Reusing existing folder: {run_dir}")
                 run_id = run_dir.name  # Use existing folder name as run_id
             else:
-                # Cache expired, create new folder
-                logger.info(f"⏰ Cache expired for pack '{pack_name}', creating new folder")
+                # Cache expired, create new folder with timestamp prefix
+                logger.info(f"⏰ Cache expired, creating new folder")
                 timestamp = now.strftime("%Y%m%d_%H%M%S")
-                run_id = f"{timestamp}_{safe_pack_name}"
+                run_id = f"{timestamp}_{folder_name}"
                 run_dir = Path(self._runs_base_dir) / run_id
                 run_dir.mkdir(parents=True, exist_ok=True)
                 PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
         else:
-            # No cached folder, create new one
+            # No cached folder, create new one with timestamp prefix
             timestamp = now.strftime("%Y%m%d_%H%M%S")
-            run_id = f"{timestamp}_{safe_pack_name}"
+            run_id = f"{timestamp}_{folder_name}"
             run_dir = Path(self._runs_base_dir) / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
-            logger.info(f"📁 Created new folder for pack '{pack_name}': {run_dir}")
+            logger.info(f"📁 Created new folder: {run_dir}")
         
         # Create manifests subfolder for JSON metadata
         manifests_dir = run_dir / "manifests"
@@ -264,12 +267,19 @@ class PipelineRunner:
                         payload["refiner_switch_at"] = njr_config.get("refiner_switch_at", 0.8)
                     
                     # Add other settings that might be in config
+                    # PR-LEARN-012: Check NJR attributes if not in config (learning jobs have seed at NJR level)
                     for key in ["clip_skip", "seed", "subseed", "subseed_strength",
                                 "seed_resize_from_h", "seed_resize_from_w",
                                 "restore_faces", "tiling", "do_not_save_samples", "do_not_save_grid",
                                 "vae"]:
                         if key in njr_config:
                             payload[key] = njr_config[key]
+                        elif hasattr(njr, key) and getattr(njr, key) is not None:
+                            # Fallback to NJR attribute if not in config dict
+                            payload[key] = getattr(njr, key)
+                        elif hasattr(njr, 'extra_metadata') and isinstance(njr.extra_metadata, dict) and key in njr.extra_metadata:
+                            # Fallback to extra_metadata for learning jobs
+                            payload[key] = njr.extra_metadata[key]
                     
                     # Debug logging for hires fix
                     logger.info("🔵 [HIRES_DEBUG] payload: enable_hr=%s, hr_scale=%s, hr_upscaler=%s, hr_second_pass_steps=%s, denoise=%s",
@@ -637,7 +647,45 @@ class PipelineRunner:
         result_dict = result.to_dict()
         logger.info(f"🔍 DEBUG: to_dict() success={result_dict.get('success')}, error={result_dict.get('error')}")
         try:
-            write_run_metadata(run_id, metadata, base_dir=self._runs_base_dir)
+            # Build stage_outputs from variants (each variant is a dict with path, config, etc.)
+            stage_outputs = []
+            for variant in variants:
+                if variant and isinstance(variant, dict):
+                    stage_outputs.append(variant)
+            
+            # For learning jobs, include experiment metadata and base config
+            learning_context = getattr(njr, "learning_context", None)
+            packs_list = []
+            enhanced_metadata = dict(metadata)  # Copy base metadata
+            
+            if learning_context:
+                packs_list = [{
+                    "type": "learning_experiment",
+                    "experiment_name": learning_context.experiment_name,
+                    "variable": learning_context.variable_under_test,
+                    "variant_count": len(stage_outputs),
+                }]
+                # Add base configuration to metadata
+                enhanced_metadata.update({
+                    "prompt": getattr(njr, "positive_prompt", ""),
+                    "negative_prompt": getattr(njr, "negative_prompt", ""),
+                    "model": getattr(njr, "base_model", ""),
+                    "sampler": getattr(njr, "sampler_name", ""),
+                    "scheduler": getattr(njr, "scheduler", ""),
+                    "steps": getattr(njr, "steps", 0),
+                    "width": getattr(njr, "width", 0),
+                    "height": getattr(njr, "height", 0),
+                    "learning_experiment": learning_context.experiment_name,
+                    "learning_variable": learning_context.variable_under_test,
+                })
+            
+            write_run_metadata(
+                run_id,
+                enhanced_metadata,
+                packs=packs_list,
+                stage_outputs=stage_outputs,
+                base_dir=self._runs_base_dir
+            )
         except Exception:
             pass
         self._last_run_result = result
@@ -939,6 +987,12 @@ class PipelineRunner:
         payload["cfg_scale"] = config.cfg_scale
         payload["width"] = config.width
         payload["height"] = config.height
+        
+        # PR-LEARN-012: Override seed parameters from config
+        payload["seed"] = config.seed
+        payload["subseed"] = getattr(config, "subseed", -1)
+        payload["subseed_strength"] = getattr(config, "subseed_strength", 0.0)
+        payload["clip_skip"] = getattr(config, "clip_skip", 2)
 
         if config.pack_name:
             payload["pack_name"] = config.pack_name

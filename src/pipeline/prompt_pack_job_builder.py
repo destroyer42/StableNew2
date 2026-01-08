@@ -194,9 +194,16 @@ class PromptPackNormalizedJobBuilder:
 
     def _build_jobs_for_entry(self, entry: PackJobEntry) -> list[NormalizedJobRecord]:
         pack_config = self._load_pack_config(entry.pack_id)
+        
+        # BUGFIX: Allow learning experiments without pack config if config_snapshot is provided
         if pack_config is None:
-            _logger.error("Missing config for pack '%s', skipping entry", entry.pack_id)
-            return []
+            # Check if this is a learning experiment with full config_snapshot
+            if entry.config_snapshot and entry.pack_id.startswith("learning_"):
+                # Use config_snapshot as pack_config for learning experiments
+                pack_config = {}  # Empty pack_config, will use runtime_params from config_snapshot
+            else:
+                _logger.error("Missing config for pack '%s', skipping entry", entry.pack_id)
+                return []
 
         runtime_params = dict(entry.config_snapshot or {})
         merged_config = copy.deepcopy(
@@ -439,6 +446,16 @@ class PromptPackNormalizedJobBuilder:
                         "codeformer_weight": data.get("codeformer_weight"),
                     }
                 )
+            # BUGFIX: ADetailer stage should NOT have model/VAE fields set from config
+            # The 'model' in adetailer config refers to detector models (face_yolov8n.pt, mediapipe_face_full, etc.)
+            # which are NOT checkpoint models and should not trigger model switching
+            if stage == "adetailer":
+                stage_model = None
+                stage_vae = None
+            else:
+                stage_model = data.get("model")
+                stage_vae = data.get("vae")
+            
             stage_cfg = StageConfig(
                 stage_type=stage,
                 enabled=enabled,
@@ -447,8 +464,8 @@ class PromptPackNormalizedJobBuilder:
                 denoising_strength=data.get("denoising_strength"),
                 sampler_name=data.get("sampler_name") or data.get("sampler"),
                 scheduler=data.get("scheduler"),
-                model=data.get("model"),
-                vae=data.get("vae"),
+                model=stage_model,
+                vae=stage_vae,
                 extra={k: v for k, v in extra.items() if v not in (None, "", [])},
             )
             chain.append(stage_cfg)

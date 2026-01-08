@@ -39,10 +39,13 @@ class PipelineController:
 
     _JOIN_TIMEOUT = 5.0
 
-    def __init__(self, state_manager: StateManager | None = None):
+    def __init__(self, state_manager: StateManager | None = None, app_controller: Any | None = None):
         self.state_manager = state_manager or StateManager()
         self.cancel_token = CancelToken()
         self.log_queue: queue.Queue[LogMessage] = queue.Queue()
+        
+        # PR-HEARTBEAT-FIX: Reference to AppController for heartbeat updates
+        self._app_controller = app_controller
 
         # Worker + subprocess
         self._worker: threading.Thread | None = None
@@ -276,6 +279,15 @@ class PipelineController:
 
     def report_progress(self, stage: str, percent: float, eta: str | None) -> None:
         """Report progress to registered callbacks in a thread-safe manner."""
+
+        # PR-HEARTBEAT-FIX: Update UI heartbeat during progress reporting
+        # This prevents false "stall" diagnostics during long image generations
+        if self._app_controller is not None:
+            try:
+                import time
+                self._app_controller.last_ui_heartbeat_ts = time.monotonic()
+            except Exception:
+                pass  # Don't fail if heartbeat update fails
 
         eta_text = eta if eta else "ETA: --"
         try:

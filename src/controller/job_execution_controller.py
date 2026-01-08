@@ -188,6 +188,7 @@ class JobExecutionController:
             logger.warning(f"Failed to process runtime status update: {exc}")
 
     def stop(self) -> None:
+        """Stop the queue worker and persist queue state."""
         with self._lock:
             if self._started:
                 logger.info(
@@ -198,6 +199,13 @@ class JobExecutionController:
                 self._runner.stop()
                 self._started = False
                 self._worker_thread_name = None
+        
+        # PR-PERSIST-FIX: Save queue state when stopping to ensure queued jobs are persisted
+        try:
+            self._persist_queue_state()
+            logger.debug("Queue state persisted during stop()")
+        except Exception as exc:
+            logger.warning(f"Failed to persist queue state during stop: {exc}")
 
     def submit_pipeline_run(
         self,
@@ -416,6 +424,7 @@ class JobExecutionController:
         """Persist current queued jobs and control flags."""
         entries: list[dict[str, Any]] = []
         for job in self._queue.list_jobs():
+            # PR-PERSIST-FIX: Only save QUEUED jobs, exclude RUNNING/COMPLETED/FAILED/CANCELLED
             if job.status != JobStatus.QUEUED:
                 continue
             entry = self._build_queue_entry(job)
@@ -428,6 +437,8 @@ class JobExecutionController:
         )
         try:
             save_queue_snapshot(snapshot)
+            logger.debug("Persisted queue state: %d jobs, auto_run=%s, paused=%s", 
+                        len(entries), self._auto_run_enabled, self._queue_paused)
         except Exception as exc:
             logger.warning("Failed to persist queue state: %s", exc)
 

@@ -14,11 +14,13 @@ class ExperimentDesignPanel(ttk.Frame):
         self,
         master: tk.Misc,
         learning_controller: LearningController | None = None,
-        *args,
-        **kwargs,
+        prompt_workspace_state: Any | None = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         super().__init__(master, *args, **kwargs)
         self.learning_controller = learning_controller
+        self.prompt_workspace_state = prompt_workspace_state
 
         # Configure layout
         self.columnconfigure(0, weight=1)
@@ -130,6 +132,7 @@ class ExperimentDesignPanel(ttk.Frame):
             text="Use current Prompt Workspace slot",
             variable=self.prompt_source_var,
             value="workspace",
+            command=self._on_prompt_source_changed,
         ).grid(row=0, column=0, sticky="w", pady=2)
 
         ttk.Radiobutton(
@@ -137,11 +140,15 @@ class ExperimentDesignPanel(ttk.Frame):
             text="Custom prompt text:",
             variable=self.prompt_source_var,
             value="custom",
+            command=self._on_prompt_source_changed,
         ).grid(row=1, column=0, sticky="w", pady=2)
 
         self.custom_prompt_var = tk.StringVar(value="")
         self.custom_prompt_text = tk.Text(prompt_frame, height=3, wrap=tk.WORD)
         self.custom_prompt_text.grid(row=2, column=0, sticky="ew", pady=(2, 0))
+        
+        # Populate text field with workspace prompt initially
+        self._on_prompt_source_changed()
 
         # Buttons
         button_frame = ttk.Frame(self)
@@ -163,6 +170,36 @@ class ExperimentDesignPanel(ttk.Frame):
         self.feedback_var = tk.StringVar(value="")
         self.feedback_label = ttk.Label(self, textvariable=self.feedback_var, foreground="red")
         self.feedback_label.grid(row=14, column=0, sticky="w", pady=(0, 10))
+
+    def _on_prompt_source_changed(self) -> None:
+        """Handle prompt source radio button changes.
+        
+        When 'workspace' is selected, populate the text field with the current
+        workspace prompt so the user can see what will be used.
+        """
+        if self.prompt_source_var.get() == "workspace" and self.prompt_workspace_state:
+            try:
+                # Get current prompt from workspace
+                current_prompt = self.prompt_workspace_state.get_current_prompt_text()
+                if current_prompt:
+                    # Update text field to show the workspace prompt
+                    self.custom_prompt_text.delete("1.0", tk.END)
+                    self.custom_prompt_text.insert("1.0", current_prompt)
+                    # Make it read-only when workspace source is selected
+                    self.custom_prompt_text.config(state="disabled")
+                else:
+                    # No prompt available
+                    self.custom_prompt_text.delete("1.0", tk.END)
+                    self.custom_prompt_text.insert("1.0", "(No prompt in workspace)")
+                    self.custom_prompt_text.config(state="disabled")
+            except Exception:
+                # If there's an error accessing workspace state
+                self.custom_prompt_text.delete("1.0", tk.END)
+                self.custom_prompt_text.insert("1.0", "(Workspace prompt not available)")
+                self.custom_prompt_text.config(state="disabled")
+        else:
+            # Custom mode - enable text field for editing
+            self.custom_prompt_text.config(state="normal")
 
     def _on_build_preview(self) -> None:
         """Handle build preview button click."""

@@ -191,21 +191,15 @@ class SeedSection(ttk.Frame):
         
         # Main seed
         self.seed_var = tk.StringVar(value="-1")
-        ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry").grid(
-            row=1, column=0, sticky="ew"
-        )
-        self.randomize_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            self, text="Randomize", variable=self.randomize_var, style=SECONDARY_BUTTON_STYLE,
-            command=self._on_randomize_toggle
-        ).grid(row=1, column=1, sticky="w", padx=(8, 0))
+        self.seed_entry = ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry")
+        self.seed_entry.grid(row=1, column=0, sticky="ew")
         
-        # Add randomize button (🎲)
+        # Add randomize button (🎲) - sets seed to -1 for random
         randomize_btn = ttk.Button(
-            self, text="🎲", width=3,
+            self, text="🎲 Random", width=10,
             command=self._on_randomize_click
         )
-        randomize_btn.grid(row=1, column=2, sticky="w", padx=(4, 0))
+        randomize_btn.grid(row=1, column=1, sticky="w", padx=(8, 0))
         
         # Subseed controls
         ttk.Label(self, text="Subseed", style=BODY_LABEL_STYLE).grid(
@@ -243,17 +237,11 @@ class SeedSection(ttk.Frame):
         
         self.columnconfigure(0, weight=1)
     
-    def _on_randomize_toggle(self) -> None:
-        """Handle randomize checkbox toggle."""
-        if self.randomize_var.get():
-            self.seed_var.set("-1")
-    
     def _on_randomize_click(self) -> None:
-        """Handle randomize button click."""
+        """Generate and display a random seed that can be saved for subsequent runs."""
         import random
         new_seed = random.randint(0, 2**32 - 1)
         self.seed_var.set(str(new_seed))
-        self.randomize_var.set(False)
     
     def _on_randomize_subseed(self) -> None:
         """Generate random subseed."""

@@ -55,6 +55,14 @@
     "source": "none",
     "description": ""
   },
+  "ciri_prodigy_21": {
+    "name": "ciri_prodigy_21",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\ciri_prodigy_21.safetensors",
+    "file_size": 255004360,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
   "csybgh": {
     "name": "csybgh",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\csybgh.safetensors",
@@ -267,6 +275,14 @@
     "name": "WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\WeaponPoseHelper-xl1024-v3a-0__p0s3s_w34p0ns,.safetensors",
     "file_size": 456484716,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "WITCHERS_BY_STX": {
+    "name": "WITCHERS_BY_STX",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\WITCHERS_BY_STX.safetensors",
+    "file_size": 228455428,
     "keywords": [],
     "source": "none",
     "description": ""

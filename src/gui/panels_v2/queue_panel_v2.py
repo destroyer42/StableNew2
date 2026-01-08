@@ -897,6 +897,7 @@ class QueuePanelV2(ttk.Frame):
             return
 
         queue_jobs = getattr(self.app_state, "queue_jobs", None)
+        logger.debug(f"_on_queue_jobs_changed: Received {len(queue_jobs) if queue_jobs else 0} jobs")
         if queue_jobs is not None:
             self.update_jobs(queue_jobs)
 

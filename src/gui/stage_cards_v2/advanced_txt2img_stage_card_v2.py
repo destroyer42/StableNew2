@@ -162,7 +162,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # Map display_name to internal name for config
         self._model_name_map = {r.display_name: r.name for r in model_resources}
         self._vae_name_map = {r.display_name: r.name for r in vae_resources}
-        self._vae_name_map[self.NO_VAE_DISPLAY] = ""
+        self._vae_name_map[self.NO_VAE_DISPLAY] = ""  # Empty string means no VAE selected
 
         def on_model_selected(*_: Any) -> None:
             selected_display = self.model_var.get()
@@ -777,6 +777,10 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
     def load_from_config(self, cfg: dict[str, Any]) -> None:
         section = (cfg or {}).get("txt2img", {}) or {}
         self.load_from_section(section)
+    
+    def _log_seed_values(self) -> dict:
+        """Debug logging helper for seed values (disabled)."""
+        return {}  # Disabled - use DEBUG level if needed
 
     def to_config_dict(self) -> dict[str, Any]:
         # Use internal names for model/vae, and all selected values for payload correctness
@@ -800,9 +804,12 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "width": int(self.width_var.get() or 512),
                 "height": int(self.height_var.get() or 512),
                 "clip_skip": int(self.clip_skip_var.get() or 2),
-                "seed": -1 if self.seed_section.randomize_var.get() else int(self.seed_var.get() or -1),
+                "seed": int(self.seed_var.get() or -1),
                 "subseed": int(self.seed_section.subseed_var.get() or -1),
                 "subseed_strength": float(self.seed_section.subseed_strength_var.get() or 0.0),
+                
+                # Debug logging for seed values
+                **self._log_seed_values(),
                 
                 # Refiner fields - only write if explicitly enabled
                 "use_refiner": use_refiner,

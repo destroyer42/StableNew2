@@ -5,7 +5,12 @@ from collections import defaultdict
 
 class SystemWatchdogV2:
     # Tune these as needed
-    UI_STALL_S = 3.0
+    # PR-HEARTBEAT-FIX: Set to 10s for fast failure detection
+    # Rationale: We want to detect true hangs/freezes quickly (fail fast).
+    # BUT during active generation, progress polling updates the heartbeat,
+    # so working-but-slow operations won't trigger false positives.
+    # Result: 10s detects broken/frozen state fast, but active work keeps heartbeat alive.
+    UI_STALL_S = 10.0
     RUNNER_STALL_S = 10.0
     LOOP_PERIOD_S = 1.0
 
@@ -103,8 +108,13 @@ class SystemWatchdogV2:
             self._in_flight[reason] = True
             self._last_trigger_ts[reason] = now
 
+        # PR-HB-003: Enhanced context for heartbeat stall diagnostics
+        ui_heartbeat_ts = float(getattr(self.app, "last_ui_heartbeat_ts", 0) or 0)
+        ui_age_s = now - ui_heartbeat_ts if ui_heartbeat_ts else None
+        
         context = {
-            "ui_heartbeat_age_s": now - float(getattr(self.app, "last_ui_heartbeat_ts", 0) or 0),
+            "ui_age_s": ui_age_s,  # PR-HB-003: Explicit ui_age_s field
+            "ui_heartbeat_age_s": ui_age_s,  # Keep for compatibility
             "queue_activity_age_s": now - float(getattr(self.app, "last_queue_activity_ts", 0) or 0)
             if hasattr(self.app, "last_queue_activity_ts")
             else None,
@@ -112,6 +122,12 @@ class SystemWatchdogV2:
             - float(getattr(self.app, "last_runner_activity_ts", 0) or 0),
             "queue_state": getattr(self.app, "get_queue_state", lambda: None)(),
             "watchdog_reason": reason,
+            # PR-HB-003: Add operation tracking and thresholds
+            "current_operation_label": getattr(self.app, "current_operation_label", None),
+            "last_ui_action": getattr(self.app, "last_ui_action", None),
+            "ui_stall_threshold_s": self.UI_STALL_S,
+            "last_ui_heartbeat_ts": ui_heartbeat_ts,
+            "watchdog_now_ts": now,
         }
 
         def _done_callback():

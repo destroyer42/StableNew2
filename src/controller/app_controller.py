@@ -315,6 +315,18 @@ class AppController:
         self.last_ui_heartbeat_ts = time.monotonic()
         self.last_queue_activity_ts = time.monotonic()
         self.last_runner_activity_ts = time.monotonic()
+        
+        # PR-HB-002: Operation tracking for heartbeat stall diagnostics
+        self.current_operation_label: str | None = None
+        self.last_ui_action: str | None = None
+        
+        # PR-HB-003: UI update debouncing to prevent heartbeat stalls
+        self._ui_preview_dirty = False
+        self._ui_job_list_dirty = False
+        self._ui_history_dirty = False
+        self._ui_debounce_pending = False
+        self._ui_debounce_delay_ms = 150  # Coalesce updates within 150ms window
+        
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
         if self.app_state is None:
@@ -403,12 +415,20 @@ class AppController:
                 pipeline_runner=self.pipeline_runner,
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
+                app_controller=self,  # PR-HEARTBEAT-FIX: Pass self for heartbeat updates
             )
         
-        # PR-LEARN-002: Initialize LearningExecutionController for learning experiments
-        from src.controller.learning_execution_controller import LearningExecutionController
+        # PR-LEARN-012: Initialize LearningExecutionController (NEW implementation)
+        from src.learning.execution_controller import LearningExecutionController
+        from src.gui.learning_state import LearningState
+        
+        # Initialize learning state if not exists
+        if not hasattr(self, '_learning_state'):
+            self._learning_state = LearningState()
+        
         self.learning_execution_controller = LearningExecutionController(
-            run_callable=self._learning_run_callable
+            learning_state=self._learning_state,
+            job_service=self.job_service,
         )
         
         # PR-LEARN-003: Register learning completion handler
@@ -471,6 +491,17 @@ class AppController:
             protected_pids=self._get_protected_process_pids,
             start_thread=False,  # DISABLED - prevents GUI from being killed
         )
+        
+        # PR-HB-004: Initialize persistence worker with UI callback dispatcher
+        try:
+            from src.services.persistence_worker import get_persistence_worker
+            worker = get_persistence_worker()
+            if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
+                worker._ui_callback_dispatcher = self.main_window.run_in_main_thread
+            logger.debug("[controller] Persistence worker initialized")
+        except Exception as e:
+            logger.error(f"[controller] Failed to initialize persistence worker: {e}")
+        
         # Wire GUI overrides into PipelineController so config assembler can access GUI state
         if hasattr(self.pipeline_controller, "get_gui_overrides"):
             self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
@@ -496,6 +527,15 @@ class AppController:
                 logger.info("[controller] shutdown(): System watchdog stopped")
             except Exception as e:
                 logger.error(f"[controller] shutdown(): Error stopping watchdog: {e}")
+        
+        # PR-HB-004: Shutdown persistence worker
+        logger.info("[controller] shutdown(): Shutting down persistence worker...")
+        try:
+            from src.services.persistence_worker import shutdown_persistence_worker
+            shutdown_persistence_worker(timeout=5.0)
+            logger.info("[controller] shutdown(): Persistence worker shut down")
+        except Exception as e:
+            logger.error(f"[controller] shutdown(): Error shutting down persistence worker: {e}")
         
         # PR-SHUTDOWN-001: Shutdown history store background writer
         logger.info("[controller] shutdown(): Shutting down history store writer...")
@@ -551,6 +591,85 @@ class AppController:
                 root.after(0, fn)
                 return
         fn()
+    
+    def _mark_ui_dirty(self, preview: bool = False, jobs: bool = False, history: bool = False) -> None:
+        """Mark UI components as needing refresh and schedule debounced update.
+        
+        PR-HB-003: Coalesces multiple rapid update requests into a single
+        periodic refresh to prevent heartbeat stalls.
+        """
+        if preview:
+            self._ui_preview_dirty = True
+        if jobs:
+            self._ui_job_list_dirty = True
+        if history:
+            self._ui_history_dirty = True
+        
+        # Schedule debounced update if not already pending
+        if not self._ui_debounce_pending:
+            self._ui_debounce_pending = True
+            self._schedule_debounced_ui_update()
+    
+    def _schedule_debounced_ui_update(self) -> None:
+        """Schedule a debounced UI update after delay.
+        
+        PR-HB-003: Uses root.after() to coalesce updates into a single refresh.
+        """
+        try:
+            root = self.main_window.root if self.main_window else None
+        except Exception:
+            root = None
+        
+        if root is not None:
+            try:
+                root.after(self._ui_debounce_delay_ms, self._apply_pending_ui_updates)
+            except Exception:
+                # Fallback if scheduling fails
+                self._apply_pending_ui_updates()
+        else:
+            # No GUI - apply immediately
+            self._apply_pending_ui_updates()
+    
+    def _apply_pending_ui_updates(self) -> None:
+        """Apply all pending UI updates and clear dirty flags.
+        
+        PR-HB-003: Central UI update sink that processes all coalesced updates.
+        """
+        try:
+            self._ui_debounce_pending = False
+            
+            # Update last heartbeat timestamp
+            import time
+            self.last_ui_heartbeat_ts = time.monotonic()
+            
+            # Apply updates based on dirty flags
+            if self._ui_preview_dirty:
+                self._ui_preview_dirty = False
+                try:
+                    self._refresh_preview_from_state()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing preview: {exc}")
+            
+            if self._ui_job_list_dirty:
+                self._ui_job_list_dirty = False
+                try:
+                    # Trigger job list refresh if needed
+                    if self.main_window and hasattr(self.main_window, "refresh_job_list"):
+                        self.main_window.refresh_job_list()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing job list: {exc}")
+            
+            if self._ui_history_dirty:
+                self._ui_history_dirty = False
+                try:
+                    # Trigger history refresh if needed
+                    if self.main_window and hasattr(self.main_window, "refresh_history"):
+                        self.main_window.refresh_history()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing history: {exc}")
+        
+        except Exception as exc:
+            logger.exception(f"[AppController] Error in _apply_pending_ui_updates: {exc}")
 
     def _wrap_ui_callback(self, handler: Callable[..., None] | None) -> Callable[..., None] | None:
         """Return a callable that schedules `handler(*args, **kwargs)` via `_ui_dispatch`.
@@ -1679,6 +1798,11 @@ class AppController:
                 queued_jobs = self.job_service.job_queue.list_jobs(status_filter=JobStatus.QUEUED)
                 for job in queued_jobs:
                     try:
+                        # PR-PERSIST-FIX: Double-check job is still QUEUED (race condition protection)
+                        if job.status != JobStatus.QUEUED:
+                            logger.debug(f"Job {job.job_id} status changed to {job.status.value}, skipping")
+                            continue
+                        
                         # Only persist jobs that have NJR attached
                         njr = getattr(job, "_normalized_record", None)
                         if njr is None:
@@ -2223,6 +2347,11 @@ class AppController:
         if store is None:
             return
         try:
+            # PR-HISTORY-FIX: Force cache invalidation before refresh to ensure we get latest data
+            # This is critical for manual refresh button to work correctly
+            if hasattr(store, "invalidate_cache"):
+                store.invalidate_cache()
+            
             # Only show completed and failed jobs in history (not queued/running/cancelled)
             entries = store.list_jobs(limit=limit or 20)
             # Filter to only show terminal states that made it through the pipeline
@@ -3332,6 +3461,14 @@ class AppController:
         except Exception:
             logger.exception("Error waiting for worker thread during shutdown")
 
+        # PR-PERSIST-FIX: Ensure queue state is saved before shutdown completes
+        try:
+            logger.info("[controller] Step 7.5/8: Saving queue state...")
+            self._save_queue_state()
+            logger.info("[controller] Step 7.5/8: Queue state saved")
+        except Exception:
+            logger.exception("Error saving queue state during shutdown")
+
         try:
             logger.info("[controller] Step 8/8: Closing loggers and API clients...")
             close_all_structured_loggers()
@@ -3981,8 +4118,17 @@ class AppController:
                 self._warned_missing_pipeline_apply = True
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
+        """Refresh resources from WebUI API and update GUI dropdowns.
+        
+        PR-HB-003: This method is now designed to run on a worker thread.
+        It makes potentially slow HTTP calls to fetch resources, then
+        dispatches all GUI updates back to the main thread.
+        """
         if not getattr(self, "resource_service", None):
             return None
+        
+        # PR-HB-003: This can take 3-10 seconds with large model collections
+        # Now safe to block since we're on a worker thread
         try:
             payload = self.resource_service.refresh_all() or {}
         except Exception as exc:
@@ -3992,29 +4138,63 @@ class AppController:
             return None
 
         normalized = self._normalize_resource_map(payload)
-        self.state.resources = normalized
-        if self.app_state is not None:
-            try:
-                self.app_state.set_resources(normalized)
-            except Exception:
-                pass
-        self._emit_webui_resources_updated(normalized)
-        counts = tuple(
-            len(normalized[key])
-            for key in ("models", "vaes", "samplers", "schedulers", "upscalers")
-        )
-        msg = (
-            f"Resource update: {counts[0]} models, {counts[1]} vaes, "
-            f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
-        )
-        self._append_log(f"[resources] {msg}")
-        logger.debug(msg)
+        
+        # PR-HB-003: Schedule GUI updates on main thread
+        def _update_gui():
+            self.state.resources = normalized
+            if self.app_state is not None:
+                try:
+                    self.app_state.set_resources(normalized)
+                except Exception:
+                    pass
+            self._emit_webui_resources_updated(normalized)
+            
+            counts = tuple(
+                len(normalized[key])
+                for key in ("models", "vaes", "samplers", "schedulers", "upscalers")
+            )
+            msg = (
+                f"Resource update: {counts[0]} models, {counts[1]} vaes, "
+                f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
+            )
+            self._append_log(f"[resources] {msg}")
+            logger.debug(msg)
+        
+        # PR-HB-003: Dispatch to main thread for GUI updates
+        self._run_in_gui_thread(_update_gui)
+        
         return normalized
 
     def on_webui_ready(self) -> None:
-        """Handle WebUI transitioning to READY."""
-        self._append_log("[webui] READY received, refreshing resource lists.")
-        self.refresh_resources_from_webui()
+        """Handle WebUI transitioning to READY.
+        
+        PR-HB-003: Spawns worker thread for resource refresh to avoid blocking
+        the calling thread (which may be UI thread or connection thread).
+        """
+        self._append_log("[webui] READY received, refreshing resource lists asynchronously.")
+        
+        # PR-HB-003: Set operation label for diagnostics
+        self.current_operation_label = "Refreshing WebUI resources"
+        self.last_ui_action = "on_webui_ready()"
+        
+        # PR-HB-003: Spawn worker thread for slow resource fetching
+        def _worker():
+            try:
+                self.refresh_resources_from_webui()
+            except Exception as exc:
+                logger.exception(f"[controller] Error refreshing WebUI resources: {exc}")
+                self._append_log(f"[webui] Resource refresh failed: {exc}")
+            finally:
+                # Clear operation label
+                self.current_operation_label = None
+                self.last_ui_action = None
+        
+        # Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=_worker,
+            name="WebUIResourceRefresh",
+            purpose="Refresh WebUI resources after connection"
+        )
 
     def _normalize_resource_map(self, payload: dict[str, Any]) -> dict[str, list[Any]]:
         resources = self._empty_resource_map()
@@ -4800,86 +4980,131 @@ class AppController:
         )
 
     def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
-        """Add one or more packs to the current job draft."""
+        """
+        Add one or more packs to the current job draft.
+        
+        PR-HB-002: This method now spawns a worker thread to avoid blocking the UI thread
+        during heavy I/O operations (reading pack files with 100s of prompts).
+        """
+        if not pack_ids:
+            return
+        
+        # PR-HB-002: Set operation label for heartbeat stall diagnostics
+        self.current_operation_label = f"Adding {len(pack_ids)} pack(s) to job"
+        self.last_ui_action = f"on_pipeline_add_packs_to_job({pack_ids})"
+        
         logger.debug(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
         self._append_log(f"[controller] Adding packs to job: {pack_ids}")
-
-        entries = []
+        
+        # Validate inputs and collect metadata on UI thread (fast)
         stage_flags = self._build_stage_flags()
         randomizer_metadata = self._build_randomizer_metadata()
-        logger.debug(f"[AppController] Stage flags: {stage_flags}")
-        for pack_id in pack_ids:
-            pack = self._find_pack_by_id(pack_id)
-            logger.debug(f"[AppController] Looking for pack '{pack_id}': {pack}")
-            if pack is None:
-                self._append_log(f"[controller] Pack not found: {pack_id}")
-                logger.debug(f"[AppController] ERROR: Pack '{pack_id}' not found!")
-                continue
-
-            # Get pack configuration - read the actual pack file to get its config
-            pack_config = {}
+        
+        # PR-HB-002: Spawn worker thread for I/O-heavy work
+        def _worker():
             try:
-                pack_prompts = read_prompt_pack(pack.path)
-                if pack_prompts and len(pack_prompts) > 0:
-                    # Use first prompt's metadata as pack config (common approach)
-                    first_prompt = pack_prompts[0]
-                    pack_config = {k: v for k, v in first_prompt.items() if k not in ["positive", "negative"]}
-            except Exception as e:
-                self._append_log(f"[controller] Failed to read pack config for '{pack_id}': {e}")
-
-            # Build config snapshot considering override checkbox state
-            config_snapshot = self._build_config_snapshot_with_override(pack_config)
-
-            # Add stage enable flags to pipeline section so executor can check them
-            pipeline_section = config_snapshot.setdefault("pipeline", {})
-            pipeline_section["adetailer_enabled"] = stage_flags.get("adetailer", False)
-            pipeline_section["upscale_enabled"] = stage_flags.get("upscale", False)
-            pipeline_section["txt2img_enabled"] = stage_flags.get("txt2img", True)
-            pipeline_section["img2img_enabled"] = stage_flags.get("img2img", False)
-
-            # Ensure randomization is included
-            if "randomization_enabled" not in config_snapshot:
-                config_snapshot["randomization_enabled"] = (
-                    self.state.current_config.randomization_enabled
-                )
-            
-            # Read all prompts from pack file (not just first)
-            try:
-                all_prompts = read_prompt_pack(pack.path)
-            except Exception as e:
-                self._append_log(f"[controller] Failed to read pack '{pack_id}': {e}")
-                all_prompts = []
-            
-            if not all_prompts:
-                self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
-                continue
-            
-            logger.debug(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
-            
-            # Create one PackJobEntry per prompt row
-            for row_index, prompt_row in enumerate(all_prompts):
-                prompt_text = prompt_row.get("positive", "").strip()
-                negative_prompt_text = prompt_row.get("negative", "").strip()
+                entries = []
+                logger.debug(f"[AppController] Stage flags: {stage_flags}")
                 
-                entry = PackJobEntry(
-                    pack_id=pack_id,
-                    pack_name=pack.name,
-                    config_snapshot=config_snapshot,
-                    prompt_text=prompt_text,
-                    negative_prompt_text=negative_prompt_text,
-                    stage_flags=stage_flags,  # Use the stage flags that were built
-                    randomizer_metadata=randomizer_metadata,
-                    pack_row_index=row_index,  # Track which prompt row this is
-                )
-                entries.append(entry)
-            
-            logger.debug(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
+                for pack_id in pack_ids:
+                    pack = self._find_pack_by_id(pack_id)
+                    logger.debug(f"[AppController] Looking for pack '{pack_id}': {pack}")
+                    if pack is None:
+                        self._append_log(f"[controller] Pack not found: {pack_id}")
+                        logger.debug(f"[AppController] ERROR: Pack '{pack_id}' not found!")
+                        continue
 
-        if entries and self.app_state:
-            self.app_state.add_packs_to_job_draft(entries)
-            self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
-            self._refresh_preview_from_state()
-        # D21: Do NOT submit jobs to the queue here. Only update draft and preview. No queue interaction.
+                    # Get pack configuration - read the actual pack file to get its config
+                    pack_config = {}
+                    try:
+                        pack_prompts = read_prompt_pack(pack.path)
+                        if pack_prompts and len(pack_prompts) > 0:
+                            # Use first prompt's metadata as pack config (common approach)
+                            first_prompt = pack_prompts[0]
+                            pack_config = {k: v for k, v in first_prompt.items() if k not in ["positive", "negative"]}
+                    except Exception as e:
+                        self._append_log(f"[controller] Failed to read pack config for '{pack_id}': {e}")
+
+                    # Build config snapshot considering override checkbox state
+                    config_snapshot = self._build_config_snapshot_with_override(pack_config)
+
+                    # Add stage enable flags to pipeline section so executor can check them
+                    pipeline_section = config_snapshot.setdefault("pipeline", {})
+                    pipeline_section["adetailer_enabled"] = stage_flags.get("adetailer", False)
+                    pipeline_section["upscale_enabled"] = stage_flags.get("upscale", False)
+                    pipeline_section["txt2img_enabled"] = stage_flags.get("txt2img", True)
+                    pipeline_section["img2img_enabled"] = stage_flags.get("img2img", False)
+
+                    # Ensure randomization is included
+                    if "randomization_enabled" not in config_snapshot:
+                        config_snapshot["randomization_enabled"] = (
+                            self.state.current_config.randomization_enabled
+                        )
+                    
+                    # Read all prompts from pack file (not just first)
+                    try:
+                        all_prompts = read_prompt_pack(pack.path)
+                    except Exception as e:
+                        self._append_log(f"[controller] Failed to read pack '{pack_id}': {e}")
+                        all_prompts = []
+                    
+                    if not all_prompts:
+                        self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
+                        continue
+                    
+                    logger.debug(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
+                    
+                    # Create one PackJobEntry per prompt row
+                    for row_index, prompt_row in enumerate(all_prompts):
+                        prompt_text = prompt_row.get("positive", "").strip()
+                        negative_prompt_text = prompt_row.get("negative", "").strip()
+                        
+                        entry = PackJobEntry(
+                            pack_id=pack_id,
+                            pack_name=pack.name,
+                            config_snapshot=config_snapshot,
+                            prompt_text=prompt_text,
+                            negative_prompt_text=negative_prompt_text,
+                            stage_flags=stage_flags,
+                            randomizer_metadata=randomizer_metadata,
+                            pack_row_index=row_index,
+                        )
+                        entries.append(entry)
+                    
+                    logger.debug(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
+
+                # PR-HB-003: Schedule UI updates on main thread using debounced refresh
+                def _update_ui():
+                    if entries and self.app_state:
+                        self.app_state.add_packs_to_job_draft(entries)
+                        self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft")
+                        # Use debounced refresh instead of direct call
+                        self._mark_ui_dirty(preview=True)
+                    
+                    # Clear operation label
+                    self.current_operation_label = None
+                    self.last_ui_action = None
+                
+                # Schedule callback on UI thread
+                if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
+                    self.main_window.run_in_main_thread(_update_ui)
+                else:
+                    # Fallback: direct call (for tests without GUI)
+                    _update_ui()
+                    
+            except Exception as exc:
+                logger.exception(f"[AppController] Worker error in on_pipeline_add_packs_to_job: {exc}")
+                self._append_log(f"[controller] Error adding packs: {exc}")
+                # Clear operation label on error
+                self.current_operation_label = None
+                self.last_ui_action = None
+        
+        # PR-HB-002: Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=_worker,
+            name=f"PackAdd-{len(pack_ids)}",
+            purpose=f"Add {len(pack_ids)} pack(s) to job draft"
+        )
 
     def add_single_prompt_to_draft(self) -> None:
         """Capture the current prompt/negative pair in the pipeline draft summary."""
@@ -4905,6 +5130,50 @@ class AppController:
             refresh_fn()
         except Exception as exc:
             self._append_log(f"[controller] Refresh preview error: {exc!r}")
+
+    def _refresh_preview_from_state_async(self) -> None:
+        """
+        PR-HB-002: Async version of _refresh_preview_from_state that moves heavy work off UI thread.
+        
+        This spawns a worker thread to call pipeline_controller.refresh_preview_from_state(),
+        which can be slow when processing many pack entries. UI updates are scheduled back
+        to the main thread.
+        """
+        controller = getattr(self, "pipeline_controller", None)
+        if controller is None:
+            return
+        refresh_fn = getattr(controller, "refresh_preview_from_state", None)
+        if not callable(refresh_fn):
+            return
+
+        # PR-HB-002: Set operation label for diagnostics
+        self.current_operation_label = "Refreshing preview from state"
+        self.last_ui_action = "_refresh_preview_from_state_async()"
+
+        def _worker():
+            try:
+                # Heavy work happens here (off UI thread)
+                refresh_fn()
+            except Exception as exc:
+                logger.exception(f"[AppController] Error in _refresh_preview_from_state_async: {exc}")
+                self._append_log(f"[controller] Refresh preview error: {exc!r}")
+            finally:
+                # Clear operation label
+                def _clear_label():
+                    self.current_operation_label = None
+                    self.last_ui_action = None
+
+                if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
+                    self.main_window.run_in_main_thread(_clear_label)
+                else:
+                    _clear_label()
+
+        # PR-HB-002: Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=_worker,
+            name="PreviewRefresh",
+            purpose="Refresh preview from state async"
+        )
 
     def on_add_job_to_queue(self) -> None:
         """Enqueue the current job draft."""

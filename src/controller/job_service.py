@@ -181,10 +181,12 @@ class JobService:
             self.runner = runner_factory(job_queue, run_callable)
         else:
             # Default: create SingleNodeJobRunner (production behavior)
+            # BUGFIX: Pass is_paused callback so runner respects pause state
             self.runner = SingleNodeJobRunner(
                 job_queue,
                 run_callable=run_callable,
                 poll_interval=0.05,
+                is_paused=lambda: getattr(self, '_queue_status', 'idle') == 'paused',
             )
         log_with_ctx(
             logger,
@@ -866,6 +868,7 @@ class JobService:
             self._start_watchdog(job)
         elif status == JobStatus.COMPLETED:
             self._log_job_finished(job.job_id, "completed", "Job completed successfully.")
+            logger.info(f"[JobService] About to emit EVENT_JOB_FINISHED for job {job.job_id}")
             self._emit(self.EVENT_JOB_FINISHED, job)
             self._record_job_history(job, status)
             # PR-LEARN-003: Notify completion handlers
@@ -976,8 +979,15 @@ class JobService:
             self._emit(self.EVENT_QUEUE_STATUS, status)
 
     def _emit(self, event: str, *args: Any) -> None:
-        for callback in self._listeners.get(event, []):
+        callbacks = self._listeners.get(event, [])
+        if event == self.EVENT_JOB_FINISHED:
+            logger.info(f"[JobService] _emit({event}): {len(callbacks)} callback(s) registered")
+        
+        for callback in callbacks:
             try:
+                if event == self.EVENT_JOB_FINISHED:
+                    logger.info(f"[JobService] Calling callback: {callback}")
+                
                 if self._event_dispatcher:
                     # schedule via dispatcher to preserve caller thread
                     def _call(cb=callback, a=args):

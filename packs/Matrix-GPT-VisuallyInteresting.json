@@ -4,8 +4,8 @@
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere, gorgeous smile\na powerful gorgeous, athletic and fit, large breasted, flawless skin, naked fantasy female warrior as the central subject,\n[[hair]] hair flowing dramatically in the wind, [[eyes]] eyes filled with resolve,\n[[pose]] while [[activity]],\nshot from a [[perspective]],\nilluminated by [[lighting]],\nset in a vast [[environment]],\nthe moment feels like [[narrative]],\nwearing [[clothes]],\nepic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus",
-        "negative": "low quality, blurry, bad anatomy, extra limbs, distorted face, warped proportions,, plastic skin, flat lighting, cartoonish, anime style, glowing eyes",
+        "text": "(masterpiece, best quality, photorealistic) portrait, detailed skin, natural light, high fantasy, magical atmosphere, gorgeous smile\na  gorgeous, athletic and fit, huge breasted, flawless skin, naked fantasy female warrior as the central subject,\n[[hair]] hair flowing dramatically in the wind, [[eyes]] eyes filled with resolve,\n[[pose]] while [[activity]],\nshot from a [[perspective]],\nilluminated by [[lighting]],\nset in a vast [[environment]],\nthe moment feels like [[narrative]],\nwearing [[clothes]],\nepic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1",
@@ -24,15 +24,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.3474576271186441
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.9425675675675675
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.30000000000000004
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -46,8 +46,8 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) a mystical gorgeous, athletic and fit, large breasted, flawless skin, naked female spellcaster standing as the clear focal point, [[number]], gorgeous smile\nlong [[hair]] hair framing her face, glowing [[eyes]] eyes,\n[[pose]] as she is [[activity]],\ncaptured from a [[perspective]],\nbathed in [[lighting]],\ninside a towering [[environment]],\nthe scene suggests [[narrative]],\ndressed in [[clothes]],\nhigh fantasy realism, intricate details, dramatic atmosphere, cinematic lighting",
-        "negative": "modern clothing, sci-fi elements, dull colors, low detail,, distorted hands, malformed face, oversharpened, glowing eyes",
+        "text": "(masterpiece, best quality) a mystical gorgeous, athletic and fit, huge-breasted, flawless skin, naked female spellcaster standing as the clear focal point, [[number]], gorgeous smile\nlong [[hair]] hair framing her face,  [[eyes]] eyes,\n[[pose]] as she is [[activity]],\ncaptured from a [[perspective]],\nbathed in [[lighting]],\ninside a towering [[environment]],\nthe scene suggests [[narrative]],\ndressed in [[clothes]],\nhigh fantasy realism, intricate details, dramatic atmosphere, cinematic lighting",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -61,15 +61,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.4915254237288135
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.8108108108108109
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.38437499999999997
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -83,8 +83,8 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, mystical female spellcaster standing as the clear focal point, [[number]], gorgeous smile\nlong [[hair]] hair framing her face, glowing [[eyes]] eyes,\n[[pose]] as she is [[activity]],\ncaptured from a [[perspective]],\nbathed in [[lighting]],\ninside a towering [[environment]],\nthe scene suggests [[narrative]],\ndressed in [[clothes]],\nhigh fantasy realism, intricate details, dramatic atmosphere, cinematic lighting",
-        "negative": "modern clothing, sci-fi elements, dull colors, low detail,, distorted hands, malformed face, oversharpened, glowing eyes",
+        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, huge breasted, flawless skin, naked, mystical female spellcaster standing as the clear focal point, [[number]], gorgeous smile\nlong [[hair]] hair framing her face, [[eyes]] eyes,\n[[pose]] as she is [[activity]],\ncaptured from a [[perspective]],\nbathed in [[lighting]],\ninside a towering [[environment]],\nthe scene suggests [[narrative]],\ndressed in [[clothes]],\nhigh fantasy realism, intricate details, dramatic atmosphere, cinematic lighting",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -98,15 +98,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.3983050847457627
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.75
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.35624999999999996
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -120,8 +120,8 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, mysterious desert oracle woman as the primary focus, [[number]], gorgeous smile\n[[hair]] hair moving gently, intense [[eyes]] eyes,\n[[pose]] while [[activity]],\nphotographed from a [[perspective]],\nilluminated by [[lighting]],\nstanding within a vast [[environment]],\nthe scene conveys [[narrative]],\nclad in [[clothes]],\ncinematic fantasy realism, warm tones, detailed textures, dramatic composition",
-        "negative": "snowy environment, cold lighting, modern fashion,, low resolution, blurred face, exaggerated anatomy, glowing eyes",
+        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, huge breasted, flawless skin, naked, mysterious desert oracle woman as the primary focus, [[number]], gorgeous smile\n[[hair]] hair moving gently, intense [[eyes]] eyes,\n[[pose]] while [[activity]],\nphotographed from a [[perspective]],\nilluminated by [[lighting]],\nstanding within a vast [[environment]],\nthe scene conveys [[narrative]],\nclad in [[clothes]],\ncinematic fantasy realism, warm tones, detailed textures, dramatic composition",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -135,15 +135,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.364406779661017
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.8412162162162162
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.30000000000000004
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -158,7 +158,7 @@
       {
         "index": 0,
         "text": "(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, stealthy fantasy female assassin as the main subject, [[number]], gorgeous smile\n[[hair]] hair partially obscured, piercing [[eyes]] eyes,\n[[pose]] while [[activity]],\nviewed from a [[perspective]],\naccented by [[lighting]],\nset against a shadowy [[environment]],\nthe moment suggests [[narrative]],\nwearing [[clothes]],\ndark fantasy realism, high contrast, cinematic shadows, sharp detail",
-        "negative": "overexposed lighting, cartoon style, anime face,, extra limbs, malformed hands, muddy textures, glowing eyes",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -172,15 +172,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.4067796610169492
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.8513513513513513
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.3375
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -194,8 +194,8 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, legendary female hero infused with dragon power as the focal point, [[number]], gorgeous smile\nwild [[hair]] hair, glowing [[eyes]] eyes,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nsurrounded by [[lighting]],\nstanding within a dramatic [[environment]],\nthe image represents [[narrative]],\nwearing [[clothes]],\nepic fantasy realism, dynamic motion, vivid colors, cinematic scale",
-        "negative": "low detail, flat colors, sci-fi armor,, distorted proportions, plastic skin, blurry focus, glowing eyes",
+        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, huge-breasted, flawless skin, naked, legendary female hero infused with dragon power as the focal point, [[number]], gorgeous smile\nwild [[hair]] hair,  [[eyes]] eyes,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nsurrounded by [[lighting]],\nstanding within a dramatic [[environment]],\nthe image represents [[narrative]],\nwearing [[clothes]],\nepic fantasy realism, dynamic motion, vivid colors, cinematic scale",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -209,15 +209,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.38983050847457623
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            1.064189189189189
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.31875
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -231,8 +231,8 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, serene fantasy priestess as the central subject, [[number]], gorgeous smile\nsoft [[hair]] hair and radiant [[eyes]] eyes,\n[[pose]] while [[activity]],\nframed from a [[perspective]],\nbathed in [[lighting]],\ninside an ancient [[environment]],\nthe mood feels like [[narrative]],\nwearing [[clothes]],\nfantasy realism, glowing crystals, elegant composition, rich color depth",
-        "negative": "dark noisy image, modern accessories,, distorted face, uneven lighting, low resolution, glowing eyes",
+        "text": "(masterpiece, best quality, photorealistic) a gorgeous, athletic and fit, huge-breasted, flawless skin, naked, serene fantasy priestess as the central subject, [[number]], gorgeous smile\nsoft [[hair]] hair and radiant [[eyes]] eyes,\n[[pose]] while [[activity]],\nframed from a [[perspective]],\nbathed in [[lighting]],\ninside an ancient [[environment]],\nthe mood feels like [[narrative]],\nwearing [[clothes]],\nfantasy realism, glowing crystals, elegant composition, rich color depth",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -246,15 +246,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.3813559322033898
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.902027027027027
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.38437499999999997
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -268,8 +268,8 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, battle-hardened fantasy woman as the clear focal point, [[number]], gorgeous smile\ntousled [[hair]] hair, weary [[eyes]] eyes,\n[[pose]] while [[activity]],\nshot from a [[perspective]],\nlit by [[lighting]],\nstanding within a devastated [[environment]],\nthe scene tells [[narrative]],\nwearing [[clothes]],\ngritty fantasy realism, cinematic storytelling, dramatic lighting, detailed textures",
-        "negative": "clean pristine clothing, flat lighting, cartoonish style,, extra limbs, distorted anatomy, low detail, glowing eyes",
+        "text": "(masterpiece, best quality, a gorgeous woman, athletic and fit, huge-breasted, flawless skin, naked), battle-hardened, fantasy woman as the clear focal point, [[number]], gorgeous smile, tousled [[hair]] hair, weary [[eyes]] eyes,\n[[pose]] while [[activity]],\nshot from a [[perspective]],\nlit by [[lighting]],\nstanding within a devastated [[environment]],\nthe scene tells [[narrative]],\nwearing [[clothes]],\ngritty fantasy realism, cinematic storytelling, dramatic lighting, detailed textures",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -283,15 +283,15 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.3813559322033898
           ],
           [
             "CinematicStyle_v1",
-            0.5
+            0.902027027027027
           ],
           [
             "DetailedEyes_V3",
-            0.8
+            0.31875
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -305,8 +305,8 @@
       },
       {
         "index": 2,
-        "text": "(masterpiece, best quality) a gorgeous, athletic and fit, large breasted, flawless skin, naked, high-fantasy female knight as the dominant subject, [[number]], gorgeous smile\nwind-swept [[hair]] hair, sharp [[eyes]] eyes,\n[[pose]] while [[activity]],\nviewed from a [[perspective]],\nhighlighted by [[lighting]],\nhigh above a vast [[environment]],\nthe image conveys [[narrative]],\nwearing [[clothes]],\ncinematic fantasy realism, dramatic motion, expansive scale, vibrant sky colors",
-        "negative": "ground-level mundane setting, dull lighting,, bad anatomy, stiff pose, plastic skin, glowing eyes",
+        "text": "(masterpiece, best quality, photorealistic) a gorgeous, athletic and fit, huge-breasted, flawless skin, naked, high-fantasy female knight as the dominant subject, [[number]], gorgeous smile\nwind-swept [[hair]] hair, sharp [[eyes]] eyes,\n[[pose]] while [[activity]],\nviewed from a [[perspective]],\nhighlighted by [[lighting]],\nhigh above a vast [[environment]],\nthe image conveys [[narrative]],\nwearing [[clothes]],\ncinematic fantasy realism, dramatic motion, expansive scale, vibrant sky colors",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1"
@@ -319,7 +319,7 @@
         "loras": [
           [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
-            0.510989010989011
+            0.4945054945054945
           ],
           [
             "DetailedEyes_V3",
@@ -331,14 +331,14 @@
           ],
           [
             "add-detail-xl",
-            0.6105263157894737
+            0.5684210526315789
           ]
         ]
       },
       {
         "index": 2,
-        "text": "(masterpiece, best quality) a mesmerizing gorgeous, athletic and fit, large breasted, flawless skin, naked fantasy enchantress as the central subject, [[number]], gorgeous smile\nvivid [[hair]] hair, captivating [[eyes]] eyes,\n[[pose]] while [[activity]],\nseen from a [[perspective]],\nilluminated by [[lighting]],\nwithin a surreal [[environment]],\nthe scene feels like [[narrative]],\nwearing [[clothes]],\nfantasy realism, colorful spectacle, magical lighting, cinematic focus",
-        "negative": "muted colors, boring composition, low contrast,, extra fingers, distorted face, anime influence, glowing eyes",
+        "text": "(masterpiece, best quality, photorealistic) a mesmerizing gorgeous, athletic and fit, huge-breasted, flawless skin, naked fantasy enchantress as the central subject, [[number]], gorgeous smile\nvivid [[hair]] hair, captivating [[eyes]] eyes,\n[[pose]] while [[activity]],\nseen from a [[perspective]],\nilluminated by [[lighting]],\nwithin a surreal [[environment]],\nthe scene feels like [[narrative]],\nwearing [[clothes]],\nfantasy realism, colorful spectacle, magical lighting, cinematic focus",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1"
@@ -354,11 +354,11 @@
         "loras": [
           [
             "DetailedEyes_V3",
-            0.8899253731343284
+            0.5673076923076923
           ],
           [
             "anatomy_helper",
-            0.8
+            0.7354838709677419
           ],
           [
             "sdxl1.0_realastic_female_lora",
@@ -366,7 +366,7 @@
           ],
           [
             "add-detail-xl",
-            0.676300578034682
+            0.4335260115606937
           ]
         ]
       }
@@ -374,7 +374,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 5,
+      "limit": 2,
       "slots": [
         {
           "name": "lighting",
@@ -396,9 +396,9 @@
             "g-string",
             "only a tight shirt with underboob",
             "nothing",
-            "lingerie",
+            "stringy lingerie",
             "bikini",
-            "micro-kini"
+            "micro-kini she is pulling to the side"
           ]
         },
         {
@@ -427,11 +427,12 @@
         {
           "name": "activity",
           "values": [
-            "fucking",
-            "dancing",
+            "massaging vulva",
+            "rubbing clitoris",
             "rubbing self",
             "masturbating",
-            "self massage"
+            "self vaginal massage",
+            "fingering butthole"
           ]
         },
         {
@@ -440,7 +441,6 @@
             "blue",
             "green",
             "brown",
-            "violet",
             "sapphire"
           ]
         },
@@ -463,7 +463,7 @@
             "high angle",
             "from behind",
             "pov",
-            "cowboy shot"
+            "model shot"
           ]
         },
         {
@@ -477,7 +477,10 @@
         {
           "name": "number",
           "values": [
-            "one"
+            "one",
+            "one",
+            "one",
+            "two"
           ]
         }
       ]
@@ -486,16 +489,16 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "epicrealismXL_vxviiCrystalclear",
-      "model_name": "epicrealismXL_vxviiCrystalclear",
+      "model": "juggernautXL_ragnarokBy",
+      "model_name": "juggernautXL_ragnarokBy",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
-      "steps": 34,
-      "cfg_scale": 6.499999999999998,
-      "width": 1024,
-      "height": 1408,
+      "steps": 28,
+      "cfg_scale": 6.1,
+      "width": 512,
+      "height": 896,
       "clip_skip": 2,
       "seed": -1,
       "subseed": -1,
@@ -507,7 +510,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "epicrealismXL_vxviiCrystalclear.safetensors [3267fd6443]"
+      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
     },
     "img2img": {
       "model": "",
@@ -528,25 +531,27 @@
       "upscaling_resize": 2.0,
       "tile_size": 0,
       "face_restore": false,
-      "face_restore_method": "CodeFormer"
+      "face_restore_method": "CodeFormer",
+      "sampler_name": "Euler a",
+      "scheduler": "Normal"
     },
     "adetailer": {
-      "adetailer_model": "mediapipe_face_full",
-      "ad_model": "mediapipe_face_full",
+      "adetailer_model": "mediapipe_face_mesh",
+      "ad_model": "mediapipe_face_mesh",
       "adetailer_confidence": 0.34,
       "ad_confidence": 0.34,
       "max_detections": 3,
       "mask_blur": 6,
       "ad_mask_blur": 6,
       "mask_merge_mode": "merge",
-      "adetailer_steps": 9,
-      "ad_steps": 9,
-      "adetailer_cfg": 5.5,
-      "ad_cfg_scale": 5.5,
+      "adetailer_steps": 8,
+      "ad_steps": 8,
+      "adetailer_cfg": 3.0,
+      "ad_cfg_scale": 3.0,
       "adetailer_sampler": "DPM++ 2M",
       "ad_sampler": "DPM++ 2M",
-      "adetailer_denoise": 0.26,
-      "ad_denoising_strength": 0.26,
+      "adetailer_denoise": 0.16,
+      "ad_denoising_strength": 0.16,
       "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
       "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
       "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
@@ -555,7 +560,7 @@
       "ad_inpaint_only_masked_padding": 32,
       "ad_use_inpaint_width_height": false,
       "enable_face_pass": true,
-      "face_model": "face_yolov8s.pt",
+      "face_model": "mediapipe_face_full",
       "face_padding": 32,
       "enable_hands_pass": true,
       "hands_model": "hand_yolov8s.pt",

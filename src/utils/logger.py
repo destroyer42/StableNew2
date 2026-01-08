@@ -176,6 +176,30 @@ class JsonlFileHandler(RotatingFileHandler):
         )
         self.setLevel(level)
 
+    def doRollover(self) -> None:
+        """
+        Override doRollover to handle Windows file locking issues.
+        
+        On Windows, os.rename() fails with PermissionError if the target file
+        is open by another process/thread. This override closes the file first,
+        does the rotation, then reopens it.
+        """
+        if self.stream:
+            self.stream.close()
+            self.stream = None  # type: ignore
+        
+        try:
+            # Perform rotation with file closed
+            super().doRollover()
+        except (PermissionError, OSError) as e:
+            # Windows file locking issue - log silently failed, continue without rotation
+            # This prevents crash but means log file may grow beyond maxBytes temporarily
+            pass
+        finally:
+            # Reopen the file
+            if not self.stream:
+                self.stream = self._open()
+
     def emit(self, record: logging.LogRecord) -> None:
         payload = getattr(record, "json_payload", None)
         if payload is None:

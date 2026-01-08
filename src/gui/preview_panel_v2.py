@@ -81,8 +81,8 @@ class PreviewPanelV2(ttk.Frame):
 
         self.thumbnail = ThumbnailWidget(
             right_frame,
-            width=150,
-            height=150,
+            width=300,
+            height=300,
             placeholder_text="No Preview",
         )
         self.thumbnail.pack(anchor="ne")

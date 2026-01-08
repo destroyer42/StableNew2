@@ -186,19 +186,20 @@ class MainWindowV2:
 
         # Learning tab (optional; attach via registry)
         def _make_learning(parent):
-            try:
-                # PR-LEARN-001: Pass pipeline_controller and app_controller for proper wiring
-                tab = LearningTabFrame(
-                    parent,
-                    app_state=self.app_state,
-                    pipeline_controller=self.pipeline_controller,
-                    app_controller=self.app_controller,
-                )
-            except Exception:
-                try:
-                    tab = LearningTabFrame(parent, app_state=self.app_state)
-                except Exception:
-                    tab = LearningTabFrame(parent)
+            import logging
+            logger = logging.getLogger(__name__)            
+            logger.info("[MainWindow] Creating LearningTabFrame")
+            
+            # Create with full parameters - no fallback, fail fast on errors
+            tab = LearningTabFrame(
+                parent,
+                app_state=self.app_state,
+                pipeline_controller=self.pipeline_controller,
+                app_controller=self.app_controller,
+            )
+            
+            logger.info("[MainWindow] LearningTabFrame created successfully")
+            return tab
             # Wire controller if present
             if hasattr(tab, "controller"):
                 try:
@@ -351,9 +352,35 @@ class MainWindowV2:
         return self._tab_registry.get(tab_id)
 
     def _install_ui_heartbeat(self):
+        """Install UI heartbeat ticker that runs every 250ms.
+        
+        PR-HB-003: Enhanced with diagnostic logging and operation tracking.
+        """
+        tick_count = 0
+        last_operation = None
+        
         def _tick():
+            nonlocal tick_count, last_operation
+            tick_count += 1
+            
+            # Update controller heartbeat timestamp
             if self.app_controller and hasattr(self.app_controller, "update_ui_heartbeat"):
                 self.app_controller.update_ui_heartbeat()
+            
+            # PR-HB-003: Log heartbeat diagnostics periodically or when operation changes
+            if self.app_controller:
+                current_op = getattr(self.app_controller, "current_operation_label", None)
+                
+                # Log every 20 ticks (5 seconds) or when operation changes
+                should_log = (tick_count % 20 == 0) or (current_op != last_operation and current_op is not None)
+                
+                if should_log:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    op_text = current_op if current_op else "idle"
+                    logger.debug(f"[UI] heartbeat tick #{tick_count} op={op_text}")
+                    last_operation = current_op
+            
             self.root.after(250, _tick)
 
         self.root.after(250, _tick)

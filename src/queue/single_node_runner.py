@@ -213,6 +213,7 @@ class SingleNodeJobRunner:
         poll_interval: float = 0.1,
         on_status_change: Callable[[Job, JobStatus], None] | None = None,
         on_activity=None,
+        is_paused: Callable[[], bool] | None = None,
     ) -> None:
         self.job_queue = job_queue
         self.run_callable = run_callable
@@ -224,6 +225,8 @@ class SingleNodeJobRunner:
         self._cancel_current = threading.Event()
         # PR-CORE1-D21B: Activity callback
         self._on_activity = on_activity
+        # BUGFIX: Pause state callback
+        self._is_paused = is_paused
 
     def _run_with_webui_retry(self, job: Job) -> dict | None:
         if self.run_callable is None:
@@ -307,6 +310,11 @@ class SingleNodeJobRunner:
     def _worker_loop(self) -> None:
         logger.debug("SingleNodeJobRunner worker loop started")
         while not self._stop_event.is_set():
+            # Check if queue is paused before dequeuing
+            if self._is_paused and self._is_paused():
+                time.sleep(self.poll_interval)
+                continue
+            
             job = self.job_queue.get_next_job()
             if job is None:
                 time.sleep(self.poll_interval)

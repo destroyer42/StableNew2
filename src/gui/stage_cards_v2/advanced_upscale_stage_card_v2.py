@@ -35,6 +35,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         self.tile_size_var = tk.IntVar(value=0)
         self.face_restore_var = tk.BooleanVar(value=False)
         self.face_restore_method_var = tk.StringVar(value="CodeFormer")
+        # BUGFIX: Add sampler and scheduler for upscale stage
+        self.sampler_var = tk.StringVar(value="Euler a")
+        self.scheduler_var = tk.StringVar(value="normal")
 
         ttk.Label(parent, text="Upscaler", style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", padx=(0, 4)
@@ -112,9 +115,36 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TSpinbox",
         ).grid(row=2, column=3, sticky="ew")
 
+        # BUGFIX: Add sampler and scheduler fields for upscale
+        ttk.Label(parent, text="Sampler", style=BODY_LABEL_STYLE).grid(
+            row=3, column=0, sticky="w", pady=(6, 2)
+        )
+        self.sampler_combo = ttk.Combobox(
+            parent,
+            textvariable=self.sampler_var,
+            values=["Euler a", "Euler", "DPM++ 2M", "DPM++ 2M Karras", "DPM++ SDE", "DPM++ SDE Karras", "DDIM", "PLMS", "UniPC"],
+            state="readonly",
+            width=18,
+            style="Dark.TCombobox",
+        )
+        self.sampler_combo.grid(row=3, column=1, sticky="ew", padx=(0, 8))
+        
+        ttk.Label(parent, text="Scheduler", style=BODY_LABEL_STYLE).grid(
+            row=3, column=2, sticky="w", pady=(6, 2)
+        )
+        self.scheduler_combo = ttk.Combobox(
+            parent,
+            textvariable=self.scheduler_var,
+            values=["normal", "karras", "exponential", "sgm_uniform"],
+            state="readonly",
+            width=12,
+            style="Dark.TCombobox",
+        )
+        self.scheduler_combo.grid(row=3, column=3, sticky="ew")
+
         # Face restore row with checkbox and method dropdown
         face_restore_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
-        face_restore_frame.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        face_restore_frame.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(6, 0))
         
         ttk.Checkbutton(
             face_restore_frame,
@@ -136,14 +166,14 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
 
         # Final dimensions display
         ttk.Label(parent, text="Final size", style=BODY_LABEL_STYLE).grid(
-            row=4, column=0, sticky="w", pady=(6, 2)
+            row=5, column=0, sticky="w", pady=(6, 2)
         )
         self.final_dimensions_label = ttk.Label(
             parent,
             text=self._compute_final_size_text(),
             style="Dark.TLabel",
         )
-        self.final_dimensions_label.grid(row=4, column=1, columnspan=3, sticky="w", pady=(6, 2))
+        self.final_dimensions_label.grid(row=5, column=1, columnspan=3, sticky="w", pady=(6, 2))
 
         for col in range(4):
             parent.columnconfigure(col, weight=1 if col in (1, 3) else 0)
@@ -176,6 +206,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         self.tile_size_var.set(int(self._safe_int(section.get("tile_size", 0), 0)))
         self.face_restore_var.set(bool(section.get("face_restore", False)))
         self.face_restore_method_var.set(section.get("face_restore_method", "CodeFormer"))
+        # BUGFIX: Load sampler and scheduler
+        self.sampler_var.set(section.get("sampler_name", "Euler a"))
+        self.scheduler_var.set(section.get("scheduler", "normal"))
         # Update dropdown state
         self._on_face_restore_toggle()
 
@@ -193,6 +226,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
                 "tile_size": int(self.tile_size_var.get() or 0),
                 "face_restore": bool(self.face_restore_var.get()),
                 "face_restore_method": self.face_restore_method_var.get(),
+                # BUGFIX: Include sampler and scheduler in upscale config
+                "sampler_name": self.sampler_var.get(),
+                "scheduler": self.scheduler_var.get(),
             }
         }
 

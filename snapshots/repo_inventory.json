@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2026-01-02T08:11:35",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260102-081120.zip",
-  "file_count": 1648,
-  "total_size_bytes": 17663330,
+  "created_at": "2026-01-03T16:05:00",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260103-160447.zip",
+  "file_count": 1662,
+  "total_size_bytes": 18580142,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -130,6 +130,11 @@
       "mtime_iso": "2025-12-27T10:25:37"
     },
     {
+      "path": "test_learning_fix.py",
+      "size_bytes": 4376,
+      "mtime_iso": "2026-01-02T10:40:32"
+    },
+    {
       "path": "test_pipeline_final.py",
       "size_bytes": 1958,
       "mtime_iso": "2025-12-27T19:36:14"
@@ -138,6 +143,11 @@
       "path": "test_pipeline_tab.py",
       "size_bytes": 865,
       "mtime_iso": "2025-12-27T19:36:14"
+    },
+    {
+      "path": "test_pr_hb_001_002.py",
+      "size_bytes": 4796,
+      "mtime_iso": "2026-01-02T09:23:20"
     },
     {
       "path": "test_stage_cards_debug.py",
@@ -748,6 +758,16 @@
       "path": "docs/PR-GUI-RUNTIME-STATUS-001-Implementation-Summary.md",
       "size_bytes": 26431,
       "mtime_iso": "2026-01-01T11:43:59"
+    },
+    {
+      "path": "docs/PR-HB-003-UI-Debounce-ThreadDump-HeartbeatDiag.md",
+      "size_bytes": 8891,
+      "mtime_iso": "2026-01-02T10:59:49"
+    },
+    {
+      "path": "docs/PR-HB-004-Async-Persistence-Queue.md",
+      "size_bytes": 12361,
+      "mtime_iso": "2026-01-02T11:28:33"
     },
     {
       "path": "docs/PR-METADATA-001-Manifest-Reconciliation.md",
@@ -3400,14 +3420,24 @@
       "mtime_iso": "2025-11-13T16:22:05"
     },
     {
-      "path": "packs/A test.json",
-      "size_bytes": 7712,
-      "mtime_iso": "2026-01-01T23:56:23"
+      "path": "packs/A single prompt for testing.json",
+      "size_bytes": 8703,
+      "mtime_iso": "2026-01-02T17:29:01"
     },
     {
-      "path": "packs/A test.txt",
-      "size_bytes": 2060,
-      "mtime_iso": "2025-12-31T13:20:53"
+      "path": "packs/A single prompt for testing.txt",
+      "size_bytes": 941,
+      "mtime_iso": "2026-01-02T17:29:01"
+    },
+    {
+      "path": "packs/A test_Dreamshaper_model.json",
+      "size_bytes": 7762,
+      "mtime_iso": "2026-01-02T09:38:46"
+    },
+    {
+      "path": "packs/A test_Dreamshaper_model.txt",
+      "size_bytes": 2110,
+      "mtime_iso": "2026-01-02T09:38:46"
     },
     {
       "path": "packs/An Extra Test.json",
@@ -3487,7 +3517,7 @@
     {
       "path": "packs/Beautiful_people_fullbody_PhotoMomentum_v26.json",
       "size_bytes": 11552,
-      "mtime_iso": "2026-01-01T20:01:00"
+      "mtime_iso": "2026-01-02T09:19:54"
     },
     {
       "path": "packs/Beautiful_people_fullbody_PhotoMomentum_v26.json.bak",
@@ -3511,13 +3541,23 @@
     },
     {
       "path": "packs/CrazyCoolVariety.json",
-      "size_bytes": 10206,
-      "mtime_iso": "2026-01-01T08:18:46"
+      "size_bytes": 10185,
+      "mtime_iso": "2026-01-02T17:19:02"
     },
     {
       "path": "packs/CrazyCoolVariety.txt",
-      "size_bytes": 2459,
-      "mtime_iso": "2026-01-01T00:39:47"
+      "size_bytes": 2396,
+      "mtime_iso": "2026-01-02T17:17:45"
+    },
+    {
+      "path": "packs/Dreamshaper_config_optimized.json",
+      "size_bytes": 8040,
+      "mtime_iso": "2026-01-02T13:16:33"
+    },
+    {
+      "path": "packs/Dreamshaper_config_optimized.txt",
+      "size_bytes": 2506,
+      "mtime_iso": "2026-01-02T11:34:35"
     },
     {
       "path": "packs/FANTASY_character_closeup_face_DreamShaperXL_v26.json",
@@ -3591,8 +3631,8 @@
     },
     {
       "path": "packs/Matrix-GPT-VisuallyInteresting.json",
-      "size_bytes": 22449,
-      "mtime_iso": "2026-01-01T08:18:47"
+      "size_bytes": 22565,
+      "mtime_iso": "2026-01-02T18:12:51"
     },
     {
       "path": "packs/Matrix-GPT-VisuallyInteresting.txt",
@@ -3926,13 +3966,18 @@
     },
     {
       "path": "presets/Beast_Boss_Juggernaut_SDXL.json",
-      "size_bytes": 8126,
-      "mtime_iso": "2025-11-22T07:25:45"
+      "size_bytes": 6846,
+      "mtime_iso": "2026-01-02T13:14:55"
     },
     {
       "path": "presets/default.json",
       "size_bytes": 6808,
       "mtime_iso": "2025-12-29T19:09:25"
+    },
+    {
+      "path": "presets/DreamshaperXLOptimized.json",
+      "size_bytes": 6846,
+      "mtime_iso": "2026-01-02T13:15:29"
     },
     {
       "path": "presets/global_negative.txt",
@@ -4736,8 +4781,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 230162,
-      "mtime_iso": "2026-01-01T20:18:06"
+      "size_bytes": 241355,
+      "mtime_iso": "2026-01-02T11:28:33"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -4901,8 +4946,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 36191,
-      "mtime_iso": "2025-12-29T21:18:52"
+      "size_bytes": 37366,
+      "mtime_iso": "2026-01-02T10:59:49"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -5031,8 +5076,8 @@
     },
     {
       "path": "src/gui/controllers/learning_controller.py",
-      "size_bytes": 22096,
-      "mtime_iso": "2025-12-31T14:23:08"
+      "size_bytes": 27981,
+      "mtime_iso": "2026-01-02T18:04:24"
     },
     {
       "path": "src/gui/dialogs/multi_folder_selector.py",
@@ -5181,8 +5226,8 @@
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py",
-      "size_bytes": 11342,
-      "mtime_iso": "2025-12-27T21:35:55"
+      "size_bytes": 13018,
+      "mtime_iso": "2026-01-02T11:34:30"
     },
     {
       "path": "src/gui/stage_cards_v2/base_stage_card_v2.py",
@@ -5501,8 +5546,8 @@
     },
     {
       "path": "src/learning/run_metadata.py",
-      "size_bytes": 1216,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 2063,
+      "mtime_iso": "2026-01-02T11:28:33"
     },
     {
       "path": "src/pipeline/config_merger_v2.py",
@@ -5516,8 +5561,8 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 185561,
-      "mtime_iso": "2026-01-02T00:12:18"
+      "size_bytes": 187237,
+      "mtime_iso": "2026-01-02T18:16:12"
     },
     {
       "path": "src/pipeline/job_builder_v2.py",
@@ -5556,8 +5601,8 @@
     },
     {
       "path": "src/pipeline/prompt_pack_job_builder.py",
-      "size_bytes": 26708,
-      "mtime_iso": "2025-12-28T07:09:43"
+      "size_bytes": 27183,
+      "mtime_iso": "2026-01-02T14:31:35"
     },
     {
       "path": "src/pipeline/prompt_pack_parser.py",
@@ -5581,8 +5626,8 @@
     },
     {
       "path": "src/pipeline/resolution_layer.py",
-      "size_bytes": 10984,
-      "mtime_iso": "2025-12-29T21:52:18"
+      "size_bytes": 11174,
+      "mtime_iso": "2026-01-02T11:34:30"
     },
     {
       "path": "src/pipeline/run_config.py",
@@ -5621,8 +5666,8 @@
     },
     {
       "path": "src/queue/job_history_store.py",
-      "size_bytes": 11925,
-      "mtime_iso": "2025-12-26T08:26:17"
+      "size_bytes": 12668,
+      "mtime_iso": "2026-01-02T11:28:33"
     },
     {
       "path": "src/queue/job_model.py",
@@ -5675,6 +5720,11 @@
       "mtime_iso": "2025-12-25T22:12:05"
     },
     {
+      "path": "src/services/persistence_worker.py",
+      "size_bytes": 11091,
+      "mtime_iso": "2026-01-02T11:28:33"
+    },
+    {
       "path": "src/services/queue_store_v2.py",
       "size_bytes": 8984,
       "mtime_iso": "2025-12-27T21:35:55"
@@ -5686,8 +5736,8 @@
     },
     {
       "path": "src/services/watchdog_system_v2.py",
-      "size_bytes": 6452,
-      "mtime_iso": "2025-12-25T17:08:36"
+      "size_bytes": 7108,
+      "mtime_iso": "2026-01-02T10:59:49"
     },
     {
       "path": "src/stablenew.egg-info/dependency_links.txt",
@@ -5761,8 +5811,8 @@
     },
     {
       "path": "src/utils/diagnostics_bundle_v2.py",
-      "size_bytes": 9130,
-      "mtime_iso": "2025-12-25T16:07:33"
+      "size_bytes": 12634,
+      "mtime_iso": "2026-01-02T10:59:49"
     },
     {
       "path": "src/utils/embedding_scanner.py",
@@ -5811,8 +5861,8 @@
     },
     {
       "path": "src/utils/logger.py",
-      "size_bytes": 23897,
-      "mtime_iso": "2025-12-31T19:56:53"
+      "size_bytes": 24831,
+      "mtime_iso": "2026-01-02T21:35:19"
     },
     {
       "path": "src/utils/logging_helpers_v2.py",
@@ -5952,12 +6002,12 @@
     {
       "path": "state/preview_panel_state.json",
       "size_bytes": 57,
-      "mtime_iso": "2026-01-02T00:12:44"
+      "mtime_iso": "2026-01-02T21:32:24"
     },
     {
       "path": "state/queue_state_v2.json",
-      "size_bytes": 75,
-      "mtime_iso": "2026-01-02T00:17:48"
+      "size_bytes": 793974,
+      "mtime_iso": "2026-01-02T18:20:12"
     },
     {
       "path": "state/queue_state_v2_TEST.json",
@@ -5967,12 +6017,12 @@
     {
       "path": "state/sidebar_state.json",
       "size_bytes": 154,
-      "mtime_iso": "2026-01-02T00:12:44"
+      "mtime_iso": "2026-01-02T09:20:37"
     },
     {
       "path": "state/ui_state.json",
-      "size_bytes": 157,
-      "mtime_iso": "2026-01-02T00:12:44"
+      "size_bytes": 151,
+      "mtime_iso": "2026-01-02T09:20:47"
     },
     {
       "path": "tests/conftest.py",
@@ -6868,6 +6918,11 @@
       "path": "tests/gui/test_state_manager_legacy.py",
       "size_bytes": 953,
       "mtime_iso": "2025-12-19T05:15:33"
+    },
+    {
+      "path": "tests/gui/test_ui_debounce.py",
+      "size_bytes": 4752,
+      "mtime_iso": "2026-01-02T10:59:49"
     },
     {
       "path": "tests/gui/_tmp_test.py",
@@ -8020,6 +8075,16 @@
       "mtime_iso": "2025-12-22T07:01:39"
     },
     {
+      "path": "tests/services/test_persistence_worker.py",
+      "size_bytes": 9924,
+      "mtime_iso": "2026-01-02T11:28:33"
+    },
+    {
+      "path": "tests/services/test_watchdog_ui_stall_context.py",
+      "size_bytes": 6023,
+      "mtime_iso": "2026-01-02T10:59:49"
+    },
+    {
       "path": "tests/state/test_multi_slot_load.py",
       "size_bytes": 2297,
       "mtime_iso": "2025-12-19T23:16:02"
@@ -8063,6 +8128,11 @@
       "path": "tests/utils/test_diagnostics_bundle_v2.py",
       "size_bytes": 1429,
       "mtime_iso": "2025-12-08T08:04:45"
+    },
+    {
+      "path": "tests/utils/test_diagnostics_thread_dump.py",
+      "size_bytes": 5863,
+      "mtime_iso": "2026-01-02T10:59:49"
     },
     {
       "path": "tests/utils/test_error_envelope_v2.py",

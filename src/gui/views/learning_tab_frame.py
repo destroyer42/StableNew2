@@ -73,7 +73,11 @@ class LearningTabFrame(ttk.Frame):
 
         # Left panel: Experiment Design
         self.experiment_panel = ExperimentDesignPanel(
-            self.body_frame, learning_controller=self.learning_controller, style="Panel.TFrame"
+            self.body_frame,
+            learning_controller=self.learning_controller,
+            prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
+            if self.app_state
+            else None,
         )
         self.experiment_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
