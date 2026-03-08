@@ -1530,8 +1530,17 @@ class LearningController:
             "steps": ("txt2img_card", "steps_var"),
             "sampler": ("txt2img_card", "sampler_var"),
             "scheduler": ("txt2img_card", "scheduler_var"),
+            "model": ("txt2img_card", "model_var"),
+            "model_name": ("txt2img_card", "model_var"),
+            "vae": ("txt2img_card", "vae_var"),
+            "width": ("txt2img_card", "width_var"),
+            "height": ("txt2img_card", "height_var"),
+            "clip_skip": ("txt2img_card", "clip_skip_var"),
             "denoise_strength": ("img2img_card", "denoise_var"),
             "denoising_strength": ("img2img_card", "denoise_var"),
+            "adetailer_denoise": ("adetailer_card", "denoise_var"),
+            "adetailer_steps": ("adetailer_card", "steps_var"),
+            "adetailer_cfg": ("adetailer_card", "cfg_var"),
             "upscale_factor": ("upscale_card", "factor_var"),
         }
         
