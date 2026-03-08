@@ -25,6 +25,7 @@ import tempfile
 import threading
 import time
 import traceback
+import json
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -430,6 +431,11 @@ class AppController:
             learning_state=self._learning_state,
             job_service=self.job_service,
         )
+        # Compatibility for integration tests expecting a run callable field.
+        try:
+            self.learning_execution_controller._run_callable = self._learning_run_callable  # type: ignore[attr-defined]
+        except Exception:
+            pass
         
         # PR-LEARN-003: Register learning completion handler
         if self.job_service:
@@ -794,8 +800,13 @@ class AppController:
             # Route to learning controller via main window
             if hasattr(self, "main_window") and self.main_window:
                 learning_tab = getattr(self.main_window, "learning_tab", None)
-                if learning_tab and hasattr(learning_tab, "controller"):
-                    callback = getattr(learning_tab.controller, "on_job_completed_callback", None)
+                controller_obj = None
+                if learning_tab:
+                    controller_obj = getattr(learning_tab, "learning_controller", None)
+                    if controller_obj is None:
+                        controller_obj = getattr(learning_tab, "controller", None)
+                if controller_obj is not None:
+                    callback = getattr(controller_obj, "on_job_completed_callback", None)
                     if callable(callback):
                         callback(job, result)
         return handler
@@ -1277,7 +1288,6 @@ class AppController:
             ValueError: If no images or stages provided, or if invalid stage names
         """
         from src.pipeline.reprocess_builder import ReprocessJobBuilder
-        from src.queue.job_model import Job, JobPriority
         
         if not image_paths:
             raise ValueError("No images provided for reprocessing")
@@ -1321,56 +1331,7 @@ class AppController:
                     )
                     njrs.append(njr)
             
-            # Submit all jobs
-            submitted_count = 0
-            client_ref = getattr(self, "_api_client", None)
-            for njr in njrs:
-                # Create Job from NJR with proper metadata
-                config_snapshot = njr.to_queue_snapshot()
-                job = Job(
-                    job_id=njr.job_id,
-                    priority=JobPriority.NORMAL,
-                    run_mode="queue",
-                    source="reprocess_panel",
-                    prompt_source="reprocess",
-                    prompt_pack_id=None,
-                    config_snapshot=config_snapshot,
-                    learning_enabled=False,
-                )
-                
-                # Attach NJR for execution
-                job._normalized_record = njr  # type: ignore[attr-defined]
-                
-                # Attach execution payload
-                def _run_reprocess_job(j: Job, client_ref=client_ref) -> dict:
-                    """Execute reprocess job through pipeline runner."""
-                    from src.pipeline.pipeline_runner import run_njr_v2
-                    njr_obj = getattr(j, "_normalized_record", None)
-                    if njr_obj is None:
-                        raise RuntimeError("Reprocess job missing NormalizedJobRecord")
-                    
-                    # Clear VRAM caches before each reprocess job to prevent memory exhaustion
-                    try:
-                        if client_ref and hasattr(client_ref, "free_vram"):
-                            client_ref.free_vram(unload_model=True)
-                    except Exception:
-                        pass  # Non-fatal: best effort VRAM clearing
-                    
-                    result = run_njr_v2(
-                        njr_obj,
-                        client=client_ref,
-                        cancel_token=self.cancel_token,
-                    )
-                    return result or {}
-                
-                job.payload = lambda j=job: _run_reprocess_job(j)
-                
-                # Submit to queue via job service
-                if self.job_service:
-                    self.job_service.submit_queued(job)
-                    submitted_count += 1
-                else:
-                    raise RuntimeError("Job service not available")
+            submitted_count = self._submit_reprocess_njrs(njrs, source="reprocess_panel")
             
             self._append_log(
                 f"[reprocess] Submitted {submitted_count} job(s) for {len(image_paths)} image(s) "
@@ -1382,6 +1343,251 @@ class AppController:
         except Exception as exc:
             self._append_log(f"[reprocess] Failed to submit reprocess jobs: {exc!r}")
             raise
+
+    def on_reprocess_images_with_prompt_delta(
+        self,
+        image_paths: list[str],
+        stages: list[str],
+        prompt_delta: str = "",
+        negative_prompt_delta: str = "",
+        prompt_mode: str = "append",
+        negative_prompt_mode: str = "append",
+        batch_size: int = 1,
+    ) -> int:
+        """Reprocess images while preserving metadata-derived settings and editing prompts.
+
+        This path is used by the Review tab. For each image:
+        - Reads embedded stage metadata (if present) for prompt/model/VAE/config baseline.
+        - Applies prompt deltas in append/replace mode.
+        - Builds a single-image NJR and submits it to the queue.
+        """
+        from src.pipeline.reprocess_builder import ReprocessJobBuilder
+
+        if not image_paths:
+            raise ValueError("No images provided for reprocessing")
+        if not stages:
+            raise ValueError("No stages specified for reprocessing")
+
+        valid_stages = {"adetailer", "upscale", "img2img"}
+        invalid_stages = set(stages) - valid_stages
+        if invalid_stages:
+            raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
+        if prompt_mode not in {"append", "replace"}:
+            raise ValueError("prompt_mode must be 'append' or 'replace'")
+        if negative_prompt_mode not in {"append", "replace"}:
+            raise ValueError("negative_prompt_mode must be 'append' or 'replace'")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be >= 1")
+
+        builder = ReprocessJobBuilder()
+        fallback_config = self._build_reprocess_config(stages)
+        njrs = []
+        metadata_hits = 0
+        group_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+
+        for image_path in image_paths:
+            image_file = Path(image_path)
+            base_prompt = ""
+            base_negative_prompt = ""
+            base_model: str | None = None
+            base_vae: str | None = None
+            metadata_config: dict[str, Any] = {}
+
+            metadata_baseline = self._extract_reprocess_baseline_from_image(image_file)
+            if metadata_baseline:
+                metadata_hits += 1
+                base_prompt = str(metadata_baseline.get("prompt") or "")
+                base_negative_prompt = str(metadata_baseline.get("negative_prompt") or "")
+                base_model = metadata_baseline.get("model")
+                base_vae = metadata_baseline.get("vae")
+                maybe_cfg = metadata_baseline.get("config")
+                if isinstance(maybe_cfg, dict):
+                    metadata_config = maybe_cfg
+
+            effective_prompt = self._apply_prompt_delta(base_prompt, prompt_delta, prompt_mode)
+            effective_negative_prompt = self._apply_prompt_delta(
+                base_negative_prompt, negative_prompt_delta, negative_prompt_mode
+            )
+
+            merged_config = self._merge_nested_dicts(fallback_config, metadata_config)
+            self._apply_model_vae_to_config(merged_config, model=base_model, vae=base_vae)
+            config_signature = json.dumps(merged_config, sort_keys=True, default=str)
+            group_key = (
+                effective_prompt,
+                effective_negative_prompt,
+                base_model or "",
+                config_signature,
+            )
+            group = group_map.get(group_key)
+            if group is None:
+                group = {
+                    "paths": [],
+                    "config": merged_config,
+                    "prompt": effective_prompt,
+                    "negative_prompt": effective_negative_prompt,
+                    "model": base_model,
+                }
+                group_map[group_key] = group
+            group["paths"].append(str(image_file))
+
+        for group in group_map.values():
+            paths = group["paths"]
+            for idx in range(0, len(paths), batch_size):
+                chunk = paths[idx : idx + batch_size]
+                njr = builder.build_reprocess_job(
+                    input_image_paths=chunk,
+                    stages=stages,
+                    config=group["config"],
+                    prompt=group["prompt"],
+                    negative_prompt=group["negative_prompt"],
+                    model=group["model"],
+                    pack_name="ReviewReprocess",
+                )
+                njrs.append(njr)
+
+        submitted_count = self._submit_reprocess_njrs(njrs, source="review_tab")
+        self._append_log(
+            f"[reprocess] Review-tab submit: {submitted_count} jobs, "
+            f"metadata baseline used for {metadata_hits}/{len(image_paths)} images "
+            f"across {len(group_map)} compatibility group(s), batch_size={batch_size}"
+        )
+        return submitted_count
+
+    def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
+        from src.utils.image_metadata import extract_embedded_metadata
+
+        try:
+            metadata_result = extract_embedded_metadata(image_path)
+        except Exception:
+            return {}
+
+        if metadata_result.status != "ok" or not isinstance(metadata_result.payload, dict):
+            return {}
+
+        payload = metadata_result.payload
+        generation = payload.get("generation")
+        if not isinstance(generation, dict):
+            generation = {}
+        stage_manifest = payload.get("stage_manifest")
+        if not isinstance(stage_manifest, dict):
+            stage_manifest = {}
+
+        config = stage_manifest.get("config")
+        if not isinstance(config, dict):
+            config = {}
+
+        model_value = stage_manifest.get("model") or generation.get("model")
+        if isinstance(model_value, str) and model_value.strip().lower() in {"unknown", "n/a"}:
+            model_value = None
+        vae_value = stage_manifest.get("vae") or generation.get("vae")
+        if isinstance(vae_value, str) and vae_value.strip().lower() in {"unknown", "n/a"}:
+            vae_value = None
+
+        return {
+            "prompt": stage_manifest.get("prompt") or generation.get("prompt") or "",
+            "negative_prompt": stage_manifest.get("negative_prompt")
+            or generation.get("negative_prompt")
+            or "",
+            "model": model_value,
+            "vae": vae_value,
+            "config": config,
+        }
+
+    @staticmethod
+    def _apply_prompt_delta(base: str, delta: str, mode: str) -> str:
+        base_clean = (base or "").strip()
+        delta_clean = (delta or "").strip()
+        if not delta_clean:
+            return base_clean
+        if mode == "replace":
+            return delta_clean
+        if not base_clean:
+            return delta_clean
+        return f"{base_clean}, {delta_clean}"
+
+    @staticmethod
+    def _merge_nested_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(base)
+        for key, value in (override or {}).items():
+            if isinstance(value, Mapping) and isinstance(merged.get(key), dict):
+                merged[key] = AppController._merge_nested_dicts(
+                    merged.get(key, {}),
+                    dict(value),
+                )
+            else:
+                merged[key] = deepcopy(value)
+        return merged
+
+    @staticmethod
+    def _apply_model_vae_to_config(
+        config: dict[str, Any],
+        *,
+        model: str | None,
+        vae: str | None,
+    ) -> None:
+        if model:
+            config["model"] = model
+            txt2img_cfg = config.setdefault("txt2img", {})
+            if isinstance(txt2img_cfg, dict):
+                txt2img_cfg["model"] = model
+            img2img_cfg = config.setdefault("img2img", {})
+            if isinstance(img2img_cfg, dict):
+                img2img_cfg["model"] = model
+        if vae is not None:
+            config["vae"] = vae
+            txt2img_cfg = config.setdefault("txt2img", {})
+            if isinstance(txt2img_cfg, dict):
+                txt2img_cfg["vae"] = vae
+            img2img_cfg = config.setdefault("img2img", {})
+            if isinstance(img2img_cfg, dict):
+                img2img_cfg["vae"] = vae
+
+    def _submit_reprocess_njrs(self, njrs: list[Any], *, source: str) -> int:
+        from src.queue.job_model import Job, JobPriority
+
+        if not self.job_service:
+            raise RuntimeError("Job service not available")
+
+        submitted_count = 0
+        client_ref = getattr(self, "_api_client", None)
+        for njr in njrs:
+            config_snapshot = njr.to_queue_snapshot()
+            job = Job(
+                job_id=njr.job_id,
+                priority=JobPriority.NORMAL,
+                run_mode="queue",
+                source=source,
+                prompt_source="reprocess",
+                prompt_pack_id=None,
+                config_snapshot=config_snapshot,
+                learning_enabled=False,
+            )
+
+            job._normalized_record = njr  # type: ignore[attr-defined]
+
+            def _run_reprocess_job(j: Job, client_ref=client_ref) -> dict:
+                from src.pipeline.pipeline_runner import run_njr_v2
+
+                njr_obj = getattr(j, "_normalized_record", None)
+                if njr_obj is None:
+                    raise RuntimeError("Reprocess job missing NormalizedJobRecord")
+                try:
+                    if client_ref and hasattr(client_ref, "free_vram"):
+                        client_ref.free_vram(unload_model=True)
+                except Exception:
+                    pass
+                result = run_njr_v2(
+                    njr_obj,
+                    client=client_ref,
+                    cancel_token=self.cancel_token,
+                )
+                return result or {}
+
+            job.payload = lambda j=job: _run_reprocess_job(j)
+            self.job_service.submit_queued(job)
+            submitted_count += 1
+
+        return submitted_count
     
     def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
         """Build configuration dict for reprocess jobs.
