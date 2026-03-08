@@ -198,6 +198,56 @@ class Pipeline:
         self._progress_poll_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="progress_poll")
         self._current_generation_progress: float = 0.0
         self._progress_lock = threading.Lock()
+        self._run_started_at_monotonic: float | None = None
+        self._run_model_switch_count: int = 0
+        self._run_vae_switch_count: int = 0
+
+    def _begin_run_metrics(self) -> None:
+        """Reset per-run efficiency counters."""
+        self._run_started_at_monotonic = time.monotonic()
+        self._run_model_switch_count = 0
+        self._run_vae_switch_count = 0
+
+    def _record_model_switch(self) -> None:
+        self._run_model_switch_count += 1
+
+    def _record_vae_switch(self) -> None:
+        self._run_vae_switch_count += 1
+
+    def get_run_efficiency_metrics(self, images_processed: int) -> dict[str, Any]:
+        """Return a structured run-efficiency snapshot for logs/UI/history."""
+        if self._run_started_at_monotonic is None:
+            elapsed_seconds = 0.0
+        else:
+            elapsed_seconds = max(0.0, time.monotonic() - self._run_started_at_monotonic)
+        images_per_minute = 0.0
+        if elapsed_seconds > 0 and images_processed > 0:
+            images_per_minute = (images_processed / elapsed_seconds) * 60.0
+        return {
+            "elapsed_seconds": round(elapsed_seconds, 3),
+            "images_processed": int(images_processed),
+            "images_per_minute": round(images_per_minute, 3),
+            "model_switches": int(self._run_model_switch_count),
+            "vae_switches": int(self._run_vae_switch_count),
+        }
+
+    def _log_run_efficiency_metrics(
+        self,
+        *,
+        run_type: str,
+        images_processed: int,
+    ) -> None:
+        """Log per-run timing and switch counts for throughput diagnostics."""
+        metrics = self.get_run_efficiency_metrics(images_processed)
+        logger.info(
+            "Run efficiency (%s): elapsed=%.2fs, images=%d, img_per_min=%.2f, model_switches=%d, vae_switches=%d",
+            run_type,
+            metrics["elapsed_seconds"],
+            metrics["images_processed"],
+            metrics["images_per_minute"],
+            metrics["model_switches"],
+            metrics["vae_switches"],
+        )
 
     def _clean_metadata_payload(self, payload: Any) -> Any:
         """Remove large binary blobs (e.g., base64 images) from metadata payloads."""
@@ -465,6 +515,14 @@ class Pipeline:
         cleaned = re.sub(r'\.(safetensors|ckpt|pt|pth)$', '', cleaned, flags=re.IGNORECASE)
         return cleaned.lower()
 
+    def _normalize_vae_name(self, raw: str | None) -> str:
+        if raw is None:
+            return "automatic"
+        cleaned = str(raw).strip().lower()
+        if cleaned in {"", "automatic", "none"}:
+            return "automatic"
+        return cleaned
+
     def _discover_current_model_if_needed(self) -> None:
         if self._model_discovery_attempted or self._current_model is not None:
             return
@@ -506,6 +564,7 @@ class Pipeline:
                     self.client.set_model(model_name)
                     self._current_model = model_name
                     model_switched = True
+                    self._record_model_switch()
                 except Exception:
                     self._current_model = None
                     raise
@@ -513,21 +572,20 @@ class Pipeline:
         # Handle VAE switching (independent of model - always execute if vae_name provided)
         try:
             if vae_name:
-                if vae_name != self._current_vae:
+                desired_vae = self._normalize_vae_name(vae_name)
+                current_vae = self._normalize_vae_name(self._current_vae)
+                if desired_vae != current_vae:
                     logger.info(f"Switching to VAE: {vae_name}")
                     self.client.set_vae(vae_name)
                     self._current_vae = vae_name
-                else:
-                    # Even if cached VAE matches, ensure it's set in WebUI
-                    # (WebUI may have reverted to Automatic)
-                    logger.info(f"Ensuring VAE is set: {vae_name}")
-                    self.client.set_vae(vae_name)
+                    self._record_vae_switch()
             elif model_switched:
                 # If a new model is loaded and no explicit VAE is requested, clear any
                 # stale VAE override so WebUI can use the model's preferred default.
                 logger.info("Model switched without explicit VAE; resetting VAE to Automatic")
                 self.client.set_vae("Automatic")
                 self._current_vae = "Automatic"
+                self._record_vae_switch()
         except Exception:
             self._current_vae = None
             raise
@@ -1428,13 +1486,9 @@ class Pipeline:
             or config.get("base_model")
             or config.get("sd_model_checkpoint")
         )
-        if requested_model:
-            self.client.set_model(requested_model)
-        
-        # Handle VAE: distinguish between not specified (None) and explicitly empty ("") 
+        # Handle VAE: distinguish between not specified (None) and explicitly empty ("")
         requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
-        if requested_vae:  # Only set if non-empty
-            self.client.set_vae(requested_vae)
+        self._ensure_model_and_vae(requested_model, requested_vae)
         
         # Query WebUI for ACTUAL current model and VAE (what's really being used)
         # This ensures manifest reflects reality, not just what we requested
@@ -1664,13 +1718,9 @@ class Pipeline:
 
         # Set model and VAE if specified
         model_name = config.get("model") or config.get("sd_model_checkpoint")
-        if model_name:
-            self.client.set_model(model_name)
-        
         # Handle VAE: only set if non-empty
         requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
-        if requested_vae:  # Only set if non-empty
-            self.client.set_vae(requested_vae)
+        self._ensure_model_and_vae(model_name, requested_vae)
 
         payload = {
             "prompt": prompt,
@@ -1822,13 +1872,10 @@ class Pipeline:
         )
 
         # Set model and VAE if specified
-        if config.get("model"):
-            self.client.set_model(config["model"])
-        
+        requested_model = config.get("model")
         # Handle VAE: only set if non-empty
         requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
-        if requested_vae:  # Only set if non-empty
-            self.client.set_vae(requested_vae)
+        self._ensure_model_and_vae(requested_model, requested_vae)
 
         # Apply optional prompt adjustments from config
         prompt_adjust = (config.get("prompt_adjust") or "").strip()
@@ -2381,6 +2428,7 @@ class Pipeline:
         """
 
         self.reset_stage_events()
+        self._begin_run_metrics()
 
         try:
             result = self._run_full_pipeline_impl(
@@ -2407,6 +2455,15 @@ class Pipeline:
                     },
                 )
             raise
+        finally:
+            current_results = getattr(self, "_last_full_pipeline_results", {}) or {}
+            current_results["efficiency_metrics"] = self.get_run_efficiency_metrics(
+                len(current_results.get("summary", []))
+            )
+            self._log_run_efficiency_metrics(
+                run_type="full_pipeline",
+                images_processed=len(current_results.get("summary", [])),
+            )
 
     def _run_full_pipeline_impl(
         self,
@@ -2731,6 +2788,7 @@ class Pipeline:
         logger.info(f"🎨 Processing prompt {prompt_index + 1} from pack '{pack_name}'")
 
         # Create pack-specific directory structure
+        self._begin_run_metrics()
         pack_dir = self.logger.create_pack_directory(run_dir, pack_name)
 
         # Save config for this pack run
@@ -3115,6 +3173,13 @@ class Pipeline:
             summary_path = pack_dir / "summary.csv"
             self.logger.create_pack_csv_summary(summary_path, results["summary"])
 
+        results["efficiency_metrics"] = self.get_run_efficiency_metrics(
+            len(results.get("summary", []))
+        )
+        self._log_run_efficiency_metrics(
+            run_type="pack_pipeline",
+            images_processed=len(results.get("summary", [])),
+        )
         logger.info(
             f"✅ Completed pack '{pack_name}' prompt {prompt_index + 1}: {len(results['summary'])} images"
         )

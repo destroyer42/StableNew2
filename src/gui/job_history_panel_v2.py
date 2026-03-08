@@ -490,7 +490,7 @@ class JobHistoryPanelV2(ttk.Frame):
         return str(runs_base)
 
     def _on_tree_motion(self, event: tk.Event) -> None:
-        """Show tooltip with full model name on hover."""
+        """Show tooltip with full model name and efficiency metrics on hover."""
         item = self.history_tree.identify_row(event.y)
         column = self.history_tree.identify_column(event.x)
         
@@ -513,8 +513,10 @@ class JobHistoryPanelV2(ttk.Frame):
         if not full_model or full_model == "-":
             self._hide_tooltip()
             return
-        
-        self._show_tooltip(event.x_root, event.y_root, full_model)
+
+        efficiency_text = self._extract_efficiency_summary(entry)
+        tooltip_text = full_model if not efficiency_text else f"{full_model}\n{efficiency_text}"
+        self._show_tooltip(event.x_root, event.y_root, tooltip_text)
     
     def _extract_full_model(self, entry: JobHistoryEntry) -> str:
         """Extract full model name without truncation."""
@@ -530,6 +532,38 @@ class JobHistoryPanelV2(ttk.Frame):
                 return str(model)
         
         return "-"
+
+    def _extract_efficiency_summary(self, entry: JobHistoryEntry) -> str:
+        """Return compact efficiency metrics summary from run result metadata."""
+        if not entry.result or not isinstance(entry.result, dict):
+            return ""
+        metrics = None
+        metadata = entry.result.get("metadata")
+        if isinstance(metadata, dict):
+            candidate = metadata.get("efficiency_metrics")
+            if isinstance(candidate, dict):
+                metrics = candidate
+        if metrics is None:
+            candidate = entry.result.get("efficiency_metrics")
+            if isinstance(candidate, dict):
+                metrics = candidate
+        if not metrics:
+            return ""
+
+        elapsed = metrics.get("elapsed_seconds")
+        ipm = metrics.get("images_per_minute")
+        model_switches = metrics.get("model_switches")
+        vae_switches = metrics.get("vae_switches")
+        parts: list[str] = []
+        if elapsed is not None:
+            parts.append(f"elapsed={elapsed}s")
+        if ipm is not None:
+            parts.append(f"img/min={ipm}")
+        if model_switches is not None:
+            parts.append(f"model_sw={model_switches}")
+        if vae_switches is not None:
+            parts.append(f"vae_sw={vae_switches}")
+        return " | ".join(parts)
     
     def _show_tooltip(self, x: int, y: int, text: str) -> None:
         """Display tooltip near cursor."""

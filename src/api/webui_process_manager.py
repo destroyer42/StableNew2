@@ -16,6 +16,11 @@ from typing import Any
 
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
+from src.utils.process_container_v2 import (
+    ProcessContainer,
+    ProcessContainerConfig,
+    build_process_container,
+)
 
 
 class WebUIStartupError(RuntimeError):
@@ -95,8 +100,43 @@ class WebUIProcessManager:
         self._stopped: bool = False
         self._orphan_monitor_thread: threading.Thread | None = None
         self._orphan_monitor_stop = threading.Event()
+        self._process_container: ProcessContainer | None = None
+        self._init_process_container()
         global _GLOBAL_WEBUI_PROCESS_MANAGER
         _GLOBAL_WEBUI_PROCESS_MANAGER = self
+
+    def _init_process_container(self) -> None:
+        """Create an OS-level process container for deterministic WebUI lifecycle."""
+        try:
+            self._process_container = build_process_container(
+                "webui_process_manager",
+                ProcessContainerConfig(enabled=True),
+            )
+        except Exception as exc:
+            logger.debug("Failed to initialize WebUI process container: %s", exc)
+            self._process_container = None
+
+    def _attach_pid_to_container(self, pid: int | None) -> None:
+        if pid is None or self._process_container is None:
+            return
+        try:
+            self._process_container.add_pid(pid)
+        except Exception as exc:
+            logger.debug("Failed to attach WebUI PID %s to process container: %s", pid, exc)
+
+    def _teardown_process_container(self) -> None:
+        container = self._process_container
+        if container is None:
+            return
+        try:
+            container.kill_all()
+        except Exception:
+            logger.debug("WebUI process container kill_all failed", exc_info=True)
+        try:
+            container.teardown()
+        except Exception:
+            logger.debug("WebUI process container teardown failed", exc_info=True)
+        self._process_container = None
 
     @property
     def process(self) -> subprocess.Popen | None:
@@ -228,23 +268,31 @@ class WebUIProcessManager:
                 # Give the OS time to release the port
                 time.sleep(1.0)
             
-            # For .bat files on Windows, we MUST use shell=True, otherwise they won't execute.
-            # Use CREATE_NEW_PROCESS_GROUP to allow clean termination and prevent orphans.
-            use_shell = os.name == "nt" and self._config.command[0].endswith(".bat")
+            # Prevention-first launch policy:
+            # - Never use shell=True (detaches child trees and complicates ownership).
+            # - For .bat/.cmd on Windows, invoke through cmd.exe explicitly so we can keep
+            #   shell=False and retain deterministic process/container ownership.
+            launch_command = list(self._config.command)
+            if (
+                os.name == "nt"
+                and launch_command
+                and launch_command[0].lower().endswith((".bat", ".cmd"))
+            ):
+                launch_command = ["cmd.exe", "/d", "/s", "/c", *launch_command]
+
             launch_in_new_console = False
             if os.name == "nt":
                 launch_in_new_console = os.environ.get(
                     "STABLENEW_WEBUI_NEW_CONSOLE", ""
                 ).strip().lower() in {"1", "true", "yes", "on"}
 
-            # On Windows, use CREATE_NEW_PROCESS_GROUP + CREATE_BREAKAWAY_FROM_JOB flags
-            # This allows us to send CTRL_BREAK_EVENT for clean shutdown.
+            # On Windows, use CREATE_NEW_PROCESS_GROUP only (no BREAKAWAY):
+            # keeping the process in our job/container avoids detached orphan trees.
             creationflags = 0
             if os.name == "nt":
                 import subprocess
                 # CREATE_NEW_PROCESS_GROUP = 0x00000200
-                # CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-                creationflags = 0x00000200 | 0x01000000
+                creationflags = 0x00000200
                 if launch_in_new_console:
                     # CREATE_NEW_CONSOLE = 0x00000010
                     creationflags |= 0x00000010
@@ -258,12 +306,12 @@ class WebUIProcessManager:
                 popen_stderr = None
 
             self._process = subprocess.Popen(
-                self._config.command,
+                launch_command,
                 cwd=self._config.working_dir or None,
                 env=self._config.build_env(),
                 stdout=popen_stdout,
                 stderr=popen_stderr,
-                shell=use_shell,
+                shell=False,
                 creationflags=creationflags if os.name == "nt" else 0,
                 text=True,
                 encoding="utf-8",
@@ -271,6 +319,7 @@ class WebUIProcessManager:
                 bufsize=1,
             )
             self._pid = self._process.pid
+            self._attach_pid_to_container(self._pid)
             self._start_time = time.time()
             launch_msg = format_launch_message(
                 run_session_id=run_session_id,
@@ -387,6 +436,7 @@ class WebUIProcessManager:
             logger.exception("Error calling stop_webui during stop()")
         finally:
             # Clear global reference to allow cleanup
+            self._teardown_process_container()
             clear_global_webui_process_manager()
 
     def is_running(self) -> bool:

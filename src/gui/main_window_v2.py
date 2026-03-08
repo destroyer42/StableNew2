@@ -20,6 +20,7 @@ from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
+from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui.zone_map_v2 import get_root_zone_config
 from src.services.ui_state_store import get_ui_state_store
 from src.utils import InMemoryLogHandler
@@ -209,6 +210,15 @@ class MainWindowV2:
             return tab
 
         self.learning_tab = self.add_tab("learning", "Learning", _make_learning)
+
+        def _make_review(parent):
+            return ReviewTabFrame(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.review_tab = self.add_tab("review", "Review", _make_review)
 
         # PR-PERSIST-001: Restore selected tab
         self._restore_tab_selection()
@@ -426,6 +436,11 @@ class MainWindowV2:
         if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "preview_panel"):
             try:
                 self.pipeline_tab.preview_panel.controller = controller
+            except Exception:
+                pass
+        if hasattr(self, "review_tab"):
+            try:
+                self.review_tab.app_controller = controller
             except Exception:
                 pass
 

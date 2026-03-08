@@ -57,6 +57,8 @@ class PipelineRunner:
         Execute the pipeline using a NormalizedJobRecord (NJR-only, v2.6+ contract).
         This is the ONLY supported production entrypoint.
         """
+        if hasattr(self._pipeline, "_begin_run_metrics"):
+            self._pipeline._begin_run_metrics()
         # Best-effort VRAM refresh before every job to avoid long-run buildup.
         try:
             client = getattr(self._pipeline, "client", None)
@@ -631,6 +633,15 @@ class PipelineRunner:
             self._pipeline._current_job_id = None
             self._pipeline._current_njr_sha256 = None
             
+        efficiency_metrics: dict[str, Any] = {}
+        if hasattr(self._pipeline, "get_run_efficiency_metrics"):
+            try:
+                efficiency_metrics = self._pipeline.get_run_efficiency_metrics(len(variants))
+            except Exception:
+                efficiency_metrics = {}
+        if efficiency_metrics:
+            metadata["efficiency_metrics"] = efficiency_metrics
+
         result = PipelineRunResult(
             run_id=run_id,
             success=success,

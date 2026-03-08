@@ -64,3 +64,24 @@ def test_job_history_panel_updates_and_opens_folder(tk_root, tmp_path, monkeypat
     assert controller.replay_calls == 1
     panel.refresh_btn.invoke()
     assert controller.refresh_calls == 1
+
+
+@pytest.mark.gui
+def test_job_history_panel_efficiency_tooltip_summary(tk_root) -> None:
+    panel = JobHistoryPanelV2(tk_root, controller=DummyController(), app_state=AppStateV2())
+    entry = _make_entry("job-eff")
+    entry.result = {
+        "metadata": {
+            "efficiency_metrics": {
+                "elapsed_seconds": 12.5,
+                "images_per_minute": 9.6,
+                "model_switches": 1,
+                "vae_switches": 0,
+            }
+        }
+    }
+
+    text = panel._extract_efficiency_summary(entry)
+    assert "elapsed=12.5s" in text
+    assert "img/min=9.6" in text
+    assert "model_sw=1" in text

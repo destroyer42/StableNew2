@@ -102,3 +102,15 @@ def test_model_unchanged_does_not_reset_vae_when_not_explicit() -> None:
     assert client.set_model_calls == []
     assert client.set_vae_calls == []
     assert pipeline._current_vae == "sdxl_vae.safetensors"
+
+
+def test_explicit_vae_noop_skips_redundant_set() -> None:
+    client = _ModelSwitchClient("same_model.safetensors", safe_mode=False)
+    pipeline = Pipeline(client=client, structured_logger=_NoOpStructuredLogger())
+    pipeline._current_model = "same_model.safetensors"
+    pipeline._current_vae = "sdxl_vae.safetensors"
+
+    pipeline._ensure_model_and_vae("same_model.safetensors", "sdxl_vae.safetensors")
+
+    assert client.set_model_calls == []
+    assert client.set_vae_calls == []
