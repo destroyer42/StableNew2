@@ -50,3 +50,13 @@ def test_update_record_feedback_appends(tmp_path: Path):
     final = list_recent_learning_records(tmp_path)[0]
     assert final.metadata.get("rating") == 5
     assert "nice" in str(final.metadata.get("tags"))
+
+
+def test_list_recent_learning_records_does_not_fallback_to_legacy_paths(tmp_path: Path):
+    canonical = tmp_path / "data" / "learning" / "learning_records.jsonl"
+    legacy = tmp_path / "learning_records.jsonl"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(_record("legacy-only").to_json() + "\n", encoding="utf-8")
+
+    records = list_recent_learning_records(canonical, limit=10)
+    assert records == []

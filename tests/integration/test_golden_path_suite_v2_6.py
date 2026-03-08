@@ -538,7 +538,70 @@ class TestGP10LearningIntegration:
 
     def test_gp10_learning_receives_full_metadata(self, tmp_path: Path):
         """GP10.1: Learning receives complete job metadata including PromptPack provenance."""
-        pytest.skip("Implementation pending: Requires Learning integration")
+        from types import SimpleNamespace
+
+        from src.gui.controllers.learning_controller import LearningController
+        from src.gui.learning_state import LearningExperiment, LearningState
+        from src.learning.learning_record import LearningRecordWriter
+
+        class _Var:
+            def __init__(self, value):
+                self._value = value
+
+            def get(self):
+                return self._value
+
+            def set(self, value):
+                self._value = value
+
+        records_path = tmp_path / "data" / "learning" / "learning_records.jsonl"
+        writer = LearningRecordWriter(records_path)
+        learning_state = LearningState()
+        learning_state.current_experiment = LearningExperiment(
+            name="gp10_learning",
+            stage="txt2img",
+            variable_under_test="CFG Scale",
+            prompt_text="portrait photo",
+        )
+
+        stage_cards = SimpleNamespace(txt2img_card=SimpleNamespace(cfg_var=_Var(7.0)))
+        pipeline_controller = Mock()
+        pipeline_controller.stage_cards_panel = stage_cards
+        pipeline_controller.can_enqueue_learning_jobs.return_value = (True, "")
+        pipeline_controller.get_preview_jobs.return_value = [object()]
+
+        controller = LearningController(
+            learning_state=learning_state,
+            pipeline_controller=pipeline_controller,
+            learning_record_writer=writer,
+        )
+
+        controller.save_review_feedback(
+            {
+                "image_path": str(tmp_path / "gp10.png"),
+                "rating": 5,
+                "quality_label": "excellent",
+                "base_prompt": "portrait photo",
+                "after_prompt": "portrait photo, improved hands",
+                "stage": "txt2img",
+                "model": "modelA.safetensors",
+                "sampler": "Euler a",
+                "scheduler": "karras",
+                "steps": 30,
+                "cfg_scale": 8.0,
+            }
+        )
+
+        recommendations = controller.get_recommendations_for_current_prompt()
+        assert recommendations is not None
+        cfg_rec = recommendations.get_best_for_parameter("cfg_scale")
+        assert cfg_rec is not None
+        assert cfg_rec.recommended_value == 8.0
+        assert "samples=" in cfg_rec.confidence_rationale
+
+        controller.set_automation_mode("apply_with_confirm")
+        assert controller.apply_recommendations_to_pipeline(recommendations) is True
+        assert stage_cards.txt2img_card.cfg_var.get() == 8.0
 
 
 # ============================================================================

@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.learning.learning_paths import iter_learning_records_candidates
 from src.learning.learning_adapter import prepare_learning_run
 from src.learning.learning_plan import LearningPlan, LearningRunStep
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
@@ -95,14 +94,7 @@ def list_recent_learning_records(records_path: Path, limit: int = 10) -> list[Le
     if path.is_dir():
         path = path / "learning_records.jsonl"
     if not path.exists():
-        fallback = None
-        for candidate in iter_learning_records_candidates():
-            if candidate.exists():
-                fallback = candidate
-                break
-        if fallback is None:
-            return []
-        path = fallback
+        return []
     records: list[LearningRecord] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()

@@ -1379,12 +1379,16 @@ class LearningController:
         base_negative = str(feedback.get("base_negative_prompt") or "")
         after_prompt = str(feedback.get("after_prompt") or base_prompt)
         after_negative = str(feedback.get("after_negative_prompt") or base_negative)
+        model = str(feedback.get("model") or "")
+        stage = str(feedback.get("stage") or "review")
         metadata = {
             "source": "review_tab",
             "image_path": image_path,
             "user_rating": rating,
             "quality_label": str(feedback.get("quality_label") or ""),
             "user_notes": str(feedback.get("notes") or ""),
+            "stage": stage,
+            "model": model,
             "prompt_before": base_prompt,
             "prompt_after": after_prompt,
             "negative_prompt_before": base_negative,
@@ -1396,8 +1400,20 @@ class LearningController:
             "stages": list(feedback.get("stages") or []),
             "review_context": dict(feedback.get("context") or {}),
         }
-        model = str(feedback.get("model") or "")
-        stage = str(feedback.get("stage") or "review")
+        primary_sampler = str(feedback.get("sampler") or "")
+        primary_scheduler = str(feedback.get("scheduler") or "")
+        primary_steps = feedback.get("steps")
+        primary_cfg_scale = feedback.get("cfg_scale")
+
+        def _extract_primary(_cfg: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "model": model,
+                "sampler": primary_sampler,
+                "scheduler": primary_scheduler,
+                "steps": primary_steps,
+                "cfg_scale": primary_cfg_scale,
+            }
+
         record = LearningRecord.from_pipeline_context(
             base_config={
                 "stage": stage,
@@ -1414,6 +1430,7 @@ class LearningController:
             ],
             randomizer_mode="review_feedback",
             randomizer_plan_size=1,
+            extract_primary=_extract_primary,
             metadata=metadata,
         )
         self._learning_record_writer.append_record(record)
