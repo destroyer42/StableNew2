@@ -423,6 +423,7 @@ class PipelineController(_GUIPipelineController):
         """
         if not self.gui_can_run():
             return False
+        self._sync_auto_run_setting()
 
         # Check WebUI connection
         if hasattr(self, "_webui_connection"):
@@ -656,7 +657,20 @@ class PipelineController(_GUIPipelineController):
                 self._job_service.set_status_callback("pipeline", self._on_job_status)
             except Exception:
                 pass
+        self._sync_auto_run_setting()
         self._setup_queue_callbacks()
+
+    def _sync_auto_run_setting(self, forced_value: bool | None = None) -> None:
+        """Propagate auto-run preference from AppState into JobService."""
+        if not self._job_service:
+            return
+        if forced_value is None:
+            if self._app_state is None:
+                return
+            enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+        else:
+            enabled = bool(forced_value)
+        self._job_service.auto_run_enabled = enabled
 
     def _get_pipeline_state(self) -> PipelineState | None:
         getter = getattr(self, "gui_get_pipeline_state", None)
@@ -832,6 +846,7 @@ class PipelineController(_GUIPipelineController):
         """Submit a pipeline job using assembler-enforced config."""
         if not self.gui_can_run():
             return False
+        self._sync_auto_run_setting()
 
         if hasattr(self, "_webui_connection"):
             state = self._webui_connection.ensure_connected(autostart=True)
@@ -1200,9 +1215,22 @@ class PipelineController(_GUIPipelineController):
                 _logger.exception("on_queue_clear_v2 failed", exc_info=True)
 
     def on_set_auto_run_v2(self, enabled: bool) -> None:
-        if not self._app_state:
+        if self._app_state:
+            self._app_state.set_auto_run_queue(bool(enabled))
+        self._sync_auto_run_setting(bool(enabled))
+        if not enabled or not self._job_service:
             return
-        self._app_state.set_auto_run_queue(bool(enabled))
+        if self._app_state and bool(getattr(self._app_state, "is_queue_paused", False)):
+            return
+        queue = getattr(self._job_service, "queue", None) or getattr(self._job_service, "job_queue", None)
+        if not queue or not hasattr(queue, "list_jobs"):
+            return
+        try:
+            has_queued = any(job.status == JobStatus.QUEUED for job in queue.list_jobs())
+        except Exception:
+            has_queued = False
+        if has_queued:
+            self._job_service.resume()
 
     def on_pause_queue_v2(self) -> None:
         if not self._job_service:

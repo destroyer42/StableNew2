@@ -63,7 +63,12 @@ class LearningController:
             self.execution_controller.set_failure_callback(self._on_variant_job_failed)
 
     def update_experiment_design(self, experiment_data: dict[str, Any]) -> None:
-        """Update the current experiment design from form data."""
+        """Update the current experiment design from form data.
+        
+        PR-LEARN-020: Updated to store variable specs in metadata field.
+        """
+        from src.learning.variable_metadata import get_variable_metadata
+        
         # Determine prompt text based on prompt_source
         prompt_text = ""
         prompt_source = experiment_data.get("prompt_source", "custom")
@@ -74,6 +79,29 @@ class LearningController:
             # BUGFIX: Use current prompt pack when source is 'current'
             prompt_text = self.prompt_workspace_state.get_current_prompt_text() or ""
         
+        # Look up variable metadata
+        variable_name = experiment_data.get("variable_under_test", "")
+        meta = get_variable_metadata(variable_name)
+        
+        # Build metadata dict with value specifications
+        metadata = {
+            # Numeric range params
+            "start_value": experiment_data.get("start_value", 1.0),
+            "end_value": experiment_data.get("end_value", 10.0),
+            "step_value": experiment_data.get("step_value", 1.0),
+            # Discrete/resource selection
+            "selected_items": experiment_data.get("selected_items", []),
+            # PR-LEARN-022: LoRA composite params
+            "lora_mode": experiment_data.get("lora_mode", "strength"),
+            "lora_name": experiment_data.get("lora_name"),
+            "strength_start": experiment_data.get("strength_start", 0.5),
+            "strength_end": experiment_data.get("strength_end", 1.5),
+            "strength_step": experiment_data.get("strength_step", 0.1),
+            "comparison_mode": experiment_data.get("comparison_mode", False),
+            "fixed_strength": experiment_data.get("fixed_strength", 1.0),
+            "selected_loras": experiment_data.get("selected_loras", []),
+        }
+        
         # Create LearningExperiment from form data
         experiment = LearningExperiment(
             name=experiment_data.get("name", ""),
@@ -81,13 +109,10 @@ class LearningController:
             baseline_config={},  # Will be populated from pipeline state later
             prompt_text=prompt_text,
             stage=experiment_data.get("stage", "txt2img"),
-            variable_under_test=experiment_data.get("variable_under_test", ""),
-            values=self._generate_values_from_range(
-                experiment_data.get("start_value", 1.0),
-                experiment_data.get("end_value", 10.0),
-                experiment_data.get("step_value", 1.0),
-            ),
+            variable_under_test=variable_name,
+            values=[],  # PR-LEARN-020: Values generated in build_plan()
             images_per_value=experiment_data.get("images_per_value", 1),
+            metadata=metadata,  # PR-LEARN-020: Store value specs
         )
 
         # Store in state
@@ -102,9 +127,205 @@ class LearningController:
             current += step
         return values
 
+    def _generate_variant_values(self, experiment: LearningExperiment) -> list[Any]:
+        """Generate values using variable metadata.
+        
+        PR-LEARN-020: Metadata-driven value generation for all variable types.
+        
+        Args:
+            experiment: Learning experiment with metadata field containing value specs
+        
+        Returns:
+            List of values (numeric, strings, or dicts depending on variable type)
+        """
+        import logging
+        from src.learning.variable_metadata import get_variable_metadata
+        
+        logger = logging.getLogger(__name__)
+        
+        # Look up metadata for this variable
+        meta = get_variable_metadata(experiment.variable_under_test)
+        if not meta:
+            raise ValueError(f"Unknown variable: {experiment.variable_under_test}")
+        
+        logger.info(f"[LearningController] Generating values for {meta.display_name} (type: {meta.value_type})")
+        
+        # Generate values based on type
+        if meta.value_type == "numeric":
+            # Numeric range - use metadata from experiment
+            start = float(experiment.metadata.get("start_value", meta.constraints.get("default_start", 1.0)))
+            end = float(experiment.metadata.get("end_value", meta.constraints.get("default_end", 10.0)))
+            step = float(experiment.metadata.get("step_value", meta.constraints.get("step", 1.0)))
+            
+            values = self._generate_values_from_range(start, end, step)
+            logger.info(f"[LearningController]   Generated {len(values)} numeric values: {start} to {end}, step {step}")
+            return values
+        
+        elif meta.value_type in ["discrete", "resource"]:  # PR-LEARN-021: Handle resource type
+            # Discrete choice or resource selection - use selected_items from metadata
+            selected = experiment.metadata.get("selected_items", [])
+            
+            if not selected and meta.resource_key:
+                # Fallback: get available items from app state resources
+                if self.app_controller and hasattr(self.app_controller, "_app_state"):
+                    app_state = self.app_controller._app_state
+                    if hasattr(app_state, "resources"):
+                        available = app_state.resources.get(meta.resource_key, [])
+                        selected = available[:5] if available else []  # Use first 5 as fallback
+                        logger.warning(
+                            f"[LearningController]   No items selected, using first {len(selected)} "
+                            f"available {meta.resource_key}"
+                        )
+            
+            if not selected:
+                raise ValueError(
+                    f"No items selected for {meta.display_name}. "
+                    "Please select at least one item from the checklist."
+                )
+            
+            # PR-LEARN-021: Validate resource variables
+            if meta.value_type == "resource" and meta.resource_key:
+                is_valid, error_msg = self._validate_selected_resources(selected, meta, meta.resource_key)
+                if not is_valid:
+                    raise ValueError(error_msg)
+            
+            logger.info(f"[LearningController]   Using {len(selected)} discrete/resource values")
+            return selected
+        
+        elif meta.value_type == "composite":
+            # PR-LEARN-022: Composite variable (LoRA Strength)
+            
+            # Determine mode: strength sweep or LoRA comparison
+            comparison_mode = experiment.metadata.get("comparison_mode", False)
+            
+            if comparison_mode:
+                # Mode 2: Compare different LoRAs at fixed strength
+                selected_loras = experiment.metadata.get("selected_loras", [])
+                fixed_strength = float(experiment.metadata.get("fixed_strength", 1.0))
+                
+                if not selected_loras:
+                    # Get all enabled LoRAs from stage card
+                    available_loras = self._get_current_loras()
+                    selected_loras = [l["name"] for l in available_loras]
+                
+                values = [{"name": lora, "weight": fixed_strength} for lora in selected_loras]
+                logger.info(f"[LearningController]   Generated {len(values)} LoRA comparison variants at strength {fixed_strength}")
+            
+            else:
+                # Mode 1: Test single LoRA at multiple strengths
+                lora_name = experiment.metadata.get("lora_name")
+                
+                if not lora_name:
+                    # Try to get first enabled LoRA
+                    available_loras = self._get_current_loras()
+                    if available_loras:
+                        lora_name = available_loras[0]["name"]
+                        logger.warning(f"[LearningController]   No LoRA specified, using first enabled: {lora_name}")
+                    else:
+                        raise ValueError("No LoRA specified and no enabled LoRAs in stage card")
+                
+                # Generate strength range
+                start = float(experiment.metadata.get("strength_start", meta.constraints.get("min_strength", 0.5)))
+                end = float(experiment.metadata.get("strength_end", meta.constraints.get("max_strength", 1.5)))
+                step = float(experiment.metadata.get("strength_step", meta.constraints.get("default_step", 0.1)))
+                
+                strengths = self._generate_values_from_range(start, end, step)
+                
+                values = [{"name": lora_name, "weight": s} for s in strengths]
+                logger.info(f"[LearningController]   Generated {len(values)} strength variants for {lora_name}")
+            
+            return values
+        
+        else:
+            raise ValueError(f"Unsupported variable type: {meta.value_type}")
+
+    def _get_current_loras(self) -> list[dict[str, Any]]:
+        """Get currently selected LoRAs from stage card state.
+        
+        PR-LEARN-022: Retrieves enabled LoRAs from baseline config for LoRA variable.
+        
+        Returns:
+            List of LoRA dicts: [{"name": "...", "strength": ..., "enabled": True}, ...]
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if not self.app_controller:
+            logger.warning("[LearningController] No app_controller, cannot get LoRAs")
+            return []
+        
+        # Get baseline config from stage cards
+        try:
+            baseline = self._get_baseline_config()
+            txt2img = baseline.get("txt2img", {})
+            loras = txt2img.get("lora_strengths", [])
+            
+            # Filter to enabled only
+            enabled_loras = [l for l in loras if l.get("enabled", False)]
+            
+            logger.info(f"[LearningController] Found {len(enabled_loras)} enabled LoRAs in stage card")
+            return enabled_loras
+            
+        except Exception as exc:
+            logger.error(f"[LearningController] Failed to get current LoRAs: {exc}")
+            return []
+
+    def _validate_selected_resources(
+        self,
+        selected: list[str],
+        meta,
+        resource_key: str
+    ) -> tuple[bool, str]:
+        """Validate that selected resources exist in WebUI.
+        
+        PR-LEARN-021: Validates resource variables against available resources.
+        
+        Args:
+            selected: List of selected resource names
+            meta: Variable metadata
+            resource_key: Resource key in app_state (e.g., "models", "vaes")
+        
+        Returns:
+            (is_valid, error_message)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Get available resources from app_state
+        available = []
+        if self.app_controller and hasattr(self.app_controller, "_app_state"):
+            app_state = self.app_controller._app_state
+            if hasattr(app_state, "resources"):
+                available = app_state.resources.get(resource_key, [])
+        
+        if not available:
+            return False, f"No {meta.display_name} available in WebUI. Please check WebUI connection."
+        
+        # Check each selected resource
+        missing = []
+        for resource in selected:
+            if resource not in available:
+                missing.append(resource)
+        
+        if missing:
+            error = f"Selected {meta.display_name} not found in WebUI: {', '.join(missing[:3])}"
+            if len(missing) > 3:
+                error += f" and {len(missing) - 3} more"
+            logger.error(f"[LearningController] Resource validation failed: {error}")
+            return False, error
+        
+        logger.info(f"[LearningController] Resource validation passed: {len(selected)} {meta.display_name} selected")
+        return True, ""
+
     def build_plan(self, experiment: LearningExperiment) -> None:
-        """Build a learning plan from experiment definition."""
+        """Build a learning plan from experiment definition.
+        
+        PR-LEARN-020: Updated to use metadata-driven value generation.
+        """
+        import logging
         from src.gui.learning_state import LearningVariant
+
+        logger = logging.getLogger(__name__)
 
         # Store the current experiment
         self.learning_state.current_experiment = experiment
@@ -114,6 +335,15 @@ class LearningController:
 
         # Clear any existing plan
         self.learning_state.plan = []
+        
+        # PR-LEARN-020: Generate values using metadata-driven system
+        try:
+            values = self._generate_variant_values(experiment)
+            experiment.values = values  # Update experiment with generated values
+            logger.info(f"[LearningController] Generated {len(values)} variant values")
+        except Exception as exc:
+            logger.error(f"[LearningController] Failed to generate values: {exc}")
+            raise
 
         # Generate variants for each value in the experiment
         for value in experiment.values:
@@ -309,16 +539,16 @@ class LearningController:
             logger.error(f"[LearningController] Baseline config validation failed: {error_msg}")
             raise ValueError(f"Invalid baseline config: {error_msg}")
         
-        txt2img_config = baseline.get("txt2img", {})
+        # PR-LEARN-020: Apply variant override using metadata system
+        import copy
+        final_config = copy.deepcopy(baseline)
+        self._apply_variant_override_with_metadata(final_config, variant.param_value, experiment)
         
-        # Build overrides for this variant
-        variant_overrides = self._build_variant_overrides(variant, experiment)
+        # Add learning context metadata
+        final_config["learning_experiment_id"] = experiment.name
+        final_config["learning_variant_value"] = variant.param_value
+        final_config["learning_variable"] = experiment.variable_under_test
         
-        # PR-LEARN-011: Log variant overrides
-        logger.info(f"[LearningController] Variant overrides for {variant.param_value}: {variant_overrides}")
-        
-        # Apply overrides to txt2img section
-        final_config = self._apply_overrides_to_config(baseline, variant_overrides, experiment)
         txt2img_final = final_config.get("txt2img", {})
         
         # Extract explicit config values
@@ -428,6 +658,25 @@ class LearningController:
             path_output_dir="",  # Will be set by runner
             filename_template="",  # Will be set by runner
         )
+        
+        # PR-LEARN-022: Apply LoRA override if present
+        lora_override = final_config.get("lora_override")
+        if lora_override and isinstance(lora_override, dict):
+            from src.pipeline.job_models_v2 import LoRATag
+            
+            lora_name = lora_override["name"]
+            lora_weight = float(lora_override["weight"])
+            
+            logger.info(f"[LearningController] Applying LoRA override to NJR: {lora_name} @ {lora_weight}")
+            
+            # Remove any existing tag with same name
+            record.lora_tags = [tag for tag in record.lora_tags if tag.name != lora_name]
+            
+            # Add new tag with override weight
+            new_tag = LoRATag(name=lora_name, weight=lora_weight)
+            record.lora_tags.append(new_tag)
+            
+            logger.info(f"[LearningController]   NJR lora_tags: {[f'{t.name}@{t.weight}' for t in record.lora_tags]}")
         
         # PR-LEARN-011: Confirm NJR construction
         logger.info(f"[LearningController] Successfully built NJR: job_id={record.job_id}")
@@ -737,6 +986,57 @@ class LearningController:
         
         return config
 
+    def _apply_variant_override_with_metadata(
+        self,
+        config: dict[str, Any],
+        value: Any,
+        experiment: LearningExperiment
+    ) -> None:
+        """Apply variant override using metadata config_path.
+        
+        PR-LEARN-020: Metadata-driven override application.
+        PR-LEARN-022: Special handling for composite LoRA variables.
+        
+        Args:
+            config: Config dict to modify (in-place)
+            value: The variant value to apply
+            experiment: Current experiment for context
+        """
+        import logging
+        from src.learning.variable_metadata import get_variable_metadata
+        
+        logger = logging.getLogger(__name__)
+        
+        # Get metadata for variable
+        meta = get_variable_metadata(experiment.variable_under_test)
+        if not meta:
+            logger.error(f"[LearningController] No metadata for variable: {experiment.variable_under_test}")
+            return
+        
+        # PR-LEARN-022: Special handling for composite LoRA variable
+        if meta.value_type == "composite" and isinstance(value, dict):
+            # value = {"name": "CharacterLoRA", "weight": 0.8}
+            # Store in lora_override for later NJR application
+            config.setdefault("lora_override", {}).update(value)
+            logger.info(f"[LearningController] Applied LoRA override: {value['name']} @ {value['weight']}")
+            return
+        
+        # Standard config path application
+        # Parse config_path (e.g., "txt2img.cfg_scale" -> ["txt2img", "cfg_scale"])
+        keys = meta.config_path.split(".")
+        
+        # Navigate to parent dict
+        target = config
+        for key in keys[:-1]:
+            if key not in target:
+                target[key] = {}
+            target = target[key]
+        
+        # Set the final value
+        final_key = keys[-1]
+        target[final_key] = value
+        logger.info(f"[LearningController] Applied override: {meta.config_path} = {value}")
+
     def _on_variant_job_completed(self, variant: LearningVariant, result: dict[str, Any]) -> None:
         """Handle completion of a variant job.
         
@@ -886,14 +1186,6 @@ class LearningController:
             if self._review_panel and hasattr(self._review_panel, "update_recommendations"):
                 self._review_panel.update_recommendations(recommendations)
 
-    def get_recommendations_for_current_prompt(self) -> Any | None:
-        """Get recommendations for the current prompt and stage."""
-        if not self._recommendation_engine:
-            return None
-
-        # Get current prompt and stage
-        prompt_text = ""
-    
     def on_job_completed_callback(
         self, 
         job: Any, 

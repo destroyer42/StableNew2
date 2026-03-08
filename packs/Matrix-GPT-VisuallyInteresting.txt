@@ -1,4 +1,4 @@
-<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2>
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality, photorealistic) portrait, detailed skin, natural light, high fantasy, magical atmosphere, gorgeous smile
 a  gorgeous, athletic and fit, huge breasted, flawless skin, naked fantasy female warrior as the central subject,
 [[hair]] hair flowing dramatically in the wind, [[eyes]] eyes filled with resolve,
@@ -9,8 +9,8 @@ set in a vast [[environment]],
 the moment feels like [[narrative]],
 wearing [[clothes]],
 epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus
-<lora:add-detail-xl:0.3474576271186441> <lora:CinematicStyle_v1:0.9425675675675675> <lora:DetailedEyes_V3:0.30000000000000004> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
-neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:SDXLnegXL>
+<lora:add-detail-xl:0.7627118644067796> <lora:CinematicStyle_v1:0.75> <lora:DetailedEyes_V3:0.7124999999999999> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
@@ -23,7 +23,7 @@ inside a towering [[environment]],
 the scene suggests [[narrative]],
 dressed in [[clothes]],
 high fantasy realism, intricate details, dramatic atmosphere, cinematic lighting
-<lora:add-detail-xl:0.4915254237288135> <lora:CinematicStyle_v1:0.8108108108108109> <lora:DetailedEyes_V3:0.38437499999999997> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.923728813559322> <lora:CinematicStyle_v1:0.8108108108108109> <lora:DetailedEyes_V3:0.84375> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -37,7 +37,7 @@ inside a towering [[environment]],
 the scene suggests [[narrative]],
 dressed in [[clothes]],
 high fantasy realism, intricate details, dramatic atmosphere, cinematic lighting
-<lora:add-detail-xl:0.3983050847457627> <lora:CinematicStyle_v1:0.75> <lora:DetailedEyes_V3:0.35624999999999996> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.8813559322033899> <lora:CinematicStyle_v1:0.75> <lora:DetailedEyes_V3:0.7875000000000001> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -51,7 +51,7 @@ standing within a vast [[environment]],
 the scene conveys [[narrative]],
 clad in [[clothes]],
 cinematic fantasy realism, warm tones, detailed textures, dramatic composition
-<lora:add-detail-xl:0.364406779661017> <lora:CinematicStyle_v1:0.8412162162162162> <lora:DetailedEyes_V3:0.30000000000000004> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.7966101694915254> <lora:CinematicStyle_v1:0.8412162162162162> <lora:DetailedEyes_V3:0.796875> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -65,7 +65,7 @@ set against a shadowy [[environment]],
 the moment suggests [[narrative]],
 wearing [[clothes]],
 dark fantasy realism, high contrast, cinematic shadows, sharp detail
-<lora:add-detail-xl:0.4067796610169492> <lora:CinematicStyle_v1:0.8513513513513513> <lora:DetailedEyes_V3:0.3375> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.8135593220338984> <lora:CinematicStyle_v1:0.8513513513513513> <lora:DetailedEyes_V3:0.7781250000000001> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -79,7 +79,7 @@ standing within a dramatic [[environment]],
 the image represents [[narrative]],
 wearing [[clothes]],
 epic fantasy realism, dynamic motion, vivid colors, cinematic scale
-<lora:add-detail-xl:0.38983050847457623> <lora:CinematicStyle_v1:1.064189189189189> <lora:DetailedEyes_V3:0.31875> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.8305084745762712> <lora:CinematicStyle_v1:1.064189189189189> <lora:DetailedEyes_V3:0.8156249999999999> <lora:babesByStableYogiPony_xlV4:1.0> <lora:detailed_notrigger:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -93,7 +93,7 @@ inside an ancient [[environment]],
 the mood feels like [[narrative]],
 wearing [[clothes]],
 fantasy realism, glowing crystals, elegant composition, rich color depth
-<lora:add-detail-xl:0.3813559322033898> <lora:CinematicStyle_v1:0.902027027027027> <lora:DetailedEyes_V3:0.38437499999999997> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.7966101694915254> <lora:CinematicStyle_v1:0.902027027027027> <lora:DetailedEyes_V3:0.8343750000000001> <lora:Photoshoot_Realism:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -106,7 +106,7 @@ standing within a devastated [[environment]],
 the scene tells [[narrative]],
 wearing [[clothes]],
 gritty fantasy realism, cinematic storytelling, dramatic lighting, detailed textures
-<lora:add-detail-xl:0.3813559322033898> <lora:CinematicStyle_v1:0.902027027027027> <lora:DetailedEyes_V3:0.31875> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.75>
+<lora:add-detail-xl:0.7542372881355932> <lora:CinematicStyle_v1:0.902027027027027> <lora:DetailedEyes_V3:0.721875> <lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -120,7 +120,7 @@ high above a vast [[environment]],
 the image conveys [[narrative]],
 wearing [[clothes]],
 cinematic fantasy realism, dramatic motion, expansive scale, vibrant sky colors
-<lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.4945054945054945> <lora:DetailedEyes_V3:0.6212686567164178> <lora:anatomy_helper:0.6853932584269663> <lora:add-detail-xl:0.5684210526315789>
+<lora:DetailedEyes_V3:0.75> <lora:anatomy_helper:0.6853932584269663> <lora:add-detail-xl:0.8119266055045871> <lora:CinematicStyle_v1:0.8> <lora:dreamshaperXL10_lora:0.7417582417582418>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps
 
@@ -134,6 +134,6 @@ within a surreal [[environment]],
 the scene feels like [[narrative]],
 wearing [[clothes]],
 fantasy realism, colorful spectacle, magical lighting, cinematic focus
-<lora:DetailedEyes_V3:0.5673076923076923> <lora:anatomy_helper:0.7354838709677419> <lora:sdxl1.0_realastic_female_lora:0.7019704433497537> <lora:add-detail-xl:0.4335260115606937>
+<lora:DetailedEyes_V3:0.75> <lora:anatomy_helper:0.7354838709677419> <lora:add-detail-xl:0.7109826589595376> <lora:Realism_Lora_By_Stable_yogi_SDXL8.1:0.5934065934065934>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:bad_prompt> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:SDXLnegXL>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps

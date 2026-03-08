@@ -8,31 +8,26 @@
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1",
-          "Stable-Yogis-Makeup-Enhancer-XL",
-          "Stable_Yogis_Anatomy_Positives_V1",
-          "Stable_Yogis_General_Positives_V1",
-          "Stable_Yogis_PDXL_Positives2"
+          "stable_yogis_realism_positives_v1"
         ],
         "negative_embeddings": [
           "negative_hands",
           "stable_yogis_anatomy_negatives_v1-neg",
           "sdxl_cyberrealistic_simpleneg-neg",
-          "Stable_Yogis_PDXL_Negatives2-neg",
-          "SDXLnegXL"
+          "Stable_Yogis_PDXL_Negatives2-neg"
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.3474576271186441
+            0.7627118644067796
           ],
           [
             "CinematicStyle_v1",
-            0.9425675675675675
+            0.75
           ],
           [
             "DetailedEyes_V3",
-            0.30000000000000004
+            0.7124999999999999
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -61,7 +56,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.4915254237288135
+            0.923728813559322
           ],
           [
             "CinematicStyle_v1",
@@ -69,7 +64,7 @@
           ],
           [
             "DetailedEyes_V3",
-            0.38437499999999997
+            0.84375
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -98,7 +93,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.3983050847457627
+            0.8813559322033899
           ],
           [
             "CinematicStyle_v1",
@@ -106,7 +101,7 @@
           ],
           [
             "DetailedEyes_V3",
-            0.35624999999999996
+            0.7875000000000001
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -135,7 +130,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.364406779661017
+            0.7966101694915254
           ],
           [
             "CinematicStyle_v1",
@@ -143,7 +138,7 @@
           ],
           [
             "DetailedEyes_V3",
-            0.30000000000000004
+            0.796875
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -172,7 +167,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.4067796610169492
+            0.8135593220338984
           ],
           [
             "CinematicStyle_v1",
@@ -180,7 +175,7 @@
           ],
           [
             "DetailedEyes_V3",
-            0.3375
+            0.7781250000000001
           ],
           [
             "babesByStableYogiPony_xlV4",
@@ -209,7 +204,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.38983050847457623
+            0.8305084745762712
           ],
           [
             "CinematicStyle_v1",
@@ -217,15 +212,15 @@
           ],
           [
             "DetailedEyes_V3",
-            0.31875
+            0.8156249999999999
           ],
           [
             "babesByStableYogiPony_xlV4",
             1.0
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "detailed_notrigger",
+            0.8
           ]
         ]
       },
@@ -246,7 +241,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.3813559322033898
+            0.7966101694915254
           ],
           [
             "CinematicStyle_v1",
@@ -254,15 +249,11 @@
           ],
           [
             "DetailedEyes_V3",
-            0.38437499999999997
+            0.8343750000000001
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
-          ],
-          [
-            "DreamyStyle_xl",
-            0.75
+            "Photoshoot_Realism",
+            0.8
           ]
         ]
       },
@@ -283,7 +274,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.3813559322033898
+            0.7542372881355932
           ],
           [
             "CinematicStyle_v1",
@@ -291,15 +282,11 @@
           ],
           [
             "DetailedEyes_V3",
-            0.31875
+            0.721875
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
-          ],
-          [
-            "DreamyStyle_xl",
-            0.75
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            0.8
           ]
         ]
       },
@@ -318,12 +305,8 @@
         ],
         "loras": [
           [
-            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
-            0.4945054945054945
-          ],
-          [
             "DetailedEyes_V3",
-            0.6212686567164178
+            0.75
           ],
           [
             "anatomy_helper",
@@ -331,7 +314,15 @@
           ],
           [
             "add-detail-xl",
-            0.5684210526315789
+            0.8119266055045871
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8
+          ],
+          [
+            "dreamshaperXL10_lora",
+            0.7417582417582418
           ]
         ]
       },
@@ -354,19 +345,19 @@
         "loras": [
           [
             "DetailedEyes_V3",
-            0.5673076923076923
+            0.75
           ],
           [
             "anatomy_helper",
             0.7354838709677419
           ],
           [
-            "sdxl1.0_realastic_female_lora",
-            0.7019704433497537
+            "add-detail-xl",
+            0.7109826589595376
           ],
           [
-            "add-detail-xl",
-            0.4335260115606937
+            "Realism_Lora_By_Stable_yogi_SDXL8.1",
+            0.5934065934065934
           ]
         ]
       }
@@ -477,10 +468,7 @@
         {
           "name": "number",
           "values": [
-            "one",
-            "one",
-            "one",
-            "two"
+            "one"
           ]
         }
       ]
@@ -489,16 +477,16 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "juggernautXL_ragnarokBy",
-      "model_name": "juggernautXL_ragnarokBy",
+      "model": "babesByStableYogiPony_xlV4",
+      "model_name": "babesByStableYogiPony_xlV4",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
-      "steps": 28,
-      "cfg_scale": 6.1,
-      "width": 512,
-      "height": 896,
+      "steps": 34,
+      "cfg_scale": 6.470000000000001,
+      "width": 768,
+      "height": 1280,
       "clip_skip": 2,
       "seed": -1,
       "subseed": -1,
@@ -510,7 +498,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
+      "hr_checkpoint_name": "babesByStableYogiPony_xlV4.safetensors [c75622b71d]"
     },
     "img2img": {
       "model": "",
@@ -532,26 +520,26 @@
       "tile_size": 0,
       "face_restore": false,
       "face_restore_method": "CodeFormer",
-      "sampler_name": "Euler a",
-      "scheduler": "Normal"
+      "sampler_name": "DPM++ 2M Karras",
+      "scheduler": "karras"
     },
     "adetailer": {
-      "adetailer_model": "mediapipe_face_mesh",
-      "ad_model": "mediapipe_face_mesh",
+      "adetailer_model": "mediapipe_face_full",
+      "ad_model": "mediapipe_face_full",
       "adetailer_confidence": 0.34,
       "ad_confidence": 0.34,
       "max_detections": 3,
-      "mask_blur": 6,
-      "ad_mask_blur": 6,
-      "mask_merge_mode": "merge",
+      "mask_blur": 4,
+      "ad_mask_blur": 4,
+      "mask_merge_mode": "keep",
       "adetailer_steps": 8,
       "ad_steps": 8,
-      "adetailer_cfg": 3.0,
-      "ad_cfg_scale": 3.0,
+      "adetailer_cfg": 5.5,
+      "ad_cfg_scale": 5.5,
       "adetailer_sampler": "DPM++ 2M",
       "ad_sampler": "DPM++ 2M",
-      "adetailer_denoise": 0.16,
-      "ad_denoising_strength": 0.16,
+      "adetailer_denoise": 0.21,
+      "ad_denoising_strength": 0.21,
       "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
       "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
       "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
@@ -572,8 +560,8 @@
       "ad_mask_min_ratio": 0.01,
       "mask_max_ratio": 1.0,
       "ad_mask_max_ratio": 1.0,
-      "mask_dilate_erode": 5,
-      "ad_dilate_erode": 5,
+      "mask_dilate_erode": 4,
+      "ad_dilate_erode": 4,
       "mask_feather": 6,
       "ad_mask_feather": 6,
       "scheduler": "Karras",

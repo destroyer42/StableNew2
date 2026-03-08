@@ -327,8 +327,8 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "sdxlUnstableDiffusers_nihilmania",
-      "model_name": "sdxlUnstableDiffusers_nihilmania",
+      "model": "juggernautXL_ragnarokBy",
+      "model_name": "juggernautXL_ragnarokBy",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
@@ -348,7 +348,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "sdxlUnstableDiffusers_nihilmania.safetensors [a47e380db3]"
+      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
     },
     "img2img": {
       "model": "",
