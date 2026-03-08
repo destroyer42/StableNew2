@@ -231,6 +231,11 @@ class WebUIProcessManager:
             # For .bat files on Windows, we MUST use shell=True, otherwise they won't execute.
             # Use CREATE_NEW_PROCESS_GROUP to allow clean termination and prevent orphans.
             use_shell = os.name == "nt" and self._config.command[0].endswith(".bat")
+            launch_in_new_console = False
+            if os.name == "nt":
+                launch_in_new_console = os.environ.get(
+                    "STABLENEW_WEBUI_NEW_CONSOLE", ""
+                ).strip().lower() in {"1", "true", "yes", "on"}
 
             # On Windows, use CREATE_NEW_PROCESS_GROUP + CREATE_BREAKAWAY_FROM_JOB flags
             # This allows us to send CTRL_BREAK_EVENT for clean shutdown.
@@ -240,13 +245,24 @@ class WebUIProcessManager:
                 # CREATE_NEW_PROCESS_GROUP = 0x00000200
                 # CREATE_BREAKAWAY_FROM_JOB = 0x01000000
                 creationflags = 0x00000200 | 0x01000000
+                if launch_in_new_console:
+                    # CREATE_NEW_CONSOLE = 0x00000010
+                    creationflags |= 0x00000010
+
+            # Optional debug mode: launch WebUI in its own console window so users can
+            # observe native startup/runtime logs directly.
+            popen_stdout = subprocess.PIPE
+            popen_stderr = subprocess.PIPE
+            if launch_in_new_console:
+                popen_stdout = None
+                popen_stderr = None
 
             self._process = subprocess.Popen(
                 self._config.command,
                 cwd=self._config.working_dir or None,
                 env=self._config.build_env(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=popen_stdout,
+                stderr=popen_stderr,
                 shell=use_shell,
                 creationflags=creationflags if os.name == "nt" else 0,
                 text=True,

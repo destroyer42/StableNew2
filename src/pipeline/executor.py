@@ -482,6 +482,7 @@ class Pipeline:
 
     def _ensure_model_and_vae(self, model_name: str | None, vae_name: str | None) -> None:
         """Set model and/or VAE. Model and VAE switches are independent operations."""
+        model_switched = False
         # Handle model switching (if requested)
         desired_normalized = self._normalize_model_name(model_name)
         if desired_normalized:
@@ -504,6 +505,7 @@ class Pipeline:
                     logger.info(f"Switching to model: {model_name}")
                     self.client.set_model(model_name)
                     self._current_model = model_name
+                    model_switched = True
                 except Exception:
                     self._current_model = None
                     raise
@@ -520,6 +522,12 @@ class Pipeline:
                     # (WebUI may have reverted to Automatic)
                     logger.info(f"Ensuring VAE is set: {vae_name}")
                     self.client.set_vae(vae_name)
+            elif model_switched:
+                # If a new model is loaded and no explicit VAE is requested, clear any
+                # stale VAE override so WebUI can use the model's preferred default.
+                logger.info("Model switched without explicit VAE; resetting VAE to Automatic")
+                self.client.set_vae("Automatic")
+                self._current_vae = "Automatic"
         except Exception:
             self._current_vae = None
             raise
