@@ -1,0 +1,129 @@
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a powerful fantasy woman standing as the clear central subject, silver hair flowing in the wind, ice blue eyes filled with resolve,
+standing firm against the storm while gripping a weapon,
+shot from a slightly low angle,
+cinematic rim lighting cutting through dark clouds,
+set atop a windswept mountain pass,
+the moment feels like the calm before the final battle,
+wearing ornate plate armor,
+epic fantasy realism, dramatic atmosphere, sharp focus, rich colors
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a mystical fantasy sorceress as the main focus, deep auburn hair framing her face, glowing violet eyes,
+standing calmly while summoning magic with both hands,
+eye-level cinematic framing,
+soft volumetric light rays and floating arcane glow,
+inside a vast ancient stone ruin,
+the moment captures ancient power awakening,
+wearing layered mage robes,
+high fantasy realism, intricate details, cinematic lighting
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a battle-hardened fantasy woman as the focal point, raven black hair tousled, storm gray eyes heavy with emotion,
+standing among debris while surveying the battlefield,
+three-quarter cinematic view,
+flickering firelight and drifting embers,
+set within a burning battlefield,
+the scene tells a story of moments after victory,
+wearing battle-worn leather armor,
+gritty fantasy realism, dramatic storytelling, detailed textures
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+an ethereal fantasy woman standing barefoot as the central subject, chestnut brown hair flowing softly, emerald green eyes,
+poised calmly while channeling elemental energy,
+eye-level cinematic framing,
+bioluminescent glow filtering through mist,
+surrounded by a moonlit forest clearing,
+the moment suggests guarding an ancient secret,
+wearing enchanted fabric armor,
+fantasy realism, vibrant greens, soft depth of field
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a high-fantasy female knight as the dominant subject, platinum blonde hair swept by wind, sharp blue eyes,
+mid-stride as she advances forward,
+slightly low angle cinematic framing,
+dramatic backlighting against swirling clouds,
+standing on floating sky islands,
+the image conveys standing at the edge of destiny,
+wearing tactical light armor and a flowing cloak,
+epic fantasy realism, dynamic motion, expansive scale
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a mysterious desert oracle woman as the central subject, copper red hair glowing in sunlight, molten gold eyes,
+arms raised while invoking ancient power,
+three-quarter cinematic view,
+golden hour sunlight and heat haze,
+standing within desert temple ruins,
+the scene captures the moment history changed,
+wearing ceremonial priestess garments,
+cinematic fantasy realism, warm tones, detailed textures
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a lone fantasy woman standing firm in the snow, snow white hair blowing violently, piercing teal eyes,
+braced against the wind while gripping a spear,
+slightly low angle framing,
+cold moonlight reflecting off ice crystals,
+set on a frozen tundra battlefield,
+the moment feels like holding the line alone,
+wearing fur-lined travel gear,
+epic fantasy realism, cold color palette, sharp detail
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a solemn fantasy woman as the central figure, jet black hair cascading down her shoulders, silver-gray eyes,
+standing quietly amid ruins,
+off-center cinematic composition,
+soft ambient light mixed with drifting ash,
+inside a torch-lit cathedral interior,
+the scene suggests watching the world burn,
+wearing layered fantasy attire,
+dark fantasy realism, dramatic contrast, atmospheric depth
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+a serene fantasy priestess as the focal subject, golden blonde hair illuminated softly, glowing cyan eyes,
+kneeling in quiet focus while channeling magic,
+eye-level cinematic framing,
+ethereal ambient glow reflecting off crystal walls,
+inside a glowing underground sanctuary,
+the moment feels sacred and timeless,
+wearing embroidered arcane clothing,
+fantasy realism, luminous colors, elegant composition
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting
+
+<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+two allied fantasy women standing side by side as the clear focus, silver and raven black hair contrasting, amber and ice blue eyes,
+standing firm while preparing for battle,
+cinematic wide framing with subjects centered,
+dramatic rim lighting cutting through smoke,
+set on an ancient battlefield at dawn,
+the scene conveys the calm before the storm,
+wearing matching ornate plate armor,
+epic fantasy realism, strong silhouettes, cinematic storytelling
+<lora:add-detail-xl:0.4945054945054945> <lora:CinematicStyle_v1:0.5604395604395604> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting

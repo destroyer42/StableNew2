@@ -178,21 +178,22 @@ class LearningReviewPanel(ttk.Frame):
         image_ref = self.image_listbox.get(image_index)
 
         # Call controller to record rating
-        if hasattr(self.master, "learning_controller"):
-            controller = self.master.learning_controller
-            if hasattr(controller, "record_rating"):
-                try:
-                    controller.record_rating(image_ref, rating, notes)
-                    self.feedback_label.config(
-                        text="Rating saved successfully!", foreground="green"
-                    )
-                    # Clear form
-                    self.rating_var.set(0)
-                    self.notes_text.delete(1.0, tk.END)
-                except Exception as e:
-                    self.feedback_label.config(text=f"Error saving rating: {e}", foreground="red")
-            else:
-                self.feedback_label.config(text="Rating system not available", foreground="red")
+        # PR-LEARN-014: Check self.learning_controller first (set by learning_tab_frame)
+        controller = getattr(self, "learning_controller", None) or getattr(self.master, "learning_controller", None)
+        
+        if controller and hasattr(controller, "record_rating"):
+            try:
+                controller.record_rating(image_ref, rating, notes)
+                self.feedback_label.config(
+                    text="Rating saved successfully!", foreground="green"
+                )
+                # Clear form
+                self.rating_var.set(0)
+                self.notes_text.delete(1.0, tk.END)
+            except Exception as e:
+                self.feedback_label.config(text=f"Error saving rating: {e}", foreground="red")
+        elif controller:
+            self.feedback_label.config(text="Rating system not available", foreground="red")
         else:
             self.feedback_label.config(text="Controller not available", foreground="red")
 

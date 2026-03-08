@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
@@ -26,6 +28,11 @@ from .model_list_adapter_v2 import ModelListAdapterV2
 from .output_settings_panel_v2 import OutputSettingsPanelV2
 from .prompt_pack_adapter_v2 import PromptPackAdapterV2, PromptPackSummary
 from .prompt_pack_list_manager import PromptPackListManager
+
+logger = logging.getLogger(__name__)
+
+# PR-PERSIST-001: Sidebar state persistence
+SIDEBAR_STATE_PATH = Path("state") / "sidebar_state.json"
 
 
 class _SidebarCard(BaseStageCardV2):
@@ -140,19 +147,20 @@ class SidebarPanelV2(ttk.Frame):
         self._on_apply_pack = on_apply_pack
         self._on_change = on_change
 
+        # PR-DEFAULT-ADETAILER: Default to True for visibility
         adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", True))
         self.stage_states: dict[str, tk.BooleanVar] = {
             "txt2img": tk.BooleanVar(value=True),
-            "img2img": tk.BooleanVar(value=True),
+            "img2img": tk.BooleanVar(value=False),  # Fixed: was True, should be False
             "adetailer": tk.BooleanVar(value=adetailer_default),
-            "upscale": tk.BooleanVar(value=True),
+            "upscale": tk.BooleanVar(value=False),  # Fixed: was True, should be False
         }
         self.run_mode_var = tk.StringVar(value="direct")
         self.run_scope_var = tk.StringVar(value="full")
 
         self.columnconfigure(0, weight=1)
-        # PR-GUI-H: Now 5 rows (0-4) after removing standalone config_source_label
-        for i in range(5):
+        # PR-GUI-H: Now 6 rows (0-5) including reprocess panel
+        for i in range(6):
             self.rowconfigure(i, weight=1 if i >= 1 else 0)
 
         # PR-GUI-H: config_source_label moved into Pipeline Presets panel
@@ -195,6 +203,9 @@ class SidebarPanelV2(ttk.Frame):
         self.global_negative_text_var = tk.StringVar(value="")
         self.global_positive_enabled_var = tk.BooleanVar(value=False)
         self.global_positive_text_var = tk.StringVar(value="")
+        
+        # Override checkbox for pack config override
+        self.override_pack_config_var = tk.BooleanVar(value=False)
         
         # Load global prompts from config manager
         try:
@@ -262,6 +273,29 @@ class SidebarPanelV2(ttk.Frame):
             build_child=lambda parent: OutputSettingsPanelV2(parent, embed_mode=True),
         )
         self.output_settings_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
+        
+        # Reprocess panel for sending existing images through pipeline stages
+        # Import inside lambda to avoid circular import at module load time
+        def _build_reprocess_panel(parent):
+            from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
+            return ReprocessPanelV2(
+                parent,
+                controller=self.controller,
+                app_state=self.app_state,
+                embed_mode=True,
+            )
+        
+        self.reprocess_card = _SidebarCard(
+            self,
+            title="Reprocess Images",
+            build_child=_build_reprocess_panel,
+            collapsible=True,
+        )
+        self.reprocess_panel = self.reprocess_card.child
+        self.reprocess_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
+        
+        # PR-PERSIST-001: Restore saved state
+        self.restore_state()
 
     def _build_preset_actions_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
@@ -280,7 +314,7 @@ class SidebarPanelV2(ttk.Frame):
         self.preset_combo.grid(row=0, column=0, sticky="ew")
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_selected)
 
-        self.preset_menu_button = ttk.Menubutton(combo_frame, text="Actions", direction="below")
+        self.preset_menu_button = ttk.Menubutton(combo_frame, text="Actions", direction="below", style="Dark.TButton")
         self.preset_menu_button.grid(row=0, column=1, padx=(4, 0))
         self.preset_dropdown = self.preset_menu_button
         self.preset_menu = tk.Menu(self.preset_menu_button, tearoff=0)
@@ -307,7 +341,7 @@ class SidebarPanelV2(ttk.Frame):
             text="+ New",
             width=8,
             command=self._create_preset_from_stages,
-            style="Primary.TButton",
+            style="Dark.TButton",
         )
         create_button.grid(row=0, column=0, sticky="w")
 
@@ -362,19 +396,20 @@ class SidebarPanelV2(ttk.Frame):
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
 
-        # PR-GUI-H: Add prompt text and restore button (moved from actions_card in pipeline_tab_frame)
+        # PR-GUI-H: Add prompt text and refresh button (moved from actions_card in pipeline_tab_frame)
         prompt_row = ttk.Frame(frame)
         prompt_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         prompt_row.columnconfigure(0, weight=1)
         self.prompt_text = tk.Entry(prompt_row)
         self.prompt_text.grid(row=0, column=0, sticky="ew")
-        self.restore_last_run_button = ttk.Button(
+        self.refresh_packs_button = ttk.Button(
             prompt_row,
-            text="Restore",
+            text="Refresh",
             width=8,
-            command=self._on_restore_last_run,
+            command=self.refresh_prompt_packs,
+            style="Dark.TButton",
         )
-        self.restore_last_run_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self.refresh_packs_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=1, column=0, sticky="ew", pady=(0, 4))
@@ -383,19 +418,19 @@ class SidebarPanelV2(ttk.Frame):
         btn_frame.columnconfigure(2, weight=1)
         btn_frame.columnconfigure(3, weight=1)
         self.load_config_button = ttk.Button(
-            btn_frame, text="Load Config", command=self._on_pack_load_config
+            btn_frame, text="Load Config", command=self._on_pack_load_config, style="Dark.TButton"
         )
         self.load_config_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
         self.apply_config_button = ttk.Button(
-            btn_frame, text="Apply Config", command=self._on_pack_apply_config
+            btn_frame, text="Apply Config", command=self._on_pack_apply_config, style="Dark.TButton"
         )
         self.apply_config_button.grid(row=0, column=1, sticky="ew", padx=(0, 2))
         self.add_to_job_button = ttk.Button(
-            btn_frame, text="Add to Job", command=self._on_add_to_job
+            btn_frame, text="Add to Job", command=self._on_add_to_job, style="Dark.TButton"
         )
         self.add_to_job_button.grid(row=0, column=2, sticky="ew", padx=(0, 2))
         self.preview_toggle_button = ttk.Button(
-            btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED
+            btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED, style="Dark.TButton"
         )
         self.preview_toggle_button.grid(row=0, column=3, sticky="ew")
 
@@ -653,18 +688,18 @@ class SidebarPanelV2(ttk.Frame):
         PR-CORE-D/E: PromptPack-only architecture - button should only be enabled when pack(s) selected.
         Routes to controller's on_pipeline_add_packs_to_job.
         """
-        print("[SidebarPanel] _on_add_to_job called")
+        logger.debug("[SidebarPanel] _on_add_to_job called")
         if not self.pack_listbox:
-            print("[SidebarPanel] No pack_listbox, returning")
+            logger.debug("[SidebarPanel] No pack_listbox, returning")
             return
 
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         controller = self.controller
-        print(f"[SidebarPanel] Selection: {selection}, Controller: {controller}")
+        logger.debug(f"[SidebarPanel] Selection: {selection}, Controller: {controller}")
 
         # PromptPack-only: This should not execute if button state is correct, but guard anyway
         if not selection:
-            print("[SidebarPanel] No selection, falling back to single prompt handler")
+            logger.debug("[SidebarPanel] No selection, falling back to single prompt handler")
             if controller and hasattr(controller, "add_single_prompt_to_draft"):
                 try:
                     controller.add_single_prompt_to_draft()
@@ -676,19 +711,19 @@ class SidebarPanelV2(ttk.Frame):
         pack_ids = [
             self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
         ]
-        print(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
+        logger.debug(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
         if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
-            print(f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})")
+            logger.debug(f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})")
             try:
                 controller.on_pipeline_add_packs_to_job(pack_ids)
-                print("[SidebarPanel] Successfully called on_pipeline_add_packs_to_job")
+                logger.debug("[SidebarPanel] Successfully called on_pipeline_add_packs_to_job")
             except Exception as e:
                 import logging
 
-                print(f"[SidebarPanel] EXCEPTION: {e}")
+                logger.debug(f"[SidebarPanel] EXCEPTION: {e}")
                 logging.exception(f"Error adding packs to job: {e}")
         else:
-            print(
+            logger.debug(
                 "[SidebarPanel] Controller missing or doesn't have on_pipeline_add_packs_to_job method"
             )
 
@@ -837,10 +872,18 @@ class SidebarPanelV2(ttk.Frame):
     def refresh_prompt_packs(self) -> None:
         if not self.prompt_pack_adapter:
             return
+        # Clear preview cache to force reload
+        self._preview_cache.clear()
+        # Reload packs from disk
         self._load_prompt_summaries()
         self.pack_list_manager.refresh()  # type: ignore[no-untyped-call]
         self._set_pack_list_values(self.pack_list_manager.get_list_names())
         self._populate_packs_for_selected_list()
+        # Show brief visual feedback
+        if hasattr(self, 'refresh_packs_button'):
+            original_text = self.refresh_packs_button.cget('text')
+            self.refresh_packs_button.configure(text="✓ Refreshed")
+            self.after(1500, lambda: self.refresh_packs_button.configure(text=original_text))
 
     def set_pack_names(self, names: list[str]) -> None:
         """Best-effort helper for simple string lists (used by AppController)."""
@@ -936,6 +979,7 @@ class SidebarPanelV2(ttk.Frame):
                 pass
 
     def _build_stages_section(self, parent: ttk.Frame) -> ttk.Frame:
+        """Build stages section with horizontal 2-column layout."""
         frame = ttk.Frame(parent)
         for idx, stage in enumerate(self._STAGE_ORDER):
             var = self.stage_states.get(stage)
@@ -953,7 +997,10 @@ class SidebarPanelV2(ttk.Frame):
                 command=make_toggle_command(stage),
                 style="Dark.TCheckbutton",
             )
-            cb.grid(row=idx, column=0, sticky="w", pady=2)
+            # 2-column layout: row = idx // 2, column = idx % 2
+            row = idx // 2
+            col = idx % 2
+            cb.grid(row=row, column=col, sticky="w", pady=2, padx=(0, 12))
         return frame
 
     def _on_stage_toggle(self, stage: str) -> None:
@@ -965,6 +1012,17 @@ class SidebarPanelV2(ttk.Frame):
         if controller and hasattr(controller, "on_stage_toggled"):
             try:
                 controller.on_stage_toggled(stage, enabled)
+            except Exception:
+                pass
+        self._emit_change()
+
+    def _on_override_changed(self) -> None:
+        """Called when override pack config checkbox state changes."""
+        enabled = bool(self.override_pack_config_var.get())
+        controller = self.controller
+        if controller and hasattr(controller, "on_override_pack_config_changed"):
+            try:
+                controller.on_override_pack_config_changed(enabled)
             except Exception:
                 pass
         self._emit_change()
@@ -1012,18 +1070,30 @@ class SidebarPanelV2(ttk.Frame):
         return frame
 
     def _build_pipeline_config_section(self, parent: ttk.Frame) -> ttk.Frame:
-        """DEPRECATED (PR-CORE1-12): Pipeline config section no longer used.
+        """Pipeline config section with override checkbox and stage toggles.
 
-        This method built a PipelineConfigPanel which is now archived. The panel
-        was wired to pipeline_config execution, which is removed in v2.6.
-
-        Consider removing this method entirely in future cleanup.
+        PR-CORE1-12: PipelineConfigPanel archived - now using direct stage toggles.
+        Added override checkbox to control whether current stage configs override pack configs.
         """
         # PR-CORE1-12: PipelineConfigPanel archived - no longer wired
         # from src.gui.panels_v2.pipeline_config_panel_v2 import PipelineConfigPanel
 
         # Create a frame to hold the pipeline config panel and stage toggles
         frame = ttk.Frame(parent)
+        
+        # Override checkbox section
+        override_frame = ttk.Frame(frame)
+        override_frame.pack(fill="x", pady=(0, 8))
+        override_cb = ttk.Checkbutton(
+            override_frame,
+            text="Override pack configs with current stages",
+            variable=self.override_pack_config_var,
+            command=self._on_override_changed,
+            style="Dark.TCheckbutton",
+        )
+        override_cb.pack(anchor="w")
+        
+        # Stage toggles section
         stage_section = ttk.Frame(frame)
         stage_section.pack(fill="x", pady=(0, 8))
         header = ttk.Label(stage_section, text="Stages", style=HEADING_LABEL_STYLE)
@@ -1226,6 +1296,84 @@ class SidebarPanelV2(ttk.Frame):
         if panel:
             return panel.get_output_overrides()  # type: ignore
         return {}
+
+    # PR-PERSIST-001: State persistence methods
+    def save_state(self) -> None:
+        """Save sidebar state to disk."""
+        try:
+            # Get selected pack names
+            selected_packs = []
+            if self.pack_listbox:
+                selection = self.pack_listbox.curselection()
+                selected_packs = [
+                    self._current_pack_names[i]
+                    for i in selection
+                    if i < len(self._current_pack_names)
+                ]
+            
+            state = {
+                "selected_list": self.pack_list_var.get() if hasattr(self, "pack_list_var") else "",
+                "selected_packs": selected_packs,
+                "prompt_text": self.prompt_text.get() if hasattr(self, "prompt_text") else "",
+                "schema_version": "2.6"
+            }
+            SIDEBAR_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            SIDEBAR_STATE_PATH.write_text(json.dumps(state, indent=2))
+        except Exception as e:
+            logger.warning(f"Failed to save sidebar state: {e}")
+
+    def restore_state(self) -> None:
+        """Restore sidebar state from disk."""
+        if not SIDEBAR_STATE_PATH.exists():
+            return
+        
+        try:
+            state = json.loads(SIDEBAR_STATE_PATH.read_text())
+            
+            # Validate schema version
+            if state.get("schema_version") != "2.6":
+                logger.warning("Unsupported sidebar state schema, ignoring")
+                return
+            
+            # Restore prompt text
+            prompt_text = state.get("prompt_text", "")
+            if prompt_text and hasattr(self, "prompt_text"):
+                self.prompt_text.delete(0, tk.END)
+                self.prompt_text.insert(0, prompt_text)
+            
+            # Restore selected list
+            selected_list = state.get("selected_list", "")
+            if selected_list and hasattr(self, "pack_list_var"):
+                if selected_list in self.pack_list_names:
+                    self.pack_list_var.set(selected_list)
+                    self._populate_packs_for_selected_list()
+            
+            # Restore selected packs (defer to next frame to ensure listbox is populated)
+            selected_packs = state.get("selected_packs", [])
+            if selected_packs and hasattr(self, "pack_listbox"):
+                def restore_selection():
+                    try:
+                        self.pack_listbox.selection_clear(0, tk.END)
+                        for pack_name in selected_packs:
+                            if pack_name in self._current_pack_names:
+                                idx = self._current_pack_names.index(pack_name)
+                                self.pack_listbox.selection_set(idx)
+                    except Exception as e:
+                        logger.warning(f"Failed to restore pack selection: {e}")
+                
+                self.after(100, restore_selection)
+            
+            logger.debug(f"Restored sidebar state: {len(selected_packs)} packs selected")
+        except Exception as e:
+            logger.warning(f"Failed to restore sidebar state: {e}")
+
+    def destroy(self) -> None:
+        """Override destroy to save state before cleanup."""
+        try:
+            self.save_state()
+        except Exception:
+            pass
+        super().destroy()
 
 
 __all__ = ["SidebarPanelV2"]

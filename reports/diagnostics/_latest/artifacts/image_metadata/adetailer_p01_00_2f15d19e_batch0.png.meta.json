@@ -1,0 +1,39 @@
+{
+  "status": "ok",
+  "payload": {
+    "image": {
+      "format": "png",
+      "height": 1280,
+      "path": "adetailer_p01_00_2f15d19e_batch0.png",
+      "width": 768
+    },
+    "job_id": "4a2db624623e4d2293cf048e4b9f312b",
+    "njr": {
+      "sha256": "04f9a1b8b33ad970ebd9532cfcdfea3ccb38e5b7dceadf99de925bc6a1946ec9",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20251224_231442_CrazyCoolVariety",
+    "seeds": {
+      "actual_seed": 1287383136,
+      "actual_subseed": 2492149147,
+      "requested_seed": -1
+    },
+    "stage": "adetailer",
+    "stage_manifest": {
+      "config_hash": "0e760792f6f41779adbe8a8930dd4d13fe84e7bd561843bd9630be052094d093",
+      "name": "adetailer_p01_00_2f15d19e_batch0",
+      "timestamp": "20251224_231602"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "4a2db624623e4d2293cf048e4b9f312b",
+    "stablenew:run_id": "20251224_231442_CrazyCoolVariety",
+    "stablenew:stage": "adetailer",
+    "stablenew:created_utc": "2025-12-25T05:16:02.308401+00:00",
+    "stablenew:payload_sha256": "2176729d33cd4405dfabd52476b6b883d4459ce61fe9805deac29030c6b2d231",
+    "stablenew:payload": "{\"image\":{\"format\":\"png\",\"height\":1280,\"path\":\"adetailer_p01_00_2f15d19e_batch0.png\",\"width\":768},\"job_id\":\"4a2db624623e4d2293cf048e4b9f312b\",\"njr\":{\"sha256\":\"04f9a1b8b33ad970ebd9532cfcdfea3ccb38e5b7dceadf99de925bc6a1946ec9\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20251224_231442_CrazyCoolVariety\",\"seeds\":{\"actual_seed\":1287383136,\"actual_subseed\":2492149147,\"requested_seed\":-1},\"stage\":\"adetailer\",\"stage_manifest\":{\"config_hash\":\"0e760792f6f41779adbe8a8930dd4d13fe84e7bd561843bd9630be052094d093\",\"name\":\"adetailer_p01_00_2f15d19e_batch0\",\"timestamp\":\"20251224_231602\"}}",
+    "stablenew:njr_sha256": "04f9a1b8b33ad970ebd9532cfcdfea3ccb38e5b7dceadf99de925bc6a1946ec9"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20251224_231442_CrazyCoolVariety\\adetailer_p01_00_2f15d19e_batch0.png"
+}

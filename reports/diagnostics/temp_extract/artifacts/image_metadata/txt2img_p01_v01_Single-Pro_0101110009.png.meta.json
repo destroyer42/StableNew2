@@ -1,0 +1,82 @@
+{
+  "status": "ok",
+  "payload": {
+    "generation": {
+      "cfg_scale": 6.499999999999998,
+      "clip_skip": 2,
+      "denoising_strength": 0.7,
+      "height": 1408,
+      "negative_prompt": "blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 34,
+      "width": 1024
+    },
+    "image": {
+      "format": "png",
+      "height": 1408,
+      "path": "txt2img_p01_v01_Single-Pro_0101110009.png",
+      "width": 1024
+    },
+    "job_id": "8910b176309d4f6a9bf4291cb54576b1",
+    "njr": {
+      "sha256": "d74cedfc27434663cf4450c4a6e638e2d5ab25923108b7cb37a63fec94886b04",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "seeds": {},
+    "stage": "txt2img",
+    "stage_history": [],
+    "stage_manifest": {
+      "config": {
+        "batch_size": 1,
+        "cfg_scale": 6.499999999999998,
+        "clip_skip": 2,
+        "denoising_strength": 0.7,
+        "do_not_save_grid": null,
+        "do_not_save_samples": null,
+        "enable_hr": false,
+        "height": 1408,
+        "hr_resize_x": 0,
+        "hr_resize_y": 0,
+        "hr_scale": 2.0,
+        "hr_second_pass_steps": 0,
+        "hr_upscaler": "Latent",
+        "n_iter": 1,
+        "negative_prompt": "blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
+        "prompt": "<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> close up, portrait, a highly detailed fantasy scene centered on a single central figure, a female figure as the clear primary subject, standing firm while invoking ancient power, captured from a cinematic wide framing with subject centered, lit by glowing magical light, set within a visually rich ancient stone ruins, the scene conveys moments after victory, wearing nothing but a g-string, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.26249999999999996> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963>",
+        "restore_faces": null,
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": -1,
+        "seed_resize_from_h": -1,
+        "seed_resize_from_w": -1,
+        "steps": 34,
+        "subseed": -1,
+        "subseed_strength": 0.5,
+        "tiling": null,
+        "width": 1024
+      },
+      "config_hash": "9e1a97b372f469e3221ff6f747f2ed25c5a6a93a5fce9cca9b8b0b36f4603823",
+      "model": "Unknown",
+      "name": "txt2img_p01_v01_Single-Pro_0101110009",
+      "negative_prompt": "",
+      "prompt": "",
+      "seeds": {},
+      "stage": "txt2img",
+      "timestamp": "20260101_110047",
+      "vae": "Automatic"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "8910b176309d4f6a9bf4291cb54576b1",
+    "stablenew:run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "stablenew:stage": "txt2img",
+    "stablenew:created_utc": "2026-01-01T17:00:47.206638+00:00",
+    "stablenew:payload_sha256": "82ae06f17efad5782b3c8eaa604bb117fd4ac85dd7352b1f40fa9d087ed6f3c1",
+    "stablenew:payload": "{\"generation\":{\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"height\":1408,\"negative_prompt\":\"blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":34,\"width\":1024},\"image\":{\"format\":\"png\",\"height\":1408,\"path\":\"txt2img_p01_v01_Single-Pro_0101110009.png\",\"width\":1024},\"job_id\":\"8910b176309d4f6a9bf4291cb54576b1\",\"njr\":{\"sha256\":\"d74cedfc27434663cf4450c4a6e638e2d5ab25923108b7cb37a63fec94886b04\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20260101_104229_Single-Prompt-Xtra-Crazy\",\"seeds\":{},\"stage\":\"txt2img\",\"stage_history\":[],\"stage_manifest\":{\"config\":{\"batch_size\":1,\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"do_not_save_grid\":null,\"do_not_save_samples\":null,\"enable_hr\":false,\"height\":1408,\"hr_resize_x\":0,\"hr_resize_y\":0,\"hr_scale\":2.0,\"hr_second_pass_steps\":0,\"hr_upscaler\":\"Latent\",\"n_iter\":1,\"negative_prompt\":\"blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes\",\"prompt\":\"<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> close up, portrait, a highly detailed fantasy scene centered on a single central figure, a female figure as the clear primary subject, standing firm while invoking ancient power, captured from a cinematic wide framing with subject centered, lit by glowing magical light, set within a visually rich ancient stone ruins, the scene conveys moments after victory, wearing nothing but a g-string, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.26249999999999996> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963>\",\"restore_faces\":null,\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":-1,\"seed_resize_from_h\":-1,\"seed_resize_from_w\":-1,\"steps\":34,\"subseed\":-1,\"subseed_strength\":0.5,\"tiling\":null,\"width\":1024},\"config_hash\":\"9e1a97b372f469e3221ff6f747f2ed25c5a6a93a5fce9cca9b8b0b36f4603823\",\"model\":\"Unknown\",\"name\":\"txt2img_p01_v01_Single-Pro_0101110009\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{},\"stage\":\"txt2img\",\"timestamp\":\"20260101_110047\",\"vae\":\"Automatic\"}}",
+    "stablenew:njr_sha256": "d74cedfc27434663cf4450c4a6e638e2d5ab25923108b7cb37a63fec94886b04"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20260101_104229_Single-Prompt-Xtra-Crazy\\txt2img_p01_v01_Single-Pro_0101110009.png"
+}

@@ -57,48 +57,117 @@ class PipelineRunner:
         Execute the pipeline using a NormalizedJobRecord (NJR-only, v2.6+ contract).
         This is the ONLY supported production entrypoint.
         """
+        if hasattr(self._pipeline, "_begin_run_metrics"):
+            self._pipeline._begin_run_metrics()
+        # Best-effort VRAM refresh before every job to avoid long-run buildup.
+        try:
+            client = getattr(self._pipeline, "client", None)
+            if client and hasattr(client, "free_vram"):
+                logger.info("Freeing VRAM caches before job execution.")
+                client.free_vram(unload_model=False)
+        except Exception:
+            pass
         # Build run plan directly from NJR
         from src.pipeline.run_plan import build_run_plan_from_njr
 
         plan = build_run_plan_from_njr(njr)
         
-        # Prepare output dir with datetime_packname structure (flat)
-        # Format: output/{YYYYMMDD_HHMMSS}_{pack_name}/
-        # All jobs from the same pack share the same folder (cached for 30 minutes)
+        # Prepare output dir with pack-model-vae naming structure
+        # Format: output/{pack_12chars}-{model_10+5chars}-{vae_12chars}/
+        # Jobs from the same pack+model+vae share folder within cache timeout
+        # Learning experiments always share folder (by experiment_id)
         pack_name = getattr(njr, "prompt_pack_name", "") or getattr(njr, "job_id", "unknown")
-        # Sanitize pack name for filesystem
-        safe_pack_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in pack_name)
         
-        # Check cache for existing folder for this pack
+        # Extract model and VAE from config
+        config = njr.config or {}
+        model_name = config.get("txt2img", {}).get("model") or config.get("txt2img", {}).get("sd_model_checkpoint") or njr.base_model or "unknown"
+        vae_name = config.get("txt2img", {}).get("vae") or njr.vae or "none"
+        
+        # Helper function to sanitize names for filesystem
+        def sanitize_for_fs(name: str) -> str:
+            """Sanitize string for filesystem, keeping only alphanumeric, dash, underscore."""
+            return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in name)
+        
+        # Helper function to shorten model name (first 10 + last 5 chars)
+        def shorten_model_name(name: str) -> str:
+            """Shorten model name to first 10 + last 5 characters."""
+            # Remove common extensions first
+            for ext in [".safetensors", ".ckpt", ".pt"]:
+                if name.lower().endswith(ext):
+                    name = name[:-len(ext)]
+                    break
+            if len(name) <= 15:
+                return name
+            return name[:10] + name[-5:]
+        
+        # Build folder name components
+        pack_part = sanitize_for_fs(pack_name[:12])
+        model_part = sanitize_for_fs(shorten_model_name(model_name))
+        vae_part = sanitize_for_fs(vae_name[:12]) if vae_name.lower() not in ["none", "", "automatic"] else "none"
+        
+        # Determine cache key based on learning context or pack+model+vae
+        learning_context = getattr(njr, "learning_context", None)
+        
+        if learning_context:
+            # Learning experiments: use experiment_id so all variants share same folder
+            cache_key = f"learning_{learning_context.experiment_id}"
+            folder_name = f"learning_{sanitize_for_fs(learning_context.experiment_id)}"
+            logger.debug(f"Using learning experiment folder: {cache_key}")
+        else:
+            # Regular jobs: folder name includes pack+model+vae for clarity
+            folder_name = f"{pack_part}-{model_part}-{vae_part}"
+            cache_key = folder_name
+            logger.debug(f"Using pack-model-vae folder: {folder_name}")
+        
+        # Check cache for existing folder for this pack+model+vae
         now = datetime.now()
-        cached_entry = PipelineRunner._pack_folder_cache.get(safe_pack_name)
+        cached_entry = PipelineRunner._pack_folder_cache.get(cache_key)
         
         if cached_entry:
             timestamp_created, run_dir = cached_entry
             # Reuse if created within timeout window
             if (now - timestamp_created).total_seconds() < (PipelineRunner._folder_cache_timeout_minutes * 60):
-                logger.info(f"♻️ Reusing existing folder for pack '{pack_name}': {run_dir}")
+                logger.info(f"♻️ Reusing existing folder: {run_dir}")
                 run_id = run_dir.name  # Use existing folder name as run_id
             else:
-                # Cache expired, create new folder
-                logger.info(f"⏰ Cache expired for pack '{pack_name}', creating new folder")
+                # Cache expired, create new folder with timestamp prefix
+                logger.info(f"⏰ Cache expired, creating new folder")
                 timestamp = now.strftime("%Y%m%d_%H%M%S")
-                run_id = f"{timestamp}_{safe_pack_name}"
+                run_id = f"{timestamp}_{folder_name}"
                 run_dir = Path(self._runs_base_dir) / run_id
                 run_dir.mkdir(parents=True, exist_ok=True)
-                PipelineRunner._pack_folder_cache[safe_pack_name] = (now, run_dir)
+                PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
         else:
-            # No cached folder, create new one
+            # No cached folder, create new one with timestamp prefix
             timestamp = now.strftime("%Y%m%d_%H%M%S")
-            run_id = f"{timestamp}_{safe_pack_name}"
+            run_id = f"{timestamp}_{folder_name}"
             run_dir = Path(self._runs_base_dir) / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
-            PipelineRunner._pack_folder_cache[safe_pack_name] = (now, run_dir)
-            logger.info(f"📁 Created new folder for pack '{pack_name}': {run_dir}")
+            PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
+            logger.info(f"📁 Created new folder: {run_dir}")
         
         # Create manifests subfolder for JSON metadata
         manifests_dir = run_dir / "manifests"
         manifests_dir.mkdir(exist_ok=True)
+        
+        logger.info(f"🎯 [OUTPUT_PATH] Images will be saved to: {run_dir.absolute()}")
+        logger.info(f"🎯 [OUTPUT_PATH] Manifests will be saved to: {manifests_dir.absolute()}")
+        
+        # PR-PIPE-001: Set current job ID on executor for manifest tracking
+        self._pipeline._current_job_id = njr.job_id
+        try:
+            from src.utils.image_metadata import canonical_json_bytes, sha256_hex
+
+            snapshot = njr.to_queue_snapshot()
+            self._pipeline._current_njr_sha256 = sha256_hex(canonical_json_bytes(snapshot))
+        except Exception:
+            self._pipeline._current_njr_sha256 = None
+        
+        # Initialize stage tracking for runtime status
+        stage_chain = [stage.stage_name for stage in plan.jobs]
+        self._pipeline._current_stage_chain = stage_chain
+        self._pipeline._current_stage_index = 0
+        
         stage_events: list[dict[str, Any]] = []
         success = False
         error = None
@@ -113,7 +182,41 @@ class PipelineRunner:
             prompt = getattr(njr, "positive_prompt", "") or ""
             negative_prompt = getattr(njr, "negative_prompt", "") or ""
             
+            # REPROCESSING SUPPORT: Check if this is a reprocessing job
+            # If input_image_paths are provided, use them as starting images
+            input_images = getattr(njr, "input_image_paths", None) or []
+            start_stage = getattr(njr, "start_stage", None)
+            if input_images:
+                current_stage_paths = list(input_images)
+                logger.info(f"🔄 [REPROCESS] Starting with {len(current_stage_paths)} input images: {[str(p) for p in input_images[:3]]}")
+                # Verify input files exist
+                for img_path in input_images:
+                    if not Path(img_path).exists():
+                        logger.error(f"🔄 [REPROCESS] ERROR: Input image not found: {img_path}")
+                        raise FileNotFoundError(f"Reprocess input image not found: {img_path}")
+                if start_stage:
+                    logger.info(f"🔄 [REPROCESS] Will start from stage: {start_stage}")
+            else:
+                logger.info("🔵 [PIPELINE] Normal job (not reprocessing)")
+            
+            # Track whether we've reached the start_stage (for reprocessing mode)
+            reached_start_stage = (start_stage is None)  # If no start_stage, begin immediately
+            
             for stage in plan.jobs:
+                # REPROCESSING: Skip stages before start_stage
+                if not reached_start_stage:
+                    if stage.stage_name == start_stage:
+                        # We've reached the start stage, process this and all subsequent stages
+                        reached_start_stage = True
+                    else:
+                        # Skip this stage - we haven't reached start_stage yet
+                        logger.info(f"⏭️  [REPROCESS] Skipping stage '{stage.stage_name}' (before start_stage '{start_stage}')")
+                        # Don't increment stage_index when skipping
+                        continue
+                
+                # Increment stage index for runtime status tracking
+                # (Will be reset to 0 at the start of next NJR execution)
+                
                 # Dispatch to the appropriate stage executor based on stage_name
                 if stage.stage_name == "txt2img":
                     # Build payload for txt2img
@@ -154,18 +257,31 @@ class PipelineRunner:
                             payload["hr_resize_x"] = njr_config["hr_resize_x"]
                         if njr_config.get("hr_resize_y"):
                             payload["hr_resize_y"] = njr_config["hr_resize_y"]
+                        if njr_config.get("hires_use_base_model") is not None:
+                            payload["hires_use_base_model"] = njr_config["hires_use_base_model"]
+                        if njr_config.get("hr_checkpoint_name"):
+                            payload["hr_checkpoint_name"] = njr_config["hr_checkpoint_name"]
                     
-                    # Add refiner settings from NJR config if present
-                    if njr_config.get("refiner_checkpoint"):
+                    # Add refiner settings only if use_refiner is explicitly True
+                    if njr_config.get("use_refiner") and njr_config.get("refiner_checkpoint"):
+                        payload["use_refiner"] = True  # Propagate flag so executor can see it
                         payload["refiner_checkpoint"] = njr_config["refiner_checkpoint"]
                         payload["refiner_switch_at"] = njr_config.get("refiner_switch_at", 0.8)
                     
                     # Add other settings that might be in config
+                    # PR-LEARN-012: Check NJR attributes if not in config (learning jobs have seed at NJR level)
                     for key in ["clip_skip", "seed", "subseed", "subseed_strength",
                                 "seed_resize_from_h", "seed_resize_from_w",
-                                "restore_faces", "tiling", "do_not_save_samples", "do_not_save_grid"]:
+                                "restore_faces", "tiling", "do_not_save_samples", "do_not_save_grid",
+                                "vae"]:
                         if key in njr_config:
                             payload[key] = njr_config[key]
+                        elif hasattr(njr, key) and getattr(njr, key) is not None:
+                            # Fallback to NJR attribute if not in config dict
+                            payload[key] = getattr(njr, key)
+                        elif hasattr(njr, 'extra_metadata') and isinstance(njr.extra_metadata, dict) and key in njr.extra_metadata:
+                            # Fallback to extra_metadata for learning jobs
+                            payload[key] = njr.extra_metadata[key]
                     
                     # Debug logging for hires fix
                     logger.info("🔵 [HIRES_DEBUG] payload: enable_hr=%s, hr_scale=%s, hr_upscaler=%s, hr_second_pass_steps=%s, denoise=%s",
@@ -178,12 +294,28 @@ class PipelineRunner:
                     logger.info("🔵 [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s", payload.get('batch_size'))
                     # Include prompt pack row index in naming to prevent overwrites
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build safe filename with human-readable identifiers (PR-FILENAME-001)
+                    from src.utils.file_io import build_safe_image_name
+                    # Use 1-based indexing to match GUI display (p01 = "Prompt 1", v01 = "Variant 1")
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
+                    seed = payload.get("seed")
+                    image_name = build_safe_image_name(
+                        base_prefix=base_prefix,
+                        matrix_values=matrix_values,
+                        seed=seed,
+                        pack_name=pack_name,
+                        max_length=100  # Conservative limit for Windows paths
+                    )
+                    
                     result = self._pipeline.run_txt2img_stage(
                         payload["prompt"],
                         payload["negative_prompt"],
                         payload,
                         run_dir,
-                        image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}",
+                        image_name=image_name,
                         cancel_token=cancel_token,
                     )
                     # Extract ALL image paths from metadata for batch processing
@@ -196,8 +328,78 @@ class PipelineRunner:
                     else:
                         current_stage_paths = []
                     
-                    variants.append(result)
+                    # Only append non-None results to variants
+                    if result is not None:
+                        variants.append(result)
                     last_result = result
+                    
+                elif stage.stage_name == "img2img":
+                    if not current_stage_paths:
+                        logger.warning("img2img stage skipped: no input images from previous stage")
+                        continue
+                    
+                    # Get stage config from njr.stage_chain
+                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "img2img"), None)
+                    if stage_config:
+                        config_dict = asdict(stage_config)
+                        # Flatten 'extra' dict to top level for executor
+                        if "extra" in config_dict:
+                            config_dict.update(config_dict.pop("extra"))
+                    else:
+                        config_dict = {}
+                    
+                    # Add scheduler from NJR if present
+                    if njr.scheduler:
+                        config_dict["scheduler"] = njr.scheduler
+                    
+                    # Process ALL images from previous stage through img2img
+                    next_stage_paths = []
+                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
+                    from src.utils.file_io import build_safe_image_name
+                    from pathlib import Path as PathLib
+                    # Use 1-based indexing to match GUI display
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
+                    
+                    # For reprocess jobs, get original input filename for uniqueness
+                    original_inputs = getattr(njr, 'input_image_paths', None)
+                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
+                    
+                    for img_idx, input_path in enumerate(current_stage_paths):
+                        logger.info(f"🔵 [BATCH_PIPELINE] Processing img2img for image {img_idx + 1}/{len(current_stage_paths)}")
+                        # For reprocess jobs, include original filename to prevent collisions
+                        if use_original_name and img_idx < len(original_inputs):
+                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]  # First 30 chars of original filename
+                            unique_prefix = f"{base_prefix}_{input_stem}"
+                        else:
+                            unique_prefix = base_prefix
+                        image_name = build_safe_image_name(
+                            base_prefix=unique_prefix,
+                            matrix_values=matrix_values,
+                            seed=None,
+                            batch_index=img_idx,
+                            pack_name=pack_name,
+                            max_length=100
+                        )
+                        result = self._pipeline.run_img2img_stage(
+                            input_image_path=Path(input_path),
+                            prompt=prompt,
+                            config=config_dict,
+                            output_dir=run_dir,
+                            image_name=image_name,
+                            cancel_token=cancel_token,
+                        )
+                        # Collect output path from this image
+                        if result and "path" in result:
+                            next_stage_paths.append(result["path"])
+                        variants.append(result)
+                    
+                    # Update current_stage_paths for next stage
+                    current_stage_paths = next_stage_paths
+                    logger.info(f"🔵 [BATCH_PIPELINE] img2img completed {len(current_stage_paths)} images")
                     
                 elif stage.stage_name == "adetailer":
                     if not current_stage_paths:
@@ -227,6 +429,10 @@ class PipelineRunner:
                     
                     # Debug logging
                     logger.info("🔵 [ADETAILER_CONFIG_DEBUG] config_dict keys: %s", list(config_dict.keys()))
+                    logger.info("🔵 [ADETAILER_CONFIG_DEBUG] adetailer_steps=%s, adetailer_denoise=%s, adetailer_cfg=%s",
+                               config_dict.get("adetailer_steps", "NOT SET"),
+                               config_dict.get("adetailer_denoise", "NOT SET"),
+                               config_dict.get("adetailer_cfg", "NOT SET"))
                     logger.info("🔵 [ADETAILER_PROMPT_DEBUG] adetailer_prompt='%s', adetailer_negative='%s'",
                                config_dict.get("adetailer_prompt", "(not set)")[:60],
                                config_dict.get("adetailer_negative_prompt", "(not set)")[:60])
@@ -234,21 +440,73 @@ class PipelineRunner:
                     # Process ALL images from previous stage through adetailer
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
+                    from src.utils.file_io import build_safe_image_name
+                    from pathlib import Path as PathLib
+                    # Use 1-based indexing to match GUI display
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
+                    
+                    # For reprocess jobs, get original input filename for uniqueness
+                    original_inputs = getattr(njr, 'input_image_paths', None)
+                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
+                    
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing adetailer for image {img_idx + 1}/{len(current_stage_paths)}")
+                        
+                        # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
+                        if use_original_name and img_idx > 0:  # Not first image (first one is fresh)
+                            try:
+                                if client and hasattr(client, "free_vram"):
+                                    logger.info("🧹 Freeing VRAM BEFORE adetailer image...")
+                                    client.free_vram(unload_model=True)
+                                    import time
+                                    time.sleep(1.0)  # Give WebUI time to stabilize
+                            except Exception:
+                                pass  # Non-fatal
+                        
+                        # For reprocess jobs, include original filename to prevent collisions
+                        if use_original_name and img_idx < len(original_inputs):
+                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]  # First 30 chars of original filename
+                            unique_prefix = f"{base_prefix}_{input_stem}"
+                        else:
+                            unique_prefix = base_prefix
+                        image_name = build_safe_image_name(
+                            base_prefix=unique_prefix,
+                            matrix_values=matrix_values,
+                            seed=None,
+                            batch_index=img_idx,
+                            pack_name=pack_name,
+                            max_length=100
+                        )
                         result = self._pipeline.run_adetailer_stage(
                             input_image_path=Path(input_path),
                             config=config_dict,
                             output_dir=run_dir,
-                            image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}_img{img_idx:02d}",
+                            image_name=image_name,
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
                         )
                         # Collect output path from this image
                         if result and "path" in result:
+                            logger.info(f"✅ [ADETAILER_OUTPUT] Saved: {result['path']}")
                             next_stage_paths.append(result["path"])
+                        else:
+                            logger.warning(f"❌ [ADETAILER_OUTPUT] No output from image {img_idx}")
                         variants.append(result)
+                        
+
+                        # For reprocess jobs, aggressively free VRAM after each image to prevent timeout
+                        if use_original_name and img_idx < len(current_stage_paths) - 1:  # Not last image
+                            try:
+                                if client and hasattr(client, "free_vram"):
+                                    logger.info("🧹 Freeing VRAM between adetailer images...")
+                                    client.free_vram(unload_model=True)
+                            except Exception:
+                                pass  # Non-fatal
                     
                     # Update current_stage_paths for next stage
                     current_stage_paths = next_stage_paths
@@ -265,27 +523,72 @@ class PipelineRunner:
                         config_dict = asdict(stage_config)
                         # Flatten 'extra' dict to top level for executor
                         if "extra" in config_dict:
+                            logger.info(f"🔵 [UPSCALE_CONFIG_DEBUG] extra dict before flatten: {config_dict['extra']}")
                             config_dict.update(config_dict.pop("extra"))
+                            logger.info(f"🔵 [UPSCALE_CONFIG_DEBUG] config_dict after flatten - upscaler={config_dict.get('upscaler')}")
                     else:
                         config_dict = {}
+                        logger.warning("[UPSCALE_CONFIG_DEBUG] No upscale stage config found in stage_chain")
                     
                     # Process ALL images from previous stage through upscaler
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    
+                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
+                    from src.utils.file_io import build_safe_image_name
+                    from pathlib import Path as PathLib
+                    # Use 1-based indexing to match GUI display
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
+                    
+                    # For reprocess jobs, get original input filename for uniqueness
+                    original_inputs = getattr(njr, 'input_image_paths', None)
+                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
+                    
                     for img_idx, input_path in enumerate(current_stage_paths):
                         logger.info(f"🔵 [BATCH_PIPELINE] Processing upscale for image {img_idx + 1}/{len(current_stage_paths)}")
+                        
+                        # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
+                        if use_original_name and img_idx > 0:  # Not first image
+                            try:
+                                if client and hasattr(client, "free_vram"):
+                                    logger.info("🧹 Freeing VRAM BEFORE upscale image...")
+                                    client.free_vram(unload_model=True)
+                                    import time
+                                    time.sleep(1.0)  # Give WebUI time to stabilize
+                            except Exception:
+                                pass  # Non-fatal
+                        
+                        # For reprocess jobs, include original filename to prevent collisions
+                        if use_original_name and img_idx < len(original_inputs):
+                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]  # First 30 chars of original filename
+                            unique_prefix = f"{base_prefix}_{input_stem}"
+                        else:
+                            unique_prefix = base_prefix
+                        image_name = build_safe_image_name(
+                            base_prefix=unique_prefix,
+                            matrix_values=matrix_values,
+                            seed=None,
+                            batch_index=img_idx,
+                            pack_name=pack_name,
+                            max_length=100
+                        )
                         result = self._pipeline.run_upscale_stage(
                             input_image_path=Path(input_path),
                             config=config_dict,
                             output_dir=run_dir,
-                            image_name=f"{stage.stage_name}_p{prompt_row:02d}_{stage.variant_id:02d}_img{img_idx:02d}",
+                            image_name=image_name,
                             cancel_token=cancel_token,
                         )
                         # Collect output path from this image
                         if result and "path" in result:
+                            logger.info(f"✅ [UPSCALE_OUTPUT] Saved: {result['path']}")
                             next_stage_paths.append(result["path"])
+                        else:
+                            logger.warning(f"❌ [UPSCALE_OUTPUT] No output from image {img_idx}")
                         variants.append(result)
-                    
+                        
                     # Update current_stage_paths for next stage
                     current_stage_paths = next_stage_paths
                     logger.info(f"🔵 [BATCH_PIPELINE] upscale completed {len(current_stage_paths)} images")
@@ -304,7 +607,14 @@ class PipelineRunner:
                         "cancelled": False,
                     }
                 )
-            success = True
+                
+                # Increment stage index for next iteration
+                self._pipeline._current_stage_index += 1
+                
+            # Success only if we have at least one successful variant
+            success = len(variants) > 0 and any(v for v in variants if v is not None)
+            if not success and error is None:
+                error = "No images were generated successfully"
         except Exception as exc:
             error = str(exc)
             logger.error(f"❌ Pipeline execution failed: {exc}", exc_info=True)
@@ -318,6 +628,20 @@ class PipelineRunner:
                     "error_message": str(exc),
                 }
             )
+        finally:
+            # PR-PIPE-001: Clear job ID from executor after execution
+            self._pipeline._current_job_id = None
+            self._pipeline._current_njr_sha256 = None
+            
+        efficiency_metrics: dict[str, Any] = {}
+        if hasattr(self._pipeline, "get_run_efficiency_metrics"):
+            try:
+                efficiency_metrics = self._pipeline.get_run_efficiency_metrics(len(variants))
+            except Exception:
+                efficiency_metrics = {}
+        if efficiency_metrics:
+            metadata["efficiency_metrics"] = efficiency_metrics
+
         result = PipelineRunResult(
             run_id=run_id,
             success=success,
@@ -334,7 +658,45 @@ class PipelineRunner:
         result_dict = result.to_dict()
         logger.info(f"🔍 DEBUG: to_dict() success={result_dict.get('success')}, error={result_dict.get('error')}")
         try:
-            write_run_metadata(run_id, metadata, base_dir=self._runs_base_dir)
+            # Build stage_outputs from variants (each variant is a dict with path, config, etc.)
+            stage_outputs = []
+            for variant in variants:
+                if variant and isinstance(variant, dict):
+                    stage_outputs.append(variant)
+            
+            # For learning jobs, include experiment metadata and base config
+            learning_context = getattr(njr, "learning_context", None)
+            packs_list = []
+            enhanced_metadata = dict(metadata)  # Copy base metadata
+            
+            if learning_context:
+                packs_list = [{
+                    "type": "learning_experiment",
+                    "experiment_name": learning_context.experiment_name,
+                    "variable": learning_context.variable_under_test,
+                    "variant_count": len(stage_outputs),
+                }]
+                # Add base configuration to metadata
+                enhanced_metadata.update({
+                    "prompt": getattr(njr, "positive_prompt", ""),
+                    "negative_prompt": getattr(njr, "negative_prompt", ""),
+                    "model": getattr(njr, "base_model", ""),
+                    "sampler": getattr(njr, "sampler_name", ""),
+                    "scheduler": getattr(njr, "scheduler", ""),
+                    "steps": getattr(njr, "steps", 0),
+                    "width": getattr(njr, "width", 0),
+                    "height": getattr(njr, "height", 0),
+                    "learning_experiment": learning_context.experiment_name,
+                    "learning_variable": learning_context.variable_under_test,
+                })
+            
+            write_run_metadata(
+                run_id,
+                enhanced_metadata,
+                packs=packs_list,
+                stage_outputs=stage_outputs,
+                base_dir=self._runs_base_dir
+            )
         except Exception:
             pass
         self._last_run_result = result
@@ -378,11 +740,12 @@ class PipelineRunner:
         runs_base_dir: str | None = None,
         learning_enabled: bool = False,
         sequencer: StageSequencer | None = None,
+        status_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._api_client = api_client
         self._structured_logger = structured_logger
         self._config_manager = config_manager or ConfigManager()
-        self._pipeline = Pipeline(api_client, structured_logger)
+        self._pipeline = Pipeline(api_client, structured_logger, status_callback=status_callback)
         self._learning_record_writer = learning_record_writer
         self._learning_record_callback = on_learning_record
         self._last_run_result: PipelineRunResult | None = None
@@ -570,7 +933,8 @@ class PipelineRunner:
         img2img["model"] = config.model
         img2img["sampler_name"] = config.sampler
         img2img["steps"] = max(img2img.get("steps", 15), 1)
-        img2img.setdefault("enabled", base.get("pipeline", {}).get("img2img_enabled", False))
+        img2img_val = base.get("pipeline", {}).get("img2img_enabled")
+        img2img.setdefault("enabled", bool(img2img_val) if img2img_val is not None else False)
 
         metadata = base.setdefault("metadata", {})
         if config.pack_name:
@@ -634,6 +998,12 @@ class PipelineRunner:
         payload["cfg_scale"] = config.cfg_scale
         payload["width"] = config.width
         payload["height"] = config.height
+        
+        # PR-LEARN-012: Override seed parameters from config
+        payload["seed"] = config.seed
+        payload["subseed"] = getattr(config, "subseed", -1)
+        payload["subseed_strength"] = getattr(config, "subseed_strength", 0.0)
+        payload["clip_skip"] = getattr(config, "clip_skip", 2)
 
         if config.pack_name:
             payload["pack_name"] = config.pack_name
@@ -734,13 +1104,13 @@ class PipelineRunResult:
             "run_id": self.run_id,
             "success": self.success,
             "error": self.error,
-            "variants": [dict(variant) for variant in self.variants],
-            "learning_records": [asdict(record) for record in self.learning_records],
+            "variants": [dict(variant) for variant in (self.variants or []) if variant is not None],
+            "learning_records": [asdict(record) for record in (self.learning_records or []) if record is not None],
             "randomizer_mode": self.randomizer_mode,
             "randomizer_plan_size": self.randomizer_plan_size,
             "metadata": dict(self.metadata or {}),
             "stage_plan": self._serialize_stage_plan(),
-            "stage_events": [dict(event) for event in self.stage_events],
+            "stage_events": [dict(event) for event in (self.stage_events or []) if event is not None],
         }
 
     def _serialize_stage_plan(self) -> dict[str, Any] | None:
@@ -792,16 +1162,22 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
     Ensures all execution metadata (including run_mode, source) is present in the metadata dict.
     """
     if isinstance(value, PipelineRunResult):
-        return value.to_dict()
+        try:
+            return value.to_dict()
+        except Exception as e:
+            logger.error(f"Failed to convert PipelineRunResult to dict: {e}")
+            
     if isinstance(value, Mapping):
         try:
             return PipelineRunResult.from_dict(dict(value), default_run_id=default_run_id).to_dict()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to normalize Mapping to PipelineRunResult: {e}")
+            
+    # Fallback for any case that fails
     fallback = PipelineRunResult(
         run_id=default_run_id or "",
         success=False,
-        error=str(value) if value is not None else None,
+        error=str(value) if value is not None else "Unknown error in normalize_run_result",
         variants=[],
         learning_records=[],
     )

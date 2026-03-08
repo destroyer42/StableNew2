@@ -9,6 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 import requests
@@ -29,12 +30,41 @@ from src.utils.retry_policy_v2 import (
 
 logger = get_logger(__name__)
 
+
+@dataclass
+class ProgressInfo:
+    """Progress information from WebUI /sdapi/v1/progress endpoint."""
+    
+    progress: float           # 0.0 to 1.0
+    eta_relative: float       # Seconds remaining
+    current_step: int | None
+    total_steps: int | None
+    current_image: str | None
+    state: dict[str, Any]
+    
+    @classmethod
+    def from_response(cls, data: dict[str, Any]) -> ProgressInfo:
+        """Parse from WebUI response."""
+        state = data.get("state", {})
+        return cls(
+            progress=float(data.get("progress", 0.0)),
+            eta_relative=float(data.get("eta_relative", 0.0)),
+            current_step=state.get("sampling_step"),
+            total_steps=state.get("sampling_steps"),
+            current_image=data.get("current_image"),
+            state=state,
+        )
+
 POOL_CONNECTIONS = 20
 POOL_MAXSIZE = 20
 POOL_BLOCK = True
 DEFAULT_CONNECT_TIMEOUT = 3.0
 DEFAULT_READ_TIMEOUT = 60.0
 OPTIONS_POST_MIN_INTERVAL = 6.0
+
+# PR-HARDEN-001: Reduced generation timeout for faster failure detection
+DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
+PROGRESS_STALL_THRESHOLD_SEC = 60.0  # If no progress update for this long, consider stalled
 
 
 class WebUIUnavailableError(Exception):
@@ -90,7 +120,7 @@ class SDWebUIClient:
     def __init__(
         self,
         base_url: str = "http://127.0.0.1:7860",
-        timeout: int = 300,
+        timeout: int | float = DEFAULT_GENERATION_TIMEOUT,  # PR-HARDEN-001: Reduced from 300s
         max_retries: int = 3,
         backoff_factor: float = 1.0,
         max_backoff: float = 30.0,
@@ -137,7 +167,7 @@ class SDWebUIClient:
             else bool(ConfigManager().get_setting("webui_options_write_enabled", False))
         )
         self._options_write_enabled = resolved_flag
-        logger.info(
+        logger.debug(
             "WebUI options writes %s",
             "enabled" if self._options_write_enabled else "disabled (SafeMode)",
         )
@@ -326,9 +356,22 @@ class SDWebUIClient:
             payload_capture = dict(payload_capture)
 
         json_payload = kwargs.get("json")
+        payload_size_mb = 0.0
         if json_payload is not None:
             try:
-                json.dumps(json_payload, ensure_ascii=False)
+                payload_json_str = json.dumps(json_payload, ensure_ascii=False)
+                payload_size_mb = len(payload_json_str) / (1024 * 1024)
+                # Log large payloads (over 10MB) as these may cause timeouts
+                if payload_size_mb > 10.0:
+                    log_with_ctx(
+                        logger,
+                        logging.WARNING,
+                        f"Large payload detected for {method.upper()} {endpoint}: {payload_size_mb:.1f}MB",
+                        ctx=context,
+                        extra_fields={"payload_size_mb": payload_size_mb, "stage": stage_key},
+                    )
+                else:
+                    logger.debug(f"Payload size for {method.upper()} {endpoint}: {payload_size_mb:.1f}MB")
             except (TypeError, ValueError) as json_exc:
                 raise WebUIPayloadValidationError(
                     f"Failed to serialize payload for {method.upper()} {endpoint}: {json_exc}"
@@ -703,17 +746,20 @@ class SDWebUIClient:
     def apply_upscale_performance_defaults(self) -> None:
         """
         Apply conservative tiling and resolution defaults to the WebUI options.
+        
+        These are SAFE defaults that prevent memory explosion during upscaling.
+        Smaller tiles = less VRAM per chunk = more stable upscaling.
 
         Best-effort: failures are logged but do not raise.
         """
 
         payload = {
-            "img_max_size_mp": 16,
-            "ESRGAN_tile": 1920,
-            "ESRGAN_tile_overlap": 64,
-            "DAT_tile": 1920,
-            "DAT_tile_overlap": 64,
-            "upscaling_max_images_in_cache": 8,
+            "img_max_size_mp": 8.0,      # 8 megapixels max (2828x2828) - safe for most GPUs
+            "ESRGAN_tile": 768,           # 768px tiles = 589k pixels per tile (SAFE)
+            "ESRGAN_tile_overlap": 64,    # Moderate overlap for quality
+            "DAT_tile": 768,              # 768px tiles = 589k pixels per tile (SAFE)
+            "DAT_tile_overlap": 64,       # Moderate overlap for quality
+            "upscaling_max_images_in_cache": 4,  # Reduced cache to free memory
         }
 
         can_send, reason = self._options_can_send()
@@ -732,13 +778,66 @@ class SDWebUIClient:
                     raise RuntimeError("No response from /sdapi/v1/options")
 
             logger.info(
-                "Applied WebUI upscale defaults: img_max_size_mp=%s, ESRGAN_tile=%s, DAT_tile=%s",
+                "Applied SAFE WebUI upscale defaults: img_max_size_mp=%.1f, ESRGAN_tile=%s, DAT_tile=%s (768px tiles = 589k pixels/tile, SAFE for memory)",
                 payload.get("img_max_size_mp"),
                 payload.get("ESRGAN_tile"),
                 payload.get("DAT_tile"),
             )
         except Exception as exc:  # noqa: BLE001 - log and continue
             logger.warning("Failed to apply WebUI upscale defaults: %s", exc)
+
+    def free_vram(self, unload_model: bool = False, force_gc: bool = True) -> bool:
+        """
+        Free VRAM by unloading cached data.
+        
+        Useful between batch jobs to prevent memory exhaustion.
+        
+        Args:
+            unload_model: If True, also unload the SD model (slower but frees more memory)
+            force_gc: If True, also run Python garbage collection
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        freed = False
+        
+        try:
+            # First try the unload-checkpoint endpoint if available (A1111 1.6+)
+            if unload_model:
+                with self._request_context(
+                    "post",
+                    "/sdapi/v1/unload-checkpoint",
+                    timeout=30,
+                ) as response:
+                    if response is not None:
+                        logger.info("Unloaded SD model to free VRAM")
+                        freed = True
+            
+            # Alternative: POST to /sdapi/v1/refresh-checkpoints which clears caches
+            with self._request_context(
+                "post",
+                "/sdapi/v1/refresh-checkpoints",
+                timeout=30,
+            ) as response:
+                if response is not None:
+                    logger.info("Refreshed checkpoints to free VRAM caches")
+                    freed = True
+            
+            # Optional: Force Python garbage collection
+            if force_gc:
+                try:
+                    import gc
+                    collected = gc.collect()
+                    if collected > 100:  # Only log if significant
+                        logger.debug("Python GC freed %d objects", collected)
+                except Exception:
+                    pass
+            
+            return freed
+            
+        except Exception as exc:
+            logger.debug("free_vram failed (non-fatal): %s", exc)
+            return False
 
     def check_api_ready(self, max_retries: int = 5, retry_delay: float = 2.0) -> bool:
         """
@@ -789,6 +888,12 @@ class SDWebUIClient:
 
             try:
                 data = response.json()
+                # Log response size for diagnostics
+                response_size_mb = len(response.content) / (1024 * 1024)
+                if response_size_mb > 10.0:
+                    logger.warning(f"Large txt2img response: {response_size_mb:.1f}MB")
+                else:
+                    logger.debug(f"txt2img response size: {response_size_mb:.1f}MB")
             except ValueError as exc:
                 logger.error(f"txt2img response parsing failed: {exc}")
                 return None
@@ -847,6 +952,12 @@ class SDWebUIClient:
 
             try:
                 data = response.json()
+                # Log response size for diagnostics
+                response_size_mb = len(response.content) / (1024 * 1024)
+                if response_size_mb > 10.0:
+                    logger.warning(f"Large img2img response: {response_size_mb:.1f}MB")
+                else:
+                    logger.debug(f"img2img response size: {response_size_mb:.1f}MB")
             except ValueError as exc:
                 logger.error(f"img2img response parsing failed: {exc}")
                 return None
@@ -1058,6 +1169,42 @@ class SDWebUIClient:
                 details=details,
             )
 
+    def get_progress(self, *, skip_current_image: bool = True) -> ProgressInfo | None:
+        """
+        Get current generation progress from WebUI.
+        
+        Args:
+            skip_current_image: If True, don't include preview image in response
+            
+        Returns:
+            ProgressInfo if generation in progress, None if idle or error
+        """
+        try:
+            url = f"{self.base_url}/sdapi/v1/progress"
+            params = {"skip_current_image": str(skip_current_image).lower()}
+            
+            response = self._session.get(
+                url,
+                params=params,
+                timeout=(DEFAULT_CONNECT_TIMEOUT, 5.0),  # Short read timeout
+            )
+            
+            if response.status_code != 200:
+                return None
+            
+            data = response.json()
+            
+            # Check if actually generating (progress > 0 or job running)
+            state = data.get("state", {})
+            if not state.get("job") and data.get("progress", 0) == 0:
+                return None  # Idle
+            
+            return ProgressInfo.from_response(data)
+            
+        except Exception as exc:
+            logger.debug("Progress poll failed: %s", exc)
+            return None
+
     def get_models(self) -> list[dict[str, Any]]:
         """
         Get list of available SD models.
@@ -1076,7 +1223,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse models response: {exc}")
                 return []
 
-        logger.info("Retrieved %s models", len(data))
+        logger.debug("Retrieved %s models", len(data))
         return data
 
     def get_vae_models(self) -> list[dict[str, Any]]:
@@ -1096,7 +1243,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse VAE models response: {exc}")
                 return []
 
-        logger.info("Retrieved %s VAE models", len(data))
+        logger.debug("Retrieved %s VAE models", len(data))
         return data
 
     def get_samplers(self) -> list[dict[str, Any]]:
@@ -1116,7 +1263,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse samplers response: {exc}")
                 return []
 
-        logger.info("Retrieved %s samplers", len(data))
+        logger.debug("Retrieved %s samplers", len(data))
         self.samplers = data
         return data
 
@@ -1137,7 +1284,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse upscalers response: {exc}")
                 return []
 
-        logger.info("Retrieved %s upscalers", len(data))
+        logger.debug("Retrieved %s upscalers", len(data))
         self.upscalers = data
         return data
 
@@ -1160,7 +1307,7 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse hypernetworks response: {exc}")
                 return []
 
-        logger.info("Retrieved %s hypernetworks", len(data))
+        logger.debug("Retrieved %s hypernetworks", len(data))
         return data
 
     def get_schedulers(self) -> list[str]:
@@ -1206,7 +1353,7 @@ class SDWebUIClient:
         ]
         # Ensure proper capitalization for scheduler names (WebUI expects "Karras" not "karras")
         schedulers = [s.capitalize() if s and s.lower() in {"karras", "exponential", "normal", "simple", "beta", "linear", "cosine"} else s for s in schedulers]
-        logger.info("Retrieved %s schedulers", len(schedulers))
+        logger.debug("Retrieved %s schedulers", len(schedulers))
         return schedulers
 
     def get_adetailer_models(self) -> list[str]:
@@ -1242,21 +1389,21 @@ class SDWebUIClient:
                                 if "choices" in arg:
                                     choices = arg.get("choices", [])
                                     if choices and len(choices) > 3:  # Sanity check
-                                        logger.info("Retrieved %s ADetailer models from scripts API (arg %s)", len(choices), i)
+                                        logger.debug("Retrieved %s ADetailer models from scripts API (arg %s)", len(choices), i)
                                         return choices
                                 # Also check label for model-related args
                                 label = arg.get("label", "").lower()
                                 if "model" in label and "choices" in arg:
                                     choices = arg.get("choices", [])
                                     if choices:
-                                        logger.info("Retrieved %s ADetailer models from scripts API (via label)", len(choices))
+                                        logger.debug("Retrieved %s ADetailer models from scripts API (via label)", len(choices))
                                         return choices
             except Exception as exc:
                 logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
         
         # Fallback defaults
         defaults = self._get_default_adetailer_models()
-        logger.info("Using default ADetailer models: %s", len(defaults))
+        logger.debug("Using default ADetailer models: %s", len(defaults))
         return defaults
     
     @staticmethod
@@ -1485,15 +1632,42 @@ class SDWebUIClient:
         """
         with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
             if response is None:
+                logger.warning("get_current_model: response is None")
                 return None
 
             try:
                 data = response.json()
+                model = data.get("sd_model_checkpoint")
+                logger.info(f"✅ get_current_model: {model}")
+                return model
             except ValueError as exc:
                 logger.error(f"Failed to parse current model response: {exc}")
                 return None
 
-        return data.get("sd_model_checkpoint")
+    def get_current_vae(self) -> str | None:
+        """
+        Get the currently loaded VAE.
+
+        Returns:
+            Current VAE name or None if using default/Automatic
+        """
+        with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
+            if response is None:
+                logger.warning("get_current_vae: response is None")
+                return None
+
+            try:
+                data = response.json()
+                vae = data.get("sd_vae")
+                # WebUI returns "Automatic" or "None" when no VAE is explicitly set
+                if vae in ("Automatic", "None", None, ""):
+                    logger.info("✅ get_current_vae: Automatic")
+                    return "Automatic"
+                logger.info(f"✅ get_current_vae: {vae}")
+                return vae
+            except ValueError as exc:
+                logger.error(f"Failed to parse current VAE response: {exc}")
+                return None
 
 
 def validate_webui_health(*args, **kwargs):

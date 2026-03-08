@@ -13,6 +13,7 @@ from src.gui.learning_state import LearningState
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.learning.learning_paths import get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
 
 
@@ -32,7 +33,7 @@ class LearningTabFrame(ttk.Frame):
         self.pipeline_controller = pipeline_controller
 
         # Initialize learning record writer
-        self.learning_record_writer = LearningRecordWriter("data/learning_records.jsonl")
+        self.learning_record_writer = LearningRecordWriter(get_learning_records_path())
 
         # Initialize learning state and controller
         self.learning_state = LearningState()
@@ -73,7 +74,11 @@ class LearningTabFrame(ttk.Frame):
 
         # Left panel: Experiment Design
         self.experiment_panel = ExperimentDesignPanel(
-            self.body_frame, learning_controller=self.learning_controller, style="Panel.TFrame"
+            self.body_frame,
+            learning_controller=self.learning_controller,
+            prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
+            if self.app_state
+            else None,
         )
         self.experiment_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
 

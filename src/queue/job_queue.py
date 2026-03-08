@@ -11,6 +11,7 @@ upon for new queue jobs.
 from __future__ import annotations
 
 import heapq
+from collections import deque
 from collections.abc import Callable, Iterable
 from threading import Lock
 from typing import TYPE_CHECKING
@@ -33,6 +34,8 @@ class JobQueue:
         self._counter = 0
         self._lock = Lock()
         self._history_store = history_store
+        # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
+        self._finalized_jobs_order: deque[str] = deque(maxlen=100)
         self._finalized_jobs: dict[str, Job] = {}
         self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
         self._state_listeners: list[Callable[[], None]] = []
@@ -98,12 +101,33 @@ class JobQueue:
             ts = job.updated_at
             should_prune = status in self._FINAL_STATUSES and self._history_store is not None
             if should_prune:
-                self._finalized_jobs[job_id] = job
+                # PR-MEMORY-001: Add to bounded finalized jobs collection
+                self._add_finalized_job(job_id, job)
                 self._prune_job(job_id)
         self._record_status(job_id, status, ts, error_message, result=result)
         self._notify_status(job, status)
         self._notify_state_listeners()
         return job
+
+    def _add_finalized_job(self, job_id: str, job: Job) -> None:
+        """Add job to bounded finalized collection.
+        
+        PR-MEMORY-001: Maintains max 100 finalized jobs. When full, evicts oldest.
+        Also clears job payload to free memory.
+        """
+        # Clear payload to free memory (PR-MEMORY-001)
+        job.payload = None
+        
+        # Check if deque is full and will evict oldest
+        if len(self._finalized_jobs_order) == self._finalized_jobs_order.maxlen:
+            # Get the oldest job_id that will be evicted
+            oldest_jid = self._finalized_jobs_order[0] if self._finalized_jobs_order else None
+            if oldest_jid and oldest_jid in self._finalized_jobs:
+                self._finalized_jobs.pop(oldest_jid, None)
+        
+        # Add new job (deque will auto-evict if at maxlen)
+        self._finalized_jobs_order.append(job_id)
+        self._finalized_jobs[job_id] = job
 
     def _record_submission(self, job: Job) -> None:
         if not self._history_store:
@@ -156,14 +180,15 @@ class JobQueue:
         with self._lock:
             # Find queued jobs in order
             queued = self._get_ordered_queued_jobs()
-            for i, (priority, _counter, jid) in enumerate(queued):
+            for i, (priority, counter, jid) in enumerate(queued):
                 if jid == job_id:
                     if i == 0:
                         return False  # Already at top
-                    # Swap priorities with the job above
+                    # Swap counters with the job above to change ordering
                     prev_priority, prev_counter, prev_jid = queued[i - 1]
-                    # Adjust internal queue entries
-                    self._swap_queue_positions(job_id, prev_jid, priority, prev_priority)
+                    if priority != prev_priority:
+                        return False
+                    self._swap_queue_positions(job_id, prev_jid, counter, prev_counter)
                     self._notify_state_listeners()
                     return True
             return False
@@ -179,16 +204,120 @@ class JobQueue:
         """
         with self._lock:
             queued = self._get_ordered_queued_jobs()
-            for i, (priority, _counter, jid) in enumerate(queued):
+            for i, (priority, counter, jid) in enumerate(queued):
                 if jid == job_id:
                     if i == len(queued) - 1:
                         return False  # Already at bottom
-                    # Swap priorities with the job below
+                    # Swap counters with the job below to change ordering
                     next_priority, next_counter, next_jid = queued[i + 1]
-                    self._swap_queue_positions(job_id, next_jid, priority, next_priority)
+                    if priority != next_priority:
+                        return False
+                    self._swap_queue_positions(job_id, next_jid, counter, next_counter)
                     self._notify_state_listeners()
                     return True
             return False
+
+    def move_to_front(self, job_id: str) -> bool:
+        """Move a queued job to the front of the queue (highest priority within its priority level).
+
+        Args:
+            job_id: The ID of the job to move.
+
+        Returns:
+            True if the job was moved, False if not found or already at front.
+        """
+        with self._lock:
+            queued = self._get_ordered_queued_jobs()
+            if not queued:
+                return False
+            
+            # Find the job
+            job_index = None
+            job_priority = None
+            for i, (priority, counter, jid) in enumerate(queued):
+                if jid == job_id:
+                    job_index = i
+                    job_priority = priority
+                    break
+            
+            if job_index is None:
+                return False  # Job not found
+            
+            if job_index == 0:
+                return False  # Already at front
+            
+            # Get the minimum counter value (front of queue) for this priority
+            # We want to assign a counter lower than the first job in the same priority level
+            min_counter_for_priority = float('inf')
+            for priority, counter, jid in queued:
+                if priority == job_priority:
+                    min_counter_for_priority = min(min_counter_for_priority, counter)
+            
+            # Assign a new lower counter (move to front)
+            new_counter = min_counter_for_priority - 1
+            
+            # Update the queue with the new counter
+            new_queue = []
+            for priority, counter, jid in self._queue:
+                if jid == job_id:
+                    new_queue.append((priority, new_counter, jid))
+                else:
+                    new_queue.append((priority, counter, jid))
+            self._queue = new_queue
+            heapq.heapify(self._queue)
+            self._notify_state_listeners()
+            return True
+
+    def move_to_back(self, job_id: str) -> bool:
+        """Move a queued job to the back of the queue (lowest priority within its priority level).
+
+        Args:
+            job_id: The ID of the job to move.
+
+        Returns:
+            True if the job was moved, False if not found or already at back.
+        """
+        with self._lock:
+            queued = self._get_ordered_queued_jobs()
+            if not queued:
+                return False
+            
+            # Find the job
+            job_index = None
+            job_priority = None
+            for i, (priority, counter, jid) in enumerate(queued):
+                if jid == job_id:
+                    job_index = i
+                    job_priority = priority
+                    break
+            
+            if job_index is None:
+                return False  # Job not found
+            
+            if job_index == len(queued) - 1:
+                return False  # Already at back
+            
+            # Get the maximum counter value (back of queue) for this priority
+            # We want to assign a counter higher than the last job in the same priority level
+            max_counter_for_priority = float('-inf')
+            for priority, counter, jid in queued:
+                if priority == job_priority:
+                    max_counter_for_priority = max(max_counter_for_priority, counter)
+            
+            # Assign a new higher counter (move to back)
+            new_counter = max_counter_for_priority + 1
+            
+            # Update the queue with the new counter
+            new_queue = []
+            for priority, counter, jid in self._queue:
+                if jid == job_id:
+                    new_queue.append((priority, new_counter, jid))
+                else:
+                    new_queue.append((priority, counter, jid))
+            self._queue = new_queue
+            heapq.heapify(self._queue)
+            self._notify_state_listeners()
+            return True
 
     def remove(self, job_id: str) -> Job | None:
         """Remove a job from the queue.
@@ -246,17 +375,16 @@ class JobQueue:
         return queued
 
     def _swap_queue_positions(
-        self, job_id1: str, job_id2: str, priority1: int, priority2: int
+        self, job_id1: str, job_id2: str, counter1: int, counter2: int
     ) -> None:
         """Swap queue positions between two jobs (internal, must hold lock)."""
-        # We swap by adjusting counter values since priority might be the same
+        # Swap counters to preserve priority ordering while reordering within priority.
         new_queue = []
         for priority, counter, jid in self._queue:
             if jid == job_id1:
-                # Give it the other job's counter (position)
-                new_queue.append((priority2, counter, jid))
+                new_queue.append((priority, counter2, jid))
             elif jid == job_id2:
-                new_queue.append((priority1, counter, jid))
+                new_queue.append((priority, counter1, jid))
             else:
                 new_queue.append((priority, counter, jid))
         self._queue = new_queue

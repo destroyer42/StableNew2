@@ -47,6 +47,11 @@ class PromptPackAdapterV2:
             )
         return summaries
 
+    def refresh_packs(self) -> None:
+        """Force reload of pack list from disk."""
+        # This method exists for explicit refresh calls
+        # load_summaries already does a fresh discovery
+
     def get_base_prompt(self, summary: PromptPackSummary) -> str:
         """Return the base prompt text for the given pack (first positive prompt)."""
 

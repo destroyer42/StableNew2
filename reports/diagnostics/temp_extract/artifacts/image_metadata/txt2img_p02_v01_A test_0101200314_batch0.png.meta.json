@@ -1,0 +1,82 @@
+{
+  "status": "ok",
+  "payload": {
+    "generation": {
+      "cfg_scale": 6.499999999999998,
+      "clip_skip": 2,
+      "denoising_strength": 0.7,
+      "height": 1408,
+      "negative_prompt": "blurry, bad quality, distorted, amber, deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 34,
+      "width": 1024
+    },
+    "image": {
+      "format": "png",
+      "height": 1408,
+      "path": "txt2img_p02_v01_A test_0101200314_batch0.png",
+      "width": 1024
+    },
+    "job_id": "c7754fa0768342a58a007addc9cebbce",
+    "njr": {
+      "sha256": "1205e67158b0de8870a82fc203ceb20085892d9e265def0fd0f963a52d00b3de",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20260101_200314_A_test",
+    "seeds": {},
+    "stage": "txt2img",
+    "stage_history": [],
+    "stage_manifest": {
+      "config": {
+        "batch_size": 2,
+        "cfg_scale": 6.499999999999998,
+        "clip_skip": 2,
+        "denoising_strength": 0.7,
+        "do_not_save_grid": null,
+        "do_not_save_samples": null,
+        "enable_hr": false,
+        "height": 1408,
+        "hr_resize_x": 0,
+        "hr_resize_y": 0,
+        "hr_scale": 2.0,
+        "hr_second_pass_steps": 0,
+        "hr_upscaler": "Latent",
+        "n_iter": 1,
+        "negative_prompt": "blurry, bad quality, distorted, amber, deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi",
+        "prompt": "<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> (masterpiece, 8k, cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, amber colored eyes, gorgeous smile, knowing expression, detailed skin, natural light, high fantasy, magical atmosphere, a powerful fantasy female warrior as the central subject, wide stance, arched back, hands up and behind head, illuminated by soft directional side lighting, set in a vast torch-lit hall, epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus <lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:DetailedEyes_V3:0.33495145631067963>",
+        "restore_faces": null,
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": -1,
+        "seed_resize_from_h": -1,
+        "seed_resize_from_w": -1,
+        "steps": 34,
+        "subseed": -1,
+        "subseed_strength": 0.5,
+        "tiling": null,
+        "width": 1024
+      },
+      "config_hash": "1e5cb38b44ab2aa4807b70fb41dcd6aeb66a0e128c8a0ef7603c0bbfd50c4db4",
+      "model": "Unknown",
+      "name": "txt2img_p02_v01_A test_0101200314_batch0",
+      "negative_prompt": "",
+      "prompt": "",
+      "seeds": {},
+      "stage": "txt2img",
+      "timestamp": "20260101_200501",
+      "vae": "Automatic"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "c7754fa0768342a58a007addc9cebbce",
+    "stablenew:run_id": "20260101_200314_A_test",
+    "stablenew:stage": "txt2img",
+    "stablenew:created_utc": "2026-01-02T02:05:01.662113+00:00",
+    "stablenew:payload_sha256": "c48d59e4cc26d70f9d5cd0fabd6793d30cd3f57997893a4cf9746025d9f4f2b4",
+    "stablenew:payload": "{\"generation\":{\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"height\":1408,\"negative_prompt\":\"blurry, bad quality, distorted, amber, deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":34,\"width\":1024},\"image\":{\"format\":\"png\",\"height\":1408,\"path\":\"txt2img_p02_v01_A test_0101200314_batch0.png\",\"width\":1024},\"job_id\":\"c7754fa0768342a58a007addc9cebbce\",\"njr\":{\"sha256\":\"1205e67158b0de8870a82fc203ceb20085892d9e265def0fd0f963a52d00b3de\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20260101_200314_A_test\",\"seeds\":{},\"stage\":\"txt2img\",\"stage_history\":[],\"stage_manifest\":{\"config\":{\"batch_size\":2,\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"do_not_save_grid\":null,\"do_not_save_samples\":null,\"enable_hr\":false,\"height\":1408,\"hr_resize_x\":0,\"hr_resize_y\":0,\"hr_scale\":2.0,\"hr_second_pass_steps\":0,\"hr_upscaler\":\"Latent\",\"n_iter\":1,\"negative_prompt\":\"blurry, bad quality, distorted, amber, deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi\",\"prompt\":\"<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> (masterpiece, 8k, cowboy shot)  A gorgeous large breasted, athletic and fit, fully naked, perky nipples, fertile, shaved vagina, amber colored eyes, gorgeous smile, knowing expression, detailed skin, natural light, high fantasy, magical atmosphere, a powerful fantasy female warrior as the central subject, wide stance, arched back, hands up and behind head, illuminated by soft directional side lighting, set in a vast torch-lit hall, epic fantasy realism, cinematic composition, highly detailed, rich colors, sharp focus <lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:DetailedEyes_V3:0.33495145631067963>\",\"restore_faces\":null,\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":-1,\"seed_resize_from_h\":-1,\"seed_resize_from_w\":-1,\"steps\":34,\"subseed\":-1,\"subseed_strength\":0.5,\"tiling\":null,\"width\":1024},\"config_hash\":\"1e5cb38b44ab2aa4807b70fb41dcd6aeb66a0e128c8a0ef7603c0bbfd50c4db4\",\"model\":\"Unknown\",\"name\":\"txt2img_p02_v01_A test_0101200314_batch0\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{},\"stage\":\"txt2img\",\"timestamp\":\"20260101_200501\",\"vae\":\"Automatic\"}}",
+    "stablenew:njr_sha256": "1205e67158b0de8870a82fc203ceb20085892d9e265def0fd0f963a52d00b3de"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20260101_200314_A_test\\txt2img_p02_v01_A test_0101200314_batch0.png"
+}

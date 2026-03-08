@@ -13,24 +13,39 @@ class WebUIResourceService(BaseWebUIResourceService):
     def __init__(self, client: SDWebUIClient | None = None, **kwargs: Any) -> None:
         super().__init__(client=client, **kwargs)
 
-    def refresh_all(self) -> dict[str, list[Any]]:
-        """Fetch the canonical resource sets defined by the UI dropdowns."""
-        models = self.list_models() or []
-        vaes = self.list_vaes() or []
-        samplers = self._normalize_sampler_names(self.client.get_samplers() or [])
-        schedulers = list(self.client.get_schedulers() or [])
-        upscalers = self.list_upscalers() or []
-        adetailer_models = self.list_adetailer_models()
-        adetailer_detectors = self.list_adetailer_detectors()
-        return {
-            "models": models,
-            "vaes": vaes,
-            "samplers": samplers,
-            "schedulers": schedulers,
-            "upscalers": upscalers,
-            "adetailer_models": adetailer_models,
-            "adetailer_detectors": adetailer_detectors,
-        }
+    def refresh_all(self, timeout: float = 5.0) -> dict[str, list[Any]]:
+        """Fetch the canonical resource sets defined by the UI dropdowns.
+        
+        Args:
+            timeout: Maximum seconds to wait for each resource fetch. Default 5.0.
+        
+        Returns:
+            Dictionary of resource lists. Empty lists returned on timeout/error.
+        """
+        import concurrent.futures
+        
+        # Use ThreadPoolExecutor with timeout to prevent indefinite blocking
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                "models": executor.submit(self.list_models),
+                "vaes": executor.submit(self.list_vaes),
+                "samplers": executor.submit(lambda: self._normalize_sampler_names(self.client.get_samplers() or [])),
+                "schedulers": executor.submit(lambda: list(self.client.get_schedulers() or [])),
+                "upscalers": executor.submit(self.list_upscalers),
+                "adetailer_models": executor.submit(self.list_adetailer_models),
+                "adetailer_detectors": executor.submit(self.list_adetailer_detectors),
+            }
+            
+            results = {}
+            for key, future in futures.items():
+                try:
+                    results[key] = future.result(timeout=timeout) or []
+                except concurrent.futures.TimeoutError:
+                    results[key] = []  # Fall back to empty list on timeout
+                except Exception:
+                    results[key] = []  # Fall back to empty list on error
+            
+            return results
 
     @staticmethod
     def _normalize_sampler_names(data: Iterable[Any]) -> list[str]:

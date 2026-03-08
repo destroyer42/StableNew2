@@ -9,7 +9,7 @@ from src.gui.gui_invoker import GuiInvoker
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
     NormalizedJobRecord,
-    QueueJobV2,
+    RuntimeJobStatus,
     UnifiedJobSummary,
 )
 from src.queue.job_history_store import JobHistoryEntry
@@ -37,6 +37,7 @@ class PackJobEntry:
     pack_row_index: int | None = None
     pack_version: str | None = None
     matrix_slot_values: dict[str, str] = field(default_factory=dict)
+    learning_metadata: dict[str, Any] | None = None  # PR-LEARN-001: Learning experiment provenance
 
 
 @dataclass
@@ -136,8 +137,9 @@ class AppStateV2:
         }
     )
     queue_items: list[str] = field(default_factory=list)
-    queue_jobs: list[QueueJobV2] = field(default_factory=list)
-    running_job: QueueJobV2 | None = None
+    queue_jobs: list[UnifiedJobSummary] = field(default_factory=list)
+    running_job: UnifiedJobSummary | None = None
+    runtime_status: RuntimeJobStatus | None = None  # Dynamic execution state for running job
     queue_status: str = "idle"
     history_items: list[JobHistoryEntry] = field(default_factory=list)
     run_config: dict[str, Any] = field(default_factory=dict)
@@ -151,7 +153,7 @@ class AppStateV2:
     lora_strengths: list[LoraRuntimeConfig] = field(default_factory=list)
     adetailer_models: list[str] = field(default_factory=list)
     adetailer_detectors: list[str] = field(default_factory=list)
-    adetailer_enabled: bool = False
+    adetailer_enabled: bool = True  # PR-DEFAULT-ADETAILER: Default to True for visibility
     adetailer_config: dict[str, Any] = field(default_factory=dict)
     collapse_states: dict[str, bool] = field(default_factory=dict)
 
@@ -364,17 +366,35 @@ class AppStateV2:
         self.queue_items = list(items)
         self._notify("queue_items")
 
-    def set_queue_jobs(self, jobs: list[QueueJobV2] | None) -> None:
+    def set_queue_jobs(self, jobs: list[UnifiedJobSummary] | None) -> None:
         if jobs is None:
             jobs = []
-        if self.queue_jobs != jobs:
+        # Always update and notify - fixes Remove button not updating GUI (queue job removal bug)
+        # The comparison self.queue_jobs != jobs might miss updates due to object identity issues
+        changed = len(self.queue_jobs) != len(jobs) or any(
+            old.job_id != new.job_id for old, new in zip(self.queue_jobs, jobs, strict=False)
+        )
+        if changed:
+            logger.debug(f"set_queue_jobs: Updating from {len(self.queue_jobs)} to {len(jobs)} jobs")
             self.queue_jobs = list(jobs)
             self._notify("queue_jobs")
+        else:
+            logger.debug(f"set_queue_jobs: No change detected, {len(jobs)} jobs")
 
-    def set_running_job(self, job: QueueJobV2 | None) -> None:
+    def set_running_job(self, job: UnifiedJobSummary | None) -> None:
         if self.running_job != job:
             self.running_job = job
             self._notify("running_job")
+
+    def set_runtime_status(self, status: RuntimeJobStatus | None) -> None:
+        """Set the runtime execution status for the currently running job.
+        
+        This should be updated periodically during job execution to reflect
+        current stage, progress, seed, and ETA information.
+        """
+        if self.runtime_status != status:
+            self.runtime_status = status
+            self._notify("runtime_status")
 
     def set_queue_status(self, status: str) -> None:
         if self.queue_status != status:
@@ -421,11 +441,15 @@ class AppStateV2:
         self._notify("job_draft")
 
     def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
+        logger.debug(f"[AppState] set_preview_jobs called with {len(jobs) if jobs else 0} jobs")
         if jobs is None:
             jobs = []
         if self.preview_jobs != jobs:
+            logger.debug(f"[AppState] preview_jobs changed, notifying subscribers")
             self.preview_jobs = list(jobs)
             self._notify("preview_jobs")
+        else:
+            logger.debug(f"[AppState] preview_jobs unchanged, not notifying")
 
     def append_log_event(self, event: JobLifecycleLogEvent) -> None:
         self.log_events.append(event)

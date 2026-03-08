@@ -178,7 +178,7 @@ class ConfigManager:
             List of preset names
         """
         presets = [p.stem for p in self.presets_dir.glob("*.json")]
-        logger.info(f"Found {len(presets)} presets")
+        logger.debug(f"Found {len(presets)} presets")
         return sorted(presets)
 
     def delete_preset(self, name: str) -> bool:
@@ -304,7 +304,7 @@ class ConfigManager:
             },
             "video": {"fps": 24, "codec": "libx264", "quality": "medium"},
             "api": {"base_url": "http://127.0.0.1:7860", "timeout": 300},
-            "webui_options_write_enabled": False,
+            "webui_options_write_enabled": True,
             "randomization": {
                 "enabled": False,
                 # Optional seed for deterministic randomization.
@@ -344,9 +344,10 @@ class ConfigManager:
                 "fallback_prompt": "",
             },
             "pipeline": {
-                "img2img_enabled": True,
-                "upscale_enabled": True,
+                "txt2img_enabled": True,
+                "img2img_enabled": False,
                 "adetailer_enabled": False,
+                "upscale_enabled": False,
                 "allow_hr_with_stages": False,
                 "refiner_compare_mode": False,  # When True and refiner+hires enabled, branch original & refined
                 # Global negative application toggles per-stage (default True for backward compatibility)
@@ -520,7 +521,7 @@ class ConfigManager:
 
     def get_pack_config(self, pack_name: str) -> dict[str, Any]:
         """
-        Get individual pack configuration from its .json file.
+        Get pack pipeline configuration from unified JSON's preset_data section.
 
         Args:
             pack_name: Name of the prompt pack (e.g., "heroes.txt")
@@ -536,7 +537,22 @@ class ConfigManager:
 
         try:
             with open(config_path, encoding="utf-8") as f:
-                config = json.load(f)
+                data = json.load(f)
+            
+            # Handle unified format (v2.6+) vs legacy format
+            if "preset_data" in data:
+                config = data["preset_data"]
+            elif "pack_data" in data:
+                # New format but no preset_data yet
+                config = {}
+            else:
+                # Legacy format - check if this is actually a config file
+                if "pipeline" in data or "txt2img" in data:
+                    config = data
+                else:
+                    # It's a legacy pack data file, no config
+                    config = {}
+            
             logger.debug(f"Loaded pack config: {pack_name}")
             return config
         except Exception as e:
@@ -551,11 +567,36 @@ class ConfigManager:
         if not config_path.exists():
             return None
         raw = self.get_pack_config(pack_name)
-        return self._merge_config_with_defaults(raw)
+        
+        # Debug: Log raw config before merging
+        raw_pipeline = raw.get("pipeline", {})
+        logger.info(
+            "Loading pack config '%s' (before merge): pipeline flags: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
+            pack_name,
+            raw_pipeline.get("txt2img_enabled"),
+            raw_pipeline.get("img2img_enabled"),
+            raw_pipeline.get("adetailer_enabled"),
+            raw_pipeline.get("upscale_enabled"),
+        )
+        
+        merged = self._merge_config_with_defaults(raw)
+        
+        # Debug: Log merged config after merging
+        merged_pipeline = merged.get("pipeline", {})
+        logger.info(
+            "Loading pack config '%s' (after merge): pipeline flags: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
+            pack_name,
+            merged_pipeline.get("txt2img_enabled"),
+            merged_pipeline.get("img2img_enabled"),
+            merged_pipeline.get("adetailer_enabled"),
+            merged_pipeline.get("upscale_enabled"),
+        )
+        
+        return merged
 
     def save_pack_config(self, pack_name: str, config: dict[str, Any]) -> bool:
         """
-        Save individual pack configuration to its .json file.
+        Save pipeline configuration to unified JSON's preset_data section.
 
         Args:
             pack_name: Name of the prompt pack (e.g., "heroes.txt")
@@ -583,8 +624,35 @@ class ConfigManager:
             # Ensure packs directory exists
             config_path.parent.mkdir(exist_ok=True)
 
+            # Load existing data to preserve pack_data section
+            existing_data = {}
+            if config_path.exists():
+                try:
+                    with open(config_path, encoding="utf-8") as f:
+                        existing_data = json.load(f)
+                except Exception:
+                    pass  # If load fails, start fresh
+            
+            # Build unified structure
+            if "pack_data" in existing_data:
+                # Unified format - preserve pack_data, update preset_data
+                unified_data = existing_data
+                unified_data["preset_data"] = config
+            elif "name" in existing_data and "slots" in existing_data:
+                # Legacy pack format - convert to unified
+                unified_data = {
+                    "pack_data": existing_data,
+                    "preset_data": config,
+                }
+            else:
+                # No existing data or legacy config-only format
+                unified_data = {
+                    "pack_data": {"name": Path(pack_name).stem, "slots": [], "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []}},
+                    "preset_data": config,
+                }
+
             with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
+                json.dump(unified_data, f, indent=2, ensure_ascii=False)
 
             logger.info(f"Saved pack config to: {config_path}")
             return True
@@ -671,6 +739,7 @@ class ConfigManager:
             "webui_health_retry_count": app_config.get_webui_health_retry_count(),
             "webui_health_retry_interval_seconds": app_config.get_webui_health_retry_interval_seconds(),
             "webui_health_total_timeout_seconds": app_config.get_webui_health_total_timeout_seconds(),
+            "webui_options_write_enabled": True,
             "output_dir": str(Path("output")),
             "model_dir": str(Path("models")),
         }
@@ -711,40 +780,6 @@ class ConfigManager:
             return True
         except Exception as exc:  # noqa: BLE001 - surface failure but keep running
             logger.error("Failed to save global negative prompt: %s", exc)
-            return False
-
-    def get_global_positive_prompt(self) -> str:
-        """Return the persisted global positive prompt, creating a default if missing."""
-
-        if self._global_positive_cache is not None:
-            return self._global_positive_cache
-
-        prompt = DEFAULT_GLOBAL_POSITIVE_PROMPT
-        try:
-            if self._global_positive_path.exists():
-                text = self._global_positive_path.read_text(encoding="utf-8").strip()
-                if text:
-                    prompt = text
-            else:
-                self._global_positive_path.parent.mkdir(parents=True, exist_ok=True)
-                self._global_positive_path.write_text(prompt, encoding="utf-8")
-        except Exception as exc:  # noqa: BLE001 - log and fall back to default
-            logger.warning("Failed reading global positive prompt: %s", exc)
-        self._global_positive_cache = prompt
-        return prompt
-
-    def save_global_positive_prompt(self, prompt: str) -> bool:
-        """Persist a custom global positive prompt to disk."""
-
-        text = (prompt or "").strip()
-        try:
-            self._global_positive_path.parent.mkdir(parents=True, exist_ok=True)
-            self._global_positive_path.write_text(text, encoding="utf-8")
-            self._global_positive_cache = text
-            logger.info("Saved global positive prompt (%s chars)", len(text))
-            return True
-        except Exception as exc:  # noqa: BLE001 - surface failure but keep running
-            logger.error("Failed to save global positive prompt: %s", exc)
             return False
 
     def get_global_positive_prompt(self) -> str:
@@ -920,7 +955,7 @@ def save_queue_state(queue_data: dict[str, Any]) -> bool:
     Save the queue state to disk for persistence across sessions.
 
     Args:
-        queue_data: Serialized queue state from JobQueueV2.serialize()
+        queue_data: Serialized queue state (QueueSnapshotV1 format)
 
     Returns:
         True if saved successfully
@@ -943,7 +978,7 @@ def load_queue_state() -> dict[str, Any] | None:
     Load the queue state from disk.
 
     Returns:
-        Serialized queue state to pass to JobQueueV2.restore(), or None if no state exists
+        Serialized queue state (QueueSnapshotV1 format), or None if no state exists
     """
     if not QUEUE_STATE_PATH.exists():
         return None

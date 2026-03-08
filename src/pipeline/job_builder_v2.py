@@ -140,7 +140,7 @@ class JobBuilderV2:
                         job_id=self._id_fn(),
                         config=matrix_config,
                         path_output_dir=output.base_output_dir,
-                        filename_template=output.filename_template,
+                        filename_template="{seed}",  # Fixed: OutputSettings no longer has filename_template
                         seed=seed,
                         variant_index=variant_index,
                         variant_total=variant_total,

@@ -1,0 +1,35 @@
+{
+  "name": "Test Matrix Pack",
+  "version": "1.0",
+  "slots": [
+    {
+      "name": "Positive Prompt",
+      "text": "(masterpiece, best quality) [[job]] in [[environment]]"
+    },
+    {
+      "name": "Negative Prompt",
+      "text": "bad quality, blurry"
+    }
+  ],
+  "matrix": {
+    "enabled": true,
+    "mode": "fanout",
+    "limit": 4,
+    "slots": [
+      {
+        "name": "job",
+        "values": [
+          "wizard",
+          "knight"
+        ]
+      },
+      {
+        "name": "environment",
+        "values": [
+          "forest",
+          "castle"
+        ]
+      }
+    ]
+  }
+}

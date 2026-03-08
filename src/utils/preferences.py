@@ -17,9 +17,9 @@ class PreferencesManager:
 
     _DEFAULT_PIPELINE_CONTROLS: dict[str, Any] = {
         "txt2img_enabled": True,
-        "img2img_enabled": True,
+        "img2img_enabled": False,
         "adetailer_enabled": False,
-        "upscale_enabled": True,
+        "upscale_enabled": False,
         "video_enabled": False,
         "loop_type": "single",
         "loop_count": 1,

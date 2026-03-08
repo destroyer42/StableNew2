@@ -25,6 +25,7 @@ import tempfile
 import threading
 import time
 import traceback
+import json
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -53,6 +54,7 @@ from src.pipeline.last_run_store_v2_5 import (
     update_current_config_from_last_run,
 )
 from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
+from src.pipeline.job_models_v2 import UnifiedJobSummary
 
 if TYPE_CHECKING:  # pragma: no cover - type-only import
     from src.controller.archive.pipeline_config_types import PipelineConfig
@@ -74,8 +76,10 @@ from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
+from src.services.duration_stats_service import DurationStatsService
 from src.services.queue_store_v2 import (
     QueueSnapshotV1,
+    SCHEMA_VERSION,
     UnsupportedQueueSchemaError,
     load_queue_snapshot,
     save_queue_snapshot,
@@ -97,9 +101,9 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
     wrap_exception,
 )
+from src.utils.thread_registry import get_thread_registry
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
-from src.utils.queue_helpers_v2 import job_to_queue_job
 
 logger = logging.getLogger(__name__)
 
@@ -225,9 +229,14 @@ class AppController:
         self._queue_submit_in_progress = True
         jobs = getattr(self, "_draft_job_bundle", [])
         self._draft_job_bundle = []
-        import threading
-
-        threading.Thread(target=self._submit_jobs_async, args=(jobs,), daemon=True).start()
+        
+        # PR-THREAD-001: Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=self._submit_jobs_async,
+            args=(jobs,),
+            name="QueueSubmit",
+            purpose="Submit jobs to queue asynchronously"
+        )
 
     def _submit_jobs_async(self, jobs):
         try:
@@ -235,6 +244,44 @@ class AppController:
                 self.job_service.submit_queued(job)
         finally:
             self._queue_submit_in_progress = False
+    
+    def _spawn_tracked_thread(
+        self,
+        target: Callable,
+        args: tuple = (),
+        kwargs: dict | None = None,
+        name: str | None = None,
+        daemon: bool = False,
+        purpose: str | None = None,
+    ) -> threading.Thread:
+        """
+        Spawn a tracked thread for clean shutdown.
+        
+        PR-THREAD-001: All background operations must use this method
+        to ensure proper cleanup during shutdown.
+        
+        Args:
+            target: Function to run in thread
+            args: Positional arguments for target
+            kwargs: Keyword arguments for target
+            name: Thread name (required)
+            daemon: Whether to use daemon mode (discouraged)
+            purpose: Description of thread purpose
+        
+        Returns:
+            The spawned thread
+        """
+        if kwargs is None:
+            kwargs = {}
+        
+        return self._thread_registry.spawn(
+            target=target,
+            args=args,
+            kwargs=kwargs,
+            name=name or "UnnamedThread",
+            daemon=daemon,
+            purpose=purpose,
+        )
 
     def __init__(
         self,
@@ -262,11 +309,25 @@ class AppController:
         self.diagnostics_service = None
         self._system_watchdog = None
         # --- END PR-CORE1-D21A ---
+        # PR-THREAD-001: Thread registry for clean shutdown
+        self._thread_registry = get_thread_registry()
         self._is_shutting_down = False
         self.job_service = job_service  # Ensure job_service is always set, even if None
         self.last_ui_heartbeat_ts = time.monotonic()
         self.last_queue_activity_ts = time.monotonic()
         self.last_runner_activity_ts = time.monotonic()
+        
+        # PR-HB-002: Operation tracking for heartbeat stall diagnostics
+        self.current_operation_label: str | None = None
+        self.last_ui_action: str | None = None
+        
+        # PR-HB-003: UI update debouncing to prevent heartbeat stalls
+        self._ui_preview_dirty = False
+        self._ui_job_list_dirty = False
+        self._ui_history_dirty = False
+        self._ui_debounce_pending = False
+        self._ui_debounce_delay_ms = 150  # Coalesce updates within 150ms window
+        
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
         if self.app_state is None:
@@ -284,11 +345,12 @@ class AppController:
         self._last_run_auto_restored = False
         self._last_run_store = LastRunStoreV2_5()
         self._last_run_config: RunConfigDict | None = None
-        # GUI log handler for LogTracePanelV2 (must be set before any access)
-        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.INFO)
+        # GUI log handler for LogTracePanelV2 (captures DEBUG and above for GUI display)
+        self.gui_log_handler = InMemoryLogHandler(max_entries=500, level=logging.DEBUG)
         root_logger = logging.getLogger()
-        if root_logger.level > logging.INFO or root_logger.level == logging.NOTSET:
-            root_logger.setLevel(logging.INFO)
+        # Ensure root logger level allows DEBUG messages to reach handlers
+        if root_logger.level > logging.DEBUG or root_logger.level == logging.NOTSET:
+            root_logger.setLevel(logging.INFO)  # Changed from DEBUG to reduce noise
         root_logger.addHandler(self.gui_log_handler)
         json_config = get_jsonl_log_config()
         self.json_log_handler = attach_jsonl_log_handler(json_config, level=logging.INFO)
@@ -322,6 +384,15 @@ class AppController:
             self.job_service = self._build_job_service()
         if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
             self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
+        
+        # PR-PIPE-002: Initialize duration stats service for queue ETA
+        history_store = getattr(self.job_service, "history_store", None) if self.job_service else None
+        self._duration_stats_service = DurationStatsService(history_store=history_store)
+        if self._duration_stats_service:
+            try:
+                self._duration_stats_service.refresh()
+            except Exception as exc:
+                self._append_log(f"[duration_stats] Initial refresh failed: {exc}")
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
         self._diagnostics_lock = threading.Lock()
@@ -345,12 +416,40 @@ class AppController:
                 pipeline_runner=self.pipeline_runner,
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
+                app_controller=self,  # PR-HEARTBEAT-FIX: Pass self for heartbeat updates
             )
+        
+        # PR-LEARN-012: Initialize LearningExecutionController (NEW implementation)
+        from src.learning.execution_controller import LearningExecutionController
+        from src.gui.learning_state import LearningState
+        
+        # Initialize learning state if not exists
+        if not hasattr(self, '_learning_state'):
+            self._learning_state = LearningState()
+        
+        self.learning_execution_controller = LearningExecutionController(
+            learning_state=self._learning_state,
+            job_service=self.job_service,
+        )
+        # Compatibility for integration tests expecting a run callable field.
+        try:
+            self.learning_execution_controller._run_callable = self._learning_run_callable  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        
+        # PR-LEARN-003: Register learning completion handler
+        if self.job_service:
+            self._learning_completion_handler = self._create_learning_completion_handler()
+            self.job_service.register_completion_handler(self._learning_completion_handler)
+        
         self.webui_connection_controller = getattr(
             self.pipeline_controller, "_webui_connection", None
         )
         if self.webui_connection_controller is None:
             self.webui_connection_controller = WebUIConnectionController()
+        
+        # Override pack config state (for ConfigMergerV2 integration)
+        self.override_pack_config_enabled = False
         try:
             self.webui_connection_controller.register_on_ready(self.on_webui_ready)
         except Exception:
@@ -392,10 +491,23 @@ class AppController:
                         pass
         except Exception:
             pass
+        # PR-SCANNER-001: Disable ProcessAutoScanner by default to prevent self-kill
         self.process_auto_scanner = ProcessAutoScannerService(
             config=ProcessAutoScannerConfig(),
             protected_pids=self._get_protected_process_pids,
+            start_thread=False,  # DISABLED - prevents GUI from being killed
         )
+        
+        # PR-HB-004: Initialize persistence worker with UI callback dispatcher
+        try:
+            from src.services.persistence_worker import get_persistence_worker
+            worker = get_persistence_worker()
+            if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
+                worker._ui_callback_dispatcher = self.main_window.run_in_main_thread
+            logger.debug("[controller] Persistence worker initialized")
+        except Exception as e:
+            logger.error(f"[controller] Failed to initialize persistence worker: {e}")
+        
         # Wire GUI overrides into PipelineController so config assembler can access GUI state
         if hasattr(self.pipeline_controller, "get_gui_overrides"):
             self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
@@ -408,11 +520,53 @@ class AppController:
         self._setup_diagnostics_hooks()
 
     def shutdown(self) -> None:
-        """Shutdown the AppController and all background services cleanly."""
-        self._is_shutting_down = True
+        """
+        Shutdown the AppController and all background services cleanly.
+        
+        PR-SHUTDOWN-001: Enhanced to stop SystemWatchdog, join all tracked threads,
+        close file handles, and verify clean exit.
+        """
+        logger.info("[controller] shutdown(): Stopping system watchdog...")
         if hasattr(self, "_system_watchdog") and self._system_watchdog:
-            self._system_watchdog.stop()
-        # ...existing shutdown logic if any...
+            try:
+                self._system_watchdog.stop()
+                logger.info("[controller] shutdown(): System watchdog stopped")
+            except Exception as e:
+                logger.error(f"[controller] shutdown(): Error stopping watchdog: {e}")
+        
+        # PR-HB-004: Shutdown persistence worker
+        logger.info("[controller] shutdown(): Shutting down persistence worker...")
+        try:
+            from src.services.persistence_worker import shutdown_persistence_worker
+            shutdown_persistence_worker(timeout=5.0)
+            logger.info("[controller] shutdown(): Persistence worker shut down")
+        except Exception as e:
+            logger.error(f"[controller] shutdown(): Error shutting down persistence worker: {e}")
+        
+        # PR-SHUTDOWN-001: Shutdown history store background writer
+        logger.info("[controller] shutdown(): Shutting down history store writer...")
+        if self.job_service:
+            history_store = getattr(self.job_service, "history_store", None)
+            if history_store and hasattr(history_store, "shutdown"):
+                try:
+                    history_store.shutdown()
+                    logger.info("[controller] shutdown(): History store writer shut down")
+                except Exception as e:
+                    logger.error(f"[controller] shutdown(): Error shutting down history store: {e}")
+        
+        # PR-THREAD-001: Join all tracked threads
+        logger.info("[controller] shutdown(): Joining all tracked threads...")
+        try:
+            stats = self._thread_registry.shutdown_all(timeout=10.0)
+            logger.info(
+                f"[controller] shutdown(): Thread shutdown complete - "
+                f"joined={stats['joined']}, timeout={stats['timeout']}, "
+                f"orphaned={stats['orphaned']}"
+            )
+            if stats['timeout'] > 0 or stats['orphaned'] > 0:
+                logger.warning(f"[controller] shutdown(): {stats['timeout']} threads timed out, {stats['orphaned']} daemon threads orphaned")
+        except Exception as e:
+            logger.error(f"[controller] shutdown(): Error during thread shutdown: {e}")
 
     def _ui_dispatch(self, fn: Callable[[], None]) -> None:
         import threading
@@ -443,6 +597,85 @@ class AppController:
                 root.after(0, fn)
                 return
         fn()
+    
+    def _mark_ui_dirty(self, preview: bool = False, jobs: bool = False, history: bool = False) -> None:
+        """Mark UI components as needing refresh and schedule debounced update.
+        
+        PR-HB-003: Coalesces multiple rapid update requests into a single
+        periodic refresh to prevent heartbeat stalls.
+        """
+        if preview:
+            self._ui_preview_dirty = True
+        if jobs:
+            self._ui_job_list_dirty = True
+        if history:
+            self._ui_history_dirty = True
+        
+        # Schedule debounced update if not already pending
+        if not self._ui_debounce_pending:
+            self._ui_debounce_pending = True
+            self._schedule_debounced_ui_update()
+    
+    def _schedule_debounced_ui_update(self) -> None:
+        """Schedule a debounced UI update after delay.
+        
+        PR-HB-003: Uses root.after() to coalesce updates into a single refresh.
+        """
+        try:
+            root = self.main_window.root if self.main_window else None
+        except Exception:
+            root = None
+        
+        if root is not None:
+            try:
+                root.after(self._ui_debounce_delay_ms, self._apply_pending_ui_updates)
+            except Exception:
+                # Fallback if scheduling fails
+                self._apply_pending_ui_updates()
+        else:
+            # No GUI - apply immediately
+            self._apply_pending_ui_updates()
+    
+    def _apply_pending_ui_updates(self) -> None:
+        """Apply all pending UI updates and clear dirty flags.
+        
+        PR-HB-003: Central UI update sink that processes all coalesced updates.
+        """
+        try:
+            self._ui_debounce_pending = False
+            
+            # Update last heartbeat timestamp
+            import time
+            self.last_ui_heartbeat_ts = time.monotonic()
+            
+            # Apply updates based on dirty flags
+            if self._ui_preview_dirty:
+                self._ui_preview_dirty = False
+                try:
+                    self._refresh_preview_from_state()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing preview: {exc}")
+            
+            if self._ui_job_list_dirty:
+                self._ui_job_list_dirty = False
+                try:
+                    # Trigger job list refresh if needed
+                    if self.main_window and hasattr(self.main_window, "refresh_job_list"):
+                        self.main_window.refresh_job_list()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing job list: {exc}")
+            
+            if self._ui_history_dirty:
+                self._ui_history_dirty = False
+                try:
+                    # Trigger history refresh if needed
+                    if self.main_window and hasattr(self.main_window, "refresh_history"):
+                        self.main_window.refresh_history()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing history: {exc}")
+        
+        except Exception as exc:
+            logger.exception(f"[AppController] Error in _apply_pending_ui_updates: {exc}")
 
     def _wrap_ui_callback(self, handler: Callable[..., None] | None) -> Callable[..., None] | None:
         """Return a callable that schedules `handler(*args, **kwargs)` via `_ui_dispatch`.
@@ -461,6 +694,42 @@ class AppController:
 
         return _wrapped
 
+    def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None]:
+        """Return a callback for runtime status updates from pipeline execution.
+        
+        This callback receives status updates during job execution and forwards them
+        to app_state for display in the running job panel.
+        """
+        def _status_callback(status_data: dict[str, Any]) -> None:
+            try:
+                from datetime import datetime
+                from src.pipeline.job_models_v2 import RuntimeJobStatus
+                
+                # Create RuntimeJobStatus from status_data
+                runtime_status = RuntimeJobStatus(
+                    job_id=status_data.get("job_id", ""),
+                    current_stage=status_data.get("current_stage", ""),
+                    stage_index=status_data.get("stage_index", 0),
+                    total_stages=status_data.get("total_stages", 1),
+                    progress=status_data.get("progress", 0.0),
+                    eta_seconds=status_data.get("eta_seconds"),
+                    started_at=status_data.get("started_at") or datetime.utcnow(),
+                    actual_seed=status_data.get("actual_seed"),
+                    current_step=status_data.get("current_step", 0),
+                    total_steps=status_data.get("total_steps", 0),
+                )
+                
+                # Update app_state on GUI thread
+                def _update_state() -> None:
+                    if hasattr(self.app_state, "set_runtime_status"):
+                        self.app_state.set_runtime_status(runtime_status)
+                
+                self._ui_dispatch(_update_state)
+            except Exception as exc:
+                logger.warning(f"Failed to process runtime status update: {exc}")
+        
+        return _status_callback
+
     def list_models(self) -> list[WebUIResource]:
         return self.resource_service.list_models()
 
@@ -478,6 +747,11 @@ class AppController:
 
     def get_gui_log_handler(self) -> InMemoryLogHandler | None:
         return self.gui_log_handler
+
+    @property
+    def duration_stats_service(self) -> DurationStatsService | None:
+        """Expose duration stats service for queue ETA estimation (PR-PIPE-002)."""
+        return getattr(self, "_duration_stats_service", None)
 
     def run_txt2img_once(self, config: dict[str, Any] | None = None) -> None:
         self._append_log("[controller] run_txt2img_once called.")
@@ -499,6 +773,43 @@ class AppController:
         except Exception as exc:
             self._append_log(f"Pipeline error: {exc!r}")
             self._update_status(f"Error: {exc!r}")
+
+    def _learning_run_callable(self, config: dict, step: Any) -> Any:
+        """Callable passed to LearningExecutionController for running pipeline steps.
+
+        PR-LEARN-002: Provides learning experiments with access to the pipeline execution system.
+        """
+        try:
+            # Run through the pipeline runner with the learning experiment config
+            result = self.pipeline_runner.run_txt2img_once(config)
+            return normalize_run_result(result)
+        except Exception as exc:
+            logger.exception(f"[learning] Pipeline run failed for step {step}: {exc}")
+            return normalize_run_result({
+                "success": False,
+                "error": str(exc),
+            })
+    
+    def _create_learning_completion_handler(self):
+        """Create a completion handler that routes to learning subsystem.
+        
+        PR-LEARN-003: Routes job completion events to the learning controller
+        so experiments can update variant status as jobs complete.
+        """
+        def handler(job, result):
+            # Route to learning controller via main window
+            if hasattr(self, "main_window") and self.main_window:
+                learning_tab = getattr(self.main_window, "learning_tab", None)
+                controller_obj = None
+                if learning_tab:
+                    controller_obj = getattr(learning_tab, "learning_controller", None)
+                    if controller_obj is None:
+                        controller_obj = getattr(learning_tab, "controller", None)
+                if controller_obj is not None:
+                    callback = getattr(controller_obj, "on_job_completed_callback", None)
+                    if callable(callback):
+                        callback(job, result)
+        return handler
 
     def update_ui_heartbeat(self) -> None:
         import time
@@ -957,6 +1268,470 @@ class AppController:
             self._append_log(f"[controller] Replay job {job_id} failed: {exc!r}")
         return False
 
+    def on_reprocess_images(
+        self, 
+        image_paths: list[str], 
+        stages: list[str],
+        batch_size: int = 1,
+    ) -> int:
+        """Reprocess existing images through specified pipeline stages.
+        
+        Args:
+            image_paths: List of paths to images to reprocess
+            stages: List of stage names to apply (e.g., ["img2img", "adetailer", "upscale"])
+            batch_size: Number of images per job (default 1 = one job per image)
+            
+        Returns:
+            Number of jobs submitted to queue
+            
+        Raises:
+            ValueError: If no images or stages provided, or if invalid stage names
+        """
+        from src.pipeline.reprocess_builder import ReprocessJobBuilder
+        
+        if not image_paths:
+            raise ValueError("No images provided for reprocessing")
+        if not stages:
+            raise ValueError("No stages specified for reprocessing")
+        
+        # Validate stages
+        valid_stages = {"adetailer", "upscale", "img2img"}
+        invalid_stages = set(stages) - valid_stages
+        if invalid_stages:
+            raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
+        
+        builder = ReprocessJobBuilder()
+        
+        try:
+            # Get current GUI configs for stages
+            config = self._build_reprocess_config(stages)
+            
+            # Debug logging
+            self._append_log(f"[reprocess] Stages enabled: {', '.join(stages)}")
+            if "upscale" in stages:
+                self._append_log(f"[reprocess] DEBUG: config['upscale'] = {config.get('upscale', 'NOT SET')}")
+                self._append_log(f"[reprocess] DEBUG: config['upscaler'] flat key = {config.get('upscaler', 'NOT SET')}")
+            
+            # Build reprocess jobs (batched or individual)
+            if batch_size > 1:
+                njrs = builder.build_reprocess_jobs_batched(
+                    input_image_paths=image_paths,
+                    stages=stages,
+                    batch_size=batch_size,
+                    config=config,
+                )
+            else:
+                # One job per image
+                njrs = []
+                for image_path in image_paths:
+                    njr = builder.build_reprocess_job(
+                        input_image_paths=[image_path],
+                        stages=stages,
+                        config=config,
+                    )
+                    njrs.append(njr)
+            
+            submitted_count = self._submit_reprocess_njrs(njrs, source="reprocess_panel")
+            
+            self._append_log(
+                f"[reprocess] Submitted {submitted_count} job(s) for {len(image_paths)} image(s) "
+                f"through stages: {' → '.join(stages)}"
+            )
+            
+            return submitted_count
+                
+        except Exception as exc:
+            self._append_log(f"[reprocess] Failed to submit reprocess jobs: {exc!r}")
+            raise
+
+    def on_reprocess_images_with_prompt_delta(
+        self,
+        image_paths: list[str],
+        stages: list[str],
+        prompt_delta: str = "",
+        negative_prompt_delta: str = "",
+        prompt_mode: str = "append",
+        negative_prompt_mode: str = "append",
+        batch_size: int = 1,
+    ) -> int:
+        """Reprocess images while preserving metadata-derived settings and editing prompts.
+
+        This path is used by the Review tab. For each image:
+        - Reads embedded stage metadata (if present) for prompt/model/VAE/config baseline.
+        - Applies prompt deltas in append/replace mode.
+        - Builds a single-image NJR and submits it to the queue.
+        """
+        from src.pipeline.reprocess_builder import ReprocessJobBuilder
+
+        if not image_paths:
+            raise ValueError("No images provided for reprocessing")
+        if not stages:
+            raise ValueError("No stages specified for reprocessing")
+
+        valid_stages = {"adetailer", "upscale", "img2img"}
+        invalid_stages = set(stages) - valid_stages
+        if invalid_stages:
+            raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
+        if prompt_mode not in {"append", "replace"}:
+            raise ValueError("prompt_mode must be 'append' or 'replace'")
+        if negative_prompt_mode not in {"append", "replace"}:
+            raise ValueError("negative_prompt_mode must be 'append' or 'replace'")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be >= 1")
+
+        builder = ReprocessJobBuilder()
+        fallback_config = self._build_reprocess_config(stages)
+        njrs = []
+        metadata_hits = 0
+        group_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+
+        for image_path in image_paths:
+            image_file = Path(image_path)
+            base_prompt = ""
+            base_negative_prompt = ""
+            base_model: str | None = None
+            base_vae: str | None = None
+            metadata_config: dict[str, Any] = {}
+
+            metadata_baseline = self._extract_reprocess_baseline_from_image(image_file)
+            if metadata_baseline:
+                metadata_hits += 1
+                base_prompt = str(metadata_baseline.get("prompt") or "")
+                base_negative_prompt = str(metadata_baseline.get("negative_prompt") or "")
+                base_model = metadata_baseline.get("model")
+                base_vae = metadata_baseline.get("vae")
+                maybe_cfg = metadata_baseline.get("config")
+                if isinstance(maybe_cfg, dict):
+                    metadata_config = maybe_cfg
+
+            effective_prompt = self._apply_prompt_delta(base_prompt, prompt_delta, prompt_mode)
+            effective_negative_prompt = self._apply_prompt_delta(
+                base_negative_prompt, negative_prompt_delta, negative_prompt_mode
+            )
+
+            merged_config = self._merge_nested_dicts(fallback_config, metadata_config)
+            self._apply_model_vae_to_config(merged_config, model=base_model, vae=base_vae)
+            config_signature = json.dumps(merged_config, sort_keys=True, default=str)
+            group_key = (
+                effective_prompt,
+                effective_negative_prompt,
+                base_model or "",
+                config_signature,
+            )
+            group = group_map.get(group_key)
+            if group is None:
+                group = {
+                    "paths": [],
+                    "config": merged_config,
+                    "prompt": effective_prompt,
+                    "negative_prompt": effective_negative_prompt,
+                    "model": base_model,
+                }
+                group_map[group_key] = group
+            group["paths"].append(str(image_file))
+
+        for group in group_map.values():
+            paths = group["paths"]
+            for idx in range(0, len(paths), batch_size):
+                chunk = paths[idx : idx + batch_size]
+                njr = builder.build_reprocess_job(
+                    input_image_paths=chunk,
+                    stages=stages,
+                    config=group["config"],
+                    prompt=group["prompt"],
+                    negative_prompt=group["negative_prompt"],
+                    model=group["model"],
+                    pack_name="ReviewReprocess",
+                )
+                njrs.append(njr)
+
+        submitted_count = self._submit_reprocess_njrs(njrs, source="review_tab")
+        self._append_log(
+            f"[reprocess] Review-tab submit: {submitted_count} jobs, "
+            f"metadata baseline used for {metadata_hits}/{len(image_paths)} images "
+            f"across {len(group_map)} compatibility group(s), batch_size={batch_size}"
+        )
+        return submitted_count
+
+    def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
+        from src.utils.image_metadata import extract_embedded_metadata
+
+        try:
+            metadata_result = extract_embedded_metadata(image_path)
+        except Exception:
+            return {}
+
+        if metadata_result.status != "ok" or not isinstance(metadata_result.payload, dict):
+            return {}
+
+        payload = metadata_result.payload
+        generation = payload.get("generation")
+        if not isinstance(generation, dict):
+            generation = {}
+        stage_manifest = payload.get("stage_manifest")
+        if not isinstance(stage_manifest, dict):
+            stage_manifest = {}
+
+        config = stage_manifest.get("config")
+        if not isinstance(config, dict):
+            config = {}
+
+        model_value = stage_manifest.get("model") or generation.get("model")
+        if isinstance(model_value, str) and model_value.strip().lower() in {"unknown", "n/a"}:
+            model_value = None
+        vae_value = stage_manifest.get("vae") or generation.get("vae")
+        if isinstance(vae_value, str) and vae_value.strip().lower() in {"unknown", "n/a"}:
+            vae_value = None
+
+        return {
+            "prompt": stage_manifest.get("prompt") or generation.get("prompt") or "",
+            "negative_prompt": stage_manifest.get("negative_prompt")
+            or generation.get("negative_prompt")
+            or "",
+            "model": model_value,
+            "vae": vae_value,
+            "config": config,
+        }
+
+    @staticmethod
+    def _apply_prompt_delta(base: str, delta: str, mode: str) -> str:
+        base_clean = (base or "").strip()
+        delta_clean = (delta or "").strip()
+        if not delta_clean:
+            return base_clean
+        if mode == "replace":
+            return delta_clean
+        if not base_clean:
+            return delta_clean
+        return f"{base_clean}, {delta_clean}"
+
+    @staticmethod
+    def _merge_nested_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(base)
+        for key, value in (override or {}).items():
+            if isinstance(value, Mapping) and isinstance(merged.get(key), dict):
+                merged[key] = AppController._merge_nested_dicts(
+                    merged.get(key, {}),
+                    dict(value),
+                )
+            else:
+                merged[key] = deepcopy(value)
+        return merged
+
+    @staticmethod
+    def _apply_model_vae_to_config(
+        config: dict[str, Any],
+        *,
+        model: str | None,
+        vae: str | None,
+    ) -> None:
+        if model:
+            config["model"] = model
+            txt2img_cfg = config.setdefault("txt2img", {})
+            if isinstance(txt2img_cfg, dict):
+                txt2img_cfg["model"] = model
+            img2img_cfg = config.setdefault("img2img", {})
+            if isinstance(img2img_cfg, dict):
+                img2img_cfg["model"] = model
+        if vae is not None:
+            config["vae"] = vae
+            txt2img_cfg = config.setdefault("txt2img", {})
+            if isinstance(txt2img_cfg, dict):
+                txt2img_cfg["vae"] = vae
+            img2img_cfg = config.setdefault("img2img", {})
+            if isinstance(img2img_cfg, dict):
+                img2img_cfg["vae"] = vae
+
+    def _submit_reprocess_njrs(self, njrs: list[Any], *, source: str) -> int:
+        from src.queue.job_model import Job, JobPriority
+
+        if not self.job_service:
+            raise RuntimeError("Job service not available")
+
+        submitted_count = 0
+        client_ref = getattr(self, "_api_client", None)
+        for njr in njrs:
+            config_snapshot = njr.to_queue_snapshot()
+            job = Job(
+                job_id=njr.job_id,
+                priority=JobPriority.NORMAL,
+                run_mode="queue",
+                source=source,
+                prompt_source="reprocess",
+                prompt_pack_id=None,
+                config_snapshot=config_snapshot,
+                learning_enabled=False,
+            )
+
+            job._normalized_record = njr  # type: ignore[attr-defined]
+
+            def _run_reprocess_job(j: Job, client_ref=client_ref) -> dict:
+                from src.pipeline.pipeline_runner import run_njr_v2
+
+                njr_obj = getattr(j, "_normalized_record", None)
+                if njr_obj is None:
+                    raise RuntimeError("Reprocess job missing NormalizedJobRecord")
+                try:
+                    if client_ref and hasattr(client_ref, "free_vram"):
+                        client_ref.free_vram(unload_model=True)
+                except Exception:
+                    pass
+                result = run_njr_v2(
+                    njr_obj,
+                    client=client_ref,
+                    cancel_token=self.cancel_token,
+                )
+                return result or {}
+
+            job.payload = lambda j=job: _run_reprocess_job(j)
+            self.job_service.submit_queued(job)
+            submitted_count += 1
+
+        return submitted_count
+    
+    def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
+        """Build configuration dict for reprocess jobs.
+        
+        Respects the "Override pack configs with current stages" checkbox:
+        - When checked: Uses current stage card GUI values
+        - When unchecked: Uses pack config values
+        
+        Args:
+            stages: List of stage names that will be used
+            
+        Returns:
+            Config dict with both nested stage-specific settings and flat global settings
+        """
+        config: dict[str, Any] = {}
+        
+        # Check if override is enabled
+        override_enabled = getattr(self, 'override_pack_config_enabled', False)
+        
+        if override_enabled:
+            # Override enabled: Extract configs from current stage card GUI values
+            try:
+                current_stage_configs = self._collect_current_stage_configs()
+                
+                # Extract global settings from current configs
+                config["cfg_scale"] = current_stage_configs.get("cfg_scale", 7.0)
+                config["sampler_name"] = current_stage_configs.get("sampler_name", "DPM++ 2M Karras")
+                config["steps"] = current_stage_configs.get("steps", 28)
+                
+                # Extract stage-specific configs from current GUI
+                if "img2img" in stages:
+                    img2img_cfg = current_stage_configs.get("img2img", {})
+                    config["img2img"] = {
+                        "denoising_strength": img2img_cfg.get("denoising_strength", 0.3),
+                        "width": img2img_cfg.get("width", 512),
+                        "height": img2img_cfg.get("height", 512),
+                    }
+                    config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
+                
+                if "adetailer" in stages:
+                    ad_cfg = current_stage_configs.get("adetailer", {})
+                    config["adetailer"] = {
+                        "adetailer_model": ad_cfg.get("adetailer_model", "mediapipe_face_full"),
+                        "adetailer_confidence": ad_cfg.get("adetailer_confidence", 0.69),
+                        "adetailer_dilate": ad_cfg.get("adetailer_dilate", 4),
+                        "adetailer_denoise": ad_cfg.get("adetailer_denoise", 0.25),
+                        "adetailer_steps": ad_cfg.get("adetailer_steps") or 12,
+                        "adetailer_cfg": ad_cfg.get("adetailer_cfg") or 5.7,
+                        "adetailer_sampler": ad_cfg.get("adetailer_sampler") or "DPM++ 2M Karras",
+                        "adetailer_prompt": ad_cfg.get("adetailer_prompt", "<stable_yogis_pdxl_positives>,<stable_yogis_realism_positives_v1>, highly realistic human face, natural skin texture, clear skin pores, balanced facial proportions, symmetrical facial features, well-defined eyes, natural eye reflections, accurate facial anatomy, sharp focus, photorealistic details, 8k resolution, professional lighting"),
+                        "adetailer_negative_prompt": ad_cfg.get("adetailer_negative_prompt", "<stable_yogis_pdxl_negatives2-neg>,<stable_yogis_anatomy_negatives_v1-neg>,<sdxl_cyberrealistic_simpleneg-neg>,<negative_hands>,low quality,blurry,out of focus,distorted face,asymmetrical face,deformed facial features,warped eyes,crossed eyes,extra eyes,extra face,multiple faces,mutated face,plastic skin,over-smoothed skin,over-sharpened,harsh shadows,unrealistic skin texture,uncanny "),
+                    }
+                    if ad_cfg.get("adetailer_denoise") is not None:
+                        config["adetailer_denoising_strength"] = ad_cfg["adetailer_denoise"]
+                    if ad_cfg.get("adetailer_steps") is not None:
+                        config["adetailer_steps"] = ad_cfg["adetailer_steps"]
+                    if ad_cfg.get("adetailer_cfg") is not None:
+                        config["adetailer_cfg_scale"] = ad_cfg["adetailer_cfg"]
+                
+                if "upscale" in stages:
+                    upscale_cfg = current_stage_configs.get("upscale", {})
+                    config["upscale"] = {
+                        "upscaler": upscale_cfg.get("upscaler", "4xUltrasharp_4xUltrasharpV10"),
+                        "upscale_by": upscale_cfg.get("upscale_by") or upscale_cfg.get("upscale_factor", 2.0),
+                        "tile_size": upscale_cfg.get("tile_size", 512),
+                        "denoising_strength": upscale_cfg.get("denoising_strength", 0.35),
+                    }
+                    config["upscale_denoising_strength"] = config["upscale"]["denoising_strength"]
+                    config["upscaler"] = config["upscale"]["upscaler"]
+                    config["upscale_factor"] = config["upscale"]["upscale_by"]
+                
+                self._append_log("[reprocess] Using current stage configs (override enabled)")
+            except Exception as e:
+                self._append_log(f"[reprocess] Failed to extract current stage configs: {e}, falling back to pack config")
+                override_enabled = False  # Fall back to pack config
+        
+        if not override_enabled:
+            # Override disabled: Extract configs from currently selected pack
+            pack_config = {}
+            
+            # Get currently selected pack from GUI dropdown
+            selected_pack = self._get_selected_pack()
+            if selected_pack and hasattr(selected_pack, 'config'):
+                pack_config = selected_pack.config or {}
+                self._append_log(f"[reprocess] Using config from selected pack: {selected_pack.name}")
+            else:
+                self._append_log("[reprocess] WARNING: No pack selected, using defaults")
+            
+            # Extract global settings (flat keys at root level)
+            config["cfg_scale"] = pack_config.get("cfg_scale", 7.0)
+            config["sampler_name"] = pack_config.get("sampler_name", "DPM++ 2M Karras")
+            config["steps"] = pack_config.get("steps", 28)
+            
+            # Extract stage-specific configs (nested dicts)
+            if "img2img" in stages:
+                img2img_config = pack_config.get("img2img", {})
+                config["img2img"] = {
+                    "denoising_strength": img2img_config.get("denoising_strength", 0.3),
+                    "width": img2img_config.get("width", 512),
+                    "height": img2img_config.get("height", 512),
+                }
+                # Also set flat key for builder
+                config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
+            
+            # adetailer config (use current pack's adetailer settings)
+            if "adetailer" in stages:
+                ad_config = pack_config.get("adetailer", {})
+                config["adetailer"] = {
+                    "adetailer_model": ad_config.get("adetailer_model", "mediapipe_face_full"),
+                    "adetailer_confidence": ad_config.get("adetailer_confidence", 0.69),
+                    "adetailer_dilate": ad_config.get("adetailer_dilate", 4),
+                    "adetailer_denoise": ad_config.get("adetailer_denoise", 0.25),
+                    "adetailer_steps": ad_config.get("adetailer_steps") or 12,
+                    "adetailer_cfg": ad_config.get("adetailer_cfg") or 5.7,
+                    "adetailer_sampler": ad_config.get("adetailer_sampler") or "DPM++ 2M Karras",
+                    "adetailer_prompt": ad_config.get("adetailer_prompt", "<stable_yogis_pdxl_positives>,<stable_yogis_realism_positives_v1>, highly realistic human face, natural skin texture, clear skin pores, balanced facial proportions, symmetrical facial features, well-defined eyes, natural eye reflections, accurate facial anatomy, sharp focus, photorealistic details, 8k resolution, professional lighting"),
+                    "adetailer_negative_prompt": ad_config.get("adetailer_negative_prompt", "<stable_yogis_pdxl_negatives2-neg>,<stable_yogis_anatomy_negatives_v1-neg>,<sdxl_cyberrealistic_simpleneg-neg>,<negative_hands>,low quality,blurry,out of focus,distorted face,asymmetrical face,deformed facial features,warped eyes,crossed eyes,extra eyes,extra face,multiple faces,mutated face,plastic skin,over-smoothed skin,over-sharpened,harsh shadows,unrealistic skin texture,uncanny "),
+                }
+                # Also set flat keys
+                if ad_config.get("adetailer_denoise") is not None:
+                    config["adetailer_denoising_strength"] = ad_config["adetailer_denoise"]
+                if ad_config.get("adetailer_steps") is not None:
+                    config["adetailer_steps"] = ad_config["adetailer_steps"]
+                if ad_config.get("adetailer_cfg") is not None:
+                    config["adetailer_cfg_scale"] = ad_config["adetailer_cfg"]
+            
+            # upscale config (use current pack's upscale settings)
+            if "upscale" in stages:
+                upscale_config = pack_config.get("upscale", {})
+                config["upscale"] = {
+                    "upscaler": upscale_config.get("upscaler", "4xUltrasharp_4xUltrasharpV10"),
+                    "upscale_by": upscale_config.get("upscale_by") or upscale_config.get("upscale_factor", 2.0),
+                    "tile_size": upscale_config.get("tile_size", 512),
+                    "denoising_strength": upscale_config.get("denoising_strength", 0.35),
+                }
+                # Also set flat keys
+                config["upscale_denoising_strength"] = config["upscale"]["denoising_strength"]
+                config["upscaler"] = config["upscale"]["upscaler"]
+                config["upscale_factor"] = config["upscale"]["upscale_by"]
+            
+            self._append_log("[reprocess] Using pack config (override disabled)")
+        
+        return config
+
     def set_main_window(self, main_window: MainWindow) -> None:
         """Set the main window and wire GUI callbacks."""
         self.main_window = main_window
@@ -981,7 +1756,7 @@ class AppController:
             name for name in ("header_zone", "left_zone", "bottom_zone") if not hasattr(mw, name)
         ]
         if missing:
-            print(
+            logger.debug(
                 f"AppController._attach_to_gui: main_window missing zones {missing}; deferring wiring"
             )
             return
@@ -1134,7 +1909,8 @@ class AppController:
     def _load_queue_state(self) -> None:
         """Load persisted queue state on startup.
 
-        PR-GUI-F3: Restores queue jobs and control flags from disk.
+        PR-QUEUE-PERSIST: Restores queue jobs from NJR snapshots and control flags from disk.
+        Jobs are restored via their NormalizedJobRecord snapshots, which are serializable.
         """
         try:
             snapshot = load_queue_snapshot()
@@ -1155,30 +1931,126 @@ class AppController:
             self.app_state.set_auto_run_queue(snapshot.auto_run_enabled)
             self.app_state.set_is_queue_paused(snapshot.paused)
 
-        # Note: We can't easily restore jobs to the V1 JobQueue since it uses
-        # a different job model. This is a limitation of the current architecture.
-        # The V1 queue doesn't persist job payloads - they're typically callables.
-        # For PR-GUI-F3, we'll at least restore the flags.
-        logger.info(
+        # PR-QUEUE-PERSIST: Also restore auto_run_enabled to job_service
+        if (
+            hasattr(self, "pipeline_controller")
+            and self.pipeline_controller
+            and hasattr(self.pipeline_controller, "job_service")
+            and self.pipeline_controller.job_service
+        ):
+            self.pipeline_controller.job_service.auto_run_enabled = snapshot.auto_run_enabled
+
+        # PR-QUEUE-PERSIST: Restore jobs from NJR snapshots
+        jobs_to_restore = []
+        for job_data in snapshot.jobs:
+            try:
+                # Extract NJR from snapshot
+                njr_data = job_data.get("njr_snapshot")
+                if not njr_data:
+                    logger.warning(f"Job {job_data.get('job_id', 'unknown')} missing NJR snapshot, skipping")
+                    continue
+                
+                # Deserialize NJR
+                from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+                njr = normalized_job_from_snapshot(njr_data)
+                if njr is None:
+                    logger.warning(f"Failed to deserialize NJR for job {job_data.get('job_id', 'unknown')}")
+                    continue
+                
+                # Create Job wrapper with NJR attached
+                from src.queue.job_model import Job, JobPriority, JobStatus
+                from datetime import datetime
+                job = Job(
+                    job_id=job_data.get("job_id", str(uuid.uuid4())),
+                    priority=JobPriority(job_data.get("priority", 1)),
+                    status=JobStatus.QUEUED,
+                    created_at=datetime.fromisoformat(job_data["created_at"]) if "created_at" in job_data else datetime.utcnow(),
+                    config_snapshot=job_data.get("config_snapshot"),
+                    source=job_data.get("source", "restored"),
+                )
+                job._normalized_record = njr  # Attach NJR for execution
+                jobs_to_restore.append(job)
+                
+            except Exception as exc:
+                logger.warning(f"Failed to restore job from snapshot: {exc}", exc_info=True)
+                continue
+        
+        # Restore jobs to queue
+        if jobs_to_restore and self.job_service and self.job_service.job_queue:
+            try:
+                self.job_service.job_queue.restore_jobs(jobs_to_restore)
+                logger.info(f"Restored {len(jobs_to_restore)} jobs from persisted queue state")
+            except Exception as exc:
+                logger.error(f"Failed to restore jobs to queue: {exc}", exc_info=True)
+        
+        logger.debug(
             f"Restored queue state: auto_run={snapshot.auto_run_enabled}, "
-            f"paused={snapshot.paused}, {len(snapshot.jobs)} jobs (jobs not restored in V1 queue)"
+            f"paused={snapshot.paused}, {len(jobs_to_restore)}/{len(snapshot.jobs)} jobs restored"
         )
 
     def _save_queue_state(self) -> None:
         """Save current queue state for persistence.
 
-        PR-GUI-F3: Persists queue control flags to disk.
-        Note: V1 JobQueue jobs contain callables and can't be serialized.
+        PR-QUEUE-PERSIST: Persists queue jobs via their NJR snapshots plus control flags to disk.
+        Jobs with NormalizedJobRecord attached are fully serializable and restorable.
         """
         auto_run = getattr(self.app_state, "auto_run_queue", False) if self.app_state else False
         paused = getattr(self.app_state, "is_queue_paused", False) if self.app_state else False
 
+        # PR-QUEUE-PERSIST: Extract and serialize jobs with NJR snapshots
+        jobs_data = []
+        if self.job_service and self.job_service.job_queue:
+            try:
+                queued_jobs = self.job_service.job_queue.list_jobs(status_filter=JobStatus.QUEUED)
+                for job in queued_jobs:
+                    try:
+                        # PR-PERSIST-FIX: Double-check job is still QUEUED (race condition protection)
+                        if job.status != JobStatus.QUEUED:
+                            logger.debug(f"Job {job.job_id} status changed to {job.status.value}, skipping")
+                            continue
+                        
+                        # Only persist jobs that have NJR attached
+                        njr = getattr(job, "_normalized_record", None)
+                        if njr is None:
+                            logger.debug(f"Job {job.job_id} missing NJR, skipping persistence")
+                            continue
+                        
+                        # Serialize NJR to dict
+                        from src.utils.snapshot_builder_v2 import _serialize_normalized_job
+                        njr_dict = _serialize_normalized_job(njr)
+                        
+                        job_data = {
+                            "queue_id": job.job_id,  # queue_store_v2 expects 'queue_id'
+                            "priority": int(job.priority),
+                            "status": job.status.value,
+                            "created_at": job.created_at.isoformat(),
+                            "njr_snapshot": {
+                                "normalized_job": njr_dict  # Wrap in normalized_job key
+                            },
+                            "queue_schema": SCHEMA_VERSION,  # Required by queue_store_v2
+                            "metadata": {
+                                "config_snapshot": job.config_snapshot,
+                                "source": job.source,
+                            },
+                        }
+                        jobs_data.append(job_data)
+                    except Exception as exc:
+                        logger.warning(f"Failed to serialize job {job.job_id}: {exc}")
+                        continue
+            except Exception as exc:
+                logger.error(f"Failed to extract jobs for persistence: {exc}")
+
         snapshot = QueueSnapshotV1(
-            jobs=[],  # V1 queue jobs can't be serialized (contain callables)
+            jobs=jobs_data,
             auto_run_enabled=auto_run,
             paused=paused,
         )
-        save_queue_snapshot(snapshot)
+        try:
+            save_queue_snapshot(snapshot)
+            if jobs_data:
+                logger.debug(f"Persisted queue state: {len(jobs_data)} jobs saved")
+        except Exception as exc:
+            logger.error(f"Failed to save queue state: {exc}")
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
         """Execute a job via NJR only (PR-CORE1-D11 pack-only path)."""
@@ -1395,8 +2267,22 @@ class AppController:
         if not self.app_state or not self.job_service:
             return
         jobs = self._list_service_jobs()
-        queue_jobs = [job_to_queue_job(job) for job in jobs]
-        summaries = [queue_job.get_display_summary() for queue_job in queue_jobs]
+        # Convert Job objects to UnifiedJobSummary via their NJRs
+        queue_jobs = []
+        summaries = []
+        for job in jobs:
+            njr = getattr(job, "_normalized_record", None)
+            if njr:
+                try:
+                    summary = UnifiedJobSummary.from_normalized_record(njr)
+                    queue_jobs.append(summary)
+                    summaries.append(summary.positive_prompt_preview or job.job_id)
+                except Exception as exc:
+                    logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
+                    summaries.append(job.job_id)
+            else:
+                logger.debug(f"Job {job.job_id} missing NJR, cannot display in GUI")
+                summaries.append(job.job_id)
         self.app_state.set_queue_items(summaries)
         self.app_state.set_queue_jobs(queue_jobs)
 
@@ -1414,9 +2300,36 @@ class AppController:
             return
         if job is None:
             self.app_state.set_running_job(None)
+            # Also clear running job panel if it exists
+            if hasattr(self, "main_window") and self.main_window:
+                tab_frame = getattr(self.main_window, "pipeline_tab", None)
+                if tab_frame and hasattr(tab_frame, "running_job_panel"):
+                    tab_frame.running_job_panel.update_job_with_summary(None, None, None)
+                if tab_frame and hasattr(tab_frame, "preview_panel"):
+                    tab_frame.preview_panel.update_with_summary(None)
             return
-        queue_job = job_to_queue_job(job)
-        self.app_state.set_running_job(queue_job)
+        
+        # Convert Job to UnifiedJobSummary via NJR
+        summary = None
+        njr = getattr(job, "_normalized_record", None)
+        if njr:
+            try:
+                summary = UnifiedJobSummary.from_normalized_record(njr)
+            except Exception as exc:
+                logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
+        else:
+            logger.warning(f"Running job {job.job_id} missing NJR, cannot display in GUI")
+        
+        self.app_state.set_running_job(summary)
+        
+        # Update running job panel - pass Job object with runtime tracking, not just summary
+        if hasattr(self, "main_window") and self.main_window:
+            tab_frame = getattr(self.main_window, "pipeline_tab", None)
+            if tab_frame and hasattr(tab_frame, "running_job_panel"):
+                # Pass the actual Job object (with runtime attrs) and summary separately
+                tab_frame.running_job_panel.update_job_with_summary(job, summary, None)
+            if tab_frame and hasattr(tab_frame, "preview_panel"):
+                tab_frame.preview_panel.update_with_summary(summary)
 
     # ------------------------------------------------------------------
     # PR-203: Queue Manipulation APIs
@@ -1424,36 +2337,87 @@ class AppController:
 
     def on_queue_move_up_v2(self, job_id: str) -> bool:
         """Move a job up in the queue."""
+        return self.move_queue_job_up(job_id)
+
+    def on_queue_move_down_v2(self, job_id: str) -> bool:
+        """Move a job down in the queue."""
+        return self.move_queue_job_down(job_id)
+
+    def move_queue_job_up(self, job_id: str) -> bool:
+        """Move a job up in the queue and persist the new ordering."""
         if not self.job_service:
             return False
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "move_up"):
             try:
-                return bool(queue.move_up(job_id))
+                result = bool(queue.move_up(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                    self._save_queue_state()
+                return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_up_v2 error: {exc!r}")
         return False
 
-    def on_queue_move_down_v2(self, job_id: str) -> bool:
-        """Move a job down in the queue."""
+    def move_queue_job_down(self, job_id: str) -> bool:
+        """Move a job down in the queue and persist the new ordering."""
         if not self.job_service:
             return False
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "move_down"):
             try:
-                return bool(queue.move_down(job_id))
+                result = bool(queue.move_down(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                    self._save_queue_state()
+                return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_move_down_v2 error: {exc!r}")
+        return False
+
+    def move_queue_job_to_front(self, job_id: str) -> bool:
+        """Move a job to the front of the queue."""
+        if not self.job_service:
+            return False
+        queue = getattr(self.job_service, "job_queue", None)
+        if queue and hasattr(queue, "move_to_front"):
+            try:
+                result = bool(queue.move_to_front(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                    self._save_queue_state()
+                return result
+            except Exception as exc:
+                self._append_log(f"[controller] move_queue_job_to_front error: {exc!r}")
+        return False
+
+    def move_queue_job_to_back(self, job_id: str) -> bool:
+        """Move a job to the back of the queue."""
+        if not self.job_service:
+            return False
+        queue = getattr(self.job_service, "job_queue", None)
+        if queue and hasattr(queue, "move_to_back"):
+            try:
+                result = bool(queue.move_to_back(job_id))
+                if result:
+                    self._refresh_app_state_queue()
+                    self._save_queue_state()
+                return result
+            except Exception as exc:
+                self._append_log(f"[controller] move_queue_job_to_back error: {exc!r}")
         return False
 
     def on_queue_remove_job_v2(self, job_id: str) -> bool:
         """Remove a job from the queue."""
         if not self.job_service:
             return False
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
-                return queue.remove(job_id) is not None
+                result = queue.remove(job_id) is not None
+                if result:
+                    self._refresh_app_state_queue()
+                return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_remove_job_v2 error: {exc!r}")
         return False
@@ -1462,10 +2426,12 @@ class AppController:
         """Clear all jobs from the queue."""
         if not self.job_service:
             return 0
-        queue = getattr(self.job_service, "queue", None)
+        queue = getattr(self.job_service, "job_queue", None)
         if queue and hasattr(queue, "clear"):
             try:
                 result = int(queue.clear())
+                if result > 0:
+                    self._refresh_app_state_queue()
                 self._save_queue_state()
                 return result
             except Exception as exc:
@@ -1477,7 +2443,7 @@ class AppController:
         if self.app_state:
             self.app_state.set_is_queue_paused(True)
         if self.job_service:
-            queue = getattr(self.job_service, "queue", None)
+            queue = getattr(self.job_service, "job_queue", None)
             if queue and hasattr(queue, "pause"):
                 queue.pause()
         self._save_queue_state()
@@ -1487,7 +2453,7 @@ class AppController:
         if self.app_state:
             self.app_state.set_is_queue_paused(False)
         if self.job_service:
-            queue = getattr(self.job_service, "queue", None)
+            queue = getattr(self.job_service, "job_queue", None)
             if queue and hasattr(queue, "resume"):
                 queue.resume()
         self._save_queue_state()
@@ -1497,9 +2463,23 @@ class AppController:
         if self.app_state:
             self.app_state.set_auto_run_queue(enabled)
         if self.job_service:
-            queue = getattr(self.job_service, "queue", None)
-            if queue and hasattr(queue, "auto_run_enabled"):
-                queue.auto_run_enabled = enabled
+            self.job_service.auto_run_enabled = enabled
+            # If enabling auto-run and queue has jobs, start the runner
+            if enabled:
+                queue = getattr(self.job_service, "job_queue", None)
+                app_paused = bool(getattr(self.app_state, "is_queue_paused", False)) if self.app_state else False
+                queue_paused = bool(getattr(queue, "is_paused", False)) if queue and hasattr(queue, "is_paused") else False
+                is_paused = app_paused or queue_paused
+                if is_paused:
+                    self._append_log("[controller] Auto-run enabled but queue is paused; runner not started")
+                elif queue and hasattr(queue, "list_jobs"):
+                    jobs = list(queue.list_jobs())
+                    if jobs:
+                        try:
+                            self.job_service.run_next_now()
+                            self._append_log(f"[controller] Auto-run enabled - starting runner for {len(jobs)} queued job(s)")
+                        except Exception as exc:
+                            self._append_log(f"[controller] Failed to start runner: {exc!r}")
         self._save_queue_state()
 
     def on_pause_job_v2(self) -> None:
@@ -1546,15 +2526,21 @@ class AppController:
         """Manually dispatch the next job from the queue.
 
         PR-GUI-F3: Send Job button - dispatches top of queue immediately.
-        Respects pause state (if paused, does nothing).
+        Starts the runner to process queued jobs.
         """
         if not self.job_service:
             return
-        queue = getattr(self.job_service, "queue", None)
-        if queue and hasattr(queue, "start_next_job"):
-            # Only dispatch if not paused
-            if not getattr(queue, "is_paused", False):
-                queue.start_next_job()
+        # Check if paused
+        is_paused = self.app_state.is_queue_paused if self.app_state else False
+        if is_paused:
+            self._append_log("[controller] Cannot send job - queue is paused")
+            return
+        # Start the runner to process queue
+        try:
+            self.job_service.run_next_now()
+            self._append_log("[controller] Queue worker started via Send Job")
+        except Exception as exc:
+            self._append_log(f"[controller] Failed to start queue worker: {exc!r}")
 
     def refresh_job_history(self, limit: int | None = None) -> None:
         """Trigger a manual history refresh (exposed to GUI)."""
@@ -1567,10 +2553,28 @@ class AppController:
         if store is None:
             return
         try:
+            # PR-HISTORY-FIX: Force cache invalidation before refresh to ensure we get latest data
+            # This is critical for manual refresh button to work correctly
+            if hasattr(store, "invalidate_cache"):
+                store.invalidate_cache()
+            
+            # Only show completed and failed jobs in history (not queued/running/cancelled)
             entries = store.list_jobs(limit=limit or 20)
+            # Filter to only show terminal states that made it through the pipeline
+            from src.queue.job_model import JobStatus
+            terminal_states = {JobStatus.COMPLETED, JobStatus.FAILED}
+            filtered_entries = [e for e in entries if e.status in terminal_states]
+            entries = filtered_entries
         except Exception:
             entries = []
         self.app_state.set_history_items(entries)
+        
+        # PR-PIPE-002: Refresh duration stats when history updates
+        if hasattr(self, "_duration_stats_service") and self._duration_stats_service:
+            try:
+                self._duration_stats_service.refresh()
+            except Exception as exc:
+                self._append_log(f"[duration_stats] Refresh failed: {exc}")
 
     def on_open_settings(self) -> None:
         self._append_log("[controller] Opening settings dialog.")
@@ -1964,11 +2968,12 @@ class AppController:
         """Expose helper that expands the LogTracePanelV2 if present."""
         trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
         if trace_panel is None:
+            logger.warning("show_log_trace_panel called but log_trace_panel_v2 not found")
             return
         try:
             trace_panel.show()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to show log trace panel: {e}", exc_info=True)
 
     # ------------------------------------------------------------------
     # Run / Stop / Preview
@@ -2211,12 +3216,14 @@ class AppController:
         self._set_lifecycle(LifecycleState.RUNNING)
 
         if self.threaded:
-            self._worker_thread = threading.Thread(
+            # PR-THREAD-001: Use ThreadRegistry for pipeline worker
+            self._worker_thread = self._spawn_tracked_thread(
                 target=self._run_pipeline_thread,
                 args=(self._cancel_token,),
-                daemon=True,
+                name="Pipeline-Worker",
+                daemon=False,
+                purpose="Run pipeline execution in background thread"
             )
-            self._worker_thread.start()
         else:
             # Synchronous run (for tests and journeys) via worker routine directly
             self._run_pipeline_thread(self._cancel_token)
@@ -2245,6 +3252,10 @@ class AppController:
         self._update_webui_state("connected" if healthy else "error")
 
     def _run_pipeline_thread(self, cancel_token: CancelToken) -> None:
+        """Execute pipeline with proper cleanup.
+        
+        PR-MEMORY-001: Clears cancel token after completion to prevent memory leaks.
+        """
         try:
             pipeline_config = self.build_pipeline_config_v2()
             self._append_log_threadsafe("[controller] Starting pipeline execution.")
@@ -2271,6 +3282,9 @@ class AppController:
             self._append_log_threadsafe(f"[controller] Pipeline error: {exc!r}")
             self._set_lifecycle_threadsafe(LifecycleState.ERROR, error=str(exc))
             cancel_token.clear_stop_requirement()
+        finally:
+            # PR-MEMORY-001: Clear cancel token reference to prevent memory leaks
+            self._cancel_token = None
 
     def _cache_last_run_payload(
         self, executor_config: dict[str, Any], pipeline_config: PipelineConfig
@@ -2348,13 +3362,19 @@ class AppController:
             stage_panel.load_adetailer_config(executor_config.get("adetailer") or {})
 
         pipeline_section = executor_config.get("pipeline") or {}
+        # Get stage flags directly from config without defaults - if missing, will be None
+        txt2img_val = pipeline_section.get("txt2img_enabled")
+        img2img_val = pipeline_section.get("img2img_enabled") 
+        adetailer_val = pipeline_section.get("adetailer_enabled")
+        upscale_val = pipeline_section.get("upscale_enabled")
+        
         stage_defaults = {
-            "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
-            "img2img": bool(pipeline_section.get("img2img_enabled", True)),
-            "adetailer": bool(pipeline_section.get("adetailer_enabled", True)),
-            "upscale": bool(pipeline_section.get("upscale_enabled", False)),
+            "txt2img": bool(txt2img_val) if txt2img_val is not None else True,
+            "img2img": bool(img2img_val) if img2img_val is not None else False,
+            "adetailer": bool(adetailer_val) if adetailer_val is not None else False,
+            "upscale": bool(upscale_val) if upscale_val is not None else False,
         }
-        logger.info(
+        logger.debug(
             "[controller] Loading stage flags from config: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
             stage_defaults["txt2img"],
             stage_defaults["img2img"],
@@ -2530,7 +3550,19 @@ class AppController:
 
     def on_refresh_clicked(self) -> None:
         self._append_log("[controller] Refresh clicked.")
-        self.refresh_resources_from_webui()
+        # Run refresh in background thread to avoid GUI freeze
+        import threading
+        
+        def _refresh_worker():
+            try:
+                self.refresh_resources_from_webui()
+            except Exception as exc:
+                logger.warning(f"Background refresh failed: {exc}")
+                self._append_log(f"[controller] Refresh failed: {exc}")
+        
+        thread = threading.Thread(target=_refresh_worker, daemon=True, name="RefreshResourcesWorker")
+        thread.start()
+        self._append_log("[controller] Refresh started in background...")
 
     def stop_all_background_work(self) -> None:
         """Best-effort shutdown used by GUI teardown to avoid late Tk calls."""
@@ -2565,12 +3597,19 @@ class AppController:
             logger.info("[controller] shutdown_app: Already shutting down, skipping")
             return
         self._is_shutting_down = True
-        if self._shutdown_started_at is None:
-            self._shutdown_started_at = time.time()
-            threading.Thread(target=self._shutdown_watchdog, daemon=True).start()
         label = reason or "shutdown"
         logger.info("[controller] ===== SHUTDOWN_APP CALLED (%s) =====", label)
-
+        
+        # PR-THREAD-001: Use tracked thread for shutdown watchdog
+        if self._shutdown_started_at is None:
+            self._shutdown_started_at = time.time()
+            self._spawn_tracked_thread(
+                target=self._shutdown_watchdog,
+                name="ShutdownWatchdog",
+                daemon=False,
+                purpose="Monitor shutdown for hangs"
+            )
+        
         try:
             logger.info("[controller] Step 1/8: Cancelling active jobs...")
             self._cancel_active_jobs(label)
@@ -2604,6 +3643,14 @@ class AppController:
             logger.info("[controller] Step 5/8: Job service shutdown complete")
         except Exception:
             logger.exception("Error shutting down job service")
+        
+        # PR-SHUTDOWN-001: Call enhanced shutdown() for watchdog and thread cleanup
+        try:
+            logger.info("[controller] Step 5.5/8: Running enhanced shutdown sequence...")
+            self.shutdown()
+            logger.info("[controller] Step 5.5/8: Enhanced shutdown complete")
+        except Exception:
+            logger.exception("Error during enhanced shutdown")
 
         if is_debug_shutdown_inspector_enabled():
             try:
@@ -2619,6 +3666,14 @@ class AppController:
             logger.info("[controller] Step 7/8: Worker thread joined")
         except Exception:
             logger.exception("Error waiting for worker thread during shutdown")
+
+        # PR-PERSIST-FIX: Ensure queue state is saved before shutdown completes
+        try:
+            logger.info("[controller] Step 7.5/8: Saving queue state...")
+            self._save_queue_state()
+            logger.info("[controller] Step 7.5/8: Queue state saved")
+        except Exception:
+            logger.exception("Error saving queue state during shutdown")
 
         try:
             logger.info("[controller] Step 8/8: Closing loggers and API clients...")
@@ -2720,9 +3775,21 @@ class AppController:
                 logger.exception("Error stopping job service")
 
     def _shutdown_watchdog(self) -> None:
-        timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "8"))
+        # PR-SHUTDOWN-002: Increased default from 8s to 15s to reduce false alarms
+        # Normal shutdown takes 8-12s (thread joins, WebUI stop, etc.)
+        # PR-SHUTDOWN-FIX: Poll shutdown_completed periodically instead of one long sleep
+        timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "15"))
         hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
-        time.sleep(timeout)
+        
+        # Poll every 0.5s for early exit when shutdown completes
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._shutdown_completed:
+                logger.info("[controller] Shutdown watchdog: Clean shutdown detected, exiting early")
+                return
+            time.sleep(0.5)
+        
+        # Timeout reached - check if shutdown completed
         if not self._shutdown_completed:
             logger.error(
                 "Shutdown watchdog triggered after %.1fs (completed=%s)",
@@ -3257,8 +4324,17 @@ class AppController:
                 self._warned_missing_pipeline_apply = True
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
+        """Refresh resources from WebUI API and update GUI dropdowns.
+        
+        PR-HB-003: This method is now designed to run on a worker thread.
+        It makes potentially slow HTTP calls to fetch resources, then
+        dispatches all GUI updates back to the main thread.
+        """
         if not getattr(self, "resource_service", None):
             return None
+        
+        # PR-HB-003: This can take 3-10 seconds with large model collections
+        # Now safe to block since we're on a worker thread
         try:
             payload = self.resource_service.refresh_all() or {}
         except Exception as exc:
@@ -3268,29 +4344,63 @@ class AppController:
             return None
 
         normalized = self._normalize_resource_map(payload)
-        self.state.resources = normalized
-        if self.app_state is not None:
-            try:
-                self.app_state.set_resources(normalized)
-            except Exception:
-                pass
-        self._emit_webui_resources_updated(normalized)
-        counts = tuple(
-            len(normalized[key])
-            for key in ("models", "vaes", "samplers", "schedulers", "upscalers")
-        )
-        msg = (
-            f"Resource update: {counts[0]} models, {counts[1]} vaes, "
-            f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
-        )
-        self._append_log(f"[resources] {msg}")
-        logger.info(msg)
+        
+        # PR-HB-003: Schedule GUI updates on main thread
+        def _update_gui():
+            self.state.resources = normalized
+            if self.app_state is not None:
+                try:
+                    self.app_state.set_resources(normalized)
+                except Exception:
+                    pass
+            self._emit_webui_resources_updated(normalized)
+            
+            counts = tuple(
+                len(normalized[key])
+                for key in ("models", "vaes", "samplers", "schedulers", "upscalers")
+            )
+            msg = (
+                f"Resource update: {counts[0]} models, {counts[1]} vaes, "
+                f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
+            )
+            self._append_log(f"[resources] {msg}")
+            logger.debug(msg)
+        
+        # PR-HB-003: Dispatch to main thread for GUI updates
+        self._run_in_gui_thread(_update_gui)
+        
         return normalized
 
     def on_webui_ready(self) -> None:
-        """Handle WebUI transitioning to READY."""
-        self._append_log("[webui] READY received, refreshing resource lists.")
-        self.refresh_resources_from_webui()
+        """Handle WebUI transitioning to READY.
+        
+        PR-HB-003: Spawns worker thread for resource refresh to avoid blocking
+        the calling thread (which may be UI thread or connection thread).
+        """
+        self._append_log("[webui] READY received, refreshing resource lists asynchronously.")
+        
+        # PR-HB-003: Set operation label for diagnostics
+        self.current_operation_label = "Refreshing WebUI resources"
+        self.last_ui_action = "on_webui_ready()"
+        
+        # PR-HB-003: Spawn worker thread for slow resource fetching
+        def _worker():
+            try:
+                self.refresh_resources_from_webui()
+            except Exception as exc:
+                logger.exception(f"[controller] Error refreshing WebUI resources: {exc}")
+                self._append_log(f"[webui] Resource refresh failed: {exc}")
+            finally:
+                # Clear operation label
+                self.current_operation_label = None
+                self.last_ui_action = None
+        
+        # Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=_worker,
+            name="WebUIResourceRefresh",
+            purpose="Refresh WebUI resources after connection"
+        )
 
     def _normalize_resource_map(self, payload: dict[str, Any]) -> dict[str, list[Any]]:
         resources = self._empty_resource_map()
@@ -3335,13 +4445,73 @@ class AppController:
         self.app_state.set_lora_strengths(strengths)
 
     def on_stage_toggled(self, stage: str, enabled: bool) -> None:
-        if stage != "adetailer" or not self.app_state:
-            return
+        """Sync sidebar checkbox changes to pipeline_tab variables.
+        
+        This ensures that when user toggles a stage checkbox in the sidebar,
+        the corresponding pipeline_tab.{stage}_enabled variable is updated
+        so that Apply Config saves the correct state.
+        """
         normalized = bool(enabled)
-        self.app_state.set_adetailer_enabled(normalized)
-        config_snapshot = self._collect_adetailer_panel_config()
-        config_snapshot["enabled"] = normalized
-        self.app_state.set_adetailer_config(config_snapshot)
+        
+        # Sync to pipeline_tab so Apply Config captures the checkbox state
+        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        if pipeline_tab:
+            enabled_var = getattr(pipeline_tab, f"{stage}_enabled", None)
+            if enabled_var is not None:
+                try:
+                    enabled_var.set(normalized)
+                    logger.debug(
+                        "[controller] on_stage_toggled: synced %s to %s in pipeline_tab",
+                        stage,
+                        normalized,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[controller] Failed to sync %s toggle to pipeline_tab: %s",
+                        stage,
+                        exc,
+                    )
+        
+        # Handle adetailer-specific app_state updates
+        if stage == "adetailer" and self.app_state:
+            self.app_state.set_adetailer_enabled(normalized)
+            config_snapshot = self._collect_adetailer_panel_config()
+            config_snapshot["enabled"] = normalized
+            self.app_state.set_adetailer_config(config_snapshot)
+
+    def on_override_pack_config_changed(self, enabled: bool) -> None:
+        """Handle override pack config checkbox state change.
+        
+        When enabled=True, current stage card configs will override pack configs.
+        When enabled=False, pack configs are used as-is.
+        This state is consumed by ConfigMergerV2 when building StageOverrideFlags.
+        """
+        self.override_pack_config_enabled = bool(enabled)
+        self._append_log(
+            f"[controller] Pack config override: {'ENABLED' if enabled else 'DISABLED'} - "
+            f"Current stage settings will {'override' if enabled else 'not override'} pack configs"
+        )
+
+    def _build_stage_override_flags(self):  # type: ignore[no-untyped-def]
+        """Build StageOverrideFlags based on override checkbox state.
+        
+        When override checkbox is ON, all stage overrides are enabled.
+        When OFF, all overrides are disabled (pack configs used as-is).
+        
+        Returns:
+            StageOverrideFlags instance for use with ConfigMergerV2.merge_pipeline().
+        """
+        from src.pipeline.config_merger_v2 import StageOverrideFlags, ConfigMergerV2, StageOverridesBundle
+        
+        enabled = self.override_pack_config_enabled
+        return StageOverrideFlags(
+            txt2img_override_enabled=enabled,
+            img2img_override_enabled=enabled,
+            upscale_override_enabled=enabled,
+            refiner_override_enabled=enabled,
+            hires_override_enabled=enabled,
+            adetailer_override_enabled=enabled,
+        )
 
     def on_adetailer_config_changed(self, config: dict[str, Any]) -> None:
         if not self.app_state:
@@ -3437,10 +4607,20 @@ class AppController:
         base = self.app_state.run_config.copy() if self.app_state else {}
         if self.app_state and self.app_state.lora_strengths:
             base["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
+        
+        # Defensive checks for state access
         if "randomization_enabled" not in base:
-            base["randomization_enabled"] = self.state.current_config.randomization_enabled
+            if hasattr(self, 'state') and self.state and hasattr(self.state, 'current_config'):
+                base["randomization_enabled"] = getattr(self.state.current_config, 'randomization_enabled', False)
+            else:
+                base["randomization_enabled"] = False
+                
         if "max_variants" not in base:
-            base["max_variants"] = self.state.current_config.max_variants
+            if hasattr(self, 'state') and self.state and hasattr(self.state, 'current_config'):
+                base["max_variants"] = getattr(self.state.current_config, 'max_variants', 1)
+            else:
+                base["max_variants"] = 1
+                
         return base
 
     def _lora_settings_payload(self) -> dict[str, dict[str, Any]] | None:
@@ -3741,69 +4921,396 @@ class AppController:
             self._append_log(f"[controller] Failed to save preset '{preset_name}'")
         return success
 
-    def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
-        """Add one or more packs to the current job draft."""
-        print(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
-        self._append_log(f"[controller] Adding packs to job: {pack_ids}")
+    def _collect_current_stage_configs(self) -> dict[str, Any]:
+        """Collect current stage configurations from the GUI cards.
+        
+        This is similar to the logic in on_pipeline_pack_apply_config but returns
+        the config instead of applying it to packs.
+        """
+        current_config: dict[str, Any] = {}
+        
+        # Get stage cards panel (defensive check)
+        try:
+            stage_panel = self._get_stage_cards_panel()
+        except (AttributeError, TypeError):
+            stage_panel = None
+            
+        if stage_panel:
+            # Gather from txt2img card
+            txt2img_card = getattr(stage_panel, "txt2img_card", None)
+            if txt2img_card and hasattr(txt2img_card, "to_config_dict"):
+                try:
+                    txt2img_config = txt2img_card.to_config_dict()
+                    current_config.update(txt2img_config)
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering txt2img config: {e}")
+            
+            # Gather from img2img card
+            img2img_card = getattr(stage_panel, "img2img_card", None)
+            if img2img_card and hasattr(img2img_card, "to_config_dict"):
+                try:
+                    img2img_config = img2img_card.to_config_dict()
+                    current_config.update(img2img_config)
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering img2img config: {e}")
+            
+            # Gather from upscale card
+            upscale_card = getattr(stage_panel, "upscale_card", None)
+            if upscale_card and hasattr(upscale_card, "to_config_dict"):
+                try:
+                    upscale_config = upscale_card.to_config_dict()
+                    current_config.update(upscale_config)
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering upscale config: {e}")
+            
+            # Gather from adetailer card
+            adetailer_card = getattr(stage_panel, "adetailer_card", None)
+            if adetailer_card and hasattr(adetailer_card, "to_config_dict"):
+                try:
+                    adetailer_config = adetailer_card.to_config_dict()
+                    # Wrap in "adetailer" section to match pack structure
+                    if "adetailer" not in current_config:
+                        current_config["adetailer"] = {}
+                    current_config["adetailer"].update(adetailer_config)
+                    
+                    # Include enabled flag in adetailer section
+                    if hasattr(self, 'main_window') and self.main_window:
+                        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+                        if pipeline_tab:
+                            adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
+                            if adetailer_enabled_var is not None:
+                                current_config["adetailer"]["adetailer_enabled"] = bool(adetailer_enabled_var.get())
+                except Exception as e:
+                    self._append_log(f"[controller] Error gathering adetailer config: {e}")
+        
+        # Add randomizer config (defensive check)
+        try:
+            panel_randomizer = self._get_panel_randomizer_config()
+            if panel_randomizer:
+                current_config.update(panel_randomizer)
+        except (AttributeError, TypeError):
+            pass
+        
+        return current_config
 
-        entries = []
+    def _add_global_prompt_flags(self, config: dict[str, Any]) -> None:
+        """Add global prompt application flags from sidebar checkboxes to config.
+        
+        Args:
+            config: Configuration dict to modify (modifies in-place)
+        """
+        # Get sidebar reference from main window
+        if not self.main_window:
+            return
+        
+        sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
+        if not sidebar:
+            return
+        
+        # Get global prompt configurations from sidebar
+        try:
+            global_positive_config = sidebar.get_global_positive_config()
+            global_negative_config = sidebar.get_global_negative_config()
+            
+            # Add flags to pipeline section
+            pipeline_section = config.setdefault("pipeline", {})
+            pipeline_section["apply_global_positive_txt2img"] = global_positive_config.get("enabled", False)
+            pipeline_section["apply_global_negative_txt2img"] = global_negative_config.get("enabled", True)
+            
+        except Exception as e:
+            # Fallback: if anything goes wrong, default to safe values
+            self._append_log(f"[controller] Failed to read global prompt flags: {e}")
+            pipeline_section = config.setdefault("pipeline", {})
+            pipeline_section.setdefault("apply_global_positive_txt2img", False)
+            pipeline_section.setdefault("apply_global_negative_txt2img", True)
+
+    def _build_config_snapshot_with_override(self, pack_config: dict[str, Any]) -> dict[str, Any]:
+        """Build config snapshot considering the override checkbox state.
+        
+        Args:
+            pack_config: The base configuration from the pack
+            
+        Returns:
+            A configuration dict that either uses the pack config as-is (override disabled)
+            or merges pack config with current GUI stage configs (override enabled)
+        """
+        base_config = self._run_config_with_lora()
+        
+        # Check if override is enabled (defensive check for tests/incomplete setup)
+        override_enabled = getattr(self, 'override_pack_config_enabled', False)
+        
+        if not override_enabled:
+            # Override disabled: use pack config merged with base run config
+            merged_config = {**base_config, **pack_config}
+            # Add global prompt flags from sidebar checkboxes
+            self._add_global_prompt_flags(merged_config)
+            self._append_log("[controller] Override disabled: using pack config as-is")
+            return merged_config
+        
+        # Override enabled: merge current stage configs into pack config
+        try:
+            current_stage_configs = self._collect_current_stage_configs()
+            
+            # Build stage overrides bundle from current GUI configs
+            stage_overrides = self._build_stage_overrides_from_current_config(current_stage_configs)
+            
+            # Build override flags (all enabled when override checkbox is on)
+            override_flags = self._build_stage_override_flags()
+            
+            # Merge pack config with stage overrides using ConfigMergerV2
+            from src.pipeline.config_merger_v2 import ConfigMergerV2
+            
+            base_merged = {**base_config, **pack_config}
+            final_config = ConfigMergerV2().merge_pipeline(
+                base_config=base_merged,
+                stage_overrides=stage_overrides,
+                override_flags=override_flags
+            )
+            
+            # Add global prompt flags from sidebar checkboxes
+            self._add_global_prompt_flags(final_config)
+            
+            self._append_log("[controller] Override enabled: merged current stage configs with pack config")
+            return final_config
+        
+        except Exception as e:
+            # Fallback: if anything goes wrong with override merging, use base config
+            self._append_log(f"[controller] Override merge failed: {e}, falling back to pack config")
+            return {**base_config, **pack_config}
+
+    def _build_stage_overrides_from_current_config(self, current_config: dict[str, Any]) -> StageOverridesBundle:
+        """Build a StageOverridesBundle from the current GUI stage configurations."""
+        from src.pipeline.config_merger_v2 import (
+            StageOverridesBundle,
+            Txt2ImgOverrides,
+            Img2ImgOverrides,
+            UpscaleOverrides,
+            RefinerOverrides,
+            HiresOverrides,
+            ADetailerOverrides,
+        )
+        
+        # Extract txt2img settings (stage cards export under "txt2img")
+        txt2img_overrides = None
+        txt2img_config = current_config.get("txt2img", {}) or {}
+        if any(
+            key in txt2img_config
+            for key in ["model", "sampler_name", "scheduler", "steps", "cfg_scale", "width", "height"]
+        ):
+            txt2img_overrides = Txt2ImgOverrides(
+                model=txt2img_config.get("model"),
+                vae=txt2img_config.get("vae"),
+                sampler=txt2img_config.get("sampler_name"),  # Note: field is "sampler", not "sampler_name"
+                scheduler=txt2img_config.get("scheduler"),
+                steps=txt2img_config.get("steps"),
+                cfg_scale=txt2img_config.get("cfg_scale"),
+                width=txt2img_config.get("width"),
+                height=txt2img_config.get("height"),
+            )
+        
+        # Extract img2img settings (if any)
+        img2img_overrides = None
+        img2img_config = current_config.get("img2img", {})
+        if img2img_config:
+            img2img_overrides = Img2ImgOverrides(
+                enabled=img2img_config.get("enabled", False),
+                denoise_strength=img2img_config.get("denoising_strength"),  # Note: field is "denoise_strength"
+            )
+        
+        # Extract upscale settings (if any)
+        upscale_overrides = None
+        upscale_config = current_config.get("upscale", {})
+        if upscale_config:
+            upscale_overrides = UpscaleOverrides(
+                enabled=upscale_config.get("enabled", False),
+                upscaler_name=upscale_config.get("upscaler"),  # Note: field is "upscaler_name"
+                scale_factor=upscale_config.get("scale_factor"),
+                denoise_strength=upscale_config.get("denoise_strength"),
+            )
+        
+        # Extract refiner settings (if any)
+        refiner_overrides = None
+        if any(key.startswith("refiner_") for key in txt2img_config.keys()) or "use_refiner" in txt2img_config:
+            refiner_overrides = RefinerOverrides(
+                enabled=txt2img_config.get("use_refiner", False),
+                model_name=txt2img_config.get("refiner_model_name") or txt2img_config.get("refiner_checkpoint"),
+                switch_at=txt2img_config.get("refiner_switch_at"),
+            )
+        
+        # Extract hires fix settings (if any)
+        hires_overrides = None
+        if any(key.startswith("hr_") for key in txt2img_config.keys()) or "enable_hr" in txt2img_config:
+            hires_overrides = HiresOverrides(
+                enabled=txt2img_config.get("enable_hr", False),
+                scale_factor=txt2img_config.get("hr_scale"),
+                upscaler_name=txt2img_config.get("hr_upscaler"),
+                steps=txt2img_config.get("hr_second_pass_steps"),
+                denoise_strength=txt2img_config.get("denoising_strength"),
+            )
+        
+        # Extract adetailer settings (if any)
+        adetailer_overrides = None
+        adetailer_config = current_config.get("adetailer", {})
+        if adetailer_config:
+            adetailer_overrides = ADetailerOverrides(  # Note: class name is "ADetailerOverrides"
+                enabled=adetailer_config.get("adetailer_enabled", False),
+                model=adetailer_config.get("model") or adetailer_config.get("adetailer_model"),
+                confidence=adetailer_config.get("confidence") or adetailer_config.get("adetailer_confidence"),
+                denoise_strength=adetailer_config.get("denoising_strength") or adetailer_config.get("adetailer_denoise"),
+                # Additional settings from GUI
+                sampler=adetailer_config.get("sampler_name") or adetailer_config.get("adetailer_sampler"),
+                scheduler=adetailer_config.get("scheduler") or adetailer_config.get("adetailer_scheduler"),
+                steps=adetailer_config.get("steps") or adetailer_config.get("adetailer_steps"),
+                cfg_scale=adetailer_config.get("cfg_scale") or adetailer_config.get("adetailer_cfg"),
+                prompt=adetailer_config.get("adetailer_prompt"),
+                negative_prompt=adetailer_config.get("adetailer_negative_prompt"),
+                # Mask processing
+                mask_blur=adetailer_config.get("mask_blur") or adetailer_config.get("ad_mask_blur"),
+                mask_feather=adetailer_config.get("mask_feather") or adetailer_config.get("ad_mask_feather"),
+                dilate_erode=adetailer_config.get("mask_dilate_erode") or adetailer_config.get("ad_dilate_erode"),
+                inpaint_padding=adetailer_config.get("ad_inpaint_only_masked_padding") or adetailer_config.get("inpaint_padding"),
+                # Mask filtering
+                mask_filter_method=adetailer_config.get("mask_filter_method") or adetailer_config.get("ad_mask_filter_method"),
+                mask_k_largest=adetailer_config.get("mask_k_largest") or adetailer_config.get("ad_mask_k_largest"),
+                mask_min_ratio=adetailer_config.get("mask_min_ratio") or adetailer_config.get("ad_mask_min_ratio"),
+                mask_max_ratio=adetailer_config.get("mask_max_ratio") or adetailer_config.get("ad_mask_max_ratio"),
+            )
+        
+        return StageOverridesBundle(
+            txt2img=txt2img_overrides,
+            img2img=img2img_overrides,
+            upscale=upscale_overrides,
+            refiner=refiner_overrides,
+            hires=hires_overrides,
+            adetailer=adetailer_overrides,
+        )
+
+    def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
+        """
+        Add one or more packs to the current job draft.
+        
+        PR-HB-002: This method now spawns a worker thread to avoid blocking the UI thread
+        during heavy I/O operations (reading pack files with 100s of prompts).
+        """
+        if not pack_ids:
+            return
+        
+        # PR-HB-002: Set operation label for heartbeat stall diagnostics
+        self.current_operation_label = f"Adding {len(pack_ids)} pack(s) to job"
+        self.last_ui_action = f"on_pipeline_add_packs_to_job({pack_ids})"
+        
+        logger.debug(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
+        self._append_log(f"[controller] Adding packs to job: {pack_ids}")
+        
+        # Validate inputs and collect metadata on UI thread (fast)
         stage_flags = self._build_stage_flags()
         randomizer_metadata = self._build_randomizer_metadata()
-        print(f"[AppController] Stage flags: {stage_flags}")
-        for pack_id in pack_ids:
-            pack = self._find_pack_by_id(pack_id)
-            print(f"[AppController] Looking for pack '{pack_id}': {pack}")
-            if pack is None:
-                self._append_log(f"[controller] Pack not found: {pack_id}")
-                print(f"[AppController] ERROR: Pack '{pack_id}' not found!")
-                continue
-
-            # Get current run config from app_state
-            run_config = self._run_config_with_lora()
-
-            # Ensure randomization is included
-            if "randomization_enabled" not in run_config:
-                run_config["randomization_enabled"] = (
-                    self.state.current_config.randomization_enabled
-                )
-            
-            # Read all prompts from pack file (not just first)
+        
+        # PR-HB-002: Spawn worker thread for I/O-heavy work
+        def _worker():
             try:
-                all_prompts = read_prompt_pack(pack.path)
-            except Exception as e:
-                self._append_log(f"[controller] Failed to read pack '{pack_id}': {e}")
-                all_prompts = []
-            
-            if not all_prompts:
-                self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
-                continue
-            
-            print(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
-            
-            # Create one PackJobEntry per prompt row
-            for row_index, prompt_row in enumerate(all_prompts):
-                prompt_text = prompt_row.get("positive", "").strip()
-                negative_prompt_text = prompt_row.get("negative", "").strip()
+                entries = []
+                logger.debug(f"[AppController] Stage flags: {stage_flags}")
                 
-                entry = PackJobEntry(
-                    pack_id=pack_id,
-                    pack_name=pack.name,
-                    config_snapshot=run_config,
-                    prompt_text=prompt_text,
-                    negative_prompt_text=negative_prompt_text,
-                    stage_flags={},  # Empty dict - let pack config determine stages
-                    randomizer_metadata=randomizer_metadata,
-                    pack_row_index=row_index,  # Track which prompt row this is
-                )
-                entries.append(entry)
-            
-            print(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
+                for pack_id in pack_ids:
+                    pack = self._find_pack_by_id(pack_id)
+                    logger.debug(f"[AppController] Looking for pack '{pack_id}': {pack}")
+                    if pack is None:
+                        self._append_log(f"[controller] Pack not found: {pack_id}")
+                        logger.debug(f"[AppController] ERROR: Pack '{pack_id}' not found!")
+                        continue
 
-        if entries and self.app_state:
-            self.app_state.add_packs_to_job_draft(entries)
-            self._append_log(f"[controller] Added {len(entries)} pack(s) to job draft")
-            self._refresh_preview_from_state()
-        # D21: Do NOT submit jobs to the queue here. Only update draft and preview. No queue interaction.
+                    # Get pack configuration - read the actual pack file to get its config
+                    pack_config = {}
+                    try:
+                        pack_prompts = read_prompt_pack(pack.path)
+                        if pack_prompts and len(pack_prompts) > 0:
+                            # Use first prompt's metadata as pack config (common approach)
+                            first_prompt = pack_prompts[0]
+                            pack_config = {k: v for k, v in first_prompt.items() if k not in ["positive", "negative"]}
+                    except Exception as e:
+                        self._append_log(f"[controller] Failed to read pack config for '{pack_id}': {e}")
+
+                    # Build config snapshot considering override checkbox state
+                    config_snapshot = self._build_config_snapshot_with_override(pack_config)
+
+                    # Add stage enable flags to pipeline section so executor can check them
+                    pipeline_section = config_snapshot.setdefault("pipeline", {})
+                    pipeline_section["adetailer_enabled"] = stage_flags.get("adetailer", False)
+                    pipeline_section["upscale_enabled"] = stage_flags.get("upscale", False)
+                    pipeline_section["txt2img_enabled"] = stage_flags.get("txt2img", True)
+                    pipeline_section["img2img_enabled"] = stage_flags.get("img2img", False)
+
+                    # Ensure randomization is included
+                    if "randomization_enabled" not in config_snapshot:
+                        config_snapshot["randomization_enabled"] = (
+                            self.state.current_config.randomization_enabled
+                        )
+                    
+                    # Read all prompts from pack file (not just first)
+                    try:
+                        all_prompts = read_prompt_pack(pack.path)
+                    except Exception as e:
+                        self._append_log(f"[controller] Failed to read pack '{pack_id}': {e}")
+                        all_prompts = []
+                    
+                    if not all_prompts:
+                        self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
+                        continue
+                    
+                    logger.debug(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
+                    
+                    # Create one PackJobEntry per prompt row
+                    for row_index, prompt_row in enumerate(all_prompts):
+                        prompt_text = prompt_row.get("positive", "").strip()
+                        negative_prompt_text = prompt_row.get("negative", "").strip()
+                        
+                        entry = PackJobEntry(
+                            pack_id=pack_id,
+                            pack_name=pack.name,
+                            config_snapshot=config_snapshot,
+                            prompt_text=prompt_text,
+                            negative_prompt_text=negative_prompt_text,
+                            stage_flags=stage_flags,
+                            randomizer_metadata=randomizer_metadata,
+                            pack_row_index=row_index,
+                        )
+                        entries.append(entry)
+                    
+                    logger.debug(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
+
+                # PR-HB-003: Schedule UI updates on main thread using debounced refresh
+                def _update_ui():
+                    if entries and self.app_state:
+                        self.app_state.add_packs_to_job_draft(entries)
+                        self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft")
+                        # Use debounced refresh instead of direct call
+                        self._mark_ui_dirty(preview=True)
+                    
+                    # Clear operation label
+                    self.current_operation_label = None
+                    self.last_ui_action = None
+                
+                # Schedule callback on UI thread
+                if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
+                    self.main_window.run_in_main_thread(_update_ui)
+                else:
+                    # Fallback: direct call (for tests without GUI)
+                    _update_ui()
+                    
+            except Exception as exc:
+                logger.exception(f"[AppController] Worker error in on_pipeline_add_packs_to_job: {exc}")
+                self._append_log(f"[controller] Error adding packs: {exc}")
+                # Clear operation label on error
+                self.current_operation_label = None
+                self.last_ui_action = None
+        
+        # PR-HB-002: Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=_worker,
+            name=f"PackAdd-{len(pack_ids)}",
+            purpose=f"Add {len(pack_ids)} pack(s) to job draft"
+        )
 
     def add_single_prompt_to_draft(self) -> None:
         """Capture the current prompt/negative pair in the pipeline draft summary."""
@@ -3829,6 +5336,50 @@ class AppController:
             refresh_fn()
         except Exception as exc:
             self._append_log(f"[controller] Refresh preview error: {exc!r}")
+
+    def _refresh_preview_from_state_async(self) -> None:
+        """
+        PR-HB-002: Async version of _refresh_preview_from_state that moves heavy work off UI thread.
+        
+        This spawns a worker thread to call pipeline_controller.refresh_preview_from_state(),
+        which can be slow when processing many pack entries. UI updates are scheduled back
+        to the main thread.
+        """
+        controller = getattr(self, "pipeline_controller", None)
+        if controller is None:
+            return
+        refresh_fn = getattr(controller, "refresh_preview_from_state", None)
+        if not callable(refresh_fn):
+            return
+
+        # PR-HB-002: Set operation label for diagnostics
+        self.current_operation_label = "Refreshing preview from state"
+        self.last_ui_action = "_refresh_preview_from_state_async()"
+
+        def _worker():
+            try:
+                # Heavy work happens here (off UI thread)
+                refresh_fn()
+            except Exception as exc:
+                logger.exception(f"[AppController] Error in _refresh_preview_from_state_async: {exc}")
+                self._append_log(f"[controller] Refresh preview error: {exc!r}")
+            finally:
+                # Clear operation label
+                def _clear_label():
+                    self.current_operation_label = None
+                    self.last_ui_action = None
+
+                if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
+                    self.main_window.run_in_main_thread(_clear_label)
+                else:
+                    _clear_label()
+
+        # PR-HB-002: Use tracked thread for clean shutdown
+        self._spawn_tracked_thread(
+            target=_worker,
+            name="PreviewRefresh",
+            purpose="Refresh preview from state async"
+        )
 
     def on_add_job_to_queue(self) -> None:
         """Enqueue the current job draft."""
@@ -3882,6 +5433,20 @@ class AppController:
             return
         self.job_service.cancel_current()
         self._append_log("[controller] Cancelled current job")
+
+    def on_pause_current_job(self) -> None:
+        """Pause the currently running job."""
+        if not self.job_service:
+            return
+        self.job_service.pause()
+        self._append_log("[controller] Paused current job")
+
+    def on_resume_current_job(self) -> None:
+        """Resume the paused job."""
+        if not self.job_service:
+            return
+        self.job_service.resume()
+        self._append_log("[controller] Resumed current job")
 
     def on_pipeline_preset_apply_to_default(self, preset_name: str) -> None:
         """Apply preset config to the current run config and optionally mark default."""

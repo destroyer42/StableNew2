@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 
 from src.config import app_config
 from src.gui.theme_v2 import HEADING_LABEL_STYLE
@@ -29,52 +30,88 @@ class OutputSettingsPanelV2(ttk.Frame):
         ttk.Label(parent, text="", style=HEADING_LABEL_STYLE).grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 6)
         )
-        self.output_dir_var = tk.StringVar(value=app_config.output_dir_default())
+        
+        # Convert default output dir to absolute path for display
+        default_output = app_config.output_dir_default()
+        abs_output = os.path.abspath(default_output)
+        
+        self.output_dir_var = tk.StringVar(value=abs_output)
         self.filename_pattern_var = tk.StringVar(value=app_config.filename_pattern_default())
         self.image_format_var = tk.StringVar(value=app_config.image_format_default())
         self.batch_size_var = tk.StringVar(value=str(app_config.batch_size_default()))
         self.seed_mode_var = tk.StringVar(value=app_config.seed_mode_default())
 
-        self._build_row(
-            parent, "Output Dir", ttk.Entry(parent, textvariable=self.output_dir_var), 1, 0
+        # Build output dir row with browse button
+        self._build_dir_row(parent, "Output Dir", self.output_dir_var, 1, 0)
+        
+        # Consolidate Format, Batch Size, and Seed Mode on one row
+        controls_row = ttk.Frame(parent)
+        controls_row.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 4))
+        
+        ttk.Label(controls_row, text="Format:", style="TLabel").pack(side="left", padx=(0, 4))
+        format_combo = ttk.Combobox(
+            controls_row,
+            textvariable=self.image_format_var,
+            values=self.FORMATS,
+            state="readonly",
+            width=8,
+            style="Dark.TCombobox",
         )
-        self._build_row(
-            parent, "Filename", ttk.Entry(parent, textvariable=self.filename_pattern_var), 2, 0
-        )
-        self._build_row(
-            parent,
-            "Format",
-            ttk.Combobox(
-                parent,
-                textvariable=self.image_format_var,
-                values=self.FORMATS,
-                state="readonly",
-                width=8,
-            ),
-            3,
-            0,
-        )
+        format_combo.pack(side="left", padx=(0, 16))
+        
+        ttk.Label(controls_row, text="Batch Size:", style="TLabel").pack(side="left", padx=(0, 4))
         batch_spin = ttk.Spinbox(
-            parent, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6
+            controls_row, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6, style="Dark.TSpinbox"
         )
-        self._build_row(parent, "Batch Size", batch_spin, 3, 2)
+        batch_spin.pack(side="left", padx=(0, 16))
         self._create_tooltip(batch_spin, "Number of images to generate per prompt")
         
-        self._build_row(
-            parent,
-            "Seed Mode",
-            ttk.Combobox(
-                parent,
-                textvariable=self.seed_mode_var,
-                values=self.SEED_MODES,
-                state="readonly",
-                width=10,
-            ),
-            4,
-            2,
+        ttk.Label(controls_row, text="Seed Mode:", style="TLabel").pack(side="left", padx=(0, 4))
+        seed_combo = ttk.Combobox(
+            controls_row,
+            textvariable=self.seed_mode_var,
+            values=self.SEED_MODES,
+            state="readonly",
+            width=10,
+            style="Dark.TCombobox",
         )
+        seed_combo.pack(side="left")
 
         parent.columnconfigure(1, weight=1)
+
+    def _build_dir_row(
+        self, parent: tk.Misc, label: str, variable: tk.StringVar, row_idx: int, col_idx: int
+    ) -> None:
+        """Build a row with entry field and browse button for directory selection."""
+        label_widget = ttk.Label(parent, text=label, style="TLabel")
+        label_widget.grid(row=row_idx, column=col_idx, sticky="w", padx=(0, 8), pady=(0, 4))
+
+        # Container frame for entry + browse button
+        container = ttk.Frame(parent)
+        container.grid(row=row_idx, column=col_idx + 1, sticky="ew", pady=(0, 4))
+        container.columnconfigure(0, weight=1)
+
+        entry = ttk.Entry(container, textvariable=variable)
+        entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+
+        browse_btn = ttk.Button(container, text="Browse...", command=self._on_browse_output_dir, style="Dark.TButton")
+        browse_btn.grid(row=0, column=1, sticky="e")
+
+    def _on_browse_output_dir(self) -> None:
+        """Open folder browser dialog to select output directory."""
+        current_dir = self.output_dir_var.get()
+        initial_dir = current_dir if current_dir and os.path.isdir(current_dir) else os.getcwd()
+
+        selected = filedialog.askdirectory(
+            title="Select Output Directory",
+            initialdir=initial_dir,
+            mustexist=False
+        )
+
+        if selected:
+            # Convert to absolute path and update variable
+            abs_path = os.path.abspath(selected)
+            self.output_dir_var.set(abs_path)
 
     def _build_row(
         self, parent: tk.Misc, label: str, widget: tk.Widget, row_idx: int, col_idx: int

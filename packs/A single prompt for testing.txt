@@ -1,0 +1,5 @@
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+(masterpiece, 8k, photorealistic) wide angle perspective, in the middle of the courtroom of a king's castle, the witcher Geralt with silver hair and two longswords over his right shoulder, in chainmail with a wolf medallion, leans against a wall watching the crowd, to include the king, queen, and beautiful buxom princess who are holding court. Warm light, cinematic, epic, fantasy. Natural facial proportions.
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:WITCHERS_BY_STX:0.2802197802197802>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: blurry, low resolution, bad anatomy, mishapen, extra limbs, weird angles, weird bodies, cgi, cartoon, anime, crossed eyes

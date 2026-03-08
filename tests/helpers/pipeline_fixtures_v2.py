@@ -189,12 +189,11 @@ def make_batch_settings(
 
 def make_output_settings(
     base_output_dir: str = "output",
-    filename_template: str = "{seed}",
+    filename_template: str = "{seed}",  # Legacy parameter, ignored for compatibility
 ) -> OutputSettings:
     """Create output settings for testing."""
     return OutputSettings(
         base_output_dir=base_output_dir,
-        filename_template=filename_template,
     )
 
 

@@ -1,0 +1,188 @@
+{
+  "status": "ok",
+  "payload": {
+    "generation": {
+      "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+      "vae": "Automatic"
+    },
+    "image": {
+      "format": "png",
+      "height": 2816,
+      "path": "upscale_p01_v03_Single-Pro_0101105909_batch1.png",
+      "width": 2048
+    },
+    "job_id": "9b7103f44db74b42a77a91e1a5655f36",
+    "njr": {
+      "sha256": "6e0c8908aadbaf63383584c6934c7a6fbee423f3abcbd73c8bd1014d80b408a6",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "seeds": {},
+    "stage": "upscale",
+    "stage_history": [
+      {
+        "config": {
+          "batch_size": 1,
+          "cfg_scale": 6.499999999999998,
+          "clip_skip": 2,
+          "denoising_strength": 0.7,
+          "do_not_save_grid": null,
+          "do_not_save_samples": null,
+          "enable_hr": false,
+          "height": 1408,
+          "hr_resize_x": 0,
+          "hr_resize_y": 0,
+          "hr_scale": 2.0,
+          "hr_second_pass_steps": 0,
+          "hr_upscaler": "Latent",
+          "n_iter": 1,
+          "negative_prompt": "blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, <embedding:sdxl_cyberrealistic_simpleneg-neg>, <embedding:bad_prompt>, <embedding:SDXLnegXL>, <embedding:ac_neg1>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
+          "prompt": "<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2> close up, portrait, a highly detailed fantasy scene centered on twin mirrored figures, a female figure as the clear primary subject, balanced grounded posture while invoking ancient power, captured from a three-quarter view, lit by bioluminescent glow, set within a visually rich arcane library hall, the scene conveys guarding an ancient secret, wearing nothing but an underboob tight shirt, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.6875> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.4660194174757281>",
+          "restore_faces": null,
+          "sampler_name": "DPM++ 2M",
+          "scheduler": "Karras",
+          "seed": -1,
+          "seed_resize_from_h": -1,
+          "seed_resize_from_w": -1,
+          "steps": 34,
+          "subseed": -1,
+          "subseed_strength": 0.5,
+          "tiling": null,
+          "width": 1024
+        },
+        "model": "Unknown",
+        "name": "txt2img_p01_v03_Single-Pro_0101105803",
+        "negative_prompt": "",
+        "prompt": "",
+        "seeds": {},
+        "stage": "txt2img",
+        "timestamp": "20260101_105843",
+        "vae": "Automatic"
+      },
+      {
+        "config": {
+          "alwayson_scripts": {
+            "ADetailer": {
+              "args": [
+                true,
+                false,
+                {
+                  "ad_cfg_scale": 5.5,
+                  "ad_confidence": 0.34,
+                  "ad_denoising_strength": 0.26,
+                  "ad_dilate_erode": 4,
+                  "ad_inpaint_height": 1408,
+                  "ad_inpaint_only_masked": true,
+                  "ad_inpaint_only_masked_padding": 32,
+                  "ad_inpaint_width": 1024,
+                  "ad_mask_blur": 6,
+                  "ad_mask_filter_method": "Area",
+                  "ad_mask_k": 3,
+                  "ad_mask_max_ratio": 1.0,
+                  "ad_mask_merge_invert": "None",
+                  "ad_mask_min_ratio": 0.01,
+                  "ad_mask_only_top_k_largest": true,
+                  "ad_model": "mediapipe_face_full",
+                  "ad_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
+                  "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+                  "ad_sampler": "DPM++ 2M",
+                  "ad_scheduler": "Karras",
+                  "ad_steps": 9,
+                  "ad_tab_enable": true,
+                  "ad_use_cfg_scale": true,
+                  "ad_use_inpaint_width_height": false,
+                  "ad_use_sampler": true,
+                  "ad_use_steps": true,
+                  "ad_x_offset": 0,
+                  "ad_y_offset": 0
+                },
+                {
+                  "ad_cfg_scale": 5.0,
+                  "ad_confidence": 0.3,
+                  "ad_denoising_strength": 0.25,
+                  "ad_dilate_erode": 6,
+                  "ad_inpaint_height": 1408,
+                  "ad_inpaint_only_masked": true,
+                  "ad_inpaint_only_masked_padding": 16,
+                  "ad_inpaint_width": 1024,
+                  "ad_mask_blur": 4,
+                  "ad_mask_filter_method": "Area",
+                  "ad_mask_k": 6,
+                  "ad_mask_max_ratio": 1.0,
+                  "ad_mask_merge_invert": "None",
+                  "ad_mask_min_ratio": 0.003,
+                  "ad_mask_only_top_k_largest": true,
+                  "ad_model": "hand_yolov8n.pt",
+                  "ad_negative_prompt": "extra fingers, fused fingers, broken fingers, deformed hands, missing fingers",
+                  "ad_prompt": "well-formed fingers, natural knuckles, correct hand anatomy, sharp details",
+                  "ad_sampler": "DPM++ 2M Karras",
+                  "ad_scheduler": "Use same scheduler",
+                  "ad_steps": 12,
+                  "ad_tab_enable": true,
+                  "ad_use_cfg_scale": true,
+                  "ad_use_inpaint_width_height": false,
+                  "ad_use_sampler": true,
+                  "ad_use_steps": true,
+                  "ad_x_offset": 0,
+                  "ad_y_offset": 0
+                }
+              ]
+            }
+          },
+          "cfg_scale": 5.5,
+          "denoising_strength": 0.26,
+          "height": 1408,
+          "negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
+          "prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+          "sampler_name": "DPM++ 2M",
+          "scheduler": "Karras",
+          "steps": 9,
+          "width": 1024
+        },
+        "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+        "name": "adetailer_p01_v03_Single-Pro_0101105843_batch1",
+        "negative_prompt": "",
+        "prompt": "",
+        "seeds": {
+          "final_seed": 1046221219,
+          "final_subseed": 3770182786,
+          "original_seed": -1,
+          "original_subseed": -1,
+          "subseed_strength": 0.0
+        },
+        "stage": "adetailer",
+        "timestamp": "20260101_105909",
+        "vae": "Automatic"
+      }
+    ],
+    "stage_manifest": {
+      "config": {
+        "codeformer_visibility": 0.0,
+        "codeformer_weight": 0.5,
+        "gfpgan_visibility": 0.0,
+        "upscaler": "4xUltrasharp_4xUltrasharpV10",
+        "upscaling_resize": 2.0
+      },
+      "config_hash": "9e46eef37da9725049b80a9bf818571b9f733b4110192b38807ee02bc6180e0c",
+      "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+      "name": "upscale_p01_v03_Single-Pro_0101105909_batch1",
+      "negative_prompt": "",
+      "prompt": "",
+      "seeds": {},
+      "stage": "upscale",
+      "timestamp": "20260101_105951",
+      "vae": "Automatic"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "9b7103f44db74b42a77a91e1a5655f36",
+    "stablenew:run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "stablenew:stage": "upscale",
+    "stablenew:created_utc": "2026-01-01T16:59:51.684076+00:00",
+    "stablenew:payload_sha256": "8e263906e4be0368f8abb3ced6b78fc3075d0dac951b92d478d7c8d9a6494fae",
+    "stablenew:payload": "{\"generation\":{\"model\":\"juggernautXL_ragnarokBy.safetensors [dd08fa32f9]\",\"vae\":\"Automatic\"},\"image\":{\"format\":\"png\",\"height\":2816,\"path\":\"upscale_p01_v03_Single-Pro_0101105909_batch1.png\",\"width\":2048},\"job_id\":\"9b7103f44db74b42a77a91e1a5655f36\",\"njr\":{\"sha256\":\"6e0c8908aadbaf63383584c6934c7a6fbee423f3abcbd73c8bd1014d80b408a6\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20260101_104229_Single-Prompt-Xtra-Crazy\",\"seeds\":{},\"stage\":\"upscale\",\"stage_history\":[{\"config\":{\"batch_size\":1,\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"do_not_save_grid\":null,\"do_not_save_samples\":null,\"enable_hr\":false,\"height\":1408,\"hr_resize_x\":0,\"hr_resize_y\":0,\"hr_scale\":2.0,\"hr_second_pass_steps\":0,\"hr_upscaler\":\"Latent\",\"n_iter\":1,\"negative_prompt\":\"blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, <embedding:sdxl_cyberrealistic_simpleneg-neg>, <embedding:bad_prompt>, <embedding:SDXLnegXL>, <embedding:ac_neg1>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes\",\"prompt\":\"<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2> close up, portrait, a highly detailed fantasy scene centered on twin mirrored figures, a female figure as the clear primary subject, balanced grounded posture while invoking ancient power, captured from a three-quarter view, lit by bioluminescent glow, set within a visually rich arcane library hall, the scene conveys guarding an ancient secret, wearing nothing but an underboob tight shirt, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.6875> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.4660194174757281>\",\"restore_faces\":null,\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":-1,\"seed_resize_from_h\":-1,\"seed_resize_from_w\":-1,\"steps\":34,\"subseed\":-1,\"subseed_strength\":0.5,\"tiling\":null,\"width\":1024},\"model\":\"Unknown\",\"name\":\"txt2img_p01_v03_Single-Pro_0101105803\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{},\"stage\":\"txt2img\",\"timestamp\":\"20260101_105843\",\"vae\":\"Automatic\"},{\"config\":{\"alwayson_scripts\":{\"ADetailer\":{\"args\":[true,false,{\"ad_cfg_scale\":5.5,\"ad_confidence\":0.34,\"ad_denoising_strength\":0.26,\"ad_dilate_erode\":4,\"ad_inpaint_height\":1408,\"ad_inpaint_only_masked\":true,\"ad_inpaint_only_masked_padding\":32,\"ad_inpaint_width\":1024,\"ad_mask_blur\":6,\"ad_mask_filter_method\":\"Area\",\"ad_mask_k\":3,\"ad_mask_max_ratio\":1.0,\"ad_mask_merge_invert\":\"None\",\"ad_mask_min_ratio\":0.01,\"ad_mask_only_top_k_largest\":true,\"ad_model\":\"mediapipe_face_full\",\"ad_negative_prompt\":\"<stable_yogis_pdxl_negatives2-neg>,\\n<stable_yogis_anatomy_negatives_v1-neg>,\\n<sdxl_cyberrealistic_simpleneg-neg>,\\n<negative_hands>,\\nwarped eyes,\\nmisaligned pupils,\\ncrossed eyes,\\nextra eyes,\\nduplicated pupils,\\ncollapsed eyelids,\\nmelted facial features,\\nplastic skin,\\nwaxy skin,\\nover-smoothed skin,\\nover-sharpened skin,\\nuncanny valley,\\nface redesign,\\nface re-sculpting\\n, glowing eyes\",\"ad_prompt\":\"<stable_yogis_pdxl_positives>,\\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\\nnatural facial detail,\\nsubtle skin texture,\\nfine skin pores,\\nrealistic eye reflections,\\nstable eye alignment,\\nrelaxed eyelids,\\nnatural facial micro-expression,\\npreserve original expression,\\npreserve original lighting,\\npreserve original facial structure\\n\",\"ad_sampler\":\"DPM++ 2M\",\"ad_scheduler\":\"Karras\",\"ad_steps\":9,\"ad_tab_enable\":true,\"ad_use_cfg_scale\":true,\"ad_use_inpaint_width_height\":false,\"ad_use_sampler\":true,\"ad_use_steps\":true,\"ad_x_offset\":0,\"ad_y_offset\":0},{\"ad_cfg_scale\":5.0,\"ad_confidence\":0.3,\"ad_denoising_strength\":0.25,\"ad_dilate_erode\":6,\"ad_inpaint_height\":1408,\"ad_inpaint_only_masked\":true,\"ad_inpaint_only_masked_padding\":16,\"ad_inpaint_width\":1024,\"ad_mask_blur\":4,\"ad_mask_filter_method\":\"Area\",\"ad_mask_k\":6,\"ad_mask_max_ratio\":1.0,\"ad_mask_merge_invert\":\"None\",\"ad_mask_min_ratio\":0.003,\"ad_mask_only_top_k_largest\":true,\"ad_model\":\"hand_yolov8n.pt\",\"ad_negative_prompt\":\"extra fingers, fused fingers, broken fingers, deformed hands, missing fingers\",\"ad_prompt\":\"well-formed fingers, natural knuckles, correct hand anatomy, sharp details\",\"ad_sampler\":\"DPM++ 2M Karras\",\"ad_scheduler\":\"Use same scheduler\",\"ad_steps\":12,\"ad_tab_enable\":true,\"ad_use_cfg_scale\":true,\"ad_use_inpaint_width_height\":false,\"ad_use_sampler\":true,\"ad_use_steps\":true,\"ad_x_offset\":0,\"ad_y_offset\":0}]}},\"cfg_scale\":5.5,\"denoising_strength\":0.26,\"height\":1408,\"negative_prompt\":\"<stable_yogis_pdxl_negatives2-neg>,\\n<stable_yogis_anatomy_negatives_v1-neg>,\\n<sdxl_cyberrealistic_simpleneg-neg>,\\n<negative_hands>,\\nwarped eyes,\\nmisaligned pupils,\\ncrossed eyes,\\nextra eyes,\\nduplicated pupils,\\ncollapsed eyelids,\\nmelted facial features,\\nplastic skin,\\nwaxy skin,\\nover-smoothed skin,\\nover-sharpened skin,\\nuncanny valley,\\nface redesign,\\nface re-sculpting\\n, glowing eyes\",\"prompt\":\"<stable_yogis_pdxl_positives>,\\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\\nnatural facial detail,\\nsubtle skin texture,\\nfine skin pores,\\nrealistic eye reflections,\\nstable eye alignment,\\nrelaxed eyelids,\\nnatural facial micro-expression,\\npreserve original expression,\\npreserve original lighting,\\npreserve original facial structure\\n\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":9,\"width\":1024},\"model\":\"juggernautXL_ragnarokBy.safetensors [dd08fa32f9]\",\"name\":\"adetailer_p01_v03_Single-Pro_0101105843_batch1\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{\"final_seed\":1046221219,\"final_subseed\":3770182786,\"original_seed\":-1,\"original_subseed\":-1,\"subseed_strength\":0.0},\"stage\":\"adetailer\",\"timestamp\":\"20260101_105909\",\"vae\":\"Automatic\"}],\"stage_manifest\":{\"config\":{\"codeformer_visibility\":0.0,\"codeformer_weight\":0.5,\"gfpgan_visibility\":0.0,\"upscaler\":\"4xUltrasharp_4xUltrasharpV10\",\"upscaling_resize\":2.0},\"config_hash\":\"9e46eef37da9725049b80a9bf818571b9f733b4110192b38807ee02bc6180e0c\",\"model\":\"juggernautXL_ragnarokBy.safetensors [dd08fa32f9]\",\"name\":\"upscale_p01_v03_Single-Pro_0101105909_batch1\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{},\"stage\":\"upscale\",\"timestamp\":\"20260101_105951\",\"vae\":\"Automatic\"}}",
+    "stablenew:njr_sha256": "6e0c8908aadbaf63383584c6934c7a6fbee423f3abcbd73c8bd1014d80b408a6"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20260101_104229_Single-Prompt-Xtra-Crazy\\upscale_p01_v03_Single-Pro_0101105909_batch1.png"
+}

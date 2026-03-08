@@ -257,4 +257,14 @@ UI states not aligned with PromptPack-only rules
 
 And planned mitigations.
 
+12. Final due out after implementation (Mandatory)
+
+Change state of PR from proposed to 'Implemented'
+
+Date/time stamp
+
+Summary of what was implemented, what files were touched
+
+Any outstanding issues/important information (surface this to user after implementation)
+
 ✔️ END OF PR TEMPLATE v2.6 — CANONICAL

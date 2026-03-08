@@ -5,7 +5,12 @@ from collections import defaultdict
 
 class SystemWatchdogV2:
     # Tune these as needed
-    UI_STALL_S = 3.0
+    # PR-HEARTBEAT-FIX: Set to 10s for fast failure detection
+    # Rationale: We want to detect true hangs/freezes quickly (fail fast).
+    # BUT during active generation, progress polling updates the heartbeat,
+    # so working-but-slow operations won't trigger false positives.
+    # Result: 10s detects broken/frozen state fast, but active work keeps heartbeat alive.
+    UI_STALL_S = 10.0
     RUNNER_STALL_S = 10.0
     LOOP_PERIOD_S = 1.0
 
@@ -31,19 +36,39 @@ class SystemWatchdogV2:
         )
 
     def start(self) -> None:
-        t = threading.Thread(target=self._loop, daemon=True, name="SystemWatchdogV2")
+        """Start the watchdog monitoring thread.
+        
+        PR-WATCHDOG-001: Changed to non-daemon for clean shutdown.
+        """
+        # PR-WATCHDOG-001: Changed from daemon=True to daemon=False
+        t = threading.Thread(
+            target=self._loop,
+            daemon=False,  # Changed for clean shutdown
+            name="SystemWatchdogV2"
+        )
         t.start()
         self._thread = t
 
     def stop(self) -> None:
+        """Stop the watchdog thread gracefully.
+        
+        PR-WATCHDOG-001: Increased timeout from 2s to 10s for clean shutdown.
+        """
         self._stop.set()
         if self._thread and self._thread.is_alive():
-            # best effort join; don't hang shutdown
-            self._thread.join(timeout=2.0)
+            # PR-WATCHDOG-001: Increased timeout for reliable shutdown
+            self._thread.join(timeout=10.0)
 
     def _loop(self) -> None:
+        """Main watchdog loop - monitors system health.
+        
+        PR-WATCHDOG-001: Added shutdown check to prevent diagnostics during shutdown.
+        """
         while not self._stop.is_set():
             try:
+                # PR-WATCHDOG-001: Skip checks if shutdown requested
+                if hasattr(self.app, '_is_shutting_down') and self.app._is_shutting_down:
+                    break
                 self._check()
             except Exception:
                 # watchdog must never crash the app
@@ -83,8 +108,13 @@ class SystemWatchdogV2:
             self._in_flight[reason] = True
             self._last_trigger_ts[reason] = now
 
+        # PR-HB-003: Enhanced context for heartbeat stall diagnostics
+        ui_heartbeat_ts = float(getattr(self.app, "last_ui_heartbeat_ts", 0) or 0)
+        ui_age_s = now - ui_heartbeat_ts if ui_heartbeat_ts else None
+        
         context = {
-            "ui_heartbeat_age_s": now - float(getattr(self.app, "last_ui_heartbeat_ts", 0) or 0),
+            "ui_age_s": ui_age_s,  # PR-HB-003: Explicit ui_age_s field
+            "ui_heartbeat_age_s": ui_age_s,  # Keep for compatibility
             "queue_activity_age_s": now - float(getattr(self.app, "last_queue_activity_ts", 0) or 0)
             if hasattr(self.app, "last_queue_activity_ts")
             else None,
@@ -92,6 +122,12 @@ class SystemWatchdogV2:
             - float(getattr(self.app, "last_runner_activity_ts", 0) or 0),
             "queue_state": getattr(self.app, "get_queue_state", lambda: None)(),
             "watchdog_reason": reason,
+            # PR-HB-003: Add operation tracking and thresholds
+            "current_operation_label": getattr(self.app, "current_operation_label", None),
+            "last_ui_action": getattr(self.app, "last_ui_action", None),
+            "ui_stall_threshold_s": self.UI_STALL_S,
+            "last_ui_heartbeat_ts": ui_heartbeat_ts,
+            "watchdog_now_ts": now,
         }
 
         def _done_callback():
@@ -115,9 +151,15 @@ class SystemWatchdogV2:
                         finally:
                             _done_callback()
 
-                    threading.Thread(
-                        target=_fallback_worker, daemon=True, name=f"DiagTrigger-{reason}"
-                    ).start()
+                    # PR-THREAD-001: Use ThreadRegistry for fallback worker
+                    from src.utils.thread_registry import get_thread_registry
+                    registry = get_thread_registry()
+                    registry.spawn(
+                        target=_fallback_worker,
+                        name=f"DiagTrigger-{reason}",
+                        daemon=False,
+                        purpose=f"Fallback diagnostics trigger for {reason}"
+                    )
             else:
                 # Fall back to spawning a thread here.
                 def _worker():
@@ -126,6 +168,14 @@ class SystemWatchdogV2:
                     finally:
                         _done_callback()
 
-                threading.Thread(target=_worker, daemon=True, name=f"DiagTrigger-{reason}").start()
+                # PR-THREAD-001: Use ThreadRegistry for worker
+                from src.utils.thread_registry import get_thread_registry
+                registry = get_thread_registry()
+                registry.spawn(
+                    target=_worker,
+                    name=f"DiagTrigger-{reason}",
+                    daemon=False,
+                    purpose=f"Diagnostics trigger for {reason}"
+                )
         except Exception:
             _done_callback()

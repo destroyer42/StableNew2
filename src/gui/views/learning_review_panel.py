@@ -54,18 +54,51 @@ class LearningReviewPanel(ttk.Frame):
         )
         self.recommendations_text.pack(fill="x")
 
+        # Apply recommendations button
+        button_frame = ttk.Frame(self.recommendations_frame)
+        button_frame.pack(pady=(5, 0), fill="x")
+
+        self.apply_button = ttk.Button(
+            button_frame,
+            text="Apply to Pipeline",
+            command=self._on_apply_recommendations,
+            state="disabled",
+        )
+        self.apply_button.pack(side="left", padx=2)
+
+        # Analytics button
+        self.analytics_button = ttk.Button(
+            button_frame,
+            text="View Analytics",
+            command=self._on_view_analytics,
+        )
+        self.analytics_button.pack(side="left", padx=2)
+
         # Image display section
         self.image_frame = ttk.LabelFrame(self, text="Images", padding=5)
         self.image_frame.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
+        self.image_frame.columnconfigure(0, weight=1)
+        self.image_frame.rowconfigure(1, weight=1)  # Thumbnail row gets weight
 
-        # Image list
-        self.image_listbox = tk.Listbox(self.image_frame, height=8)
-        self.image_listbox.pack(fill="both", expand=True)
+        # Import ImageThumbnail widget
+        from src.gui.widgets.image_thumbnail import ImageThumbnail
+
+        # Image list (top)
+        self.image_listbox = tk.Listbox(self.image_frame, height=5)
+        self.image_listbox.grid(row=0, column=0, sticky="ew")
         self.image_listbox.bind("<<ListboxSelect>>", self._on_image_selected)
 
-        # Selected image display (placeholder for now)
-        self.selected_image_label = ttk.Label(self.image_frame, text="Select an image above")
-        self.selected_image_label.pack(pady=(5, 0))
+        # Image thumbnail (bottom)
+        self.image_thumbnail = ImageThumbnail(
+            self.image_frame,
+            max_width=250,
+            max_height=250,
+        )
+        self.image_thumbnail.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
+        self.image_thumbnail.clear()
+
+        # Store full paths for loading images
+        self._image_full_paths: list[str] = []
 
         # Rating section
         self.rating_frame = ttk.LabelFrame(self, text="Rating", padding=5)
@@ -112,10 +145,22 @@ class LearningReviewPanel(ttk.Frame):
         # Update metadata
         self._update_metadata(variant, experiment)
 
-        # Clear and populate image list
+        # Clear and populate image list with rating indicators
         self.image_listbox.delete(0, tk.END)
-        for image_ref in variant.image_refs:
-            self.image_listbox.insert(tk.END, image_ref)
+        self._image_full_paths = []
+        for i, image_ref in enumerate(variant.image_refs):
+            filename = self._extract_filename(image_ref)
+            rating = self._get_rating_for_image(image_ref)
+
+            if rating:
+                # Show rating indicator
+                stars = "⭐" * rating
+                display = f"{i+1}. {filename} [{stars}]"
+            else:
+                display = f"{i+1}. {filename}"
+
+            self.image_listbox.insert(tk.END, display)
+            self._image_full_paths.append(image_ref)
 
         # Reset rating form
         self.rating_var.set(0)
@@ -148,13 +193,30 @@ class LearningReviewPanel(ttk.Frame):
     def _on_image_selected(self, event: tk.Event[tk.Listbox]) -> None:
         """Handle image selection from the list."""
         selection = self.image_listbox.curselection()
-        if selection:
+        if selection and hasattr(self, "_image_full_paths"):
             index = selection[0]
-            image_path = self.image_listbox.get(index)
-            self.selected_image_label.config(text=f"Selected: {image_path}")
-            # TODO: In a real implementation, this would display the actual image
+            if 0 <= index < len(self._image_full_paths):
+                full_path = self._image_full_paths[index]
+                # Load image into thumbnail
+                self.image_thumbnail.load_image(full_path)
         else:
-            self.selected_image_label.config(text="Select an image above")
+            self.image_thumbnail.clear()
+
+    def _extract_filename(self, path: str) -> str:
+        """Extract filename from full path."""
+        from pathlib import Path
+        return Path(path).name
+
+    def _get_rating_for_image(self, image_path: str) -> int | None:
+        """Get rating for an image from the controller."""
+        try:
+            if hasattr(self.master, "learning_controller"):
+                controller = self.master.learning_controller
+                if hasattr(controller, "get_rating_for_image"):
+                    return controller.get_rating_for_image(image_path)
+        except Exception:
+            pass
+        return None
 
     def _submit_rating(self) -> None:
         """Submit the rating for the selected image."""
@@ -175,7 +237,22 @@ class LearningReviewPanel(ttk.Frame):
             return
 
         image_index = selection[0]
-        image_ref = self.image_listbox.get(image_index)
+        if not hasattr(self, "_image_full_paths") or image_index >= len(self._image_full_paths):
+            self.feedback_label.config(text="Invalid image selection", foreground="red")
+            return
+
+        image_ref = self._image_full_paths[image_index]
+
+        # Check if already rated
+        existing_rating = self._get_rating_for_image(image_ref)
+        if existing_rating is not None:
+            # Ask for confirmation to override
+            from tkinter import messagebox
+            if not messagebox.askyesno(
+                "Override Rating",
+                f"This image already has a rating of {existing_rating}.\nOverride with new rating?",
+            ):
+                return
 
         # Call controller to record rating
         if hasattr(self.master, "learning_controller"):
@@ -186,6 +263,9 @@ class LearningReviewPanel(ttk.Frame):
                     self.feedback_label.config(
                         text="Rating saved successfully!", foreground="green"
                     )
+                    # Refresh display to show new rating indicator
+                    if self.current_variant and self.current_experiment:
+                        self.display_variant_results(self.current_variant, self.current_experiment)
                     # Clear form
                     self.rating_var.set(0)
                     self.notes_text.delete(1.0, tk.END)
@@ -200,24 +280,162 @@ class LearningReviewPanel(ttk.Frame):
         """Update the recommendations display with new data."""
         self.recommendations_text.config(state="normal")
         self.recommendations_text.delete(1.0, tk.END)
-
-        if recommendations and hasattr(recommendations, "recommendations"):
-            if recommendations.recommendations:
-                # Sort recommendations by confidence (highest first)
-                sorted_recs = sorted(
-                    recommendations.recommendations, key=lambda r: r.confidence_score, reverse=True
-                )
-
-                for rec in sorted_recs[:5]:  # Show top 5 recommendations
-                    line = f"{rec.parameter_name}: {rec.recommended_value} "
-                    line += f"(confidence: {rec.confidence_score:.2f})\n"
-                    self.recommendations_text.insert(tk.END, line)
-            else:
-                self.recommendations_text.insert(
-                    tk.END,
-                    "No recommendations available yet.\nRate some images to build recommendations.",
-                )
+        
+        if not recommendations:
+            self.recommendations_text.insert(tk.END, "No recommendations available yet.\n")
+            self.recommendations_text.insert(tk.END, "\nRate more images to get personalized suggestions.")
+            self.recommendations_text.config(state="disabled")
+            return
+        
+        # Format recommendations for display
+        lines = []
+        
+        # Check if it's a RecommendationSet or list of recommendations
+        if hasattr(recommendations, "recommendations"):
+            rec_list = recommendations.recommendations
+        elif isinstance(recommendations, list):
+            rec_list = recommendations
         else:
-            self.recommendations_text.insert(tk.END, "Recommendation system not available.")
-
+            rec_list = []
+        
+        if not rec_list:
+            self.recommendations_text.insert(tk.END, "Insufficient data for recommendations.\n")
+            self.recommendations_text.insert(tk.END, "\nRate at least 3 images to generate suggestions.")
+            self.recommendations_text.config(state="disabled")
+            return
+        
+        lines.append("🎯 Recommended Settings:\n")
+        lines.append("-" * 30 + "\n\n")
+        
+        for rec in rec_list:
+            # Handle both dataclass and dict formats
+            if hasattr(rec, "parameter_name"):
+                param = rec.parameter_name
+                value = rec.recommended_value
+                confidence = rec.confidence_score
+                samples = rec.sample_count
+                mean_rating = rec.mean_rating
+            elif isinstance(rec, dict):
+                param = rec.get("parameter", "Unknown")
+                value = rec.get("value", "?")
+                confidence = rec.get("confidence", 0)
+                samples = rec.get("samples", 0)
+                mean_rating = rec.get("mean_rating", 0)
+            else:
+                continue
+            
+            # Format confidence as percentage
+            conf_pct = f"{confidence * 100:.0f}%"
+            
+            # Format mean rating as stars
+            stars = "⭐" * int(round(mean_rating))
+            
+            lines.append(f"📊 {param}\n")
+            lines.append(f"   Best Value: {value}\n")
+            lines.append(f"   Avg Rating: {stars} ({mean_rating:.1f})\n")
+            lines.append(f"   Confidence: {conf_pct} ({samples} samples)\n\n")
+        
+        self.recommendations_text.insert(tk.END, "".join(lines))
         self.recommendations_text.config(state="disabled")
+        
+        # Enable/disable apply button based on recommendations
+        if rec_list:
+            self.apply_button.config(state="normal")
+        else:
+            self.apply_button.config(state="disabled")
+    
+    def _on_apply_recommendations(self) -> None:
+        """Handle apply recommendations button click."""
+        # Get controller
+        controller = self._get_learning_controller()
+        if not controller:
+            return
+        
+        # Get current recommendations
+        recs = getattr(controller, "get_recommendations_for_current_prompt", None)
+        if not callable(recs):
+            return
+        
+        recommendations = recs()
+        if not recommendations:
+            return
+        
+        # Show confirmation dialog
+        if self._confirm_apply(recommendations):
+            apply_fn = getattr(controller, "apply_recommendations_to_pipeline", None)
+            if callable(apply_fn):
+                success = apply_fn(recommendations)
+                if success:
+                    from tkinter import messagebox
+                    messagebox.showinfo(
+                        "Applied",
+                        "Recommendations applied to Pipeline settings."
+                    )
+    
+    def _confirm_apply(self, recommendations: Any) -> bool:
+        """Show confirmation dialog with proposed changes."""
+        from tkinter import messagebox
+        
+        # Format changes for display
+        changes = []
+        rec_list = self._extract_rec_list(recommendations)
+        
+        for rec in rec_list:
+            if hasattr(rec, "parameter_name"):
+                param = rec.parameter_name
+                value = rec.recommended_value
+            elif isinstance(rec, dict):
+                param = rec.get("parameter", "?")
+                value = rec.get("value", "?")
+            else:
+                continue
+            
+            changes.append(f"  • {param} → {value}")
+        
+        if not changes:
+            return False
+        
+        message = "Apply these settings to Pipeline?\n\n" + "\n".join(changes)
+        return messagebox.askyesno("Confirm Apply", message)
+    
+    def _extract_rec_list(self, recommendations: Any) -> list:
+        """Extract list of recommendations from various formats."""
+        if hasattr(recommendations, "recommendations"):
+            return recommendations.recommendations
+        elif isinstance(recommendations, list):
+            return recommendations
+        return []
+    
+    def _get_learning_controller(self):
+        """Get the learning controller from parent chain."""
+        try:
+            if hasattr(self.master, "learning_controller"):
+                return self.master.learning_controller
+        except Exception:
+            pass
+        return None
+
+    def _on_view_analytics(self) -> None:
+        """Open analytics window."""
+        controller = self._get_learning_controller()
+        if not controller:
+            return
+
+        # Create analytics window
+        analytics_window = tk.Toplevel(self.master)
+        analytics_window.title("Learning Analytics")
+        analytics_window.geometry("800x600")
+
+        from src.gui.views.learning_analytics_panel import LearningAnalyticsPanel
+
+        analytics_panel = LearningAnalyticsPanel(analytics_window)
+        analytics_panel.pack(fill="both", expand=True)
+
+        # Store reference for refresh
+        controller._analytics_panel = analytics_panel
+
+        # Pass controller to panel for export functions
+        analytics_window.learning_controller = controller
+
+        # Load initial data
+        controller.refresh_analytics()

@@ -11,19 +11,63 @@ def test_start_invokes_subprocess_with_config(monkeypatch):
     dummy = DummyProcess()
     popen_mock = mock.Mock(return_value=dummy)
     monkeypatch.setattr("subprocess.Popen", popen_mock)
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.build_process_container",
+        mock.Mock(return_value=mock.Mock()),
+    )
 
     cfg = WebUIProcessConfig(
         command=["python", "webui.py"], working_dir="/tmp/webui", env_overrides={"A": "1"}
     )
     manager = WebUIProcessManager(cfg)
+    manager._start_orphan_monitor = mock.Mock()
 
     process = manager.start()
 
     assert process is dummy
-    popen_mock.assert_called_once()
     kwargs = popen_mock.call_args.kwargs
     assert kwargs["cwd"] == "/tmp/webui"
     assert kwargs["env"].get("A") == "1"
+
+
+def test_start_windows_bat_uses_cmd_wrapper_without_shell(monkeypatch):
+    dummy = DummyProcess()
+    popen_mock = mock.Mock(return_value=dummy)
+    monkeypatch.setattr("subprocess.Popen", popen_mock)
+    monkeypatch.setattr("src.api.webui_process_manager.os.name", "nt", raising=False)
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.build_process_container",
+        mock.Mock(return_value=mock.Mock()),
+    )
+
+    cfg = WebUIProcessConfig(command=["webui-user.bat", "--api"], working_dir="C:/webui")
+    manager = WebUIProcessManager(cfg)
+    manager._start_orphan_monitor = mock.Mock()
+    manager.start()
+
+    args = popen_mock.call_args.args
+    kwargs = popen_mock.call_args.kwargs
+    assert args[0][:4] == ["cmd.exe", "/d", "/s", "/c"]
+    assert kwargs["shell"] is False
+    # Ensure breakaway flag is NOT present (0x01000000)
+    assert (kwargs["creationflags"] & 0x01000000) == 0
+
+
+def test_start_attaches_pid_to_process_container(monkeypatch):
+    dummy = DummyProcess()
+    popen_mock = mock.Mock(return_value=dummy)
+    monkeypatch.setattr("subprocess.Popen", popen_mock)
+    container = mock.Mock()
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.build_process_container",
+        mock.Mock(return_value=container),
+    )
+
+    manager = WebUIProcessManager(WebUIProcessConfig(command=["python", "webui.py"]))
+    manager._start_orphan_monitor = mock.Mock()
+    manager.start()
+
+    container.add_pid.assert_called_once_with(dummy.pid)
 
 
 def test_start_raises_structured_error(monkeypatch):

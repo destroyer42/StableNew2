@@ -41,6 +41,7 @@ def test_submit_queue_jobs_starts_worker_once() -> None:
     queue = JobQueue()
     runner = StubRunner()
     service = JobService(queue, runner=runner)
+    service.auto_run_enabled = True  # Enable auto-run so jobs start automatically
 
     job_one = Job(job_id="job-1", priority=JobPriority.NORMAL)
     job_two = Job(job_id="job-2", priority=JobPriority.NORMAL)
@@ -56,6 +57,7 @@ def test_queue_worker_start_failure_propagates_error() -> None:
     queue = JobQueue()
     runner = FailingRunner()
     service = JobService(queue, runner=runner)
+    service.auto_run_enabled = True  # Enable auto-run so jobs start automatically
     job = Job(job_id="job-fail", priority=JobPriority.NORMAL)
 
     with pytest.raises(RuntimeError):

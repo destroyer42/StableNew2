@@ -1,4 +1,5 @@
 # --- Standard library imports ---
+import atexit
 import builtins
 import importlib
 import logging
@@ -37,6 +38,56 @@ from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
 
 # Used by tests and entrypoint contract
 ENTRYPOINT_GUI_CLASS = main_window.StableNewGUI
+
+
+# PR-PROCESS-001: Emergency cleanup for WebUI processes
+# Global reference for emergency cleanup (last-resort safety net)
+_webui_manager_global: WebUIProcessManager | None = None
+_emergency_cleanup_registered = False
+
+
+def _emergency_webui_cleanup() -> None:
+    """
+    Emergency cleanup for WebUI processes.
+    
+    Runs via atexit if app crashes before normal shutdown completes.
+    This is a last-resort safety net — normal shutdown should handle cleanup.
+    
+    PR-PROCESS-001: Ensures WebUI is killed even if GUI crashes during startup
+    before graceful_exit() can run.
+    """
+    if _webui_manager_global is None:
+        return
+    
+    logger = logging.getLogger(__name__)
+    try:
+        logger.warning("EMERGENCY CLEANUP: Killing WebUI processes via atexit handler")
+        _webui_manager_global.stop_webui(grace_seconds=1.0)
+        logger.warning("EMERGENCY CLEANUP: Complete")
+    except Exception as exc:
+        logger.error("EMERGENCY CLEANUP: Failed - %s", exc, exc_info=True)
+
+
+def _register_emergency_cleanup(window) -> None:
+    """
+    Register emergency cleanup handler once WebUI manager is available.
+    
+    PR-PROCESS-001: Called asynchronously after WebUI bootstrap completes.
+    """
+    global _webui_manager_global, _emergency_cleanup_registered
+    
+    if _emergency_cleanup_registered:
+        return
+    
+    webui_mgr = getattr(window, 'webui_process_manager', None)
+    if webui_mgr:
+        _webui_manager_global = webui_mgr
+        atexit.register(_emergency_webui_cleanup)
+        _emergency_cleanup_registered = True
+        logging.getLogger(__name__).debug(
+            "Emergency cleanup handler registered for WebUI PID %s",
+            webui_mgr.pid
+        )
 
 
 # --- Thin wrapper for healthcheck ---
@@ -153,13 +204,19 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
             if webui_manager:
                 # Update the window with the WebUI manager
                 root.after(0, lambda: _update_window_webui_manager(window, webui_manager))
-                logging.info("WebUI bootstrap completed asynchronously")
+                logging.debug("WebUI bootstrap completed asynchronously")
         except Exception as e:
             logging.warning(f"Async WebUI bootstrap failed: {e}")
 
-    # Start bootstrap in background thread
-    thread = threading.Thread(target=_bootstrap_worker, daemon=True)
-    thread.start()
+    # Start bootstrap in background thread (PR-THREAD-001)
+    from src.utils.thread_registry import get_thread_registry
+    registry = get_thread_registry()
+    thread = registry.spawn(
+        target=_bootstrap_worker,
+        name="WebUI-Bootstrap",
+        daemon=False,
+        purpose="Async WebUI bootstrap during startup"
+    )
 
 
 def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> None:
@@ -227,7 +284,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                     try:
                         state = connection_controller.get_state()
                         if state != last_logged_state and log_changes:
-                            logging.info(f"WebUI status update: state = {state}")
+                            logging.debug(f"WebUI status update: state = {state}")
                             last_logged_state = state
 
                         if state == WebUIConnectionState.DISCONNECTED:
@@ -407,7 +464,11 @@ def main() -> None:
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         log_file = str(diag_dir / f"gui-shutdown-{timestamp}.log")
 
-    setup_logging("INFO", log_file=log_file)
+    # Allow user to control log verbosity via environment variable
+    # Default to INFO (shows stage progress, VRAM clearing, job status)
+    # Use WARNING for quiet mode, DEBUG for verbose troubleshooting
+    log_level = os.environ.get("STABLENEW_LOG_LEVEL", "INFO").upper()
+    setup_logging(log_level, log_file=log_file)
 
     # Optional V2.5 file-access logging, controlled by env var
     file_access_logger = None
@@ -472,6 +533,10 @@ def main() -> None:
             window.schedule_auto_exit(auto_exit_seconds)
         except Exception:
             pass
+    
+    # PR-PROCESS-001: Register emergency cleanup after WebUI bootstrap
+    # Delayed by 1000ms to allow WebUI manager to initialize
+    root.after(1000, lambda: _register_emergency_cleanup(window))
     
     root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
 

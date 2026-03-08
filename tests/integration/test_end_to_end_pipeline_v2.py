@@ -2,6 +2,8 @@
 
 Validates that a minimal pipeline run works end-to-end for both DIRECT and QUEUE flows
 using stubbed WebUI client (no real GPU/network).
+
+LEGACY TEST SUITE: Uses PipelineConfig for backward compatibility testing.
 """
 
 from __future__ import annotations
@@ -345,10 +347,11 @@ def small_pipeline_config() -> PipelineConfig:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.legacy
 @pytest.mark.smoke
 @pytest.mark.integration
 class TestDirectRunNowEndToEnd:
-    """Scenario 1: Test DIRECT run via 'Run Now' button semantics."""
+    """Scenario 1: Test DIRECT run via 'Run Now' button semantics (LEGACY)."""
 
     def test_direct_run_now_end_to_end(
         self,
@@ -462,10 +465,11 @@ class TestDirectRunNowEndToEnd:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.legacy
 @pytest.mark.smoke
 @pytest.mark.integration
 class TestQueueRunEndToEnd:
-    """Scenario 2: Test QUEUE run via 'Run' or 'Add to Queue' button semantics."""
+    """Scenario 2: Test QUEUE run via 'Run' or 'Add to Queue' button semantics (LEGACY)."""
 
     def test_queue_run_end_to_end(
         self,
@@ -690,10 +694,11 @@ class TestMixedRunModes:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.legacy
 @pytest.mark.smoke
 @pytest.mark.integration
 class TestJobHistoryFromRunConfig:
-    """Test creating JobHistoryEntry from RunConfig for end-to-end tracking."""
+    """Test creating JobHistoryEntry from RunConfig for end-to-end tracking (LEGACY)."""
 
     def test_history_entry_from_manual_run_config(self) -> None:
         """JobHistoryEntry created from manual RunConfig has correct fields."""
@@ -738,8 +743,9 @@ class TestJobHistoryFromRunConfig:
         assert entry.prompt_keys == ["prompt1", "prompt2"]
 
 
+@pytest.mark.legacy
 def test_pipeline_payload_includes_refiner_and_hires_config() -> None:
-    """Ensure the canonical payload receives refiner/hires selections from the config."""
+    """Ensure the canonical payload receives refiner/hires selections from the config (LEGACY)."""
     pipeline_config = {
         "txt2img": {
             "model": "test-model",

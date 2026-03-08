@@ -64,7 +64,15 @@ class DiagnosticsServiceV2:
                 except Exception:
                     pass
 
-            threading.Thread(target=_worker, daemon=True, name="DiagnosticsServiceV2-build").start()
+            # PR-THREAD-001: Use ThreadRegistry for diagnostics worker
+            from src.utils.thread_registry import get_thread_registry
+            registry = get_thread_registry()
+            registry.spawn(
+                target=_worker,
+                name="DiagnosticsServiceV2-build",
+                daemon=False,
+                purpose="Build diagnostics bundle asynchronously"
+            )
 
     def lifecycle_snapshot(self) -> dict[str, Any]:
         """Capture snapshot of current lifecycle state for memory leak triage.

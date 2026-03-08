@@ -1,0 +1,39 @@
+{
+  "status": "ok",
+  "payload": {
+    "image": {
+      "format": "png",
+      "height": 1280,
+      "path": "txt2img_p02_00_5907b2ea.png",
+      "width": 768
+    },
+    "job_id": "8d9d21ae7f9d4c269efe643ad1d1983f",
+    "njr": {
+      "sha256": "d908a5524d9e7e5482c4298d7e1da41b83baf42ae5374d9cfb3330d4b7c7e40f",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20251224_231442_CrazyCoolVariety",
+    "seeds": {
+      "actual_seed": 2608050777,
+      "actual_subseed": 782117291,
+      "requested_seed": -1
+    },
+    "stage": "txt2img",
+    "stage_manifest": {
+      "config_hash": "8d622718a0a0debe755f318ccb323f9bd76c8d53c2f6d0c62345781dace330a7",
+      "name": "txt2img_p02_00_5907b2ea",
+      "timestamp": "20251224_232130"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "8d9d21ae7f9d4c269efe643ad1d1983f",
+    "stablenew:run_id": "20251224_231442_CrazyCoolVariety",
+    "stablenew:stage": "txt2img",
+    "stablenew:created_utc": "2025-12-25T05:21:30.765478+00:00",
+    "stablenew:payload_sha256": "966defeac89529803fea12c8a8ea369487532327be8273da28c7c625fae69ef9",
+    "stablenew:payload": "{\"image\":{\"format\":\"png\",\"height\":1280,\"path\":\"txt2img_p02_00_5907b2ea.png\",\"width\":768},\"job_id\":\"8d9d21ae7f9d4c269efe643ad1d1983f\",\"njr\":{\"sha256\":\"d908a5524d9e7e5482c4298d7e1da41b83baf42ae5374d9cfb3330d4b7c7e40f\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20251224_231442_CrazyCoolVariety\",\"seeds\":{\"actual_seed\":2608050777,\"actual_subseed\":782117291,\"requested_seed\":-1},\"stage\":\"txt2img\",\"stage_manifest\":{\"config_hash\":\"8d622718a0a0debe755f318ccb323f9bd76c8d53c2f6d0c62345781dace330a7\",\"name\":\"txt2img_p02_00_5907b2ea\",\"timestamp\":\"20251224_232130\"}}",
+    "stablenew:njr_sha256": "d908a5524d9e7e5482c4298d7e1da41b83baf42ae5374d9cfb3330d4b7c7e40f"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20251224_231442_CrazyCoolVariety\\txt2img_p02_00_5907b2ea.png"
+}

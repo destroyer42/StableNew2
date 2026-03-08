@@ -1,4 +1,11 @@
+"""Learning record builder tests (LEGACY).
+
+Tests learning record creation with legacy PipelineConfig.
+"""
+
 from __future__ import annotations
+
+import pytest
 
 from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.learning.learning_record import LearningRecord
@@ -42,6 +49,7 @@ def _run_result_stub(run_id: str = "run-123") -> PipelineRunResult:
     )
 
 
+@pytest.mark.legacy
 def test_learning_record_builder_basic_roundtrip():
     cfg = PipelineConfig(
         prompt="p",

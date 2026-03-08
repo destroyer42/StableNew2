@@ -9,7 +9,10 @@ from typing import Any
 
 @dataclass
 class LearningExperiment:
-    """Represents a learning experiment definition."""
+    """Represents a learning experiment definition.
+    
+    PR-LEARN-020: Added metadata field for variable specifications.
+    """
 
     name: str = ""
     description: str = ""
@@ -19,6 +22,7 @@ class LearningExperiment:
     variable_under_test: str = ""
     values: list[Any] = field(default_factory=list)
     images_per_value: int = 1
+    metadata: dict[str, Any] = field(default_factory=dict)  # PR-LEARN-020: Value spec storage
 
 
 @dataclass

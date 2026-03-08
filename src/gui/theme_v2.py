@@ -33,6 +33,12 @@ VALIDATION_WARN_FG = TEXT_PRIMARY
 VALIDATION_ERROR_BG = ASWF_ERROR_RED
 VALIDATION_ERROR_FG = TEXT_PRIMARY
 
+# PR-PIPE-003: Feedback colors for visual polish
+HIGHLIGHT_SUCCESS = "#4a9f4a"  # Green flash for successful operations
+HIGHLIGHT_MOVE = "#4a90d9"     # Blue flash for move operations
+HIGHLIGHT_WARNING = "#d9a04a"  # Orange for warnings
+HIGHLIGHT_DURATION_MS = 300    # Default flash duration
+
 CARD_FRAME_STYLE = design_system.CARD_FRAME
 SURFACE_FRAME_STYLE = design_system.SECTION_FRAME
 BODY_LABEL_STYLE = design_system.BODY_LABEL
@@ -177,6 +183,22 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         "Dark.TButton",
         background=[("active", BACKGROUND_DARK)],
         foreground=[("disabled", TEXT_MUTED)],
+    )
+
+    # PR-GUI-DARKMODE-002: LabelFrame styles for dark mode
+    style.configure(
+        "Dark.TLabelframe",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "Dark.TLabelframe.Label",  # Style for the label text
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        font=(design_system.Typography.FAMILY, design_system.Typography.SM, "bold"),
     )
 
     # Slider value label style for numeric displays next to sliders

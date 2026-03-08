@@ -1,0 +1,164 @@
+{
+  "pack_data": {
+    "name": "Beautiful_people_fullbody_PhotoMomentum_v26",
+    "slots": [
+      {
+        "index": 0,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\na [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed [[skin]] woman, wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, slight perspiration, glistening, looking sultry",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\na [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed [[skin]] woman, wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, slight perspiration, glistening, looking sultry",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "babesByStableYogiPony_xlV4",
+            1.0
+          ],
+          [
+            "DreamyStyle_xl",
+            0.75
+          ]
+        ]
+      }
+    ],
+    "matrix": {
+      "enabled": true,
+      "mode": "random",
+      "limit": 9,
+      "slots": [
+        {
+          "name": "time",
+          "values": [
+            "morning light",
+            "evening light",
+            "moonlight",
+            "daylight",
+            "room-light",
+            "well-lit"
+          ]
+        },
+        {
+          "name": "clothes",
+          "values": [
+            "g-string",
+            "only a tight too small croptop",
+            "nothing",
+            "lingerie",
+            "bikini armor",
+            "only socks"
+          ]
+        },
+        {
+          "name": "hair",
+          "values": [
+            "brown",
+            "red",
+            "blonde",
+            "silver",
+            "black",
+            "auburn",
+            "strawberry",
+            "fiery"
+          ]
+        },
+        {
+          "name": "pose",
+          "values": [
+            "casual",
+            "spread-eagled",
+            "kneeling",
+            "bending forward",
+            "bending backward",
+            "on all fours"
+          ]
+        },
+        {
+          "name": "activity",
+          "values": [
+            "grabbing breasts",
+            "spreading vagina lips",
+            "fisting her pussy",
+            "sucking a dildo"
+          ]
+        },
+        {
+          "name": "eyes",
+          "values": [
+            "blue",
+            "green",
+            "brown",
+            "violet",
+            "sapphire"
+          ]
+        },
+        {
+          "name": "skin",
+          "values": [
+            "tan",
+            "golden tan",
+            "sun-kissed tan",
+            "lightly tanned",
+            "darkly tanned"
+          ]
+        }
+      ]
+    }
+  },
+  "preset_data": {}
+}

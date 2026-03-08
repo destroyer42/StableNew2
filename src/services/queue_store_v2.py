@@ -7,6 +7,7 @@ Every job entry stores exactly one NormalizedJobRecord snapshot plus metadata.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,6 +54,13 @@ class QueueSnapshot:
 QueueSnapshotV1 = QueueSnapshot
 
 _QUEUE_CODEC = JSONLCodec(logger=logger.warning)
+
+
+def _swap(jobs: list[dict[str, Any]], i: int, j: int) -> None:
+    """Swap two entries in-place if indices are valid."""
+    if i < 0 or j < 0 or i >= len(jobs) or j >= len(jobs):
+        return
+    jobs[i], jobs[j] = jobs[j], jobs[i]
 
 
 def validate_queue_item(item: Mapping[str, Any]) -> tuple[bool, list[str]]:
@@ -123,7 +131,7 @@ def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | Non
         schema_version=SCHEMA_VERSION,
     )
 
-    logger.info(
+    logger.debug(
         "Loaded queue state: %d jobs, auto_run=%s, paused=%s",
         len(snapshot.jobs),
         snapshot.auto_run_enabled,
@@ -160,10 +168,32 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
 
         temp_path = state_path.with_suffix(state_path.suffix + ".tmp")
         _QUEUE_CODEC.write_jsonl(temp_path, [data])
-        temp_path.replace(state_path)
+        
+        # Windows-safe atomic replace with retry
+        # On Windows, file locks can persist briefly after closing
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if state_path.exists():
+                    state_path.unlink()
+                temp_path.rename(state_path)
+                break  # Success
+            except (OSError, PermissionError) as e:
+                if attempt < max_retries - 1:
+                    # Brief delay to allow file system to release lock
+                    time.sleep(0.05)
+                else:
+                    # Final attempt failed - use direct write fallback
+                    logger.warning(f"Failed atomic rename after {max_retries} attempts, using direct write: {e}")
+                    _QUEUE_CODEC.write_jsonl(state_path, [data])
+                    if temp_path.exists():
+                        try:
+                            temp_path.unlink()
+                        except Exception:
+                            pass
 
         logger.debug("Saved queue state: %d jobs", len(validated_jobs))
-        logger.info(
+        logger.debug(
             "QUEUE_STATE_SAVED | Persisted queue state",
             extra={
                 "job_count": len(validated_jobs),
@@ -194,6 +224,28 @@ def delete_queue_snapshot(path: Path | str | None = None) -> bool:
         return False
 
 
+def move_job_up(snapshot: QueueSnapshotV1, queue_id: str) -> bool:
+    """Move a job up one position within a QueueSnapshot."""
+    for idx, job in enumerate(snapshot.jobs):
+        if str(job.get("queue_id")) == queue_id:
+            if idx == 0:
+                return False
+            _swap(snapshot.jobs, idx, idx - 1)
+            return True
+    return False
+
+
+def move_job_down(snapshot: QueueSnapshotV1, queue_id: str) -> bool:
+    """Move a job down one position within a QueueSnapshot."""
+    for idx, job in enumerate(snapshot.jobs):
+        if str(job.get("queue_id")) == queue_id:
+            if idx >= len(snapshot.jobs) - 1:
+                return False
+            _swap(snapshot.jobs, idx, idx + 1)
+            return True
+    return False
+
+
 __all__ = [
     "QueueSnapshotV1",
     "UnsupportedQueueSchemaError",
@@ -202,4 +254,6 @@ __all__ = [
     "save_queue_snapshot",
     "delete_queue_snapshot",
     "get_queue_state_path",
+    "move_job_up",
+    "move_job_down",
 ]

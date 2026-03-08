@@ -70,7 +70,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
 
     log_with_ctx(
         logger,
-        logging.INFO,
+        logging.DEBUG,
         "Probing WebUI readiness at models/options endpoints",
         ctx=ctx,
         extra_fields={"models_endpoint": MODELS_PATH, "options_endpoint": OPTIONS_PATH},
@@ -84,7 +84,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
         if models_error is None:
             log_with_ctx(
                 logger,
-                logging.INFO,
+                logging.DEBUG,
                 f"WebUI API ready (models endpoint): {models_url}",
                 ctx=ctx,
                 extra_fields={"endpoint": MODELS_PATH},
@@ -105,7 +105,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
         if options_error is None:
             log_with_ctx(
                 logger,
-                logging.INFO,
+                logging.DEBUG,
                 f"WebUI API ready (options endpoint): {options_url}",
                 ctx=ctx,
                 extra_fields={"endpoint": OPTIONS_PATH},
@@ -130,7 +130,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
                 extra_fields["last_error_endpoint"] = last_error_endpoint
             log_with_ctx(
                 logger,
-                logging.INFO,
+                logging.DEBUG,
                 f"WebUI API reachable but models/options not ready yet: {progress_url}",
                 ctx=ctx,
                 extra_fields=extra_fields,
@@ -170,7 +170,7 @@ def find_webui_port(
         url = base_url_template.format(port=port)
         log_with_ctx(
             logger,
-            logging.INFO,
+            logging.DEBUG,
             f"Checking for WebUI API on port {port}",
             ctx=ctx,
             extra_fields={"port": port, "endpoint": PROGRESS_PATH},
@@ -181,7 +181,7 @@ def find_webui_port(
             ):
                 log_with_ctx(
                     logger,
-                    logging.INFO,
+                    logging.DEBUG,
                     f"Found WebUI API on port {port}",
                     ctx=ctx,
                     extra_fields={"port": port},

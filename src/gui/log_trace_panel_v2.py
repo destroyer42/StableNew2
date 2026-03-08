@@ -47,7 +47,7 @@ class LogTracePanelV2(ttk.Frame):
         self._level_combo = ttk.Combobox(
             header,
             textvariable=self._level_filter,
-            values=["ALL", "WARN+", "ERROR"],
+            values=["ALL", "DEBUG+", "INFO+", "WARN+", "ERROR"],
             state="readonly",
             width=8,
         )
@@ -253,6 +253,10 @@ class LogTracePanelV2(ttk.Frame):
             level = str(entry.get("level", "")).upper()
             if mode == "ALL":
                 pass
+            elif mode == "DEBUG+" and level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+                continue
+            elif mode == "INFO+" and level not in ("INFO", "WARNING", "ERROR", "CRITICAL"):
+                continue
             elif mode == "WARN+" and level not in ("WARNING", "ERROR", "CRITICAL"):
                 continue
             elif mode == "ERROR" and level not in ("ERROR", "CRITICAL"):

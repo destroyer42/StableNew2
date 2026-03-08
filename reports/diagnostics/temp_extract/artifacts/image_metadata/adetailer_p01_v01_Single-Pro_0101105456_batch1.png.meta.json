@@ -1,0 +1,185 @@
+{
+  "status": "ok",
+  "payload": {
+    "generation": {
+      "cfg_scale": 5.5,
+      "denoising_strength": 0.26,
+      "height": 1408,
+      "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+      "negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 9,
+      "vae": "Automatic",
+      "width": 1024
+    },
+    "image": {
+      "format": "png",
+      "height": 1408,
+      "path": "adetailer_p01_v01_Single-Pro_0101105456_batch1.png",
+      "width": 1024
+    },
+    "job_id": "dfa0df4052074ddc9a6ec63d0a7cdb26",
+    "njr": {
+      "sha256": "cf41f70f222d26aaabc3bad7b1492e67e8f96d452e2de5d67a306149b61ca128",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "seeds": {
+      "final_seed": 1789550276,
+      "final_subseed": 1698986388,
+      "original_seed": -1,
+      "original_subseed": -1,
+      "subseed_strength": 0.0
+    },
+    "stage": "adetailer",
+    "stage_history": [
+      {
+        "config": {
+          "batch_size": 1,
+          "cfg_scale": 6.499999999999998,
+          "clip_skip": 2,
+          "denoising_strength": 0.7,
+          "do_not_save_grid": null,
+          "do_not_save_samples": null,
+          "enable_hr": false,
+          "height": 1408,
+          "hr_resize_x": 0,
+          "hr_resize_y": 0,
+          "hr_scale": 2.0,
+          "hr_second_pass_steps": 0,
+          "hr_upscaler": "Latent",
+          "n_iter": 1,
+          "negative_prompt": "blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, <embedding:sdxl_cyberrealistic_simpleneg-neg>, <embedding:bad_prompt>, <embedding:SDXLnegXL>, <embedding:ac_neg1>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
+          "prompt": "<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2> close up, portrait, a highly detailed fantasy scene centered on a small group of three women, a female figure as the clear primary subject, seated calmly while preparing for battle, captured from a three-quarter view, lit by golden hour sunlight, set within a visually rich windswept mountain pass, the scene conveys standing at the edge of destiny, wearing nothing, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.6875> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.4660194174757281>",
+          "restore_faces": null,
+          "sampler_name": "DPM++ 2M",
+          "scheduler": "Karras",
+          "seed": -1,
+          "seed_resize_from_h": -1,
+          "seed_resize_from_w": -1,
+          "steps": 34,
+          "subseed": -1,
+          "subseed_strength": 0.5,
+          "tiling": null,
+          "width": 1024
+        },
+        "model": "Unknown",
+        "name": "txt2img_p01_v01_Single-Pro_0101105350",
+        "negative_prompt": "",
+        "prompt": "",
+        "seeds": {},
+        "stage": "txt2img",
+        "timestamp": "20260101_105455",
+        "vae": "Automatic"
+      }
+    ],
+    "stage_manifest": {
+      "config": {
+        "alwayson_scripts": {
+          "ADetailer": {
+            "args": [
+              true,
+              false,
+              {
+                "ad_cfg_scale": 5.5,
+                "ad_confidence": 0.34,
+                "ad_denoising_strength": 0.26,
+                "ad_dilate_erode": 4,
+                "ad_inpaint_height": 1408,
+                "ad_inpaint_only_masked": true,
+                "ad_inpaint_only_masked_padding": 32,
+                "ad_inpaint_width": 1024,
+                "ad_mask_blur": 6,
+                "ad_mask_filter_method": "Area",
+                "ad_mask_k": 3,
+                "ad_mask_max_ratio": 1.0,
+                "ad_mask_merge_invert": "None",
+                "ad_mask_min_ratio": 0.01,
+                "ad_mask_only_top_k_largest": true,
+                "ad_model": "mediapipe_face_full",
+                "ad_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
+                "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+                "ad_sampler": "DPM++ 2M",
+                "ad_scheduler": "Karras",
+                "ad_steps": 9,
+                "ad_tab_enable": true,
+                "ad_use_cfg_scale": true,
+                "ad_use_inpaint_width_height": false,
+                "ad_use_sampler": true,
+                "ad_use_steps": true,
+                "ad_x_offset": 0,
+                "ad_y_offset": 0
+              },
+              {
+                "ad_cfg_scale": 5.0,
+                "ad_confidence": 0.3,
+                "ad_denoising_strength": 0.25,
+                "ad_dilate_erode": 6,
+                "ad_inpaint_height": 1408,
+                "ad_inpaint_only_masked": true,
+                "ad_inpaint_only_masked_padding": 16,
+                "ad_inpaint_width": 1024,
+                "ad_mask_blur": 4,
+                "ad_mask_filter_method": "Area",
+                "ad_mask_k": 6,
+                "ad_mask_max_ratio": 1.0,
+                "ad_mask_merge_invert": "None",
+                "ad_mask_min_ratio": 0.003,
+                "ad_mask_only_top_k_largest": true,
+                "ad_model": "hand_yolov8n.pt",
+                "ad_negative_prompt": "extra fingers, fused fingers, broken fingers, deformed hands, missing fingers",
+                "ad_prompt": "well-formed fingers, natural knuckles, correct hand anatomy, sharp details",
+                "ad_sampler": "DPM++ 2M Karras",
+                "ad_scheduler": "Use same scheduler",
+                "ad_steps": 12,
+                "ad_tab_enable": true,
+                "ad_use_cfg_scale": true,
+                "ad_use_inpaint_width_height": false,
+                "ad_use_sampler": true,
+                "ad_use_steps": true,
+                "ad_x_offset": 0,
+                "ad_y_offset": 0
+              }
+            ]
+          }
+        },
+        "cfg_scale": 5.5,
+        "denoising_strength": 0.26,
+        "height": 1408,
+        "negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
+        "prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 9,
+        "width": 1024
+      },
+      "config_hash": "db6154e56d52a491aba1f901f87e8f1a069bd3c1e78ed0c3a12312408e122a73",
+      "model": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]",
+      "name": "adetailer_p01_v01_Single-Pro_0101105456_batch1",
+      "negative_prompt": "",
+      "prompt": "",
+      "seeds": {
+        "final_seed": 1789550276,
+        "final_subseed": 1698986388,
+        "original_seed": -1,
+        "original_subseed": -1,
+        "subseed_strength": 0.0
+      },
+      "stage": "adetailer",
+      "timestamp": "20260101_105521",
+      "vae": "Automatic"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "dfa0df4052074ddc9a6ec63d0a7cdb26",
+    "stablenew:run_id": "20260101_104229_Single-Prompt-Xtra-Crazy",
+    "stablenew:stage": "adetailer",
+    "stablenew:created_utc": "2026-01-01T16:55:21.212092+00:00",
+    "stablenew:payload_sha256": "c2bf8b24317cb155cb4b6f82a91966b073e33f4bddcd372867c61d296c022806",
+    "stablenew:payload": "{\"generation\":{\"cfg_scale\":5.5,\"denoising_strength\":0.26,\"height\":1408,\"model\":\"juggernautXL_ragnarokBy.safetensors [dd08fa32f9]\",\"negative_prompt\":\"<stable_yogis_pdxl_negatives2-neg>,\\n<stable_yogis_anatomy_negatives_v1-neg>,\\n<sdxl_cyberrealistic_simpleneg-neg>,\\n<negative_hands>,\\nwarped eyes,\\nmisaligned pupils,\\ncrossed eyes,\\nextra eyes,\\nduplicated pupils,\\ncollapsed eyelids,\\nmelted facial features,\\nplastic skin,\\nwaxy skin,\\nover-smoothed skin,\\nover-sharpened skin,\\nuncanny valley,\\nface redesign,\\nface re-sculpting\\n, glowing eyes\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":9,\"vae\":\"Automatic\",\"width\":1024},\"image\":{\"format\":\"png\",\"height\":1408,\"path\":\"adetailer_p01_v01_Single-Pro_0101105456_batch1.png\",\"width\":1024},\"job_id\":\"dfa0df4052074ddc9a6ec63d0a7cdb26\",\"njr\":{\"sha256\":\"cf41f70f222d26aaabc3bad7b1492e67e8f96d452e2de5d67a306149b61ca128\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20260101_104229_Single-Prompt-Xtra-Crazy\",\"seeds\":{\"final_seed\":1789550276,\"final_subseed\":1698986388,\"original_seed\":-1,\"original_subseed\":-1,\"subseed_strength\":0.0},\"stage\":\"adetailer\",\"stage_history\":[{\"config\":{\"batch_size\":1,\"cfg_scale\":6.499999999999998,\"clip_skip\":2,\"denoising_strength\":0.7,\"do_not_save_grid\":null,\"do_not_save_samples\":null,\"enable_hr\":false,\"height\":1408,\"hr_resize_x\":0,\"hr_resize_y\":0,\"hr_scale\":2.0,\"hr_second_pass_steps\":0,\"hr_upscaler\":\"Latent\",\"n_iter\":1,\"negative_prompt\":\"blurry, bad quality, distorted, <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg>, <embedding:Stable_Yogis_PDXL_Negatives2-neg>, <embedding:NEGATIVE_HANDS>, <embedding:sdxl_cyberrealistic_simpleneg-neg>, <embedding:bad_prompt>, <embedding:SDXLnegXL>, <embedding:ac_neg1>, low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes\",\"prompt\":\"<embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:face_refiner> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2> close up, portrait, a highly detailed fantasy scene centered on a small group of three women, a female figure as the clear primary subject, seated calmly while preparing for battle, captured from a three-quarter view, lit by golden hour sunlight, set within a visually rich windswept mountain pass, the scene conveys standing at the edge of destiny, wearing nothing, strong subject focus, balanced composition, fantasy realism, cinematic atmosphere, natural proportions, realistic anatomy, photorealism, high detail, sharp focus, rich color depth <lora:add-detail-xl:0.6875> <lora:CinematicStyle_v1:0.5604395604395604> <lora:DetailedEyes_V3:0.4660194174757281>\",\"restore_faces\":null,\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":-1,\"seed_resize_from_h\":-1,\"seed_resize_from_w\":-1,\"steps\":34,\"subseed\":-1,\"subseed_strength\":0.5,\"tiling\":null,\"width\":1024},\"model\":\"Unknown\",\"name\":\"txt2img_p01_v01_Single-Pro_0101105350\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{},\"stage\":\"txt2img\",\"timestamp\":\"20260101_105455\",\"vae\":\"Automatic\"}],\"stage_manifest\":{\"config\":{\"alwayson_scripts\":{\"ADetailer\":{\"args\":[true,false,{\"ad_cfg_scale\":5.5,\"ad_confidence\":0.34,\"ad_denoising_strength\":0.26,\"ad_dilate_erode\":4,\"ad_inpaint_height\":1408,\"ad_inpaint_only_masked\":true,\"ad_inpaint_only_masked_padding\":32,\"ad_inpaint_width\":1024,\"ad_mask_blur\":6,\"ad_mask_filter_method\":\"Area\",\"ad_mask_k\":3,\"ad_mask_max_ratio\":1.0,\"ad_mask_merge_invert\":\"None\",\"ad_mask_min_ratio\":0.01,\"ad_mask_only_top_k_largest\":true,\"ad_model\":\"mediapipe_face_full\",\"ad_negative_prompt\":\"<stable_yogis_pdxl_negatives2-neg>,\\n<stable_yogis_anatomy_negatives_v1-neg>,\\n<sdxl_cyberrealistic_simpleneg-neg>,\\n<negative_hands>,\\nwarped eyes,\\nmisaligned pupils,\\ncrossed eyes,\\nextra eyes,\\nduplicated pupils,\\ncollapsed eyelids,\\nmelted facial features,\\nplastic skin,\\nwaxy skin,\\nover-smoothed skin,\\nover-sharpened skin,\\nuncanny valley,\\nface redesign,\\nface re-sculpting\\n, glowing eyes\",\"ad_prompt\":\"<stable_yogis_pdxl_positives>,\\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\\nnatural facial detail,\\nsubtle skin texture,\\nfine skin pores,\\nrealistic eye reflections,\\nstable eye alignment,\\nrelaxed eyelids,\\nnatural facial micro-expression,\\npreserve original expression,\\npreserve original lighting,\\npreserve original facial structure\\n\",\"ad_sampler\":\"DPM++ 2M\",\"ad_scheduler\":\"Karras\",\"ad_steps\":9,\"ad_tab_enable\":true,\"ad_use_cfg_scale\":true,\"ad_use_inpaint_width_height\":false,\"ad_use_sampler\":true,\"ad_use_steps\":true,\"ad_x_offset\":0,\"ad_y_offset\":0},{\"ad_cfg_scale\":5.0,\"ad_confidence\":0.3,\"ad_denoising_strength\":0.25,\"ad_dilate_erode\":6,\"ad_inpaint_height\":1408,\"ad_inpaint_only_masked\":true,\"ad_inpaint_only_masked_padding\":16,\"ad_inpaint_width\":1024,\"ad_mask_blur\":4,\"ad_mask_filter_method\":\"Area\",\"ad_mask_k\":6,\"ad_mask_max_ratio\":1.0,\"ad_mask_merge_invert\":\"None\",\"ad_mask_min_ratio\":0.003,\"ad_mask_only_top_k_largest\":true,\"ad_model\":\"hand_yolov8n.pt\",\"ad_negative_prompt\":\"extra fingers, fused fingers, broken fingers, deformed hands, missing fingers\",\"ad_prompt\":\"well-formed fingers, natural knuckles, correct hand anatomy, sharp details\",\"ad_sampler\":\"DPM++ 2M Karras\",\"ad_scheduler\":\"Use same scheduler\",\"ad_steps\":12,\"ad_tab_enable\":true,\"ad_use_cfg_scale\":true,\"ad_use_inpaint_width_height\":false,\"ad_use_sampler\":true,\"ad_use_steps\":true,\"ad_x_offset\":0,\"ad_y_offset\":0}]}},\"cfg_scale\":5.5,\"denoising_strength\":0.26,\"height\":1408,\"negative_prompt\":\"<stable_yogis_pdxl_negatives2-neg>,\\n<stable_yogis_anatomy_negatives_v1-neg>,\\n<sdxl_cyberrealistic_simpleneg-neg>,\\n<negative_hands>,\\nwarped eyes,\\nmisaligned pupils,\\ncrossed eyes,\\nextra eyes,\\nduplicated pupils,\\ncollapsed eyelids,\\nmelted facial features,\\nplastic skin,\\nwaxy skin,\\nover-smoothed skin,\\nover-sharpened skin,\\nuncanny valley,\\nface redesign,\\nface re-sculpting\\n, glowing eyes\",\"prompt\":\"<stable_yogis_pdxl_positives>,\\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\\nnatural facial detail,\\nsubtle skin texture,\\nfine skin pores,\\nrealistic eye reflections,\\nstable eye alignment,\\nrelaxed eyelids,\\nnatural facial micro-expression,\\npreserve original expression,\\npreserve original lighting,\\npreserve original facial structure\\n\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":9,\"width\":1024},\"config_hash\":\"db6154e56d52a491aba1f901f87e8f1a069bd3c1e78ed0c3a12312408e122a73\",\"model\":\"juggernautXL_ragnarokBy.safetensors [dd08fa32f9]\",\"name\":\"adetailer_p01_v01_Single-Pro_0101105456_batch1\",\"negative_prompt\":\"\",\"prompt\":\"\",\"seeds\":{\"final_seed\":1789550276,\"final_subseed\":1698986388,\"original_seed\":-1,\"original_subseed\":-1,\"subseed_strength\":0.0},\"stage\":\"adetailer\",\"timestamp\":\"20260101_105521\",\"vae\":\"Automatic\"}}",
+    "stablenew:njr_sha256": "cf41f70f222d26aaabc3bad7b1492e67e8f96d452e2de5d67a306149b61ca128"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20260101_104229_Single-Prompt-Xtra-Crazy\\adetailer_p01_v01_Single-Pro_0101105456_batch1.png"
+}

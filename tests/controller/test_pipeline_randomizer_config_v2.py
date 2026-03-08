@@ -84,11 +84,26 @@ def test_apply_config_writes_randomizer_settings_to_pack() -> None:
 def test_add_packs_to_job_snapshots_randomizer_settings() -> None:
     controller, _, _ = _make_controller({})
     controller.app_state.set_run_config({"randomization_enabled": True, "max_variants": 6})
-    controller._find_pack_by_id = lambda pack_id: SimpleNamespace(name=pack_id)
+    
+    # Mock both the pack finder and pack reader
+    from pathlib import Path
+    mock_pack = SimpleNamespace(name="pack-7", path=Path("fake/pack-7.json"))
+    controller._find_pack_by_id = lambda pack_id: mock_pack
+    
+    # Mock the pack reading to return a simple prompt
+    import src.controller.app_controller as app_controller_module
+    original_read_prompt_pack = app_controller_module.read_prompt_pack
+    app_controller_module.read_prompt_pack = lambda path: [
+        {"positive": "test prompt", "negative": "test negative"}
+    ]
+    
+    try:
+        controller.on_pipeline_add_packs_to_job(["pack-7"])
 
-    controller.on_pipeline_add_packs_to_job(["pack-7"])
-
-    entries = controller.app_state.job_draft.packs
-    assert entries
-    assert entries[0].config_snapshot["randomization_enabled"] is True
-    assert entries[0].config_snapshot["max_variants"] == 6
+        entries = controller.app_state.job_draft.packs
+        assert entries
+        assert entries[0].config_snapshot["randomization_enabled"] is True
+        assert entries[0].config_snapshot["max_variants"] == 6
+    finally:
+        # Restore the original function
+        app_controller_module.read_prompt_pack = original_read_prompt_pack

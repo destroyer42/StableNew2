@@ -32,7 +32,7 @@ class LearningPlanTable(ttk.Frame):
         table_frame.rowconfigure(0, weight=1)
 
         # Treeview with columns
-        columns = ("variant", "param_value", "stage", "status", "images")
+        columns = ("variant", "param_value", "stage", "status", "images", "rating")
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
 
         # Define headings
@@ -41,6 +41,7 @@ class LearningPlanTable(ttk.Frame):
         self.tree.heading("stage", text="Stage")
         self.tree.heading("status", text="Status")
         self.tree.heading("images", text="Images")
+        self.tree.heading("rating", text="Avg Rating")
 
         # Define column widths
         self.tree.column("variant", width=80, anchor="center")
@@ -48,6 +49,7 @@ class LearningPlanTable(ttk.Frame):
         self.tree.column("stage", width=80, anchor="center")
         self.tree.column("status", width=80, anchor="center")
         self.tree.column("images", width=80, anchor="center")
+        self.tree.column("rating", width=80, anchor="center")
 
         # Add scrollbar
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
@@ -77,6 +79,7 @@ class LearningPlanTable(ttk.Frame):
                     "txt2img",  # TODO: Get from experiment stage
                     variant.status.title(),
                     f"{variant.completed_images}/{variant.planned_images}",
+                    "—",  # Rating placeholder
                 ),
             )
 
@@ -122,6 +125,32 @@ class LearningPlanTable(ttk.Frame):
             self.tree.item(item, values=current_values)
         except (IndexError, TypeError):
             # Row doesn't exist or invalid data
+            pass
+
+    def update_row_rating(self, index: int, avg_rating: float | None) -> None:
+        """Update the average rating display for a row."""
+        try:
+            item = self.tree.get_children()[index]
+            current_values = list(self.tree.item(item, "values"))
+
+            if avg_rating is not None:
+                # Display as stars or numeric
+                if avg_rating >= 4.5:
+                    rating_display = "⭐⭐⭐⭐⭐"
+                elif avg_rating >= 3.5:
+                    rating_display = "⭐⭐⭐⭐"
+                elif avg_rating >= 2.5:
+                    rating_display = "⭐⭐⭐"
+                elif avg_rating >= 1.5:
+                    rating_display = "⭐⭐"
+                else:
+                    rating_display = "⭐"
+            else:
+                rating_display = "—"
+
+            current_values[5] = rating_display  # Rating column is index 5
+            self.tree.item(item, values=current_values)
+        except (IndexError, TypeError):
             pass
 
     def highlight_row(self, index: int, highlight: bool = True) -> None:

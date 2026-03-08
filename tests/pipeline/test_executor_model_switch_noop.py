@@ -61,3 +61,56 @@ def test_model_switch_is_avoided_when_safemode_blocks_changes() -> None:
 
     assert client.set_model_calls == []
     assert pipeline._current_model == "stable_default.safetensors"
+
+
+def test_model_switch_noop_with_hash_and_extension_equivalence() -> None:
+    # Current model has extension and hash, desired is base name
+    client = _ModelSwitchClient("model.safetensors [abc123]", safe_mode=False)
+    pipeline = Pipeline(client=client, structured_logger=_NoOpStructuredLogger())
+
+    pipeline._current_model = None
+    pipeline._model_discovery_attempted = False
+
+    pipeline._ensure_model_and_vae("model", None)
+
+    # set_model should NOT be called, as names normalize equal
+    assert client.set_model_calls == []
+    assert pipeline._current_model == "model.safetensors [abc123]"
+
+
+def test_model_switch_resets_vae_to_automatic_when_not_explicit() -> None:
+    client = _ModelSwitchClient("old_model.safetensors", safe_mode=False)
+    pipeline = Pipeline(client=client, structured_logger=_NoOpStructuredLogger())
+    pipeline._current_model = "old_model.safetensors"
+    pipeline._current_vae = "sdxl_vae.safetensors"
+
+    pipeline._ensure_model_and_vae("new_model.safetensors", None)
+
+    assert client.set_model_calls == ["new_model.safetensors"]
+    assert client.set_vae_calls == ["Automatic"]
+    assert pipeline._current_vae == "Automatic"
+
+
+def test_model_unchanged_does_not_reset_vae_when_not_explicit() -> None:
+    client = _ModelSwitchClient("same_model.safetensors", safe_mode=False)
+    pipeline = Pipeline(client=client, structured_logger=_NoOpStructuredLogger())
+    pipeline._current_model = "same_model.safetensors"
+    pipeline._current_vae = "sdxl_vae.safetensors"
+
+    pipeline._ensure_model_and_vae("same_model.safetensors", None)
+
+    assert client.set_model_calls == []
+    assert client.set_vae_calls == []
+    assert pipeline._current_vae == "sdxl_vae.safetensors"
+
+
+def test_explicit_vae_noop_skips_redundant_set() -> None:
+    client = _ModelSwitchClient("same_model.safetensors", safe_mode=False)
+    pipeline = Pipeline(client=client, structured_logger=_NoOpStructuredLogger())
+    pipeline._current_model = "same_model.safetensors"
+    pipeline._current_vae = "sdxl_vae.safetensors"
+
+    pipeline._ensure_model_and_vae("same_model.safetensors", "sdxl_vae.safetensors")
+
+    assert client.set_model_calls == []
+    assert client.set_vae_calls == []

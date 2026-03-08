@@ -20,6 +20,8 @@ __all__ = [
     "attach_jsonl_log_handler",
     "close_all_structured_loggers",
     "get_structured_logger_registry_count",
+    "install_async_logging",  # PR-HARDEN-002
+    "get_async_queue_handler",  # PR-HARDEN-002
     "PreferencesManager",
     "save_image_from_base64",
     "load_image_to_base64",
@@ -28,6 +30,7 @@ __all__ = [
     "read_prompt_pack",
     "get_prompt_packs",
     "get_safe_filename",
+    "build_safe_image_stem",
     "merge_global_negative",
     "find_webui_api_port",
     "wait_for_webui_ready",
@@ -46,6 +49,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "read_prompt_pack": ("src.utils.file_io", "read_prompt_pack"),
     "get_prompt_packs": ("src.utils.file_io", "get_prompt_packs"),
     "get_safe_filename": ("src.utils.file_io", "get_safe_filename"),
+    "build_safe_image_stem": ("src.utils.file_io", "build_safe_image_stem"),
     "merge_global_negative": ("src.utils.negative_helpers_v2", "merge_global_negative"),
     "find_webui_api_port": ("src.utils.webui_discovery", "find_webui_api_port"),
     # 🔴 OLD (remove this)
@@ -65,6 +69,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
         "src.utils.logger",
         "get_structured_logger_registry_count",
     ),
+    # PR-HARDEN-002: Async logging utilities
+    "install_async_logging": ("src.utils.logger", "install_async_logging"),
+    "get_async_queue_handler": ("src.utils.logger", "get_async_queue_handler"),
 }
 
 

@@ -1,42 +1,37 @@
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1>
+(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
+gorgeous buxom witch-knight commanding spectral chains in [[environment]]
+<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:Realism_Lora_By_Stable_yogi_SDXL8.1:0.510989010989011>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:SDXLnegXL> <embedding:bad_prompt> <embedding:ac_neg1>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
+
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-witch-knight commanding spectral chains in [[environment]]
+gorgeous buxom holy cleric with radiant staff healing allies in [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-holy cleric with radiant staff healing allies in [[environment]]
+gorgeous buxom valiant shieldmaiden on castle ramparts, [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-valiant shieldmaiden on castle ramparts, [[environment]]
+gorgeous buxom quick-footed elven ranger drawing her bow in [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-quick-footed elven ranger drawing her bow in [[environment]]
+gorgeous buxom armored dragon rider gazing toward the horizon above [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-
-
-<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
-(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-armored dragon rider gazing toward the horizon above [[environment]]
-<lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
-neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
-neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
@@ -45,35 +40,30 @@ battle-hardened paladin raising glowing hammer in [[environment]]
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-shadow rogue stepping from the gloom of [[environment]]
+gorgeous buxom shadow rogue stepping from the gloom of [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-silver-haired battle mage standing within swirling runes in [[environment]]
+gorgeous buxom silver-haired battle mage standing within swirling runes in [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-battlefield bard strumming enchanted lute amidst [[environment]]
+gorgeous buxom battlefield bard strumming enchanted lute amidst [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
 
-
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
-fire sorceress weaving burning sigils through the air in [[environment]]
+gorgeous buxom fire sorceress weaving burning sigils through the air in [[environment]]
 <lora:add-detail-xl:0.65> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.75> <lora:babesByStableYogiPony_xlV4:1.0> <lora:DreamyStyle_xl:0.7>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured
-

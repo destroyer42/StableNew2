@@ -1,6 +1,7 @@
 # Used by tests and entrypoint contract
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
@@ -19,9 +20,13 @@ from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
+from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui.zone_map_v2 import get_root_zone_config
+from src.services.ui_state_store import get_ui_state_store
 from src.utils import InMemoryLogHandler
 from src.utils.config import ConfigManager
+
+logger = logging.getLogger(__name__)
 
 
 class HeaderZone(ttk.Frame):
@@ -182,13 +187,20 @@ class MainWindowV2:
 
         # Learning tab (optional; attach via registry)
         def _make_learning(parent):
-            try:
-                tab = LearningTabFrame(parent)
-            except Exception:
-                try:
-                    tab = LearningTabFrame(parent, app_state=self.app_state)
-                except Exception:
-                    tab = LearningTabFrame(parent)
+            import logging
+            logger = logging.getLogger(__name__)            
+            logger.info("[MainWindow] Creating LearningTabFrame")
+            
+            # Create with full parameters - no fallback, fail fast on errors
+            tab = LearningTabFrame(
+                parent,
+                app_state=self.app_state,
+                pipeline_controller=self.pipeline_controller,
+                app_controller=self.app_controller,
+            )
+            
+            logger.info("[MainWindow] LearningTabFrame created successfully")
+            return tab
             # Wire controller if present
             if hasattr(tab, "controller"):
                 try:
@@ -198,6 +210,18 @@ class MainWindowV2:
             return tab
 
         self.learning_tab = self.add_tab("learning", "Learning", _make_learning)
+
+        def _make_review(parent):
+            return ReviewTabFrame(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.review_tab = self.add_tab("review", "Review", _make_review)
+
+        # PR-PERSIST-001: Restore selected tab
+        self._restore_tab_selection()
 
         self.left_zone = None
         self.right_zone = None
@@ -268,6 +292,38 @@ class MainWindowV2:
 
         # --- UI Heartbeat: Tk thread liveness signal ---
         self._install_ui_heartbeat()
+        
+        # PR-STARTUP-PERF: Trigger deferred queue autostart after GUI renders
+        # This prevents blocking startup when there are queued jobs (was ~10s delay)
+        # TEMPORARILY DISABLED FOR TESTING
+        # self.root.after(100, self._trigger_deferred_queue_autostart)
+
+    def _trigger_deferred_queue_autostart(self) -> None:
+        """Trigger deferred queue autostart after GUI is fully rendered."""
+        logger.info("[STARTUP-PERF] Attempting to trigger deferred queue autostart...")
+        try:
+            # Access JobExecutionController via pipeline_controller
+            if not self.pipeline_controller:
+                logger.warning("[STARTUP-PERF] No pipeline_controller available")
+                return
+            if not hasattr(self.pipeline_controller, '_job_controller'):
+                logger.warning("[STARTUP-PERF] pipeline_controller has no _job_controller attribute")
+                return
+            
+            job_controller = self.pipeline_controller._job_controller
+            if not job_controller:
+                logger.warning("[STARTUP-PERF] _job_controller is None")
+                return
+            if not hasattr(job_controller, 'trigger_deferred_autostart'):
+                logger.warning("[STARTUP-PERF] job_controller has no trigger_deferred_autostart method")
+                return
+            
+            logger.info("[STARTUP-PERF] Calling trigger_deferred_autostart()...")
+            job_controller.trigger_deferred_autostart()
+            logger.info("[STARTUP-PERF] Deferred autostart trigger completed")
+        except Exception:
+            # Log but don't crash GUI if autostart fails
+            logger.exception("[STARTUP-PERF] Failed to trigger deferred queue autostart")
 
     def run_in_main_thread(self, cb: Callable[[], None]) -> None:
         """Schedule the callback on the Tk main thread (safe from any thread)."""
@@ -306,9 +362,35 @@ class MainWindowV2:
         return self._tab_registry.get(tab_id)
 
     def _install_ui_heartbeat(self):
+        """Install UI heartbeat ticker that runs every 250ms.
+        
+        PR-HB-003: Enhanced with diagnostic logging and operation tracking.
+        """
+        tick_count = 0
+        last_operation = None
+        
         def _tick():
+            nonlocal tick_count, last_operation
+            tick_count += 1
+            
+            # Update controller heartbeat timestamp
             if self.app_controller and hasattr(self.app_controller, "update_ui_heartbeat"):
                 self.app_controller.update_ui_heartbeat()
+            
+            # PR-HB-003: Log heartbeat diagnostics periodically or when operation changes
+            if self.app_controller:
+                current_op = getattr(self.app_controller, "current_operation_label", None)
+                
+                # Log every 20 ticks (5 seconds) or when operation changes
+                should_log = (tick_count % 20 == 0) or (current_op != last_operation and current_op is not None)
+                
+                if should_log:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    op_text = current_op if current_op else "idle"
+                    logger.debug(f"[UI] heartbeat tick #{tick_count} op={op_text}")
+                    last_operation = current_op
+            
             self.root.after(250, _tick)
 
         self.root.after(250, _tick)
@@ -356,21 +438,53 @@ class MainWindowV2:
                 self.pipeline_tab.preview_panel.controller = controller
             except Exception:
                 pass
+        if hasattr(self, "review_tab"):
+            try:
+                self.review_tab.app_controller = controller
+            except Exception:
+                pass
 
     def _ensure_window_geometry(self) -> None:
         """Apply default geometry/minimums so the three-column layout is visible."""
-        try:
-            geom = self.root.geometry()
-            width_str, rest = geom.split("x", 1)
-            width = int(width_str)
-            height_str = rest.split("+", 1)[0]
-            height = int(height_str)
-        except Exception:
-            width = 0
-            height = 0
+        # PR-PERSIST-001: Try to restore saved window geometry
+        ui_store = get_ui_state_store()
+        state = ui_store.load_state()
+        restored = False
+        
+        if state:
+            window_state = state.get("window", {})
+            saved_geometry = window_state.get("geometry")
+            saved_state = window_state.get("state")
+            
+            if saved_geometry:
+                try:
+                    self.root.geometry(saved_geometry)
+                    restored = True
+                    logger.debug(f"Restored window geometry: {saved_geometry}")
+                except Exception as e:
+                    logger.warning(f"Failed to restore window geometry: {e}")
+            
+            if saved_state == "zoomed":
+                try:
+                    self.root.state("zoomed")
+                except Exception:
+                    pass
+        
+        # If not restored, check current size and apply defaults if needed
+        if not restored:
+            try:
+                geom = self.root.geometry()
+                width_str, rest = geom.split("x", 1)
+                width = int(width_str)
+                height_str = rest.split("+", 1)[0]
+                height = int(height_str)
+            except Exception:
+                width = 0
+                height = 0
 
-        if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
-            self.root.geometry(f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}")
+            if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
+                self.root.geometry(f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}")
+        
         self.root.minsize(MIN_MAIN_WINDOW_WIDTH, MIN_MAIN_WINDOW_HEIGHT)
 
     def update_pack_list(self, packs: list[str]) -> None:
@@ -570,6 +684,12 @@ class MainWindowV2:
         if self._disposed:
             return
         self._disposed = True
+        
+        # PR-PERSIST-001: Save UI state before cleanup
+        try:
+            self._save_ui_state()
+        except Exception as e:
+            logger.warning(f"Failed to save UI state during cleanup: {e}")
 
         try:
             self.app_state.disable_notifications()
@@ -749,6 +869,61 @@ class MainWindowV2:
             dialog.destroy()
         except Exception:
             pass
+
+    # PR-PERSIST-001: UI state persistence methods
+    def _save_ui_state(self) -> None:
+        """Save window geometry and tab selection to disk."""
+        try:
+            ui_store = get_ui_state_store()
+            
+            # Get window geometry and state
+            geometry = self.root.geometry()
+            window_state = "normal"
+            try:
+                if self.root.state() == "zoomed":
+                    window_state = "zoomed"
+            except Exception:
+                pass
+            
+            # Get selected tab index
+            selected_tab_index = 0
+            try:
+                selected_tab_index = self.center_notebook.index(self.center_notebook.select())
+            except Exception:
+                pass
+            
+            state = {
+                "window": {
+                    "geometry": geometry,
+                    "state": window_state
+                },
+                "tabs": {
+                    "selected_index": selected_tab_index
+                }
+            }
+            
+            ui_store.save_state(state)
+            logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
+        except Exception as e:
+            logger.warning(f"Failed to save UI state: {e}")
+
+    def _restore_tab_selection(self) -> None:
+        """Restore previously selected tab."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state()
+            
+            if state:
+                tabs_state = state.get("tabs", {})
+                selected_index = tabs_state.get("selected_index", 0)
+                
+                # Validate index is in range
+                tab_count = self.center_notebook.index("end")
+                if 0 <= selected_index < tab_count:
+                    self.center_notebook.select(selected_index)
+                    logger.debug(f"Restored tab selection: index {selected_index}")
+        except Exception as e:
+            logger.warning(f"Failed to restore tab selection: {e}")
 
 
 def run_app(

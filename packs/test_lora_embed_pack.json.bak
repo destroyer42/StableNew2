@@ -1,0 +1,33 @@
+{
+  "name": "Test Pack",
+  "slots": [
+    {
+      "index": 0,
+      "text": "(masterpiece, best quality), a [[job]] in [[environment]], highly detailed",
+      "negative": "bad quality, blurry, watermark, signature",
+      "positive_embeddings": [
+        "BadDream",
+        "UnrealisticDream"
+      ],
+      "negative_embeddings": [
+        "bad-hands-5"
+      ],
+      "loras": [
+        [
+          "add-detail-xl",
+          0.65
+        ],
+        [
+          "style-enhance",
+          0.8
+        ]
+      ]
+    }
+  ],
+  "matrix": {
+    "enabled": false,
+    "mode": "fanout",
+    "limit": 8,
+    "slots": []
+  }
+}

@@ -15,6 +15,7 @@ from src.gui.theme_v2 import (
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
+from src.gui.utils.display_helpers import format_seed_display
 from src.pipeline.job_models_v2 import JobHistoryItemDTO
 
 
@@ -105,6 +106,24 @@ class HistoryPanelV2(ttk.Frame):
         # PR-CORE-D: Format display text with PromptPack metadata
         timestamp = dto.completed_at.strftime("%H:%M:%S") if dto.completed_at else "??:??:??"
 
+        # Calculate duration if both started_at and completed_at are available
+        duration_text = ""
+        if hasattr(dto, "started_at") and dto.started_at and dto.completed_at:
+            try:
+                duration_seconds = (dto.completed_at - dto.started_at).total_seconds()
+                if duration_seconds < 60:
+                    duration_text = f" ({int(duration_seconds)}s)"
+                elif duration_seconds < 3600:
+                    mins = int(duration_seconds // 60)
+                    secs = int(duration_seconds % 60)
+                    duration_text = f" ({mins}m{secs}s)"
+                else:
+                    hours = int(duration_seconds // 3600)
+                    mins = int((duration_seconds % 3600) // 60)
+                    duration_text = f" ({hours}h{mins}m)"
+            except Exception:
+                duration_text = ""
+
         # Extract metadata for richer display
         pack_name = getattr(dto, "prompt_pack_name", None)
         row_idx = getattr(dto, "prompt_pack_row_index", None)
@@ -115,13 +134,16 @@ class HistoryPanelV2(ttk.Frame):
         config_variant_label = getattr(dto, "config_variant_label", None)
         config_variant_index = getattr(dto, "config_variant_index", None)
 
-        # Build display text with metadata
-        parts = [f"[{timestamp}]"]
+        # Build display text with metadata (Row number first)
+        parts = [f"[{timestamp}{duration_text}]"]
 
         if pack_name:
-            pack_text = pack_name
+            pack_text = ""
+            # Row/prompt number FIRST
             if row_idx is not None:
-                pack_text += f" R{row_idx + 1}"
+                pack_text = f"R{row_idx + 1}: "
+            
+            pack_text += pack_name
 
             # PR-CORE-E: Add config variant label if present
             if config_variant_label and config_variant_label != "base":
@@ -130,14 +152,22 @@ class HistoryPanelV2(ttk.Frame):
                 pack_text += f" [cfg_v{config_variant_index}]"
 
             if variant_idx is not None or batch_idx is not None:
-                v_text = f"v{variant_idx}" if variant_idx is not None else "v?"
-                b_text = f"b{batch_idx}" if batch_idx is not None else "b?"
+                v_text = f"v{variant_idx + 1}" if variant_idx is not None else "v?"
+                b_text = f"b{batch_idx + 1}" if batch_idx is not None else "b?"
                 pack_text += f" [{v_text}/{b_text}]"
             parts.append(pack_text)
         else:
             parts.append(dto.label)
 
         parts.append(f"({dto.total_images} img{'s' if dto.total_images != 1 else ''})")
+
+        # PR-PIPE-007: Add seed to display if available
+        requested_seed = getattr(dto, "seed", None)
+        actual_seed = getattr(dto, "actual_seed", None)
+        if actual_seed is not None or requested_seed is not None:
+            seed_text = format_seed_display(requested_seed, actual_seed)
+            if seed_text and seed_text != "-":
+                parts.append(f"Seed:{seed_text}")
 
         display_text = " ".join(parts)
 

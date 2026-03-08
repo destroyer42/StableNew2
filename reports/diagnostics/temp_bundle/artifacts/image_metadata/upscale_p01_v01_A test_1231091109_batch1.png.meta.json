@@ -1,0 +1,40 @@
+{
+  "status": "ok",
+  "payload": {
+    "image": {
+      "format": "png",
+      "height": 2816,
+      "path": "upscale_p01_v01_A test_1231091109_batch1.png",
+      "width": 1536
+    },
+    "job_id": "1239e0cd29394a2597d8531a96edbf47",
+    "njr": {
+      "sha256": "14e0de19aaff1ee2998791e981a446c83075e542c2fcaac0ace3beeb90b6f88f",
+      "snapshot_version": "2.6"
+    },
+    "run_id": "20251231_085958_A_test",
+    "seeds": {
+      "actual_seed": null,
+      "actual_subseed": null,
+      "requested_seed": null
+    },
+    "stage": "upscale",
+    "stage_history": [],
+    "stage_manifest": {
+      "config_hash": "9e46eef37da9725049b80a9bf818571b9f733b4110192b38807ee02bc6180e0c",
+      "name": "upscale_p01_v01_A test_1231091109_batch1",
+      "timestamp": "20251231_091116"
+    }
+  },
+  "kv": {
+    "stablenew:schema": "stablenew.image-metadata.v2.6",
+    "stablenew:job_id": "1239e0cd29394a2597d8531a96edbf47",
+    "stablenew:run_id": "20251231_085958_A_test",
+    "stablenew:stage": "upscale",
+    "stablenew:created_utc": "2025-12-31T15:11:16.438468+00:00",
+    "stablenew:payload_sha256": "0caf9bd886f429f351a20a726e1cbd99458f862494e04e3cc24f07f13db0bbfa",
+    "stablenew:payload": "{\"image\":{\"format\":\"png\",\"height\":2816,\"path\":\"upscale_p01_v01_A test_1231091109_batch1.png\",\"width\":1536},\"job_id\":\"1239e0cd29394a2597d8531a96edbf47\",\"njr\":{\"sha256\":\"14e0de19aaff1ee2998791e981a446c83075e542c2fcaac0ace3beeb90b6f88f\",\"snapshot_version\":\"2.6\"},\"run_id\":\"20251231_085958_A_test\",\"seeds\":{\"actual_seed\":null,\"actual_subseed\":null,\"requested_seed\":null},\"stage\":\"upscale\",\"stage_history\":[],\"stage_manifest\":{\"config_hash\":\"9e46eef37da9725049b80a9bf818571b9f733b4110192b38807ee02bc6180e0c\",\"name\":\"upscale_p01_v01_A test_1231091109_batch1\",\"timestamp\":\"20251231_091116\"}}",
+    "stablenew:njr_sha256": "14e0de19aaff1ee2998791e981a446c83075e542c2fcaac0ace3beeb90b6f88f"
+  },
+  "path": "<USER_HOME>\\projects\\StableNew\\output\\20251231_085958_A_test\\upscale_p01_v01_A test_1231091109_batch1.png"
+}

@@ -103,6 +103,9 @@ class JobExecutionController:
                     self._fn = fn
 
                 def run_njr(self, record: NormalizedJobRecord, *_: Any, **__: Any) -> Any:
+                    # Call run_njr method on the runner, not the runner as a function
+                    if hasattr(self._fn, "run_njr"):
+                        return self._fn.run_njr(record, *_, **__)
                     return self._fn(record)  # type: ignore[arg-type]
 
             replay_target = _ExecuteAdapter(self._execute_job)
@@ -111,9 +114,28 @@ class JobExecutionController:
         self._lock = threading.Lock()
         self._callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
         self._status_dispatcher: Callable[[Callable[[], None]], None] | None = None
+        self._deferred_autostart = False  # PR-PERSIST-001: Track if we need to auto-start after init
+        self._app_state: Any | None = None  # For runtime status updates
         self._restore_queue_state()
         self._queue_persistence = QueuePersistenceManager(self)
         self._persist_queue_state()
+        
+        # PR-STARTUP-PERF: Deferred autostart is now triggered externally after GUI is ready
+        # (previously executed here, blocking GUI startup for ~10 seconds)
+
+    def trigger_deferred_autostart(self) -> None:
+        """Execute deferred queue autostart if flagged during restore.
+        
+        PR-STARTUP-PERF: Called after GUI is fully rendered to avoid blocking
+        startup when there are queued jobs.
+        """
+        logger.info("[STARTUP-PERF] trigger_deferred_autostart called, _deferred_autostart=%s", self._deferred_autostart)
+        if self._deferred_autostart:
+            logger.info("Executing deferred queue autostart")
+            self.start()
+            self._deferred_autostart = False
+        else:
+            logger.info("[STARTUP-PERF] Deferred autostart not needed (flag is False)")
 
     def start(self) -> None:
         with self._lock:
@@ -129,7 +151,44 @@ class JobExecutionController:
                 )
                 self._started = True
 
+    def set_app_state(self, app_state: Any) -> None:
+        """Set the app state for runtime status updates."""
+        self._app_state = app_state
+
+    def _handle_runtime_status_update(self, status_data: dict[str, Any]) -> None:
+        """Handle runtime status updates from pipeline execution.
+        
+        Converts status dict to RuntimeJobStatus and forwards to app_state.
+        """
+        if not self._app_state:
+            return
+        
+        try:
+            from datetime import datetime
+            from src.pipeline.job_models_v2 import RuntimeJobStatus
+            
+            # Create RuntimeJobStatus from status_data
+            runtime_status = RuntimeJobStatus(
+                job_id=status_data.get("job_id", ""),
+                current_stage=status_data.get("current_stage", ""),
+                stage_index=status_data.get("stage_index", 0),
+                total_stages=status_data.get("total_stages", 1),
+                progress=status_data.get("progress", 0.0),
+                eta_seconds=status_data.get("eta_seconds"),
+                started_at=status_data.get("started_at") or datetime.utcnow(),
+                actual_seed=status_data.get("actual_seed"),
+                current_step=status_data.get("current_step", 0),
+                total_steps=status_data.get("total_steps", 0),
+            )
+            
+            # Update app_state
+            if hasattr(self._app_state, "set_runtime_status"):
+                self._app_state.set_runtime_status(runtime_status)
+        except Exception as exc:
+            logger.warning(f"Failed to process runtime status update: {exc}")
+
     def stop(self) -> None:
+        """Stop the queue worker and persist queue state."""
         with self._lock:
             if self._started:
                 logger.info(
@@ -140,6 +199,13 @@ class JobExecutionController:
                 self._runner.stop()
                 self._started = False
                 self._worker_thread_name = None
+        
+        # PR-PERSIST-FIX: Save queue state when stopping to ensure queued jobs are persisted
+        try:
+            self._persist_queue_state()
+            logger.debug("Queue state persisted during stop()")
+        except Exception as exc:
+            logger.warning(f"Failed to persist queue state during stop: {exc}")
 
     def submit_pipeline_run(
         self,
@@ -338,16 +404,27 @@ class JobExecutionController:
         if restored_jobs:
             self._queue.restore_jobs(restored_jobs)
         logger.info(
-            "Restored queue state: auto_run=%s, paused=%s, %d restored job(s)",
+            "[STARTUP-PERF] Restored queue state: auto_run=%s, paused=%s, %d restored job(s)",
             self._auto_run_enabled,
             self._queue_paused,
             len(restored_jobs),
         )
+        
+        # PR-PERSIST-001: Auto-start runner if it was enabled before shutdown
+        if self._auto_run_enabled and restored_jobs and not self._queue_paused:
+            logger.info("[STARTUP-PERF] Auto-starting queue runner after restore (had %d jobs)", len(restored_jobs))
+            # Defer start until after full initialization
+            self._deferred_autostart = True
+            logger.info("[STARTUP-PERF] Deferred autostart flag set to True (will start after GUI ready)")
+        else:
+            logger.info("[STARTUP-PERF] Not setting deferred autostart: auto_run=%s, jobs=%d, paused=%s", 
+                       self._auto_run_enabled, len(restored_jobs), self._queue_paused)
 
     def _persist_queue_state(self) -> None:
         """Persist current queued jobs and control flags."""
         entries: list[dict[str, Any]] = []
         for job in self._queue.list_jobs():
+            # PR-PERSIST-FIX: Only save QUEUED jobs, exclude RUNNING/COMPLETED/FAILED/CANCELLED
             if job.status != JobStatus.QUEUED:
                 continue
             entry = self._build_queue_entry(job)
@@ -360,6 +437,8 @@ class JobExecutionController:
         )
         try:
             save_queue_snapshot(snapshot)
+            logger.debug("Persisted queue state: %d jobs, auto_run=%s, paused=%s", 
+                        len(entries), self._auto_run_enabled, self._queue_paused)
         except Exception as exc:
             logger.warning("Failed to persist queue state: %s", exc)
 

@@ -32,6 +32,8 @@ class ParameterRecommendation:
     sample_count: int
     mean_rating: float
     rating_stddev: float
+    confidence_rationale: str = ""
+    context_key: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for UI display."""
@@ -42,6 +44,8 @@ class ParameterRecommendation:
             "samples": self.sample_count,
             "mean_rating": self.mean_rating,
             "stddev": self.rating_stddev,
+            "rationale": self.confidence_rationale,
+            "context": self.context_key,
         }
 
 
@@ -76,14 +80,57 @@ class RecommendationEngine:
         self.records_path = Path(records_path)
         self._cache: dict[str, Any] | None = None
         self._cache_timestamp: float = 0.0
+        self._cache_mtime: float = 0.0
 
     def _should_reload_cache(self) -> bool:
         """Check if cache needs to be reloaded based on file modification time."""
         if not self.records_path.exists():
             return True
-
         mtime = self.records_path.stat().st_mtime
-        return mtime > self._cache_timestamp
+        return mtime > self._cache_mtime
+
+    @staticmethod
+    def _prompt_tokens(text: str) -> set[str]:
+        parts = [p.strip().lower() for p in str(text or "").replace("\n", " ").split(",")]
+        return {p for p in parts if p}
+
+    @staticmethod
+    def _prompt_similarity_bucket(query_prompt: str, record_prompt: str) -> str:
+        query_tokens = RecommendationEngine._prompt_tokens(query_prompt)
+        record_tokens = RecommendationEngine._prompt_tokens(record_prompt)
+        if not query_tokens or not record_tokens:
+            return "unknown"
+        overlap = len(query_tokens.intersection(record_tokens)) / max(1, len(query_tokens))
+        if overlap >= 0.6:
+            return "high"
+        if overlap >= 0.3:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _resolution_bucket(width: Any, height: Any) -> str:
+        try:
+            w = int(width or 0)
+            h = int(height or 0)
+        except Exception:
+            return "unknown"
+        pixels = w * h
+        if pixels <= 0:
+            return "unknown"
+        if pixels <= 512 * 512:
+            return "small"
+        if pixels <= 1024 * 1024:
+            return "medium"
+        return "large"
+
+    def _build_query_context(self, prompt_text: str, stage: str) -> dict[str, str]:
+        return {
+            "stage": str(stage or "txt2img"),
+            "style_bucket": "default",
+            "prompt_similarity_bucket": "high",
+            "resolution_bucket": "unknown",
+            "model": "",
+        }
 
     def _load_records(self) -> list[dict[str, Any]]:
         """Load and parse all learning records from JSONL file."""
@@ -128,6 +175,8 @@ class RecommendationEngine:
             except (ValueError, TypeError):
                 continue
 
+            base_config = record.get("base_config", {}) or {}
+
             # Extract experiment context
             experiment_name = metadata.get("experiment_name", "")
             variable_under_test = metadata.get("variable_under_test", "")
@@ -158,25 +207,87 @@ class RecommendationEngine:
                 "primary_cfg_scale": primary_cfg_scale,
                 "timestamp": timestamp,
                 "metadata": metadata,
+                "base_prompt": str(base_config.get("prompt", "")),
+                "stage": str(
+                    metadata.get("stage")
+                    or base_config.get("stage")
+                    or metadata.get("stage_name")
+                    or "txt2img"
+                ),
+                "model": str(
+                    record.get("primary_model")
+                    or metadata.get("model")
+                    or base_config.get("model")
+                    or ""
+                ),
+                "style_bucket": str(metadata.get("style_bucket") or "default"),
+                "resolution_bucket": self._resolution_bucket(
+                    base_config.get("width"),
+                    base_config.get("height"),
+                ),
             }
             scored_records.append(scored_record)
 
         return scored_records
 
+    def _compute_context_weight(
+        self,
+        record: dict[str, Any],
+        query_context: dict[str, str],
+        query_prompt: str,
+    ) -> tuple[float, str]:
+        weight = 1.0
+        rationale_bits = []
+        if str(record.get("stage", "")) == str(query_context.get("stage", "")):
+            weight += 0.6
+            rationale_bits.append("stage-match")
+        else:
+            weight -= 0.35
+            rationale_bits.append("stage-mismatch")
+
+        query_model = str(query_context.get("model", "")).strip().lower()
+        record_model = str(record.get("model", "")).strip().lower()
+        if query_model and record_model:
+            if query_model == record_model:
+                weight += 0.3
+                rationale_bits.append("model-match")
+            else:
+                weight -= 0.1
+                rationale_bits.append("model-mismatch")
+
+        prompt_bucket = self._prompt_similarity_bucket(
+            query_prompt,
+            str(record.get("base_prompt", "")),
+        )
+        if prompt_bucket == "high":
+            weight += 0.45
+        elif prompt_bucket == "medium":
+            weight += 0.2
+        elif prompt_bucket == "low":
+            weight -= 0.2
+        rationale_bits.append(f"prompt-{prompt_bucket}")
+
+        return max(0.05, weight), ",".join(rationale_bits)
+
     def _compute_optimal_settings(
-        self, records: list[dict[str, Any]], stage: str
+        self,
+        records: list[dict[str, Any]],
+        query_context: dict[str, str],
+        query_prompt: str,
     ) -> dict[str, ParameterRecommendation]:
         """Compute optimal parameter settings from scored records."""
         recommendations = {}
 
         # Group records by parameter type and value
         param_groups: dict[str, dict[Any, list[float]]] = defaultdict(lambda: defaultdict(list))
+        param_raw: dict[str, dict[Any, list[float]]] = defaultdict(lambda: defaultdict(list))
+        param_reasons: dict[str, dict[Any, list[str]]] = defaultdict(lambda: defaultdict(list))
+        param_context_weights: dict[str, dict[Any, list[float]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
 
         for record in records:
-            # Add recency weighting (more recent records weighted slightly higher)
-            # For now, disable recency weighting to avoid test complications
-            weight = 1.0
-
+            weight, rationale = self._compute_context_weight(record, query_context, query_prompt)
             rating = record["rating"] * weight
 
             # Collect ratings for each parameter type
@@ -184,11 +295,26 @@ class RecommendationEngine:
             param_groups["scheduler"][record["primary_scheduler"]].append(rating)
             param_groups["steps"][record["primary_steps"]].append(rating)
             param_groups["cfg_scale"][record["primary_cfg_scale"]].append(rating)
+            param_raw["sampler"][record["primary_sampler"]].append(float(record["rating"]))
+            param_raw["scheduler"][record["primary_scheduler"]].append(float(record["rating"]))
+            param_raw["steps"][record["primary_steps"]].append(float(record["rating"]))
+            param_raw["cfg_scale"][record["primary_cfg_scale"]].append(float(record["rating"]))
+            param_reasons["sampler"][record["primary_sampler"]].append(rationale)
+            param_reasons["scheduler"][record["primary_scheduler"]].append(rationale)
+            param_reasons["steps"][record["primary_steps"]].append(rationale)
+            param_reasons["cfg_scale"][record["primary_cfg_scale"]].append(rationale)
+            param_context_weights["sampler"][record["primary_sampler"]].append(weight)
+            param_context_weights["scheduler"][record["primary_scheduler"]].append(weight)
+            param_context_weights["steps"][record["primary_steps"]].append(weight)
+            param_context_weights["cfg_scale"][record["primary_cfg_scale"]].append(weight)
 
             # If this record is from a variable test, also track that parameter
             if record["variable_under_test"] and record["variant_value"] is not None:
                 param_name = record["variable_under_test"].lower().replace(" ", "_")
                 param_groups[param_name][record["variant_value"]].append(rating)
+                param_raw[param_name][record["variant_value"]].append(float(record["rating"]))
+                param_reasons[param_name][record["variant_value"]].append(rationale)
+                param_context_weights[param_name][record["variant_value"]].append(weight)
 
         # Compute recommendations for each parameter
         for param_name, value_ratings in param_groups.items():
@@ -207,29 +333,49 @@ class RecommendationEngine:
                     continue
 
                 mean_rating = statistics.mean(ratings)
+                raw_ratings = param_raw[param_name][value]
+                raw_mean = statistics.mean(raw_ratings) if raw_ratings else mean_rating
                 try:
-                    stddev = statistics.stdev(ratings)
+                    stddev = statistics.stdev(raw_ratings)
                 except statistics.StatisticsError:
                     stddev = 0.0
 
                 count = len(ratings)
 
-                # Calculate confidence score
-                sample_confidence = min(1.0, count / 3.0)  # 3 samples for max confidence
-                consistency_confidence = 1.0 / (1.0 + stddev) if stddev > 0 else 1.0
-                confidence = sample_confidence * consistency_confidence
+                # Confidence with explicit sample-volume + variance terms.
+                sample_confidence = min(1.0, count / 6.0)
+                variance_penalty = min(1.0, stddev / 2.5)
+                consistency_confidence = 1.0 - variance_penalty
+                context_weights = param_context_weights[param_name][value]
+                context_confidence = 0.0
+                if context_weights:
+                    context_confidence = max(
+                        0.0,
+                        min(1.0, statistics.mean(context_weights) / 2.0),
+                    )
+                confidence = max(
+                    0.0,
+                    min(
+                        1.0,
+                        (sample_confidence * 0.45)
+                        + (consistency_confidence * 0.25)
+                        + (context_confidence * 0.30),
+                    ),
+                )
 
                 # Select based on confidence, break ties by highest rating
                 if confidence > best_confidence or (
-                    confidence == best_confidence and mean_rating > best_mean
+                    confidence == best_confidence and raw_mean > best_mean
                 ):
                     best_value = value
                     best_confidence = confidence
-                    best_mean = mean_rating
+                    best_mean = raw_mean
                     best_stddev = stddev
                     best_count = count
 
             if best_value is not None:
+                reasons = param_reasons[param_name][best_value]
+                reason = reasons[-1] if reasons else ""
                 recommendations[param_name] = ParameterRecommendation(
                     parameter_name=param_name,
                     recommended_value=best_value,
@@ -237,6 +383,16 @@ class RecommendationEngine:
                     sample_count=best_count,
                     mean_rating=round(best_mean, 2),
                     rating_stddev=round(best_stddev, 2),
+                    confidence_rationale=(
+                        f"samples={best_count}; stddev={round(best_stddev, 3)}; "
+                        f"context={reason or 'mixed'}"
+                    ),
+                    context_key=(
+                        f"{query_context.get('stage','')}|"
+                        f"{query_context.get('model','')}|"
+                        f"{query_context.get('style_bucket','default')}|"
+                        f"{query_context.get('resolution_bucket','unknown')}"
+                    ),
                 )
 
         return recommendations
@@ -249,22 +405,20 @@ class RecommendationEngine:
 
     def recommend(self, prompt_text: str, stage: str) -> RecommendationSet:
         """Get recommendations for a specific prompt and stage combination."""
+        query_context = self._build_query_context(prompt_text, stage)
         if self._should_reload_cache():
             records = self._load_records()
             scored_records = self._score_records(records)
-
-            # For now, we provide recommendations based on all historical data
-            # Future enhancement could filter by prompt similarity
-            optimal_settings = self._compute_optimal_settings(scored_records, stage)
-
             self._cache = {
-                "recommendations": optimal_settings,
+                "scored_records": scored_records,
                 "timestamp": time.time(),
+                "raw_record_count": len(records),
                 "record_count": len(scored_records),
             }
             self._cache_timestamp = time.time()
-        else:
-            optimal_settings = self._cache.get("recommendations", {}) if self._cache else {}
+            self._cache_mtime = self.records_path.stat().st_mtime if self.records_path.exists() else 0.0
+        scored_records = self._cache.get("scored_records", []) if self._cache else []
+        optimal_settings = self._compute_optimal_settings(scored_records, query_context, prompt_text)
 
         # Create recommendation set
         rec_set = RecommendationSet(
@@ -293,7 +447,7 @@ class RecommendationEngine:
             }
         else:
             return {
-                "total_records": self._cache.get("record_count", 0),
+                "total_records": self._cache.get("raw_record_count", 0),
                 "rated_records": self._cache.get("record_count", 0),
                 "cache_timestamp": self._cache_timestamp,
                 "records_path": str(self.records_path),

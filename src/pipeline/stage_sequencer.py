@@ -120,7 +120,9 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     txt_enabled = pipeline_flags.get("txt2img_enabled", True) and _extract_enabled(
         config, "txt2img", True
     )
-    img_enabled = pipeline_flags.get("img2img_enabled", False) or _extract_enabled(
+    # Get img2img enabled flag without default
+    img2img_val = pipeline_flags.get("img2img_enabled")
+    img_enabled = (bool(img2img_val) if img2img_val is not None else False) or _extract_enabled(
         config, "img2img", False
     )
     ad_enabled = pipeline_flags.get("adetailer_enabled", False) or _extract_enabled(
@@ -238,6 +240,10 @@ def _build_stage_metadata(
     pipeline_flags = config.get("pipeline", {}) or {}
     hires_fix = config.get("hires_fix", {}) or {}
 
+    # Get img2img value without default - calculate before StageMetadata construction
+    img2img_val = pipeline_flags.get("img2img_enabled")
+    img2img_enabled = bool(img2img_val) if img2img_val is not None else False
+
     metadata = StageMetadata(
         refiner_enabled=payload.get("refiner_enabled", False),
         refiner_model_name=payload.get("refiner_model_name"),
@@ -251,7 +257,7 @@ def _build_stage_metadata(
         hires_steps=hires_fix.get("steps"),
         stage_flags={
             "txt2img_enabled": pipeline_flags.get("txt2img_enabled", False),
-            "img2img_enabled": pipeline_flags.get("img2img_enabled", False),
+            "img2img_enabled": img2img_enabled,
             "upscale_enabled": pipeline_flags.get("upscale_enabled", False),
             "adetailer_enabled": pipeline_flags.get("adetailer_enabled", False),
         },

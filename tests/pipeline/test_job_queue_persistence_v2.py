@@ -18,6 +18,8 @@ from src.services.queue_store_v2 import (
     UnsupportedQueueSchemaError,
     delete_queue_snapshot,
     load_queue_snapshot,
+    move_job_down,
+    move_job_up,
     save_queue_snapshot,
     validate_queue_item,
 )
@@ -186,6 +188,58 @@ class TestQueuePersistence:
         lines = contents.splitlines()
         assert len(lines) == 1
         assert contents.endswith("\n")
+
+
+class TestQueueSnapshotMoves:
+    def _snapshot_with_ids(self, ids: list[str]) -> QueueSnapshotV1:
+        jobs = [
+            {
+                "queue_id": qid,
+                "njr_snapshot": {"normalized_job": {"job_id": qid}},
+                "priority": 0,
+                "status": "queued",
+                "created_at": "2025-01-01T00:00:00Z",
+                "queue_schema": SCHEMA_VERSION,
+            }
+            for qid in ids
+        ]
+        return QueueSnapshotV1(jobs=jobs)
+
+    def test_move_job_up_swaps_with_previous(self) -> None:
+        snapshot = self._snapshot_with_ids(["a", "b", "c"])
+        assert move_job_up(snapshot, "b") is True
+        assert [job["queue_id"] for job in snapshot.jobs] == ["b", "a", "c"]
+
+    def test_move_job_down_swaps_with_next(self) -> None:
+        snapshot = self._snapshot_with_ids(["a", "b", "c"])
+        assert move_job_down(snapshot, "b") is True
+        assert [job["queue_id"] for job in snapshot.jobs] == ["a", "c", "b"]
+
+    def test_move_at_edges_noop(self) -> None:
+        snapshot = self._snapshot_with_ids(["a", "b"])
+        assert move_job_up(snapshot, "a") is False
+        assert move_job_down(snapshot, "b") is False
+        assert [job["queue_id"] for job in snapshot.jobs] == ["a", "b"]
+
+    def test_move_missing_job_noop(self) -> None:
+        snapshot = self._snapshot_with_ids(["a", "b"])
+        assert move_job_up(snapshot, "missing") is False
+        assert move_job_down(snapshot, "missing") is False
+        assert [job["queue_id"] for job in snapshot.jobs] == ["a", "b"]
+
+    def test_move_then_save_load_preserves_order(self, tmp_path: Path) -> None:
+        state_file = tmp_path / "queue_state.json"
+        snapshot = self._snapshot_with_ids(["a", "b", "c"])
+
+        # Move "c" up twice so order becomes c, a, b
+        assert move_job_up(snapshot, "c") is True
+        assert move_job_up(snapshot, "c") is True
+        assert [job["queue_id"] for job in snapshot.jobs] == ["c", "a", "b"]
+
+        assert save_queue_snapshot(snapshot, state_file)
+        loaded = load_queue_snapshot(state_file)
+        assert loaded is not None
+        assert [job["queue_id"] for job in loaded.jobs] == ["c", "a", "b"]
 
 
 class TestQueuePersistenceFlags:

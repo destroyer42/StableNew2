@@ -83,23 +83,57 @@ class LabeledSlider(ttk.Frame):
 
 
 class PromptSection(ttk.Frame):
+    """Prompt text area with optional scrollbar (PR-GUI-LAYOUT-002).
+
+    Args:
+        master: Parent widget
+        title: Label text ("Prompt", "Positive", etc.)
+        height: Number of visible lines (default 3)
+        show_scrollbar: Whether to show vertical scrollbar (default True)
+    """
+
     def __init__(
-        self, master: tk.Misc, *, title: str = "Prompt", height: int = 3, **kwargs
+        self,
+        master: tk.Misc,
+        *,
+        title: str = "Prompt",
+        height: int = 3,
+        show_scrollbar: bool = True,
+        **kwargs,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=4, **kwargs)
         ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=(0, 2)
         )
+
+        # Text area with scrollbar
+        text_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
+        text_frame.grid(row=1, column=0, sticky="nsew")
+        text_frame.columnconfigure(0, weight=1)
+        text_frame.rowconfigure(0, weight=1)
+
         self.text = tk.Text(
-            self,
+            text_frame,
             height=height,
             wrap="word",
             bg=theme_v2.BACKGROUND_ELEVATED,
             fg=theme_v2.TEXT_PRIMARY,
             insertbackground=theme_v2.TEXT_PRIMARY,
-            relief="flat",
+            relief="solid",
+            borderwidth=1,
+            highlightthickness=0,
         )
-        self.text.grid(row=1, column=0, sticky="nsew")
+        self.text.grid(row=0, column=0, sticky="nsew")
+
+        if show_scrollbar:
+            scrollbar = ttk.Scrollbar(
+                text_frame,
+                orient="vertical",
+                command=self.text.yview,
+            )
+            scrollbar.grid(row=0, column=1, sticky="ns")
+            self.text.configure(yscrollcommand=scrollbar.set)
+
         self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
 
@@ -157,21 +191,15 @@ class SeedSection(ttk.Frame):
         
         # Main seed
         self.seed_var = tk.StringVar(value="-1")
-        ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry").grid(
-            row=1, column=0, sticky="ew"
-        )
-        self.randomize_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            self, text="Randomize", variable=self.randomize_var, style=SECONDARY_BUTTON_STYLE,
-            command=self._on_randomize_toggle
-        ).grid(row=1, column=1, sticky="w", padx=(8, 0))
+        self.seed_entry = ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry")
+        self.seed_entry.grid(row=1, column=0, sticky="ew")
         
-        # Add randomize button (🎲)
+        # Add randomize button (🎲) - sets seed to -1 for random
         randomize_btn = ttk.Button(
-            self, text="🎲", width=3,
+            self, text="🎲 Random", width=10,
             command=self._on_randomize_click
         )
-        randomize_btn.grid(row=1, column=2, sticky="w", padx=(4, 0))
+        randomize_btn.grid(row=1, column=1, sticky="w", padx=(8, 0))
         
         # Subseed controls
         ttk.Label(self, text="Subseed", style=BODY_LABEL_STYLE).grid(
@@ -182,6 +210,14 @@ class SeedSection(ttk.Frame):
             row=3, column=0, sticky="ew"
         )
         
+        # Subseed randomize button (🎲)
+        subseed_random_btn = ttk.Button(
+            self, text="🎲", width=3,
+            command=self._on_randomize_subseed,
+            style="Dark.TButton"
+        )
+        subseed_random_btn.grid(row=3, column=2, sticky="w", padx=(4, 0))
+        
         # Subseed strength (0.0 - 1.0)
         ttk.Label(self, text="Subseed Strength", style=BODY_LABEL_STYLE).grid(
             row=4, column=0, sticky="w", pady=(4, 2)
@@ -191,19 +227,33 @@ class SeedSection(ttk.Frame):
             row=5, column=0, sticky="ew"
         )
         
+        # Subseed strength randomize button (🎲)
+        strength_random_btn = ttk.Button(
+            self, text="🎲", width=3,
+            command=self._on_randomize_subseed_strength,
+            style="Dark.TButton"
+        )
+        strength_random_btn.grid(row=5, column=2, sticky="w", padx=(4, 0))
+        
         self.columnconfigure(0, weight=1)
     
-    def _on_randomize_toggle(self) -> None:
-        """Handle randomize checkbox toggle."""
-        if self.randomize_var.get():
-            self.seed_var.set("-1")
-    
     def _on_randomize_click(self) -> None:
-        """Handle randomize button click."""
+        """Generate and display a random seed that can be saved for subsequent runs."""
         import random
         new_seed = random.randint(0, 2**32 - 1)
         self.seed_var.set(str(new_seed))
-        self.randomize_var.set(False)
+    
+    def _on_randomize_subseed(self) -> None:
+        """Generate random subseed."""
+        import random
+        new_subseed = random.randint(0, 2**32 - 1)
+        self.subseed_var.set(str(new_subseed))
+    
+    def _on_randomize_subseed_strength(self) -> None:
+        """Generate random subseed strength between 0.0 and 1.0."""
+        import random
+        strength = random.random()
+        self.subseed_strength_var.set(f"{strength:.2f}")
 
 
 __all__ = ["LabeledSlider", "PromptSection", "SamplerSection", "SeedSection"]

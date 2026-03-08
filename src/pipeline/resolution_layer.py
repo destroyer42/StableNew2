@@ -181,28 +181,40 @@ class UnifiedPromptResolver:
         global_negative: str = "",
         apply_global_negative: bool = True,
     ) -> PromptResolution:
+        # Apply matrix token substitution to both quality_line and subject_template
         subject = self._substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
+        quality = self._substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
+        
         lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in pack_row.lora_tags)
         positive_parts = []
-        positive_parts.extend(pack_row.embeddings)
-        if pack_row.quality_line:
-            positive_parts.append(pack_row.quality_line)
+        # Fix: Wrap embeddings in <embedding:> syntax
+        if pack_row.embeddings:
+            positive_parts.extend(f"<embedding:{emb}>" for emb in pack_row.embeddings)
+        if quality:  # Use substituted quality_line
+            positive_parts.append(quality)
         if subject:
             positive_parts.append(subject)
         if lora_tokens:
             positive_parts.append(lora_tokens)
 
         positive = " ".join(part for part in positive_parts if part).strip()
+        
+        # BUGFIX: Ensure positive prompt is never empty - prevents negative becoming positive
+        if not positive:
+            positive = "professional photo, high quality"
 
         negative_parts = []
         global_applied = False
         if apply_global_negative and global_negative:
             negative_parts.append(global_negative.strip())
             global_applied = True
+        # Fix: Add pack_negative BEFORE pack row negative embeddings/phrases
         if pack_negative:
             negative_parts.append(pack_negative.strip())
+        # Fix: Wrap negative embeddings in <embedding:> syntax
+        if pack_row.negative_embeddings:
+            negative_parts.extend(f"<embedding:{tag}>" for tag in pack_row.negative_embeddings)
         negative_parts.extend(phrase for phrase in pack_row.negative_phrases if phrase)
-        negative_parts.extend(f"<embedding:{tag}>" for tag in pack_row.negative_embeddings)
         if self._safety_negative:
             negative_parts.append(self._safety_negative)
 

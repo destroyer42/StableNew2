@@ -58,3 +58,6 @@ def test_pipeline_runner_reports_variant_count_from_config():
     assert result.stage_events
     assert result.stage_events[0]["stage"] == "txt2img"
     assert result.variants[0]["path"].endswith(".png")
+    efficiency = result.metadata.get("efficiency_metrics") or {}
+    assert efficiency.get("metrics_started") is True
+    assert efficiency.get("images_processed") == len(result.variants)

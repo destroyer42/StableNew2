@@ -181,10 +181,12 @@ class JobService:
             self.runner = runner_factory(job_queue, run_callable)
         else:
             # Default: create SingleNodeJobRunner (production behavior)
+            # BUGFIX: Pass is_paused callback so runner respects pause state
             self.runner = SingleNodeJobRunner(
                 job_queue,
                 run_callable=run_callable,
                 poll_interval=0.05,
+                is_paused=lambda: getattr(self, '_queue_status', 'idle') == 'paused',
             )
         log_with_ctx(
             logger,
@@ -219,9 +221,16 @@ class JobService:
         self.job_queue.register_status_callback(self._handle_job_status_change)
         self._runner_lock = Lock()
         self._worker_started = False
+        # Auto-run control flag (set externally via app_state restoration or UI toggle)
+        self.auto_run_enabled = False
         # Optional dispatcher used to schedule event delivery (e.g., onto UI thread).
         # Signature: dispatch_fn(callable_zero_arg) -> None
         self._event_dispatcher: Callable[[Callable[[], None]], None] | None = None
+        # PR-LEARN-003: Completion handlers for learning experiments
+        self._completion_handlers: list[Callable[[Job, Any], None]] = []
+        self._callbacks: dict[str, list[Callable[..., None]]] = {}
+        self._status_callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
+        self._callback_lock = Lock()
 
     @property
     def queue(self) -> JobQueue:
@@ -230,6 +239,31 @@ class JobService:
 
     def register_callback(self, event: str, callback: Callable[..., None]) -> None:
         self._listeners.setdefault(event, []).append(callback)
+    
+    def register_completion_handler(
+        self, 
+        handler: Callable[[Job, Any], None]
+    ) -> None:
+        """Register a callback to be invoked when jobs complete.
+        
+        PR-LEARN-003: Completion handlers are called after job finishes
+        (success or failure) to notify subsystems like learning experiments.
+        """
+        with self._callback_lock:
+            if handler not in self._completion_handlers:
+                self._completion_handlers.append(handler)
+    
+    def unregister_completion_handler(
+        self,
+        handler: Callable[[Job, Any], None]
+    ) -> None:
+        """Remove a completion handler.
+        
+        PR-LEARN-003: Unregister learning completion callbacks.
+        """
+        with self._callback_lock:
+            if handler in self._completion_handlers:
+                self._completion_handlers.remove(handler)
 
     def set_event_dispatcher(self, dispatch_fn: Callable[[Callable[[], None]], None]) -> None:
         """Set an optional dispatcher used to schedule listener callbacks.
@@ -258,6 +292,7 @@ class JobService:
         """Optional hooks called on queue/runner activity for external observers."""
         self._on_queue_activity = on_queue_activity
         self._on_runner_activity = on_runner_activity
+        # Note: auto_run_enabled should be set separately via app_state restoration or explicit control
 
     def enqueue(self, job: Job) -> None:
         self.job_queue.submit(job)
@@ -404,22 +439,32 @@ class JobService:
         )
         self.enqueue(job)
         self._notify_job_submitted(job)
-        if not self.runner.is_running():
-            log_with_ctx(
-                logger,
-                logging.INFO,
-                "Queue worker starting",
-                ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
-                extra_fields={"runner": type(self.runner).__name__},
-            )
+        
+        # Start runner if auto-run is enabled and runner isn't running
+        if self.auto_run_enabled:
+            if not self.runner.is_running():
+                log_with_ctx(
+                    logger,
+                    logging.INFO,
+                    "Queue worker starting (auto-run enabled)",
+                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                    extra_fields={"runner": type(self.runner).__name__},
+                )
+                self._ensure_runner_started()
+            else:
+                log_with_ctx(
+                    logger,
+                    logging.DEBUG,
+                    "Queue worker already running; job will be picked up by worker loop",
+                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                )
         else:
             log_with_ctx(
                 logger,
-                logging.DEBUG,
-                "Queue worker already running; job will be picked up by worker loop",
+                logging.INFO,
+                "Job queued but auto-run disabled; use Send Job or Resume to start",
                 ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
             )
-        self._ensure_runner_started()
 
     def _ensure_runner_started(self) -> None:
         with self._runner_lock:
@@ -544,7 +589,8 @@ class JobService:
         if running:
             self.cancel_job(running.job_id, reason="cancel_requested")
         self.runner.cancel_current()
-        self._set_queue_status("idle")
+        # Don't force queue to "idle" - let runner continue processing if auto-run enabled
+        # The runner will naturally pick up the next job or go idle when queue is empty
         return running
 
     def cancel_job(self, job_id: str, *, reason: str | None = None) -> None:
@@ -554,7 +600,7 @@ class JobService:
         job = self.job_queue.mark_cancelled(job_id, reason or "cancelled")
         if job is not None:
             self.cleanup_external_processes(job_id, reason=reason)
-        self._set_queue_status("idle")
+        # Don't force queue to "idle" - let runner continue processing if auto-run enabled
 
     def register_external_process(self, job_id: str, pid: int) -> None:
         """Track an external PID so we can clean it up when the job terminates."""
@@ -760,16 +806,26 @@ class JobService:
         }
 
     def run_next_now(self) -> None:
-        """Synchronously run the next queued job via the runner."""
-        job = self.job_queue.get_next_job()
-        if job is None:
-            return
-        self._set_queue_status("running")
-        try:
-            self.runner.run_once(job)
-        finally:
-            if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
-                self._set_queue_status("idle")
+        """Start the runner to process queued jobs.
+        
+        This starts the background worker which will continuously process jobs
+        from the queue. Used by "Send Job" button and manual queue execution.
+        """
+        if not self.runner.is_running():
+            log_with_ctx(
+                logger,
+                logging.INFO,
+                "Starting queue worker for manual execution",
+                ctx=LogContext(subsystem="job_service"),
+            )
+            self._ensure_runner_started()
+        else:
+            log_with_ctx(
+                logger,
+                logging.DEBUG,
+                "Queue worker already running",
+                ctx=LogContext(subsystem="job_service"),
+            )
 
     def _stop_runner(self) -> None:
         with self._runner_lock:
@@ -812,15 +868,22 @@ class JobService:
             self._start_watchdog(job)
         elif status == JobStatus.COMPLETED:
             self._log_job_finished(job.job_id, "completed", "Job completed successfully.")
+            logger.info(f"[JobService] About to emit EVENT_JOB_FINISHED for job {job.job_id}")
             self._emit(self.EVENT_JOB_FINISHED, job)
             self._record_job_history(job, status)
+            # PR-LEARN-003: Notify completion handlers
+            self._notify_completion(job, {"success": True, "status": status})
         elif status == JobStatus.CANCELLED:
             self._log_job_finished(job.job_id, "cancelled", job.error_message or "Job cancelled.")
             self._emit(self.EVENT_JOB_FAILED, job)
+            # PR-LEARN-003: Notify completion handlers
+            self._notify_completion(job, {"success": False, "status": status, "error": job.error_message})
         elif status == JobStatus.FAILED:
             self._log_job_finished(job.job_id, "failed", job.error_message or "Job failed.")
             self._emit(self.EVENT_JOB_FAILED, job)
             self._record_job_history(job, status)
+            # PR-LEARN-003: Notify completion handlers
+            self._notify_completion(job, {"success": False, "status": status, "error": job.error_message})
         if status in {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED}:
             self._stop_watchdog(job.job_id)
             self.cleanup_external_processes(job.job_id, reason=status.value.lower())
@@ -916,8 +979,15 @@ class JobService:
             self._emit(self.EVENT_QUEUE_STATUS, status)
 
     def _emit(self, event: str, *args: Any) -> None:
-        for callback in self._listeners.get(event, []):
+        callbacks = self._listeners.get(event, [])
+        if event == self.EVENT_JOB_FINISHED:
+            logger.info(f"[JobService] _emit({event}): {len(callbacks)} callback(s) registered")
+        
+        for callback in callbacks:
             try:
+                if event == self.EVENT_JOB_FINISHED:
+                    logger.info(f"[JobService] Calling callback: {callback}")
+                
                 if self._event_dispatcher:
                     # schedule via dispatcher to preserve caller thread
                     def _call(cb=callback, a=args):
@@ -933,6 +1003,25 @@ class JobService:
             except Exception:
                 # Preserve existing behavior: swallow listener exceptions
                 continue
+    
+    def _notify_completion(self, job: Job, result: Any) -> None:
+        """Notify all registered completion handlers of job completion.
+        
+        PR-LEARN-003: Called after job completes (success or failure) to
+        notify subsystems like learning experiments of job outcomes.
+        """
+        with self._callback_lock:
+            handlers = list(self._completion_handlers)
+        for handler in handlers:
+            try:
+                handler(job, result)
+            except Exception:
+                log_with_ctx(
+                    logger,
+                    logging.ERROR,
+                    "Completion handler raised exception",
+                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                )
 
     def _emit_status_callbacks(self, job: Job, status: JobStatus) -> None:
         """PR-D: Emit status callbacks registered via set_status_callback."""

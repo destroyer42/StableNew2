@@ -62,6 +62,7 @@ class DummyPipelineController:
 
 @pytest.mark.gui
 def test_pipeline_adetailer_toggle_controls_stage_card_visibility(tk_root) -> None:
+    """Test that ADetailer card is visible by default and toggles correctly."""
     controller = DummyPipelineController()
     app_state = AppStateV2()
     pipeline_tab = PipelineTabFrame(
@@ -74,16 +75,19 @@ def test_pipeline_adetailer_toggle_controls_stage_card_visibility(tk_root) -> No
     sidebar = pipeline_tab.sidebar
     ad_card = pipeline_tab.stage_cards_panel.adetailer_card
 
-    assert not ad_card.winfo_ismapped()
+    # PR-DEFAULT-ADETAILER: Card should be visible by default
+    assert ad_card.winfo_ismapped(), "ADetailer card should be visible by default"
 
-    sidebar.stage_states["adetailer"].set(True)
-    sidebar._on_stage_toggle("adetailer")
-    tk_root.update_idletasks()
-    assert ad_card.winfo_ismapped()
-    assert controller.stage_toggled_calls[-1] == ("adetailer", True)
-
+    # Toggle off
     sidebar.stage_states["adetailer"].set(False)
     sidebar._on_stage_toggle("adetailer")
     tk_root.update_idletasks()
-    assert not ad_card.winfo_ismapped()
+    assert not ad_card.winfo_ismapped(), "ADetailer card should be hidden when toggled off"
     assert controller.stage_toggled_calls[-1] == ("adetailer", False)
+
+    # Toggle back on
+    sidebar.stage_states["adetailer"].set(True)
+    sidebar._on_stage_toggle("adetailer")
+    tk_root.update_idletasks()
+    assert ad_card.winfo_ismapped(), "ADetailer card should be visible when toggled on"
+    assert controller.stage_toggled_calls[-1] == ("adetailer", True)

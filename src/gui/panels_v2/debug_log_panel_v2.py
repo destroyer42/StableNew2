@@ -55,8 +55,45 @@ class DebugLogPanelV2(ttk.Frame):
         self._text.config(state=tk.DISABLED)
 
     def _format_event(self, event: JobLifecycleLogEvent) -> str:
+        """Format lifecycle event with user-friendly messages.
+        
+        PR-GUI-DATA-006: Enhanced lifecycle log formatting for better readability.
+        
+        Displays human-readable messages with visual indicators:
+        - job_created → "Job abc123 created"
+        - stage_completed → "Completed txt2img stage ✓"
+        - job_failed → "Job abc123 failed ✗"
+        - draft_submitted → "Draft batch with 4 jobs submitted"
+        """
         ts = event.timestamp.strftime("%H:%M:%S")
-        job_part = f"job={event.job_id}" if event.job_id else "job=-"
-        draft_part = f"draft={event.draft_size}" if event.draft_size is not None else ""
-        payload = f"{event.source} | {event.event_type} | {job_part} {draft_part}".strip()
-        return f"{ts} | {payload} | {event.message}"
+        job_id_short = event.job_id[:8] if event.job_id else "-"
+        
+        # Format event-specific message
+        if event.event_type == "job_created":
+            msg = f"Job {job_id_short} created"
+        elif event.event_type == "job_started":
+            msg = f"Job {job_id_short} started"
+        elif event.event_type == "stage_completed":
+            stage_name = event.message.split()[-1] if event.message else "stage"
+            msg = f"Completed {stage_name} stage ✓"
+        elif event.event_type == "job_completed":
+            msg = f"Job {job_id_short} completed ✓"
+        elif event.event_type == "job_failed":
+            reason = event.message if event.message else "unknown error"
+            msg = f"Job {job_id_short} failed ✗ ({reason})"
+        elif event.event_type == "draft_submitted":
+            count = event.draft_size if event.draft_size else "?"
+            msg = f"Draft batch with {count} jobs submitted"
+        elif event.event_type == "draft_cancelled":
+            msg = "Draft cancelled"
+        elif event.event_type == "queue_cleared":
+            msg = "Queue cleared"
+        else:
+            # Fallback to technical format for unknown event types
+            msg = f"{event.source} | {event.event_type}"
+            if event.job_id:
+                msg += f" | job={job_id_short}"
+            if event.message:
+                msg += f" | {event.message}"
+        
+        return f"{ts} | {msg}"

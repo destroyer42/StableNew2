@@ -7,7 +7,6 @@ from typing import Any
 
 from src.gui import design_system_v2 as design_system
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
-from src.gui.panels_v2.debug_log_panel_v2 import DebugLogPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -15,7 +14,7 @@ from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.state import PipelineState
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
-from src.gui.views.diagnostics_dashboard_v2 import DiagnosticsDashboardV2
+
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
@@ -87,10 +86,10 @@ class PipelineTabFrame(ttk.Frame):
         )
         self.sidebar.pack(fill="both", pady=(0, 12), expand=True)
 
-        # PR-GUI-H: prompt_text and restore_last_run_button moved to sidebar Pack Selector card
+        # PR-GUI-H: prompt_text and refresh_packs_button moved to sidebar Pack Selector card
         # Keep references for compatibility
         self.prompt_text = getattr(self.sidebar, "prompt_text", tk.Entry(self.left_inner))
-        self.restore_last_run_button = getattr(self.sidebar, "restore_last_run_button", None)
+        self.refresh_packs_button = getattr(self.sidebar, "refresh_packs_button", None)
         if self.prompt_text:
             attach_tooltip(self.prompt_text, "Primary text prompt for the active pipeline.")
         # JT05-friendly attribute for tracking the img2img/upscale input image path
@@ -159,15 +158,6 @@ class PipelineTabFrame(ttk.Frame):
         self.history_panel.grid(row=0, column=0, sticky="nsew")
 
         self.right_scroll.inner.rowconfigure(4, weight=0)
-        diagnostics_card = _create_card(self.right_scroll.inner)
-        diagnostics_card.grid(row=4, column=0, sticky="ew", padx=(0, 12), pady=(0, 0))
-        diagnostics_card.rowconfigure(0, weight=1)
-        self.diagnostics_dashboard = DiagnosticsDashboardV2(
-            diagnostics_card,
-            controller=queue_controller,
-            app_state=self.app_state,
-        )
-        self.diagnostics_dashboard.grid(row=0, column=0, sticky="nsew")
 
         self.stage_cards_panel = StageCardsPanel(
             self.stage_cards_frame,
@@ -193,9 +183,10 @@ class PipelineTabFrame(ttk.Frame):
         self.upscale_denoise = getattr(upscale_card, "denoise_var", tk.DoubleVar(value=0.35))
 
         # Stage toggle vars and upscale proxies (JT05 compatibility)
-        self.txt2img_enabled = tk.BooleanVar(value=True)
+        # CRITICAL: These are read by controller when applying config - defaults must be correct
+        self.txt2img_enabled = tk.BooleanVar(value=True)  # Only txt2img should default to True
         self.img2img_enabled = tk.BooleanVar(value=False)
-        self.adetailer_enabled = tk.BooleanVar(value=True)
+        self.adetailer_enabled = tk.BooleanVar(value=True)  # PR-DEFAULT-ADETAILER: Default to True for visibility
         self.upscale_enabled = tk.BooleanVar(value=False)
 
         self.upscale_factor = tk.DoubleVar(value=2.0)
@@ -276,14 +267,6 @@ class PipelineTabFrame(ttk.Frame):
 
         self.pack_loader_compat = self.sidebar
         self.left_compat = self.sidebar
-
-        log_card = _create_card(self.right_scroll.inner)
-        log_card.grid(row=5, column=0, sticky="ew", padx=(0, 12), pady=(0, 0))
-        self.log_panel = DebugLogPanelV2(
-            log_card,
-            app_state=self.app_state,
-        )
-        self.log_panel.grid(row=0, column=0, sticky="nsew")
 
         # PR-GUI-D: Ensure minimum window width on first show
         self._width_ensured = False
@@ -392,7 +375,7 @@ class PipelineTabFrame(ttk.Frame):
             card.grid(row=idx, column=0, sticky="nsew", pady=(0, 0) if is_last else (0, 6))
 
         for card in mapping.values():
-            if card not in ordered_cards:
+            if card and card not in ordered_cards:
                 card.grid_remove()
 
     def _bind_process_inspector_shortcut(self) -> None:

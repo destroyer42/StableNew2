@@ -1,4 +1,12 @@
+"""Pipeline ADetailer configuration tests (LEGACY).
+
+These tests validate the legacy PipelineConfig path for backward compatibility.
+New tests should use NormalizedJobRecord patterns.
+"""
+
 from __future__ import annotations
+
+import pytest
 
 from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.pipeline.pipeline_runner import PipelineRunner
@@ -36,6 +44,7 @@ def _base_config() -> PipelineConfig:
     )
 
 
+@pytest.mark.legacy
 def test_executor_config_includes_adetailer_when_metadata_enabled():
     runner = _build_runner()
     cfg = _base_config()
@@ -47,6 +56,7 @@ def test_executor_config_includes_adetailer_when_metadata_enabled():
     assert any(stage.stage_type == "adetailer" for stage in plan.stages)
 
 
+@pytest.mark.legacy
 def test_executor_config_excludes_adetailer_by_default():
     runner = _build_runner()
     cfg = _base_config()
@@ -56,6 +66,7 @@ def test_executor_config_excludes_adetailer_by_default():
     assert all(stage.stage_type != "adetailer" for stage in plan.stages)
 
 
+@pytest.mark.legacy
 def test_executor_config_preserves_selected_model_and_detector():
     runner = _build_runner()
     cfg = _base_config()

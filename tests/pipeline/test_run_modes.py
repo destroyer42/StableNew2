@@ -171,8 +171,9 @@ class TestPipelineControllerBuildJob:
         assert job.priority == JobPriority.NORMAL
         assert job.job_id is not None
 
+    @pytest.mark.legacy
     def test_build_job_creates_config_snapshot(self):
-        """_build_job should create config_snapshot from PipelineConfig."""
+        """_build_job should create config_snapshot from PipelineConfig (LEGACY)."""
         from src.controller.archive.pipeline_config_types import PipelineConfig
         from src.controller.pipeline_controller import PipelineController
 

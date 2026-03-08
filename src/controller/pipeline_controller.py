@@ -58,6 +58,7 @@ from src.pipeline.job_models_v2 import (
     BatchSettings,
     NormalizedJobRecord,
     OutputSettings,
+    UnifiedJobSummary,
 )
 
 # PR-CORE1-12: Legacy adapter still used by deprecated run_pipeline() method
@@ -73,7 +74,6 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
     wrap_exception,
 )
-from src.utils.queue_helpers_v2 import job_to_queue_job
 from src.utils.snapshot_builder_v2 import build_job_snapshot, normalized_job_from_snapshot
 
 # Logger for this module
@@ -107,6 +107,8 @@ class PipelineController(_GUIPipelineController):
         )
         njrs = builder.build_jobs(pack_entries)
         _logger.info(f"[PipelineController] Builder returned {len(njrs)} NormalizedJobRecord(s)")
+        _logger.debug(f"[PipelineController] About to return {len(njrs)} jobs")
+        _logger.debug(f"[PipelineController] First job: {njrs[0] if njrs else 'NONE'}")
         return njrs
 
     def _normalize_run_mode(self, pipeline_state: PipelineState) -> str:
@@ -324,8 +326,7 @@ class PipelineController(_GUIPipelineController):
                 )
             return self._build_normalized_jobs_from_state()
         except Exception as exc:
-            _logger.debug("Failed to build preview jobs: %s", exc)
-            return []
+            _logger.exception("Failed to build preview jobs - EXCEPTION DETAILS:")
             return []
 
     def _to_queue_job(
@@ -422,6 +423,7 @@ class PipelineController(_GUIPipelineController):
         """
         if not self.gui_can_run():
             return False
+        self._sync_auto_run_setting()
 
         # Check WebUI connection
         if hasattr(self, "_webui_connection"):
@@ -611,6 +613,7 @@ class PipelineController(_GUIPipelineController):
         self._last_stage_execution_plan: StageExecutionPlan | None = None
         self._last_stage_events: list[dict[Any, Any]] | None = None
         self._learning_enabled: bool = False
+        self._learning_queue_cap: int = 3
         self._job_controller = JobExecutionController(execute_job=self._execute_job)
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
@@ -655,7 +658,20 @@ class PipelineController(_GUIPipelineController):
                 self._job_service.set_status_callback("pipeline", self._on_job_status)
             except Exception:
                 pass
+        self._sync_auto_run_setting()
         self._setup_queue_callbacks()
+
+    def _sync_auto_run_setting(self, forced_value: bool | None = None) -> None:
+        """Propagate auto-run preference from AppState into JobService."""
+        if not self._job_service:
+            return
+        if forced_value is None:
+            if self._app_state is None:
+                return
+            enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+        else:
+            enabled = bool(forced_value)
+        self._job_service.auto_run_enabled = enabled
 
     def _get_pipeline_state(self) -> PipelineState | None:
         getter = getattr(self, "gui_get_pipeline_state", None)
@@ -788,6 +804,65 @@ class PipelineController(_GUIPipelineController):
 
         return self._learning_enabled
 
+    def set_learning_queue_cap(self, cap: int) -> None:
+        """Set max queue depth allowed for learning automation submissions."""
+        try:
+            value = int(cap)
+        except Exception:
+            value = 1
+        self._learning_queue_cap = max(1, value)
+
+    def get_learning_queue_cap(self) -> int:
+        return max(1, int(getattr(self, "_learning_queue_cap", 1)))
+
+    def get_queue_depth(self) -> int:
+        """Best-effort queue depth used by learning automation guardrails."""
+        queue = None
+        if self._job_service is not None:
+            queue = getattr(self._job_service, "queue", None)
+        if queue is not None:
+            qsize = getattr(queue, "qsize", None)
+            if callable(qsize):
+                try:
+                    return int(qsize())
+                except Exception:
+                    pass
+            size = getattr(queue, "size", None)
+            if callable(size):
+                try:
+                    return int(size())
+                except Exception:
+                    pass
+            try:
+                return len(queue)
+            except Exception:
+                pass
+
+        if self._job_service is not None:
+            getter = getattr(self._job_service, "get_diagnostics_snapshot", None)
+            if callable(getter):
+                try:
+                    snapshot = getter() or {}
+                    queue_snapshot = snapshot.get("queue") or {}
+                    if isinstance(queue_snapshot, dict):
+                        if "count" in queue_snapshot:
+                            return int(queue_snapshot.get("count", 0))
+                        jobs = queue_snapshot.get("jobs")
+                        if isinstance(jobs, list):
+                            return len(jobs)
+                except Exception:
+                    pass
+        return 0
+
+    def can_enqueue_learning_jobs(self, requested_jobs: int) -> tuple[bool, str]:
+        """Check learning-automation queue cap before enqueuing more jobs."""
+        requested = max(1, int(requested_jobs or 1))
+        depth = self.get_queue_depth()
+        cap = self.get_learning_queue_cap()
+        if (depth + requested) > cap:
+            return False, f"queue cap exceeded: depth={depth}, requested={requested}, cap={cap}"
+        return True, ""
+
     def record_run_result(self, result: PipelineRunResult) -> None:
         """Record the last PipelineRunResult for inspection by higher layers/tests."""
 
@@ -831,6 +906,7 @@ class PipelineController(_GUIPipelineController):
         """Submit a pipeline job using assembler-enforced config."""
         if not self.gui_can_run():
             return False
+        self._sync_auto_run_setting()
 
         if hasattr(self, "_webui_connection"):
             state = self._webui_connection.ensure_connected(autostart=True)
@@ -1014,6 +1090,7 @@ class PipelineController(_GUIPipelineController):
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self._app_state:
             return
+        _logger.debug(f"_on_queue_updated: Received {len(summaries)} summaries, refreshing app_state")
         self._refresh_app_state_queue()
 
     def _on_queue_status_changed(self, status: str) -> None:
@@ -1047,15 +1124,32 @@ class PipelineController(_GUIPipelineController):
         if not self._app_state or not self._job_service:
             return
         jobs = self._list_service_jobs()
-        queue_jobs = [job_to_queue_job(job) for job in jobs]
-        summaries = [queue_job.get_display_summary() for queue_job in queue_jobs]
+        # Convert Job objects to UnifiedJobSummary via their NJRs
+        queue_jobs = []
+        summaries = []
+        for job in jobs:
+            njr = getattr(job, "_normalized_record", None)
+            if njr:
+                try:
+                    summary = UnifiedJobSummary.from_normalized_record(njr)
+                    queue_jobs.append(summary)
+                    summaries.append(summary.positive_prompt_preview or job.job_id)
+                except Exception as exc:
+                    _logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
+                    summaries.append(job.job_id)
+            else:
+                _logger.debug(f"Job {job.job_id} missing NJR, cannot display in GUI")
+                summaries.append(job.job_id)
+        
+        _logger.debug(f"_refresh_app_state_queue: Setting {len(queue_jobs)} jobs")
         self._app_state.set_queue_items(summaries)
         setter = getattr(self._app_state, "set_queue_jobs", None)
         if callable(setter):
             try:
                 setter(queue_jobs)
-            except Exception:
-                pass
+                _logger.debug(f"_refresh_app_state_queue: set_queue_jobs called successfully")
+            except Exception as exc:
+                _logger.error(f"_refresh_app_state_queue: set_queue_jobs failed: {exc}", exc_info=True)
 
     def _refresh_app_state_history(self) -> None:
         if not self._app_state or not self._job_service:
@@ -1086,7 +1180,16 @@ class PipelineController(_GUIPipelineController):
         if job is None:
             self._app_state.set_running_job(None)
             return
-        self._app_state.set_running_job(job_to_queue_job(job))
+        # Convert Job to UnifiedJobSummary via NJR
+        njr = getattr(job, "_normalized_record", None)
+        if njr:
+            try:
+                summary = UnifiedJobSummary.from_normalized_record(njr)
+                self._app_state.set_running_job(summary)
+            except Exception as exc:
+                _logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
+        else:
+            _logger.warning(f"Running job {job.job_id} missing NJR, cannot display in GUI")
 
     def _get_draft_part_count(self) -> int:
         if not self._app_state:
@@ -1119,7 +1222,7 @@ class PipelineController(_GUIPipelineController):
                 self._app_state.set_preview_jobs(records)
             except Exception:
                 pass
-        self.submit_preview_jobs_to_queue()
+        self.submit_preview_jobs_to_queue(records=records)
 
     def on_clear_job_draft(self) -> None:
         if not self._app_state:
@@ -1156,7 +1259,7 @@ class PipelineController(_GUIPipelineController):
         return False
 
     def on_queue_remove_job_v2(self, job_id: str) -> None:
-        queue = getattr(self._job_service, "queue", None)
+        queue = getattr(self._job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
                 queue.remove(job_id)
@@ -1164,7 +1267,7 @@ class PipelineController(_GUIPipelineController):
                 _logger.exception("on_queue_remove_job_v2 failed", exc_info=True)
 
     def on_queue_clear_v2(self) -> None:
-        queue = getattr(self._job_service, "queue", None)
+        queue = getattr(self._job_service, "job_queue", None)
         if queue and hasattr(queue, "clear"):
             try:
                 queue.clear()
@@ -1172,9 +1275,22 @@ class PipelineController(_GUIPipelineController):
                 _logger.exception("on_queue_clear_v2 failed", exc_info=True)
 
     def on_set_auto_run_v2(self, enabled: bool) -> None:
-        if not self._app_state:
+        if self._app_state:
+            self._app_state.set_auto_run_queue(bool(enabled))
+        self._sync_auto_run_setting(bool(enabled))
+        if not enabled or not self._job_service:
             return
-        self._app_state.set_auto_run_queue(bool(enabled))
+        if self._app_state and bool(getattr(self._app_state, "is_queue_paused", False)):
+            return
+        queue = getattr(self._job_service, "queue", None) or getattr(self._job_service, "job_queue", None)
+        if not queue or not hasattr(queue, "list_jobs"):
+            return
+        try:
+            has_queued = any(job.status == JobStatus.QUEUED for job in queue.list_jobs())
+        except Exception:
+            has_queued = False
+        if has_queued:
+            self._job_service.resume()
 
     def on_pause_queue_v2(self) -> None:
         if not self._job_service:
@@ -1332,7 +1448,14 @@ class PipelineController(_GUIPipelineController):
                 base_url="http://127.0.0.1:7860",
             )
             structured_logger = StructuredLogger()
-            runner = PipelineRunner(api_client, structured_logger)
+            
+            # Get status callback from app_controller if available
+            status_callback = None
+            app_controller = getattr(self, "app_controller", None)
+            if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
+                status_callback = app_controller._get_runtime_status_callback()
+            
+            runner = PipelineRunner(api_client, structured_logger, status_callback=status_callback)
             try:
                 result = runner.run_njr(record, self.cancel_token)
                 return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
@@ -1372,12 +1495,23 @@ class PipelineController(_GUIPipelineController):
     def submit_preview_jobs_to_queue(
         self,
         *,
+        records: list[NormalizedJobRecord] | None = None,
         source: str = "gui",
         prompt_source: str = "pack",
         run_config: dict[str, Any] | None = None,
     ) -> int:
-        """Submit preview jobs as queue jobs using NormalizedJobRecord data."""
-        normalized_jobs = self.get_preview_jobs()
+        """Submit preview jobs as queue jobs using NormalizedJobRecord data.
+        
+        Args:
+            records: Optional pre-fetched records to submit. If None, calls get_preview_jobs().
+            source: Source identifier for job tracking.
+            prompt_source: Prompt source type ("pack", "manual", etc).
+            run_config: Optional runtime configuration overrides.
+            
+        Returns:
+            Number of jobs successfully submitted to queue.
+        """
+        normalized_jobs = records if records is not None else self.get_preview_jobs()
         if not normalized_jobs:
             return 0
         queueable, non_queueable = self._split_queueable_records(normalized_jobs)
@@ -1442,6 +1576,56 @@ class PipelineController(_GUIPipelineController):
         if prompt_pack_name and not getattr(record, "prompt_pack_name", None):
             record.prompt_pack_name = prompt_pack_name
 
+    def _sort_jobs_by_model(self, records: list[NormalizedJobRecord]) -> list[NormalizedJobRecord]:
+        """Sort jobs by model+VAE to minimize expensive WebUI state switches."""
+
+        def _extract_model_vae_key(record: NormalizedJobRecord) -> tuple[str, str]:
+            config = record.config or {}
+            if not isinstance(config, dict):
+                return ("", "")
+
+            # Model: try top-level, then txt2img section.
+            model = config.get("model_name") or config.get("model") or ""
+            if not model:
+                txt2img = config.get("txt2img", {})
+                if isinstance(txt2img, dict):
+                    model = txt2img.get("model_name") or txt2img.get("model") or ""
+
+            # VAE: treat empty/automatic/none as default to preserve grouping semantics.
+            vae = config.get("vae") or config.get("sd_vae") or ""
+            if not vae:
+                txt2img = config.get("txt2img", {})
+                if isinstance(txt2img, dict):
+                    vae = txt2img.get("vae") or txt2img.get("sd_vae") or ""
+            model_key = str(model).strip().lower()
+            vae_key = str(vae).strip().lower()
+            if vae_key in {"", "automatic", "none"}:
+                vae_key = "automatic"
+            return model_key, vae_key
+
+        # Keep unspecified models at the end, then sort by model and VAE.
+        sorted_records = sorted(
+            records,
+            key=lambda r: (
+                _extract_model_vae_key(r)[0] == "",
+                _extract_model_vae_key(r)[0],
+                _extract_model_vae_key(r)[1],
+            ),
+        )
+
+        if len(sorted_records) > 1:
+            model_groups: dict[str, int] = {}
+            for record in sorted_records:
+                model, vae = _extract_model_vae_key(record)
+                group_key = f"{model or '(none)'}|vae={vae}"
+                model_groups[group_key] = model_groups.get(group_key, 0) + 1
+            _logger.info(
+                "[PipelineController] Job grouping by model+vae: %s",
+                ", ".join(f"{group}: {count}" for group, count in model_groups.items()),
+            )
+
+        return sorted_records
+
     def _submit_normalized_jobs(
         self,
         records: list[NormalizedJobRecord],
@@ -1452,8 +1636,19 @@ class PipelineController(_GUIPipelineController):
     ) -> int:
         if not records or not self._job_service:
             return 0
+        if str(source).startswith("learning_"):
+            allowed, reason = self.can_enqueue_learning_jobs(len(records))
+            if not allowed:
+                _logger.warning("[PipelineController] Learning enqueue blocked: %s", reason)
+                return 0
         
         _logger.info(f"[PipelineController] _submit_normalized_jobs called with {len(records)} NormalizedJobRecord(s)")
+        
+        # Sort jobs by model+VAE to minimize switch churn and crash risk
+        records = self._sort_jobs_by_model(records)
+        _logger.info(
+            f"[PipelineController] Sorted {len(records)} jobs by model+vae to minimize WebUI switches"
+        )
         
         submitted = 0
         run_config_to_use = run_config or getattr(self, "_last_run_config", None)

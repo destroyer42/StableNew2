@@ -21,6 +21,8 @@ from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
 
 logger = logging.getLogger(__name__)
 QUEUE_JOB_SOFT_TIMEOUT_SECONDS = 600  # seconds
+# Cooldown between reprocess jobs to let WebUI stabilize and free VRAM
+REPROCESS_JOB_COOLDOWN_SECONDS = 2.0
 
 
 def _ensure_job_envelope(job: Job | None, exc: Exception) -> None:
@@ -39,11 +41,28 @@ def _ensure_job_envelope(job: Job | None, exc: Exception) -> None:
             }
 
 
-_MAX_WEBUI_CRASH_RETRIES = 1
+_MAX_WEBUI_CRASH_RETRIES = 4
+"""Retry count if WebUI crash suspected."""
+
+_TIMEOUT_ESCALATION_THRESHOLD = 3
+"""Consecutive timeouts before treating as crash-eligible."""
+
+_consecutive_timeout_counts: dict[str, int] = {}
+"""Track consecutive timeout count per job_id for escalation."""
+
 _QUEUE_JOB_WEBUI_CRASH_SUSPECTED = "QUEUE_JOB_WEBUI_CRASH_SUSPECTED"
 _QUEUE_JOB_WEBUI_RETRY_EXHAUSTED = "QUEUE_JOB_WEBUI_RETRY_EXHAUSTED"
-_CRASH_ELIGIBLE_STAGES = {"txt2img", "img2img", "upscale"}
-_CRASH_MESSAGE_KEYWORDS = ("connection refused", "actively refused", "webui unavailable")
+_CRASH_ELIGIBLE_STAGES = {"txt2img", "img2img", "upscale", "adetailer"}
+_CRASH_MESSAGE_KEYWORDS = (
+    "connection refused",
+    "actively refused",
+    "webui unavailable",
+    "500 server error",
+    "internal server error",
+    "500 internal",
+)
+# Timeout keywords indicate slow processing, NOT a crash - don't restart WebUI for these
+_TIMEOUT_KEYWORDS = ("read timed out", "readtimeout", "timeout", "timed out")
 
 
 def _select_request_summary_stage(summary: dict[str, Any] | None) -> str | None:
@@ -74,7 +93,20 @@ def _get_diagnostics_context(exc: Exception) -> dict[str, Any] | None:
     return None
 
 
-def _is_webui_crash_exception(exc: Exception) -> tuple[bool, str | None]:
+def _clear_timeout_tracking(job_id: str) -> None:
+    """Clear timeout tracking for a job (call on completion/failure)."""
+    _consecutive_timeout_counts.pop(job_id, None)
+
+
+def _is_webui_crash_exception(exc: Exception, job_id: str | None = None) -> tuple[bool, str | None]:
+    """Return (crash_eligible, stage_name) tuple.
+    
+    Looks for:
+    - HTTP 500 POST to crash-eligible stages
+    - connection refused / actively refused
+    - 'webui unavailable' in error text
+    - Consecutive timeouts (escalated after threshold)
+    """
     diag = _get_diagnostics_context(exc)
     if not diag:
         return False, None
@@ -83,6 +115,33 @@ def _is_webui_crash_exception(exc: Exception) -> tuple[bool, str | None]:
     method = (summary.get("method") or "").upper()
     attempt_stage = _select_request_summary_stage(summary)
     stage_name = attempt_stage or (getattr(exc, "stage", None) or summary.get("stage"))
+    
+    # Check if this is a timeout error - may escalate to crash after consecutive occurrences
+    error_message_lower = str(diag.get("error_message") or exc).lower()
+    exc_message_lower = str(exc).lower()
+    is_timeout = any(kw in error_message_lower or kw in exc_message_lower for kw in _TIMEOUT_KEYWORDS)
+    if is_timeout:
+        if job_id:
+            count = _consecutive_timeout_counts.get(job_id, 0) + 1
+            _consecutive_timeout_counts[job_id] = count
+            if count >= _TIMEOUT_ESCALATION_THRESHOLD:
+                logger.warning(
+                    "Timeout escalation: %d consecutive timeouts for job %s, treating as crash",
+                    count,
+                    job_id,
+                    extra={"stage": stage_name, "job_id": job_id, "timeout_count": count},
+                )
+                return True, stage_name
+        logger.info(
+            "Timeout detected but NOT treating as crash (slow processing, not WebUI failure): %s",
+            str(exc)[:200],
+        )
+        return False, stage_name
+    
+    # Reset timeout counter on non-timeout error
+    if job_id:
+        _consecutive_timeout_counts.pop(job_id, None)
+    
     try:
         status_code = int(status)
     except (TypeError, ValueError):
@@ -95,8 +154,7 @@ def _is_webui_crash_exception(exc: Exception) -> tuple[bool, str | None]:
     ):
         return True, stage_name
     if diag.get("webui_unavailable"):
-        error_message = str(diag.get("error_message") or exc).lower()
-        if any(keyword in error_message for keyword in _CRASH_MESSAGE_KEYWORDS):
+        if any(keyword in error_message_lower for keyword in _CRASH_MESSAGE_KEYWORDS):
             return True, stage_name
     message = str(exc).lower()
     if "webui unavailable" in message:
@@ -155,6 +213,7 @@ class SingleNodeJobRunner:
         poll_interval: float = 0.1,
         on_status_change: Callable[[Job, JobStatus], None] | None = None,
         on_activity=None,
+        is_paused: Callable[[], bool] | None = None,
     ) -> None:
         self.job_queue = job_queue
         self.run_callable = run_callable
@@ -166,68 +225,96 @@ class SingleNodeJobRunner:
         self._cancel_current = threading.Event()
         # PR-CORE1-D21B: Activity callback
         self._on_activity = on_activity
+        # BUGFIX: Pause state callback
+        self._is_paused = is_paused
 
     def _run_with_webui_retry(self, job: Job) -> dict | None:
         if self.run_callable is None:
             return None
         max_attempts = _MAX_WEBUI_CRASH_RETRIES + 1
         attempt = 1
-        while attempt <= max_attempts:
-            try:
-                return self.run_callable(job)
-            except Exception as exc:  # noqa: BLE001
-                crash_eligible, stage = _is_webui_crash_exception(exc)
-                if not crash_eligible:
-                    raise
-                if attempt >= max_attempts:
-                    _log_retry_exhausted(job, stage, _QUEUE_JOB_WEBUI_CRASH_SUSPECTED)
-                    raise
-                next_attempt = attempt + 1
-                _record_retry_attempt(
-                    job,
-                    stage=stage,
-                    attempt_index=next_attempt,
-                    reason=_QUEUE_JOB_WEBUI_CRASH_SUSPECTED,
-                    max_attempts=max_attempts,
-                )
-                log_with_ctx(
-                    logger,
-                    logging.WARNING,
-                    f"{_QUEUE_JOB_WEBUI_CRASH_SUSPECTED} | Suspected WebUI crash, restarting",
-                    ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
-                    extra_fields={
-                        "stage": stage,
-                        "attempt": next_attempt,
-                        "max_attempts": max_attempts,
-                    },
-                )
-                restarted = _restart_webui_process(job.job_id)
-                if not restarted:
+        try:
+            while attempt <= max_attempts:
+                try:
+                    result = self.run_callable(job)
+                    # Success - clear timeout tracking
+                    _clear_timeout_tracking(job.job_id)
+                    return result
+                except Exception as exc:  # noqa: BLE001
+                    crash_eligible, stage = _is_webui_crash_exception(exc, job.job_id)
+                    if not crash_eligible:
+                        raise
+                    if attempt >= max_attempts:
+                        _log_retry_exhausted(job, stage, _QUEUE_JOB_WEBUI_CRASH_SUSPECTED)
+                        raise
+                    next_attempt = attempt + 1
+                    _record_retry_attempt(
+                        job,
+                        stage=stage,
+                        attempt_index=next_attempt,
+                        reason=_QUEUE_JOB_WEBUI_CRASH_SUSPECTED,
+                        max_attempts=max_attempts,
+                    )
                     log_with_ctx(
                         logger,
-                        logging.ERROR,
-                        "WebUI restart failed during retry",
+                        logging.WARNING,
+                        f"{_QUEUE_JOB_WEBUI_CRASH_SUSPECTED} | Suspected WebUI crash, restarting",
                         ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
-                        extra_fields={"stage": stage, "attempt": next_attempt},
+                        extra_fields={
+                            "stage": stage,
+                            "attempt": next_attempt,
+                            "max_attempts": max_attempts,
+                        },
                     )
-                attempt += 1
+                    restarted = _restart_webui_process(job.job_id)
+                    if not restarted:
+                        log_with_ctx(
+                            logger,
+                            logging.ERROR,
+                            "WebUI restart failed during retry",
+                            ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
+                            extra_fields={"stage": stage, "attempt": next_attempt},
+                        )
+                    attempt += 1
+        finally:
+            # Always clean up timeout tracking when job completes (success or failure)
+            _clear_timeout_tracking(job.job_id)
         return None
 
     def start(self) -> None:
+        """Start the worker thread if not already running.
+        
+        PR-THREAD-001: Changed to non-daemon thread for clean shutdown.
+        """
         if self._worker and self._worker.is_alive():
             return
         self._stop_event.clear()
-        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+        # PR-THREAD-001: Use non-daemon thread with proper tracking
+        self._worker = threading.Thread(
+            target=self._worker_loop,
+            daemon=False,  # Changed from True for clean shutdown
+            name="QueueWorker"
+        )
         self._worker.start()
 
     def stop(self) -> None:
+        """Stop the worker thread gracefully.
+        
+        PR-THREAD-001: Increased timeout from 2s to 10s for clean shutdown.
+        """
         self._stop_event.set()
         if self._worker:
-            self._worker.join(timeout=2.0)
+            # PR-THREAD-001: Increased timeout for more reliable shutdown
+            self._worker.join(timeout=10.0)
 
     def _worker_loop(self) -> None:
         logger.debug("SingleNodeJobRunner worker loop started")
         while not self._stop_event.is_set():
+            # Check if queue is paused before dequeuing
+            if self._is_paused and self._is_paused():
+                time.sleep(self.poll_interval)
+                continue
+            
             job = self.job_queue.get_next_job()
             if job is None:
                 time.sleep(self.poll_interval)
@@ -349,6 +436,15 @@ class SingleNodeJobRunner:
                 self._notify(job, JobStatus.FAILED)
             finally:
                 self._current_job = None
+                # Apply cooldown for reprocess jobs to let WebUI stabilize
+                job_source = getattr(job, "source", None) or ""
+                if job_source == "reprocess_panel":
+                    logger.debug(
+                        "Applying %.1fs cooldown after reprocess job %s",
+                        REPROCESS_JOB_COOLDOWN_SECONDS,
+                        job.job_id,
+                    )
+                    time.sleep(REPROCESS_JOB_COOLDOWN_SECONDS)
         return
 
     def run_once(self, job: Job) -> dict | None:
@@ -428,3 +524,6 @@ class SingleNodeJobRunner:
     def current_job_id(self) -> str | None:
         job = self._current_job
         return job.job_id if job else None
+    def get_current_job(self) -> Job | None:
+        """Get the currently executing job, if any."""
+        return self._current_job

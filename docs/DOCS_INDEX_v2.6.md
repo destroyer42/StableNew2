@@ -72,6 +72,8 @@ Queue_and_Runner_Lifecycle_Spec_v2.6.md (implicit in CORE-C; may be explicitized
 
 History_and_Restore_Spec_v2.6.md (if applicable)
 
+Image_Metadata_Contract_v2.6.md
+
 These documents may evolve as long as they do not contradict Tiers 1–2.
 
 1.4 Tier 4 — PR-CORE Documents (Implementation-Level Governance)
@@ -95,9 +97,17 @@ E2E_Golden_Path_Test_Matrix_v2.6.md
 
 KNOWN_PITFALLS_QUEUE_TESTING.md
 
+PR-CI-JOURNEY-001.md ← NEW: CI Journey Tests with WebUI Mocks
+
 Test_Fixtures_Guide_v2.6.md (if present in repo)
 
 These ensure fidelity to the architectural guarantees.
+
+**1.5.5 Technical Debt Discovery Documents**
+
+D-TECH-DEBT-001-Duplicate-Txt2Img-Paths.md ← NEW: Documents duplicate txt2img execution paths
+
+These documents track known architectural issues requiring consolidation.
 
 1.6 Tier 6 — Reference & Ancillary Docs
 
@@ -200,6 +210,7 @@ docs/
   PromptPack_Lifecycle_v2.6.md
   Builder_Pipeline_Deep_Dive_v2.6.md
   DebugHub_v2.6.md
+  Image_Metadata_Contract_v2.6.md
   StableNew_Coding_and_Testing_v2.6.md
   PR_TEMPLATE_v2.6.md
   Agents_v2.6.md

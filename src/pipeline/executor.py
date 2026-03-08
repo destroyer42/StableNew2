@@ -7,7 +7,9 @@ import json
 import logging
 import math
 import re
+import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
@@ -17,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
-from src.api.client import WebUIPayloadValidationError
+from src.api.client import WebUIPayloadValidationError, PROGRESS_STALL_THRESHOLD_SEC
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
@@ -28,11 +30,13 @@ from ..utils import (
     ConfigManager,
     LogContext,
     StructuredLogger,
+    build_safe_image_stem,
     load_image_to_base64,
     log_with_ctx,
     merge_global_negative,
     save_image_from_base64,
 )
+from ..utils.negative_helpers_v2 import merge_global_positive
 
 if TYPE_CHECKING:
     from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
@@ -154,18 +158,20 @@ class PipelineStageError(Exception):
 class Pipeline:
     """Main pipeline orchestrator for txt2img → img2img → upscale → video"""
 
-    def __init__(self, client: SDWebUIClient, structured_logger: StructuredLogger):
+    def __init__(self, client: SDWebUIClient, structured_logger: StructuredLogger, status_callback: Callable[[dict[str, Any]], None] | None = None):
         """
         Initialize pipeline.
 
         Args:
             client: SD WebUI API client
             structured_logger: Structured logger instance
+            status_callback: Optional callback for runtime status updates during execution
         """
         self.client = client
         self.logger = structured_logger
         self.config_manager = ConfigManager()  # For global negative prompt handling
         self.progress_controller = None
+        self._status_callback = status_callback
         self._current_model: str | None = None
         self._current_vae: str | None = None
         self._current_hypernetwork: str | None = None
@@ -180,6 +186,68 @@ class Pipeline:
         self._last_full_pipeline_results: dict[str, Any] = {}
         self._stage_events: list[dict[str, Any]] = []
         self._current_run_dir: Path | None = None
+        # PR-PIPE-001: Track current job ID for manifest linkage
+        self._current_job_id: str | None = None
+        self._current_njr_sha256: str | None = None
+        # Stage tracking for runtime status
+        self._current_stage_chain: list[str] = []
+        self._current_stage_index: int = 0
+        self._current_stage_start_time: datetime | None = None
+        self._current_actual_seed: int | None = None
+        # PR-PIPE-004: Progress polling infrastructure
+        self._progress_poll_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="progress_poll")
+        self._current_generation_progress: float = 0.0
+        self._progress_lock = threading.Lock()
+        self._run_started_at_monotonic: float | None = None
+        self._run_model_switch_count: int = 0
+        self._run_vae_switch_count: int = 0
+
+    def _begin_run_metrics(self) -> None:
+        """Reset per-run efficiency counters."""
+        self._run_started_at_monotonic = time.monotonic()
+        self._run_model_switch_count = 0
+        self._run_vae_switch_count = 0
+
+    def _record_model_switch(self) -> None:
+        self._run_model_switch_count += 1
+
+    def _record_vae_switch(self) -> None:
+        self._run_vae_switch_count += 1
+
+    def get_run_efficiency_metrics(self, images_processed: int) -> dict[str, Any]:
+        """Return a structured run-efficiency snapshot for logs/UI/history."""
+        if self._run_started_at_monotonic is None:
+            elapsed_seconds = 0.0
+        else:
+            elapsed_seconds = max(0.0, time.monotonic() - self._run_started_at_monotonic)
+        images_per_minute = 0.0
+        if elapsed_seconds > 0 and images_processed > 0:
+            images_per_minute = (images_processed / elapsed_seconds) * 60.0
+        return {
+            "elapsed_seconds": round(elapsed_seconds, 3),
+            "images_processed": int(images_processed),
+            "images_per_minute": round(images_per_minute, 3),
+            "model_switches": int(self._run_model_switch_count),
+            "vae_switches": int(self._run_vae_switch_count),
+        }
+
+    def _log_run_efficiency_metrics(
+        self,
+        *,
+        run_type: str,
+        images_processed: int,
+    ) -> None:
+        """Log per-run timing and switch counts for throughput diagnostics."""
+        metrics = self.get_run_efficiency_metrics(images_processed)
+        logger.info(
+            "Run efficiency (%s): elapsed=%.2fs, images=%d, img_per_min=%.2f, model_switches=%d, vae_switches=%d",
+            run_type,
+            metrics["elapsed_seconds"],
+            metrics["images_processed"],
+            metrics["images_per_minute"],
+            metrics["model_switches"],
+            metrics["vae_switches"],
+        )
 
     def _clean_metadata_payload(self, payload: Any) -> Any:
         """Remove large binary blobs (e.g., base64 images) from metadata payloads."""
@@ -202,6 +270,120 @@ class Pipeline:
             cleaned[key] = value
         return cleaned
 
+    def _build_image_metadata_payload(
+        self,
+        *,
+        image_path: Path,
+        stage: str,
+        run_dir: Path,
+        manifest: dict[str, Any],
+        image_size: tuple[int, int] | None,
+    ) -> dict[str, Any]:
+        from src.utils.image_metadata import build_payload_from_manifest
+
+        payload = build_payload_from_manifest(
+            image_path=image_path,
+            run_dir=run_dir,
+            stage=stage,
+            manifest=manifest,
+            image_size=image_size,
+            njr_sha256=self._current_njr_sha256,
+        )
+        if not payload.get("job_id"):
+            payload["job_id"] = getattr(self, "_current_job_id", "") or ""
+        return payload
+
+    def _resolve_run_dir(self, output_dir: Path) -> Path:
+        stage_dirs = {"txt2img", "img2img", "adetailer", "upscaled", "upscale"}
+        if output_dir.name in stage_dirs and output_dir.parent.exists():
+            return output_dir.parent
+        return output_dir
+
+    def _extract_stage_history_from_input(self, input_image_path: Path) -> list[dict[str, Any]]:
+        """Extract stage history from input image metadata.
+        
+        Reads embedded metadata from the input image and extracts the stage_history
+        array plus the current stage's manifest, building a complete history chain.
+        Each stage includes full config, model, VAE, seeds for complete reproducibility.
+        
+        Args:
+            input_image_path: Path to input image
+            
+        Returns:
+            List of stage manifests in chronological order
+        """
+        try:
+            from src.utils.image_metadata import extract_embedded_metadata
+            
+            result = extract_embedded_metadata(input_image_path)
+            if result.status == "ok" and result.payload:
+                # Get existing stage history
+                stage_history = result.payload.get("stage_history", [])
+                
+                # Build complete stage manifest with all reproducibility info
+                stage_manifest = result.payload.get("stage_manifest", {})
+                if stage_manifest:
+                    current_manifest = {
+                        "stage": stage_manifest.get("stage", "unknown"),
+                        "timestamp": stage_manifest.get("timestamp", ""),
+                        "name": stage_manifest.get("name", ""),
+                        # Include full config for reproducibility
+                        "config": stage_manifest.get("config", {}),
+                        "model": stage_manifest.get("model", "Unknown"),
+                        "vae": stage_manifest.get("vae", "Automatic"),
+                        "seeds": stage_manifest.get("seeds", {}),
+                        "prompt": stage_manifest.get("prompt", ""),
+                        "negative_prompt": stage_manifest.get("negative_prompt", ""),
+                    }
+                    # Create new history with current manifest appended
+                    return stage_history + [current_manifest]
+                return stage_history
+        except Exception as exc:
+            logger.debug(f"Could not extract stage history from {input_image_path.name}: {exc}")
+        return []
+
+    def _build_image_metadata_builder(
+        self,
+        *,
+        image_path: Path,
+        stage: str,
+        run_dir: Path,
+        manifest: dict[str, Any],
+    ):
+        from datetime import timezone
+        from src.utils.image_metadata import build_contract_kv
+
+        def _builder(image: Image.Image) -> dict[str, str] | None:
+            try:
+                payload = self._build_image_metadata_payload(
+                    image_path=image_path,
+                    stage=stage,
+                    run_dir=run_dir,
+                    manifest=manifest,
+                    image_size=image.size if image else None,
+                )
+                created_utc = datetime.now(timezone.utc).isoformat()
+                return build_contract_kv(
+                    payload,
+                    job_id=str(manifest.get("job_id") or getattr(self, "_current_job_id", "") or ""),
+                    run_id=run_dir.name,
+                    stage=stage,
+                    created_utc=created_utc,
+                    njr_sha256=self._current_njr_sha256,
+                )
+            except Exception:
+                return None
+
+        return _builder
+
+    def _ensure_stage_prefix(self, image_name: str, stage: str) -> str:
+        prefix = f"{stage}_"
+        if image_name.startswith(prefix):
+            return image_name
+        if stage == "upscale" and image_name.startswith("upscaled_"):
+            return image_name
+        return f"{prefix}{image_name}"
+
     def _merge_stage_negative(
         self, base_negative: str, apply_global: bool
     ) -> tuple[str, str, bool, str]:
@@ -210,6 +392,15 @@ class Pipeline:
             self.config_manager.get_global_negative_prompt().strip() if apply_global else ""
         )
         return merge_global_negative(base_negative, global_terms)
+
+    def _merge_stage_positive(
+        self, base_positive: str, apply_global: bool
+    ) -> tuple[str, str, bool, str]:
+        """Compute original/final positive prompts plus metadata."""
+        global_terms = (
+            self.config_manager.get_global_positive_prompt().strip() if apply_global else ""
+        )
+        return merge_global_positive(base_positive, global_terms)
 
     def _resolve_negative_prompt(
         self,
@@ -243,6 +434,53 @@ class Pipeline:
 
         self.progress_controller = controller
 
+    def _emit_status_update(self, status_data: dict[str, Any]) -> None:
+        """Emit runtime status update if callback is configured.
+        
+        Args:
+            status_data: Dictionary containing status fields like:
+                - job_id: str
+                - current_stage: str (e.g., "txt2img", "img2img")
+                - stage_index: int (0-based current stage)
+                - total_stages: int
+                - progress: float (0.0 to 1.0)
+                - actual_seed: int | None
+                - current_step: int
+                - total_steps: int
+        """
+        if self._status_callback:
+            try:
+                self._status_callback(status_data)
+            except Exception as exc:
+                logger.warning(f"Status callback error: {exc}")
+
+    def _emit_stage_start(self, stage_name: str, total_steps: int = 0) -> None:
+        """Emit status update at the start of a pipeline stage.
+        
+        Args:
+            stage_name: Name of the stage starting (e.g., "txt2img", "img2img")
+            total_steps: Total steps for this stage (if known)
+        """
+        if not self._status_callback or not self._current_job_id:
+            return
+        
+        self._current_stage_start_time = datetime.utcnow()
+        
+        status_data = {
+            "job_id": self._current_job_id,
+            "current_stage": stage_name,
+            "stage_index": self._current_stage_index,
+            "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
+            "progress": 0.0,
+            "eta_seconds": None,
+            "started_at": self._current_stage_start_time,
+            "actual_seed": self._current_actual_seed,
+            "current_step": 0,
+            "total_steps": total_steps,
+        }
+        
+        self._emit_status_update(status_data)
+
     def _apply_webui_defaults_once(self) -> None:
         """
         Apply StableNew-required WebUI defaults (metadata, upscale safety) once per run.
@@ -263,10 +501,27 @@ class Pipeline:
             logger.warning("Could not apply WebUI defaults: %s", exc)
 
     def _normalize_model_name(self, raw: str | None) -> str | None:
+        """Normalize model name for comparison by removing extensions and hashes."""
         if not raw:
             return None
         cleaned = str(raw).strip()
-        return cleaned.lower() if cleaned else None
+        if not cleaned:
+            return None
+        
+        # Remove hash in brackets like [dd08fa32f9] first
+        import re
+        cleaned = re.sub(r'\s*\[[a-f0-9]+\]$', '', cleaned, flags=re.IGNORECASE)
+        # Then remove file extension (.safetensors, .ckpt, .pt, etc.)
+        cleaned = re.sub(r'\.(safetensors|ckpt|pt|pth)$', '', cleaned, flags=re.IGNORECASE)
+        return cleaned.lower()
+
+    def _normalize_vae_name(self, raw: str | None) -> str:
+        if raw is None:
+            return "automatic"
+        cleaned = str(raw).strip().lower()
+        if cleaned in {"", "automatic", "none"}:
+            return "automatic"
+        return cleaned
 
     def _discover_current_model_if_needed(self) -> None:
         if self._model_discovery_attempted or self._current_model is not None:
@@ -284,33 +539,53 @@ class Pipeline:
     # ------------------------------------------------------------------
 
     def _ensure_model_and_vae(self, model_name: str | None, vae_name: str | None) -> None:
-        """Only call into WebUI when the requested weights change."""
+        """Set model and/or VAE. Model and VAE switches are independent operations."""
+        model_switched = False
+        # Handle model switching (if requested)
         desired_normalized = self._normalize_model_name(model_name)
         if desired_normalized:
             self._discover_current_model_if_needed()
             current_normalized = self._normalize_model_name(self._current_model)
             if desired_normalized == current_normalized:
-                return
-            if not self.client.options_write_enabled:
-                logger.warning(
-                    "Model switch to %s requested but options writes are disabled (SafeMode); keeping %s",
-                    model_name,
-                    self._current_model or "current WebUI model",
-                )
-                return
-            try:
-                logger.info(f"Switching to model: {model_name}")
-                self.client.set_model(model_name)
-                self._current_model = model_name
-            except Exception:
-                self._current_model = None
-                raise
+                # Model already loaded - no switch needed, but continue to VAE logic
+                logger.debug(f"Model already loaded: {model_name}")
+            elif not self.client.options_write_enabled:
+                # Only warn if models are actually different (avoids false warnings when normalized names match)
+                if current_normalized != desired_normalized:
+                    logger.warning(
+                        "Model switch to %s requested but options writes are disabled (SafeMode); keeping %s",
+                        model_name,
+                        self._current_model or "current WebUI model",
+                    )
+            else:
+                # Model needs switching
+                try:
+                    logger.info(f"Switching to model: {model_name}")
+                    self.client.set_model(model_name)
+                    self._current_model = model_name
+                    model_switched = True
+                    self._record_model_switch()
+                except Exception:
+                    self._current_model = None
+                    raise
 
+        # Handle VAE switching (independent of model - always execute if vae_name provided)
         try:
-            if vae_name and vae_name != self._current_vae:
-                logger.info(f"Switching to VAE: {vae_name}")
-                self.client.set_vae(vae_name)
-                self._current_vae = vae_name
+            if vae_name:
+                desired_vae = self._normalize_vae_name(vae_name)
+                current_vae = self._normalize_vae_name(self._current_vae)
+                if desired_vae != current_vae:
+                    logger.info(f"Switching to VAE: {vae_name}")
+                    self.client.set_vae(vae_name)
+                    self._current_vae = vae_name
+                    self._record_vae_switch()
+            elif model_switched:
+                # If a new model is loaded and no explicit VAE is requested, clear any
+                # stale VAE override so WebUI can use the model's preferred default.
+                logger.info("Model switched without explicit VAE; resetting VAE to Automatic")
+                self.client.set_vae("Automatic")
+                self._current_vae = "Automatic"
+                self._record_vae_switch()
         except Exception:
             self._current_vae = None
             raise
@@ -456,11 +731,116 @@ class Pipeline:
             )
             raise PipelineStageError(error) from exc
 
+    def _check_webui_health_before_stage(self, stage: str) -> None:
+        """
+        PR-HARDEN-003: Lightweight per-stage health check.
+
+        Unlike _ensure_webui_true_ready() which runs once per pipeline,
+        this runs before EACH stage to detect mid-pipeline WebUI failures
+        (e.g., VRAM exhaustion, crash between stages) early rather than
+        waiting for a full generation timeout.
+
+        Args:
+            stage: Current stage name for error reporting
+
+        Raises:
+            PipelineStageError: If WebUI is not responding
+        """
+        try:
+            # Quick 5s check - just verify WebUI is responding
+            if not self.client.check_connection(timeout=5.0):
+                error = GenerateError(
+                    code=GenerateErrorCode.CONNECTION,
+                    message=f"WebUI health check failed before {stage} stage",
+                    stage=stage,
+                    details={"check_type": "pre-stage-health", "timeout": 5.0},
+                )
+                logger.error(
+                    "PR-HARDEN-003: Pre-stage health check failed for %s - WebUI not responding",
+                    stage,
+                )
+                raise PipelineStageError(error)
+            logger.debug("PR-HARDEN-003: Pre-stage health check passed for %s", stage)
+        except PipelineStageError:
+            raise
+        except Exception as exc:
+            # Don't fail the pipeline for unexpected check errors - log and continue
+            logger.warning(
+                "PR-HARDEN-003: Pre-stage health check error for %s (continuing): %s",
+                stage,
+                exc,
+            )
+
+    def _extract_generation_info(self, response: dict[str, Any]) -> dict[str, Any]:
+        """
+        Extract generation metadata from WebUI response.
+        
+        Args:
+            response: Raw WebUI API response with 'info' field
+            
+        Returns:
+            Dict with extracted seed, subseed, and other useful fields.
+            Returns empty dict if extraction fails.
+        """
+        info = response.get("info")
+        if info is None:
+            return {}
+        
+        # WebUI returns info as JSON string
+        if isinstance(info, str):
+            try:
+                info = json.loads(info)
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse WebUI info as JSON")
+                return {}
+        
+        if not isinstance(info, dict):
+            return {}
+        
+        return {
+            "seed": info.get("seed"),
+            "subseed": info.get("subseed"),
+            "all_seeds": info.get("all_seeds"),
+            "all_subseeds": info.get("all_subseeds"),
+        }
+
+    def _build_seed_metadata(self, config: dict[str, Any], gen_info: dict[str, Any]) -> dict[str, Any]:
+        """
+        Build comprehensive seed tracking structure for manifests (D-MANIFEST-001).
+        
+        Creates nested seeds object with both user input (original) and final values used by WebUI.
+        This enables full reproducibility by tracking what the user requested vs what was actually used.
+        
+        Args:
+            config: Pipeline config with user's seed/subseed input
+            gen_info: Extracted generation info from WebUI response
+            
+        Returns:
+            Dict with nested seed structure containing original and final values
+        """
+        original_seed = config.get("seed", -1)
+        original_subseed = config.get("subseed", -1)
+        original_subseed_strength = config.get("subseed_strength", 0.0)
+        
+        final_seed = gen_info.get("seed", -1)
+        final_subseed = gen_info.get("subseed", -1)
+        
+        return {
+            "original_seed": original_seed,
+            "final_seed": final_seed,
+            "original_subseed": original_subseed,
+            "final_subseed": final_subseed,
+            "subseed_strength": original_subseed_strength,
+        }
+
     def _generate_images(self, stage: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Call the shared generate_images API for the requested stage."""
 
         # Defensive gate: ensure WebUI is truly ready before first generation call
         self._ensure_webui_true_ready()
+
+        # PR-HARDEN-003: Lightweight per-stage health check
+        self._check_webui_health_before_stage(stage)
 
         try:
             payload = _validate_webui_payload(stage, payload)
@@ -565,6 +945,149 @@ class Pipeline:
             "timings": result.timings,
         }
 
+    def _poll_progress_loop(
+        self,
+        stop_event: threading.Event,
+        poll_interval: float,
+        progress_callback: Any | None,
+        stage_label: str,
+        stall_detected_event: threading.Event | None = None,
+    ) -> None:
+        """
+        Background thread that polls WebUI for progress.
+        
+        PR-HARDEN-004: Enhanced with stall detection - if no progress update
+        for PROGRESS_STALL_THRESHOLD_SEC, sets stall_detected_event.
+        """
+        highest_progress = 0.0
+        last_progress_time = time.monotonic()
+        
+        while not stop_event.is_set():
+            try:
+                info = self.client.get_progress(skip_current_image=True)
+                
+                if info is not None:
+                    if info.progress > highest_progress:
+                        highest_progress = info.progress
+                        last_progress_time = time.monotonic()
+                        
+                        with self._progress_lock:
+                            self._current_generation_progress = highest_progress
+                        
+                        # Extract actual seed if available
+                        if hasattr(info, 'seed') and info.seed is not None:
+                            self._current_actual_seed = info.seed
+                        
+                        # Emit runtime status update
+                        if self._status_callback and self._current_job_id:
+                            elapsed = time.monotonic() - (self._current_stage_start_time.timestamp() if self._current_stage_start_time else time.monotonic())
+                            eta_seconds = info.eta_relative if (hasattr(info, 'eta_relative') and info.eta_relative > 0) else None
+                            
+                            # If no ETA from WebUI, estimate from progress
+                            if eta_seconds is None and highest_progress > 0.01:
+                                total_estimated = elapsed / highest_progress
+                                eta_seconds = max(total_estimated - elapsed, 0.0)
+                            
+                            status_data = {
+                                "job_id": self._current_job_id,
+                                "current_stage": stage_label,
+                                "stage_index": self._current_stage_index,
+                                "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
+                                "progress": highest_progress,
+                                "eta_seconds": eta_seconds,
+                                "started_at": self._current_stage_start_time,
+                                "actual_seed": self._current_actual_seed,
+                                "current_step": getattr(info, 'current_step', 0),
+                                "total_steps": getattr(info, 'total_steps', 0),
+                            }
+                            self._emit_status_update(status_data)
+                        
+                        if progress_callback:
+                            # Convert 0-1 to percentage
+                            percent = highest_progress * 100.0
+                            eta = info.eta_relative if (hasattr(info, 'eta_relative') and info.eta_relative > 0) else None
+                            # Pass step info if available
+                            current_step = getattr(info, 'current_step', 0)
+                            total_steps = getattr(info, 'total_steps', 0)
+                            progress_callback(percent, eta, current_step, total_steps)
+                    
+                    # PR-HARDEN-004: Check for stall (no progress for too long)
+                    elapsed_since_progress = time.monotonic() - last_progress_time
+                    if (
+                        elapsed_since_progress > PROGRESS_STALL_THRESHOLD_SEC
+                        and highest_progress > 0
+                        and highest_progress < 0.99
+                    ):
+                        logger.warning(
+                            "PR-HARDEN-004: Generation stall detected for %s - no progress for %.1fs (stuck at %.1f%%)",
+                            stage_label,
+                            elapsed_since_progress,
+                            highest_progress * 100,
+                        )
+                        if stall_detected_event:
+                            stall_detected_event.set()
+                        
+            except Exception:
+                pass  # Ignore polling errors
+            
+            # Wait for next poll or stop signal
+            stop_event.wait(poll_interval)
+    
+    def _generate_images_with_progress(
+        self,
+        stage: str,
+        payload: dict[str, Any],
+        *,
+        poll_interval: float = 0.5,
+        progress_callback: Any | None = None,
+        stage_label: str | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Call generation endpoint with concurrent progress polling.
+        
+        PR-HARDEN-004: Always starts progress polling for stall detection,
+        even when no progress_callback is provided.
+        """
+        
+        if stage_label is None:
+            stage_label = stage
+        
+        stop_event = threading.Event()
+        stall_detected_event = threading.Event()
+        poll_future: Future | None = None
+        
+        try:
+            # PR-HARDEN-004: ALWAYS start polling for stall detection
+            poll_future = self._progress_poll_executor.submit(
+                self._poll_progress_loop,
+                stop_event,
+                poll_interval,
+                progress_callback,  # May be None - that's fine
+                stage_label,
+                stall_detected_event,
+            )
+            
+            # Make the actual generation request (blocking)
+            response = self._generate_images(stage, payload)
+            
+            # Check if stall was detected during generation
+            if stall_detected_event.is_set():
+                logger.warning(
+                    "PR-HARDEN-004: Generation for %s completed but stall was detected during execution",
+                    stage_label,
+                )
+            
+            return response
+            
+        finally:
+            # Stop polling
+            stop_event.set()
+            if poll_future:
+                try:
+                    poll_future.result(timeout=1.0)
+                except Exception:
+                    pass
+
     def _log_pipeline_cancellation(self, phase: str, exc: Exception) -> None:
         """Emit a consistent INFO-level log for pipeline cancellations."""
 
@@ -619,6 +1142,9 @@ class Pipeline:
         # Early cancel
         self._ensure_not_cancelled(cancel_token, "upscale start")
 
+        # Emit status update for stage start
+        self._emit_stage_start("upscale", total_steps=0)
+
         result = self.run_upscale_stage(
             input_image_path,
             config,
@@ -672,9 +1198,13 @@ class Pipeline:
         # Optionally disable hires fix when running downstream stages
         try:
             pipeline = cfg.get("pipeline", {})
-            disable_hr = (
-                pipeline.get("img2img_enabled", True) or pipeline.get("upscale_enabled", True)
-            ) and not pipeline.get("allow_hr_with_stages", False)
+            # Check if img2img or upscale are enabled (no defaults - None = False)
+            img2img_val = pipeline.get("img2img_enabled")
+            img2img_enabled = bool(img2img_val) if img2img_val is not None else False
+            upscale_val = pipeline.get("upscale_enabled")
+            upscale_enabled = bool(upscale_val) if upscale_val is not None else False
+            
+            disable_hr = (img2img_enabled or upscale_enabled) and not pipeline.get("allow_hr_with_stages", False)
             if disable_hr:
                 txt = cfg.setdefault("txt2img", {})
                 if txt.get("enable_hr"):
@@ -927,6 +1457,10 @@ class Pipeline:
         # Check for cancellation before starting
         self._ensure_not_cancelled(cancel_token, "txt2img start")
 
+        # Emit status update for stage start
+        total_steps = config.get("steps", 20)
+        self._emit_stage_start("txt2img", total_steps=total_steps)
+
         logger.info(f"Starting txt2img with prompt: {prompt[:50]}...")
         # Extract name prefix if present
         name_prefix = self._extract_name_prefix(prompt)
@@ -946,11 +1480,22 @@ class Pipeline:
         sampler_config = self._parse_sampler_config(config)
 
         # Set model and VAE if specified
-        model_name = config.get("model") or config.get("sd_model_checkpoint")
-        if model_name:
-            self.client.set_model(model_name)
-        if config.get("vae"):
-            self.client.set_vae(config["vae"])
+        requested_model = (
+            config.get("model")
+            or config.get("model_name")
+            or config.get("base_model")
+            or config.get("sd_model_checkpoint")
+        )
+        # Handle VAE: distinguish between not specified (None) and explicitly empty ("")
+        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
+        self._ensure_model_and_vae(requested_model, requested_vae)
+        
+        # Query WebUI for ACTUAL current model and VAE (what's really being used)
+        # This ensures manifest reflects reality, not just what we requested
+        logger.info(f"🔍 Querying WebUI for current model and VAE...")
+        model_name = self.client.get_current_model() or requested_model or "Unknown"
+        vae_name = self.client.get_current_vae() or "Automatic"
+        logger.info(f"📝 Manifest will use - Model: {model_name}, VAE: {vae_name}")
 
         payload = {
             "prompt": prompt,
@@ -972,6 +1517,9 @@ class Pipeline:
         }
 
         # Always include hires.fix parameters (will be ignored if enable_hr is False)
+        hires_denoise = config.get("denoising_strength")
+        if hires_denoise is None:
+            hires_denoise = config.get("hr_denoising_strength") or config.get("hires_denoise")
         payload.update(
             {
                 "enable_hr": config.get("enable_hr", False),
@@ -980,7 +1528,7 @@ class Pipeline:
                 "hr_second_pass_steps": config.get("hr_second_pass_steps", 0),
                 "hr_resize_x": config.get("hr_resize_x", 0),
                 "hr_resize_y": config.get("hr_resize_y", 0),
-                "denoising_strength": config.get("denoising_strength", 0.7),
+                "denoising_strength": hires_denoise if hires_denoise is not None else 0.7,
             }
         )
         # Optional separate sampler for hires second pass
@@ -998,7 +1546,53 @@ class Pipeline:
             payload["styles"] = config["styles"]
 
         self._apply_webui_defaults_once()
-        response = self._generate_images("txt2img", payload)
+        
+        # Pre-generation memory management for hires fix (only if memory pressure detected)
+        if payload.get("enable_hr", False):
+            try:
+                import gc
+                import psutil
+                
+                mem = psutil.virtual_memory()
+                mem_percent = mem.percent
+                mem_available_gb = mem.available / (1024**3)
+                
+                # Only intervene if memory pressure is HIGH (>85% or <3GB available)
+                if mem_percent > 85.0 or mem_available_gb < 3.0:
+                    logger.warning(
+                        "⚠️ High memory pressure before hires fix: %.1f%% used, %.1fGB available - freeing caches",
+                        mem_percent, mem_available_gb
+                    )
+                    
+                    # Force GC and VRAM clear
+                    gc.collect()
+                    if hasattr(self.client, 'free_vram'):
+                        self.client.free_vram(unload_model=False, force_gc=True)
+                        
+            except Exception as exc:
+                logger.debug("Pre-generation memory check failed (non-fatal): %s", exc)
+        
+        # Create progress callback that reports to controller
+        def on_txt2img_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
+            if self.progress_controller:
+                eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                if current_step is not None and total_steps is not None:
+                    eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
+                self.progress_controller.report_progress("txt2img", percent, eta_text)
+        
+        # Track timing for this stage
+        stage_start = time.monotonic()
+        response = self._generate_images_with_progress(
+            "txt2img",
+            payload,
+            poll_interval=0.5,
+            progress_callback=on_txt2img_progress,
+            stage_label="txt2img",
+        )
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract actual seed from response
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "txt2img post-call")
@@ -1018,22 +1612,80 @@ class Pipeline:
                 image_name = f"{name_prefix}_{timestamp}_{idx:03d}"
             else:
                 image_name = f"txt2img_{timestamp}_{idx:03d}"
-            image_path = run_dir / "txt2img" / f"{image_name}.png"
 
-            if save_image_from_base64(img_base64, image_path):
-                metadata = {
-                    "name": image_name,
-                    "stage": "txt2img",
-                    "timestamp": timestamp,
-                    "prompt": prompt,
-                    "config": self._clean_metadata_payload(payload),
-                    "path": str(image_path),
+            image_name = self._ensure_stage_prefix(image_name, "txt2img")
+            safe_name = build_safe_image_stem(
+                image_name,
+                output_dir=run_dir / "txt2img",
+                unique_token=self._current_job_id,
+            )
+            image_path = run_dir / "txt2img" / f"{safe_name}.png"
+
+            metadata = {
+                "name": safe_name,
+                "stage": "txt2img",
+                "timestamp": timestamp,
+                "prompt": prompt,
+                "config": self._clean_metadata_payload(payload),
+                "path": str(image_path),
+                # PR-PIPE-001: Enhanced metadata fields
+                "job_id": getattr(self, "_current_job_id", None),
+                "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
+                "model": model_name or "Unknown",
+                "vae": vae_name or "Automatic",
+                "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
+                "stage_duration_ms": stage_duration_ms,
+                # Stage history for full pipeline tracking
+                "stage_history": [],  # txt2img is first stage, no prior history
+                # Legacy fields for backward compatibility
+                "requested_seed": config.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+            }
+            
+            # PR-GUI-DATA-001: Add refiner configuration
+            refiner_enabled = config.get("use_refiner", False)
+            refiner_model = config.get("refiner_model_name") or config.get("refiner_checkpoint")
+            refiner_switch_at = config.get("refiner_switch_at", 0.8)
+            
+            if refiner_enabled and refiner_model:
+                metadata["refiner"] = {
+                    "enabled": True,
+                    "model": refiner_model,
+                    "switch_at": refiner_switch_at,
                 }
-
-                self.logger.save_manifest(run_dir, image_name, metadata)
+            else:
+                # Include refiner block even when disabled so manifest is complete
+                metadata["refiner"] = {
+                    "enabled": False,
+                    "model": refiner_model or None,
+                    "switch_at": refiner_switch_at if refiner_model else None,
+                }
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="txt2img",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            actual_path = save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder)
+            if actual_path:
+                self.logger.save_manifest(run_dir, actual_path.stem, metadata)
                 results.append(metadata)
 
         logger.info(f"txt2img completed: {len(results)} images generated")
+        
+        # Post-generation memory check for hires fix (warn if still under pressure)
+        if payload.get("enable_hr", False):
+            try:
+                import psutil
+                mem = psutil.virtual_memory()
+                if mem.percent > 90.0:
+                    logger.warning(
+                        "⚠️ Memory still high after generation: %.1f%% used - consider reducing batch size or disabling hires fix",
+                        mem.percent
+                    )
+            except Exception:
+                pass
+        
         return results
         """
         Run txt2img generation.
@@ -1066,10 +1718,9 @@ class Pipeline:
 
         # Set model and VAE if specified
         model_name = config.get("model") or config.get("sd_model_checkpoint")
-        if model_name:
-            self.client.set_model(model_name)
-        if config.get("vae"):
-            self.client.set_vae(config["vae"])
+        # Handle VAE: only set if non-empty
+        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
+        self._ensure_model_and_vae(model_name, requested_vae)
 
         payload = {
             "prompt": prompt,
@@ -1132,17 +1783,24 @@ class Pipeline:
                 image_name = f"txt2img_{timestamp}_{idx:03d}"
             image_path = run_dir / "txt2img" / f"{image_name}.png"
 
-            if save_image_from_base64(img_base64, image_path):
-                metadata = {
-                    "name": image_name,
-                    "stage": "txt2img",
-                    "timestamp": timestamp,
-                    "prompt": prompt,
-                    "config": self._clean_metadata_payload(payload),
-                    "path": str(image_path),
-                }
-
-                self.logger.save_manifest(run_dir, image_name, metadata)
+            metadata = {
+                "name": image_name,
+                "stage": "txt2img",
+                "timestamp": timestamp,
+                "prompt": prompt,
+                "config": self._clean_metadata_payload(payload),
+                "path": str(image_path),
+                "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
+            }
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="txt2img",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            actual_path = save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder)
+            if actual_path:
+                self.logger.save_manifest(run_dir, actual_path.stem, metadata)
                 results.append(metadata)
 
         logger.info(f"txt2img completed: {len(results)} images generated")
@@ -1194,6 +1852,10 @@ class Pipeline:
         # Check for cancellation before starting
         self._ensure_not_cancelled(cancel_token, "img2img start")
 
+        # Emit status update for stage start
+        total_steps = config.get("steps", 20)
+        self._emit_stage_start("img2img", total_steps=total_steps)
+
         logger.info(f"Starting img2img cleanup for: {input_image_path.name}")
 
         # Load input image
@@ -1210,10 +1872,10 @@ class Pipeline:
         )
 
         # Set model and VAE if specified
-        if config.get("model"):
-            self.client.set_model(config["model"])
-        if config.get("vae"):
-            self.client.set_vae(config["vae"])
+        requested_model = config.get("model")
+        # Handle VAE: only set if non-empty
+        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
+        self._ensure_model_and_vae(requested_model, requested_vae)
 
         # Apply optional prompt adjustments from config
         prompt_adjust = (config.get("prompt_adjust") or "").strip()
@@ -1236,7 +1898,27 @@ class Pipeline:
 
         payload.update(sampler_config)
 
-        response = self._generate_images("img2img", payload)
+        # Create progress callback that reports to controller
+        def on_img2img_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
+            if self.progress_controller:
+                eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                if current_step is not None and total_steps is not None:
+                    eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
+                self.progress_controller.report_progress("img2img", percent, eta_text)
+
+        # Track timing for this stage
+        stage_start = time.monotonic()
+        response = self._generate_images_with_progress(
+            "img2img",
+            payload,
+            poll_interval=0.5,
+            progress_callback=on_img2img_progress,
+            stage_label="img2img",
+        )
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract actual seed from response
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "img2img post-call")
@@ -1250,20 +1932,47 @@ class Pipeline:
         image_name = f"img2img_{timestamp}"
         image_path = run_dir / "img2img" / f"{image_name}.png"
 
-        if save_image_from_base64(response["images"][0], image_path):
-            metadata = {
-                "name": image_name,
-                "stage": "img2img",
-                "timestamp": timestamp,
-                "prompt": prompt,
-                "input_image": str(input_image_path),
-                "config": self._clean_metadata_payload(payload),
-                "path": str(image_path),
-            }
+        # Extract stage history from input image
+        stage_history = self._extract_stage_history_from_input(input_image_path)
 
-            self.logger.save_manifest(run_dir, image_name, metadata)
+        # Query WebUI for ACTUAL current model and VAE (what's really being used)
+        model_name = self.client.get_current_model() or config.get("model") or config.get("sd_model_checkpoint") or "Unknown"
+        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+        logger.info(f"📝 img2img manifest - Model: {model_name}, VAE: {vae_name}")
+
+        metadata = {
+            "name": image_name,
+            "stage": "img2img",
+            "timestamp": timestamp,
+            "prompt": prompt,
+            "input_image": str(input_image_path),
+            "config": self._clean_metadata_payload(payload),
+            "path": str(image_path),
+            # PR-PIPE-001: Enhanced metadata fields
+            "job_id": getattr(self, "_current_job_id", None),
+            "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
+            "model": model_name,
+            "vae": vae_name,
+            "requested_seed": config.get("seed", -1),
+            "actual_seed": gen_info.get("seed"),
+            "actual_subseed": gen_info.get("subseed"),
+            "stage_duration_ms": stage_duration_ms,
+            # Accumulated stage history from input image
+            "stage_history": stage_history,
+        }
+        metadata_builder = self._build_image_metadata_builder(
+            image_path=image_path,
+            stage="img2img",
+            run_dir=run_dir,
+            manifest=metadata,
+        )
+        actual_path = save_image_from_base64(
+            response["images"][0], image_path, metadata_builder=metadata_builder
+        )
+        if actual_path:
+            self.logger.save_manifest(run_dir, actual_path.stem, metadata)
             self._last_img2img_result = metadata
-            logger.info(f"img2img completed: {image_name}")
+            logger.info(f"img2img completed: {actual_path.name}")
             return metadata
         return None
 
@@ -1299,6 +2008,33 @@ class Pipeline:
             logger.info("ADetailer is disabled, skipping")
             return None
 
+        # Emit status update for stage start
+        total_steps = config.get("steps", 20)
+        self._emit_stage_start("adetailer", total_steps=total_steps)
+
+        # Set model and VAE if specified (ensure consistency across pipeline stages)
+        # BUGFIX: Don't treat ADetailer model names as SD model checkpoints
+        requested_model = config.get("model") or config.get("sd_model_checkpoint")
+        # Handle VAE: get from config but don't default to fallback if empty
+        requested_vae = config.get("vae") if "vae" in config else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
+        
+        # Filter out ADetailer model names (they end with .pt and start with face_/hand_/person_/mediapipe)
+        if requested_model:
+            model_lower = requested_model.lower()
+            is_adetailer_model = (
+                model_lower.endswith('.pt') and 
+                any(model_lower.startswith(prefix) for prefix in ['face_', 'hand_', 'person_', 'mediapipe'])
+            )
+            if is_adetailer_model:
+                logger.warning(
+                    "ADetailer detected adetailer model name '%s' in model field; ignoring SD model switch",
+                    requested_model
+                )
+                requested_model = None  # Don't try to set this as SD model
+        
+        if requested_model or requested_vae:
+            self._ensure_model_and_vae(requested_model, requested_vae)
+
         logger.info(f"Starting ADetailer for: {input_image_path.name}")
 
         # Load input image
@@ -1327,27 +2063,22 @@ class Pipeline:
         payload_height = actual_height or _coerce_dimension(config.get("height"), 512)
 
         # Use adetailer-specific negative prompt if provided, otherwise use txt2img negative
+        # NOTE: ADetailer has its own custom prompts and should NOT get global positive/negative applied
         base_ad_neg = config.get("adetailer_negative_prompt", "")
-        apply_global = False  # Initialize to track if we applied global negative
         if base_ad_neg:
-            # If specific adetailer negative provided, optionally add global negative
-            apply_global = (config.get("pipeline", {}) if isinstance(config, dict) else {}).get(
-                "apply_global_negative_adetailer", True
-            )
-            if apply_global:
-                ad_neg_final = self.config_manager.add_global_negative(base_ad_neg)
-                try:
-                    logger.info(
-                        "🛡️ Applied global NSFW prevention (adetailer stage) - Enhanced: '%s'",
-                        (ad_neg_final[:120] + "...") if len(ad_neg_final) > 120 else ad_neg_final,
-                    )
-                except Exception:
-                    pass
-            else:
-                ad_neg_final = base_ad_neg
+            # Use the specific adetailer negative prompt as-is (no global merging)
+            ad_neg_final = base_ad_neg
+            logger.info("🎯 Using custom ADetailer negative prompt (no global terms applied)")
         else:
             # No specific adetailer negative, use txt2img negative (already has global + aesthetic + pack)
             ad_neg_final = negative_prompt
+            logger.info("🎯 Using txt2img negative prompt for ADetailer (inherited from previous stage)")
+
+        # ADetailer uses custom prompts - never apply global negative merging
+        apply_global = False
+
+        # Import fallback tracking helper
+        from src.utils.config_helpers import get_with_fallback_warning
 
         # DEBUG: Log ADetailer config received
         logger.info(
@@ -1374,35 +2105,93 @@ class Pipeline:
                     prompt[:60] if prompt else "(empty)",
                     final_prompt[:60] if final_prompt else "(empty)")
         
-        # Build ADetailer payload
+        # Build ADetailer payload using smart fallback tracking
+        # Warns only when keys are actually missing (true fallback), not when user chose defaults
+        face_args = {
+            "ad_model": get_with_fallback_warning(config, "adetailer_model", "face_yolov8n.pt", source="run_adetailer"),
+            "ad_tab_enable": True,
+            "ad_confidence": get_with_fallback_warning(config, "adetailer_confidence", 0.35, source="run_adetailer"),
+            "ad_mask_filter_method": get_with_fallback_warning(config, "ad_mask_filter_method", "Area", source="run_adetailer", warn=False),
+            "ad_mask_k": get_with_fallback_warning(config, "ad_mask_k_largest", 3, source="run_adetailer", warn=False),
+            "ad_mask_min_ratio": get_with_fallback_warning(config, "ad_mask_min_ratio", 0.01, source="run_adetailer", warn=False),
+            "ad_mask_max_ratio": get_with_fallback_warning(config, "ad_mask_max_ratio", 1.0, source="run_adetailer", warn=False),
+            "ad_dilate_erode": get_with_fallback_warning(config, "ad_dilate_erode", 4, source="run_adetailer", warn=False),
+            "ad_mask_blur": get_with_fallback_warning(config, "ad_mask_blur", 6, source="run_adetailer", warn=False),
+            "ad_mask_merge_invert": get_with_fallback_warning(config, "ad_mask_merge_invert", "None", source="run_adetailer", warn=False),
+            "ad_inpaint_only_masked": True,
+            "ad_inpaint_only_masked_padding": get_with_fallback_warning(config, "adetailer_padding", 32, source="run_adetailer", warn=False),
+            "ad_use_inpaint_width_height": False,  # Disable dimension optimization to prevent crashes on large images
+            "ad_inpaint_width": payload_width,  # Lock to source dimensions - prevent resizing
+            "ad_inpaint_height": payload_height,  # Lock to source dimensions - prevent resizing
+            "ad_x_offset": 0,  # Disable x tiling
+            "ad_y_offset": 0,  # Disable y tiling
+            "ad_mask_only_top_k_largest": True,  # Process only largest detection
+            "ad_use_steps": True,
+            "ad_steps": get_with_fallback_warning(config, "adetailer_steps", 14, source="run_adetailer"),
+            "ad_use_cfg_scale": True,
+            "ad_cfg_scale": get_with_fallback_warning(config, "adetailer_cfg", 5.5, source="run_adetailer"),
+            "ad_denoising_strength": get_with_fallback_warning(config, "adetailer_denoise", 0.32, source="run_adetailer"),
+            "ad_use_sampler": True,
+            "ad_sampler": get_with_fallback_warning(config, "adetailer_sampler", "DPM++ 2M Karras", source="run_adetailer"),
+            "ad_scheduler": get_with_fallback_warning(config, "adetailer_scheduler", "Use same scheduler", source="run_adetailer", warn=False),
+            "ad_prompt": config.get("adetailer_prompt", final_prompt),
+            "ad_negative_prompt": config.get("adetailer_negative_prompt", ad_neg_final),
+        }
+
+        hand_args = {
+            "ad_model": config.get("adetailer_hands_model", "hand_yolov8n.pt"),
+            "ad_tab_enable": config.get("ad_hands_enabled", True),
+            "ad_confidence": config.get("adetailer_hands_confidence", 0.30),
+            "ad_mask_filter_method": config.get("ad_hands_mask_filter_method", "Area"),
+            "ad_mask_k": config.get("ad_hands_mask_k", 6),
+            "ad_mask_min_ratio": config.get("ad_hands_mask_min_ratio", 0.003),
+            "ad_mask_max_ratio": config.get("ad_hands_mask_max_ratio", 1.0),
+            "ad_dilate_erode": config.get("ad_hands_dilate_erode", 6),
+            "ad_mask_blur": config.get("ad_hands_mask_blur", 4),
+            "ad_mask_merge_invert": config.get("ad_hands_mask_merge_invert", "None"),
+            "ad_inpaint_only_masked": True,
+            "ad_inpaint_only_masked_padding": config.get("ad_hands_padding", 16),
+            "ad_use_inpaint_width_height": False,  # Disable dimension optimization to prevent crashes on large images
+            "ad_inpaint_width": payload_width,  # Lock to source dimensions - prevent resizing
+            "ad_inpaint_height": payload_height,  # Lock to source dimensions - prevent resizing
+            "ad_x_offset": 0,  # Disable x tiling
+            "ad_y_offset": 0,  # Disable y tiling
+            "ad_mask_only_top_k_largest": True,  # Process only largest detection
+            "ad_use_steps": True,
+            "ad_steps": config.get("adetailer_hands_steps", 12),
+            "ad_use_cfg_scale": True,
+            "ad_cfg_scale": config.get("adetailer_hands_cfg", 5.0),
+            "ad_denoising_strength": config.get("adetailer_hands_denoise", 0.25),
+            "ad_use_sampler": True,
+            "ad_sampler": config.get("adetailer_hands_sampler", "DPM++ 2M Karras"),
+            "ad_scheduler": config.get("adetailer_hands_scheduler", "Use same scheduler"),
+            "ad_prompt": config.get(
+                "adetailer_hands_prompt",
+                "well-formed fingers, natural knuckles, correct hand anatomy, sharp details",
+            ),
+            "ad_negative_prompt": config.get(
+                "adetailer_hands_negative_prompt",
+                "extra fingers, fused fingers, broken fingers, deformed hands, missing fingers",
+            ),
+        }
+
         payload = {
             "init_images": [init_image],
             "prompt": final_prompt,
             "negative_prompt": ad_neg_final,
-            "sampler_name": config.get("adetailer_sampler", "DPM++ 2M"),
+            "sampler_name": config.get("adetailer_sampler", "DPM++ 2M Karras"),
             "steps": config.get("adetailer_steps", 28),
             "cfg_scale": config.get("adetailer_cfg", 7.0),
             "denoising_strength": config.get("adetailer_denoise", 0.4),
             "width": payload_width,
             "height": payload_height,
-            # ADetailer specific parameters
             "alwayson_scripts": {
                 "ADetailer": {
                     "args": [
-                        {
-                            "ad_model": config.get("adetailer_model", "face_yolov8n.pt"),
-                            "ad_confidence": config.get("adetailer_confidence", 0.3),
-                            "ad_mask_blur": config.get("adetailer_mask_feather", 4),
-                            "ad_denoising_strength": config.get("adetailer_denoise", 0.4),
-                            "ad_inpaint_only_masked": True,
-                            "ad_inpaint_only_masked_padding": 32,
-                            "ad_use_inpaint_width_height": False,
-                            "ad_sampler": config.get("adetailer_sampler", "DPM++ 2M"),
-                            "ad_steps": config.get("adetailer_steps", 28),
-                            "ad_cfg_scale": config.get("adetailer_cfg", 7.0),
-                            "ad_prompt": final_prompt,  # Use final_prompt (adetailer override or original txt2img prompt)
-                            "ad_negative_prompt": ad_neg_final,
-                        }
+                        True,
+                        False,
+                        face_args,
+                        hand_args,
                     ]
                 }
             },
@@ -1411,8 +2200,38 @@ class Pipeline:
         if config.get("scheduler"):
             payload["scheduler"] = config.get("scheduler")
 
+        # DEBUG: Log ADetailer payload dimensions to verify no resizing
+        logger.warning(
+            "🔍 ADETAILER PAYLOAD: width=%s, height=%s, face[ad_use_inpaint_width_height]=%s, face[ad_inpaint_width]=%s, face[ad_inpaint_height]=%s",
+            payload_width,
+            payload_height,
+            face_args.get("ad_use_inpaint_width_height"),
+            face_args.get("ad_inpaint_width"),
+            face_args.get("ad_inpaint_height"),
+        )
+
+        # Create progress callback that reports to controller
+        def on_adetailer_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
+            if self.progress_controller:
+                eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                if current_step is not None and total_steps is not None:
+                    eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
+                self.progress_controller.report_progress("adetailer", percent, eta_text)
+
+        # Track timing for this stage
+        stage_start = time.monotonic()
         # Call img2img endpoint with ADetailer extension
-        response = self._generate_images("img2img", payload)
+        response = self._generate_images_with_progress(
+            "img2img",
+            payload,
+            poll_interval=0.5,
+            progress_callback=on_adetailer_progress,
+            stage_label="adetailer",
+        )
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract actual seed from response
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "adetailer post-call")
@@ -1429,31 +2248,67 @@ class Pipeline:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             final_image_name = f"adetailer_{timestamp}"
         image_path = run_dir / f"{final_image_name}.png"
+        # PR-FILENAME-001: Apply collision failsafe
+        from src.utils.file_io import get_unique_output_path
+        image_path = get_unique_output_path(image_path)
 
-        if save_image_from_base64(response["images"][0], image_path):
-            metadata = {
-                "name": final_image_name,
-                "stage": "adetailer",
-                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
-                "original_prompt": prompt,
-                "final_prompt": payload.get("prompt", prompt),
-                "original_negative_prompt": base_ad_neg,
-                "final_negative_prompt": ad_neg_final,
-                "global_negative_applied": apply_global,
-                "global_negative_terms": self.config_manager.get_global_negative_prompt()
-                if apply_global
-                else "",
-                "input_image": str(input_image_path),
-                "config": self._clean_metadata_payload(payload),
-                "path": str(image_path),
-            }
+        # Extract stage history from input image
+        stage_history = self._extract_stage_history_from_input(input_image_path)
 
+        # Query WebUI for ACTUAL current model and VAE
+        model_name = self.client.get_current_model() or config.get("model") or config.get("sd_model_checkpoint") or "Unknown"
+        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+        logger.info(f"📝 ADetailer manifest - Model: {model_name}, VAE: {vae_name}")
+
+        metadata = {
+            "name": final_image_name,
+            "stage": "adetailer",
+            "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+            "original_prompt": prompt,
+            "final_prompt": payload.get("prompt", prompt),
+            "original_negative_prompt": base_ad_neg,
+            "final_negative_prompt": ad_neg_final,
+            "global_negative_applied": apply_global,
+            "global_negative_terms": "",  # Always empty for ADetailer per design
+            "input_image": str(input_image_path),
+            "config": self._clean_metadata_payload(payload),
+            "path": str(image_path),
+            # PR-PIPE-001: Enhanced metadata fields
+            "job_id": getattr(self, "_current_job_id", None),
+            "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
+            "model": model_name,
+            "vae": vae_name,
+            "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
+            "stage_duration_ms": stage_duration_ms,
+            # Accumulated stage history from input image
+            "stage_history": stage_history,
+            # Legacy fields for backward compatibility
+            "requested_seed": config.get("seed", -1),
+            "actual_seed": gen_info.get("seed"),
+            "actual_subseed": gen_info.get("subseed"),
+        }
+        metadata_builder = self._build_image_metadata_builder(
+            image_path=image_path,
+            stage="adetailer",
+            run_dir=run_dir,
+            manifest=metadata,
+        )
+        actual_path = save_image_from_base64(
+            response["images"][0], image_path, metadata_builder=metadata_builder
+        )
+        if actual_path:
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-            manifest_dir = run_dir / "manifests"
-            manifest_dir.mkdir(exist_ok=True, parents=True)
-            manifest_path = manifest_dir / f"{final_image_name}_adetailer.json"
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            manifest_dir = Path(run_dir) / "manifests"
+            # Use actual image stem (includes _copy suffix if collision occurred)
+            manifest_path = manifest_dir / f"{actual_path.stem}.json"
+            try:
+                # Ensure parent directory exists before writing
+                manifest_path.parent.mkdir(exist_ok=True, parents=True)
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                logger.error(f"Error writing manifest file {manifest_path}: {e}")
+                # Continue anyway - manifest is not critical
             
             logger.info(f"adetailer completed: {final_image_name}")
             return metadata
@@ -1495,7 +2350,14 @@ class Pipeline:
             "codeformer_visibility": config.get("codeformer_visibility", 0.0),
             "codeformer_weight": config.get("codeformer_weight", 0.5),
         }
+        
+        # Track timing for this stage
+        stage_start = time.monotonic()
         response = self._generate_images("upscale", payload)
+        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
+        
+        # Extract info from response (upscale may not return seed, but try anyway)
+        gen_info = self._extract_generation_info(response) if response else {}
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "upscale stage post-call")
@@ -1508,17 +2370,46 @@ class Pipeline:
         image_name = f"upscaled_{input_image_path.stem}_{timestamp}"
         image_path = run_dir / "upscaled" / f"{image_name}.png"
 
-        if save_image_from_base64(response["image"], image_path):
-            metadata = {
-                "name": image_name,
-                "stage": "upscale",
-                "timestamp": timestamp,
-                "input_image": str(input_image_path),
-                "config": config,
-                "path": str(image_path),
-            }
+        # Extract stage history from input image
+        stage_history = self._extract_stage_history_from_input(input_image_path)
 
-            self.logger.save_manifest(run_dir, image_name, metadata)
+        # Query WebUI for ACTUAL current model and VAE
+        model_name = self.client.get_current_model() or config.get("model") or "Unknown"
+        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+        logger.info(f"📝 run_upscale manifest - Model: {model_name}, VAE: {vae_name}")
+
+        metadata = {
+            "name": image_name,
+            "stage": "upscale",
+            "timestamp": timestamp,
+            "input_image": str(input_image_path),
+            "config": config,
+            "path": str(image_path),
+            # PR-PIPE-001: Enhanced metadata fields
+            "job_id": getattr(self, "_current_job_id", None),
+            "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
+            "model": model_name,
+            "vae": vae_name,
+            "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
+            "stage_duration_ms": stage_duration_ms,
+            # Accumulated stage history from input image
+            "stage_history": stage_history,
+            # Legacy fields for backward compatibility
+            "requested_seed": config.get("seed"),  # May be None for upscale
+            "actual_seed": gen_info.get("seed"),  # Likely None for upscale
+            "actual_subseed": gen_info.get("subseed"),  # Likely None for upscale
+        }
+        metadata_builder = self._build_image_metadata_builder(
+            image_path=image_path,
+            stage="upscale",
+            run_dir=run_dir,
+            manifest=metadata,
+        )
+        actual_path = save_image_from_base64(
+            response["image"], image_path, metadata_builder=metadata_builder
+        )
+        if actual_path:
+            self.logger.save_manifest(run_dir, actual_path.stem, metadata)
             logger.info("Upscale completed successfully")
             return metadata
 
@@ -1537,6 +2428,7 @@ class Pipeline:
         """
 
         self.reset_stage_events()
+        self._begin_run_metrics()
 
         try:
             result = self._run_full_pipeline_impl(
@@ -1563,6 +2455,15 @@ class Pipeline:
                     },
                 )
             raise
+        finally:
+            current_results = getattr(self, "_last_full_pipeline_results", {}) or {}
+            current_results["efficiency_metrics"] = self.get_run_efficiency_metrics(
+                len(current_results.get("summary", []))
+            )
+            self._log_run_efficiency_metrics(
+                run_type="full_pipeline",
+                images_processed=len(current_results.get("summary", [])),
+            )
 
     def _run_full_pipeline_impl(
         self,
@@ -1602,11 +2503,12 @@ class Pipeline:
         logger.info("=" * 60)
         logger.info("Starting full pipeline execution")
 
-        # Check pipeline stage configuration
+        # Check pipeline stage configuration - no defaults, use actual config values
         pipeline_cfg: dict[str, Any] = config.get("pipeline", {}) or {}
-        img2img_enabled: bool = pipeline_cfg.get("img2img_enabled", True)
-        adetailer_enabled: bool = pipeline_cfg.get("adetailer_enabled", False)
-        upscale_enabled: bool = pipeline_cfg.get("upscale_enabled", True)
+        img2img_val = pipeline_cfg.get("img2img_enabled")
+        img2img_enabled: bool = bool(img2img_val) if img2img_val is not None else False
+        adetailer_enabled: bool = pipeline_cfg.get("adetailer_enabled") or False
+        upscale_enabled: bool = pipeline_cfg.get("upscale_enabled") or False
         upscale_only_last: bool = pipeline_cfg.get("upscale_only_last", False)
 
         logger.info(
@@ -1886,6 +2788,7 @@ class Pipeline:
         logger.info(f"🎨 Processing prompt {prompt_index + 1} from pack '{pack_name}'")
 
         # Create pack-specific directory structure
+        self._begin_run_metrics()
         pack_dir = self.logger.create_pack_directory(run_dir, pack_name)
 
         # Save config for this pack run
@@ -1951,9 +2854,9 @@ class Pipeline:
             and str(refiner_checkpoint).strip() != ""
             and 0.0 < float(refiner_switch_at) < 1.0
         )
-        img2img_enabled = config.get("pipeline", {}).get("img2img_enabled", True)
+        img2img_enabled = config.get("pipeline", {}).get("img2img_enabled", False)
         adetailer_enabled = config.get("pipeline", {}).get("adetailer_enabled", False)
-        upscale_enabled = config.get("pipeline", {}).get("upscale_enabled", True)
+        upscale_enabled = config.get("pipeline", {}).get("upscale_enabled", False)
 
         # Phase 1: txt2img for all images
         for batch_idx in range(batch_size):
@@ -1975,6 +2878,21 @@ class Pipeline:
         if not results["txt2img"]:
             logger.error("No txt2img outputs produced; aborting pack pipeline early")
             return results
+        
+        # Log phase completion at WARNING level for visibility
+        logger.warning(f"✅ txt2img phase completed: {len(results['txt2img'])} image(s) generated")
+        
+        # CRITICAL: Free VRAM after txt2img phase completes
+        # Prevents VRAM accumulation before refinement stages
+        try:
+            logger.warning("🧹 Clearing VRAM after txt2img phase...")
+            if hasattr(self.client, 'free_vram'):
+                if self.client.free_vram(unload_model=False):
+                    logger.warning("✅ VRAM cleared successfully after txt2img phase")
+                else:
+                    logger.warning("⚠️  VRAM clear returned False after txt2img phase")
+        except Exception as exc:
+            logger.warning(f"❌ Failed to clear VRAM after txt2img phase: {exc}")
 
         # Phase 2: refinement (img2img/adetailer/upscale) per base image
         for batch_idx, txt2img_meta in enumerate(results["txt2img"]):
@@ -2032,12 +2950,7 @@ class Pipeline:
                         txt_settings = config.get("txt2img", {})
                         adetailer_cfg.setdefault("width", txt_settings.get("width", 512))
                         adetailer_cfg.setdefault("height", txt_settings.get("height", 512))
-                        pipe_flags = dict(config.get("pipeline", {}))
-                        adetailer_cfg["pipeline"] = {
-                            "apply_global_negative_adetailer": pipe_flags.get(
-                                "apply_global_negative_adetailer", True
-                            )
-                        }
+                        # ADetailer uses its own custom prompts, no global prompt application needed
                         cand_negative = self._resolve_negative_prompt(
                             cand.get("meta"),
                             txt2img_meta,
@@ -2103,17 +3016,25 @@ class Pipeline:
                         last_image_path = img2img_meta["path"]
                         last_stage_meta = img2img_meta
                         final_image_path = last_image_path
+                        
+                        # CRITICAL: Free VRAM after img2img before next stage
+                        logger.warning("✅ img2img stage completed")
+                        try:
+                            logger.warning("🧹 Clearing VRAM after img2img stage...")
+                            if hasattr(self.client, 'free_vram'):
+                                if self.client.free_vram(unload_model=False):
+                                    logger.warning("✅ VRAM cleared successfully after img2img")
+                                else:
+                                    logger.warning("⚠️  VRAM clear returned False after img2img")
+                        except Exception as exc:
+                            logger.warning(f"❌ Failed to clear VRAM after img2img: {exc}")
+                            
                 if adetailer_enabled:
                     adetailer_cfg = dict(config.get("adetailer", {}))
                     txt_settings = config.get("txt2img", {})
                     adetailer_cfg.setdefault("width", txt_settings.get("width", 512))
                     adetailer_cfg.setdefault("height", txt_settings.get("height", 512))
-                    pipe_flags = dict(config.get("pipeline", {}))
-                    adetailer_cfg["pipeline"] = {
-                        "apply_global_negative_adetailer": pipe_flags.get(
-                            "apply_global_negative_adetailer", True
-                        )
-                    }
+                    # ADetailer uses its own custom prompts, no global prompt application needed
                     fallback_neg = self._resolve_negative_prompt(
                         last_stage_meta,
                         txt2img_meta,
@@ -2130,6 +3051,20 @@ class Pipeline:
                         last_image_path = adetailer_meta["path"]
                         last_stage_meta = adetailer_meta
                         final_image_path = last_image_path
+                        
+                        # CRITICAL: Free VRAM before upscale to prevent OOM
+                        # ADetailer can leave models loaded consuming 14+ GB
+                        logger.warning("✅ adetailer stage completed")
+                        try:
+                            logger.warning("🧹 Clearing VRAM after ADetailer before upscale...")
+                            if hasattr(self.client, 'free_vram'):
+                                if self.client.free_vram(unload_model=False):
+                                    logger.warning("✅ VRAM cleared successfully after ADetailer")
+                                else:
+                                    logger.warning("⚠️  VRAM clear returned False after ADetailer")
+                        except Exception as exc:
+                            logger.warning(f"❌ Failed to clear VRAM after ADetailer: {exc}")
+                
                 if upscale_enabled:
                     upscale_dir = pack_dir / "upscaled"
                     upscaled_meta = self.run_upscale_stage(
@@ -2144,6 +3079,19 @@ class Pipeline:
                         )
                         results["upscaled"].append(upscaled_meta)
                         final_image_path = upscaled_meta["path"]
+                        
+                        # CRITICAL: Free VRAM after upscale for cleanup
+                        # Ensures next job starts with clean VRAM state
+                        logger.warning("✅ upscale stage completed")
+                        try:
+                            logger.warning("🧹 Clearing VRAM after upscale for next job...")
+                            if hasattr(self.client, 'free_vram'):
+                                if self.client.free_vram(unload_model=False):
+                                    logger.warning("✅ VRAM cleared successfully after upscale")
+                                else:
+                                    logger.warning("⚠️  VRAM clear returned False after upscale")
+                        except Exception as exc:
+                            logger.warning(f"❌ Failed to clear VRAM after upscale: {exc}")
                     else:
                         final_image_path = last_image_path
                 else:
@@ -2225,6 +3173,13 @@ class Pipeline:
             summary_path = pack_dir / "summary.csv"
             self.logger.create_pack_csv_summary(summary_path, results["summary"])
 
+        results["efficiency_metrics"] = self.get_run_efficiency_metrics(
+            len(results.get("summary", []))
+        )
+        self._log_run_efficiency_metrics(
+            run_type="pack_pipeline",
+            images_processed=len(results.get("summary", [])),
+        )
         logger.info(
             f"✅ Completed pack '{pack_name}' prompt {prompt_index + 1}: {len(results['summary'])} images"
         )
@@ -2257,6 +3212,13 @@ class Pipeline:
             self._ensure_not_cancelled(cancel_token, "txt2img stage start")
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Verify directory creation succeeded
+            if not output_dir.exists():
+                logger.error(f"Failed to create output directory: {output_dir}")
+                return None
+            
+            logger.debug(f"Output directory confirmed: {output_dir}")
 
             # Build txt2img payload - config may have txt2img sub-dict OR be flat
             # Support both formats for compatibility
@@ -2269,15 +3231,32 @@ class Pipeline:
             stage_batch_size = config.get("batch_size", 1)
             logger.info("🔵 [BATCH_SIZE_DEBUG] executor.run_txt2img_stage: config['batch_size']=%s, stage_batch_size=%s", config.get('batch_size'), stage_batch_size)
 
-            # Optionally apply global NSFW prevention to negative prompt based on stage flag
-            apply_global = config.get("pipeline", {}).get("apply_global_negative_txt2img", True)
-            original_negative_prompt = negative_prompt
-            _, enhanced_negative, global_applied, global_terms = self._merge_stage_negative(
-                original_negative_prompt, apply_global
+            # Apply global positive and negative prompts to txt2img stage only
+            pipeline_section = config.get("pipeline", {})
+            apply_global_positive = pipeline_section.get("apply_global_positive_txt2img", True)
+            apply_global_negative = pipeline_section.get("apply_global_negative_txt2img", True)
+            
+            # Apply global positive (prepends quality/style terms)
+            original_positive_prompt = prompt
+            _, enhanced_positive, positive_global_applied, positive_global_terms = self._merge_stage_positive(
+                original_positive_prompt, apply_global_positive
             )
-            if global_applied:
+            if positive_global_applied:
                 logger.info(
-                    "dY>нЛ,? Applied global NSFW prevention (txt2img stage) - Enhanced: '%s'",
+                    "✨ Applied global positive terms (txt2img stage) - Enhanced: '%s'",
+                    (enhanced_positive[:100] + "...")
+                    if len(enhanced_positive) > 100
+                    else enhanced_positive,
+                )
+            
+            # Apply global negative (appends NSFW prevention terms)
+            original_negative_prompt = negative_prompt
+            _, enhanced_negative, negative_global_applied, negative_global_terms = self._merge_stage_negative(
+                original_negative_prompt, apply_global_negative
+            )
+            if negative_global_applied:
+                logger.info(
+                    "dY>нЛ,? Applied global negative terms (txt2img stage) - Enhanced: '%s'",
                     (enhanced_negative[:100] + "...")
                     if len(enhanced_negative) > 100
                     else enhanced_negative,
@@ -2305,12 +3284,22 @@ class Pipeline:
                     computed_ratio,
                 )
                 refiner_switch_at = computed_ratio
+            # use_refiner must be explicitly True in config AND valid checkpoint/ratio
+            # Read from txt2img_config (nested) or fall back to top-level config (flat payload)
+            use_refiner_flag = txt2img_config.get("use_refiner", config.get("use_refiner", False))
             use_refiner = (
-                refiner_checkpoint
+                use_refiner_flag  # Must be explicitly True
+                and refiner_checkpoint
                 and refiner_checkpoint != "None"
                 and refiner_checkpoint.strip() != ""
                 and 0.0 < refiner_switch_at < 1.0
             )
+            
+            # Log refiner status for debugging
+            if not use_refiner_flag and refiner_checkpoint:
+                logger.info("🚫 Refiner disabled via use_refiner=False (checkpoint present but ignored)")
+            elif use_refiner:
+                logger.info("✅ Refiner enabled: checkpoint=%s, switch_at=%.3f", refiner_checkpoint, refiner_switch_at)
 
             if use_refiner:
                 # Compute expected switch step number within the base pass and within combined progress
@@ -2339,10 +3328,32 @@ class Pipeline:
                 )
 
             # Set model and VAE if specified
-            model_name = txt2img_config.get("model") or txt2img_config.get("sd_model_checkpoint")
-            vae_name = txt2img_config.get("vae")
-            if model_name or vae_name:
-                self._ensure_model_and_vae(model_name, vae_name)
+            requested_model = txt2img_config.get("model") or txt2img_config.get("sd_model_checkpoint")
+            requested_vae = txt2img_config.get("vae")
+            
+            # Debug: log what config we received
+            logger.info(f"🔍 [EXECUTOR] Config keys: {list(txt2img_config.keys())}")
+            logger.info(f"🔍 [EXECUTOR] Received requested_model='{requested_model}', requested_vae='{requested_vae}'")
+            
+            if requested_model or requested_vae:
+                self._ensure_model_and_vae(requested_model, requested_vae)
+            
+            # Use the requested model/VAE for manifest (what we asked for)
+            # Query WebUI only as fallback if not specified in config
+            if requested_model:
+                model_name = requested_model
+            else:
+                logger.info(f"🔍 Querying WebUI for current model...")
+                model_name = self.client.get_current_model() or "Unknown"
+            
+            # For VAE: check if key exists in config (even if empty string)
+            if "vae" in txt2img_config:
+                vae_name = requested_vae or ""  # Use empty string if explicitly set to empty
+            else:
+                logger.info(f"🔍 Querying WebUI for current VAE...")
+                vae_name = self.client.get_current_vae() or "Automatic"
+            
+            logger.info(f"📝 Manifest will use - Model: {model_name}, VAE: {vae_name}")
 
             self._ensure_hypernetwork(
                 txt2img_config.get("hypernetwork"),
@@ -2357,13 +3368,15 @@ class Pipeline:
 
             logger.info("🔵 [BATCH_SIZE_DEBUG] executor: About to create WebUI payload with batch_size=%s", stage_batch_size)
             payload = {
-                "prompt": prompt,
+                "prompt": enhanced_positive,  # Use enhanced positive with global terms
                 "negative_prompt": enhanced_negative,
                 "steps": txt2img_config.get("steps", 20),
                 "cfg_scale": txt2img_config.get("cfg_scale", 7.0),
                 "width": txt2img_config.get("width", 512),
                 "height": txt2img_config.get("height", 512),
                 "seed": txt2img_config.get("seed", -1),
+                "subseed": txt2img_config.get("subseed", -1),
+                "subseed_strength": txt2img_config.get("subseed_strength", 0.0),
                 "seed_resize_from_h": txt2img_config.get("seed_resize_from_h", -1),
                 "seed_resize_from_w": txt2img_config.get("seed_resize_from_w", -1),
                 "clip_skip": txt2img_config.get("clip_skip", 2),
@@ -2373,6 +3386,9 @@ class Pipeline:
                 "tiling": txt2img_config.get("tiling", False),
                 "do_not_save_samples": txt2img_config.get("do_not_save_samples", False),
                 "do_not_save_grid": txt2img_config.get("do_not_save_grid", False),
+                # Include model and VAE in payload so WebUI uses them for this specific generation
+                "sd_model": requested_model,
+                "sd_vae": requested_vae,
             }
 
             # Always include hires.fix parameters (will be ignored if enable_hr is False)
@@ -2455,6 +3471,8 @@ class Pipeline:
                 logger.error("txt2img failed - no images returned")
                 return None
 
+            gen_info = self._extract_generation_info(response) if response else {}
+
             # Log how many images were actually generated
             num_images_received = len(response["images"])
             logger.info("🔵 [BATCH_SIZE_DEBUG] WebUI returned %s images (expected %s)", num_images_received, payload.get('batch_size', 1) * payload.get('n_iter', 1))
@@ -2464,6 +3482,29 @@ class Pipeline:
             saved_paths = []
             batch_size = payload.get('batch_size', 1)
             n_iter = payload.get('n_iter', 1)
+            run_dir = self._resolve_run_dir(output_dir)
+            base_metadata = {
+                "stage": "txt2img",
+                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+                "original_prompt": original_positive_prompt,
+                "final_prompt": enhanced_positive,
+                "global_positive_applied": positive_global_applied,
+                "global_positive_terms": positive_global_terms if positive_global_applied else "",
+                "original_negative_prompt": original_negative_prompt,
+                "final_negative_prompt": enhanced_negative,
+                "global_negative_applied": negative_global_applied,
+                "global_negative_terms": negative_global_terms if negative_global_applied else "",
+                "seed": payload.get("seed", -1),
+                "subseed": payload.get("subseed", -1),
+                "subseed_strength": payload.get("subseed_strength", 0.0),
+                "config": self._clean_metadata_payload(payload),
+                "job_id": getattr(self, "_current_job_id", None),
+                "requested_seed": payload.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
+                "model": model_name,
+                "vae": vae_name,
+            }
             
             for batch_idx in range(num_images_received):
                 # Multiple images: use suffix _batch0, _batch1, etc.
@@ -2476,12 +3517,42 @@ class Pipeline:
                     image_path = output_dir / f"{image_name}.png"
                     batch_image_name = image_name
                 
+                # PR-FILENAME-001: Apply collision failsafe
+                from src.utils.file_io import get_unique_output_path
+                image_path = get_unique_output_path(image_path)
+                
                 logger.info("🔵 [BATCH_SIZE_DEBUG] Saving image %s/%s: %s", batch_idx + 1, num_images_received, image_path.name)
-                if not save_image_from_base64(response["images"][batch_idx], image_path):
+                image_metadata = dict(base_metadata)
+                image_metadata["name"] = batch_image_name
+                image_metadata["path"] = str(image_path)
+                image_metadata["output_path"] = str(image_path)
+                metadata_builder = self._build_image_metadata_builder(
+                    image_path=image_path,
+                    stage="txt2img",
+                    run_dir=run_dir,
+                    manifest=image_metadata,
+                )
+                actual_path = save_image_from_base64(
+                    response["images"][batch_idx],
+                    image_path,
+                    metadata_builder=metadata_builder,
+                )
+                if not actual_path:
                     logger.error("Failed to save image %s", image_path)
                     continue
                     
-                saved_paths.append(image_path)
+                saved_paths.append(actual_path)
+                
+                # Save separate manifest for each variant using the batch_image_name
+                manifest_dir = output_dir / "manifests"
+                manifest_dir.mkdir(exist_ok=True, parents=True)
+                variant_manifest_path = manifest_dir / f"{actual_path.stem}.json"
+                try:
+                    with open(variant_manifest_path, "w", encoding="utf-8") as f:
+                        json.dump(image_metadata, f, indent=2, ensure_ascii=False)
+                    logger.debug(f"Saved variant manifest: {variant_manifest_path.name}")
+                except Exception as e:
+                    logger.error(f"Failed to save variant manifest {variant_manifest_path}: {e}")
             
             # Use the first image for metadata and return value (backward compatibility)
             if saved_paths:
@@ -2498,30 +3569,24 @@ class Pipeline:
                     "name": image_name,
                     "stage": "txt2img",
                     "timestamp": timestamp,
-                    "original_prompt": prompt,
-                    "final_prompt": payload.get("prompt", prompt),
-                    "prompt": payload.get("prompt", prompt),  # backward compatibility
-                    "original_negative_prompt": negative_prompt,
-                    "final_negative_prompt": payload.get("negative_prompt", enhanced_negative),
-                    "negative_prompt": payload.get(
-                        "negative_prompt", enhanced_negative
-                    ),  # backward compatibility
-                    "global_negative_applied": global_applied,
-                    "global_negative_terms": global_terms if global_applied else "",
+                    "original_prompt": original_positive_prompt,
+                    "final_prompt": enhanced_positive,
+                    "global_positive_applied": positive_global_applied,
+                    "global_positive_terms": positive_global_terms if positive_global_applied else "",
+                    "original_negative_prompt": original_negative_prompt,
+                    "final_negative_prompt": enhanced_negative,
+                    "global_negative_applied": negative_global_applied,
+                    "global_negative_terms": negative_global_terms if negative_global_applied else "",
+                    "seed": payload.get("seed", -1),
+                    "subseed": payload.get("subseed", -1),
+                    "subseed_strength": payload.get("subseed_strength", 0.0),
                     "config": self._clean_metadata_payload(payload),
                     "output_path": str(image_path),
                     "path": str(image_path),
                     "all_paths": [str(p) for p in saved_paths],  # All generated images for batch processing
                 }
 
-                # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-                manifest_dir = output_dir / "manifests"
-                manifest_dir.mkdir(exist_ok=True, parents=True)
-                manifest_name = f"{image_name}_txt2img"
-                manifest_path = manifest_dir / f"{manifest_name}.json"
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
-
+                # Manifests already saved per-variant in the loop above
                 self._record_stage_event("txt2img", "exit", 1, 1, False)
                 return metadata
             else:
@@ -2662,33 +3727,56 @@ class Pipeline:
 
             # Save image
             image_path = output_dir / f"{image_name}.png"
+            # PR-FILENAME-001: Apply collision failsafe
+            from src.utils.file_io import get_unique_output_path
+            image_path = get_unique_output_path(image_path)
 
-            if save_image_from_base64(response["images"][0], image_path):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                metadata = {
-                    "name": image_name,
-                    "stage": "img2img",
-                    "timestamp": timestamp,
-                    "original_prompt": prompt,
-                    "final_prompt": payload.get("prompt", prompt),
-                    "prompt": payload.get("prompt", prompt),
-                    "original_negative_prompt": original_negative_prompt,
-                    "final_negative_prompt": payload.get("negative_prompt", ""),
-                    "negative_prompt": payload.get("negative_prompt", ""),
-                    "global_negative_applied": global_applied,
-                    "global_negative_terms": global_terms if global_applied else "",
-                    "input_image": str(input_image_path),
-                    "config": self._clean_metadata_payload(payload),
-                    "path": str(image_path),
-                }
-
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            gen_info = self._extract_generation_info(response)
+            metadata = {
+                "name": image_name,
+                "stage": "img2img",
+                "timestamp": timestamp,
+                "original_prompt": prompt,
+                "final_prompt": payload.get("prompt", prompt),
+                "original_negative_prompt": original_negative_prompt,
+                "final_negative_prompt": payload.get("negative_prompt", ""),
+                "global_negative_applied": global_applied,
+                "global_negative_terms": global_terms if global_applied else "",
+                "seed": payload.get("seed", -1),
+                "subseed": payload.get("subseed", -1),
+                "subseed_strength": payload.get("subseed_strength", 0.0),
+                "input_image": str(input_image_path),
+                "config": self._clean_metadata_payload(payload),
+                "path": str(image_path),
+                "seeds": self._build_seed_metadata(payload, gen_info),  # D-MANIFEST-001
+                # Legacy fields for backward compatibility
+                "requested_seed": payload.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
+            }
+            run_dir = self._resolve_run_dir(output_dir)
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="img2img",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            actual_path = save_image_from_base64(
+                response["images"][0], image_path, metadata_builder=metadata_builder
+            )
+            if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-                manifest_dir = output_dir / "manifests"
-                manifest_dir.mkdir(exist_ok=True, parents=True)
-                manifest_name = f"{image_name}_img2img"
-                manifest_path = manifest_dir / f"{manifest_name}.json"
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                manifest_dir = Path(output_dir) / "manifests"
+                # Use actual stem from saved path (includes _copy suffix if collision)
+                manifest_path = manifest_dir / f"{actual_path.stem}.json"
+                try:
+                    # Ensure parent directory exists before writing
+                    manifest_path.parent.mkdir(exist_ok=True, parents=True)
+                    with open(manifest_path, "w", encoding="utf-8") as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    logger.error(f"Error writing manifest file {manifest_path}: {e}")
 
                 logger.info(f"img2img completed: {image_path.name}")
                 self._record_stage_event("img2img", "exit", 1, 1, False)
@@ -2728,6 +3816,14 @@ class Pipeline:
         self._record_stage_event("upscale", "enter", 1, 1, False)
         try:
             self._ensure_not_cancelled(cancel_token, "upscale stage start")
+            
+            # Set model and VAE if specified (ensure consistency across pipeline stages)
+            requested_model = config.get("model") or config.get("sd_model_checkpoint")
+            # Handle VAE: get from config but don't default to fallback if empty
+            requested_vae = config.get("vae") if "vae" in config else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
+            if requested_model or requested_vae:
+                self._ensure_model_and_vae(requested_model, requested_vae)
+            
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2750,17 +3846,33 @@ class Pipeline:
                 config.get("denoising_strength", "NOT_SET"),
             )
 
-            # Set conservative tile sizes to prevent CUDA OOM
-            if hasattr(self.client, "ensure_safe_upscale_defaults"):
-                try:
-                    # Use smaller tiles for safety (512 vs default 768)
-                    self.client.ensure_safe_upscale_defaults(
-                        max_img_mp=8.0,
-                        max_tile=512,
-                        max_overlap=64,
+            # REMOVED: ensure_safe_upscale_defaults() was interfering with user's tile_size=0 config
+            # Forcing ESRGAN_tile to 512 broke the upscaler's tiling logic
+            # User has been running tile_size=0 successfully - don't override it
+            
+            # Pre-upscale memory management (upscale is memory-intensive)
+            try:
+                import gc
+                import psutil
+                
+                mem = psutil.virtual_memory()
+                mem_percent = mem.percent
+                mem_available_gb = mem.available / (1024**3)
+                
+                # Upscale can use a lot of RAM - check memory pressure
+                if mem_percent > 85.0 or mem_available_gb < 3.0:
+                    logger.warning(
+                        "⚠️ High memory pressure before upscale: %.1f%% used, %.1fGB available - freeing caches",
+                        mem_percent, mem_available_gb
                     )
-                except Exception as exc:  # noqa: BLE001 - best-effort safety clamp
-                    logger.debug("ensure_safe_upscale_defaults failed: %s", exc)
+                    
+                    # Force GC and VRAM clear to free memory
+                    gc.collect()
+                    if hasattr(self.client, 'free_vram'):
+                        self.client.free_vram(unload_model=False, force_gc=True)
+                        
+            except Exception as exc:
+                logger.debug("Pre-upscale memory check failed (non-fatal): %s", exc)
 
             if upscale_mode == "img2img":
                 # Use img2img for upscaling with denoising
@@ -2842,7 +3954,10 @@ class Pipeline:
                 except Exception:
                     pass
 
+                # Track timing for this stage
+                stage_start = time.monotonic()
                 response = self._generate_images("img2img", payload)
+                stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
                 response_key = "images"
                 image_key = 0
             else:
@@ -2876,6 +3991,8 @@ class Pipeline:
                     int(orig_height * upscaling_resize) if orig_height is not None else "?",
                 )
 
+                # Track timing for this stage
+                stage_start = time.monotonic()
                 # Call client.upscale_image() which properly formats the payload
                 response = self.client.upscale_image(
                     image_base64=input_image_b64,
@@ -2885,6 +4002,7 @@ class Pipeline:
                     codeformer_visibility=codeformer_vis,
                     codeformer_weight=codeformer_weight,
                 )
+                stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
                 response_key = "image"
                 image_key = None
 
@@ -2894,6 +4012,9 @@ class Pipeline:
 
             # Save image
             image_path = output_dir / f"{image_name}.png"
+            # PR-FILENAME-001: Apply collision failsafe
+            from src.utils.file_io import get_unique_output_path
+            image_path = get_unique_output_path(image_path)
 
             # Extract the correct image data based on upscale mode
             if image_key is None:
@@ -2904,48 +4025,97 @@ class Pipeline:
                     return None
                 image_data = response[response_key][image_key]
 
-            if save_image_from_base64(image_data, image_path):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                # Build metadata config based on upscale mode
-                if upscale_mode == "img2img":
-                    config_dict = self._clean_metadata_payload(payload)
-                    neg_prompt = payload.get("negative_prompt")
-                else:
-                    # Single-image mode doesn't have full payload
-                    config_dict = {
-                        "upscaler": upscaler,
-                        "upscaling_resize": upscaling_resize,
-                        "gfpgan_visibility": gfpgan_vis,
-                        "codeformer_visibility": codeformer_vis,
-                        "codeformer_weight": codeformer_weight,
-                    }
-                    neg_prompt = None
-                
-                metadata = {
-                    "name": image_name,
-                    "stage": "upscale",
-                    "timestamp": timestamp,
-                    "input_image": str(input_image_path),
-                    "final_negative_prompt": neg_prompt,
-                    "global_negative_applied": global_applied
-                    if "global_applied" in locals()
-                    else False,
-                    "global_negative_terms": global_terms
-                    if "global_terms" in locals() and global_applied
-                    else "",
-                    "config": config_dict,
-                    "path": str(image_path),
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Build metadata config based on upscale mode
+            if upscale_mode == "img2img":
+                config_dict = self._clean_metadata_payload(payload)
+                neg_prompt = payload.get("negative_prompt")
+            else:
+                # Single-image mode doesn't have full payload - include all relevant params
+                # BUGFIX: Include steps, sampler, scheduler, denoise in manifest for single mode
+                config_dict = {
+                    "upscaler": upscaler,
+                    "upscaling_resize": upscaling_resize,
+                    "gfpgan_visibility": gfpgan_vis,
+                    "codeformer_visibility": codeformer_vis,
+                    "codeformer_weight": codeformer_weight,
+                    "steps": config.get("steps", 20),
+                    "denoising_strength": config.get("denoising_strength", 0.35),
+                    "sampler_name": config.get("sampler_name", "Euler a"),
+                    "scheduler": config.get("scheduler", "normal"),
                 }
+                neg_prompt = None
 
+            # Extract stage history from input image
+            stage_history = self._extract_stage_history_from_input(input_image_path)
+
+            # Query WebUI for ACTUAL current model and VAE
+            model_name = self.client.get_current_model() or config.get("model") or "Unknown"
+            vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+            logger.info(f"📝 Upscale manifest - Model: {model_name}, VAE: {vae_name}")
+            
+            metadata = {
+                "name": image_name,
+                "stage": "upscale",
+                "timestamp": timestamp,
+                "input_image": str(input_image_path),
+                "final_negative_prompt": neg_prompt,
+                "global_negative_applied": global_applied
+                if "global_applied" in locals()
+                else False,
+                "global_negative_terms": global_terms
+                if "global_terms" in locals() and global_applied
+                else "",
+                "config": config_dict,
+                "path": str(image_path),
+                # PR-PIPE-001: Enhanced metadata fields
+                "job_id": getattr(self, "_current_job_id", None),
+                "model": model_name,
+                "vae": vae_name,
+                "requested_seed": config.get("seed") if upscale_mode == "img2img" else None,
+                "actual_seed": None,  # Upscale doesn't return seed info
+                "actual_subseed": None,  # Upscale doesn't return seed info
+                "stage_duration_ms": stage_duration_ms,
+                # Accumulated stage history from previous stages
+                "stage_history": stage_history,
+            }
+            run_dir = self._resolve_run_dir(output_dir)
+            metadata_builder = self._build_image_metadata_builder(
+                image_path=image_path,
+                stage="upscale",
+                run_dir=run_dir,
+                manifest=metadata,
+            )
+            actual_path = save_image_from_base64(
+                image_data, image_path, metadata_builder=metadata_builder
+            )
+            if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
-                manifest_dir = output_dir / "manifests"
-                manifest_dir.mkdir(exist_ok=True, parents=True)
-                manifest_name = f"{image_name}_upscale"
-                manifest_path = manifest_dir / f"{manifest_name}.json"
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                manifest_dir = Path(output_dir) / "manifests"
+                # Use actual stem from saved path (includes _copy suffix if collision)
+                manifest_path = manifest_dir / f"{actual_path.stem}.json"
+                try:
+                    # Ensure parent directory exists before writing
+                    manifest_path.parent.mkdir(exist_ok=True, parents=True)
+                    with open(manifest_path, "w", encoding="utf-8") as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    logger.error(f"Error writing manifest file {manifest_path}: {e}")
 
                 logger.info(f"Upscale completed: {image_path.name}")
+                
+                # Post-upscale memory check (warn if still under pressure)
+                try:
+                    import psutil
+                    mem = psutil.virtual_memory()
+                    if mem.percent > 90.0:
+                        logger.warning(
+                            "⚠️ Memory still high after upscale: %.1f%% used - consider reducing upscale factor or batch size",
+                            mem.percent
+                        )
+                except Exception:
+                    pass
+                
                 self._record_stage_event("upscale", "exit", 1, 1, False)
                 return metadata
             else:

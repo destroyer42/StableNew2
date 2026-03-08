@@ -1,8 +1,20 @@
 {
-  "txt2img": {
-    "steps": 25,
-    "cfg_scale": 8.0,
-    "width": 1024,
-    "height": 1024
+  "pack_data": {
+    "name": "test_pack",
+    "slots": [],
+    "matrix": {
+      "enabled": false,
+      "mode": "fanout",
+      "limit": 8,
+      "slots": []
+    }
+  },
+  "preset_data": {
+    "txt2img": {
+      "steps": 25,
+      "cfg_scale": 8.0,
+      "width": 1024,
+      "height": 1024
+    }
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import itertools
 import logging
 from collections.abc import Iterable
 from pathlib import Path
@@ -22,6 +23,7 @@ from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 from src.utils.config import ConfigManager
+from src.utils.prompt_pack_utils import get_matrix_slots_dict, load_pack_metadata
 
 _logger = logging.getLogger(__name__)
 
@@ -55,18 +57,153 @@ class PromptPackNormalizedJobBuilder:
             if not entry.pack_id:
                 _logger.warning("Pack entry missing pack_id, skipping")
                 continue
-            jobs = self._build_jobs_for_entry(entry)
-            if jobs:
-                _logger.info(f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) produced {len(jobs)} NJR(s)")
-                records.extend(jobs)
+            
+            # Expand entry by matrix combinations from pack JSON
+            expanded_entries = self._expand_entry_by_matrix(entry)
+            _logger.info(f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) expanded to {len(expanded_entries)} variant(s)")
+            
+            # Track jobs per prompt to renumber variant indices correctly
+            jobs_for_this_prompt: list[NormalizedJobRecord] = []
+            
+            for expanded_entry in expanded_entries:
+                jobs = self._build_jobs_for_entry(expanded_entry)
+                if jobs:
+                    _logger.info(f"[PromptPackNormalizedJobBuilder] Expanded entry produced {len(jobs)} NJR(s)")
+                    jobs_for_this_prompt.extend(jobs)
+            
+            # Renumber variant indices sequentially across all matrix combinations
+            if jobs_for_this_prompt:
+                self._renumber_variant_indices(jobs_for_this_prompt, len(expanded_entries))
+                records.extend(jobs_for_this_prompt)
+        
         _logger.info(f"[PromptPackNormalizedJobBuilder] Total NJRs generated: {len(records)}")
         return records
 
+    def _renumber_variant_indices(
+        self, jobs: list[NormalizedJobRecord], matrix_combinations_count: int
+    ) -> None:
+        """Renumber variant indices sequentially across matrix combinations.
+        
+        When matrix expansion creates multiple combinations, each combination produces
+        jobs with variant_index starting at 0. This method renumbers them sequentially
+        so that matrix combination 1 gets v01-v0N, combination 2 gets v(N+1)-v(2N), etc.
+        
+        Args:
+            jobs: List of NJRs to renumber (modified in place)
+            matrix_combinations_count: Number of matrix combinations that were expanded
+        """
+        if matrix_combinations_count <= 1:
+            # No matrix expansion, variants are already numbered correctly
+            return
+        
+        # Group jobs by their original variant_index to preserve batch grouping
+        # Jobs are ordered: [matrix1_variant0_batch0, matrix1_variant0_batch1, ..., matrix2_variant0_batch0, ...]
+        jobs_per_combination = len(jobs) // matrix_combinations_count
+        
+        # Renumber: each matrix combination gets sequential variant indices
+        for i, job in enumerate(jobs):
+            matrix_combo_index = i // jobs_per_combination
+            job.variant_index = matrix_combo_index
+            job.variant_total = matrix_combinations_count
+            _logger.debug(f"[Variant Renumber] Job {i}: variant_index={job.variant_index}, variant_total={job.variant_total}")
+
+    def _expand_entry_by_matrix(self, entry: PackJobEntry) -> list[PackJobEntry]:
+        """Expand a single entry into multiple entries based on pack JSON matrix slots.
+        
+        If the pack has matrix slots defined in its JSON metadata:
+        1. Load pack JSON metadata
+        2. Extract matrix slots (e.g., {"job": ["wizard", "knight"], "env": ["forest", "castle"]})
+        3. Generate all combinations (Cartesian product)
+        4. Create one entry per combination with matrix_slot_values set
+        
+        If no matrix or matrix disabled, returns [entry] unchanged.
+        
+        Args:
+            entry: Original PackJobEntry
+            
+        Returns:
+            List of PackJobEntry, one per matrix combination
+        """
+        # Resolve pack path
+        pack_path = self._resolve_pack_text_path(entry.pack_id)
+        if not pack_path:
+            _logger.debug(f"[Matrix Expansion] No pack path found for {entry.pack_id}, skipping expansion")
+            return [entry]
+        
+        # Load pack JSON metadata
+        metadata = load_pack_metadata(pack_path)
+        if not metadata:
+            _logger.debug(f"[Matrix Expansion] No JSON metadata for {entry.pack_id}, skipping expansion")
+            return [entry]
+        
+        # Extract matrix slots
+        matrix_slots_dict = get_matrix_slots_dict(metadata)
+        if not matrix_slots_dict:
+            _logger.debug(f"[Matrix Expansion] No matrix slots in {entry.pack_id}, skipping expansion")
+            return [entry]
+        
+        # Check matrix config for mode
+        pack_data = metadata.get("pack_data", {})
+        matrix_config = pack_data.get("matrix", {})
+        matrix_mode = matrix_config.get("mode", "sequential")
+        limit = matrix_config.get("limit", 0)
+        
+        slot_names = list(matrix_slots_dict.keys())
+        slot_values_lists = [matrix_slots_dict[name] for name in slot_names]
+        
+        # Generate combinations based on mode
+        if matrix_mode == "random":
+            # Random mode: generate N random combinations (each slot independently randomized)
+            import random
+            target_count = limit if limit > 0 else 10  # Default to 10 if no limit specified
+            combinations = []
+            for _ in range(target_count):
+                # Pick a random value from each slot independently
+                combo = tuple(random.choice(slot_values_lists[i]) for i in range(len(slot_names)))
+                combinations.append(combo)
+            _logger.info(f"[Matrix Expansion] Generated {len(combinations)} random combinations for {entry.pack_id} with slots: {slot_names}")
+        else:
+            # Sequential mode: generate all Cartesian product combinations
+            combinations = list(itertools.product(*slot_values_lists))
+            if limit > 0 and len(combinations) > limit:
+                combinations = combinations[:limit]
+                _logger.info(f"[Matrix Expansion] Limited combinations to {limit} (from {len(combinations)} total)")
+            _logger.info(f"[Matrix Expansion] Generating {len(combinations)} sequential combinations for {entry.pack_id} with slots: {slot_names}")
+        
+        # Create one entry per combination
+        expanded_entries = []
+        for combo in combinations:
+            # Build matrix_slot_values dict for this combination
+            matrix_values = {name: value for name, value in zip(slot_names, combo)}
+            
+            # Create a copy of the entry with matrix_slot_values set
+            expanded_entry = PackJobEntry(
+                pack_id=entry.pack_id,
+                pack_name=entry.pack_name,
+                pack_row_index=entry.pack_row_index,
+                prompt_text=entry.prompt_text,
+                negative_prompt_text=entry.negative_prompt_text,
+                config_snapshot=entry.config_snapshot,
+                stage_flags=entry.stage_flags,
+                matrix_slot_values=matrix_values,  # Set the matrix values for this combination
+                randomizer_metadata=entry.randomizer_metadata,
+            )
+            expanded_entries.append(expanded_entry)
+        
+        return expanded_entries
+
     def _build_jobs_for_entry(self, entry: PackJobEntry) -> list[NormalizedJobRecord]:
         pack_config = self._load_pack_config(entry.pack_id)
+        
+        # BUGFIX: Allow learning experiments without pack config if config_snapshot is provided
         if pack_config is None:
-            _logger.error("Missing config for pack '%s', skipping entry", entry.pack_id)
-            return []
+            # Check if this is a learning experiment with full config_snapshot
+            if entry.config_snapshot and entry.pack_id.startswith("learning_"):
+                # Use config_snapshot as pack_config for learning experiments
+                pack_config = {}  # Empty pack_config, will use runtime_params from config_snapshot
+            else:
+                _logger.error("Missing config for pack '%s', skipping entry", entry.pack_id)
+                return []
 
         runtime_params = dict(entry.config_snapshot or {})
         merged_config = copy.deepcopy(
@@ -87,12 +224,17 @@ class PromptPackNormalizedJobBuilder:
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
         batch_settings = self._build_batch_settings(merged_config)
+        
+        # Output settings: just specify directory, filenames are handled by runner
+        pipeline_section = merged_config.get("pipeline", {})
+        base_output_dir = pipeline_section.get("output_dir", "output")
+        output_settings = OutputSettings(base_output_dir=base_output_dir)
 
         jobs = self._job_builder.build_jobs(
             base_config=config_for_builder,
             randomization_plan=randomizer_plan,
             batch_settings=batch_settings,
-            output_settings=OutputSettings(),
+            output_settings=output_settings,
         )
 
         pipeline_section = merged_config.get("pipeline", {})
@@ -216,10 +358,11 @@ class PromptPackNormalizedJobBuilder:
             "hr_resize_y": txt2img.get("hr_resize_y"),
             "hires_use_base_model": txt2img.get("hires_use_base_model"),
             "hr_checkpoint_name": txt2img.get("hr_checkpoint_name"),
-            # Add refiner settings from txt2img section
-            "use_refiner": txt2img.get("use_refiner"),
-            "refiner_checkpoint": txt2img.get("refiner_checkpoint"),
-            "refiner_switch_at": txt2img.get("refiner_switch_at"),
+            # Add refiner settings only if use_refiner is True
+            "use_refiner": txt2img.get("use_refiner", False),
+            **({"refiner_checkpoint": txt2img.get("refiner_checkpoint"),
+                "refiner_switch_at": txt2img.get("refiner_switch_at")}
+               if txt2img.get("use_refiner") else {}),
             # Add other txt2img settings
             "subseed": txt2img.get("subseed"),
             "subseed_strength": txt2img.get("subseed_strength"),
@@ -303,6 +446,16 @@ class PromptPackNormalizedJobBuilder:
                         "codeformer_weight": data.get("codeformer_weight"),
                     }
                 )
+            # BUGFIX: ADetailer stage should NOT have model/VAE fields set from config
+            # The 'model' in adetailer config refers to detector models (face_yolov8n.pt, mediapipe_face_full, etc.)
+            # which are NOT checkpoint models and should not trigger model switching
+            if stage == "adetailer":
+                stage_model = None
+                stage_vae = None
+            else:
+                stage_model = data.get("model")
+                stage_vae = data.get("vae")
+            
             stage_cfg = StageConfig(
                 stage_type=stage,
                 enabled=enabled,
@@ -311,8 +464,8 @@ class PromptPackNormalizedJobBuilder:
                 denoising_strength=data.get("denoising_strength"),
                 sampler_name=data.get("sampler_name") or data.get("sampler"),
                 scheduler=data.get("scheduler"),
-                model=data.get("model"),
-                vae=data.get("vae"),
+                model=stage_model,
+                vae=stage_vae,
                 extra={k: v for k, v in extra.items() if v not in (None, "", [])},
             )
             chain.append(stage_cfg)
@@ -327,28 +480,30 @@ class PromptPackNormalizedJobBuilder:
     def _build_randomizer_plan(
         self, entry: PackJobEntry, merged_config: dict[str, Any]
     ) -> RandomizationPlanV2:
-        matrix_config = merged_config.get("randomization", {})
-        metadata = entry.randomizer_metadata or {}
-        enabled = bool(metadata.get("enabled") or matrix_config.get("enabled"))
-        max_variants = int(metadata.get("max_variants", 1) or 1)
-        plan = RandomizationPlanV2(
-            enabled=enabled,
+        """Build a randomization plan from entry metadata and config."""
+        # Check if randomization is enabled in the config
+        randomization_enabled = merged_config.get("randomization_enabled", False)
+        if not randomization_enabled:
+            return RandomizationPlanV2(enabled=False, max_variants=1)
+        
+        # Extract randomization parameters from config
+        max_variants = merged_config.get("max_variants", 1)
+        base_seed = merged_config.get("seed")
+        
+        # Determine seed mode
+        seed_mode = RandomizationSeedMode.NONE
+        if base_seed is not None:
+            seed_mode = RandomizationSeedMode.PER_VARIANT
+        
+        return RandomizationPlanV2(
+            enabled=True,
             max_variants=max_variants,
-            seed_mode=RandomizationSeedMode.NONE,
-            base_seed=matrix_config.get("seed"),
+            seed_mode=seed_mode,
+            base_seed=base_seed,
+            model_choices=[],
+            sampler_choices=[],
+            scheduler_choices=[],
         )
-        return plan
-
-    def _load_pack_rows(self, pack_id: str) -> list[PackRow]:
-        path = self._resolve_pack_text_path(pack_id)
-        if not path:
-            return []
-        try:
-            content = path.read_text(encoding="utf-8")
-        except Exception as exc:
-            _logger.warning("Failed to read prompt pack '%s': %s", pack_id, exc)
-            return []
-        return parse_prompt_pack_text(content)
 
     def _resolve_pack_text_path(self, pack_id: str) -> Path | None:
         candidate = Path(pack_id)
@@ -369,6 +524,20 @@ class PromptPackNormalizedJobBuilder:
                 return path
         return None
 
+    def _load_pack_rows(self, pack_id: str) -> list[PackRow]:
+        """Load and parse pack rows from the pack file."""
+        path = self._resolve_pack_text_path(pack_id)
+        if not path:
+            _logger.warning("Pack file not found for '%s'", pack_id)
+            return []
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+        except Exception as exc:
+            _logger.warning("Failed to read prompt pack '%s': %s", pack_id, exc)
+            return []
+        return parse_prompt_pack_text(content)
+
     def _load_pack_config(self, pack_id: str) -> dict[str, Any] | None:
         try:
             return self._config_manager.load_pack_config(pack_id)
@@ -379,9 +548,13 @@ class PromptPackNormalizedJobBuilder:
     def _normalize_stage_flags(
         self, pipeline_section: dict[str, Any], overrides: dict[str, bool]
     ) -> dict[str, bool]:
+        # Get img2img value without default - calculate before dictionary construction
+        img2img_val = pipeline_section.get("img2img_enabled")
+        img2img_enabled = bool(img2img_val) if img2img_val is not None else False
+        
         defaults = {
             "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
-            "img2img": bool(pipeline_section.get("img2img_enabled", False)),
+            "img2img": img2img_enabled,
             "adetailer": bool(pipeline_section.get("adetailer_enabled", False)),
             "upscale": bool(pipeline_section.get("upscale_enabled", False)),
         }

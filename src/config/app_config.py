@@ -32,8 +32,8 @@ _webui_health_initial_timeout: float | None = None
 _webui_health_retry_count: int | None = None
 _webui_health_retry_interval: float | None = None
 _webui_health_total_timeout: float | None = None
-STABLENEW_WEBUI_ROOT = ""
-STABLENEW_WEBUI_COMMAND = ""
+STABLENEW_WEBUI_ROOT = "C:\\Users\\rob\\stable-diffusion-webui"
+STABLENEW_WEBUI_COMMAND = "webui-user.bat --api --xformers"
 
 
 _watchdog_config: WatchdogConfig | None = None

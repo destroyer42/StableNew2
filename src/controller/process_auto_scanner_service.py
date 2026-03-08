@@ -22,10 +22,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 @dataclass
 class ProcessAutoScannerConfig:
+    """Configuration for ProcessAutoScannerService.
+    
+    PR-SCANNER-001: Increased thresholds to prevent GUI self-kill.
+    """
     enabled: bool = True
     scan_interval_sec: float = 30.0
-    idle_threshold_sec: float = 120.0
-    memory_threshold_mb: float = 1024.0
+    # PR-SCANNER-001: Increased from 120s to 300s (5 minutes)
+    idle_threshold_sec: float = 300.0
+    # PR-SCANNER-001: Increased from 1024MB to 2048MB (2GB)
+    memory_threshold_mb: float = 2048.0
     kill_timeout: float = 3.0
 
 
@@ -33,7 +39,14 @@ class ProcessAutoScannerConfig:
 class ProcessAutoScannerSummary:
     timestamp: float | None = None
     scanned: int = 0
+    # PR-MEMORY-001: Bounded list (max 100 entries) to prevent unbounded growth
     killed: list[dict[str, Any]] = field(default_factory=list)
+    
+    def add_killed(self, entry: dict[str, Any]) -> None:
+        """Add killed process entry with max 100 cap (PR-MEMORY-001)."""
+        self.killed.append(entry)
+        if len(self.killed) > 100:
+            self.killed = self.killed[-100:]  # Keep only last 100
 
 
 def _is_test_mode() -> bool:
@@ -60,8 +73,11 @@ class ProcessAutoScannerService:
         self._last_summary = ProcessAutoScannerSummary()
         self._thread: threading.Thread | None = None
         if start_thread and not _is_test_mode():
+            # PR-SCANNER-001: Changed to non-daemon for clean shutdown
             self._thread = threading.Thread(
-                target=self._run_loop, daemon=True, name="ProcessAutoScanner"
+                target=self._run_loop,
+                daemon=False,  # Changed from True
+                name="ProcessAutoScanner"
             )
             self._thread.start()
         elif start_thread and _is_test_mode():
@@ -107,18 +123,37 @@ class ProcessAutoScannerService:
         self._config.memory_threshold_mb = max(0.0, float(mb))
 
     def stop(self) -> None:
+        """Stop the scanner thread gracefully.
+        
+        PR-SCANNER-001: Increased timeout from 1s to 10s for reliable shutdown.
+        """
         self._stop_event.set()
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.0)
+            # PR-SCANNER-001: Increased timeout for clean shutdown
+            self._thread.join(timeout=10.0)
 
     def scan_once(self) -> ProcessAutoScannerSummary:
+        """Scan for and terminate stray Python processes.
+        
+        PR-SCANNER-001: Enhanced with self-PID and parent-PID protection.
+        """
         summary = ProcessAutoScannerSummary(timestamp=time.time())
         if self._psutil is None:
             with self._summary_lock:
                 self._last_summary = summary
             return summary
 
+        # PR-SCANNER-001: Protect own PID and parent PID to prevent self-kill
         protected = {int(pid) for pid in (self._protected_pids() or []) if isinstance(pid, int)}
+        protected.add(os.getpid())  # Add own PID
+        try:
+            # Add parent process PID to prevent killing the GUI
+            parent_pid = os.getppid()
+            if parent_pid:
+                protected.add(parent_pid)
+        except Exception:
+            pass  # os.getppid() may not be available on all platforms
+        
         scanned = 0
         killed_details: list[dict[str, Any]] = []
         for proc in self._psutil.process_iter(
@@ -190,7 +225,9 @@ class ProcessAutoScannerService:
                     }
                 )
         summary.scanned = scanned
-        summary.killed = killed_details
+        # PR-MEMORY-001: Use bounded collection for killed list
+        for entry in killed_details:
+            summary.add_killed(entry)
         with self._summary_lock:
             self._last_summary = summary
         return summary

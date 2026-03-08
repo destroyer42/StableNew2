@@ -9,6 +9,7 @@ class FakePipeline:
         self.calls: list[tuple[str, Any]] = []
         self.stage_events: list[dict[str, Any]] = []
         self._output_writer = _kwargs.get("output_writer")
+        self._metrics_started = False
 
     def run_txt2img_stage(
         self,
@@ -89,6 +90,19 @@ class FakePipeline:
 
     def get_stage_events(self) -> list[dict[str, Any]]:
         return list(self.stage_events)
+
+    def _begin_run_metrics(self) -> None:
+        self._metrics_started = True
+
+    def get_run_efficiency_metrics(self, images_processed: int) -> dict[str, Any]:
+        return {
+            "elapsed_seconds": 0.001,
+            "images_processed": int(images_processed),
+            "images_per_minute": 60000.0,
+            "model_switches": 0,
+            "vae_switches": 0,
+            "metrics_started": self._metrics_started,
+        }
 
     def _load_image_base64(self, path: Any) -> str:
         """Return a fake base64-encoded image string."""
