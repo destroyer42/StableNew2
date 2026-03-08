@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -1355,6 +1356,118 @@ class LearningController:
         if self.execution_controller and hasattr(self.execution_controller, "save_feedback"):
             return self.execution_controller.save_feedback(record, rating, tags)
         return None
+
+    def save_review_feedback(self, feedback: dict[str, Any]) -> LearningRecord:
+        """Persist review-tab feedback into learning records for downstream analysis."""
+        if not self._learning_record_writer:
+            raise RuntimeError("LearningRecordWriter not configured")
+
+        image_path = str(feedback.get("image_path") or "").strip()
+        if not image_path:
+            raise ValueError("image_path is required")
+
+        try:
+            rating = int(feedback.get("rating", 0))
+        except Exception as exc:
+            raise ValueError("rating must be an integer") from exc
+        if rating < 1 or rating > 5:
+            raise ValueError("rating must be between 1 and 5")
+
+        base_prompt = str(feedback.get("base_prompt") or "")
+        base_negative = str(feedback.get("base_negative_prompt") or "")
+        after_prompt = str(feedback.get("after_prompt") or base_prompt)
+        after_negative = str(feedback.get("after_negative_prompt") or base_negative)
+        metadata = {
+            "source": "review_tab",
+            "image_path": image_path,
+            "user_rating": rating,
+            "quality_label": str(feedback.get("quality_label") or ""),
+            "user_notes": str(feedback.get("notes") or ""),
+            "prompt_before": base_prompt,
+            "prompt_after": after_prompt,
+            "negative_prompt_before": base_negative,
+            "negative_prompt_after": after_negative,
+            "prompt_delta": str(feedback.get("prompt_delta") or ""),
+            "negative_prompt_delta": str(feedback.get("negative_prompt_delta") or ""),
+            "prompt_mode": str(feedback.get("prompt_mode") or "append"),
+            "negative_prompt_mode": str(feedback.get("negative_prompt_mode") or "append"),
+            "stages": list(feedback.get("stages") or []),
+            "review_context": dict(feedback.get("context") or {}),
+        }
+        model = str(feedback.get("model") or "")
+        stage = str(feedback.get("stage") or "review")
+        record = LearningRecord.from_pipeline_context(
+            base_config={
+                "stage": stage,
+                "model": model,
+                "prompt": base_prompt,
+                "negative_prompt": base_negative,
+            },
+            variant_configs=[
+                {
+                    "prompt": after_prompt,
+                    "negative_prompt": after_negative,
+                    "model": model,
+                }
+            ],
+            randomizer_mode="review_feedback",
+            randomizer_plan_size=1,
+            metadata=metadata,
+        )
+        self._learning_record_writer.append_record(record)
+        self.refresh_recommendations()
+        return record
+
+    def list_recent_review_feedback(
+        self,
+        *,
+        limit: int = 20,
+        image_path: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return recent review feedback records from learning storage."""
+        if not self._learning_record_writer:
+            return []
+        path = self._learning_record_writer.records_path
+        if not path.exists():
+            return []
+
+        selected_image = str(image_path or "").strip()
+        rows: list[dict[str, Any]] = []
+        try:
+            with open(path, encoding="utf-8") as handle:
+                raw_lines = [line.strip() for line in handle if line.strip()]
+                for raw in reversed(raw_lines):
+                    raw = raw.strip()
+                    if not raw:
+                        continue
+                    try:
+                        payload = json.loads(raw)
+                    except Exception:
+                        continue
+                    metadata = payload.get("metadata", {})
+                    if metadata.get("source") != "review_tab":
+                        continue
+                    if selected_image and str(metadata.get("image_path") or "") != selected_image:
+                        continue
+                    rows.append(
+                        {
+                            "run_id": payload.get("run_id"),
+                            "timestamp": payload.get("timestamp"),
+                            "image_path": metadata.get("image_path"),
+                            "rating": metadata.get("user_rating"),
+                            "quality_label": metadata.get("quality_label"),
+                            "notes": metadata.get("user_notes"),
+                            "prompt_before": metadata.get("prompt_before"),
+                            "prompt_after": metadata.get("prompt_after"),
+                            "negative_prompt_before": metadata.get("negative_prompt_before"),
+                            "negative_prompt_after": metadata.get("negative_prompt_after"),
+                            "stages": metadata.get("stages", []),
+                        }
+                    )
+        except Exception:
+            return []
+
+        return rows[: max(1, int(limit))]
 
     def on_variant_selected(self, variant_index: int) -> None:
         """Handle selection of a variant in the table."""

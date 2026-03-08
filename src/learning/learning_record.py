@@ -77,6 +77,7 @@ class LearningRecord:
             stage_plan=payload.get("stage_plan", []),
             stage_events=payload.get("stage_events", []),
             outputs=payload.get("outputs", []),
+            sidecar_priors=payload.get("sidecar_priors", {}),
         )
 
     @staticmethod
