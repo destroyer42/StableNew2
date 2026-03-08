@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from typing import Any
 
 from src.gui.app_state_v2 import AppStateV2
@@ -89,6 +89,7 @@ class LearningTabFrame(ttk.Frame):
         self._learning_enabled_var = tk.BooleanVar(
             value=self.app_state.learning_enabled if self.app_state else False
         )
+        self._automation_mode_var = tk.StringVar(value="suggest_only")
         learning_toggle = ttk.Checkbutton(
             self.header_frame,
             text="Learning mode",
@@ -96,13 +97,42 @@ class LearningTabFrame(ttk.Frame):
             command=self._on_learning_toggle,
         )
         learning_toggle.pack(side="right")
+        mode_row = ttk.Frame(self.header_frame, style=SURFACE_FRAME_STYLE)
+        mode_row.pack(side="right", padx=(8, 0))
+        ttk.Label(mode_row, text="Automation", style=BODY_LABEL_STYLE).pack(side="left", padx=(0, 4))
+        mode_combo = ttk.Combobox(
+            mode_row,
+            textvariable=self._automation_mode_var,
+            values=["suggest_only", "apply_with_confirm", "auto_micro_experiment"],
+            state="readonly",
+            width=22,
+        )
+        mode_combo.pack(side="left")
+        mode_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_automation_mode_changed())
+        help_btn = ttk.Button(
+            mode_row,
+            text="?",
+            width=3,
+            command=self._show_automation_help,
+        )
+        help_btn.pack(side="left", padx=(4, 0))
         ttk.Button(
             self.header_frame,
             text="Review learning runs",
             command=self._on_open_review,
         ).pack(side="right", padx=8)
         attach_tooltip(learning_toggle, "Enable learning mode to collect ratings and feedback.")
+        attach_tooltip(
+            mode_combo,
+            "suggest_only: never apply; apply_with_confirm: manual apply; "
+            "auto_micro_experiment: apply + submit one capped validation job.",
+        )
+        attach_tooltip(
+            help_btn,
+            "Automation mode help.",
+        )
         attach_tooltip(header_label, "Learning mode: review runs, enable adaptive loops.")
+        self._on_automation_mode_changed()
 
         # Body with three columns
         self.body_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -168,6 +198,24 @@ class LearningTabFrame(ttk.Frame):
             LearningReviewDialogV2(self, self.learning_controller, records)
         except Exception:
             pass
+
+    def _on_automation_mode_changed(self) -> None:
+        mode = str(self._automation_mode_var.get() or "suggest_only")
+        setter = getattr(self.learning_controller, "set_automation_mode", None)
+        if callable(setter):
+            try:
+                setter(mode)
+            except Exception:
+                pass
+
+    def _show_automation_help(self) -> None:
+        messagebox.showinfo(
+            "Automation Modes",
+            "suggest_only: recommendations are shown only, never auto-applied.\n\n"
+            "apply_with_confirm: recommendations can be applied to stage cards after user confirmation.\n\n"
+            "auto_micro_experiment: applies recommendations, then submits one preview job as "
+            "a validation run if queue capacity guardrails allow it.",
+        )
 
 
 LearningTabFrame = LearningTabFrame

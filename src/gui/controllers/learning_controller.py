@@ -51,6 +51,8 @@ class LearningController:
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
         self._learning_enabled = False
+        self._automation_mode = "suggest_only"
+        self._automation_snapshot: dict[tuple[str, str], Any] = {}
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -1483,6 +1485,8 @@ class LearningController:
         
         Returns True if successful, False otherwise.
         """
+        if self._automation_mode == "suggest_only":
+            return False
         if not self.pipeline_controller:
             return False
         
@@ -1497,6 +1501,7 @@ class LearningController:
         
         # Extract recommendations
         rec_list = self._extract_rec_list(recommendations)
+        self._automation_snapshot = {}
         
         applied = 0
         for rec in rec_list:
@@ -1509,16 +1514,81 @@ class LearningController:
             else:
                 continue
             
-            if self._apply_single_recommendation(stage_cards, param, value):
+            if self._apply_single_recommendation(
+                stage_cards,
+                param,
+                value,
+                snapshot=self._automation_snapshot,
+            ):
                 applied += 1
-        
-        return applied > 0
+        if applied <= 0:
+            return False
+
+        if self._automation_mode == "auto_micro_experiment":
+            can_enqueue, _reason = self._check_micro_experiment_queue_capacity(requested_jobs=1)
+            if not can_enqueue:
+                self.rollback_last_recommendation_apply()
+                return False
+            submit_preview = getattr(self.pipeline_controller, "submit_preview_jobs_to_queue", None)
+            get_preview = getattr(self.pipeline_controller, "get_preview_jobs", None)
+            if callable(submit_preview) and callable(get_preview):
+                try:
+                    preview_jobs = list(get_preview() or [])
+                    if preview_jobs:
+                        submit_preview(
+                            records=preview_jobs[:1],
+                            source="learning_auto_micro",
+                            prompt_source="manual",
+                        )
+                except Exception:
+                    self.rollback_last_recommendation_apply()
+                    return False
+        return True
+
+    def set_automation_mode(self, mode: str) -> None:
+        allowed = {"suggest_only", "apply_with_confirm", "auto_micro_experiment"}
+        mode_value = str(mode or "suggest_only").strip().lower()
+        if mode_value not in allowed:
+            mode_value = "suggest_only"
+        self._automation_mode = mode_value
+
+    def get_automation_mode(self) -> str:
+        return self._automation_mode
+
+    def rollback_last_recommendation_apply(self) -> bool:
+        """Rollback the most recent recommendation apply operation."""
+        if not self._automation_snapshot:
+            return False
+        stage_cards = None
+        if self.pipeline_controller:
+            stage_cards = getattr(self.pipeline_controller, "stage_cards_panel", None)
+        if not stage_cards:
+            stage_cards = self._find_stage_cards_panel()
+        if not stage_cards:
+            return False
+        restored = 0
+        for (card_name, var_name), old_value in self._automation_snapshot.items():
+            card = getattr(stage_cards, card_name, None)
+            if not card:
+                continue
+            var = getattr(card, var_name, None)
+            if not var or not hasattr(var, "set"):
+                continue
+            try:
+                var.set(old_value)
+                restored += 1
+            except Exception:
+                continue
+        self._automation_snapshot = {}
+        return restored > 0
     
     def _apply_single_recommendation(
         self, 
         stage_cards: Any, 
         param: str, 
-        value: Any
+        value: Any,
+        *,
+        snapshot: dict[tuple[str, str], Any] | None = None,
     ) -> bool:
         """Apply a single recommendation to stage cards."""
         param_lower = param.lower().replace(" ", "_")
@@ -1559,10 +1629,28 @@ class LearningController:
             if not var:
                 return False
             
+            if snapshot is not None and hasattr(var, "get"):
+                snap_key = (card_name, var_name)
+                if snap_key not in snapshot:
+                    try:
+                        snapshot[snap_key] = var.get()
+                    except Exception:
+                        pass
             var.set(value)
             return True
         except Exception:
             return False
+
+    def _check_micro_experiment_queue_capacity(self, requested_jobs: int) -> tuple[bool, str]:
+        if not self.pipeline_controller:
+            return False, "pipeline controller unavailable"
+        checker = getattr(self.pipeline_controller, "can_enqueue_learning_jobs", None)
+        if callable(checker):
+            try:
+                return checker(int(max(1, requested_jobs)))
+            except Exception:
+                return False, "queue capacity check failed"
+        return True, ""
     
     def _find_stage_cards_panel(self) -> Any:
         """Find stage cards panel through various paths."""
