@@ -11,6 +11,7 @@ from src.gui_v2.adapters.learning_adapter_v2 import (
     list_recent_learning_records,
     update_record_feedback,
 )
+from src.learning.learning_paths import get_learning_records_path
 from src.learning.learning_execution import (
     LearningExecutionContext,
     LearningExecutionResult,
@@ -28,7 +29,7 @@ class LearningExecutionController:
     ) -> None:
         self._run_callable = run_callable
         self._last_result: LearningExecutionResult | None = None
-        self._records_path: Path = Path("output/learning/learning_records.jsonl")
+        self._records_path: Path = get_learning_records_path()
         self._learning_enabled = get_learning_enabled()
 
     def run_learning_plan(

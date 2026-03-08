@@ -13,6 +13,7 @@ from src.gui.tooltip import attach_tooltip
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.learning.learning_paths import get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
 
 
@@ -34,7 +35,7 @@ class LearningTabFrame(ttk.Frame):
         self.app_controller = app_controller  # PR-LEARN-002: Store app_controller reference
         
         # Initialize learning record writer
-        self.learning_record_writer = LearningRecordWriter("data/learning_records.jsonl")
+        self.learning_record_writer = LearningRecordWriter(get_learning_records_path())
 
         # Initialize learning state and controller
         self.learning_state = LearningState()
