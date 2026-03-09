@@ -51,6 +51,8 @@ class ReviewTabFrame(ttk.Frame):
         self.negative_mode_var.trace_add("write", lambda *_: self._refresh_prompt_diff())
         self.prompt_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self.negative_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
+        self._set_readonly_text(self.current_prompt_text, "")
+        self._set_readonly_text(self.current_negative_text, "")
         self._refresh_prompt_diff()
 
     def _build_header(self) -> None:
@@ -140,15 +142,32 @@ class ReviewTabFrame(ttk.Frame):
 
         prompt_box = ttk.LabelFrame(
             controls,
-            text="Prompt Edits",
+            text="Current Prompts + Edits",
             style="Dark.TLabelframe",
             padding=8,
         )
         prompt_box.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         prompt_box.columnconfigure(1, weight=1)
+        prompt_box.rowconfigure(1, weight=0)
+        prompt_box.rowconfigure(3, weight=0)
+
+        ttk.Label(prompt_box, text="Current + prompt", style="Dark.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4)
+        )
+        self.current_prompt_text = tk.Text(
+            prompt_box,
+            height=3,
+            bg="#161616",
+            fg="#cfcfcf",
+            insertbackground="#cfcfcf",
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+        )
+        self.current_prompt_text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
         ttk.Label(prompt_box, text="Positive mode", style="Dark.TLabel").grid(
-            row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
+            row=2, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
         )
         ttk.Combobox(
             prompt_box,
@@ -157,7 +176,7 @@ class ReviewTabFrame(ttk.Frame):
             state="readonly",
             style="Dark.TCombobox",
             width=10,
-        ).grid(row=0, column=1, sticky="w", pady=(0, 4))
+        ).grid(row=2, column=1, sticky="w", pady=(0, 4))
 
         self.prompt_text = tk.Text(
             prompt_box,
@@ -169,10 +188,25 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
-        self.prompt_text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        self.prompt_text.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        ttk.Label(prompt_box, text="Current - prompt", style="Dark.TLabel").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(0, 4)
+        )
+        self.current_negative_text = tk.Text(
+            prompt_box,
+            height=3,
+            bg="#161616",
+            fg="#cfcfcf",
+            insertbackground="#cfcfcf",
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+        )
+        self.current_negative_text.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
         ttk.Label(prompt_box, text="Negative mode", style="Dark.TLabel").grid(
-            row=2, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
+            row=6, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
         )
         ttk.Combobox(
             prompt_box,
@@ -181,7 +215,7 @@ class ReviewTabFrame(ttk.Frame):
             state="readonly",
             style="Dark.TCombobox",
             width=10,
-        ).grid(row=2, column=1, sticky="w", pady=(0, 4))
+        ).grid(row=6, column=1, sticky="w", pady=(0, 4))
 
         self.negative_text = tk.Text(
             prompt_box,
@@ -193,7 +227,7 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
-        self.negative_text.grid(row=3, column=0, columnspan=2, sticky="ew")
+        self.negative_text.grid(row=7, column=0, columnspan=2, sticky="ew")
 
         diff_box = ttk.LabelFrame(
             prompt_box,
@@ -201,7 +235,7 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabelframe",
             padding=8,
         )
-        diff_box.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        diff_box.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         diff_box.columnconfigure(0, weight=1)
 
         self.diff_before_label = ttk.Label(
@@ -395,6 +429,8 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path = None
+        self._set_readonly_text(self.current_prompt_text, "")
+        self._set_readonly_text(self.current_negative_text, "")
         self._refresh_prompt_diff()
         self.preview.clear()
 
@@ -436,6 +472,8 @@ class ReviewTabFrame(ttk.Frame):
             self.meta_label.config(text=f"Metadata: {result.status}")
             self._selected_base_prompt = ""
             self._selected_base_negative_prompt = ""
+            self._set_readonly_text(self.current_prompt_text, "")
+            self._set_readonly_text(self.current_negative_text, "")
             self._refresh_prompt_diff()
             return
 
@@ -455,10 +493,18 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_negative_prompt = str(
             stage_manifest.get("negative_prompt") or generation.get("negative_prompt") or ""
         )
+        self._set_readonly_text(self.current_prompt_text, self._selected_base_prompt)
+        self._set_readonly_text(self.current_negative_text, self._selected_base_negative_prompt)
         self._refresh_prompt_diff()
         self.meta_label.config(
             text=f"Metadata: ok | model={model} | vae={vae}\nPrompt: {preview_prompt or '(empty)'}"
         )
+
+    def _set_readonly_text(self, widget: tk.Text, value: str) -> None:
+        widget.configure(state="normal")
+        widget.delete("1.0", tk.END)
+        widget.insert("1.0", (value or "").strip())
+        widget.configure(state="disabled")
 
     def _clip_text(self, text: str, max_len: int = 220) -> str:
         clean = (text or "").strip()
