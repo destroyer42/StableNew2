@@ -649,6 +649,17 @@ If any fail → PR rejected.
 - Extracted non-render UI logic (for example, review payload/diff computation adapters) should be tested directly without Tk root setup.
 - Host-specific tests (Tk rendering) remain useful for smoke/layout checks, but behavior correctness should live in contract/controller tests first.
 
+### PySide6 Migration Testing Gates (PR-GUI-PS6-001)
+
+- Each migration PR must include a parity matrix for affected surfaces:
+  1. State transition parity.
+  2. Controller event parity.
+  3. Persistence/resume parity where applicable.
+- Controller and pipeline tests remain mandatory; GUI migration may not reduce backend coverage.
+- For any PR changing active GUI runtime wiring, the Golden Path integration suite is required before merge.
+- Migration PRs must document rollback conditions and explicit verification commands in their implementation summary.
+- No PR may introduce a permanent dual-runtime compatibility layer in mainline execution paths.
+
 11. Summary
 
 This document exists to ensure:

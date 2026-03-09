@@ -258,6 +258,26 @@ NJR format
 If a PR modifies architecture:
 → It must be labeled PR-ARCHITECTURE-X, extremely rare.
 
+6. PySide6 Migration Program Documents (PR-MAR26)
+
+The following migration planning/spec docs are tracked under:
+
+`docs/PR_MAR26/`
+
+- `PR-MAR26-UI-REFRESH-PYSIDE6-MIGRATION-CRITIQUE-AND-PLAN.md`
+- `PR-GUI-PS6-001-PySide6-Governance-and-Gates.md`
+- `PR-GUI-PS6-002-View-Contract-Extraction.md`
+- `PR-GUI-PS6-003-UI-Dispatcher-Abstraction.md`
+- `PR-GUI-PS6-004-PySide6-App-Spine.md`
+- `PR-GUI-PS6-005-Prompt-Pipeline-Port.md`
+- `PR-GUI-PS6-006-Review-Learning-Port.md`
+- `PR-GUI-PS6-007-Runtime-Panels-Port.md`
+- `PR-GUI-PS6-008-Dialogs-Settings-Shutdown.md`
+- `PR-GUI-PS6-009-Cutover.md`
+- `PR-GUI-PS6-010-Packaging-CI.md`
+
+These are implementation-level migration documents and must not override Tier 1/Tier 2 canonical architecture rules.
+
 If a PR modifies Roadmap or Governance:
 → It must be labeled PR-GOVERNANCE-X, even rarer.
 
