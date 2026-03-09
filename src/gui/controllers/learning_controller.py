@@ -369,7 +369,14 @@ class LearningController:
     def _update_plan_table(self) -> None:
         """Update the learning plan table with current plan data."""
         if self._plan_table and hasattr(self._plan_table, "update_plan"):
-            self._plan_table.update_plan(self.learning_state.plan)
+            stage_name = "txt2img"
+            if self.learning_state.current_experiment:
+                stage_name = str(self.learning_state.current_experiment.stage or "txt2img")
+            try:
+                self._plan_table.update_plan(self.learning_state.plan, stage_name=stage_name)
+            except TypeError:
+                # Backward compatibility for older test doubles.
+                self._plan_table.update_plan(self.learning_state.plan)
 
     def load_existing_ratings(self) -> None:
         """Load existing ratings for the current experiment."""

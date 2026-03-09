@@ -161,6 +161,7 @@ class LearningTabFrame(ttk.Frame):
 
         # Connect controller to plan table
         self.learning_controller._plan_table = self.plan_table
+        self.plan_table.set_on_variant_selected(self.learning_controller.on_variant_selected)
 
         # Right panel: Learning Review
         self.review_panel = LearningReviewPanel(self.body_frame, style=CARD_FRAME_STYLE)
