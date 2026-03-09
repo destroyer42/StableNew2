@@ -78,6 +78,7 @@ class LearningTabFrame(ttk.Frame):
         # Header
         self.header_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.header_frame.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        self.header_frame.columnconfigure(0, weight=1)
 
         header_label = ttk.Label(
             self.header_frame,
@@ -85,7 +86,7 @@ class LearningTabFrame(ttk.Frame):
             font=("TkDefaultFont", 14, "bold"),
             style=BODY_LABEL_STYLE,
         )
-        header_label.pack(side="left", anchor="w")
+        header_label.grid(row=0, column=0, sticky="w")
         self._learning_enabled_var = tk.BooleanVar(
             value=self.app_state.learning_enabled if self.app_state else False
         )
@@ -96,9 +97,9 @@ class LearningTabFrame(ttk.Frame):
             variable=self._learning_enabled_var,
             command=self._on_learning_toggle,
         )
-        learning_toggle.pack(side="right")
+        learning_toggle.grid(row=0, column=4, sticky="e")
         mode_row = ttk.Frame(self.header_frame, style=SURFACE_FRAME_STYLE)
-        mode_row.pack(side="right", padx=(8, 0))
+        mode_row.grid(row=0, column=3, sticky="e", padx=(8, 0))
         ttk.Label(mode_row, text="Automation", style=BODY_LABEL_STYLE).pack(side="left", padx=(0, 4))
         mode_combo = ttk.Combobox(
             mode_row,
@@ -120,7 +121,7 @@ class LearningTabFrame(ttk.Frame):
             self.header_frame,
             text="Review learning runs",
             command=self._on_open_review,
-        ).pack(side="right", padx=8)
+        ).grid(row=0, column=2, sticky="e", padx=8)
         attach_tooltip(learning_toggle, "Enable learning mode to collect ratings and feedback.")
         attach_tooltip(
             mode_combo,
@@ -132,6 +133,15 @@ class LearningTabFrame(ttk.Frame):
             "Automation mode help.",
         )
         attach_tooltip(header_label, "Learning mode: review runs, enable adaptive loops.")
+        self._workflow_state_var = tk.StringVar(value="Workflow: idle")
+        self.workflow_state_label = ttk.Label(
+            self.header_frame,
+            textvariable=self._workflow_state_var,
+            style=BODY_LABEL_STYLE,
+        )
+        self.workflow_state_label.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
+        self.learning_controller.add_workflow_state_listener(self._on_workflow_state_changed)
+        self._on_workflow_state_changed(self.learning_controller.get_workflow_state())
         self._on_automation_mode_changed()
 
         # Body with three columns
@@ -217,6 +227,10 @@ class LearningTabFrame(ttk.Frame):
             "auto_micro_experiment: applies recommendations, then submits one preview job as "
             "a validation run if queue capacity guardrails allow it.",
         )
+
+    def _on_workflow_state_changed(self, state: str) -> None:
+        label = str(state or "idle").replace("_", " ").title()
+        self._workflow_state_var.set(f"Workflow: {label}")
 
 
 LearningTabFrame = LearningTabFrame

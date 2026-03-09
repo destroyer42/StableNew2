@@ -61,6 +61,9 @@ class LearningTabFrame(ttk.Frame):
             font=("TkDefaultFont", 14, "bold"),
         )
         header_label.pack(anchor="w")
+        self._workflow_state_var = tk.StringVar(value="Workflow: idle")
+        self.workflow_state_label = ttk.Label(self.header_frame, textvariable=self._workflow_state_var)
+        self.workflow_state_label.pack(anchor="w", pady=(4, 0))
 
         # Body with three columns
         self.body_frame = ttk.Frame(self, style="Panel.TFrame")
@@ -96,3 +99,9 @@ class LearningTabFrame(ttk.Frame):
 
         # Connect controller to review panel
         self.learning_controller._review_panel = self.review_panel
+        self.learning_controller.add_workflow_state_listener(self._on_workflow_state_changed)
+        self._on_workflow_state_changed(self.learning_controller.get_workflow_state())
+
+    def _on_workflow_state_changed(self, state: str) -> None:
+        label = str(state or "idle").replace("_", " ").title()
+        self._workflow_state_var.set(f"Workflow: {label}")

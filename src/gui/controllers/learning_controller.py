@@ -53,6 +53,8 @@ class LearningController:
         self._learning_enabled = False
         self._automation_mode = "suggest_only"
         self._automation_snapshot: dict[tuple[str, str], Any] = {}
+        self._workflow_state = "idle"
+        self._workflow_state_listeners: list[Any] = []
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -122,6 +124,7 @@ class LearningController:
 
         # Store in state
         self.learning_state.current_experiment = experiment
+        self._set_workflow_state("designing")
 
     def _generate_values_from_range(self, start: float, end: float, step: float) -> list[float]:
         """Generate list of values from start to end with given step."""
@@ -365,6 +368,7 @@ class LearningController:
         # Update the plan table if it exists
         if self._plan_table:
             self._update_plan_table()
+        self._set_workflow_state("planned")
 
     def _update_plan_table(self) -> None:
         """Update the learning plan table with current plan data."""
@@ -432,10 +436,12 @@ class LearningController:
         
         if not self.learning_state.plan:
             logger.warning("[LearningController] No plan exists, exiting run_plan()")
+            self._set_workflow_state("idle")
             return
 
         if not self.pipeline_controller:
             logger.error("[LearningController] No pipeline controller, exiting run_plan()")
+            self._set_workflow_state("planned")
             return
         
         logger.info(f"[LearningController] Starting to submit {len(self.learning_state.plan)} variants")
@@ -460,6 +466,7 @@ class LearningController:
 
         # Update table (fallback for any variants that didn't get live updates)
         self._update_plan_table()
+        self._recompute_workflow_state_from_plan()
 
     def _submit_variant_job(self, variant: LearningVariant) -> None:
         """Submit a learning job via LearningExecutionController.
@@ -1138,6 +1145,7 @@ class LearningController:
         # Update review panel if this variant is selected
         if self._review_panel and hasattr(self._review_panel, "display_variant_results"):
             self._review_panel.display_variant_results(variant)
+        self._recompute_workflow_state_from_plan()
 
     def _on_variant_job_failed(self, variant: LearningVariant, error: Exception) -> None:
         """Handle failure of a variant job."""
@@ -1148,6 +1156,48 @@ class LearningController:
         if variant_index >= 0:
             self._update_variant_status(variant_index, "failed")
             self._highlight_variant(variant_index, False)  # Remove highlight
+        self._recompute_workflow_state_from_plan()
+
+    def add_workflow_state_listener(self, listener: Any) -> None:
+        if listener not in self._workflow_state_listeners:
+            self._workflow_state_listeners.append(listener)
+
+    def get_workflow_state(self) -> str:
+        return self._workflow_state
+
+    def _set_workflow_state(self, state: str) -> None:
+        next_state = str(state or "idle").strip().lower() or "idle"
+        if next_state == self._workflow_state:
+            return
+        self._workflow_state = next_state
+        for listener in list(self._workflow_state_listeners):
+            try:
+                listener(self._workflow_state)
+            except Exception:
+                continue
+
+    def _recompute_workflow_state_from_plan(self) -> None:
+        plan = list(self.learning_state.plan or [])
+        if not plan:
+            self._set_workflow_state("idle")
+            return
+        statuses = {str(v.status or "").lower() for v in plan}
+        if statuses.issubset({"pending"}):
+            self._set_workflow_state("planned")
+            return
+        if "running" in statuses or "queued" in statuses:
+            self._set_workflow_state("running")
+            return
+        if "completed" in statuses:
+            if statuses.issubset({"completed", "failed"}):
+                self._set_workflow_state("reviewing")
+            else:
+                self._set_workflow_state("running")
+            return
+        if statuses.issubset({"failed"}):
+            self._set_workflow_state("failed")
+            return
+        self._set_workflow_state("planned")
 
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
         """Handle completion of a learning job."""
