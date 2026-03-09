@@ -155,3 +155,66 @@ def test_auto_micro_experiment_submits_one_validation_job_when_allowed(tmp_path:
     assert call_kwargs["source"] == "learning_auto_micro"
     assert len(call_kwargs["records"]) == 1
 
+
+def test_apply_with_confirm_supports_manual_rollback(tmp_path: Path) -> None:
+    writer = LearningRecordWriter(tmp_path / "data" / "learning" / "learning_records.jsonl")
+    stage_cards = SimpleNamespace(txt2img_card=SimpleNamespace(cfg_var=_DummyVar(7.0)))
+    pipeline_controller = Mock()
+    pipeline_controller.stage_cards_panel = stage_cards
+    pipeline_controller.can_enqueue_learning_jobs.return_value = (True, "")
+    pipeline_controller.get_preview_jobs.return_value = [object()]
+
+    learning_state = LearningState()
+    learning_state.current_experiment = LearningExperiment(
+        name="rollback",
+        stage="txt2img",
+        variable_under_test="CFG Scale",
+        prompt_text="portrait photo",
+    )
+    learning_controller = LearningController(
+        learning_state=learning_state,
+        pipeline_controller=pipeline_controller,
+        learning_record_writer=writer,
+    )
+    learning_controller.set_automation_mode("apply_with_confirm")
+
+    applied = learning_controller.apply_recommendations_to_pipeline(
+        [{"parameter": "cfg_scale", "value": 8.2}]
+    )
+    assert applied is True
+    assert stage_cards.txt2img_card.cfg_var.get() == 8.2
+
+    rolled_back = learning_controller.rollback_last_recommendation_apply()
+    assert rolled_back is True
+    assert stage_cards.txt2img_card.cfg_var.get() == 7.0
+
+
+def test_auto_micro_experiment_rolls_back_when_queue_cap_blocks(tmp_path: Path) -> None:
+    writer = LearningRecordWriter(tmp_path / "data" / "learning" / "learning_records.jsonl")
+    stage_cards = SimpleNamespace(txt2img_card=SimpleNamespace(cfg_var=_DummyVar(7.0)))
+    pipeline_controller = Mock()
+    pipeline_controller.stage_cards_panel = stage_cards
+    pipeline_controller.can_enqueue_learning_jobs.return_value = (False, "queue cap exceeded")
+    pipeline_controller.get_preview_jobs.return_value = [object()]
+
+    learning_state = LearningState()
+    learning_state.current_experiment = LearningExperiment(
+        name="cap-block",
+        stage="txt2img",
+        variable_under_test="CFG Scale",
+        prompt_text="portrait photo",
+    )
+    learning_controller = LearningController(
+        learning_state=learning_state,
+        pipeline_controller=pipeline_controller,
+        learning_record_writer=writer,
+    )
+    learning_controller.set_automation_mode("auto_micro_experiment")
+
+    success = learning_controller.apply_recommendations_to_pipeline(
+        [{"parameter": "cfg_scale", "value": 9.0}]
+    )
+    assert success is False
+    assert stage_cards.txt2img_card.cfg_var.get() == 7.0
+    pipeline_controller.submit_preview_jobs_to_queue.assert_not_called()
+
