@@ -1199,6 +1199,69 @@ class LearningController:
             return
         self._set_workflow_state("planned")
 
+    def get_learning_run_summary(self) -> dict[str, Any]:
+        """Return deterministic plan/run summary for the Learning tab header."""
+        plan = list(self.learning_state.plan or [])
+        experiment = self.learning_state.current_experiment
+        stage = str(getattr(experiment, "stage", "txt2img") or "txt2img")
+        images_per_variant = int(getattr(experiment, "images_per_value", 0) or 0)
+        total_variants = len(plan)
+        status_counts = {
+            "pending": 0,
+            "queued": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0,
+        }
+        total_planned_images = 0
+        total_completed_images = 0
+        for variant in plan:
+            status = str(getattr(variant, "status", "") or "").lower()
+            if status in status_counts:
+                status_counts[status] += 1
+            total_planned_images += int(getattr(variant, "planned_images", 0) or 0)
+            total_completed_images += int(getattr(variant, "completed_images", 0) or 0)
+        if total_planned_images <= 0 and total_variants > 0 and images_per_variant > 0:
+            total_planned_images = total_variants * images_per_variant
+
+        pending_submissions = status_counts["pending"]
+        queue_ok = True
+        queue_reason = ""
+        queue_cap = None
+        queue_depth = None
+        if self.pipeline_controller:
+            can_enqueue = getattr(self.pipeline_controller, "can_enqueue_learning_jobs", None)
+            get_cap = getattr(self.pipeline_controller, "get_learning_queue_cap", None)
+            get_depth = getattr(self.pipeline_controller, "get_queue_depth", None)
+            if callable(get_cap):
+                try:
+                    queue_cap = int(get_cap())
+                except Exception:
+                    queue_cap = None
+            if callable(get_depth):
+                try:
+                    queue_depth = int(get_depth())
+                except Exception:
+                    queue_depth = None
+            if callable(can_enqueue):
+                try:
+                    queue_ok, queue_reason = can_enqueue(max(1, pending_submissions))
+                except Exception:
+                    queue_ok = False
+                    queue_reason = "queue check failed"
+
+        return {
+            "stage": stage,
+            "total_variants": total_variants,
+            "status_counts": status_counts,
+            "total_planned_images": total_planned_images,
+            "total_completed_images": total_completed_images,
+            "queue_ok": queue_ok,
+            "queue_reason": queue_reason,
+            "queue_cap": queue_cap,
+            "queue_depth": queue_depth,
+        }
+
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
         """Handle completion of a learning job."""
         # This method can be used for general job completion handling

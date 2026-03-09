@@ -64,6 +64,9 @@ class LearningTabFrame(ttk.Frame):
         self._workflow_state_var = tk.StringVar(value="Workflow: idle")
         self.workflow_state_label = ttk.Label(self.header_frame, textvariable=self._workflow_state_var)
         self.workflow_state_label.pack(anchor="w", pady=(4, 0))
+        self._summary_var = tk.StringVar(value="Plan: 0 variants | Images: 0/0")
+        self.summary_label = ttk.Label(self.header_frame, textvariable=self._summary_var)
+        self.summary_label.pack(anchor="w")
 
         # Body with three columns
         self.body_frame = ttk.Frame(self, style="Panel.TFrame")
@@ -101,7 +104,25 @@ class LearningTabFrame(ttk.Frame):
         self.learning_controller._review_panel = self.review_panel
         self.learning_controller.add_workflow_state_listener(self._on_workflow_state_changed)
         self._on_workflow_state_changed(self.learning_controller.get_workflow_state())
+        self._schedule_summary_refresh()
 
     def _on_workflow_state_changed(self, state: str) -> None:
         label = str(state or "idle").replace("_", " ").title()
         self._workflow_state_var.set(f"Workflow: {label}")
+
+    def _schedule_summary_refresh(self) -> None:
+        self._refresh_summary()
+        self.after(1000, self._schedule_summary_refresh)
+
+    def _refresh_summary(self) -> None:
+        getter = getattr(self.learning_controller, "get_learning_run_summary", None)
+        if not callable(getter):
+            self._summary_var.set("Plan: n/a")
+            return
+        summary = getter() or {}
+        total_variants = int(summary.get("total_variants", 0) or 0)
+        planned_images = int(summary.get("total_planned_images", 0) or 0)
+        completed_images = int(summary.get("total_completed_images", 0) or 0)
+        self._summary_var.set(
+            f"Plan: {total_variants} variants | Images: {completed_images}/{planned_images}"
+        )

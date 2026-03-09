@@ -140,9 +140,17 @@ class LearningTabFrame(ttk.Frame):
             style=BODY_LABEL_STYLE,
         )
         self.workflow_state_label.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
+        self._summary_var = tk.StringVar(value="Plan: 0 variants | Images: 0/0")
+        self.summary_label = ttk.Label(
+            self.header_frame,
+            textvariable=self._summary_var,
+            style=BODY_LABEL_STYLE,
+        )
+        self.summary_label.grid(row=2, column=0, columnspan=5, sticky="w", pady=(2, 0))
         self.learning_controller.add_workflow_state_listener(self._on_workflow_state_changed)
         self._on_workflow_state_changed(self.learning_controller.get_workflow_state())
         self._on_automation_mode_changed()
+        self._schedule_summary_refresh()
 
         # Body with three columns
         self.body_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -231,6 +239,39 @@ class LearningTabFrame(ttk.Frame):
     def _on_workflow_state_changed(self, state: str) -> None:
         label = str(state or "idle").replace("_", " ").title()
         self._workflow_state_var.set(f"Workflow: {label}")
+
+    def _schedule_summary_refresh(self) -> None:
+        self._refresh_summary()
+        self.after(1000, self._schedule_summary_refresh)
+
+    def _refresh_summary(self) -> None:
+        getter = getattr(self.learning_controller, "get_learning_run_summary", None)
+        if not callable(getter):
+            self._summary_var.set("Plan: n/a")
+            return
+        summary = getter() or {}
+        total_variants = int(summary.get("total_variants", 0) or 0)
+        planned_images = int(summary.get("total_planned_images", 0) or 0)
+        completed_images = int(summary.get("total_completed_images", 0) or 0)
+        status_counts = summary.get("status_counts", {}) or {}
+        pending = int(status_counts.get("pending", 0) or 0)
+        queued = int(status_counts.get("queued", 0) or 0)
+        running = int(status_counts.get("running", 0) or 0)
+        failed = int(status_counts.get("failed", 0) or 0)
+        cap = summary.get("queue_cap")
+        depth = summary.get("queue_depth")
+        queue_ok = bool(summary.get("queue_ok", True))
+        queue_text = "Queue: ok"
+        if cap is not None and depth is not None:
+            queue_text = f"Queue: {depth}/{cap}"
+        if not queue_ok:
+            queue_text = f"{queue_text} (blocked)"
+        self._summary_var.set(
+            "Plan: "
+            f"{total_variants} variants | Images: {completed_images}/{planned_images} | "
+            f"Pending: {pending} Queued: {queued} Running: {running} Failed: {failed} | "
+            f"{queue_text}"
+        )
 
 
 LearningTabFrame = LearningTabFrame
