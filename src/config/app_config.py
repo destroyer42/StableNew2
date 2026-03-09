@@ -148,11 +148,11 @@ def set_jsonl_log_config(config: JsonlFileLogConfig) -> None:
 
 
 def learning_enabled_default() -> bool:
-    """Return default for learning toggle (opt-in by default)."""
+    """Return default for learning toggle."""
 
     env_flag = os.environ.get("STABLENEW_LEARNING_ENABLED")
     if env_flag is None:
-        return False
+        return True
     return env_flag.lower() in {"1", "true", "yes", "on"}
 
 

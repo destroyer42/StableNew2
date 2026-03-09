@@ -125,7 +125,7 @@ class AppStateV2:
     status_text: str = "Idle"
     last_error: str | None = None
     webui_state: str = "disconnected"
-    learning_enabled: bool = False
+    learning_enabled: bool = True
     prompt_workspace_state: PromptWorkspaceState | None = None
     resources: dict[str, list[Any]] = field(
         default_factory=lambda: {

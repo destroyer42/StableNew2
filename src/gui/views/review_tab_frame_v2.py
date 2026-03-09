@@ -5,7 +5,9 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.tooltip import attach_tooltip
+from src.gui.ui_tokens import TOKENS
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.utils.image_metadata import extract_embedded_metadata
 
@@ -24,6 +26,7 @@ class ReviewTabFrame(ttk.Frame):
         super().__init__(master, **kwargs)
         self.app_controller = app_controller
         self.app_state = app_state
+        self._workflow_adapter = ReviewWorkflowAdapter()
 
         self.selected_images: list[Path] = []
         self._image_index_by_row: list[Path] = []
@@ -47,7 +50,11 @@ class ReviewTabFrame(ttk.Frame):
         }
         self.batch_size_var = tk.IntVar(value=1)
         self.rating_var = tk.IntVar(value=3)
+        self.anatomy_rating_var = tk.IntVar(value=3)
+        self.composition_rating_var = tk.IntVar(value=3)
+        self.prompt_adherence_rating_var = tk.IntVar(value=3)
         self.quality_var = tk.StringVar(value="okay")
+        self._feedback_undo_stack: list[list[dict[str, str]]] = []
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path: Path | None = None
@@ -116,13 +123,14 @@ class ReviewTabFrame(ttk.Frame):
 
         self.images_list = tk.Listbox(
             left,
-            bg="#1f1f1f",
-            fg="#e8e8e8",
-            selectbackground="#9b7d1f",
-            selectforeground="#ffffff",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            selectbackground=TOKENS.colors.accent_primary,
+            selectforeground=TOKENS.colors.text_primary,
+            selectmode=tk.EXTENDED,
             borderwidth=0,
             highlightthickness=1,
-            highlightbackground="#3a3a3a",
+            highlightbackground=TOKENS.colors.border_subtle,
             exportselection=False,
         )
         self.images_list.grid(row=0, column=0, sticky="nsew")
@@ -171,9 +179,9 @@ class ReviewTabFrame(ttk.Frame):
         self.current_prompt_text = tk.Text(
             prompt_box,
             height=3,
-            bg="#161616",
-            fg="#cfcfcf",
-            insertbackground="#cfcfcf",
+            bg=TOKENS.colors.surface_tertiary,
+            fg=TOKENS.colors.text_muted,
+            insertbackground=TOKENS.colors.text_muted,
             wrap="word",
             borderwidth=1,
             relief="solid",
@@ -195,9 +203,9 @@ class ReviewTabFrame(ttk.Frame):
         self.prompt_text = tk.Text(
             prompt_box,
             height=4,
-            bg="#1f1f1f",
-            fg="#e8e8e8",
-            insertbackground="#e8e8e8",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
             wrap="word",
             borderwidth=1,
             relief="solid",
@@ -210,9 +218,9 @@ class ReviewTabFrame(ttk.Frame):
         self.current_negative_text = tk.Text(
             prompt_box,
             height=3,
-            bg="#161616",
-            fg="#cfcfcf",
-            insertbackground="#cfcfcf",
+            bg=TOKENS.colors.surface_tertiary,
+            fg=TOKENS.colors.text_muted,
+            insertbackground=TOKENS.colors.text_muted,
             wrap="word",
             borderwidth=1,
             relief="solid",
@@ -234,9 +242,9 @@ class ReviewTabFrame(ttk.Frame):
         self.negative_text = tk.Text(
             prompt_box,
             height=4,
-            bg="#1f1f1f",
-            fg="#e8e8e8",
-            insertbackground="#e8e8e8",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
             wrap="word",
             borderwidth=1,
             relief="solid",
@@ -378,9 +386,9 @@ class ReviewTabFrame(ttk.Frame):
         self.feedback_notes = tk.Text(
             feedback_box,
             height=3,
-            bg="#1f1f1f",
-            fg="#e8e8e8",
-            insertbackground="#e8e8e8",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
             wrap="word",
             borderwidth=1,
             relief="solid",
@@ -393,10 +401,57 @@ class ReviewTabFrame(ttk.Frame):
             command=self._save_feedback,
         )
         feedback_btn.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Button(
+            feedback_box,
+            text="Save Feedback (Selected Batch)",
+            style="Dark.TButton",
+            command=self._save_feedback_batch,
+        ).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Button(
+            feedback_box,
+            text="Undo Last Save",
+            style="Dark.TButton",
+            command=self._undo_last_feedback_save,
+        ).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         attach_tooltip(
             feedback_btn,
             "Saves rating and prompt-change context into the Learning records store.",
         )
+        ttk.Label(feedback_box, text="Subscores", style="Dark.TLabel").grid(
+            row=6, column=0, sticky="w", padx=(0, 6), pady=(8, 4)
+        )
+        subscores = ttk.Frame(feedback_box, style="Panel.TFrame")
+        subscores.grid(row=6, column=1, sticky="w", pady=(8, 4))
+        ttk.Label(subscores, text="Anatomy", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(
+            subscores,
+            from_=1,
+            to=5,
+            increment=1,
+            textvariable=self.anatomy_rating_var,
+            width=4,
+            style="Dark.TSpinbox",
+        ).grid(row=0, column=1, sticky="w", padx=(6, 12))
+        ttk.Label(subscores, text="Composition", style="Dark.TLabel").grid(row=0, column=2, sticky="w")
+        ttk.Spinbox(
+            subscores,
+            from_=1,
+            to=5,
+            increment=1,
+            textvariable=self.composition_rating_var,
+            width=4,
+            style="Dark.TSpinbox",
+        ).grid(row=0, column=3, sticky="w", padx=(6, 12))
+        ttk.Label(subscores, text="Prompt Fit", style="Dark.TLabel").grid(row=0, column=4, sticky="w")
+        ttk.Spinbox(
+            subscores,
+            from_=1,
+            to=5,
+            increment=1,
+            textvariable=self.prompt_adherence_rating_var,
+            width=4,
+            style="Dark.TSpinbox",
+        ).grid(row=0, column=5, sticky="w", padx=(6, 0))
 
     def _selected_stages(self) -> list[str]:
         stages: list[str] = []
@@ -524,36 +579,21 @@ class ReviewTabFrame(ttk.Frame):
         widget.configure(state="disabled")
 
     def _clip_text(self, text: str, max_len: int = 220) -> str:
-        clean = (text or "").strip()
-        if not clean:
-            return "(empty)"
-        if len(clean) <= max_len:
-            return clean
-        return f"{clean[:max_len-3]}..."
+        return self._workflow_adapter.clip_text(text, max_len=max_len)
 
     def _refresh_prompt_diff(self) -> None:
         prompt_delta = self.prompt_text.get("1.0", tk.END).strip()
         negative_delta = self.negative_text.get("1.0", tk.END).strip()
-        after_prompt = self._apply_prompt_delta(
-            self._selected_base_prompt,
-            prompt_delta,
-            self.prompt_mode_var.get(),
+        diff = self._workflow_adapter.build_prompt_diff(
+            base_prompt=self._selected_base_prompt,
+            base_negative_prompt=self._selected_base_negative_prompt,
+            prompt_delta=prompt_delta,
+            negative_prompt_delta=negative_delta,
+            prompt_mode=self.prompt_mode_var.get(),
+            negative_prompt_mode=self.negative_mode_var.get(),
         )
-        after_negative = self._apply_prompt_delta(
-            self._selected_base_negative_prompt,
-            negative_delta,
-            self.negative_mode_var.get(),
-        )
-        before_text = (
-            f"Before +: {self._clip_text(self._selected_base_prompt)}\n"
-            f"Before -: {self._clip_text(self._selected_base_negative_prompt)}"
-        )
-        after_text = (
-            f"After +: {self._clip_text(after_prompt)}\n"
-            f"After -: {self._clip_text(after_negative)}"
-        )
-        self.diff_before_label.config(text=before_text)
-        self.diff_after_label.config(text=after_text)
+        self.diff_before_label.config(text=diff.before_text)
+        self.diff_after_label.config(text=diff.after_text)
 
     def _show_batch_logic_help(self) -> None:
         messagebox.showinfo(
@@ -568,15 +608,7 @@ class ReviewTabFrame(ttk.Frame):
 
     @staticmethod
     def _apply_prompt_delta(base: str, delta: str, mode: str) -> str:
-        base_clean = (base or "").strip()
-        delta_clean = (delta or "").strip()
-        if not delta_clean:
-            return base_clean
-        if mode in {"replace", "modify"}:
-            return delta_clean
-        if not base_clean:
-            return delta_clean
-        return f"{base_clean}, {delta_clean}"
+        return ReviewWorkflowAdapter.apply_prompt_delta(base, delta, mode)
 
     def _get_text(self, widget: tk.Text) -> str:
         return widget.get("1.0", tk.END).strip()
@@ -709,37 +741,109 @@ class ReviewTabFrame(ttk.Frame):
                 "Connected learning controller does not support review feedback.",
             )
             return
-        prompt_delta = self.prompt_text.get("1.0", tk.END).strip()
-        negative_delta = self.negative_text.get("1.0", tk.END).strip()
-        after_prompt = self._apply_prompt_delta(
-            self._selected_base_prompt,
-            prompt_delta,
-            self.prompt_mode_var.get(),
-        )
-        after_negative = self._apply_prompt_delta(
-            self._selected_base_negative_prompt,
-            negative_delta,
-            self.negative_mode_var.get(),
-        )
-        notes = self.feedback_notes.get("1.0", tk.END).strip()
+        payload = self._build_feedback_payload(self._selected_image_path)
+        if payload is None:
+            messagebox.showerror("Save failed", "Unable to build feedback payload for selected image.")
+            return
         try:
-            save(
-                {
-                    "image_path": str(self._selected_image_path),
-                    "rating": int(self.rating_var.get()),
-                    "quality_label": self.quality_var.get(),
-                    "notes": notes,
-                    "base_prompt": self._selected_base_prompt,
-                    "base_negative_prompt": self._selected_base_negative_prompt,
-                    "after_prompt": after_prompt,
-                    "after_negative_prompt": after_negative,
-                    "prompt_delta": prompt_delta,
-                    "negative_prompt_delta": negative_delta,
-                    "prompt_mode": self.prompt_mode_var.get(),
-                    "negative_prompt_mode": self.negative_mode_var.get(),
-                    "stages": self._selected_stages(),
-                }
+            record = save(payload)
+            run_id = str(getattr(record, "run_id", "") or "")
+            self._feedback_undo_stack.append(
+                [{"run_id": run_id, "image_path": str(self._selected_image_path)}]
             )
             messagebox.showinfo("Saved", "Review feedback saved to Learning records.")
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc))
+
+    def _save_feedback_batch(self) -> None:
+        learning_controller = self._resolve_learning_controller()
+        if learning_controller is None:
+            messagebox.showerror("Learning unavailable", "Learning controller is not connected.")
+            return
+        save = getattr(learning_controller, "save_review_feedback", None)
+        if not callable(save):
+            messagebox.showerror(
+                "Unsupported",
+                "Connected learning controller does not support review feedback.",
+            )
+            return
+        idxs = list(self.images_list.curselection())
+        if not idxs:
+            messagebox.showwarning("No selection", "Select one or more images in the list.")
+            return
+        targets: list[Path] = []
+        for idx in idxs:
+            if 0 <= int(idx) < len(self._image_index_by_row):
+                targets.append(self._image_index_by_row[int(idx)])
+        if not targets:
+            messagebox.showwarning("No images", "No valid selected images.")
+            return
+
+        tokens: list[dict[str, str]] = []
+        failed: list[str] = []
+        for target in targets:
+            payload = self._build_feedback_payload(target)
+            if payload is None:
+                failed.append(target.name)
+                continue
+            try:
+                record = save(payload)
+                tokens.append(
+                    {
+                        "run_id": str(getattr(record, "run_id", "") or ""),
+                        "image_path": str(target),
+                    }
+                )
+            except Exception:
+                failed.append(target.name)
+        if tokens:
+            self._feedback_undo_stack.append(tokens)
+        if failed:
+            messagebox.showwarning(
+                "Partial Save",
+                f"Saved {len(tokens)} feedback record(s); failed {len(failed)}.",
+            )
+            return
+        messagebox.showinfo("Saved", f"Saved feedback for {len(tokens)} image(s).")
+
+    def _undo_last_feedback_save(self) -> None:
+        learning_controller = self._resolve_learning_controller()
+        if learning_controller is None:
+            messagebox.showerror("Learning unavailable", "Learning controller is not connected.")
+            return
+        undo = getattr(learning_controller, "undo_review_feedback", None)
+        if not callable(undo):
+            messagebox.showerror("Unsupported", "Connected learning controller does not support undo.")
+            return
+        if not self._feedback_undo_stack:
+            messagebox.showinfo("Nothing to undo", "No saved feedback actions to undo.")
+            return
+        action = self._feedback_undo_stack.pop()
+        undone = 0
+        for token in reversed(action):
+            if undo(run_id=token.get("run_id"), image_path=token.get("image_path")):
+                undone += 1
+        if undone <= 0:
+            messagebox.showwarning("Undo", "No matching feedback records were removed.")
+            return
+        messagebox.showinfo("Undo complete", f"Removed {undone} feedback record(s).")
+
+    def _build_feedback_payload(self, image_path: Path) -> dict[str, Any] | None:
+        metadata = extract_embedded_metadata(image_path)
+        if metadata.status != "ok" or not isinstance(metadata.payload, dict):
+            return None
+        return self._workflow_adapter.build_feedback_payload(
+            image_path=image_path,
+            metadata_payload=metadata.payload,
+            rating=int(self.rating_var.get()),
+            quality_label=self.quality_var.get(),
+            notes=self.feedback_notes.get("1.0", tk.END).strip(),
+            prompt_delta=self.prompt_text.get("1.0", tk.END).strip(),
+            negative_prompt_delta=self.negative_text.get("1.0", tk.END).strip(),
+            prompt_mode=self.prompt_mode_var.get(),
+            negative_prompt_mode=self.negative_mode_var.get(),
+            stages=self._selected_stages(),
+            anatomy_rating=int(self.anatomy_rating_var.get()),
+            composition_rating=int(self.composition_rating_var.get()),
+            prompt_adherence_rating=int(self.prompt_adherence_rating_var.get()),
+        )

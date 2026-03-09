@@ -210,6 +210,7 @@ class MainWindowV2:
             return tab
 
         self.learning_tab = self.add_tab("learning", "Learning", _make_learning)
+        self._restore_learning_tab_state()
 
         def _make_review(parent):
             return ReviewTabFrame(
@@ -455,6 +456,12 @@ class MainWindowV2:
             window_state = state.get("window", {})
             saved_geometry = window_state.get("geometry")
             saved_state = window_state.get("state")
+            learning_state = state.get("learning", {})
+            if isinstance(learning_state, dict):
+                try:
+                    self.app_state.set_learning_enabled(bool(learning_state.get("enabled", True)))
+                except Exception:
+                    pass
             
             if saved_geometry:
                 try:
@@ -899,8 +906,18 @@ class MainWindowV2:
                 },
                 "tabs": {
                     "selected_index": selected_tab_index
-                }
+                },
+                "learning": {},
             }
+            try:
+                learning_tab = getattr(self, "learning_tab", None)
+                getter = getattr(learning_tab, "get_learning_session_state", None)
+                if callable(getter):
+                    learning_state = getter()
+                    if isinstance(learning_state, dict):
+                        state["learning"] = learning_state
+            except Exception:
+                pass
             
             ui_store.save_state(state)
             logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
@@ -924,6 +941,19 @@ class MainWindowV2:
                     logger.debug(f"Restored tab selection: index {selected_index}")
         except Exception as e:
             logger.warning(f"Failed to restore tab selection: {e}")
+
+    def _restore_learning_tab_state(self) -> None:
+        """Restore persisted learning tab state."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            learning_state = state.get("learning")
+            learning_tab = getattr(self, "learning_tab", None)
+            restore = getattr(learning_tab, "restore_learning_session_state", None)
+            if callable(restore):
+                restore(learning_state)
+        except Exception as e:
+            logger.warning(f"Failed to restore learning tab state: {e}")
 
 
 def run_app(

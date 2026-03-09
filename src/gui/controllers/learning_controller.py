@@ -1199,6 +1199,72 @@ class LearningController:
             return
         self._set_workflow_state("planned")
 
+    def _is_review_complete(self) -> bool:
+        """Return True when a run has reached terminal status and all images are rated."""
+        plan = list(self.learning_state.plan or [])
+        if not plan:
+            return False
+        for variant in plan:
+            status = str(getattr(variant, "status", "") or "").lower()
+            if status in {"pending", "queued", "running"}:
+                return False
+            if status == "completed":
+                refs = list(getattr(variant, "image_refs", []) or [])
+                if not refs:
+                    return False
+                for ref in refs:
+                    if not self.is_image_rated(str(ref)):
+                        return False
+        return True
+
+    def export_resume_state(self) -> dict[str, Any] | None:
+        """Export resumable learning session state for UI persistence."""
+        if self.learning_state.current_experiment is None:
+            return None
+        if self._is_review_complete():
+            return None
+        payload = self.learning_state.to_dict()
+        payload["workflow_state"] = self._workflow_state
+        payload["learning_enabled"] = bool(self._learning_enabled)
+        payload["resume_schema_version"] = 1
+        payload["saved_at"] = datetime.utcnow().isoformat() + "Z"
+        return payload
+
+    def restore_resume_state(self, payload: dict[str, Any] | None) -> bool:
+        """Restore learning session from persisted payload."""
+        if not isinstance(payload, dict):
+            return False
+        try:
+            restored = LearningState.from_dict(payload)
+        except Exception:
+            return False
+
+        self.learning_state.current_experiment = restored.current_experiment
+        self.learning_state.plan = list(restored.plan or [])
+        self.learning_state.selected_variant = restored.selected_variant
+        self.learning_state.selected_image_index = int(restored.selected_image_index or 0)
+        self.load_existing_ratings()
+        self._update_plan_table()
+
+        desired_state = str(payload.get("workflow_state", "") or "").strip().lower()
+        if desired_state:
+            self._set_workflow_state(desired_state)
+        else:
+            self._recompute_workflow_state_from_plan()
+
+        selected_variant = self.learning_state.selected_variant
+        if selected_variant is not None and self._review_panel and hasattr(
+            self._review_panel, "display_variant_results"
+        ):
+            try:
+                self._review_panel.display_variant_results(
+                    selected_variant,
+                    self.learning_state.current_experiment,
+                )
+            except Exception:
+                pass
+        return True
+
     def get_learning_run_summary(self) -> dict[str, Any]:
         """Return deterministic plan/run summary for the Learning tab header."""
         plan = list(self.learning_state.plan or [])
@@ -1334,6 +1400,10 @@ class LearningController:
         
         # Update plan table with new average rating
         self._update_variant_ratings()
+        if self._is_review_complete():
+            self._set_workflow_state("completed")
+        else:
+            self._recompute_workflow_state_from_plan()
 
     def update_recommendations(self) -> None:
         """Update recommendations based on latest learning data."""
@@ -1453,6 +1523,11 @@ class LearningController:
     def set_learning_enabled(self, enabled: bool) -> None:
         """Set learning enablement and propagate to connected controllers."""
         self._learning_enabled = bool(enabled)
+        if self.app_controller and hasattr(self.app_controller, "_app_state"):
+            try:
+                self.app_controller._app_state.set_learning_enabled(self._learning_enabled)
+            except Exception:
+                pass
         if self.execution_controller and hasattr(self.execution_controller, "set_learning_enabled"):
             try:
                 self.execution_controller.set_learning_enabled(self._learning_enabled)
@@ -1494,6 +1569,22 @@ class LearningController:
             raise ValueError("rating must be an integer") from exc
         if rating < 1 or rating > 5:
             raise ValueError("rating must be between 1 and 5")
+        subscores_raw = feedback.get("subscores") or {}
+        subscores = {
+            "anatomy": int(subscores_raw.get("anatomy", rating) or rating),
+            "composition": int(subscores_raw.get("composition", rating) or rating),
+            "prompt_adherence": int(subscores_raw.get("prompt_adherence", rating) or rating),
+        }
+        for key, value in subscores.items():
+            if value < 1 or value > 5:
+                raise ValueError(f"{key} must be between 1 and 5")
+        weighted_score = (
+            (rating * 0.4)
+            + (subscores["anatomy"] * 0.2)
+            + (subscores["composition"] * 0.2)
+            + (subscores["prompt_adherence"] * 0.2)
+        )
+        blended_rating = int(min(5, max(1, round(weighted_score))))
 
         base_prompt = str(feedback.get("base_prompt") or "")
         base_negative = str(feedback.get("base_negative_prompt") or "")
@@ -1504,7 +1595,11 @@ class LearningController:
         metadata = {
             "source": "review_tab",
             "image_path": image_path,
-            "user_rating": rating,
+            "user_rating": blended_rating,
+            "user_rating_raw": rating,
+            "advanced_rating_enabled": True,
+            "subscores": subscores,
+            "weighted_score": weighted_score,
             "quality_label": str(feedback.get("quality_label") or ""),
             "user_notes": str(feedback.get("notes") or ""),
             "stage": stage,
@@ -1556,6 +1651,57 @@ class LearningController:
         self._learning_record_writer.append_record(record)
         self.refresh_recommendations()
         return record
+
+    def undo_review_feedback(
+        self,
+        *,
+        run_id: str | None = None,
+        image_path: str | None = None,
+    ) -> bool:
+        """Undo a review feedback write by deleting the latest matching record."""
+        if not self._learning_record_writer:
+            return False
+        path = self._learning_record_writer.records_path
+        if not path.exists():
+            return False
+
+        target_run = str(run_id or "").strip()
+        target_image = str(image_path or "").strip()
+        try:
+            lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        except Exception:
+            return False
+        if not lines:
+            return False
+
+        remove_index = -1
+        for idx in range(len(lines) - 1, -1, -1):
+            try:
+                payload = json.loads(lines[idx])
+            except Exception:
+                continue
+            metadata = payload.get("metadata", {})
+            if metadata.get("source") != "review_tab":
+                continue
+            if target_run and str(payload.get("run_id") or "") != target_run:
+                continue
+            if target_image and str(metadata.get("image_path") or "") != target_image:
+                continue
+            remove_index = idx
+            break
+        if remove_index < 0:
+            return False
+
+        lines.pop(remove_index)
+        try:
+            final_text = "\n".join(lines)
+            if final_text:
+                final_text += "\n"
+            path.write_text(final_text, encoding="utf-8")
+        except Exception:
+            return False
+        self.refresh_recommendations()
+        return True
 
     def list_recent_review_feedback(
         self,

@@ -641,6 +641,14 @@ If any fail → PR rejected.
 - Fixtures should annotate `metadata.execution_path` and `metadata.job_id` so queue vs. direct runs remain distinguishable.
 - Queue/history persistence tests must assert `HistoryRecord.result` exists and follows the canonical schema (variants, learning_records, stage_events, metadata) each time JSONL entries are written (`tests/pipeline/test_pipeline_runner.py`, `tests/controller/test_core_run_path_v2.py`, `tests/history/test_history_roundtrip.py`, `tests/history/test_history_replay_integration.py`, `tests/queue/test_job_history_store.py`).
 
+### UI Contract Testing Addendum (PR-MAR26-UI-REFRESH-001)
+
+- UI behavior tests should prefer toolkit-agnostic contract tests over widget pixel/state specifics.
+- `src/gui/ui_tokens.py` must be validated by token-shape tests (`tests/gui_v2/test_ui_tokens_contract.py`).
+- `src/gui/view_contracts/*` contract modules must be covered by deterministic unit tests.
+- Extracted non-render UI logic (for example, review payload/diff computation adapters) should be tested directly without Tk root setup.
+- Host-specific tests (Tk rendering) remain useful for smoke/layout checks, but behavior correctness should live in contract/controller tests first.
+
 11. Summary
 
 This document exists to ensure:

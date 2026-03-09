@@ -10,6 +10,7 @@ from src.gui.learning_review_dialog_v2 import LearningReviewDialogV2
 from src.gui.learning_state import LearningState
 from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
+from src.gui.view_contracts.status_banner_contract import update_status_banner
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
@@ -150,6 +151,7 @@ class LearningTabFrame(ttk.Frame):
         self.learning_controller.add_workflow_state_listener(self._on_workflow_state_changed)
         self._on_workflow_state_changed(self.learning_controller.get_workflow_state())
         self._on_automation_mode_changed()
+        self._on_learning_toggle()
         self._schedule_summary_refresh()
 
         # Body with three columns
@@ -237,8 +239,8 @@ class LearningTabFrame(ttk.Frame):
         )
 
     def _on_workflow_state_changed(self, state: str) -> None:
-        label = str(state or "idle").replace("_", " ").title()
-        self._workflow_state_var.set(f"Workflow: {label}")
+        contract = update_status_banner(state)
+        self._workflow_state_var.set(contract.display_text)
 
     def _schedule_summary_refresh(self) -> None:
         self._refresh_summary()
@@ -272,6 +274,42 @@ class LearningTabFrame(ttk.Frame):
             f"Pending: {pending} Queued: {queued} Running: {running} Failed: {failed} | "
             f"{queue_text}"
         )
+
+    def get_learning_session_state(self) -> dict[str, Any] | None:
+        """Return learning tab session payload for app-level persistence."""
+        exporter = getattr(self.learning_controller, "export_resume_state", None)
+        payload = exporter() if callable(exporter) else None
+        if payload is None:
+            return None
+        return {
+            "enabled": bool(self._learning_enabled_var.get()),
+            "automation_mode": str(self._automation_mode_var.get() or "suggest_only"),
+            "session": payload,
+        }
+
+    def restore_learning_session_state(self, payload: dict[str, Any] | None) -> bool:
+        """Restore persisted learning tab session payload."""
+        if not isinstance(payload, dict):
+            return False
+        try:
+            enabled = bool(payload.get("enabled", True))
+            self._learning_enabled_var.set(enabled)
+            self._on_learning_toggle()
+        except Exception:
+            pass
+        try:
+            mode = str(payload.get("automation_mode", "suggest_only") or "suggest_only")
+            self._automation_mode_var.set(mode)
+            self._on_automation_mode_changed()
+        except Exception:
+            pass
+        restore = getattr(self.learning_controller, "restore_resume_state", None)
+        if callable(restore):
+            try:
+                return bool(restore(payload.get("session")))
+            except Exception:
+                return False
+        return False
 
 
 LearningTabFrame = LearningTabFrame

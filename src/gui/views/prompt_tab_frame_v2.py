@@ -21,6 +21,12 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
+from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.prompt_editor_contract import (
+    build_editor_warning_text,
+    build_slot_labels,
+    find_undefined_slots,
+)
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
@@ -113,10 +119,10 @@ class PromptTabFrame(ttk.Frame):
             self.left_frame, 
             exportselection=False, 
             height=8,
-            bg="#1E1E1E",
-            fg="#FFFFFF",
-            selectbackground="#FFC805",
-            selectforeground="#000000",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            selectbackground=TOKENS.colors.accent_primary,
+            selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
             borderwidth=0
         )
@@ -135,10 +141,10 @@ class PromptTabFrame(ttk.Frame):
             self.left_frame, 
             exportselection=False, 
             height=10,
-            bg="#1E1E1E",
-            fg="#FFFFFF",
-            selectbackground="#FFC805",
-            selectforeground="#000000",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            selectbackground=TOKENS.colors.accent_primary,
+            selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
             borderwidth=0
         )
@@ -215,11 +221,11 @@ class PromptTabFrame(ttk.Frame):
             self.prompts_tab, 
             height=8, 
             wrap="word",
-            bg="#1E1E1E",
-            fg="#FFFFFF",
-            insertbackground="#FFC805",
-            selectbackground="#FFC805",
-            selectforeground="#000000",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.accent_primary,
+            selectbackground=TOKENS.colors.accent_primary,
+            selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
             borderwidth=1,
             relief="solid"
@@ -233,7 +239,11 @@ class PromptTabFrame(ttk.Frame):
         attach_tooltip(self.editor, "Main prompt text for txt2img/img2img runs. Type [[ for slot autocomplete.")
         
         # Configure tag for matrix token highlighting (darker yellow for dark mode)
-        self.editor.tag_config("matrix_token", background="#4A4A2A", foreground="#FFD700")
+        self.editor.tag_config(
+            "matrix_token",
+            background=TOKENS.colors.surface_tertiary,
+            foreground=TOKENS.colors.accent_primary,
+        )
 
         # Negative prompt header (row 2)
         negative_header = ttk.Frame(self.prompts_tab)
@@ -257,11 +267,11 @@ class PromptTabFrame(ttk.Frame):
             self.prompts_tab, 
             height=4, 
             wrap="word",
-            bg="#1E1E1E",
-            fg="#FFFFFF",
-            insertbackground="#FFC805",
-            selectbackground="#FFC805",
-            selectforeground="#000000",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.accent_primary,
+            selectbackground=TOKENS.colors.accent_primary,
+            selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
             borderwidth=1,
             relief="solid"
@@ -275,7 +285,11 @@ class PromptTabFrame(ttk.Frame):
         attach_tooltip(self.negative_editor, "Negative prompt to exclude unwanted elements. Type [[ for slot autocomplete.")
         
         # Configure tag for matrix token highlighting (darker yellow for dark mode)
-        self.negative_editor.tag_config("matrix_token", background="#4A4A2A", foreground="#FFD700")
+        self.negative_editor.tag_config(
+            "matrix_token",
+            background=TOKENS.colors.surface_tertiary,
+            foreground=TOKENS.colors.accent_primary,
+        )
 
         # Separator (row 4)
         ttk.Separator(self.prompts_tab, orient="horizontal").grid(
@@ -313,8 +327,8 @@ class PromptTabFrame(ttk.Frame):
             height=12, 
             wrap="word", 
             state="disabled",
-            bg="#1E1E1E",
-            fg="#FFFFFF",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
             highlightthickness=0,
             borderwidth=1,
             relief="solid"
@@ -1201,12 +1215,12 @@ class PromptTabFrame(ttk.Frame):
                 height=min(8, len(slot_names)),
                 width=20,
                 exportselection=False,
-                bg="#1E1E1E",
-                fg="#FFFFFF",
-                selectbackground="#FFC805",
-                selectforeground="#000000",
+                bg=TOKENS.colors.surface_secondary,
+                fg=TOKENS.colors.text_primary,
+                selectbackground=TOKENS.colors.accent_primary,
+                selectforeground=TOKENS.colors.surface_primary,
                 highlightthickness=1,
-                highlightbackground="#2A2A2A",
+                highlightbackground=TOKENS.colors.border_subtle,
                 borderwidth=0
             )
             self._autocomplete_list.bind("<<ListboxSelect>>", lambda e: self._on_autocomplete_select(editor))
@@ -1390,26 +1404,13 @@ class PromptTabFrame(ttk.Frame):
     
     def _validate_matrix_slots(self) -> None:
         """Check for undefined [[tokens]] and show warnings."""
-        import re
-        
-        pattern = re.compile(r'\[\[([^\]]+)\]\]')
         matrix_config = self.workspace_state.get_matrix_config()
         defined_slots = set(matrix_config.get_slot_names())
-        
-        # Find all used tokens
-        positive_text = self.editor.get("1.0", "end")
-        negative_text = self.negative_editor.get("1.0", "end")
-        
-        used_slots = set()
-        for match in pattern.finditer(positive_text):
-            used_slots.add(match.group(1))
-        for match in pattern.finditer(negative_text):
-            used_slots.add(match.group(1))
-        
-        # Find undefined slots
-        self._undefined_slots = used_slots - defined_slots
-        
-        # Update metadata display with warnings
+        self._undefined_slots = find_undefined_slots(
+            positive_text=self.editor.get("1.0", "end"),
+            negative_text=self.negative_editor.get("1.0", "end"),
+            defined_slots=defined_slots,
+        )
         if self._undefined_slots:
             self._show_validation_warning()
     
@@ -1417,18 +1418,16 @@ class PromptTabFrame(ttk.Frame):
         """Show visual indicator for undefined slots (non-blocking)."""
         if not self._undefined_slots:
             return
-        
-        # Update pack name label with warning indicator
+
         pack_name = self.workspace_state.current_pack.name if self.workspace_state.current_pack else "None"
-        dirty = " (modified)" if self.workspace_state.dirty else ""
-        warning = f" ⚠️ Undefined slots: {', '.join(sorted(self._undefined_slots))}"
-        
         self.pack_name_label.config(
-            text=f"Editor - {pack_name}{dirty}{warning}",
-            foreground="#d9534f"  # Bootstrap danger color
+            text=build_editor_warning_text(
+                pack_name=pack_name,
+                dirty=bool(self.workspace_state.dirty),
+                undefined_slots=self._undefined_slots,
+            ),
+            foreground=TOKENS.colors.status_error,
         )
-        
-        # Reset color after 3 seconds
         self.after(3000, lambda: self.pack_name_label.config(foreground=""))
 
     # Slot Management Methods ---------------------------------------
@@ -1436,8 +1435,8 @@ class PromptTabFrame(ttk.Frame):
     def _refresh_slot_list(self) -> None:
         """Refresh the slot list display."""
         self.slot_list.delete(0, "end")
-        for i in range(len(self.workspace_state.current_pack.slots)):
-            self.slot_list.insert("end", f"Prompt {i + 1}")
+        for label in build_slot_labels(len(self.workspace_state.current_pack.slots)):
+            self.slot_list.insert("end", label)
 
     def _on_add_slot(self) -> None:
         """Add a new empty slot."""
@@ -1503,3 +1502,4 @@ class PromptTabFrame(ttk.Frame):
 
 
 PromptTabFrame = PromptTabFrame
+

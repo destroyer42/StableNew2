@@ -695,4 +695,18 @@ No drift allowed.
 - JobService validation rejects missing pack identifiers gracefully and emits diagnostics rather than raising uncaught exceptions.
 - Tests and helpers construct Jobs from NJRs only; legacy configuration job construction is removed from new paths.
 
+## UI Host Abstraction Boundary Addendum (PR-MAR26-UI-REFRESH-001)
+
+- `src/gui/ui_tokens.py` is the semantic style source-of-truth for GUI host layers.
+- `src/gui/view_contracts/*` defines toolkit-agnostic interaction contracts that must not import Tk types.
+- `src/gui/views/*` remains render and event wiring only; non-render decisions belong in controllers/adapters.
+- Migration target is host swap (Tk -> Qt/PySide6) without changing contract semantics.
+
+Current contract mappings:
+
+- Status banner display behavior -> `status_banner_contract`.
+- Form mode/edit synchronization -> `form_section_contract`.
+- Selection handling semantics -> `selection_list_contract`.
+- Review feedback action states -> `feedback_panel_contract`.
+
 END OF ARCHITECTURE_v2.6.md (Canonical Edition)
