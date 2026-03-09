@@ -304,10 +304,10 @@ class LearningReviewPanel(ttk.Frame):
             self.recommendations_text.config(state="disabled")
             return
         
-        lines.append("🎯 Recommended Settings:\n")
+        lines.append("Recommended Settings\n")
         lines.append("-" * 30 + "\n\n")
         
-        for rec in rec_list:
+        for rec in rec_list[:5]:
             # Handle both dataclass and dict formats
             if hasattr(rec, "parameter_name"):
                 param = rec.parameter_name
@@ -315,12 +315,16 @@ class LearningReviewPanel(ttk.Frame):
                 confidence = rec.confidence_score
                 samples = rec.sample_count
                 mean_rating = rec.mean_rating
+                rationale = getattr(rec, "confidence_rationale", "")
+                context = getattr(rec, "context_key", "")
             elif isinstance(rec, dict):
                 param = rec.get("parameter", "Unknown")
                 value = rec.get("value", "?")
                 confidence = rec.get("confidence", 0)
                 samples = rec.get("samples", 0)
                 mean_rating = rec.get("mean_rating", 0)
+                rationale = rec.get("rationale", "")
+                context = rec.get("context", "")
             else:
                 continue
             
@@ -328,12 +332,19 @@ class LearningReviewPanel(ttk.Frame):
             conf_pct = f"{confidence * 100:.0f}%"
             
             # Format mean rating as stars
-            stars = "⭐" * int(round(mean_rating))
+            stars = "*" * int(round(mean_rating))
             
-            lines.append(f"📊 {param}\n")
-            lines.append(f"   Best Value: {value}\n")
-            lines.append(f"   Avg Rating: {stars} ({mean_rating:.1f})\n")
-            lines.append(f"   Confidence: {conf_pct} ({samples} samples)\n\n")
+            lines.append(f"{param}: {value}\n")
+            lines.append(f"  Avg Rating: {stars or '-'} ({mean_rating:.1f})\n")
+            lines.append(f"  Confidence: {conf_pct} ({samples} samples)\n")
+            because_parts = []
+            if rationale:
+                because_parts.append(str(rationale))
+            if context:
+                because_parts.append(f"context={context}")
+            if because_parts:
+                lines.append(f"  Because: {'; '.join(because_parts)}\n")
+            lines.append("\n")
         
         self.recommendations_text.insert(tk.END, "".join(lines))
         self.recommendations_text.config(state="disabled")
