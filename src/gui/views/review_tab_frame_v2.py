@@ -33,6 +33,18 @@ class ReviewTabFrame(ttk.Frame):
         self.stage_upscale_var = tk.BooleanVar(value=False)
         self.prompt_mode_var = tk.StringVar(value="append")
         self.negative_mode_var = tk.StringVar(value="append")
+        self._prompt_prev_mode = "append"
+        self._negative_prev_mode = "append"
+        self._prompt_mode_edits: dict[str, str] = {
+            "append": "",
+            "replace": "",
+            "modify": "",
+        }
+        self._negative_mode_edits: dict[str, str] = {
+            "append": "",
+            "replace": "",
+            "modify": "",
+        }
         self.batch_size_var = tk.IntVar(value=1)
         self.rating_var = tk.IntVar(value=3)
         self.quality_var = tk.StringVar(value="okay")
@@ -47,12 +59,14 @@ class ReviewTabFrame(ttk.Frame):
         self._build_body()
         self._build_controls()
 
-        self.prompt_mode_var.trace_add("write", lambda *_: self._refresh_prompt_diff())
-        self.negative_mode_var.trace_add("write", lambda *_: self._refresh_prompt_diff())
+        self.prompt_mode_var.trace_add("write", lambda *_: self._on_prompt_mode_changed())
+        self.negative_mode_var.trace_add("write", lambda *_: self._on_negative_mode_changed())
         self.prompt_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self.negative_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self._set_readonly_text(self.current_prompt_text, "")
         self._set_readonly_text(self.current_negative_text, "")
+        self._sync_edit_box_to_mode("prompt")
+        self._sync_edit_box_to_mode("negative")
         self._refresh_prompt_diff()
 
     def _build_header(self) -> None:
@@ -172,7 +186,7 @@ class ReviewTabFrame(ttk.Frame):
         ttk.Combobox(
             prompt_box,
             textvariable=self.prompt_mode_var,
-            values=["append", "replace"],
+            values=["append", "replace", "modify"],
             state="readonly",
             style="Dark.TCombobox",
             width=10,
@@ -211,7 +225,7 @@ class ReviewTabFrame(ttk.Frame):
         ttk.Combobox(
             prompt_box,
             textvariable=self.negative_mode_var,
-            values=["append", "replace"],
+            values=["append", "replace", "modify"],
             state="readonly",
             style="Dark.TCombobox",
             width=10,
@@ -429,6 +443,7 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path = None
+        self._reset_mode_edits_for_current_image()
         self._set_readonly_text(self.current_prompt_text, "")
         self._set_readonly_text(self.current_negative_text, "")
         self._refresh_prompt_diff()
@@ -472,6 +487,7 @@ class ReviewTabFrame(ttk.Frame):
             self.meta_label.config(text=f"Metadata: {result.status}")
             self._selected_base_prompt = ""
             self._selected_base_negative_prompt = ""
+            self._reset_mode_edits_for_current_image()
             self._set_readonly_text(self.current_prompt_text, "")
             self._set_readonly_text(self.current_negative_text, "")
             self._refresh_prompt_diff()
@@ -493,6 +509,7 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_negative_prompt = str(
             stage_manifest.get("negative_prompt") or generation.get("negative_prompt") or ""
         )
+        self._reset_mode_edits_for_current_image()
         self._set_readonly_text(self.current_prompt_text, self._selected_base_prompt)
         self._set_readonly_text(self.current_negative_text, self._selected_base_negative_prompt)
         self._refresh_prompt_diff()
@@ -555,11 +572,57 @@ class ReviewTabFrame(ttk.Frame):
         delta_clean = (delta or "").strip()
         if not delta_clean:
             return base_clean
-        if mode == "replace":
+        if mode in {"replace", "modify"}:
             return delta_clean
         if not base_clean:
             return delta_clean
         return f"{base_clean}, {delta_clean}"
+
+    def _get_text(self, widget: tk.Text) -> str:
+        return widget.get("1.0", tk.END).strip()
+
+    def _set_text(self, widget: tk.Text, value: str) -> None:
+        widget.delete("1.0", tk.END)
+        widget.insert("1.0", value or "")
+
+    def _reset_mode_edits_for_current_image(self) -> None:
+        self._prompt_mode_edits = {"append": "", "replace": "", "modify": self._selected_base_prompt}
+        self._negative_mode_edits = {
+            "append": "",
+            "replace": "",
+            "modify": self._selected_base_negative_prompt,
+        }
+        self._prompt_prev_mode = self.prompt_mode_var.get() or "append"
+        self._negative_prev_mode = self.negative_mode_var.get() or "append"
+        self._sync_edit_box_to_mode("prompt")
+        self._sync_edit_box_to_mode("negative")
+
+    def _sync_edit_box_to_mode(self, which: str) -> None:
+        if which == "prompt":
+            mode = self.prompt_mode_var.get() or "append"
+            text = self._prompt_mode_edits.get(mode, "")
+            if mode == "modify" and not text:
+                text = self._selected_base_prompt
+                self._prompt_mode_edits["modify"] = text
+            self._set_text(self.prompt_text, text)
+        else:
+            mode = self.negative_mode_var.get() or "append"
+            text = self._negative_mode_edits.get(mode, "")
+            if mode == "modify" and not text:
+                text = self._selected_base_negative_prompt
+                self._negative_mode_edits["modify"] = text
+            self._set_text(self.negative_text, text)
+        self._refresh_prompt_diff()
+
+    def _on_prompt_mode_changed(self) -> None:
+        self._prompt_mode_edits[self._prompt_prev_mode] = self._get_text(self.prompt_text)
+        self._prompt_prev_mode = self.prompt_mode_var.get() or "append"
+        self._sync_edit_box_to_mode("prompt")
+
+    def _on_negative_mode_changed(self) -> None:
+        self._negative_mode_edits[self._negative_prev_mode] = self._get_text(self.negative_text)
+        self._negative_prev_mode = self.negative_mode_var.get() or "append"
+        self._sync_edit_box_to_mode("negative")
 
     def _reprocess(self, *, batch_all: bool) -> None:
         stages = self._selected_stages()
