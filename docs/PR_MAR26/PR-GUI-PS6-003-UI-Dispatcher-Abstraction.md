@@ -1,6 +1,6 @@
 # PR-GUI-PS6-003: UI Dispatcher Abstraction
 
-**Status**: ?? Specification
+**Status**: In Progress
 **Priority**: HIGH
 **Effort**: MEDIUM (1 week)
 **Phase**: PySide6 Migration
@@ -58,3 +58,18 @@ Net: -2
 
 ## Next Steps
 PR-PS6-004
+
+## Implementation Summary (Incremental)
+
+**Implementation Date**: 2026-03-09
+**Executor**: Codex
+**Status**: PARTIAL
+
+### What Was Implemented
+1. Added `src/gui/ui_dispatcher.py` with `UiDispatcher`, `TkUiDispatcher`, and `ImmediateUiDispatcher`.
+2. Updated `src/app_factory.py` to inject `ui_scheduler=TkUiDispatcher(root).invoke` into `AppController`.
+3. Added `tests/gui_v2/test_ui_dispatcher.py`.
+
+### Verification
+1. `pytest -q tests/gui_v2/test_ui_dispatcher.py`
+2. `pytest -q tests/integration/test_golden_path_suite_v2_6.py`
