@@ -1,6 +1,6 @@
 # PR-GUI-PS6-002: Complete View-Contract Extraction
 
-**Status**: ?? Specification
+**Status**: Implemented
 **Priority**: HIGH
 **Effort**: MEDIUM (1 week)
 **Phase**: PySide6 Migration
@@ -87,3 +87,21 @@ Planner/Executor: Codex; Reviewer: Rob
 
 ## Next Steps
 PR-PS6-003
+
+## Implementation Summary
+
+**Implementation Date**: 2026-03-09
+**Executor**: Codex
+**Status**: COMPLETE
+
+### What Was Implemented
+1. Added `src/gui/view_contracts/pipeline_layout_contract.py`.
+2. Updated `src/gui/views/pipeline_tab_frame_v2.py` to use contract functions for:
+   - minimum window geometry normalization
+   - visible stage ordering
+3. Updated `src/gui/view_contracts/__init__.py` exports.
+4. Added `tests/gui_v2/test_pipeline_view_contracts.py`.
+
+### Verification
+1. `pytest -q tests/gui_v2/test_pipeline_view_contracts.py tests/gui_v2/test_prompt_view_contracts.py tests/gui_v2/test_queue_view_contracts.py`
+2. `pytest -q tests/integration/test_golden_path_suite_v2_6.py`
