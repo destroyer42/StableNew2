@@ -42,7 +42,7 @@ class PipelineRunControlsV2(ttk.Frame):
         self.app_state = app_state
         self.theme = theme
         self._is_queue_paused = False
-        self._auto_run_enabled = False
+        self._auto_run_enabled = bool(getattr(app_state, "auto_run_queue", True))
 
         # Title
         title = ttk.Label(self, text="Run Controls", style=STATUS_STRONG_LABEL_STYLE)
@@ -52,7 +52,7 @@ class PipelineRunControlsV2(ttk.Frame):
         options_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         options_frame.pack(fill="x", pady=(0, 8))
 
-        self.auto_run_var = tk.BooleanVar(value=False)
+        self.auto_run_var = tk.BooleanVar(value=self._auto_run_enabled)
         self.auto_run_check = ttk.Checkbutton(
             options_frame,
             text="Auto-run queue",

@@ -82,7 +82,7 @@ class JobExecutionController:
         self._worker_registry = worker_registry or WorkerRegistry()
         self._queue = JobQueue(history_store=self._history_store)
         self._execute_job = execute_job
-        self._auto_run_enabled = False
+        self._auto_run_enabled = True
         self._queue_paused = False
         self._queue_persistence: QueuePersistenceManager | None = None
         self._runner = SingleNodeJobRunner(

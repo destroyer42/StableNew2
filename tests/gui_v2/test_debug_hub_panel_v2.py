@@ -2,6 +2,7 @@ import tkinter as tk
 
 import pytest
 
+from src.gui.app_state_v2 import AppStateV2
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.pipeline.job_models_v2 import NormalizedJobRecord, PackUsageInfo, StagePromptInfo
 from src.utils import InMemoryLogHandler
@@ -96,3 +97,24 @@ def test_debug_hub_has_expected_tabs(tk_root: tk.Tk):
     panel, _ = _create_panel(job, tk_root)
     assert len(panel.notebook.tabs()) == 6
     _cleanup_panel(panel)
+
+
+def test_debug_hub_unsubscribes_history_listener_on_close(tk_root: tk.Tk) -> None:
+    state = AppStateV2()
+    log_handler = InMemoryLogHandler(max_entries=10)
+    panel = DebugHubPanelV2.open(
+        master=tk_root,
+        controller=_StubController(_build_job()),
+        app_state=state,
+        log_handler=log_handler,
+    )
+    panel.update_idletasks()
+
+    listeners = list(state._listeners.get("history_items", []))
+    assert listeners
+
+    panel.close()
+    tk_root.update_idletasks()
+
+    listeners_after = list(state._listeners.get("history_items", []))
+    assert not listeners_after

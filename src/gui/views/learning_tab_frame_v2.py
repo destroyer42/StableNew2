@@ -16,6 +16,7 @@ from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
 from src.learning.learning_paths import get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
+from src.services.ui_state_store import get_ui_state_store
 
 
 class LearningTabFrame(ttk.Frame):
@@ -149,6 +150,7 @@ class LearningTabFrame(ttk.Frame):
         )
         self.summary_label.grid(row=2, column=0, columnspan=5, sticky="w", pady=(2, 0))
         self.learning_controller.add_workflow_state_listener(self._on_workflow_state_changed)
+        self.learning_controller.add_resume_state_listener(self._persist_learning_session_state)
         self._on_workflow_state_changed(self.learning_controller.get_workflow_state())
         self._on_automation_mode_changed()
         self._on_learning_toggle()
@@ -205,6 +207,7 @@ class LearningTabFrame(ttk.Frame):
                 self.app_state.set_learning_enabled(enabled)
             except Exception:
                 pass
+        self._persist_learning_session_state()
 
     def _on_open_review(self) -> None:
         """Open the learning review dialog with the latest records."""
@@ -228,6 +231,7 @@ class LearningTabFrame(ttk.Frame):
                 setter(mode)
             except Exception:
                 pass
+        self._persist_learning_session_state()
 
     def _show_automation_help(self) -> None:
         messagebox.showinfo(
@@ -241,6 +245,7 @@ class LearningTabFrame(ttk.Frame):
     def _on_workflow_state_changed(self, state: str) -> None:
         contract = update_status_banner(state)
         self._workflow_state_var.set(contract.display_text)
+        self._persist_learning_session_state()
 
     def _schedule_summary_refresh(self) -> None:
         self._refresh_summary()
@@ -287,6 +292,47 @@ class LearningTabFrame(ttk.Frame):
             "session": payload,
         }
 
+    def _persist_learning_session_state(self) -> None:
+        """Persist learning session state immediately for resume-after-restart flows."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            learning_state = self.get_learning_session_state()
+            state["learning"] = learning_state if isinstance(learning_state, dict) else {}
+            ui_store.save_state(state)
+        except Exception:
+            pass
+
+    def _restore_experiment_panel(self) -> None:
+        experiment = getattr(self.learning_controller.learning_state, "current_experiment", None)
+        panel = getattr(self, "experiment_panel", None)
+        if not experiment or panel is None:
+            return
+        try:
+            if hasattr(panel, "name_var"):
+                panel.name_var.set(str(getattr(experiment, "name", "") or ""))
+            if hasattr(panel, "desc_var"):
+                panel.desc_var.set(str(getattr(experiment, "description", "") or ""))
+            if hasattr(panel, "stage_var"):
+                panel.stage_var.set(str(getattr(experiment, "stage", "txt2img") or "txt2img"))
+            if hasattr(panel, "variable_var"):
+                panel.variable_var.set(
+                    str(getattr(experiment, "variable_under_test", "") or "")
+                )
+            if hasattr(panel, "images_var"):
+                panel.images_var.set(int(getattr(experiment, "images_per_value", 1) or 1))
+            if hasattr(panel, "prompt_source_var"):
+                prompt_text = str(getattr(experiment, "prompt_text", "") or "")
+                panel.prompt_source_var.set("custom" if prompt_text else "workspace")
+                if hasattr(panel, "custom_prompt_text"):
+                    panel.custom_prompt_text.config(state=tk.NORMAL)
+                    panel.custom_prompt_text.delete("1.0", tk.END)
+                    panel.custom_prompt_text.insert("1.0", prompt_text)
+                    if hasattr(panel, "_on_prompt_source_changed"):
+                        panel._on_prompt_source_changed()
+        except Exception:
+            pass
+
     def restore_learning_session_state(self, payload: dict[str, Any] | None) -> bool:
         """Restore persisted learning tab session payload."""
         if not isinstance(payload, dict):
@@ -306,7 +352,10 @@ class LearningTabFrame(ttk.Frame):
         restore = getattr(self.learning_controller, "restore_resume_state", None)
         if callable(restore):
             try:
-                return bool(restore(payload.get("session")))
+                restored = bool(restore(payload.get("session")))
+                if restored:
+                    self._restore_experiment_panel()
+                return restored
             except Exception:
                 return False
         return False

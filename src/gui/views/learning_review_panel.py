@@ -15,6 +15,7 @@ class LearningReviewPanel(ttk.Frame):
 
     def __init__(self, master: tk.Misc, *args, **kwargs) -> None:
         super().__init__(master, *args, **kwargs)
+        self.learning_controller = None
 
         # Current variant being reviewed
         self.current_variant: LearningVariant | None = None
@@ -210,10 +211,9 @@ class LearningReviewPanel(ttk.Frame):
     def _get_rating_for_image(self, image_path: str) -> int | None:
         """Get rating for an image from the controller."""
         try:
-            if hasattr(self.master, "learning_controller"):
-                controller = self.master.learning_controller
-                if hasattr(controller, "get_rating_for_image"):
-                    return controller.get_rating_for_image(image_path)
+            controller = self._get_learning_controller()
+            if controller and hasattr(controller, "get_rating_for_image"):
+                return controller.get_rating_for_image(image_path)
         except Exception:
             pass
         return None
@@ -255,8 +255,8 @@ class LearningReviewPanel(ttk.Frame):
                 return
 
         # Call controller to record rating
-        if hasattr(self.master, "learning_controller"):
-            controller = self.master.learning_controller
+        controller = self._get_learning_controller()
+        if controller:
             if hasattr(controller, "record_rating"):
                 try:
                     controller.record_rating(image_ref, rating, notes)
@@ -420,8 +420,14 @@ class LearningReviewPanel(ttk.Frame):
     def _get_learning_controller(self):
         """Get the learning controller from parent chain."""
         try:
+            controller = getattr(self, "learning_controller", None)
+            if controller is not None:
+                return controller
             if hasattr(self.master, "learning_controller"):
                 return self.master.learning_controller
+            parent = getattr(self.master, "master", None)
+            if parent is not None and hasattr(parent, "learning_controller"):
+                return parent.learning_controller
         except Exception:
             pass
         return None

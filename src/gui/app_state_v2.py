@@ -165,7 +165,7 @@ class AppStateV2:
     last_error_message: str | None = None
 
     # PR-203: Auto-run queue flag
-    auto_run_queue: bool = False
+    auto_run_queue: bool = True
 
     # PR-CORE-E: Config Sweep state
     config_sweep_enabled: bool = False
@@ -187,6 +187,17 @@ class AppStateV2:
         listeners = self._listeners.setdefault(key, [])
         if listener not in listeners:
             listeners.append(listener)
+
+    def unsubscribe(self, key: str, listener: Listener) -> None:
+        listeners = self._listeners.get(key)
+        if not listeners:
+            return
+        try:
+            listeners.remove(listener)
+        except ValueError:
+            return
+        if not listeners:
+            self._listeners.pop(key, None)
 
     def _notify(self, key: str) -> None:
         if not self._notifications_enabled:

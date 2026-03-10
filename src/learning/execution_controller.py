@@ -359,4 +359,10 @@ class LearningExecutionController:
                         if isinstance(output, dict) and "path" in output:
                             image_refs.append(str(output["path"]))
         
-        return image_refs
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for image_ref in image_refs:
+            if image_ref and image_ref not in seen:
+                seen.add(image_ref)
+                deduped.append(image_ref)
+        return deduped
