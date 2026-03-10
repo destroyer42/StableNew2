@@ -50,7 +50,7 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
         assert hasattr(self.panel, "preview_checkbox")
 
     def test_preview_checkbox_default_state(self) -> None:
-        """Test that preview checkbox is disabled by default."""
+        """Test that preview checkbox is unchecked (preview off) by default."""
         assert self.panel._show_preview_var.get() is False
 
     def test_thumbnail_clears_when_no_job(self) -> None:

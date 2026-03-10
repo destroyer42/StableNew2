@@ -308,6 +308,17 @@ class LearningTabFrame(ttk.Frame):
         panel = getattr(self, "experiment_panel", None)
         if not experiment or panel is None:
             return
+
+        # Prefer delegating state restoration to the experiment panel itself,
+        # falling back to the legacy attribute-based logic if needed.
+        restore = getattr(panel, "restore_state", None)
+        if callable(restore):
+            try:
+                restore(experiment)
+            except Exception:
+                # Swallow exceptions to match the previous best-effort behavior.
+                pass
+            return
         try:
             if hasattr(panel, "name_var"):
                 panel.name_var.set(str(getattr(experiment, "name", "") or ""))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
     from PIL import Image, ImageTk
 
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_MUTED
+
+logger = logging.getLogger(__name__)
 
 
 class ThumbnailWidget(ttk.Frame):
@@ -97,8 +100,12 @@ class ThumbnailWidget(ttk.Frame):
             # Schedule UI update on main thread
             try:
                 self.after(0, lambda: self._on_image_loaded(thumb))
-            except (RuntimeError, tk.TclError):
+            except (RuntimeError, tk.TclError) as e:
                 # Widget or Tk root was torn down while the background load completed.
+                logger.debug(
+                    f"ThumbnailWidget teardown race condition detected (id={id(self)}): {e}",
+                    exc_info=False,
+                )
                 return
 
         # PR-THREAD-001: Use ThreadRegistry for thumbnail loading
