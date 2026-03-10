@@ -6,24 +6,25 @@ import tkinter as tk
 from tkinter import ttk
 
 from src.gui import design_system_v2 as design_system
+from src.gui.ui_tokens import TOKENS
 
-BACKGROUND_DARK = design_system.Colors.PRIMARY_BG
-BACKGROUND_ELEVATED = design_system.Colors.ELEVATED_SURFACE
-TEXT_PRIMARY = design_system.Colors.TEXT_PRIMARY
-TEXT_MUTED = design_system.Colors.TEXT_MUTED
-TEXT_DISABLED = design_system.Colors.TEXT_DISABLED
-BORDER_SUBTLE = design_system.Colors.BORDER
-ACCENT_GOLD = design_system.Colors.PRIMARY_ACCENT
-ACCENT_GOLD_HOVER = design_system.Colors.PRIMARY_ACCENT_HOVER
-PADDING_SM = design_system.Spacing.SM
-PADDING_MD = design_system.Spacing.MD
+BACKGROUND_DARK = TOKENS.colors.surface_primary
+BACKGROUND_ELEVATED = TOKENS.colors.surface_secondary
+TEXT_PRIMARY = TOKENS.colors.text_primary
+TEXT_MUTED = TOKENS.colors.text_muted
+TEXT_DISABLED = TOKENS.colors.text_disabled
+BORDER_SUBTLE = TOKENS.colors.border_subtle
+ACCENT_GOLD = TOKENS.colors.accent_primary
+ACCENT_GOLD_HOVER = TOKENS.colors.accent_primary_hover
+PADDING_SM = TOKENS.spacing.sm
+PADDING_MD = TOKENS.spacing.md
 ASWF_BLACK = BACKGROUND_DARK
 ASWF_DARK_GREY = BACKGROUND_ELEVATED
 ASWF_MED_GREY = "#3A393D"
 ASWF_LIGHT_GREY = "#4A4950"
 ASWF_GOLD = ACCENT_GOLD
-ASWF_ERROR_RED = "#FF4D4F"
-ASWF_OK_GREEN = "#52C41A"
+ASWF_ERROR_RED = TOKENS.colors.status_error
+ASWF_OK_GREEN = TOKENS.colors.status_success
 EXPANDER_ICON_COLLAPSED = "▸"
 EXPANDER_ICON_EXPANDED = "▾"
 VALIDATION_NORMAL_BG = BACKGROUND_ELEVATED
@@ -34,9 +35,9 @@ VALIDATION_ERROR_BG = ASWF_ERROR_RED
 VALIDATION_ERROR_FG = TEXT_PRIMARY
 
 # PR-PIPE-003: Feedback colors for visual polish
-HIGHLIGHT_SUCCESS = "#4a9f4a"  # Green flash for successful operations
-HIGHLIGHT_MOVE = "#4a90d9"     # Blue flash for move operations
-HIGHLIGHT_WARNING = "#d9a04a"  # Orange for warnings
+HIGHLIGHT_SUCCESS = TOKENS.colors.status_success  # Green flash for successful operations
+HIGHLIGHT_MOVE = TOKENS.colors.status_info     # Blue flash for move operations
+HIGHLIGHT_WARNING = TOKENS.colors.status_warning  # Orange for warnings
 HIGHLIGHT_DURATION_MS = 300    # Default flash duration
 
 CARD_FRAME_STYLE = design_system.CARD_FRAME

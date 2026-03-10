@@ -123,8 +123,7 @@
             "only a tight shirt with underboob",
             "nothing",
             "only an open jacket",
-            "nothing",
-            "only a crown"
+            "nothing"
           ]
         },
         {
@@ -143,8 +142,8 @@
         {
           "name": "activity",
           "values": [
-            "grabbing her own genitaliam",
-            "holding her crotch"
+            "aggressively grabbing her own genitalia",
+            "furiously massaging her clitoris"
           ]
         },
         {
@@ -172,7 +171,9 @@
         {
           "name": "perspective",
           "values": [
-            "very low angle"
+            "very low angle",
+            "high angle",
+            "narrow lens"
           ]
         },
         {
@@ -187,8 +188,8 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "sdxlNuclearGeneralPurposeV3Semi_v30BakedVAE",
-      "model_name": "sdxlNuclearGeneralPurposeV3Semi_v30BakedVAE",
+      "model": "juggernautXL_ragnarokBy",
+      "model_name": "juggernautXL_ragnarokBy",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
@@ -198,9 +199,9 @@
       "width": 768,
       "height": 1280,
       "clip_skip": 2,
-      "seed": 855849245,
-      "subseed": 0,
-      "subseed_strength": 0.0,
+      "seed": -1,
+      "subseed": -1,
+      "subseed_strength": 0.5,
       "use_refiner": false,
       "enable_hr": false,
       "hr_upscaler": "Latent",
@@ -208,7 +209,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "sdxlNuclearGeneralPurposeV3Semi_v30BakedVAE.safetensors [55c9a27f36]"
+      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
     },
     "img2img": {
       "model": "",

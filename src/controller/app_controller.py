@@ -72,6 +72,7 @@ from src.controller.process_auto_scanner_service import (
 )
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.learning.model_profiles import get_model_profile_defaults_for_model
+from src.photo_optimize import get_photo_optimize_store
 from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
@@ -440,7 +441,12 @@ class AppController:
         # PR-LEARN-003: Register learning completion handler
         if self.job_service:
             self._learning_completion_handler = self._create_learning_completion_handler()
-            self.job_service.register_completion_handler(self._learning_completion_handler)
+            register_completion = getattr(self.job_service, "register_completion_handler", None)
+            if callable(register_completion):
+                register_completion(self._learning_completion_handler)
+            self._photo_optimize_completion_handler = self._create_photo_optimize_completion_handler()
+            if callable(register_completion):
+                register_completion(self._photo_optimize_completion_handler)
         
         self.webui_connection_controller = getattr(
             self.pipeline_controller, "_webui_connection", None
@@ -577,9 +583,7 @@ class AppController:
         if callable(self._ui_scheduler):
             self._ui_scheduler(fn)
             return
-        root = getattr(self.main_window, "root", None) or getattr(self.main_window, "master", None)
-        if root is not None and hasattr(root, "after"):
-            root.after(0, fn)
+        if self._dispatch_via_root_after(0, fn):
             return
         # fallback: run directly (test mode)
         fn()
@@ -592,10 +596,36 @@ class AppController:
             if callable(dispatcher):
                 dispatcher(fn)
                 return
-            root = getattr(mw, "root", None)
-            if root is not None and hasattr(root, "after"):
-                root.after(0, fn)
+            if self._dispatch_via_root_after(0, fn):
                 return
+        fn()
+
+    def _get_ui_root(self) -> Any | None:
+        mw = getattr(self, "main_window", None)
+        if mw is None:
+            return None
+        return getattr(mw, "root", None) or getattr(mw, "master", None) or mw
+
+    def _dispatch_via_root_after(self, delay_ms: int, fn: Callable[[], None]) -> bool:
+        root = self._get_ui_root()
+        if root is None:
+            return False
+        after = getattr(root, "after", None)
+        if not callable(after):
+            return False
+        try:
+            after(int(delay_ms), fn)
+            return True
+        except Exception:
+            return False
+
+    def _ui_dispatch_later(self, delay_ms: int, fn: Callable[[], None]) -> None:
+        delay = max(0, int(delay_ms or 0))
+        if delay == 0:
+            self._ui_dispatch(fn)
+            return
+        if self._dispatch_via_root_after(delay, fn):
+            return
         fn()
     
     def _mark_ui_dirty(self, preview: bool = False, jobs: bool = False, history: bool = False) -> None:
@@ -619,22 +649,9 @@ class AppController:
     def _schedule_debounced_ui_update(self) -> None:
         """Schedule a debounced UI update after delay.
         
-        PR-HB-003: Uses root.after() to coalesce updates into a single refresh.
+        PR-HB-003: Uses UI scheduler to coalesce updates into a single refresh.
         """
-        try:
-            root = self.main_window.root if self.main_window else None
-        except Exception:
-            root = None
-        
-        if root is not None:
-            try:
-                root.after(self._ui_debounce_delay_ms, self._apply_pending_ui_updates)
-            except Exception:
-                # Fallback if scheduling fails
-                self._apply_pending_ui_updates()
-        else:
-            # No GUI - apply immediately
-            self._apply_pending_ui_updates()
+        self._ui_dispatch_later(self._ui_debounce_delay_ms, self._apply_pending_ui_updates)
     
     def _apply_pending_ui_updates(self) -> None:
         """Apply all pending UI updates and clear dirty flags.
@@ -809,6 +826,12 @@ class AppController:
                     callback = getattr(controller_obj, "on_job_completed_callback", None)
                     if callable(callback):
                         callback(job, result)
+        return handler
+
+    def _create_photo_optimize_completion_handler(self):
+        def handler(job, result):
+            self._handle_photo_optimize_completion(job, result)
+
         return handler
 
     def update_ui_heartbeat(self) -> None:
@@ -1372,10 +1395,10 @@ class AppController:
         invalid_stages = set(stages) - valid_stages
         if invalid_stages:
             raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
-        if prompt_mode not in {"append", "replace"}:
-            raise ValueError("prompt_mode must be 'append' or 'replace'")
-        if negative_prompt_mode not in {"append", "replace"}:
-            raise ValueError("negative_prompt_mode must be 'append' or 'replace'")
+        if prompt_mode not in {"append", "replace", "modify"}:
+            raise ValueError("prompt_mode must be 'append', 'replace', or 'modify'")
+        if negative_prompt_mode not in {"append", "replace", "modify"}:
+            raise ValueError("negative_prompt_mode must be 'append', 'replace', or 'modify'")
         if batch_size <= 0:
             raise ValueError("batch_size must be >= 1")
 
@@ -1453,6 +1476,168 @@ class AppController:
         )
         return submitted_count
 
+    def build_photo_optimize_defaults(self) -> dict[str, Any]:
+        config = self._build_reprocess_config(["img2img", "adetailer", "upscale"])
+        txt2img_cfg = config.get("txt2img", {}) if isinstance(config, dict) else {}
+        img2img_cfg = config.get("img2img", {}) if isinstance(config, dict) else {}
+        model = (
+            (img2img_cfg.get("model") if isinstance(img2img_cfg, dict) else None)
+            or (txt2img_cfg.get("model") if isinstance(txt2img_cfg, dict) else None)
+            or config.get("model")
+            or ""
+        )
+        vae = (
+            (img2img_cfg.get("vae") if isinstance(img2img_cfg, dict) else None)
+            or (txt2img_cfg.get("vae") if isinstance(txt2img_cfg, dict) else None)
+            or config.get("vae")
+            or ""
+        )
+        return {
+            "prompt": "",
+            "negative_prompt": "",
+            "model": str(model or ""),
+            "vae": str(vae or ""),
+            "stage_defaults": {
+                "img2img": True,
+                "adetailer": False,
+                "upscale": False,
+            },
+            "config": config,
+            "source": "manual",
+        }
+
+    def on_optimize_photo_assets(
+        self,
+        *,
+        assets: list[dict[str, Any]],
+        stages: list[str],
+        prompt_delta: str = "",
+        negative_prompt_delta: str = "",
+        prompt_mode: str = "append",
+        negative_prompt_mode: str = "append",
+        batch_size: int = 1,
+    ) -> int:
+        from src.pipeline.reprocess_builder import ReprocessJobBuilder
+
+        if not assets:
+            raise ValueError("No photo assets were provided for optimization")
+        if not stages:
+            raise ValueError("No stages specified for photo optimization")
+        valid_stages = {"adetailer", "upscale", "img2img"}
+        invalid_stages = set(stages) - valid_stages
+        if invalid_stages:
+            raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
+        if prompt_mode not in {"append", "replace", "modify"}:
+            raise ValueError("prompt_mode must be 'append', 'replace', or 'modify'")
+        if negative_prompt_mode not in {"append", "replace", "modify"}:
+            raise ValueError("negative_prompt_mode must be 'append', 'replace', or 'modify'")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be >= 1")
+
+        fallback_config = self._build_reprocess_config(stages)
+        builder = ReprocessJobBuilder()
+        store = get_photo_optimize_store()
+        group_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        njrs = []
+
+        for asset in assets:
+            asset_id = str(asset.get("asset_id") or "")
+            if not asset_id:
+                raise ValueError("Photo asset is missing asset_id")
+            baseline = asset.get("baseline") or {}
+            if hasattr(baseline, "to_dict"):
+                baseline = baseline.to_dict()
+            if not isinstance(baseline, dict):
+                baseline = {}
+            input_image_path = str(
+                asset.get("input_image_path")
+                or baseline.get("working_image_path")
+                or asset.get("managed_original_path")
+                or ""
+            )
+            if not input_image_path:
+                raise ValueError(f"Photo asset '{asset_id}' is missing input_image_path")
+            base_prompt = str(baseline.get("prompt") or "")
+            base_negative_prompt = str(baseline.get("negative_prompt") or "")
+            base_model = str(baseline.get("model") or "")
+            base_vae = str(baseline.get("vae") or "")
+            base_config = baseline.get("config") if isinstance(baseline.get("config"), dict) else {}
+            effective_prompt = self._apply_prompt_delta(base_prompt, prompt_delta, prompt_mode)
+            effective_negative_prompt = self._apply_prompt_delta(
+                base_negative_prompt,
+                negative_prompt_delta,
+                negative_prompt_mode,
+            )
+            merged_config = self._merge_nested_dicts(fallback_config, base_config)
+            self._apply_model_vae_to_config(
+                merged_config,
+                model=base_model or None,
+                vae=base_vae or None,
+            )
+            config_signature = json.dumps(merged_config, sort_keys=True, default=str)
+            group_key = (
+                effective_prompt,
+                effective_negative_prompt,
+                base_model,
+                config_signature,
+            )
+            group = group_map.get(group_key)
+            if group is None:
+                group = {
+                    "assets": [],
+                    "config": merged_config,
+                    "prompt": effective_prompt,
+                    "negative_prompt": effective_negative_prompt,
+                    "model": base_model,
+                }
+                group_map[group_key] = group
+            group["assets"].append(
+                {
+                    "asset_id": asset_id,
+                    "input_image_path": input_image_path,
+                    "effective_prompt": effective_prompt,
+                    "effective_negative_prompt": effective_negative_prompt,
+                    "config_snapshot": deepcopy(merged_config),
+                    "stages": list(stages),
+                }
+            )
+
+        for group in group_map.values():
+            assets_in_group = list(group["assets"])
+            for idx in range(0, len(assets_in_group), batch_size):
+                chunk = assets_in_group[idx : idx + batch_size]
+                output_dir = store.create_staging_run_dir("photo_optimize")
+                njr = builder.build_reprocess_job(
+                    input_image_paths=[item["input_image_path"] for item in chunk],
+                    stages=stages,
+                    config=group["config"],
+                    prompt=group["prompt"],
+                    negative_prompt=group["negative_prompt"],
+                    model=group["model"] or None,
+                    output_dir=str(output_dir),
+                    pack_name="PhotoOptimize",
+                )
+                photo_metadata = {
+                    "source": "photo_optimize_tab",
+                    "run_id": output_dir.name,
+                    "stages": list(stages),
+                    "prompt_mode": prompt_mode,
+                    "prompt_delta": prompt_delta,
+                    "negative_prompt_mode": negative_prompt_mode,
+                    "negative_prompt_delta": negative_prompt_delta,
+                    "assets": chunk,
+                }
+                njr.extra_metadata = dict(njr.extra_metadata or {})
+                njr.extra_metadata["photo_optimize"] = photo_metadata
+                njrs.append(njr)
+
+        submitted_count = self._submit_reprocess_njrs(njrs, source="photo_optimize_tab")
+        self._append_log(
+            f"[photo_optimize] Submitted {submitted_count} job(s) across "
+            f"{len(group_map)} compatibility group(s), batch_size={batch_size}"
+        )
+        return submitted_count
+
     def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
         from src.utils.image_metadata import extract_embedded_metadata
 
@@ -1499,11 +1684,88 @@ class AppController:
         delta_clean = (delta or "").strip()
         if not delta_clean:
             return base_clean
-        if mode == "replace":
+        if mode in {"replace", "modify"}:
             return delta_clean
         if not base_clean:
             return delta_clean
         return f"{base_clean}, {delta_clean}"
+
+    def _extract_reprocess_output_paths(self, job: Job, result: Any) -> list[str]:
+        njr = getattr(job, "_normalized_record", None)
+        if njr is not None:
+            existing = list(getattr(njr, "output_paths", []) or [])
+            if existing:
+                return [str(item) for item in existing]
+        payload = getattr(job, "result", None)
+        if not isinstance(payload, dict) and isinstance(result, dict):
+            payload = result
+        if isinstance(payload, dict):
+            direct = payload.get("output_paths")
+            if isinstance(direct, list) and direct:
+                return [str(item) for item in direct]
+            variants = payload.get("variants")
+            if isinstance(variants, list) and variants:
+                paths: list[str] = []
+                for variant in variants:
+                    if not isinstance(variant, dict):
+                        continue
+                    path = variant.get("path") or variant.get("output_path")
+                    if path:
+                        paths.append(str(path))
+                input_count = len(getattr(njr, "input_image_paths", []) or []) if njr is not None else 0
+                if input_count > 0 and len(paths) > input_count:
+                    paths = paths[-input_count:]
+                return paths
+        return []
+
+    def _handle_photo_optimize_completion(self, job: Job, result: Any) -> None:
+        njr = getattr(job, "_normalized_record", None)
+        metadata = getattr(njr, "extra_metadata", None) if njr is not None else None
+        if not isinstance(metadata, dict):
+            return
+        photo_meta = metadata.get("photo_optimize")
+        if not isinstance(photo_meta, dict):
+            return
+        if getattr(job, "status", None) != JobStatus.COMPLETED:
+            return
+
+        output_paths = self._extract_reprocess_output_paths(job, result)
+        assets = list(photo_meta.get("assets") or [])
+        if not assets or not output_paths:
+            return
+
+        store = get_photo_optimize_store()
+        processed_asset_ids: list[str] = []
+        for index, asset_info in enumerate(assets):
+            if not isinstance(asset_info, dict):
+                continue
+            if index >= len(output_paths):
+                break
+            asset_id = str(asset_info.get("asset_id") or "")
+            if not asset_id:
+                continue
+            store.record_optimize_history(
+                asset_id,
+                run_id=str(photo_meta.get("run_id") or job.job_id),
+                input_image_path=str(asset_info.get("input_image_path") or ""),
+                source_output_paths=[output_paths[index]],
+                prompt_mode=str(photo_meta.get("prompt_mode") or "append"),
+                prompt_delta=str(photo_meta.get("prompt_delta") or ""),
+                negative_prompt_mode=str(photo_meta.get("negative_prompt_mode") or "append"),
+                negative_prompt_delta=str(photo_meta.get("negative_prompt_delta") or ""),
+                effective_prompt=str(asset_info.get("effective_prompt") or ""),
+                effective_negative_prompt=str(asset_info.get("effective_negative_prompt") or ""),
+                stages=[str(item) for item in asset_info.get("stages") or photo_meta.get("stages") or []],
+                config_snapshot=asset_info.get("config_snapshot") or {},
+                job_ids=[job.job_id],
+            )
+            processed_asset_ids.append(asset_id)
+
+        if processed_asset_ids and self.main_window is not None:
+            tab = getattr(self.main_window, "photo_optimize_tab", None)
+            refresh = getattr(tab, "on_assets_updated", None)
+            if callable(refresh):
+                self._ui_dispatch(lambda: refresh(processed_asset_ids))
 
     @staticmethod
     def _merge_nested_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -2667,7 +2929,7 @@ class AppController:
             return
 
         if self.main_window is not None:
-            self.main_window.after(0, lambda: self._set_lifecycle(new_state, error))
+            self._ui_dispatch(lambda: self._set_lifecycle(new_state, error))
 
     def _update_status(self, text: str) -> None:
         """Update status bar text if the bottom zone is ready; otherwise cache it."""
@@ -2699,11 +2961,10 @@ class AppController:
                 return
             status_label.configure(text=f"Status: {text}")
 
-        # Only update UI on main thread; otherwise, dispatch via root.after
-        root = getattr(self.main_window, "root", None)
-        if thread_name != "MainThread" and root is not None:
+        # Only update UI on main thread; otherwise, dispatch via controller scheduler
+        if thread_name != "MainThread":
             logger.debug(f"[D21] _update_status dispatching to UI thread (from {thread_name})")
-            root.after(0, do_update)
+            self._ui_dispatch(do_update)
         else:
             do_update()
 
@@ -2801,7 +3062,7 @@ class AppController:
             return
 
         if self.main_window is not None:
-            self.main_window.after(0, lambda: self._append_log(text))
+            self._ui_dispatch(lambda: self._append_log(text))
 
     def generate_diagnostics_bundle_manual(self) -> None:
         """Expose a manual trigger for diagnostics bundles."""

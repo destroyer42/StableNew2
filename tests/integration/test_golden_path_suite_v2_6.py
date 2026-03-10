@@ -97,7 +97,7 @@ class TestGP1SingleSimpleRun:
         # Step 3: Verify NJR structure
         assert njr.job_id == "gp1-test-001"
         assert njr.positive_prompt == pack.slots[0].text
-        assert njr.base_model == "sdxl"
+        assert njr.base_model == pack.preset_data.get("base_model", "sdxl")
         assert njr.config["sampler"] == "Euler"
         assert njr.config["steps"] == 20
 
@@ -170,8 +170,9 @@ class TestGP1SingleSimpleRun:
             # Verify history entry metadata
             assert entry.job_id == "gp1-test-003"
             assert entry.status == JobStatus.COMPLETED
-            assert entry.normalized_record_snapshot is not None
-            assert entry.normalized_record_snapshot.positive_prompt == pack.slots[0].text
+            snapshot = (entry.snapshot or {}).get("normalized_job", {})
+            assert snapshot
+            assert snapshot.get("positive_prompt") == pack.slots[0].text
 
     def test_gp1_debug_hub_explain_job_works(self):
         """GP1.4: Debug Hub can explain job with full builder trace."""
@@ -307,8 +308,17 @@ class TestGP3BatchExpansion:
             for entry in history_entries:
                 assert entry.status.value == "completed"
             
-            # Verify HTTP calls made for each batch job
-            assert mock_request.call_count == 3
+            # Verify at least one generation call per batch job.
+            # Runner may perform additional readiness/progress API calls.
+            txt2img_calls = 0
+            for call in mock_request.call_args_list:
+                args = list(call.args)
+                kwargs = call.kwargs or {}
+                method = str(args[0] if len(args) > 0 else kwargs.get("method", ""))
+                url = str(args[1] if len(args) > 1 else kwargs.get("url", ""))
+                if method.upper() == "POST" and "/sdapi/v1/txt2img" in url:
+                    txt2img_calls += 1
+            assert txt2img_calls >= 3
 
 
 # ============================================================================
@@ -452,9 +462,11 @@ class TestGP6MultiStagePipeline:
             assert mock_request.called
             
             # Verify NJR snapshot has stage flags enabled
-            snapshot = entry.normalized_record_snapshot
-            assert snapshot.config["enable_hr"] is True
-            assert snapshot.config["adetailer_enabled"] is True
+            snapshot = (entry.snapshot or {}).get("normalized_job", {})
+            assert snapshot
+            config = snapshot.get("config", {})
+            assert config.get("enable_hr") is True
+            assert config.get("adetailer_enabled") is True
 
 
 # ============================================================================

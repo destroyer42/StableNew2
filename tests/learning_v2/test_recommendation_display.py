@@ -118,6 +118,35 @@ def test_update_recommendations_handles_recommendation_set():
     assert "Sampler" in call_args
 
 
+def test_update_recommendations_includes_rationale_when_present():
+    """Verify compact rationale/context are shown when available."""
+    from src.gui.views.learning_review_panel import LearningReviewPanel
+
+    panel = LearningReviewPanel.__new__(LearningReviewPanel)
+    panel.recommendations_text = MagicMock()
+    panel.recommendations_text.config = MagicMock()
+    panel.recommendations_text.delete = MagicMock()
+    panel.recommendations_text.insert = MagicMock()
+    panel.apply_button = MagicMock()
+
+    recs = [
+        {
+            "parameter": "CFG Scale",
+            "value": 8.0,
+            "confidence": 0.82,
+            "samples": 9,
+            "mean_rating": 4.3,
+            "rationale": "samples=9; stddev=0.4; context=stage-match",
+            "context": "txt2img|modelA|default|medium",
+        }
+    ]
+
+    panel.update_recommendations(recs)
+    call_args = str(panel.recommendations_text.insert.call_args_list)
+    assert "Because:" in call_args
+    assert "context=" in call_args
+
+
 def test_update_recommendations_empty_list():
     """Verify empty list shows insufficient data message."""
     from src.gui.views.learning_review_panel import LearningReviewPanel
@@ -172,6 +201,7 @@ def test_rating_triggers_recommendation_refresh():
         controller = LearningController(
             learning_state=state,
             learning_record_writer=writer,
+            pipeline_controller=object(),
         )
 
         # Mock the refresh_recommendations method

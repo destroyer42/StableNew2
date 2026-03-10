@@ -17,13 +17,15 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from src.gui.theme_v2 import (
-    ACCENT_GOLD,
-    ASWF_ERROR_RED,
     SECONDARY_BUTTON_STYLE,
     STATUS_LABEL_STYLE,
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
-    TEXT_PRIMARY,
+)
+from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.queue_status_contract import (
+    resolve_queue_status_display,
+    resolve_queue_status_from_label,
 )
 from src.pipeline.job_models_v2 import (
     JobQueueItemDTO,
@@ -56,7 +58,7 @@ class QueuePanelV2(ttk.Frame):
         self.app_state = app_state
         self._jobs: list[UnifiedJobSummary] = []
         self._is_queue_paused = False
-        self._auto_run_enabled = False
+        self._auto_run_enabled = bool(getattr(app_state, "auto_run_queue", True))
         self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
         self._summaries: list[UnifiedJobSummary] = []
 
@@ -75,7 +77,7 @@ class QueuePanelV2(ttk.Frame):
         controls_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         controls_frame.pack(fill="x", pady=(0, 4))
 
-        self.auto_run_var = tk.BooleanVar(value=False)
+        self.auto_run_var = tk.BooleanVar(value=self._auto_run_enabled)
         self.auto_run_check = ttk.Checkbutton(
             controls_frame,
             text="Auto-run queue",
@@ -128,13 +130,13 @@ class QueuePanelV2(ttk.Frame):
             height=6,
             selectmode=tk.SINGLE,
             exportselection=False,
-            bg="#2a2a2a",
-            fg="#e0e0e0",
-            selectbackground="#4a90d9",
-            selectforeground="#ffffff",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            selectbackground=TOKENS.colors.status_info,
+            selectforeground=TOKENS.colors.text_primary,
             highlightthickness=1,
-            highlightbackground="#3a3a3a",
-            highlightcolor="#4a90d9",
+            highlightbackground=TOKENS.colors.border_subtle,
+            highlightcolor=TOKENS.colors.status_info,
             relief="flat",
             font=("Segoe UI", 9),
         )
@@ -495,7 +497,9 @@ class QueuePanelV2(ttk.Frame):
 
     # PR-PIPE-003: Visual feedback methods
     
-    def _flash_item(self, index: int, color: str = "#4a90d9", duration_ms: int = 300) -> None:
+    def _flash_item(
+        self, index: int, color: str = TOKENS.colors.status_info, duration_ms: int = 300
+    ) -> None:
         """Briefly highlight a listbox item to indicate action completion."""
         if index < 0 or index >= self.job_listbox.size():
             return
@@ -525,18 +529,18 @@ class QueuePanelV2(ttk.Frame):
 
     def _flash_success(self, index: int) -> None:
         """Flash item green to indicate success."""
-        self._flash_item(index, color="#4a9f4a", duration_ms=250)
+        self._flash_item(index, color=TOKENS.colors.status_success, duration_ms=250)
 
     def _flash_move(self, index: int) -> None:
         """Flash item blue to indicate move completed."""
-        self._flash_item(index, color="#4a90d9", duration_ms=300)
+        self._flash_item(index, color=TOKENS.colors.status_info, duration_ms=300)
 
     def _show_boundary_feedback(self, boundary: str) -> None:
         """Show subtle feedback when job is at queue boundary."""
         idx = self._get_selected_index()
         if idx is not None:
             # Brief orange flash to indicate "can't go further"
-            self._flash_item(idx, color="#d9a04a", duration_ms=150)
+            self._flash_item(idx, color=TOKENS.colors.status_warning, duration_ms=150)
 
     def _emit_status_message(self, message: str, level: str = "info") -> None:
         """Emit a status message via controller or status bar."""
@@ -749,19 +753,15 @@ class QueuePanelV2(ttk.Frame):
         self, is_paused: bool, running_job: Any | None, queue_count: int
     ) -> None:
         """Update the queue status label text and color."""
-        if running_job:
-            status_text = "Queue: Running job..."
-            color = ACCENT_GOLD
-        elif is_paused:
-            status_text = f"Queue: Paused ({queue_count} pending)"
-            color = ASWF_ERROR_RED
-        elif queue_count > 0:
-            status_text = f"Queue: {queue_count} job{'s' if queue_count != 1 else ''} pending"
-            color = TEXT_PRIMARY
-        else:
-            status_text = "Queue: Idle"
-            color = TEXT_PRIMARY
-        self.queue_status_label.configure(text=status_text, foreground=color)
+        state = resolve_queue_status_display(
+            is_paused=bool(is_paused),
+            has_running_job=running_job is not None,
+            queue_count=int(queue_count or 0),
+        )
+        self.queue_status_label.configure(
+            text=state.text,
+            foreground=self._status_color_for_severity(state.severity),
+        )
 
     def update_queue_status(self, status: str | None) -> None:
         """Update the queue status from a status string.
@@ -770,17 +770,20 @@ class QueuePanelV2(ttk.Frame):
         """
         if self._dispatch_to_ui(lambda: self.update_queue_status(status)):
             return
-        normalized = (status or "idle").lower()
-        if normalized == "running":
-            color = ACCENT_GOLD
-        elif normalized == "paused":
-            color = ASWF_ERROR_RED
-        else:
-            color = TEXT_PRIMARY
+        state = resolve_queue_status_from_label(status)
         self.queue_status_label.configure(
-            text=f"Queue: {normalized.title()}",
-            foreground=color,
+            text=state.text,
+            foreground=self._status_color_for_severity(state.severity),
         )
+
+    def _status_color_for_severity(self, severity: str) -> str:
+        severity_to_color = {
+            "running": TOKENS.colors.status_warning,
+            "paused": TOKENS.colors.status_error,
+            "pending": TOKENS.colors.text_primary,
+            "idle": TOKENS.colors.text_primary,
+        }
+        return severity_to_color.get(str(severity or "").strip().lower(), TOKENS.colors.text_primary)
 
     def refresh_states(self) -> None:
         """Refresh control states from current app state."""

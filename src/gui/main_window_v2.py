@@ -19,6 +19,7 @@ from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
+from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui.zone_map_v2 import get_root_zone_config
@@ -210,6 +211,7 @@ class MainWindowV2:
             return tab
 
         self.learning_tab = self.add_tab("learning", "Learning", _make_learning)
+        self._restore_learning_tab_state()
 
         def _make_review(parent):
             return ReviewTabFrame(
@@ -219,6 +221,16 @@ class MainWindowV2:
             )
 
         self.review_tab = self.add_tab("review", "Review", _make_review)
+
+        def _make_photo_optimize(parent):
+            return PhotoOptimizeTabFrame(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.photo_optimize_tab = self.add_tab("photo_optimize", "Photo Optomize", _make_photo_optimize)
+        self._restore_photo_optimize_tab_state()
 
         # PR-PERSIST-001: Restore selected tab
         self._restore_tab_selection()
@@ -293,10 +305,9 @@ class MainWindowV2:
         # --- UI Heartbeat: Tk thread liveness signal ---
         self._install_ui_heartbeat()
         
-        # PR-STARTUP-PERF: Trigger deferred queue autostart after GUI renders
-        # This prevents blocking startup when there are queued jobs (was ~10s delay)
-        # TEMPORARILY DISABLED FOR TESTING
-        # self.root.after(100, self._trigger_deferred_queue_autostart)
+        # Trigger deferred queue autostart after the GUI renders so restored
+        # queued jobs actually resume when auto-run was enabled before shutdown.
+        self.root.after(100, self._trigger_deferred_queue_autostart)
 
     def _trigger_deferred_queue_autostart(self) -> None:
         """Trigger deferred queue autostart after GUI is fully rendered."""
@@ -455,6 +466,12 @@ class MainWindowV2:
             window_state = state.get("window", {})
             saved_geometry = window_state.get("geometry")
             saved_state = window_state.get("state")
+            learning_state = state.get("learning", {})
+            if isinstance(learning_state, dict):
+                try:
+                    self.app_state.set_learning_enabled(bool(learning_state.get("enabled", True)))
+                except Exception:
+                    pass
             
             if saved_geometry:
                 try:
@@ -875,6 +892,7 @@ class MainWindowV2:
         """Save window geometry and tab selection to disk."""
         try:
             ui_store = get_ui_state_store()
+            existing_state = ui_store.load_state() or {}
             
             # Get window geometry and state
             geometry = self.root.geometry()
@@ -893,14 +911,39 @@ class MainWindowV2:
                 pass
             
             state = {
+                **existing_state,
                 "window": {
                     "geometry": geometry,
                     "state": window_state
                 },
                 "tabs": {
                     "selected_index": selected_tab_index
-                }
+                },
             }
+            try:
+                learning_tab = getattr(self, "learning_tab", None)
+                getter = getattr(learning_tab, "get_learning_session_state", None)
+                if callable(getter):
+                    learning_state = getter()
+                    if isinstance(learning_state, dict):
+                        state["learning"] = learning_state
+                    elif "learning" not in state:
+                        state["learning"] = {}
+            except Exception:
+                if "learning" not in state:
+                    state["learning"] = {}
+            try:
+                photo_tab = getattr(self, "photo_optimize_tab", None)
+                photo_getter = getattr(photo_tab, "get_photo_optimize_state", None)
+                if callable(photo_getter):
+                    photo_state = photo_getter()
+                    if isinstance(photo_state, dict):
+                        state["photo_optimize"] = photo_state
+                    elif "photo_optimize" not in state:
+                        state["photo_optimize"] = {}
+            except Exception:
+                if "photo_optimize" not in state:
+                    state["photo_optimize"] = {}
             
             ui_store.save_state(state)
             logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
@@ -924,6 +967,32 @@ class MainWindowV2:
                     logger.debug(f"Restored tab selection: index {selected_index}")
         except Exception as e:
             logger.warning(f"Failed to restore tab selection: {e}")
+
+    def _restore_learning_tab_state(self) -> None:
+        """Restore persisted learning tab state."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            learning_state = state.get("learning")
+            learning_tab = getattr(self, "learning_tab", None)
+            restore = getattr(learning_tab, "restore_learning_session_state", None)
+            if callable(restore):
+                restore(learning_state)
+        except Exception as e:
+            logger.warning(f"Failed to restore learning tab state: {e}")
+
+    def _restore_photo_optimize_tab_state(self) -> None:
+        """Restore persisted Photo Optomize tab state."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            photo_state = state.get("photo_optimize")
+            photo_tab = getattr(self, "photo_optimize_tab", None)
+            restore = getattr(photo_tab, "restore_photo_optimize_state", None)
+            if callable(restore):
+                restore(photo_state)
+        except Exception as e:
+            logger.warning(f"Failed to restore Photo Optomize tab state: {e}")
 
 
 def run_app(

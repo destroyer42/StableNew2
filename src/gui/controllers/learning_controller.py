@@ -53,6 +53,9 @@ class LearningController:
         self._learning_enabled = False
         self._automation_mode = "suggest_only"
         self._automation_snapshot: dict[tuple[str, str], Any] = {}
+        self._workflow_state = "idle"
+        self._workflow_state_listeners: list[Any] = []
+        self._resume_state_listeners: list[Any] = []
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -122,6 +125,8 @@ class LearningController:
 
         # Store in state
         self.learning_state.current_experiment = experiment
+        self._set_workflow_state("designing")
+        self._notify_resume_state_changed()
 
     def _generate_values_from_range(self, start: float, end: float, step: float) -> list[float]:
         """Generate list of values from start to end with given step."""
@@ -365,11 +370,20 @@ class LearningController:
         # Update the plan table if it exists
         if self._plan_table:
             self._update_plan_table()
+        self._set_workflow_state("planned")
+        self._notify_resume_state_changed()
 
     def _update_plan_table(self) -> None:
         """Update the learning plan table with current plan data."""
         if self._plan_table and hasattr(self._plan_table, "update_plan"):
-            self._plan_table.update_plan(self.learning_state.plan)
+            stage_name = "txt2img"
+            if self.learning_state.current_experiment:
+                stage_name = str(self.learning_state.current_experiment.stage or "txt2img")
+            try:
+                self._plan_table.update_plan(self.learning_state.plan, stage_name=stage_name)
+            except TypeError:
+                # Backward compatibility for older test doubles.
+                self._plan_table.update_plan(self.learning_state.plan)
 
     def load_existing_ratings(self) -> None:
         """Load existing ratings for the current experiment."""
@@ -425,10 +439,12 @@ class LearningController:
         
         if not self.learning_state.plan:
             logger.warning("[LearningController] No plan exists, exiting run_plan()")
+            self._set_workflow_state("idle")
             return
 
         if not self.pipeline_controller:
             logger.error("[LearningController] No pipeline controller, exiting run_plan()")
+            self._set_workflow_state("planned")
             return
         
         logger.info(f"[LearningController] Starting to submit {len(self.learning_state.plan)} variants")
@@ -453,6 +469,7 @@ class LearningController:
 
         # Update table (fallback for any variants that didn't get live updates)
         self._update_plan_table()
+        self._recompute_workflow_state_from_plan()
 
     def _submit_variant_job(self, variant: LearningVariant) -> None:
         """Submit a learning job via LearningExecutionController.
@@ -1101,7 +1118,6 @@ class LearningController:
         logger.debug(f"Variant {variant.param_value} completed")
         
         variant.status = "completed"
-        variant.completed_images += 1
 
         # PR-LEARN-005: Extract image references from result
         image_paths = []
@@ -1118,6 +1134,7 @@ class LearningController:
         for image_path in image_paths:
             if image_path and image_path not in variant.image_refs:
                 variant.image_refs.append(image_path)
+        variant.completed_images = max(variant.completed_images, len(variant.image_refs))
 
         # PR-LEARN-004: Update UI with live updates
         variant_index = self._get_variant_index(variant)
@@ -1131,6 +1148,8 @@ class LearningController:
         # Update review panel if this variant is selected
         if self._review_panel and hasattr(self._review_panel, "display_variant_results"):
             self._review_panel.display_variant_results(variant)
+        self._recompute_workflow_state_from_plan()
+        self._notify_resume_state_changed()
 
     def _on_variant_job_failed(self, variant: LearningVariant, error: Exception) -> None:
         """Handle failure of a variant job."""
@@ -1141,6 +1160,190 @@ class LearningController:
         if variant_index >= 0:
             self._update_variant_status(variant_index, "failed")
             self._highlight_variant(variant_index, False)  # Remove highlight
+        self._recompute_workflow_state_from_plan()
+        self._notify_resume_state_changed()
+
+    def add_workflow_state_listener(self, listener: Any) -> None:
+        if listener not in self._workflow_state_listeners:
+            self._workflow_state_listeners.append(listener)
+
+    def add_resume_state_listener(self, listener: Any) -> None:
+        if listener not in self._resume_state_listeners:
+            self._resume_state_listeners.append(listener)
+
+    def _notify_resume_state_changed(self) -> None:
+        for listener in list(self._resume_state_listeners):
+            try:
+                listener()
+            except Exception:
+                continue
+
+    def get_workflow_state(self) -> str:
+        return self._workflow_state
+
+    def _set_workflow_state(self, state: str) -> None:
+        next_state = str(state or "idle").strip().lower() or "idle"
+        if next_state == self._workflow_state:
+            return
+        self._workflow_state = next_state
+        for listener in list(self._workflow_state_listeners):
+            try:
+                listener(self._workflow_state)
+            except Exception:
+                continue
+
+    def _recompute_workflow_state_from_plan(self) -> None:
+        plan = list(self.learning_state.plan or [])
+        if not plan:
+            self._set_workflow_state("idle")
+            return
+        statuses = {str(v.status or "").lower() for v in plan}
+        if statuses.issubset({"pending"}):
+            self._set_workflow_state("planned")
+            return
+        if "running" in statuses or "queued" in statuses:
+            self._set_workflow_state("running")
+            return
+        if "completed" in statuses:
+            if statuses.issubset({"completed", "failed"}):
+                self._set_workflow_state("reviewing")
+            else:
+                self._set_workflow_state("running")
+            return
+        if statuses.issubset({"failed"}):
+            self._set_workflow_state("failed")
+            return
+        self._set_workflow_state("planned")
+
+    def _is_review_complete(self) -> bool:
+        """Return True when a run has reached terminal status and all images are rated."""
+        plan = list(self.learning_state.plan or [])
+        if not plan:
+            return False
+        for variant in plan:
+            status = str(getattr(variant, "status", "") or "").lower()
+            if status in {"pending", "queued", "running"}:
+                return False
+            if status == "completed":
+                refs = list(getattr(variant, "image_refs", []) or [])
+                if not refs:
+                    return False
+                for ref in refs:
+                    if not self.is_image_rated(str(ref)):
+                        return False
+        return True
+
+    def export_resume_state(self) -> dict[str, Any] | None:
+        """Export resumable learning session state for UI persistence."""
+        if self.learning_state.current_experiment is None:
+            return None
+        if self._is_review_complete():
+            return None
+        payload = self.learning_state.to_dict()
+        payload["workflow_state"] = self._workflow_state
+        payload["learning_enabled"] = bool(self._learning_enabled)
+        payload["resume_schema_version"] = 1
+        payload["saved_at"] = datetime.utcnow().isoformat() + "Z"
+        return payload
+
+    def restore_resume_state(self, payload: dict[str, Any] | None) -> bool:
+        """Restore learning session from persisted payload."""
+        if not isinstance(payload, dict):
+            return False
+        try:
+            restored = LearningState.from_dict(payload)
+        except Exception:
+            return False
+
+        self.learning_state.current_experiment = restored.current_experiment
+        self.learning_state.plan = list(restored.plan or [])
+        self.learning_state.selected_variant = restored.selected_variant
+        self.learning_state.selected_image_index = int(restored.selected_image_index or 0)
+        self.load_existing_ratings()
+        self._update_plan_table()
+
+        desired_state = str(payload.get("workflow_state", "") or "").strip().lower()
+        if desired_state:
+            self._set_workflow_state(desired_state)
+        else:
+            self._recompute_workflow_state_from_plan()
+
+        selected_variant = self.learning_state.selected_variant
+        if selected_variant is not None and self._review_panel and hasattr(
+            self._review_panel, "display_variant_results"
+        ):
+            try:
+                self._review_panel.display_variant_results(
+                    selected_variant,
+                    self.learning_state.current_experiment,
+                )
+            except Exception:
+                pass
+        self._notify_resume_state_changed()
+        return True
+
+    def get_learning_run_summary(self) -> dict[str, Any]:
+        """Return deterministic plan/run summary for the Learning tab header."""
+        plan = list(self.learning_state.plan or [])
+        experiment = self.learning_state.current_experiment
+        stage = str(getattr(experiment, "stage", "txt2img") or "txt2img")
+        images_per_variant = int(getattr(experiment, "images_per_value", 0) or 0)
+        total_variants = len(plan)
+        status_counts = {
+            "pending": 0,
+            "queued": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0,
+        }
+        total_planned_images = 0
+        total_completed_images = 0
+        for variant in plan:
+            status = str(getattr(variant, "status", "") or "").lower()
+            if status in status_counts:
+                status_counts[status] += 1
+            total_planned_images += int(getattr(variant, "planned_images", 0) or 0)
+            total_completed_images += int(getattr(variant, "completed_images", 0) or 0)
+        if total_planned_images <= 0 and total_variants > 0 and images_per_variant > 0:
+            total_planned_images = total_variants * images_per_variant
+
+        pending_submissions = status_counts["pending"]
+        queue_ok = True
+        queue_reason = ""
+        queue_cap = None
+        queue_depth = None
+        if self.pipeline_controller:
+            can_enqueue = getattr(self.pipeline_controller, "can_enqueue_learning_jobs", None)
+            get_cap = getattr(self.pipeline_controller, "get_learning_queue_cap", None)
+            get_depth = getattr(self.pipeline_controller, "get_queue_depth", None)
+            if callable(get_cap):
+                try:
+                    queue_cap = int(get_cap())
+                except Exception:
+                    queue_cap = None
+            if callable(get_depth):
+                try:
+                    queue_depth = int(get_depth())
+                except Exception:
+                    queue_depth = None
+            if callable(can_enqueue):
+                try:
+                    queue_ok, queue_reason = can_enqueue(max(1, pending_submissions))
+                except Exception:
+                    queue_ok = False
+                    queue_reason = "queue check failed"
+
+        return {
+            "stage": stage,
+            "total_variants": total_variants,
+            "status_counts": status_counts,
+            "total_planned_images": total_planned_images,
+            "total_completed_images": total_completed_images,
+            "queue_ok": queue_ok,
+            "queue_reason": queue_reason,
+            "queue_cap": queue_cap,
+            "queue_depth": queue_depth,
+        }
 
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
         """Handle completion of a learning job."""
@@ -1214,6 +1417,11 @@ class LearningController:
         
         # Update plan table with new average rating
         self._update_variant_ratings()
+        if self._is_review_complete():
+            self._set_workflow_state("completed")
+        else:
+            self._recompute_workflow_state_from_plan()
+        self._notify_resume_state_changed()
 
     def update_recommendations(self) -> None:
         """Update recommendations based on latest learning data."""
@@ -1333,6 +1541,11 @@ class LearningController:
     def set_learning_enabled(self, enabled: bool) -> None:
         """Set learning enablement and propagate to connected controllers."""
         self._learning_enabled = bool(enabled)
+        if self.app_controller and hasattr(self.app_controller, "_app_state"):
+            try:
+                self.app_controller._app_state.set_learning_enabled(self._learning_enabled)
+            except Exception:
+                pass
         if self.execution_controller and hasattr(self.execution_controller, "set_learning_enabled"):
             try:
                 self.execution_controller.set_learning_enabled(self._learning_enabled)
@@ -1343,6 +1556,7 @@ class LearningController:
                 self.pipeline_controller.set_learning_enabled(self._learning_enabled)
             except Exception:
                 pass
+        self._notify_resume_state_changed()
 
     def list_recent_records(self, limit: int = 10) -> list[Any]:
         """Return recent learning records through execution-controller APIs."""
@@ -1374,6 +1588,22 @@ class LearningController:
             raise ValueError("rating must be an integer") from exc
         if rating < 1 or rating > 5:
             raise ValueError("rating must be between 1 and 5")
+        subscores_raw = feedback.get("subscores") or {}
+        subscores = {
+            "anatomy": int(subscores_raw.get("anatomy", rating) or rating),
+            "composition": int(subscores_raw.get("composition", rating) or rating),
+            "prompt_adherence": int(subscores_raw.get("prompt_adherence", rating) or rating),
+        }
+        for key, value in subscores.items():
+            if value < 1 or value > 5:
+                raise ValueError(f"{key} must be between 1 and 5")
+        weighted_score = (
+            (rating * 0.4)
+            + (subscores["anatomy"] * 0.2)
+            + (subscores["composition"] * 0.2)
+            + (subscores["prompt_adherence"] * 0.2)
+        )
+        blended_rating = int(min(5, max(1, round(weighted_score))))
 
         base_prompt = str(feedback.get("base_prompt") or "")
         base_negative = str(feedback.get("base_negative_prompt") or "")
@@ -1384,7 +1614,11 @@ class LearningController:
         metadata = {
             "source": "review_tab",
             "image_path": image_path,
-            "user_rating": rating,
+            "user_rating": blended_rating,
+            "user_rating_raw": rating,
+            "advanced_rating_enabled": True,
+            "subscores": subscores,
+            "weighted_score": weighted_score,
             "quality_label": str(feedback.get("quality_label") or ""),
             "user_notes": str(feedback.get("notes") or ""),
             "stage": stage,
@@ -1436,6 +1670,57 @@ class LearningController:
         self._learning_record_writer.append_record(record)
         self.refresh_recommendations()
         return record
+
+    def undo_review_feedback(
+        self,
+        *,
+        run_id: str | None = None,
+        image_path: str | None = None,
+    ) -> bool:
+        """Undo a review feedback write by deleting the latest matching record."""
+        if not self._learning_record_writer:
+            return False
+        path = self._learning_record_writer.records_path
+        if not path.exists():
+            return False
+
+        target_run = str(run_id or "").strip()
+        target_image = str(image_path or "").strip()
+        try:
+            lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        except Exception:
+            return False
+        if not lines:
+            return False
+
+        remove_index = -1
+        for idx in range(len(lines) - 1, -1, -1):
+            try:
+                payload = json.loads(lines[idx])
+            except Exception:
+                continue
+            metadata = payload.get("metadata", {})
+            if metadata.get("source") != "review_tab":
+                continue
+            if target_run and str(payload.get("run_id") or "") != target_run:
+                continue
+            if target_image and str(metadata.get("image_path") or "") != target_image:
+                continue
+            remove_index = idx
+            break
+        if remove_index < 0:
+            return False
+
+        lines.pop(remove_index)
+        try:
+            final_text = "\n".join(lines)
+            if final_text:
+                final_text += "\n"
+            path.write_text(final_text, encoding="utf-8")
+        except Exception:
+            return False
+        self.refresh_recommendations()
+        return True
 
     def list_recent_review_feedback(
         self,
@@ -1492,10 +1777,12 @@ class LearningController:
         """Handle selection of a variant in the table."""
         if 0 <= variant_index < len(self.learning_state.plan):
             variant = self.learning_state.plan[variant_index]
+            self.learning_state.selected_variant = variant
             if self._review_panel and hasattr(self._review_panel, "display_variant_results"):
                 self._review_panel.display_variant_results(
                     variant, self.learning_state.current_experiment
                 )
+            self._notify_resume_state_changed()
     
     def apply_recommendations_to_pipeline(self, recommendations: Any) -> bool:
         """Apply recommendations to the pipeline stage cards.
@@ -1568,6 +1855,7 @@ class LearningController:
         if mode_value not in allowed:
             mode_value = "suggest_only"
         self._automation_mode = mode_value
+        self._notify_resume_state_changed()
 
     def get_automation_mode(self) -> str:
         return self._automation_mode

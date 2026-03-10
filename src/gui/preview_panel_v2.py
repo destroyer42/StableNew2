@@ -78,6 +78,7 @@ class PreviewPanelV2(ttk.Frame):
         # Right column: Thumbnail + checkbox
         right_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
         right_frame.grid(row=0, column=1, sticky="ne", padx=(8, 0))
+        self.thumbnail_frame = right_frame
 
         self.thumbnail = ThumbnailWidget(
             right_frame,
@@ -261,6 +262,10 @@ class PreviewPanelV2(ttk.Frame):
             cfg_scale=(unified.cfg_scale if unified else None),
             seed=getattr(job, "seed", None),
             base_model=(unified.base_model if unified else getattr(ui_summary, "label", "")),
+            prompt_pack_name=getattr(job, "prompt_pack_name", ""),
+            thumbnail_path=getattr(job, "thumbnail_path", None),
+            output_paths=list(getattr(job, "output_paths", []) or []),
+            source_job=job,
         )
 
     def set_job_summaries(self, summaries: list[Any]) -> None:
@@ -268,8 +273,8 @@ class PreviewPanelV2(ttk.Frame):
         if self._dispatch_to_ui(lambda: self.set_job_summaries(summaries)):
             return
         self._job_summaries = list(summaries)
-        first_summary = summaries[0] if summaries else None
-        self._render_summary(first_summary, len(summaries))
+        last_summary = summaries[-1] if summaries else None
+        self._render_summary(last_summary, len(summaries))
 
     def update_from_job_draft(self, job_draft: Any | None) -> None:
         """Render preview directly from a JobDraft pack list."""
@@ -965,6 +970,26 @@ class PreviewPanelV2(ttk.Frame):
         if summary is None:
             return None
 
+        source_job = getattr(summary, "source_job", None)
+        if source_job is not None and source_job is not summary:
+            source_image = self._find_latest_output_image(source_job)
+            if source_image and source_image.exists():
+                return source_image
+
+        thumbnail_path = getattr(summary, "thumbnail_path", None)
+        if thumbnail_path:
+            thumbnail = Path(thumbnail_path)
+            if thumbnail.exists():
+                return thumbnail
+
+        output_paths = getattr(summary, "output_paths", None)
+        if isinstance(output_paths, list):
+            for candidate in reversed(output_paths):
+                if candidate:
+                    image_path = Path(candidate)
+                    if image_path.exists():
+                        return image_path
+
         # If summary carries a result dict with metadata paths, use that first
         result = getattr(summary, "result", None)
         if isinstance(result, dict):
@@ -1061,83 +1086,6 @@ class PreviewPanelV2(ttk.Frame):
         # PR-PREVIEW-001: Preserve checkbox state, don't hardcode True
         self._current_show_preview = self._show_preview_var.get()
         self._update_thumbnail(summary, self._current_pack_name, self._show_preview_var.get())
-        
-        # PR-GUI-DATA-005: Load latest output image if preview enabled
-        if self._show_preview_var.get() and summary:
-            latest_image = self._find_latest_output_image(summary)
-            if latest_image and latest_image.exists():
-                try:
-                    self.thumbnail.load_image(str(latest_image))
-                except Exception as e:
-                    logger.debug(f"Failed to load thumbnail: {e}")
-                    self.thumbnail.clear()
-            else:
-                self.thumbnail.clear()
-        else:
-            self.thumbnail.clear()
-    
-    def _find_latest_output_image(self, summary: UnifiedJobSummary) -> Path | None:
-        """Find the most recently generated image for this job.
-        
-        PR-GUI-DATA-005: Search job output folder for latest image.
-        
-        Args:
-            summary: UnifiedJobSummary containing job_id and result metadata
-            
-        Returns:
-            Path to most recent image or None
-        """
-        # Try to get output folder from result metadata
-        if hasattr(summary, 'result') and isinstance(summary.result, dict):
-            metadata = summary.result.get('metadata', {})
-            if isinstance(metadata, dict):
-                output_path = metadata.get('path')
-                if output_path:
-                    image_path = Path(output_path)
-                    if image_path.exists():
-                        return image_path
-        
-        # Fallback: scan output folder for this job_id
-        job_id = getattr(summary, 'job_id', None)
-        if job_id:
-            output_folder = Path("output") / job_id
-            if output_folder.exists():
-                # Find most recent image file
-                image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
-                images = [
-                    f for f in output_folder.rglob("*")
-                    if f.is_file() and f.suffix.lower() in image_extensions
-                ]
-                if images:
-                    # Sort by modification time, return most recent
-                    images.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                    return images[0]
-        
-        # Try output/<timestamp> pattern fallback
-        output_root = Path("output")
-        if output_root.exists():
-            # Find folders that might contain this job's outputs
-            # Look for recent folders (within last hour)
-            import time
-            now = time.time()
-            recent_threshold = now - 3600  # 1 hour ago
-            
-            recent_folders = [
-                f for f in output_root.iterdir()
-                if f.is_dir() and f.stat().st_mtime > recent_threshold
-            ]
-            
-            for folder in sorted(recent_folders, key=lambda p: p.stat().st_mtime, reverse=True):
-                image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
-                images = [
-                    f for f in folder.rglob("*")
-                    if f.is_file() and f.suffix.lower() in image_extensions
-                ]
-                if images:
-                    images.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                    return images[0]
-        
-        return None
 
     # PR-PERSIST-001: State persistence methods
     def save_state(self) -> None:
@@ -1165,10 +1113,9 @@ class PreviewPanelV2(ttk.Frame):
                 logger.warning("Unsupported preview state schema, ignoring")
                 return
             
-            # NOTE: show_preview is NOT restored - always starts False (unchecked)
-            # User must manually enable preview each session if desired
-            
-            logger.debug("Restored preview panel state (show_preview always defaults to False)")
+            show_preview = bool(state.get("show_preview", False))
+            self._show_preview_var.set(show_preview)
+            logger.debug("Restored preview panel state")
         except Exception as e:
             logger.warning(f"Failed to restore preview panel state: {e}")
 

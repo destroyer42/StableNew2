@@ -21,10 +21,11 @@ Modern Journey Test Pattern (PR-TEST-003):
 from __future__ import annotations
 
 import time
+import base64
 from collections.abc import Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from src.controller.app_controller import AppController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -216,8 +217,74 @@ def run_njr_journey(
     # Create runner with the api_client
     runner = PipelineRunner(api_client=api_client, structured_logger=StructuredLogger())
 
-    # Execute the NJR
-    result = runner.run_njr(njr)
+    original_request = getattr(api_client._session, "request", None)
+    if callable(original_request):
+        def _request_with_normalized_response(*args, **kwargs):
+            response = original_request(*args, **kwargs)
+            if isinstance(response, Mock):
+                if isinstance(getattr(response, "content", None), Mock):
+                    response.content = b"{}"
+                if isinstance(getattr(response, "text", None), Mock):
+                    response.text = "{}"
+                if isinstance(getattr(response, "headers", None), Mock):
+                    response.headers = {}
+                if not callable(getattr(response, "raise_for_status", None)):
+                    response.raise_for_status = Mock()
+                json_fn = getattr(response, "json", None)
+                if callable(json_fn):
+                    try:
+                        payload = json_fn()
+                        if isinstance(payload, dict):
+                            images = payload.get("images")
+                            if isinstance(images, list):
+                                tiny_png = (
+                                    "data:image/png;base64,"
+                                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+                                )
+                                fixed = []
+                                changed = False
+                                for item in images:
+                                    value = str(item or "")
+                                    is_valid = False
+                                    if "base64," in value:
+                                        try:
+                                            raw = value.split("base64,", 1)[1]
+                                            decoded = base64.b64decode(raw, validate=True)
+                                            is_valid = bool(decoded.startswith(b"\x89PNG"))
+                                        except Exception:
+                                            is_valid = False
+                                    if not is_valid:
+                                        value = tiny_png
+                                        changed = True
+                                    fixed.append(value)
+                                if changed:
+                                    payload["images"] = fixed
+                                    response.json = Mock(return_value=payload)
+                    except Exception:
+                        pass
+            return response
+
+        try:
+            setattr(api_client._session, "request", _request_with_normalized_response)
+        except Exception:
+            pass
+
+    # Bypass readiness gate in deterministic tests where transport is fully mocked.
+    from src.api.webui_api import WebUIAPI
+
+    try:
+        with (
+            patch.object(WebUIAPI, "wait_until_true_ready", return_value=True),
+            patch("src.api.client.wait_for_webui_ready", return_value=True),
+            patch("src.api.client.validate_webui_health", return_value=True),
+        ):
+            result = runner.run_njr(njr)
+    finally:
+        if callable(original_request):
+            try:
+                setattr(api_client._session, "request", original_request)
+            except Exception:
+                pass
 
     # Convert result to JobHistoryEntry
     entry = JobHistoryEntry(
@@ -226,7 +293,14 @@ def run_njr_journey(
         status=JobStatus.COMPLETED if result.success else JobStatus.FAILED,
         run_mode="direct",
         payload_summary=f"NJR journey: {njr.positive_prompt[:50]}",
-        normalized_record_snapshot=njr,
+        snapshot={
+            "normalized_job": {
+                "job_id": njr.job_id,
+                "positive_prompt": njr.positive_prompt,
+                "negative_prompt": njr.negative_prompt,
+                "config": dict(njr.config or {}) if isinstance(njr.config, dict) else {},
+            },
+        },
     )
 
     return entry

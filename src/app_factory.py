@@ -7,6 +7,7 @@ from src.api.webui_process_manager import WebUIProcessManager
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.main_window_v2 import MainWindowV2
+from src.gui.ui_dispatcher import TkUiDispatcher
 from src.utils.config import ConfigManager
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ def build_v2_app(
 
     if root is None:
         root = tk.Tk()
+    ui_dispatcher = TkUiDispatcher(root)
 
     app_state = AppStateV2()
 
@@ -55,6 +57,7 @@ def build_v2_app(
         None,  # main_window=None for now
         pipeline_runner=pipeline_runner,
         threaded=threaded,
+        ui_scheduler=ui_dispatcher.invoke,
         webui_process_manager=webui_manager,
         config_manager=config_manager,
         job_service=job_service,  # PR-0114C-Ty: DI for tests

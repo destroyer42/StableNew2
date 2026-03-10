@@ -15,6 +15,7 @@ from src.gui.theme_v2 import (
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
+from src.gui.ui_tokens import TOKENS
 from src.gui.utils.display_helpers import format_seed_display
 from src.pipeline.job_models_v2 import JobHistoryItemDTO
 
@@ -65,13 +66,13 @@ class HistoryPanelV2(ttk.Frame):
             height=6,
             selectmode=tk.SINGLE,
             exportselection=False,
-            bg="#2a2a2a",
-            fg="#e0e0e0",
-            selectbackground="#4a90d9",
-            selectforeground="#ffffff",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            selectbackground=TOKENS.colors.status_info,
+            selectforeground=TOKENS.colors.text_primary,
             highlightthickness=1,
-            highlightbackground="#3a3a3a",
-            highlightcolor="#4a90d9",
+            highlightbackground=TOKENS.colors.border_subtle,
+            highlightcolor=TOKENS.colors.status_info,
             relief="flat",
             font=("Segoe UI", 9),
         )

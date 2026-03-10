@@ -695,4 +695,33 @@ No drift allowed.
 - JobService validation rejects missing pack identifiers gracefully and emits diagnostics rather than raising uncaught exceptions.
 - Tests and helpers construct Jobs from NJRs only; legacy configuration job construction is removed from new paths.
 
+## UI Host Abstraction Boundary Addendum (PR-MAR26-UI-REFRESH-001)
+
+- `src/gui/ui_tokens.py` is the semantic style source-of-truth for GUI host layers.
+- `src/gui/view_contracts/*` defines toolkit-agnostic interaction contracts that must not import Tk types.
+- `src/gui/views/*` remains render and event wiring only; non-render decisions belong in controllers/adapters.
+- Migration target is host swap (Tk -> Qt/PySide6) without changing contract semantics.
+
+Current contract mappings:
+
+- Status banner display behavior -> `status_banner_contract`.
+- Form mode/edit synchronization -> `form_section_contract`.
+- Selection handling semantics -> `selection_list_contract`.
+- Review feedback action states -> `feedback_panel_contract`.
+
+## PySide6 Migration Governance Addendum (PR-GUI-PS6-001)
+
+- GUI toolkit migration must preserve the canonical runtime path exactly:
+  PromptPack -> Builder -> NJR -> Queue -> Runner -> History -> Learning.
+- During migration phases, host-specific UI code must be separated from toolkit-agnostic contracts/adapters.
+- Mainline runtime may not execute mixed Tk + Qt host paths for the same app session.
+- Cutover to a Qt host is allowed only after parity gates pass:
+  1. Contract/controller parity tests for migrated surfaces.
+  2. Startup/shutdown lifecycle parity checks.
+  3. Golden Path integration suite pass with no new regressions.
+- Rollback trigger policy for cutover PRs:
+  1. Any GP regression.
+  2. Deterministic startup failure in clean environment.
+  3. New shutdown instability causing process lifecycle leaks.
+
 END OF ARCHITECTURE_v2.6.md (Canonical Edition)
