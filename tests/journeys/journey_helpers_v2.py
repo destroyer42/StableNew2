@@ -273,7 +273,11 @@ def run_njr_journey(
     from src.api.webui_api import WebUIAPI
 
     try:
-        with patch.object(WebUIAPI, "wait_until_true_ready", return_value=True):
+        with (
+            patch.object(WebUIAPI, "wait_until_true_ready", return_value=True),
+            patch("src.api.client.wait_for_webui_ready", return_value=True),
+            patch("src.api.client.validate_webui_health", return_value=True),
+        ):
             result = runner.run_njr(njr)
     finally:
         if callable(original_request):

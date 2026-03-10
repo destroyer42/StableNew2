@@ -63,13 +63,20 @@ PR-PS6-004
 
 **Implementation Date**: 2026-03-09
 **Executor**: Codex
-**Status**: PARTIAL
+**Status**: PARTIAL (controller-side scheduling replacement complete)
 
 ### What Was Implemented
 1. Added `src/gui/ui_dispatcher.py` with `UiDispatcher`, `TkUiDispatcher`, and `ImmediateUiDispatcher`.
 2. Updated `src/app_factory.py` to inject `ui_scheduler=TkUiDispatcher(root).invoke` into `AppController`.
 3. Added `tests/gui_v2/test_ui_dispatcher.py`.
+4. Replaced direct controller `root.after` usages in `src/controller/app_controller.py` with centralized dispatcher helpers:
+   - `_dispatch_via_root_after`
+   - `_ui_dispatch_later`
+   - `_get_ui_root`
+5. Routed lifecycle/status/log/debounce scheduling through dispatcher helpers.
+6. Added safety guard for job services without `register_completion_handler`.
 
 ### Verification
 1. `pytest -q tests/gui_v2/test_ui_dispatcher.py`
-2. `pytest -q tests/integration/test_golden_path_suite_v2_6.py`
+2. `pytest -q tests/controller/test_queue_callback_gui_thread_marshaling.py tests/controller/test_ui_dispatch_threading.py tests/controller/test_job_execution_controller_ui_dispatch.py`
+3. `pytest -q tests/integration/test_golden_path_suite_v2_6.py`

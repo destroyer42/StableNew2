@@ -440,7 +440,9 @@ class AppController:
         # PR-LEARN-003: Register learning completion handler
         if self.job_service:
             self._learning_completion_handler = self._create_learning_completion_handler()
-            self.job_service.register_completion_handler(self._learning_completion_handler)
+            register_completion = getattr(self.job_service, "register_completion_handler", None)
+            if callable(register_completion):
+                register_completion(self._learning_completion_handler)
         
         self.webui_connection_controller = getattr(
             self.pipeline_controller, "_webui_connection", None
@@ -577,9 +579,7 @@ class AppController:
         if callable(self._ui_scheduler):
             self._ui_scheduler(fn)
             return
-        root = getattr(self.main_window, "root", None) or getattr(self.main_window, "master", None)
-        if root is not None and hasattr(root, "after"):
-            root.after(0, fn)
+        if self._dispatch_via_root_after(0, fn):
             return
         # fallback: run directly (test mode)
         fn()
@@ -592,10 +592,36 @@ class AppController:
             if callable(dispatcher):
                 dispatcher(fn)
                 return
-            root = getattr(mw, "root", None)
-            if root is not None and hasattr(root, "after"):
-                root.after(0, fn)
+            if self._dispatch_via_root_after(0, fn):
                 return
+        fn()
+
+    def _get_ui_root(self) -> Any | None:
+        mw = getattr(self, "main_window", None)
+        if mw is None:
+            return None
+        return getattr(mw, "root", None) or getattr(mw, "master", None) or mw
+
+    def _dispatch_via_root_after(self, delay_ms: int, fn: Callable[[], None]) -> bool:
+        root = self._get_ui_root()
+        if root is None:
+            return False
+        after = getattr(root, "after", None)
+        if not callable(after):
+            return False
+        try:
+            after(int(delay_ms), fn)
+            return True
+        except Exception:
+            return False
+
+    def _ui_dispatch_later(self, delay_ms: int, fn: Callable[[], None]) -> None:
+        delay = max(0, int(delay_ms or 0))
+        if delay == 0:
+            self._ui_dispatch(fn)
+            return
+        if self._dispatch_via_root_after(delay, fn):
+            return
         fn()
     
     def _mark_ui_dirty(self, preview: bool = False, jobs: bool = False, history: bool = False) -> None:
@@ -619,22 +645,9 @@ class AppController:
     def _schedule_debounced_ui_update(self) -> None:
         """Schedule a debounced UI update after delay.
         
-        PR-HB-003: Uses root.after() to coalesce updates into a single refresh.
+        PR-HB-003: Uses UI scheduler to coalesce updates into a single refresh.
         """
-        try:
-            root = self.main_window.root if self.main_window else None
-        except Exception:
-            root = None
-        
-        if root is not None:
-            try:
-                root.after(self._ui_debounce_delay_ms, self._apply_pending_ui_updates)
-            except Exception:
-                # Fallback if scheduling fails
-                self._apply_pending_ui_updates()
-        else:
-            # No GUI - apply immediately
-            self._apply_pending_ui_updates()
+        self._ui_dispatch_later(self._ui_debounce_delay_ms, self._apply_pending_ui_updates)
     
     def _apply_pending_ui_updates(self) -> None:
         """Apply all pending UI updates and clear dirty flags.
@@ -2667,7 +2680,7 @@ class AppController:
             return
 
         if self.main_window is not None:
-            self.main_window.after(0, lambda: self._set_lifecycle(new_state, error))
+            self._ui_dispatch(lambda: self._set_lifecycle(new_state, error))
 
     def _update_status(self, text: str) -> None:
         """Update status bar text if the bottom zone is ready; otherwise cache it."""
@@ -2699,11 +2712,10 @@ class AppController:
                 return
             status_label.configure(text=f"Status: {text}")
 
-        # Only update UI on main thread; otherwise, dispatch via root.after
-        root = getattr(self.main_window, "root", None)
-        if thread_name != "MainThread" and root is not None:
+        # Only update UI on main thread; otherwise, dispatch via controller scheduler
+        if thread_name != "MainThread":
             logger.debug(f"[D21] _update_status dispatching to UI thread (from {thread_name})")
-            root.after(0, do_update)
+            self._ui_dispatch(do_update)
         else:
             do_update()
 
@@ -2801,7 +2813,7 @@ class AppController:
             return
 
         if self.main_window is not None:
-            self.main_window.after(0, lambda: self._append_log(text))
+            self._ui_dispatch(lambda: self._append_log(text))
 
     def generate_diagnostics_bundle_manual(self) -> None:
         """Expose a manual trigger for diagnostics bundles."""
