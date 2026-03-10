@@ -658,6 +658,11 @@ class PipelineRunner:
         result_dict = result.to_dict()
         logger.info(f"🔍 DEBUG: to_dict() success={result_dict.get('success')}, error={result_dict.get('error')}")
         try:
+            njr.output_paths = list(current_stage_paths or [])
+            njr.thumbnail_path = njr.output_paths[-1] if njr.output_paths else None
+        except Exception:
+            pass
+        try:
             # Build stage_outputs from variants (each variant is a dict with path, config, etc.)
             stage_outputs = []
             for variant in variants:

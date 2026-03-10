@@ -1,5 +1,6 @@
 """Tests for preview panel thumbnail functionality."""
 
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -17,6 +18,11 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
         if not self.root:
             self.skipTest("Tk not available")
 
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._state_path = Path(self._temp_dir.name) / "preview_panel_state.json"
+        self._state_patch = patch("src.gui.preview_panel_v2.PREVIEW_STATE_PATH", self._state_path)
+        self._state_patch.start()
+
         self.controller = Mock()
         self.app_state = Mock()
         # Configure app_state.preview_jobs as empty list
@@ -32,6 +38,10 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
                 self.panel.destroy()
             except Exception:
                 pass
+        if hasattr(self, "_state_patch"):
+            self._state_patch.stop()
+        if hasattr(self, "_temp_dir"):
+            self._temp_dir.cleanup()
 
     def test_preview_panel_has_thumbnail(self) -> None:
         """Test that preview panel includes thumbnail widget."""
@@ -40,8 +50,8 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
         assert hasattr(self.panel, "preview_checkbox")
 
     def test_preview_checkbox_default_state(self) -> None:
-        """Test that preview checkbox is enabled by default."""
-        assert self.panel._show_preview_var.get() is True
+        """Test that preview checkbox is unchecked (preview off) by default."""
+        assert self.panel._show_preview_var.get() is False
 
     def test_thumbnail_clears_when_no_job(self) -> None:
         """Test that thumbnail is cleared when no job is selected."""
@@ -105,3 +115,52 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
 
         # Checkbox should be updated to False
         assert self.panel._show_preview_var.get() is False
+
+    def test_set_job_summaries_renders_last_summary(self) -> None:
+        """Preview should track the last summary, not the first one."""
+        from types import SimpleNamespace
+
+        first = SimpleNamespace(
+            job_id="job-1",
+            label="model-a",
+            positive_preview="first prompt",
+            negative_preview="",
+            stages_display="txt2img",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.0,
+            seed=1,
+        )
+        last = SimpleNamespace(
+            job_id="job-2",
+            label="model-b",
+            positive_preview="last prompt",
+            negative_preview="",
+            stages_display="txt2img",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.0,
+            seed=2,
+        )
+
+        self.panel.set_job_summaries([first, last])
+
+        prompt_text = self.panel.prompt_text.get("1.0", "end").strip()
+        assert prompt_text == "last prompt"
+        assert self.panel._current_preview_job.job_id == "job-2"
+
+    def test_update_with_summary_uses_thumbnail_widget_path_loader(self) -> None:
+        """update_with_summary should route image loading through set_image_from_path."""
+        from pathlib import Path
+        from types import SimpleNamespace
+
+        summary = SimpleNamespace(job_id="job-3", prompt_pack_name="pack-3")
+        image_path = Path("output/test-image.png")
+
+        self.panel._show_preview_var.set(True)
+
+        with patch.object(self.panel, "_find_latest_output_image", return_value=image_path):
+            with patch.object(self.panel.thumbnail, "set_image_from_path") as mock_set_image:
+                self.panel.update_with_summary(summary)
+
+        mock_set_image.assert_called_once_with(image_path)

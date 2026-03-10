@@ -15,10 +15,10 @@ class FeedbackPanelState:
 
 def update_feedback_state(
     *,
-    has_selected_image: bool,
     selected_count: int,
     undo_depth: int,
 ) -> FeedbackPanelState:
+    has_selected_image = int(selected_count or 0) > 0
     can_save = bool(has_selected_image)
     can_batch_save = int(selected_count or 0) > 0
     can_undo = int(undo_depth or 0) > 0

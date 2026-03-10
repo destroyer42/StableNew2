@@ -55,6 +55,7 @@ class LearningController:
         self._automation_snapshot: dict[tuple[str, str], Any] = {}
         self._workflow_state = "idle"
         self._workflow_state_listeners: list[Any] = []
+        self._resume_state_listeners: list[Any] = []
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -125,6 +126,7 @@ class LearningController:
         # Store in state
         self.learning_state.current_experiment = experiment
         self._set_workflow_state("designing")
+        self._notify_resume_state_changed()
 
     def _generate_values_from_range(self, start: float, end: float, step: float) -> list[float]:
         """Generate list of values from start to end with given step."""
@@ -369,6 +371,7 @@ class LearningController:
         if self._plan_table:
             self._update_plan_table()
         self._set_workflow_state("planned")
+        self._notify_resume_state_changed()
 
     def _update_plan_table(self) -> None:
         """Update the learning plan table with current plan data."""
@@ -1115,7 +1118,6 @@ class LearningController:
         logger.debug(f"Variant {variant.param_value} completed")
         
         variant.status = "completed"
-        variant.completed_images += 1
 
         # PR-LEARN-005: Extract image references from result
         image_paths = []
@@ -1132,6 +1134,7 @@ class LearningController:
         for image_path in image_paths:
             if image_path and image_path not in variant.image_refs:
                 variant.image_refs.append(image_path)
+        variant.completed_images = max(variant.completed_images, len(variant.image_refs))
 
         # PR-LEARN-004: Update UI with live updates
         variant_index = self._get_variant_index(variant)
@@ -1146,6 +1149,7 @@ class LearningController:
         if self._review_panel and hasattr(self._review_panel, "display_variant_results"):
             self._review_panel.display_variant_results(variant)
         self._recompute_workflow_state_from_plan()
+        self._notify_resume_state_changed()
 
     def _on_variant_job_failed(self, variant: LearningVariant, error: Exception) -> None:
         """Handle failure of a variant job."""
@@ -1157,10 +1161,22 @@ class LearningController:
             self._update_variant_status(variant_index, "failed")
             self._highlight_variant(variant_index, False)  # Remove highlight
         self._recompute_workflow_state_from_plan()
+        self._notify_resume_state_changed()
 
     def add_workflow_state_listener(self, listener: Any) -> None:
         if listener not in self._workflow_state_listeners:
             self._workflow_state_listeners.append(listener)
+
+    def add_resume_state_listener(self, listener: Any) -> None:
+        if listener not in self._resume_state_listeners:
+            self._resume_state_listeners.append(listener)
+
+    def _notify_resume_state_changed(self) -> None:
+        for listener in list(self._resume_state_listeners):
+            try:
+                listener()
+            except Exception:
+                continue
 
     def get_workflow_state(self) -> str:
         return self._workflow_state
@@ -1263,6 +1279,7 @@ class LearningController:
                 )
             except Exception:
                 pass
+        self._notify_resume_state_changed()
         return True
 
     def get_learning_run_summary(self) -> dict[str, Any]:
@@ -1404,6 +1421,7 @@ class LearningController:
             self._set_workflow_state("completed")
         else:
             self._recompute_workflow_state_from_plan()
+        self._notify_resume_state_changed()
 
     def update_recommendations(self) -> None:
         """Update recommendations based on latest learning data."""
@@ -1538,6 +1556,7 @@ class LearningController:
                 self.pipeline_controller.set_learning_enabled(self._learning_enabled)
             except Exception:
                 pass
+        self._notify_resume_state_changed()
 
     def list_recent_records(self, limit: int = 10) -> list[Any]:
         """Return recent learning records through execution-controller APIs."""
@@ -1758,10 +1777,12 @@ class LearningController:
         """Handle selection of a variant in the table."""
         if 0 <= variant_index < len(self.learning_state.plan):
             variant = self.learning_state.plan[variant_index]
+            self.learning_state.selected_variant = variant
             if self._review_panel and hasattr(self._review_panel, "display_variant_results"):
                 self._review_panel.display_variant_results(
                     variant, self.learning_state.current_experiment
                 )
+            self._notify_resume_state_changed()
     
     def apply_recommendations_to_pipeline(self, recommendations: Any) -> bool:
         """Apply recommendations to the pipeline stage cards.
@@ -1834,6 +1855,7 @@ class LearningController:
         if mode_value not in allowed:
             mode_value = "suggest_only"
         self._automation_mode = mode_value
+        self._notify_resume_state_changed()
 
     def get_automation_mode(self) -> str:
         return self._automation_mode

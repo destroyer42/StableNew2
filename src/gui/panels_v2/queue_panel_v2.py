@@ -58,7 +58,7 @@ class QueuePanelV2(ttk.Frame):
         self.app_state = app_state
         self._jobs: list[UnifiedJobSummary] = []
         self._is_queue_paused = False
-        self._auto_run_enabled = False
+        self._auto_run_enabled = bool(getattr(app_state, "auto_run_queue", True))
         self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
         self._summaries: list[UnifiedJobSummary] = []
 
@@ -77,7 +77,7 @@ class QueuePanelV2(ttk.Frame):
         controls_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         controls_frame.pack(fill="x", pady=(0, 4))
 
-        self.auto_run_var = tk.BooleanVar(value=False)
+        self.auto_run_var = tk.BooleanVar(value=self._auto_run_enabled)
         self.auto_run_check = ttk.Checkbutton(
             controls_frame,
             text="Auto-run queue",

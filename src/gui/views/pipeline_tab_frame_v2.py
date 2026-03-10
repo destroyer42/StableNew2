@@ -16,6 +16,10 @@ from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 
 from src.gui.views.stage_cards_panel import StageCardsPanel
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_visible_stage_order,
+    normalize_window_geometry,
+)
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -289,23 +293,14 @@ class PipelineTabFrame(ttk.Frame):
         """Expand the window if it's narrower than the minimum for 3 columns."""
         try:
             root = self.winfo_toplevel()
-            current_geom = root.geometry()  # "WxH+X+Y"
-            width_str, rest = current_geom.split("x", 1)
-            width = int(width_str)
+            current_geom = root.geometry()
         except Exception:
             return
 
-        if width < self.MIN_WINDOW_WIDTH:
+        updated = normalize_window_geometry(current_geom, self.MIN_WINDOW_WIDTH)
+        if updated:
             try:
-                parts = rest.split("+")
-                height = parts[0]
-                x = parts[1] if len(parts) > 1 else None
-                y = parts[2] if len(parts) > 2 else None
-
-                if x is not None and y is not None:
-                    root.geometry(f"{self.MIN_WINDOW_WIDTH}x{height}+{x}+{y}")
-                else:
-                    root.geometry(f"{self.MIN_WINDOW_WIDTH}x{height}")
+                root.geometry(updated)
             except Exception:
                 pass
 
@@ -363,12 +358,8 @@ class PipelineTabFrame(ttk.Frame):
             stage_name: getattr(self.stage_cards_panel, f"{stage_name}_card", None)
             for stage_name in stage_order
         }
-        ordered_cards = []
-        for stage_name in stage_order:
-            if stage_name in enabled:
-                card = mapping.get(stage_name)
-                if card:
-                    ordered_cards.append(card)
+        visible_stage_names = get_visible_stage_order(stage_order, enabled)
+        ordered_cards = [mapping[name] for name in visible_stage_names if mapping.get(name)]
 
         for idx, card in enumerate(ordered_cards):
             is_last = idx == len(ordered_cards) - 1

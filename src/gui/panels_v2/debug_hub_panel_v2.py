@@ -118,6 +118,7 @@ class _PipelineTab(ttk.Frame):
         self.controller = controller
         self.app_state = app_state
         self._selected_job_id: str | None = None
+        self._history_listener_registered = False
 
         action_bar = ttk.Frame(self)
         action_bar.pack(fill=tk.X, pady=(0, 4))
@@ -141,15 +142,25 @@ class _PipelineTab(ttk.Frame):
 
         if app_state and hasattr(app_state, "subscribe"):
             app_state.subscribe("history_items", self._on_history_updated)
+            self._history_listener_registered = True
             self._on_history_updated()
 
     def _on_history_updated(self, *_) -> None:
+        if not self.winfo_exists():
+            return
+        combo = getattr(self, "_job_combo", None)
+        explain_btn = getattr(self, "_explain_btn", None)
+        job_var = getattr(self, "_job_var", None)
+        if combo is None or explain_btn is None or job_var is None:
+            return
+        if not combo.winfo_exists():
+            return
         items = getattr(self.app_state, "history_items", []) or []
         ids = [getattr(entry, "job_id", "") for entry in items if getattr(entry, "job_id", "")]
-        self._job_combo["values"] = ids
+        combo["values"] = ids
         if self._selected_job_id not in ids:
-            self._explain_btn.configure(state=tk.DISABLED)
-            self._job_var.set("")
+            explain_btn.configure(state=tk.DISABLED)
+            job_var.set("")
             self._selected_job_id = None
 
     def _on_job_selected(self) -> None:
@@ -170,6 +181,19 @@ class _PipelineTab(ttk.Frame):
                 handler(self._selected_job_id)
             except Exception:
                 pass
+
+    def destroy(self) -> None:
+        if (
+            self._history_listener_registered
+            and self.app_state is not None
+            and hasattr(self.app_state, "unsubscribe")
+        ):
+            try:
+                self.app_state.unsubscribe("history_items", self._on_history_updated)
+            except Exception:
+                pass
+            self._history_listener_registered = False
+        super().destroy()
 
 
 class _PromptTab(ttk.Frame):
@@ -294,6 +318,7 @@ class _ProcessTab(ttk.Frame):
     def __init__(self, master: tk.Misc, *, auto_scanner: Any | None = None) -> None:
         super().__init__(master)
         self._auto_scanner = auto_scanner
+        self._status_refresh_id: str | None = None
         header = ttk.Frame(self)
         header.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(header, text="StableNew-like processes").pack(side=tk.LEFT)
@@ -350,11 +375,22 @@ class _ProcessTab(ttk.Frame):
         self._update_scanner_status()
 
     def _update_scanner_status(self) -> None:
+        if not self.winfo_exists():
+            return
         if not self._auto_scanner:
             self._scanner_status_var.set("Auto-scanner unavailable")
         else:
             self._scanner_status_var.set(self._auto_scanner.get_status_text())
-        self.after(self.REFRESH_INTERVAL_MS, self._update_scanner_status)
+        self._status_refresh_id = self.after(self.REFRESH_INTERVAL_MS, self._update_scanner_status)
+
+    def destroy(self) -> None:
+        if self._status_refresh_id:
+            try:
+                self.after_cancel(self._status_refresh_id)
+            except Exception:
+                pass
+            self._status_refresh_id = None
+        super().destroy()
 
 
 class _CrashTab(ttk.Frame):

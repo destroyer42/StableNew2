@@ -120,9 +120,9 @@ class TestAppStateV2RunStateFields:
 class TestAppStateV2AutoRunQueue:
     """Tests for PR-203 auto_run_queue field."""
 
-    def test_auto_run_queue_default_false(self) -> None:
+    def test_auto_run_queue_default_true(self) -> None:
         state = AppStateV2()
-        assert state.auto_run_queue is False
+        assert state.auto_run_queue is True
 
     def test_set_auto_run_queue_true(self) -> None:
         state = AppStateV2()
@@ -133,7 +133,7 @@ class TestAppStateV2AutoRunQueue:
         state = AppStateV2()
         notifications = []
         state.subscribe("auto_run_queue", lambda: notifications.append("notified"))
-        state.set_auto_run_queue(True)
+        state.set_auto_run_queue(False)
         assert notifications == ["notified"]
 
 
@@ -151,7 +151,7 @@ class MockAppState:
     is_direct_run_in_progress: bool = False
     is_queue_paused: bool = False
     current_pack: str | None = None
-    auto_run_queue: bool = False
+    auto_run_queue: bool = True
     running_job: dict | None = None
     queue_items: list = None
 
