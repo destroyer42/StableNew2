@@ -265,25 +265,24 @@ class LearningController:
             List of LoRA dicts: [{"name": "...", "strength": ..., "enabled": True}, ...]
         """
         import logging
+        from src.learning.lora_variable_service import collect_available_loras
+
         logger = logging.getLogger(__name__)
-        from src.learning.variable_selection_contract import normalize_resource_entries
-        
-        if not self.app_controller:
-            logger.warning("[LearningController] No app_controller, cannot get LoRAs")
-            return []
-        
-        # Get baseline config from stage cards
+
         try:
             baseline = self._get_baseline_config()
-            txt2img = baseline.get("txt2img", {})
-            loras = txt2img.get("lora_strengths", [])
-            
-            # Filter to enabled only
-            enabled_loras = [l for l in loras if l.get("enabled", False)]
-            
-            logger.info(f"[LearningController] Found {len(enabled_loras)} enabled LoRAs in stage card")
+            app_state = getattr(self.app_controller, "_app_state", None) if self.app_controller else None
+            loras = collect_available_loras(
+                prompt_workspace_state=self.prompt_workspace_state,
+                app_state=app_state,
+                baseline_config=baseline,
+            )
+            enabled_loras = [entry for entry in loras if entry.get("enabled", True)]
+
+            logger.info(
+                f"[LearningController] Found {len(enabled_loras)} enabled LoRAs from runtime/prompt/baseline"
+            )
             return enabled_loras
-            
         except Exception as exc:
             logger.error(f"[LearningController] Failed to get current LoRAs: {exc}")
             return []

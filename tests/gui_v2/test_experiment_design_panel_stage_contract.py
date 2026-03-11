@@ -62,3 +62,22 @@ def test_experiment_design_panel_resource_checklist_uses_internal_names() -> Non
     assert "Photon" in texts
 
     panel.destroy()
+
+
+def test_experiment_design_panel_can_switch_away_from_lora_mode() -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    panel = ExperimentDesignPanel(root, learning_controller=SimpleNamespace(_get_current_loras=lambda: []))
+
+    panel.variable_var.set("LoRA Strength")
+    panel._on_variable_changed()  # noqa: SLF001
+    assert panel.lora_frame.winfo_manager() == "grid"
+
+    panel.variable_var.set("Steps")
+    panel._on_variable_changed()  # noqa: SLF001
+    assert panel.lora_frame.winfo_manager() == ""
+    assert panel.value_frame.winfo_manager() == "grid"
+
+    panel.destroy()
