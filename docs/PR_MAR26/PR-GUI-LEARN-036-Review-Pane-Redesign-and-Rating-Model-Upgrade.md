@@ -1,35 +1,37 @@
 # PR-GUI-LEARN-036: Review Pane Redesign and Rating Model Upgrade
 
-**Status**: 🟡 Specification
+**Status**: Implemented
 **Priority**: HIGH
 **Effort**: LARGE
 **Phase**: Learning Recovery
 **Date**: 2026-03-10
 
 ## Context & Motivation
-The current Learning review pane is too small, too light-themed, and too simplistic to support reliable review and learning.
+The prior Learning review pane was too small, too light-themed, and too simplistic to support reliable review and learning.
 
 ## Goals
 1. Expand and dark-theme the review pane.
-2. Add resizable image viewing and better metadata display.
+2. Add larger image viewing and better metadata display.
 3. Upgrade rating to support structured sub-scores and context-sensitive categories.
 
 ## Allowed Files
 - `src/gui/views/learning_review_panel.py`
 - `src/gui/controllers/learning_controller.py`
-- `src/learning/learning_record.py`
-- `src/learning/rating_schema.py` (new)
+- `src/learning/rating_schema.py`
 - related tests
 
-## Implementation Plan
-1. Rebuild the panel layout.
-2. Persist structured rating details alongside aggregate rating.
-3. Surface context-aware sub-scores when appropriate.
+## Implementation Summary
+1. Added `src/learning/rating_schema.py` for context-aware rating categories and blended aggregate scoring.
+2. Reworked `LearningReviewPanel` to:
+   - use dark-mode text and list surfaces
+   - enlarge preview images
+   - show stage information in metadata
+   - collect context flags and stage-relevant sub-scores
+3. Extended `LearningController.record_rating(...)` to persist structured rating details while preserving aggregate compatibility.
+4. Tagged review-tab-derived feedback separately from experiment ratings to support downstream analytics.
 
-## Testing Plan
-- rating save/override tests
-- review restore tests
-- image navigation and display tests
+## Validation
+- `tests/learning_v2/test_learning_review_panel_controller_resolution.py`
+- `tests/learning_v2/test_rating_schema.py`
+- `tests/learning_v2/test_recommendation_display.py`
 
-## Next Steps
-Execute after PR-035.

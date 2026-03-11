@@ -1416,7 +1416,13 @@ class LearningController:
         # The specific variant handling is done in _on_variant_job_completed
         pass
 
-    def record_rating(self, image_ref: str, rating: int, notes: str = "") -> None:
+    def record_rating(
+        self,
+        image_ref: str,
+        rating: int,
+        notes: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> None:
         """Record a rating for a learning image."""
         if not self._learning_record_writer:
             raise RuntimeError("LearningRecordWriter not configured")
@@ -1443,6 +1449,10 @@ class LearningController:
             "stage": experiment.stage,
             experiment.variable_under_test.lower(): target_variant.param_value,
         }
+        detail_payload = dict(details or {})
+        subscores = dict(detail_payload.get("subscores") or {})
+        context_flags = dict(detail_payload.get("context_flags") or {})
+        blended_rating = int(detail_payload.get("blended_rating") or rating)
 
         # Create variant config
         variant_config = {experiment.variable_under_test.lower(): target_variant.param_value}
@@ -1459,8 +1469,13 @@ class LearningController:
                 "variable_under_test": experiment.variable_under_test,
                 "variant_value": target_variant.param_value,
                 "image_path": image_ref,
-                "user_rating": rating,
+                "user_rating": blended_rating,
+                "user_rating_raw": rating,
                 "user_notes": notes,
+                "record_kind": "learning_experiment_rating",
+                "rating_schema_version": 2,
+                "rating_context": context_flags,
+                "rating_details": subscores,
                 "learning_context": {
                     "experiment_id": experiment.name,
                     "variant_id": target_variant.id
@@ -1678,6 +1693,7 @@ class LearningController:
         stage = str(feedback.get("stage") or "review")
         metadata = {
             "source": "review_tab",
+            "record_kind": "review_tab_feedback",
             "image_path": image_path,
             "user_rating": blended_rating,
             "user_rating_raw": rating,
