@@ -6,7 +6,11 @@
   "tabs": {
     "selected_index": 1
   },
-  "learning": {},
+  "learning": {
+    "enabled": true,
+    "automation_mode": "suggest_only",
+    "last_experiment_id": "20260311_042334_my-experiment_f214ac09"
+  },
   "schema_version": "2.6",
   "photo_optimize": {
     "selected_asset_id": "photo_20260310_125941_48256a09"
