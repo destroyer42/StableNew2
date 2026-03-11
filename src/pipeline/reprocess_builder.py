@@ -35,6 +35,26 @@ class ReprocessJobBuilder:
     
     # Valid stages for reprocessing (stages that can accept input images)
     VALID_REPROCESS_STAGES = {"img2img", "adetailer", "upscale"}
+    DEFAULT_STAGE_VALUES: dict[str, dict[str, Any]] = {
+        "img2img": {
+            "steps": 15,
+            "cfg_scale": 7.0,
+            "denoising_strength": 0.3,
+            "sampler_name": "Euler a",
+        },
+        "adetailer": {
+            "steps": 12,
+            "cfg_scale": 5.7,
+            "denoising_strength": 0.25,
+            "sampler_name": "DPM++ 2M Karras",
+        },
+        "upscale": {
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "denoising_strength": 0.35,
+            "sampler_name": "Euler a",
+        },
+    }
     
     def __init__(
         self,
@@ -103,15 +123,20 @@ class ReprocessJobBuilder:
         config = config or {}
         
         for stage_name in stages:
+            stage_extra = config.get(stage_name, {})
+            if not isinstance(stage_extra, dict):
+                stage_extra = {}
+            defaults = self.DEFAULT_STAGE_VALUES.get(stage_name, {})
             stage_config = StageConfig(
                 stage_type=stage_name,
                 enabled=True,
-                steps=config.get(f"{stage_name}_steps"),
-                cfg_scale=config.get(f"{stage_name}_cfg_scale") or config.get("cfg_scale"),
-                denoising_strength=config.get(f"{stage_name}_denoising_strength") or config.get("denoising_strength"),
-                sampler_name=config.get(f"{stage_name}_sampler_name") or config.get("sampler_name"),
+                steps=self._resolve_stage_steps(stage_name, config, stage_extra, defaults),
+                cfg_scale=self._resolve_stage_cfg_scale(stage_name, config, stage_extra, defaults),
+                denoising_strength=self._resolve_stage_denoise(stage_name, config, stage_extra, defaults),
+                sampler_name=self._resolve_stage_sampler(stage_name, config, stage_extra, defaults),
+                scheduler=self._resolve_stage_scheduler(stage_name, config, stage_extra),
                 model=model,
-                extra=config.get(stage_name, {}),
+                extra=stage_extra,
             )
             stage_chain.append(stage_config)
         
@@ -146,6 +171,135 @@ class ReprocessJobBuilder:
                 "reprocess_stages": list(stages),
             },
         )
+
+    @staticmethod
+    def _first_present(*values: Any, default: Any = None) -> Any:
+        for value in values:
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return value
+        return default
+
+    def _resolve_stage_steps(
+        self,
+        stage_name: str,
+        config: dict[str, Any],
+        stage_extra: dict[str, Any],
+        defaults: dict[str, Any],
+    ) -> int:
+        if stage_name == "adetailer":
+            value = self._first_present(
+                config.get("adetailer_steps"),
+                stage_extra.get("adetailer_steps"),
+                stage_extra.get("ad_steps"),
+                config.get("steps"),
+                stage_extra.get("steps"),
+                default=defaults.get("steps", 1),
+            )
+        else:
+            value = self._first_present(
+                config.get(f"{stage_name}_steps"),
+                stage_extra.get("steps"),
+                config.get("steps"),
+                default=defaults.get("steps", 1),
+            )
+        return int(value)
+
+    def _resolve_stage_cfg_scale(
+        self,
+        stage_name: str,
+        config: dict[str, Any],
+        stage_extra: dict[str, Any],
+        defaults: dict[str, Any],
+    ) -> float:
+        if stage_name == "adetailer":
+            value = self._first_present(
+                config.get("adetailer_cfg_scale"),
+                stage_extra.get("adetailer_cfg"),
+                stage_extra.get("ad_cfg_scale"),
+                stage_extra.get("cfg_scale"),
+                config.get("cfg_scale"),
+                default=defaults.get("cfg_scale", 7.0),
+            )
+        else:
+            value = self._first_present(
+                config.get(f"{stage_name}_cfg_scale"),
+                stage_extra.get("cfg_scale"),
+                config.get("cfg_scale"),
+                default=defaults.get("cfg_scale", 7.0),
+            )
+        return float(value)
+
+    def _resolve_stage_denoise(
+        self,
+        stage_name: str,
+        config: dict[str, Any],
+        stage_extra: dict[str, Any],
+        defaults: dict[str, Any],
+    ) -> float:
+        if stage_name == "adetailer":
+            value = self._first_present(
+                config.get("adetailer_denoising_strength"),
+                stage_extra.get("adetailer_denoise"),
+                stage_extra.get("ad_denoising_strength"),
+                stage_extra.get("denoising_strength"),
+                config.get("denoising_strength"),
+                default=defaults.get("denoising_strength", 0.25),
+            )
+        else:
+            value = self._first_present(
+                config.get(f"{stage_name}_denoising_strength"),
+                stage_extra.get("denoising_strength"),
+                config.get("denoising_strength"),
+                default=defaults.get("denoising_strength", 0.3),
+            )
+        return float(value)
+
+    def _resolve_stage_sampler(
+        self,
+        stage_name: str,
+        config: dict[str, Any],
+        stage_extra: dict[str, Any],
+        defaults: dict[str, Any],
+    ) -> str:
+        if stage_name == "adetailer":
+            value = self._first_present(
+                config.get("adetailer_sampler_name"),
+                stage_extra.get("adetailer_sampler"),
+                stage_extra.get("ad_sampler"),
+                stage_extra.get("sampler_name"),
+                config.get("sampler_name"),
+                default=defaults.get("sampler_name", "Euler a"),
+            )
+        else:
+            value = self._first_present(
+                config.get(f"{stage_name}_sampler_name"),
+                stage_extra.get("sampler_name"),
+                config.get("sampler_name"),
+                default=defaults.get("sampler_name", "Euler a"),
+            )
+        return str(value)
+
+    def _resolve_stage_scheduler(
+        self,
+        stage_name: str,
+        config: dict[str, Any],
+        stage_extra: dict[str, Any],
+    ) -> str | None:
+        if stage_name == "adetailer":
+            value = self._first_present(
+                stage_extra.get("scheduler"),
+                stage_extra.get("ad_scheduler"),
+                config.get("scheduler"),
+            )
+        else:
+            value = self._first_present(
+                stage_extra.get("scheduler"),
+                config.get("scheduler"),
+            )
+        return str(value) if value is not None else None
     
     def build_reprocess_jobs_batched(
         self,

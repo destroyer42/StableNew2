@@ -9,7 +9,11 @@ from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
-from src.utils.image_metadata import extract_embedded_metadata
+from src.utils.image_metadata import (
+    extract_embedded_metadata,
+    resolve_model_vae_fields,
+    resolve_prompt_fields,
+)
 
 
 class ReviewTabFrame(ttk.Frame):
@@ -554,22 +558,22 @@ class ReviewTabFrame(ttk.Frame):
         generation = result.payload.get("generation", {})
         if not isinstance(generation, dict):
             generation = {}
-        model = stage_manifest.get("model") or generation.get("model", "n/a")
-        vae = stage_manifest.get("vae") or generation.get("vae", "n/a")
-        prompt = stage_manifest.get("prompt", "")
-        preview_prompt = str(prompt).strip()
+        resolved_prompt, resolved_negative_prompt = resolve_prompt_fields(result.payload)
+        model, vae = resolve_model_vae_fields(result.payload)
+        preview_prompt = str(resolved_prompt).strip()
         if len(preview_prompt) > 120:
             preview_prompt = f"{preview_prompt[:117]}..."
-        self._selected_base_prompt = str(stage_manifest.get("prompt") or generation.get("prompt") or "")
-        self._selected_base_negative_prompt = str(
-            stage_manifest.get("negative_prompt") or generation.get("negative_prompt") or ""
-        )
+        self._selected_base_prompt = resolved_prompt
+        self._selected_base_negative_prompt = resolved_negative_prompt
         self._reset_mode_edits_for_current_image()
         self._set_readonly_text(self.current_prompt_text, self._selected_base_prompt)
         self._set_readonly_text(self.current_negative_text, self._selected_base_negative_prompt)
         self._refresh_prompt_diff()
         self.meta_label.config(
-            text=f"Metadata: ok | model={model} | vae={vae}\nPrompt: {preview_prompt or '(empty)'}"
+            text=(
+                f"Metadata: ok | model={model or 'n/a'} | vae={vae or 'n/a'}\n"
+                f"Prompt: {preview_prompt or '(empty)'}"
+            )
         )
 
     def _set_readonly_text(self, widget: tk.Text, value: str) -> None:

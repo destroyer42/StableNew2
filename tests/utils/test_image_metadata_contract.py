@@ -8,11 +8,14 @@ from PIL import Image
 
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
+    build_payload_from_manifest,
     build_contract_kv,
     decode_payload,
     encode_payload,
     extract_embedded_metadata,
     read_image_metadata,
+    resolve_model_vae_fields,
+    resolve_prompt_fields,
     write_image_metadata,
 )
 
@@ -91,3 +94,82 @@ def test_corrupt_payload_is_ignored(tmp_path: Path) -> None:
     assert write_image_metadata(image_path, stored) is True
     decoded = extract_embedded_metadata(image_path)
     assert decoded.status == "corrupt"
+
+
+def test_resolve_prompt_fields_uses_final_and_config_fallbacks() -> None:
+    prompt, negative = resolve_prompt_fields(
+        {
+            "stage_manifest": {
+                "config": {
+                    "prompt": "config prompt",
+                    "negative_prompt": "config negative",
+                },
+                "final_prompt": "final stage prompt",
+            },
+            "generation": {
+                "original_prompt": "original generation prompt",
+                "original_negative_prompt": "original generation negative",
+            },
+        }
+    )
+
+    assert prompt == "final stage prompt"
+    assert negative == "config negative"
+
+
+def test_resolve_model_vae_fields_uses_history_and_config_fallbacks() -> None:
+    model, vae = resolve_model_vae_fields(
+        {
+            "stage_manifest": {
+                "config": {
+                    "txt2img": {
+                        "model": "model-from-txt2img",
+                    },
+                    "sd_vae": "vae-from-config",
+                }
+            },
+            "stage_history": [
+                {"model": "history-model", "vae": "history-vae"},
+            ],
+        }
+    )
+
+    assert model == "model-from-txt2img"
+    assert vae == "vae-from-config"
+
+
+def test_build_payload_from_manifest_preserves_prompt_and_model_fields(tmp_path: Path) -> None:
+    image_path = tmp_path / "sample.png"
+    _write_png(image_path)
+    run_dir = tmp_path
+    payload = build_payload_from_manifest(
+        image_path=image_path,
+        run_dir=run_dir,
+        stage="img2img",
+        manifest={
+            "name": "img2img_sample",
+            "stage": "img2img",
+            "timestamp": "20260310_120000",
+            "original_prompt": "base prompt",
+            "final_prompt": "final prompt",
+            "original_negative_prompt": "base negative",
+            "final_negative_prompt": "final negative",
+            "config": {
+                "prompt": "config prompt",
+                "negative_prompt": "config negative",
+                "steps": 24,
+                "cfg_scale": 6.5,
+                "sampler_name": "Euler a",
+                "scheduler": "Karras",
+                "model": "modelA",
+                "sd_vae": "vaeA",
+            },
+        },
+        image_size=(8, 8),
+    )
+
+    assert payload["generation"]["final_prompt"] == "final prompt"
+    assert payload["generation"]["original_negative_prompt"] == "base negative"
+    assert payload["stage_manifest"]["final_prompt"] == "final prompt"
+    assert payload["stage_manifest"]["model"] == "modelA"
+    assert payload["stage_manifest"]["vae"] == "vaeA"

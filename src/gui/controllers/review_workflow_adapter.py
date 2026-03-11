@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.utils.image_metadata import resolve_model_vae_fields, resolve_prompt_fields
+
 
 @dataclass(frozen=True)
 class ReviewPromptDiff:
@@ -93,10 +95,8 @@ class ReviewWorkflowAdapter:
         generation = metadata_payload.get("generation", {})
         if not isinstance(generation, dict):
             generation = {}
-        base_prompt = str(stage_manifest.get("prompt") or generation.get("prompt") or "")
-        base_negative = str(
-            stage_manifest.get("negative_prompt") or generation.get("negative_prompt") or ""
-        )
+        base_prompt, base_negative = resolve_prompt_fields(metadata_payload)
+        model, _vae = resolve_model_vae_fields(metadata_payload)
         diff = self.build_prompt_diff(
             base_prompt=base_prompt,
             base_negative_prompt=base_negative,
@@ -124,7 +124,7 @@ class ReviewWorkflowAdapter:
                 "composition": int(composition_rating),
                 "prompt_adherence": int(prompt_adherence_rating),
             },
-            "model": str(stage_manifest.get("model") or generation.get("model") or ""),
+            "model": str(model or ""),
             "sampler": str(stage_manifest.get("sampler_name") or generation.get("sampler_name") or ""),
             "scheduler": str(stage_manifest.get("scheduler") or generation.get("scheduler") or ""),
             "steps": stage_manifest.get("steps") or generation.get("steps"),

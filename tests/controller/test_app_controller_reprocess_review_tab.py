@@ -86,6 +86,30 @@ def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) 
     assert njr.config["steps"] == 20
 
 
+def test_reprocess_img2img_fallback_sets_stage_steps(tmp_path) -> None:
+    controller = _build_controller()
+    image = tmp_path / "img_img2img.png"
+    image.write_bytes(b"")
+
+    controller._extract_reprocess_baseline_from_image = Mock(return_value={})
+
+    submitted = controller.on_reprocess_images_with_prompt_delta(
+        image_paths=[str(image)],
+        stages=["img2img"],
+        prompt_delta="cleanup",
+        negative_prompt_delta="",
+        prompt_mode="replace",
+        negative_prompt_mode="replace",
+    )
+
+    assert submitted == 1
+    job = controller.job_service.submit_queued.call_args[0][0]
+    stage = job._normalized_record.stage_chain[0]
+    assert stage.stage_type == "img2img"
+    assert stage.steps == 20
+    assert stage.cfg_scale == 7.0
+
+
 def test_reprocess_batch_size_groups_only_compatible_jobs(tmp_path) -> None:
     controller = _build_controller()
     image_a = tmp_path / "img_a.png"
@@ -129,3 +153,33 @@ def test_reprocess_batch_size_groups_only_compatible_jobs(tmp_path) -> None:
     jobs = [call.args[0] for call in controller.job_service.submit_queued.call_args_list]
     batch_sizes = sorted(len(job._normalized_record.input_image_paths) for job in jobs)
     assert batch_sizes == [1, 2]
+
+
+def test_extract_reprocess_baseline_uses_prompt_resolution_fallbacks(tmp_path) -> None:
+    controller = _build_controller()
+    image = tmp_path / "img_meta.png"
+    image.write_bytes(b"")
+
+    with patch("src.utils.image_metadata.extract_embedded_metadata") as extract:
+        extract.return_value = Mock(
+            status="ok",
+            payload={
+                "generation": {
+                    "model": "modelA.safetensors",
+                    "vae": "vaeA",
+                },
+                "stage_manifest": {
+                    "config": {
+                        "prompt": "config prompt",
+                        "negative_prompt": "config negative",
+                    },
+                    "final_prompt": "final prompt",
+                },
+            },
+        )
+        baseline = controller._extract_reprocess_baseline_from_image(image)
+
+    assert baseline["prompt"] == "final prompt"
+    assert baseline["negative_prompt"] == "config negative"
+    assert baseline["model"] == "modelA.safetensors"
+    assert baseline["vae"] == "vaeA"
