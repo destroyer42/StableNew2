@@ -4,7 +4,7 @@
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
+        "text": "(masterpiece, best quality, grabbing crotch) portrait, detailed skin, natural light, high fantasy, magical atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
@@ -33,7 +33,7 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
+        "text": "(masterpiece, best quality, massaging groin) portrait, [[perspective]],detailed skin, natural light, high fantasy, magical atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]],is [[activity]], in [[time]], detailed shaved aroused wet vagina",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
@@ -70,38 +70,7 @@
       },
       {
         "index": 2,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes,  straps, shoulder straps, bra straps",
-        "positive_embeddings": [
-          "Stable_Yogis_PDXL_Positives",
-          "Stable_Yogis_Realism_Positives_V1",
-          "Stable_Yogis_Anatomy_Positives_V1",
-          "Stable_Yogis_General_Positives_V1"
-        ],
-        "negative_embeddings": [
-          "Stable_Yogis_Anatomy_Negatives_V1-neg",
-          "ac_neg1",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "bad_prompt"
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
-            0.7
-          ],
-          [
-            "CinematicStyle_v1",
-            0.4945054945054945
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ]
-        ]
-      },
-      {
-        "index": 2,
-        "text": "(masterpiece, best quality, photorealistic) portrait, detailed skin, natural light, romantic atmosphere a blonde-haired perky-large-breasted athletic beautiful blue-eyed sun-kissed tan woman lies atop another gorgeous woman with opposite orientations, each one with their head aligned with the groin of the other, as  they slowly caress and kiss each other's vaginas, in a bedroom, wearing  nothing, legs spread, detailed shaved aroused wet vagina, incredible skin, slight perspiration, glistening, looking sultry",
+        "text": "(masterpiece, best quality, touching clitoris) portrait, detailed skin, natural light, high fantasy, magical atmosphere a brown-haired perky-large-breasted athletic beautiful green-eyed sun-kissed tan woman, in a bedroom, wearing only nothing, stretching languidly, is grabbing herself in the warm light, detailed shaved aroused wet vagina, incredible skin, slight perspiration, glistening, looking sultry",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes,  straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
@@ -150,6 +119,10 @@
         {
           "name": "clothes",
           "values": [
+            "nothing",
+            "only a tight shirt with underboob",
+            "nothing",
+            "only an open jacket",
             "nothing"
           ]
         },
@@ -157,17 +130,21 @@
           "name": "hair",
           "values": [
             "brown",
-            "auburn",
+            "red",
             "blonde",
-            "black"
+            "silver",
+            "black",
+            "auburn",
+            "strawberry-blonde",
+            "fiery"
           ]
         },
         {
           "name": "activity",
           "values": [
-            "crouched over another gorgeous woman in a 69 position",
-            "licking the vagina of another woman who is lying down",
-            "is licking the vagina of another woman who is kneeling down"
+            "aggressively grabbing her own genitalia",
+            "furiously massaging her clitoris",
+            "fingering her pussy rapidly"
           ]
         },
         {
@@ -183,7 +160,13 @@
         {
           "name": "environment",
           "values": [
-            "a bedroom"
+            "ancient stone ruins",
+            "windswept mountain pass",
+            "burning battlefield",
+            "frozen forest clearing",
+            "deserted city street",
+            "torch-lit hall",
+            "stormy shoreline"
           ]
         },
         {
@@ -206,14 +189,14 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "juggernautXL_ragnarokBy",
-      "model_name": "juggernautXL_ragnarokBy",
+      "model": "realismFromHadesXL_2ndAnniversary",
+      "model_name": "realismFromHadesXL_2ndAnniversary",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
-      "steps": 30,
-      "cfg_scale": 6.43,
+      "steps": 20,
+      "cfg_scale": 4.000000000000004,
       "width": 768,
       "height": 1280,
       "clip_skip": 2,
@@ -227,7 +210,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
+      "hr_checkpoint_name": "realismFromHadesXL_2ndAnniversary.safetensors [897626cbf4]"
     },
     "img2img": {
       "model": "",
