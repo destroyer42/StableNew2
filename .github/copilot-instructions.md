@@ -1,175 +1,105 @@
-StableNew v2.6 — Copilot / Executor Instructions
+﻿StableNew v2.6 - Copilot / Executor Instructions
 
-Status: CANONICAL · ZERO‑LATITUDE EXECUTION CONTRACT
+Status: CANONICAL ACTIVE EXECUTOR BRIEF
 
-READ FIRST — BINDING EXECUTION AGREEMENT
+Read this before making any change in this repository.
 
-By executing any StableNew PR, you explicitly agree that:
+## Purpose
 
-StableNew_v2.6_Canonical_Execution_Contract.md is the single source of truth
+This file is the machine-facing execution brief for Copilot/Codex sessions in StableNew.
+It does not replace the canonical docs. It operationalizes them.
 
-PR instructions override your preferences, heuristics, or prior code behavior
+Primary authorities:
 
-Partial compliance constitutes failure
+1. `AGENTS.md`
+2. `docs/ARCHITECTURE_v2.6.md`
+3. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+4. `docs/StableNew_Coding_and_Testing_v2.6.md`
+5. `docs/PR_TEMPLATE_v2.6.md`
 
-If you cannot comply exactly, you must STOP.
+If this file conflicts with those documents, the canonical docs win.
 
-1. Executor Identity
+## Core architecture
 
-You are acting as a deterministic code executor, not a collaborator.
+StableNew has one valid job path:
 
-Your job is to:
+PromptPack -> Builder Pipeline -> NormalizedJobRecord -> Queue -> Runner -> History -> Learning
 
-Apply the PR spec
+Critical invariants:
 
-Prove compliance
+- PromptPack is the only prompt source.
+- `AppStateV2` owns runtime draft state.
+- Controllers orchestrate; they do not invent alternate job formats.
+- `NormalizedJobRecord` is the only valid execution payload for new work.
+- Queue and runner are the only execution path.
+- Legacy shims, duplicate job paths, and parallel flows are defects.
 
-Exit
+## Repository map
 
-Nothing more.
+- `src/gui*/` contains UI layers and view wiring.
+- `src/controller/` contains orchestration and lifecycle coordination.
+- `src/pipeline/` contains builder/runtime pipeline modules.
+- `src/randomizer/` contains deterministic randomizer logic.
+- `src/queue/` and `src/history/` contain execution persistence/runtime state.
+- `src/learning/` contains post-execution learning logic.
+- `tests/` mirrors runtime domains and must stay deterministic.
+- `.github/agents/` contains specialist agent profiles.
+- `.github/instructions/` contains path-scoped guidance files.
 
-2. Absolute Rules (Non‑Negotiable)
+## Execution rules
 
-You MUST:
+- Treat approved PR specs as binding.
+- Modify only files inside the approved scope.
+- Stop when instructions are ambiguous or contradictory.
+- Do not preserve legacy code "just in case."
+- Do not add new prompt sources, dict-based runtime configs, or alternate runner entrypoints.
+- Do not move logic into the GUI that belongs in controller/pipeline/randomizer layers.
+- Do not change architecture without an explicit approved plan.
 
-Execute every PR step literally
+## Build and verification defaults
 
-Modify every file listed in the PR
+Use targeted validation for the files you touch, then broader validation when appropriate.
 
-Delete every file marked for deletion
+Typical commands:
 
-Run every test specified
+- `python -m compileall src`
+- `pytest -q`
+- `pytest tests/controller -q`
+- `pytest tests/pipeline -q`
+- `pytest tests/gui -q`
+- `pytest tests/randomizer -q`
+- `pytest tests/learning -q`
 
-Provide verifiable proof for all claims
+Rules:
 
-You MUST NOT:
+- No real network calls in tests.
+- No sleeps unless a test is explicitly timing-related and approved.
+- GUI tests must avoid blocking the UI thread.
+- Prefer deterministic mocks over live WebUI/API behavior.
 
-Interpret intent
+## Instruction layering
 
-Improve design
+When editing files in a scoped area, also follow the matching file under `.github/instructions/`.
 
-Fix unrelated issues
+Examples:
 
-Refactor for cleanliness
+- GUI work -> `.github/instructions/gui.instructions.md`
+- Controller work -> `.github/instructions/controller.instructions.md`
+- Pipeline work -> `.github/instructions/pipeline.instructions.md`
+- Randomizer work -> `.github/instructions/randomizer.instructions.md`
+- Tests -> `.github/instructions/tests.instructions.md`
+- Docs -> `.github/instructions/docs.instructions.md`
 
-Touch files outside scope
+## Agent usage
 
-Skip failing tests
+Use the canonical agents in `.github/agents/`:
 
-Silence or omission = failure.
-
-3. Scope Enforcement
-3.1 Allowed Files Only
-
-If a file is not listed in the PR’s Allowed Files table:
-
-You MUST NOT modify it
-
-If modification is required → STOP and request clarification
-
-3.2 Required Deletions
-
-If the PR marks a file for deletion:
-
-The file must be removed
-
-All references must be eliminated
-
-Proof via git status and git grep is mandatory
-
-4. Architectural Invariants You Must Enforce
-
-You MUST prove:
-
-❌ No PipelineConfig enters execution
-
-❌ No dict‑based runtime configs
-
-❌ No legacy builders or adapters
-
-✅ NormalizedJobRecord is the sole execution payload
-
-✅ run_njr() is the only runner entrypoint
-
-Any violation = refusal.
-
-5. Execution Behavior
-5.1 Order Matters
-
-Steps must be executed in the exact order listed.
-
-Reordering steps or batching changes is forbidden.
-
-5.2 Failure Handling
-
-If any step fails:
-
-STOP immediately
-
-Explain the exact blocker
-
-Make zero code changes
-
-6. Proof Requirements (Mandatory)
-
-For each PR section, you MUST provide:
-
-git diff (full)
-
-git status --short
-
-pytest command + captured output
-
-grep output for forbidden symbols
-
-File + line references for behavior changes
-
-Claims without proof are invalid.
-
-7. Test Execution
-
-Tests are not optional.
-
-You MUST:
-
-Run all tests specified by the PR
-
-Show full output
-
-Fix failures before proceeding
-
-“No tests found” or “tests assumed passing” = refusal.
-
-8. Drift & Ambiguity
-
-If you encounter:
-
-Ambiguity
-
-Missing details
-
-Conflicting instructions
-
-You MUST:
-
-STOP
-
-Ask the Planner for clarification
-
-You MUST NOT guess.
-
-9. Completion Output
-
-On successful completion, output only:
-
-A summary of completed steps
-
-Proof artifacts (diffs, logs, grep)
-
-No discussion. No commentary.
-
-10. Failure Clause
-
-If you claim completion without satisfying every rule above, the PR is invalid and must be redone.
-
-This document is binding for all Copilot / Codex executions in StableNew v2.6.
+- `controller_lead_engineer.md`
+- `implementer.md`
+- `gui.md`
+- `pipeline_runtime.md`
+- `tester.md`
+- `docs.md`
+- `refactor.md`
+
+Archived or duplicate agent files are reference-only and must not be used for new work.

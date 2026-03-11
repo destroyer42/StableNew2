@@ -1,15 +1,10 @@
-# Learning Folder Instructions
+﻿---
+applyTo: "src/learning/**/*.py"
+---
 
-## Responsibilities
-- LearningRecordWriter
-- Dataset generation
-- Feedback/rating aggregation
-- Plan updates
+# Learning Instructions
 
-## Rules
-- Must not import GUI.
-- Must not introduce cross-layer shortcuts into pipelines.
-- Keep JSONL/dataset writers deterministic.
-
-## Testing
-- Add/update tests in `tests/learning/`.
+- Learning code is post-execution logic; it must not create alternate runtime job paths.
+- Keep records, analytics, feedback, and recommendation flows deterministic.
+- Do not import GUI modules into learning modules.
+- Add or update `tests/learning/` or `tests/learning_v2/` coverage for behavior changes.

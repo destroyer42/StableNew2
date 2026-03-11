@@ -1,15 +1,11 @@
----
+﻿---
 applyTo: "tests/**/*.py"
 ---
 
-# Tests Folder Instructions
+# Tests Instructions
 
-## Rules
-- Tests must mirror the corresponding `src/` structure.
-- Do not import archived legacy modules for new tests.
-- Favor small, clear, deterministic tests.
-- GUI tests should use provided patterns instead of inventing new frameworks.
-
-## CI Alignment
-- Ensure all tests pass with `pytest -q`.
-- Avoid modifying GitHub Actions to “fix” failing tests.
+- Prefer deterministic pytest tests.
+- Match the current `tests/` domain layout.
+- No real network calls, no real WebUI dependency, and no flaky sleeps.
+- Keep GUI tests headless-safe and non-blocking.
+- Remove or rewrite tests that defend retired legacy paths when the approved scope removes them.
