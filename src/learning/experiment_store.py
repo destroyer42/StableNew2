@@ -124,7 +124,7 @@ class LearningExperimentStore:
                     session_path=self.root / str(experiment_id) / self.SESSION_FILE,
                 )
             )
-        handles.sort(key=lambda item: item.updated_at, reverse=True)
+        handles.sort(key=lambda item: (item.updated_at, item.experiment_id), reverse=True)
         return handles
 
     def session_path_for(self, experiment_id: str) -> Path:
@@ -155,4 +155,3 @@ class LearningExperimentStore:
     def _write_json(path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
