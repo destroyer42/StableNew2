@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import ANY
 from unittest.mock import MagicMock
 
 
@@ -34,5 +35,5 @@ def test_submit_rating_uses_panel_learning_controller() -> None:
 
     panel._submit_rating()
 
-    controller.record_rating.assert_called_once_with("out/test.png", 4, "good")
+    controller.record_rating.assert_called_once_with("out/test.png", 4, "good", ANY)
     panel.feedback_label.config.assert_called()

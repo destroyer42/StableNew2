@@ -103,7 +103,7 @@ from src.utils.error_envelope_v2 import (
     wrap_exception,
 )
 from src.utils.thread_registry import get_thread_registry
-from src.utils.file_io import read_prompt_pack
+from src.utils.file_io import load_image_to_base64, read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 
 logger = logging.getLogger(__name__)
@@ -1506,6 +1506,28 @@ class AppController:
             "source": "manual",
         }
 
+    def interrogate_photo_path(self, image_path: str | Path, *, model: str = "clip") -> str:
+        image_file = Path(image_path)
+        if not image_file.exists():
+            raise FileNotFoundError(f"Image not found: {image_file}")
+        if not hasattr(self, "_api_client") or self._api_client is None:
+            raise RuntimeError("WebUI client is not available")
+
+        image_base64 = load_image_to_base64(image_file)
+        if not image_base64:
+            raise RuntimeError(f"Failed to load image for interrogation: {image_file}")
+
+        interrogate = getattr(self._api_client, "interrogate", None)
+        if not callable(interrogate):
+            raise RuntimeError("WebUI client does not support interrogate")
+
+        caption = str(interrogate(image_base64, model=model) or "").strip()
+        if not caption:
+            raise RuntimeError("Interrogate returned no caption")
+
+        self._append_log(f"[photo_optimize] Interrogated {image_file.name}")
+        return caption
+
     def on_optimize_photo_assets(
         self,
         *,
@@ -1639,7 +1661,11 @@ class AppController:
         return submitted_count
 
     def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
-        from src.utils.image_metadata import extract_embedded_metadata
+        from src.utils.image_metadata import (
+            extract_embedded_metadata,
+            resolve_model_vae_fields,
+            resolve_prompt_fields,
+        )
 
         try:
             metadata_result = extract_embedded_metadata(image_path)
@@ -1661,18 +1687,16 @@ class AppController:
         if not isinstance(config, dict):
             config = {}
 
-        model_value = stage_manifest.get("model") or generation.get("model")
+        model_value, vae_value = resolve_model_vae_fields(payload)
         if isinstance(model_value, str) and model_value.strip().lower() in {"unknown", "n/a"}:
             model_value = None
-        vae_value = stage_manifest.get("vae") or generation.get("vae")
         if isinstance(vae_value, str) and vae_value.strip().lower() in {"unknown", "n/a"}:
             vae_value = None
+        prompt_value, negative_prompt_value = resolve_prompt_fields(payload)
 
         return {
-            "prompt": stage_manifest.get("prompt") or generation.get("prompt") or "",
-            "negative_prompt": stage_manifest.get("negative_prompt")
-            or generation.get("negative_prompt")
-            or "",
+            "prompt": prompt_value,
+            "negative_prompt": negative_prompt_value,
             "model": model_value,
             "vae": vae_value,
             "config": config,
@@ -1883,10 +1907,17 @@ class AppController:
                 if "img2img" in stages:
                     img2img_cfg = current_stage_configs.get("img2img", {})
                     config["img2img"] = {
+                        "steps": img2img_cfg.get("steps", current_stage_configs.get("steps", 28)),
+                        "cfg_scale": img2img_cfg.get("cfg_scale", current_stage_configs.get("cfg_scale", 7.0)),
+                        "sampler_name": img2img_cfg.get("sampler_name", current_stage_configs.get("sampler_name", "DPM++ 2M Karras")),
+                        "scheduler": img2img_cfg.get("scheduler", current_stage_configs.get("scheduler", "Karras")),
                         "denoising_strength": img2img_cfg.get("denoising_strength", 0.3),
                         "width": img2img_cfg.get("width", 512),
                         "height": img2img_cfg.get("height", 512),
                     }
+                    config["img2img_steps"] = config["img2img"]["steps"]
+                    config["img2img_cfg_scale"] = config["img2img"]["cfg_scale"]
+                    config["img2img_sampler_name"] = config["img2img"]["sampler_name"]
                     config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
                 
                 if "adetailer" in stages:
@@ -1947,10 +1978,17 @@ class AppController:
             if "img2img" in stages:
                 img2img_config = pack_config.get("img2img", {})
                 config["img2img"] = {
+                    "steps": img2img_config.get("steps", pack_config.get("steps", 28)),
+                    "cfg_scale": img2img_config.get("cfg_scale", pack_config.get("cfg_scale", 7.0)),
+                    "sampler_name": img2img_config.get("sampler_name", pack_config.get("sampler_name", "DPM++ 2M Karras")),
+                    "scheduler": img2img_config.get("scheduler", pack_config.get("scheduler", "Karras")),
                     "denoising_strength": img2img_config.get("denoising_strength", 0.3),
                     "width": img2img_config.get("width", 512),
                     "height": img2img_config.get("height", 512),
                 }
+                config["img2img_steps"] = config["img2img"]["steps"]
+                config["img2img_cfg_scale"] = config["img2img"]["cfg_scale"]
+                config["img2img_sampler_name"] = config["img2img"]["sampler_name"]
                 # Also set flat key for builder
                 config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
             

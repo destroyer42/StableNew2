@@ -9,6 +9,7 @@ from typing import Any
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.photo_optimize import PhotoOptimizeAsset, PhotoOptimizeBaseline, get_photo_optimize_store
 
@@ -25,7 +26,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
     ) -> None:
         super().__init__(master, **kwargs)
         self.app_controller = app_controller
-        self.app_state = app_state
+        self.app_state = None
         self.store = store or get_photo_optimize_store()
         self._workflow_adapter = ReviewWorkflowAdapter()
         self._asset_index_by_row: list[str] = []
@@ -34,6 +35,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._restored_asset_id: str | None = None
         self._history_index_by_row: list[int] = []
         self._suspend_asset_persist = False
+        self._app_state_resource_listener: Any = None
+        self._model_name_map: dict[str, str] = {}
+        self._vae_name_map: dict[str, str] = {"Automatic": ""}
 
         self.prompt_mode_var = tk.StringVar(value="append")
         self.negative_mode_var = tk.StringVar(value="append")
@@ -49,6 +53,28 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.stage_adetailer_var = tk.BooleanVar(value=False)
         self.stage_upscale_var = tk.BooleanVar(value=False)
         self.batch_size_var = tk.IntVar(value=1)
+        self.img2img_sampler_var = tk.StringVar()
+        self.img2img_steps_var = tk.IntVar(value=20)
+        self.img2img_cfg_var = tk.DoubleVar(value=7.0)
+        self.img2img_denoise_var = tk.DoubleVar(value=0.3)
+        self.img2img_width_var = tk.IntVar(value=0)
+        self.img2img_height_var = tk.IntVar(value=0)
+        self.adetailer_model_var = tk.StringVar()
+        self.adetailer_confidence_var = tk.DoubleVar(value=0.35)
+        self.adetailer_steps_var = tk.IntVar(value=28)
+        self.adetailer_cfg_var = tk.DoubleVar(value=7.0)
+        self.adetailer_denoise_var = tk.DoubleVar(value=0.4)
+        self.adetailer_sampler_var = tk.StringVar()
+        self.adetailer_scheduler_var = tk.StringVar(value="Use sampler default")
+        self.upscale_upscaler_var = tk.StringVar()
+        self.upscale_factor_var = tk.DoubleVar(value=2.0)
+        self.upscale_steps_var = tk.IntVar(value=20)
+        self.upscale_denoise_var = tk.DoubleVar(value=0.35)
+        self.upscale_sampler_var = tk.StringVar(value="Euler a")
+        self.upscale_scheduler_var = tk.StringVar(value="normal")
+        self.upscale_tile_size_var = tk.IntVar(value=0)
+        self.upscale_face_restore_var = tk.BooleanVar(value=False)
+        self.upscale_face_restore_method_var = tk.StringVar(value="CodeFormer")
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -65,6 +91,28 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             self.stage_img2img_var,
             self.stage_adetailer_var,
             self.stage_upscale_var,
+            self.img2img_sampler_var,
+            self.img2img_steps_var,
+            self.img2img_cfg_var,
+            self.img2img_denoise_var,
+            self.img2img_width_var,
+            self.img2img_height_var,
+            self.adetailer_model_var,
+            self.adetailer_confidence_var,
+            self.adetailer_steps_var,
+            self.adetailer_cfg_var,
+            self.adetailer_denoise_var,
+            self.adetailer_sampler_var,
+            self.adetailer_scheduler_var,
+            self.upscale_upscaler_var,
+            self.upscale_factor_var,
+            self.upscale_steps_var,
+            self.upscale_denoise_var,
+            self.upscale_sampler_var,
+            self.upscale_scheduler_var,
+            self.upscale_tile_size_var,
+            self.upscale_face_restore_var,
+            self.upscale_face_restore_method_var,
         ):
             variable.trace_add("write", lambda *_: self._persist_current_asset_baseline())
 
@@ -79,12 +127,13 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
 
         self._set_readonly_text(self.current_prompt_text, "")
         self._set_readonly_text(self.current_negative_text, "")
+        self.bind_app_state(app_state)
         self._refresh_assets()
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
         header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
-        header.columnconfigure(4, weight=1)
+        header.columnconfigure(8, weight=1)
 
         ttk.Button(
             header,
@@ -108,24 +157,51 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             header,
             text="Interrogate",
             style="Dark.TButton",
-            command=self._show_interrogate_unavailable,
+            command=self._interrogate_current_asset,
         )
         interrogate_btn.grid(row=0, column=3, sticky="w")
         attach_tooltip(
             interrogate_btn,
-            "Prompt interrogation is not wired in this MVP. Import, set a baseline, then optimize.",
+            "Analyze the current working image and write the returned caption into the baseline prompt.",
         )
+        ttk.Label(header, text="Batch", style="Dark.TLabel").grid(
+            row=0, column=4, sticky="w", padx=(10, 4)
+        )
+        ttk.Spinbox(
+            header,
+            from_=1,
+            to=64,
+            increment=1,
+            textvariable=self.batch_size_var,
+            width=5,
+            style="Dark.TSpinbox",
+        ).grid(row=0, column=5, sticky="w", padx=(0, 8))
+        self.optimize_selected_header_btn = ttk.Button(
+            header,
+            text="Optimize Selected",
+            style="Primary.TButton",
+            command=lambda: self._optimize(batch_all=False),
+        )
+        self.optimize_selected_header_btn.grid(row=0, column=6, sticky="w", padx=(0, 6))
+        self.optimize_all_header_btn = ttk.Button(
+            header,
+            text="Optimize All",
+            style="Dark.TButton",
+            command=lambda: self._optimize(batch_all=True),
+        )
+        self.optimize_all_header_btn.grid(row=0, column=7, sticky="w")
 
         self.selection_label = ttk.Label(
             header,
             text="No assets loaded",
             style="Dark.TLabel",
         )
-        self.selection_label.grid(row=0, column=4, sticky="e")
+        self.selection_label.grid(row=0, column=8, sticky="e")
 
     def _build_body(self) -> None:
-        body = ttk.Frame(self, style="Panel.TFrame")
-        body.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        self.body_scroll = ScrollableFrame(self, style="Panel.TFrame")
+        self.body_scroll.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        body = self.body_scroll.inner
         body.columnconfigure(0, weight=1, uniform="photo_optimize")
         body.columnconfigure(1, weight=2, uniform="photo_optimize")
         body.columnconfigure(2, weight=2, uniform="photo_optimize")
@@ -173,15 +249,15 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         )
         self.original_preview = ThumbnailWidget(
             preview_frame,
-            width=280,
-            height=280,
+            width=220,
+            height=220,
             placeholder_text="Import a photo",
         )
         self.original_preview.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
         self.latest_preview = ThumbnailWidget(
             preview_frame,
-            width=280,
-            height=280,
+            width=220,
+            height=220,
             placeholder_text="No optimize output yet",
         )
         self.latest_preview.grid(row=1, column=1, sticky="nsew")
@@ -191,7 +267,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             text="Metadata: n/a",
             style="Dark.TLabel",
             justify="left",
-            wraplength=560,
+            wraplength=460,
         )
         self.meta_label.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
@@ -246,11 +322,23 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         model_row.columnconfigure(1, weight=1)
         model_row.columnconfigure(3, weight=1)
         ttk.Label(model_row, text="Model", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
-        ttk.Entry(model_row, textvariable=self.model_var, style="Dark.TEntry").grid(
+        self.model_combo = ttk.Combobox(
+            model_row,
+            textvariable=self.model_var,
+            style="Dark.TCombobox",
+            state="readonly",
+        )
+        self.model_combo.grid(
             row=0, column=1, sticky="ew", padx=(0, 8)
         )
         ttk.Label(model_row, text="VAE", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
-        ttk.Entry(model_row, textvariable=self.vae_var, style="Dark.TEntry").grid(row=0, column=3, sticky="ew")
+        self.vae_combo = ttk.Combobox(
+            model_row,
+            textvariable=self.vae_var,
+            style="Dark.TCombobox",
+            state="readonly",
+        )
+        self.vae_combo.grid(row=0, column=3, sticky="ew")
 
         stage_row = ttk.Frame(baseline_box, style="Panel.TFrame")
         stage_row.grid(row=5, column=0, sticky="ew", pady=(0, 6))
@@ -273,15 +361,17 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             style="Dark.TCheckbutton",
         ).pack(side="left")
 
+        self._build_stage_config_editor(baseline_box, row=6)
+
         ttk.Label(baseline_box, text="Tags (comma-separated)", style="Dark.TLabel").grid(
-            row=6, column=0, sticky="w", pady=(0, 4)
+            row=7, column=0, sticky="w", pady=(0, 4)
         )
         ttk.Entry(baseline_box, textvariable=self.tags_var, style="Dark.TEntry").grid(
-            row=7, column=0, sticky="ew", pady=(0, 8)
+            row=8, column=0, sticky="ew", pady=(0, 8)
         )
 
         ttk.Label(baseline_box, text="Notes", style="Dark.TLabel").grid(
-            row=8, column=0, sticky="w", pady=(0, 4)
+            row=9, column=0, sticky="w", pady=(0, 4)
         )
         self.notes_text = tk.Text(
             baseline_box,
@@ -293,7 +383,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
-        self.notes_text.grid(row=9, column=0, sticky="ew")
+        self.notes_text.grid(row=10, column=0, sticky="ew")
 
         optimize_box = ttk.LabelFrame(
             controls,
@@ -525,6 +615,239 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             "source": "manual",
         }
 
+    def _build_stage_config_editor(self, parent: ttk.LabelFrame, *, row: int) -> None:
+        frame = ttk.LabelFrame(
+            parent,
+            text="Stage Config",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        frame.grid(row=row, column=0, sticky="ew", pady=(0, 8))
+        frame.columnconfigure(0, weight=1)
+
+        img2img_box = ttk.LabelFrame(
+            frame,
+            text="img2img",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        img2img_box.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        img2img_box.columnconfigure(1, weight=1)
+        img2img_box.columnconfigure(3, weight=1)
+        ttk.Label(img2img_box, text="Sampler", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self.img2img_sampler_combo = ttk.Combobox(
+            img2img_box,
+            textvariable=self.img2img_sampler_var,
+            style="Dark.TCombobox",
+        )
+        self.img2img_sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        ttk.Label(img2img_box, text="Steps", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        ttk.Spinbox(
+            img2img_box,
+            from_=1,
+            to=200,
+            increment=1,
+            textvariable=self.img2img_steps_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=0, column=3, sticky="ew")
+        ttk.Label(img2img_box, text="CFG", style="Dark.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            img2img_box,
+            from_=1.0,
+            to=30.0,
+            increment=0.1,
+            textvariable=self.img2img_cfg_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        ttk.Label(img2img_box, text="Denoise", style="Dark.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            img2img_box,
+            from_=0.0,
+            to=1.0,
+            increment=0.01,
+            textvariable=self.img2img_denoise_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=3, sticky="ew", pady=(6, 0))
+        ttk.Label(img2img_box, text="Width", style="Dark.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            img2img_box,
+            from_=0,
+            to=4096,
+            increment=64,
+            textvariable=self.img2img_width_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        ttk.Label(img2img_box, text="Height", style="Dark.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            img2img_box,
+            from_=0,
+            to=4096,
+            increment=64,
+            textvariable=self.img2img_height_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=2, column=3, sticky="ew", pady=(6, 0))
+
+        adetailer_box = ttk.LabelFrame(
+            frame,
+            text="ADetailer",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        adetailer_box.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        adetailer_box.columnconfigure(1, weight=1)
+        adetailer_box.columnconfigure(3, weight=1)
+        ttk.Label(adetailer_box, text="Model", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self.adetailer_model_combo = ttk.Combobox(
+            adetailer_box,
+            textvariable=self.adetailer_model_var,
+            style="Dark.TCombobox",
+        )
+        self.adetailer_model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        ttk.Label(adetailer_box, text="Confidence", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        ttk.Spinbox(
+            adetailer_box,
+            from_=0.0,
+            to=1.0,
+            increment=0.01,
+            textvariable=self.adetailer_confidence_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=0, column=3, sticky="ew")
+        ttk.Label(adetailer_box, text="Steps", style="Dark.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            adetailer_box,
+            from_=1,
+            to=200,
+            increment=1,
+            textvariable=self.adetailer_steps_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        ttk.Label(adetailer_box, text="CFG", style="Dark.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            adetailer_box,
+            from_=1.0,
+            to=30.0,
+            increment=0.1,
+            textvariable=self.adetailer_cfg_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=3, sticky="ew", pady=(6, 0))
+        ttk.Label(adetailer_box, text="Denoise", style="Dark.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            adetailer_box,
+            from_=0.0,
+            to=1.0,
+            increment=0.01,
+            textvariable=self.adetailer_denoise_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        ttk.Label(adetailer_box, text="Sampler", style="Dark.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        self.adetailer_sampler_combo = ttk.Combobox(
+            adetailer_box,
+            textvariable=self.adetailer_sampler_var,
+            style="Dark.TCombobox",
+        )
+        self.adetailer_sampler_combo.grid(row=2, column=3, sticky="ew", pady=(6, 0))
+        ttk.Label(adetailer_box, text="Scheduler", style="Dark.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        self.adetailer_scheduler_combo = ttk.Combobox(
+            adetailer_box,
+            textvariable=self.adetailer_scheduler_var,
+            style="Dark.TCombobox",
+        )
+        self.adetailer_scheduler_combo.grid(row=3, column=1, sticky="ew", pady=(6, 0))
+
+        upscale_box = ttk.LabelFrame(
+            frame,
+            text="Upscale",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        upscale_box.grid(row=2, column=0, sticky="ew")
+        upscale_box.columnconfigure(1, weight=1)
+        upscale_box.columnconfigure(3, weight=1)
+        ttk.Label(upscale_box, text="Upscaler", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self.upscale_upscaler_combo = ttk.Combobox(
+            upscale_box,
+            textvariable=self.upscale_upscaler_var,
+            style="Dark.TCombobox",
+        )
+        self.upscale_upscaler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        ttk.Label(upscale_box, text="Factor", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        ttk.Spinbox(
+            upscale_box,
+            from_=1.0,
+            to=8.0,
+            increment=0.1,
+            textvariable=self.upscale_factor_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=0, column=3, sticky="ew")
+        ttk.Label(upscale_box, text="Steps", style="Dark.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            upscale_box,
+            from_=1,
+            to=200,
+            increment=1,
+            textvariable=self.upscale_steps_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        ttk.Label(upscale_box, text="Denoise", style="Dark.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            upscale_box,
+            from_=0.0,
+            to=1.0,
+            increment=0.01,
+            textvariable=self.upscale_denoise_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=3, sticky="ew", pady=(6, 0))
+        ttk.Label(upscale_box, text="Sampler", style="Dark.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        self.upscale_sampler_combo = ttk.Combobox(
+            upscale_box,
+            textvariable=self.upscale_sampler_var,
+            style="Dark.TCombobox",
+        )
+        self.upscale_sampler_combo.grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        ttk.Label(upscale_box, text="Scheduler", style="Dark.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        self.upscale_scheduler_combo = ttk.Combobox(
+            upscale_box,
+            textvariable=self.upscale_scheduler_var,
+            style="Dark.TCombobox",
+        )
+        self.upscale_scheduler_combo.grid(row=2, column=3, sticky="ew", pady=(6, 0))
+        ttk.Label(upscale_box, text="Tile Size", style="Dark.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Spinbox(
+            upscale_box,
+            from_=0,
+            to=4096,
+            increment=64,
+            textvariable=self.upscale_tile_size_var,
+            width=8,
+            style="Dark.TSpinbox",
+        ).grid(row=3, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        ttk.Checkbutton(
+            upscale_box,
+            text="Face restore",
+            variable=self.upscale_face_restore_var,
+            style="Dark.TCheckbutton",
+        ).grid(row=3, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Combobox(
+            upscale_box,
+            textvariable=self.upscale_face_restore_method_var,
+            values=["CodeFormer", "GFPGAN"],
+            style="Dark.TCombobox",
+        ).grid(row=3, column=3, sticky="ew", pady=(6, 0))
+
+        self._refresh_resource_options()
+
     def _refresh_assets(self, select_asset_id: str | None = None) -> None:
         assets = self.store.list_assets()
         self.assets_list.delete(0, tk.END)
@@ -567,6 +890,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.model_var.set("")
         self.vae_var.set("")
         self.tags_var.set("")
+        self._load_baseline_config_form({})
         self._set_readonly_text(self.current_prompt_text, "")
         self._set_readonly_text(self.current_negative_text, "")
         self._set_text(self.prompt_delta_text, "")
@@ -590,15 +914,22 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._current_asset = asset
         self._suspend_asset_persist = True
         try:
+            self._refresh_resource_options()
             self._set_text(self.baseline_prompt_text, asset.baseline.prompt)
             self._set_text(self.baseline_negative_text, asset.baseline.negative_prompt)
             self._set_text(self.notes_text, asset.notes)
-            self.model_var.set(asset.baseline.model)
-            self.vae_var.set(asset.baseline.vae)
+            self.model_var.set(
+                self._display_for_internal(asset.baseline.model, self._model_name_map) or asset.baseline.model
+            )
+            self.vae_var.set(
+                self._display_for_internal(asset.baseline.vae, self._vae_name_map)
+                or ("Automatic" if not asset.baseline.vae else asset.baseline.vae)
+            )
             self.tags_var.set(", ".join(asset.tags))
             self.stage_img2img_var.set(bool(asset.baseline.stage_defaults.get("img2img", True)))
             self.stage_adetailer_var.set(bool(asset.baseline.stage_defaults.get("adetailer", False)))
             self.stage_upscale_var.set(bool(asset.baseline.stage_defaults.get("upscale", False)))
+            self._load_baseline_config_form(asset.baseline.config)
             self._set_readonly_text(self.current_prompt_text, asset.baseline.prompt)
             self._set_readonly_text(self.current_negative_text, asset.baseline.negative_prompt)
             self._reset_prompt_mode_state(asset)
@@ -786,13 +1117,17 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         baseline = PhotoOptimizeBaseline.from_dict(asset.baseline.to_dict())
         baseline.prompt = self._get_text(self.baseline_prompt_text)
         baseline.negative_prompt = self._get_text(self.baseline_negative_text)
-        baseline.model = self.model_var.get().strip()
-        baseline.vae = self.vae_var.get().strip()
+        baseline.model = self._internal_for_display(self.model_var.get(), self._model_name_map)
+        baseline.vae = self._internal_for_display(self.vae_var.get(), self._vae_name_map)
         baseline.stage_defaults = {
             "img2img": bool(self.stage_img2img_var.get()),
             "adetailer": bool(self.stage_adetailer_var.get()),
             "upscale": bool(self.stage_upscale_var.get()),
         }
+        baseline.config = self._merge_nested_dicts(
+            baseline.config if isinstance(baseline.config, dict) else {},
+            self._collect_baseline_config_from_form(),
+        )
         if not baseline.working_image_path:
             baseline.working_image_path = asset.managed_original_path
         updated = self.store.update_asset_fields(
@@ -806,6 +1141,35 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._set_readonly_text(self.current_negative_text, updated.baseline.negative_prompt)
         self._refresh_prompt_diff()
         self._refresh_preview(updated)
+
+    def _interrogate_current_asset(self) -> None:
+        if self._current_asset is None:
+            messagebox.showwarning("No asset", "Select an asset first.")
+            return
+        controller = self.app_controller
+        interrogate = getattr(controller, "interrogate_photo_path", None)
+        if not callable(interrogate):
+            messagebox.showerror("Controller missing", "Photo interrogation is not connected.")
+            return
+        try:
+            caption = str(interrogate(str(self._current_asset.current_input_path)) or "").strip()
+            if not caption:
+                raise RuntimeError("Interrogate returned an empty caption")
+            asset = self.store.get_asset(self._current_asset.asset_id)
+            if asset is None:
+                raise RuntimeError("Selected asset could not be reloaded")
+            baseline = PhotoOptimizeBaseline.from_dict(asset.baseline.to_dict())
+            baseline.prompt = caption
+            baseline.source = "interrogated"
+            self.store.update_asset_fields(
+                asset.asset_id,
+                notes=asset.notes,
+                tags=list(asset.tags),
+                baseline=baseline,
+            )
+            self._show_asset(asset.asset_id)
+        except Exception as exc:
+            messagebox.showerror("Interrogate failed", str(exc))
 
     def _reset_prompt_mode_state(self, asset: PhotoOptimizeAsset) -> None:
         self._prompt_mode_edits = {
@@ -880,10 +1244,368 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
     def _get_text(self, widget: tk.Text) -> str:
         return widget.get("1.0", tk.END).strip()
 
+    def _load_baseline_config_form(self, config: dict[str, Any] | None) -> None:
+        data = config if isinstance(config, dict) else {}
+        img2img = data.get("img2img") if isinstance(data.get("img2img"), dict) else {}
+        adetailer = data.get("adetailer") if isinstance(data.get("adetailer"), dict) else {}
+        upscale = data.get("upscale") if isinstance(data.get("upscale"), dict) else {}
+
+        self.img2img_sampler_var.set(
+            str(img2img.get("sampler_name") or data.get("img2img_sampler_name") or data.get("sampler_name") or "")
+        )
+        self.img2img_steps_var.set(
+            self._safe_int(img2img.get("steps") or data.get("img2img_steps") or data.get("steps"), 20)
+        )
+        self.img2img_cfg_var.set(
+            self._safe_float(img2img.get("cfg_scale") or data.get("img2img_cfg_scale") or data.get("cfg_scale"), 7.0)
+        )
+        self.img2img_denoise_var.set(
+            self._safe_float(
+                img2img.get("denoising_strength") or data.get("img2img_denoising_strength"),
+                0.3,
+            )
+        )
+        self.img2img_width_var.set(self._safe_int(img2img.get("width"), 0))
+        self.img2img_height_var.set(self._safe_int(img2img.get("height"), 0))
+
+        self.adetailer_model_var.set(
+            str(adetailer.get("adetailer_model") or adetailer.get("ad_model") or "")
+        )
+        self.adetailer_confidence_var.set(
+            self._safe_float(
+                adetailer.get("adetailer_confidence") or adetailer.get("ad_confidence"),
+                0.35,
+            )
+        )
+        self.adetailer_steps_var.set(
+            self._safe_int(
+                adetailer.get("adetailer_steps") or adetailer.get("ad_steps") or data.get("adetailer_steps"),
+                28,
+            )
+        )
+        self.adetailer_cfg_var.set(
+            self._safe_float(
+                adetailer.get("adetailer_cfg")
+                or adetailer.get("ad_cfg_scale")
+                or data.get("adetailer_cfg_scale"),
+                7.0,
+            )
+        )
+        self.adetailer_denoise_var.set(
+            self._safe_float(
+                adetailer.get("adetailer_denoise")
+                or adetailer.get("ad_denoising_strength")
+                or data.get("adetailer_denoising_strength"),
+                0.4,
+            )
+        )
+        self.adetailer_sampler_var.set(
+            str(
+                adetailer.get("adetailer_sampler")
+                or adetailer.get("ad_sampler")
+                or data.get("adetailer_sampler_name")
+                or ""
+            )
+        )
+        self.adetailer_scheduler_var.set(
+            str(adetailer.get("scheduler") or adetailer.get("ad_scheduler") or "Use sampler default")
+        )
+
+        self.upscale_upscaler_var.set(str(upscale.get("upscaler") or data.get("upscaler") or ""))
+        self.upscale_factor_var.set(
+            self._safe_float(
+                upscale.get("upscaling_resize")
+                or upscale.get("upscale_factor")
+                or upscale.get("upscale_by")
+                or data.get("upscale_factor"),
+                2.0,
+            )
+        )
+        self.upscale_steps_var.set(
+            self._safe_int(upscale.get("steps") or data.get("upscale_steps"), 20)
+        )
+        self.upscale_denoise_var.set(
+            self._safe_float(
+                upscale.get("denoising_strength") or data.get("upscale_denoising_strength"),
+                0.35,
+            )
+        )
+        self.upscale_sampler_var.set(
+            str(upscale.get("sampler_name") or data.get("upscale_sampler_name") or "Euler a")
+        )
+        self.upscale_scheduler_var.set(
+            str(upscale.get("scheduler") or data.get("upscale_scheduler") or "normal")
+        )
+        self.upscale_tile_size_var.set(self._safe_int(upscale.get("tile_size"), 0))
+        self.upscale_face_restore_var.set(bool(upscale.get("face_restore", False)))
+        self.upscale_face_restore_method_var.set(
+            str(upscale.get("face_restore_method") or "CodeFormer")
+        )
+
+    def _collect_baseline_config_from_form(self) -> dict[str, Any]:
+        img2img_cfg: dict[str, Any] = {
+            "sampler_name": self.img2img_sampler_var.get().strip(),
+            "steps": self._safe_int(self.img2img_steps_var.get(), 20),
+            "cfg_scale": self._safe_float(self.img2img_cfg_var.get(), 7.0),
+            "denoising_strength": self._safe_float(self.img2img_denoise_var.get(), 0.3),
+        }
+        width = self._safe_int(self.img2img_width_var.get(), 0)
+        height = self._safe_int(self.img2img_height_var.get(), 0)
+        if width > 0:
+            img2img_cfg["width"] = width
+        if height > 0:
+            img2img_cfg["height"] = height
+
+        adetailer_cfg: dict[str, Any] = {
+            "adetailer_model": self.adetailer_model_var.get().strip(),
+            "ad_model": self.adetailer_model_var.get().strip(),
+            "adetailer_confidence": self._safe_float(self.adetailer_confidence_var.get(), 0.35),
+            "ad_confidence": self._safe_float(self.adetailer_confidence_var.get(), 0.35),
+            "adetailer_steps": self._safe_int(self.adetailer_steps_var.get(), 28),
+            "ad_steps": self._safe_int(self.adetailer_steps_var.get(), 28),
+            "adetailer_cfg": self._safe_float(self.adetailer_cfg_var.get(), 7.0),
+            "ad_cfg_scale": self._safe_float(self.adetailer_cfg_var.get(), 7.0),
+            "adetailer_denoise": self._safe_float(self.adetailer_denoise_var.get(), 0.4),
+            "ad_denoising_strength": self._safe_float(self.adetailer_denoise_var.get(), 0.4),
+            "adetailer_sampler": self.adetailer_sampler_var.get().strip(),
+            "ad_sampler": self.adetailer_sampler_var.get().strip(),
+            "scheduler": self.adetailer_scheduler_var.get().strip() or "Use sampler default",
+            "ad_scheduler": self.adetailer_scheduler_var.get().strip() or "Use sampler default",
+        }
+
+        upscale_cfg: dict[str, Any] = {
+            "upscaler": self.upscale_upscaler_var.get().strip(),
+            "upscaling_resize": self._safe_float(self.upscale_factor_var.get(), 2.0),
+            "upscale_factor": self._safe_float(self.upscale_factor_var.get(), 2.0),
+            "steps": self._safe_int(self.upscale_steps_var.get(), 20),
+            "denoising_strength": self._safe_float(self.upscale_denoise_var.get(), 0.35),
+            "sampler_name": self.upscale_sampler_var.get().strip(),
+            "scheduler": self.upscale_scheduler_var.get().strip() or "normal",
+            "tile_size": self._safe_int(self.upscale_tile_size_var.get(), 0),
+            "face_restore": bool(self.upscale_face_restore_var.get()),
+            "face_restore_method": self.upscale_face_restore_method_var.get().strip() or "CodeFormer",
+        }
+
+        config: dict[str, Any] = {
+            "img2img": img2img_cfg,
+            "img2img_sampler_name": img2img_cfg["sampler_name"],
+            "img2img_steps": img2img_cfg["steps"],
+            "img2img_cfg_scale": img2img_cfg["cfg_scale"],
+            "img2img_denoising_strength": img2img_cfg["denoising_strength"],
+            "adetailer": adetailer_cfg,
+            "adetailer_steps": adetailer_cfg["adetailer_steps"],
+            "adetailer_cfg_scale": adetailer_cfg["adetailer_cfg"],
+            "adetailer_sampler_name": adetailer_cfg["adetailer_sampler"],
+            "adetailer_denoising_strength": adetailer_cfg["adetailer_denoise"],
+            "upscale": upscale_cfg,
+            "upscale_steps": upscale_cfg["steps"],
+            "upscale_sampler_name": upscale_cfg["sampler_name"],
+            "upscale_denoising_strength": upscale_cfg["denoising_strength"],
+            "upscale_factor": upscale_cfg["upscale_factor"],
+            "upscaler": upscale_cfg["upscaler"],
+            "steps": img2img_cfg["steps"],
+            "cfg_scale": img2img_cfg["cfg_scale"],
+            "sampler_name": img2img_cfg["sampler_name"],
+        }
+        return config
+
+    def _refresh_resource_options(self, resources: dict[str, list[Any]] | None = None) -> None:
+        resource_map = resources
+        if resource_map is None:
+            resource_map = getattr(self.app_state, "resources", {}) if self.app_state is not None else {}
+        model_values, model_map = self._normalize_dropdown_entries(
+            self._resource_entries(resource_map, "models")
+        )
+        vae_values, vae_map = self._normalize_dropdown_entries(
+            self._resource_entries(resource_map, "vaes"),
+            include_automatic=True,
+        )
+        self._model_name_map = model_map
+        self._vae_name_map = vae_map
+        self._set_combobox_values(self.model_combo, self.model_var, model_values)
+        self._set_combobox_values(self.vae_combo, self.vae_var, vae_values)
+
+        samplers = self._resource_values("samplers")
+        schedulers = self._resource_values("schedulers")
+        upscalers = self._resource_values("upscalers", fallback=["Latent", "R-ESRGAN 4x+"])
+        adetailer_models = self._resource_values(
+            "adetailer_models",
+            fallback=["face_yolov8n.pt", "hand_yolov8n.pt", "mediapipe_face_full"],
+        )
+        self._set_combobox_values(self.img2img_sampler_combo, self.img2img_sampler_var, samplers)
+        self._set_combobox_values(self.adetailer_sampler_combo, self.adetailer_sampler_var, samplers)
+        self._set_combobox_values(self.upscale_sampler_combo, self.upscale_sampler_var, samplers)
+        self._set_combobox_values(
+            self.adetailer_scheduler_combo,
+            self.adetailer_scheduler_var,
+            ["Use sampler default"] + schedulers,
+        )
+        self._set_combobox_values(self.upscale_scheduler_combo, self.upscale_scheduler_var, schedulers)
+        self._set_combobox_values(self.upscale_upscaler_combo, self.upscale_upscaler_var, upscalers)
+        self._set_combobox_values(self.adetailer_model_combo, self.adetailer_model_var, adetailer_models)
+
+    @staticmethod
+    def _resource_entries(
+        resources: dict[str, list[Any]] | None,
+        key: str,
+    ) -> list[Any]:
+        if not isinstance(resources, dict):
+            return []
+        return list(resources.get(key) or [])
+
+    def _resource_values(self, key: str, *, fallback: list[str] | None = None) -> list[str]:
+        resources = getattr(self.app_state, "resources", {}) if self.app_state is not None else {}
+        entries = resources.get(key) if isinstance(resources, dict) else []
+        values: list[str] = []
+        for entry in entries or []:
+            value = self._resource_entry_name(entry)
+            if value:
+                values.append(value)
+        for item in fallback or []:
+            if item and item not in values:
+                values.append(item)
+        return values
+
+    @staticmethod
+    def _resource_entry_name(entry: Any) -> str:
+        if isinstance(entry, str):
+            return entry.strip()
+        if isinstance(entry, dict):
+            for key in ("title", "model_name", "name", "label"):
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            return ""
+        for attr in ("display_name", "name", "title", "model_name"):
+            value = getattr(entry, attr, None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    @classmethod
+    def _normalize_dropdown_entries(
+        cls,
+        entries: list[Any],
+        *,
+        include_automatic: bool = False,
+    ) -> tuple[list[str], dict[str, str]]:
+        seen: set[str] = set()
+        values: list[str] = []
+        mapping: dict[str, str] = {}
+        if include_automatic:
+            values.append("Automatic")
+            mapping["Automatic"] = ""
+            seen.add("Automatic")
+        for entry in entries:
+            display = cls._resource_entry_name(entry)
+            if not display or display in seen:
+                continue
+            internal = cls._resource_internal_name(entry) or display
+            seen.add(display)
+            values.append(display)
+            mapping[display] = internal
+        return values, mapping
+
+    @staticmethod
+    def _resource_internal_name(entry: Any) -> str:
+        if isinstance(entry, str):
+            return entry.strip()
+        if isinstance(entry, dict):
+            for key in ("name", "model_name", "title", "label"):
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            return ""
+        for attr in ("name", "model_name", "title", "display_name"):
+            value = getattr(entry, attr, None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    @staticmethod
+    def _display_for_internal(internal: str | None, mapping: dict[str, str]) -> str:
+        target = str(internal or "").strip()
+        if not target:
+            return "Automatic" if mapping.get("Automatic", None) == "" else ""
+        for display, name in mapping.items():
+            if name == target:
+                return display
+        return target
+
+    @staticmethod
+    def _internal_for_display(display: str | None, mapping: dict[str, str]) -> str:
+        text = str(display or "").strip()
+        if not text:
+            return ""
+        return str(mapping.get(text, text)).strip()
+
+    @staticmethod
+    def _set_combobox_values(combo: ttk.Combobox, var: tk.StringVar, values: list[str]) -> None:
+        current = (var.get() or "").strip()
+        unique_values: list[str] = []
+        for value in values:
+            item = str(value or "").strip()
+            if item and item not in unique_values:
+                unique_values.append(item)
+        if current and current not in unique_values:
+            unique_values.append(current)
+        combo["values"] = unique_values
+
+    @staticmethod
+    def _merge_nested_dicts(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(base or {})
+        for key, value in (update or {}).items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = PhotoOptimizeTabFrameV2._merge_nested_dicts(merged.get(key, {}), value)
+            else:
+                merged[key] = deepcopy(value)
+        return merged
+
+    @staticmethod
+    def _safe_int(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _safe_float(value: Any, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
     def get_photo_optimize_state(self) -> dict[str, Any]:
         return {
             "selected_asset_id": self._current_asset_id,
         }
+
+    def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None = None) -> None:
+        self._refresh_resource_options(resources)
+
+    def bind_app_state(self, app_state: Any) -> None:
+        if self.app_state is app_state:
+            return
+        old_state = self.app_state
+        old_listener = self._app_state_resource_listener
+        if old_state is not None and old_listener is not None and hasattr(old_state, "unsubscribe"):
+            try:
+                old_state.unsubscribe("resources", old_listener)
+            except Exception:
+                pass
+        self.app_state = app_state
+        self._app_state_resource_listener = None
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            self._app_state_resource_listener = lambda: self._on_app_state_resources_changed(
+                getattr(self.app_state, "resources", None)
+            )
+            try:
+                self.app_state.subscribe("resources", self._app_state_resource_listener)
+            except Exception:
+                self._app_state_resource_listener = None
+        self._on_app_state_resources_changed(
+            getattr(self.app_state, "resources", None) if self.app_state is not None else None
+        )
 
     def restore_photo_optimize_state(self, payload: dict[str, Any] | None) -> bool:
         if not isinstance(payload, dict):
@@ -900,6 +1622,17 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         if asset_ids and target not in set(asset_ids):
             target = asset_ids[0]
         self._refresh_assets(select_asset_id=target)
+
+    def destroy(self) -> None:
+        if self.app_state is not None and self._app_state_resource_listener is not None and hasattr(
+            self.app_state, "unsubscribe"
+        ):
+            try:
+                self.app_state.unsubscribe("resources", self._app_state_resource_listener)
+            except Exception:
+                pass
+        self._app_state_resource_listener = None
+        super().destroy()
 
 
 PhotoOptimizeTabFrame = PhotoOptimizeTabFrameV2

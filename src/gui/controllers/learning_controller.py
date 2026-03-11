@@ -6,13 +6,16 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.recommendation_engine import RecommendationEngine
+from src.learning.stage_capabilities import get_stage_capability
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.queue.job_model import Job, JobPriority
 
 
@@ -117,6 +120,7 @@ class LearningController:
             baseline_config={},  # Will be populated from pipeline state later
             prompt_text=prompt_text,
             stage=experiment_data.get("stage", "txt2img"),
+            input_image_path=str(experiment_data.get("input_image_path", "") or ""),
             variable_under_test=variable_name,
             values=[],  # PR-LEARN-020: Values generated in build_plan()
             images_per_value=experiment_data.get("images_per_value", 1),
@@ -150,6 +154,7 @@ class LearningController:
         """
         import logging
         from src.learning.variable_metadata import get_variable_metadata
+        from src.learning.variable_selection_contract import normalize_resource_entries
         
         logger = logging.getLogger(__name__)
         
@@ -181,7 +186,9 @@ class LearningController:
                     app_state = self.app_controller._app_state
                     if hasattr(app_state, "resources"):
                         available = app_state.resources.get(meta.resource_key, [])
-                        selected = available[:5] if available else []  # Use first 5 as fallback
+                        _, mapping = normalize_resource_entries(list(available or []))
+                        normalized = list(mapping.values()) if mapping else [str(item) for item in available]
+                        selected = normalized[:5] if normalized else []  # Use first 5 as fallback
                         logger.warning(
                             f"[LearningController]   No items selected, using first {len(selected)} "
                             f"available {meta.resource_key}"
@@ -258,24 +265,24 @@ class LearningController:
             List of LoRA dicts: [{"name": "...", "strength": ..., "enabled": True}, ...]
         """
         import logging
+        from src.learning.lora_variable_service import collect_available_loras
+
         logger = logging.getLogger(__name__)
-        
-        if not self.app_controller:
-            logger.warning("[LearningController] No app_controller, cannot get LoRAs")
-            return []
-        
-        # Get baseline config from stage cards
+
         try:
             baseline = self._get_baseline_config()
-            txt2img = baseline.get("txt2img", {})
-            loras = txt2img.get("lora_strengths", [])
-            
-            # Filter to enabled only
-            enabled_loras = [l for l in loras if l.get("enabled", False)]
-            
-            logger.info(f"[LearningController] Found {len(enabled_loras)} enabled LoRAs in stage card")
+            app_state = getattr(self.app_controller, "_app_state", None) if self.app_controller else None
+            loras = collect_available_loras(
+                prompt_workspace_state=self.prompt_workspace_state,
+                app_state=app_state,
+                baseline_config=baseline,
+            )
+            enabled_loras = [entry for entry in loras if entry.get("enabled", True)]
+
+            logger.info(
+                f"[LearningController] Found {len(enabled_loras)} enabled LoRAs from runtime/prompt/baseline"
+            )
             return enabled_loras
-            
         except Exception as exc:
             logger.error(f"[LearningController] Failed to get current LoRAs: {exc}")
             return []
@@ -307,7 +314,12 @@ class LearningController:
             app_state = self.app_controller._app_state
             if hasattr(app_state, "resources"):
                 available = app_state.resources.get(resource_key, [])
-        
+        _, mapping = normalize_resource_entries(list(available or []))
+        if mapping:
+            available = list(mapping.values())
+        else:
+            available = [str(item) for item in available]
+
         if not available:
             return False, f"No {meta.display_name} available in WebUI. Please check WebUI connection."
         
@@ -618,7 +630,8 @@ class LearningController:
         final_config["learning_experiment_id"] = experiment.name
         final_config["learning_variant_value"] = variant.param_value
         final_config["learning_variable"] = experiment.variable_under_test
-        
+        stage_name = str(experiment.stage or "txt2img").strip().lower() or "txt2img"
+
         txt2img_final = final_config.get("txt2img", {})
         
         # Extract explicit config values
@@ -695,7 +708,44 @@ class LearningController:
             variable_under_test=experiment.variable_under_test,
             variant_value=variant.param_value,
         )
-        
+
+        if stage_name != "txt2img":
+            capability = get_stage_capability(stage_name)
+            input_image_path = str(getattr(experiment, "input_image_path", "") or "").strip()
+            if capability.requires_input_image and not input_image_path:
+                raise ValueError(f"{capability.display_name} experiments require an input image")
+            if input_image_path and not Path(input_image_path).exists():
+                raise ValueError(f"Input image not found: {input_image_path}")
+
+            stage_section = final_config.get(stage_name, {})
+            if not isinstance(stage_section, dict):
+                stage_section = {}
+            builder = ReprocessJobBuilder()
+            repeated_inputs = [input_image_path] * max(1, int(experiment.images_per_value or 1))
+            record = builder.build_reprocess_job(
+                input_image_paths=repeated_inputs,
+                stages=[stage_name],
+                config=final_config,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                model=str(stage_section.get("model") or model or ""),
+                pack_name=f"learning_{experiment.name}",
+            )
+            record.prompt_pack_id = f"learning_{experiment.name}"
+            record.prompt_pack_name = experiment.name
+            record.learning_context = learning_ctx
+            record.extra_metadata = dict(record.extra_metadata or {})
+            record.extra_metadata.update(
+                {
+                    "learning_enabled": True,
+                    "learning_experiment": experiment.name,
+                    "learning_variable": experiment.variable_under_test,
+                    "learning_variant_value": variant.param_value,
+                    "learning_stage": stage_name,
+                }
+            )
+            return record
+
         # Build NormalizedJobRecord
         record = NormalizedJobRecord(
             job_id=job_id,
@@ -878,48 +928,58 @@ class LearningController:
         if self.app_controller and hasattr(self.app_controller, "_get_stage_cards_panel"):
             try:
                 stage_panel = self.app_controller._get_stage_cards_panel()
-                if stage_panel and hasattr(stage_panel, "txt2img_card"):
-                    txt2img_card = stage_panel.txt2img_card
-                    if hasattr(txt2img_card, "to_config_dict"):
-                        card_config = txt2img_card.to_config_dict()
-                        logger.info(f"[LearningController] Got stage card config: keys={list(card_config.keys())}")
-                        txt2img_section = card_config.get("txt2img", {})
-                        logger.info(f"[LearningController] txt2img section keys: {list(txt2img_section.keys())}")
-                        logger.info(f"[LearningController] txt2img model={txt2img_section.get('model')}, vae={txt2img_section.get('vae')}")
-                        
-                        # BUGFIX: Accept config if model exists (VAE can be empty for baked VAE models)
-                        if txt2img_section.get("model") or txt2img_section.get("model_name"):
-                            # Successfully got config from stage card
-                            baseline = card_config
-                            
-                            # PR-LEARN-011: Log successful config retrieval
-                            self._log_baseline_config(baseline, source="stage_cards")
-                            
-                            # BUGFIX: Ensure subseed parameters are present in txt2img section
-                            if "txt2img" not in baseline:
-                                baseline["txt2img"] = {}
-                            if "subseed" not in baseline["txt2img"]:
-                                baseline["txt2img"]["subseed"] = -1
-                            if "subseed_strength" not in baseline["txt2img"]:
-                                baseline["txt2img"]["subseed_strength"] = 0.0
-                            if "seed_resize_from_h" not in baseline["txt2img"]:
-                                baseline["txt2img"]["seed_resize_from_h"] = 0
-                            if "seed_resize_from_w" not in baseline["txt2img"]:
-                                baseline["txt2img"]["seed_resize_from_w"] = 0
-                            
-                            # Ensure pipeline section exists
-                            if "pipeline" not in baseline:
-                                baseline["pipeline"] = {
-                                    "batch_size": 1,
-                                    "txt2img_enabled": True,
-                                    "img2img_enabled": False,
-                                    "adetailer_enabled": False,
-                                    "upscale_enabled": False,
-                                }
-                            logger.info(f"[LearningController] Successfully loaded baseline config from stage cards")
-                            return baseline
-                        else:
-                            logger.warning(f"[LearningController] Stage card has no model/VAE, falling back")
+                if stage_panel:
+                    card_names = ("txt2img_card", "img2img_card", "adetailer_card", "upscale_card")
+                    merged_config: dict[str, Any] = {}
+                    for card_name in card_names:
+                        card = getattr(stage_panel, card_name, None)
+                        to_config_dict = getattr(card, "to_config_dict", None)
+                        if not callable(to_config_dict):
+                            continue
+                        card_config = to_config_dict() or {}
+                        if not isinstance(card_config, dict):
+                            continue
+                        for key, value in card_config.items():
+                            if key in {"txt2img", "img2img", "adetailer", "upscale", "pipeline"} and isinstance(value, dict):
+                                merged_config.setdefault(key, {}).update(value)
+                            elif key not in merged_config:
+                                merged_config[key] = value
+                    txt2img_section = merged_config.get("txt2img", {})
+                    logger.info(f"[LearningController] Got stage card config: keys={list(merged_config.keys())}")
+                    logger.info(f"[LearningController] txt2img section keys: {list(txt2img_section.keys())}")
+                    logger.info(f"[LearningController] txt2img model={txt2img_section.get('model')}, vae={txt2img_section.get('vae')}")
+
+                    # BUGFIX: Accept config if model exists (VAE can be empty for baked VAE models)
+                    if txt2img_section.get("model") or txt2img_section.get("model_name"):
+                        baseline = merged_config
+
+                        # PR-LEARN-011: Log successful config retrieval
+                        self._log_baseline_config(baseline, source="stage_cards")
+
+                        # BUGFIX: Ensure subseed parameters are present in txt2img section
+                        if "txt2img" not in baseline:
+                            baseline["txt2img"] = {}
+                        if "subseed" not in baseline["txt2img"]:
+                            baseline["txt2img"]["subseed"] = -1
+                        if "subseed_strength" not in baseline["txt2img"]:
+                            baseline["txt2img"]["subseed_strength"] = 0.0
+                        if "seed_resize_from_h" not in baseline["txt2img"]:
+                            baseline["txt2img"]["seed_resize_from_h"] = 0
+                        if "seed_resize_from_w" not in baseline["txt2img"]:
+                            baseline["txt2img"]["seed_resize_from_w"] = 0
+
+                        # Ensure pipeline section exists
+                        if "pipeline" not in baseline:
+                            baseline["pipeline"] = {
+                                "batch_size": 1,
+                                "txt2img_enabled": True,
+                                "img2img_enabled": False,
+                                "adetailer_enabled": False,
+                                "upscale_enabled": False,
+                            }
+                        logger.info("[LearningController] Successfully loaded baseline config from stage cards")
+                        return baseline
+                    logger.warning("[LearningController] Stage card has no model/VAE, falling back")
             except Exception as exc:
                 logger.exception(f"[LearningController] Failed to get stage card config: {exc}")
         else:
@@ -1094,7 +1154,12 @@ class LearningController:
         # Standard config path application
         # Parse config_path (e.g., "txt2img.cfg_scale" -> ["txt2img", "cfg_scale"])
         keys = meta.config_path.split(".")
-        
+        stage_name = str(experiment.stage or "txt2img").strip().lower() or "txt2img"
+        if keys and keys[0] == "txt2img" and stage_name in {"img2img", "adetailer"}:
+            keys[0] = stage_name
+        elif keys and meta.name in {"model", "vae"} and stage_name == "upscale":
+            keys[0] = "upscale"
+
         # Navigate to parent dict
         target = config
         for key in keys[:-1]:
@@ -1351,7 +1416,13 @@ class LearningController:
         # The specific variant handling is done in _on_variant_job_completed
         pass
 
-    def record_rating(self, image_ref: str, rating: int, notes: str = "") -> None:
+    def record_rating(
+        self,
+        image_ref: str,
+        rating: int,
+        notes: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> None:
         """Record a rating for a learning image."""
         if not self._learning_record_writer:
             raise RuntimeError("LearningRecordWriter not configured")
@@ -1378,6 +1449,10 @@ class LearningController:
             "stage": experiment.stage,
             experiment.variable_under_test.lower(): target_variant.param_value,
         }
+        detail_payload = dict(details or {})
+        subscores = dict(detail_payload.get("subscores") or {})
+        context_flags = dict(detail_payload.get("context_flags") or {})
+        blended_rating = int(detail_payload.get("blended_rating") or rating)
 
         # Create variant config
         variant_config = {experiment.variable_under_test.lower(): target_variant.param_value}
@@ -1394,8 +1469,13 @@ class LearningController:
                 "variable_under_test": experiment.variable_under_test,
                 "variant_value": target_variant.param_value,
                 "image_path": image_ref,
-                "user_rating": rating,
+                "user_rating": blended_rating,
+                "user_rating_raw": rating,
                 "user_notes": notes,
+                "record_kind": "learning_experiment_rating",
+                "rating_schema_version": 2,
+                "rating_context": context_flags,
+                "rating_details": subscores,
                 "learning_context": {
                     "experiment_id": experiment.name,
                     "variant_id": target_variant.id
@@ -1613,6 +1693,7 @@ class LearningController:
         stage = str(feedback.get("stage") or "review")
         metadata = {
             "source": "review_tab",
+            "record_kind": "review_tab_feedback",
             "image_path": image_path,
             "user_rating": blended_rating,
             "user_rating_raw": rating,

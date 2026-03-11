@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.gui.app_state_v2 import AppStateV2
@@ -14,7 +15,8 @@ from src.gui.view_contracts.status_banner_contract import update_status_banner
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
-from src.learning.learning_paths import get_learning_records_path
+from src.learning.experiment_store import LearningExperimentStore
+from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
 from src.services.ui_state_store import get_ui_state_store
 
@@ -38,6 +40,8 @@ class LearningTabFrame(ttk.Frame):
         
         # Initialize learning record writer
         self.learning_record_writer = LearningRecordWriter(get_learning_records_path())
+        self.experiment_store = LearningExperimentStore(get_learning_experiments_root())
+        self._active_experiment_id: str | None = None
 
         # Initialize learning state and controller
         self.learning_state = LearningState()
@@ -124,6 +128,26 @@ class LearningTabFrame(ttk.Frame):
             text="Review learning runs",
             command=self._on_open_review,
         ).grid(row=0, column=2, sticky="e", padx=8)
+        ttk.Button(
+            self.header_frame,
+            text="Save",
+            command=self._on_save_experiment,
+        ).grid(row=0, column=5, sticky="e", padx=(4, 0))
+        ttk.Button(
+            self.header_frame,
+            text="Save As",
+            command=self._on_save_experiment_as,
+        ).grid(row=0, column=6, sticky="e", padx=(4, 0))
+        ttk.Button(
+            self.header_frame,
+            text="Load",
+            command=self._on_load_experiment,
+        ).grid(row=0, column=7, sticky="e", padx=(4, 0))
+        ttk.Button(
+            self.header_frame,
+            text="Resume Last",
+            command=self._on_resume_last_experiment,
+        ).grid(row=0, column=8, sticky="e", padx=(4, 0))
         attach_tooltip(learning_toggle, "Enable learning mode to collect ratings and feedback.")
         attach_tooltip(
             mode_combo,
@@ -280,21 +304,36 @@ class LearningTabFrame(ttk.Frame):
             f"{queue_text}"
         )
 
+    def _build_store_payload(self) -> dict[str, Any] | None:
+        if self.learning_controller.learning_state.current_experiment is None:
+            return None
+        payload = self.learning_controller.learning_state.to_dict()
+        payload["workflow_state"] = str(self._workflow_state_var.get() or "")
+        payload["learning_enabled"] = bool(self._learning_enabled_var.get())
+        payload["automation_mode"] = str(self._automation_mode_var.get() or "suggest_only")
+        return payload
+
     def get_learning_session_state(self) -> dict[str, Any] | None:
         """Return learning tab session payload for app-level persistence."""
-        exporter = getattr(self.learning_controller, "export_resume_state", None)
-        payload = exporter() if callable(exporter) else None
-        if payload is None:
-            return None
         return {
             "enabled": bool(self._learning_enabled_var.get()),
             "automation_mode": str(self._automation_mode_var.get() or "suggest_only"),
-            "session": payload,
+            "last_experiment_id": self._active_experiment_id,
         }
 
     def _persist_learning_session_state(self) -> None:
         """Persist learning session state immediately for resume-after-restart flows."""
         try:
+            payload = self._build_store_payload()
+            if isinstance(payload, dict):
+                experiment = self.learning_controller.learning_state.current_experiment
+                display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
+                handle = self.experiment_store.save_session(
+                    display_name=display_name,
+                    payload=payload,
+                    experiment_id=self._active_experiment_id,
+                )
+                self._active_experiment_id = handle.experiment_id
             ui_store = get_ui_state_store()
             state = ui_store.load_state() or {}
             learning_state = self.get_learning_session_state()
@@ -302,6 +341,79 @@ class LearningTabFrame(ttk.Frame):
             ui_store.save_state(state)
         except Exception:
             pass
+
+    def _restore_from_store_payload(
+        self,
+        payload: dict[str, Any] | None,
+        *,
+        experiment_id: str | None = None,
+    ) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        try:
+            enabled = bool(payload.get("learning_enabled", payload.get("enabled", True)))
+            self._learning_enabled_var.set(enabled)
+            self._on_learning_toggle()
+        except Exception:
+            pass
+        try:
+            mode = str(payload.get("automation_mode", "suggest_only") or "suggest_only")
+            self._automation_mode_var.set(mode)
+            self._on_automation_mode_changed()
+        except Exception:
+            pass
+        restored = bool(self.learning_controller.restore_resume_state(payload))
+        if restored:
+            self._active_experiment_id = experiment_id or self._active_experiment_id
+            self._restore_experiment_panel()
+        return restored
+
+    def _save_to_store(self, *, force_new: bool) -> bool:
+        payload = self._build_store_payload()
+        if not isinstance(payload, dict):
+            return False
+        experiment = self.learning_controller.learning_state.current_experiment
+        display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
+        handle = self.experiment_store.save_session(
+            display_name=display_name,
+            payload=payload,
+            experiment_id=None if force_new else self._active_experiment_id,
+        )
+        self._active_experiment_id = handle.experiment_id
+        self._persist_learning_session_state()
+        return True
+
+    def _on_save_experiment(self) -> None:
+        if not self._save_to_store(force_new=False):
+            messagebox.showinfo("Learning", "No experiment is available to save.")
+
+    def _on_save_experiment_as(self) -> None:
+        if not self._save_to_store(force_new=True):
+            messagebox.showinfo("Learning", "No experiment is available to save.")
+
+    def _on_load_experiment(self) -> None:
+        session_path = filedialog.askopenfilename(
+            parent=self,
+            title="Load Learning Experiment",
+            initialdir=str(self.experiment_store.root),
+            filetypes=[("Learning Session", "session.json"), ("JSON Files", "*.json")],
+        )
+        if not session_path:
+            return
+        resolved = Path(session_path)
+        experiment_id = resolved.parent.name
+        payload = self.experiment_store.load_session(experiment_id)
+        if not self._restore_from_store_payload(payload, experiment_id=experiment_id):
+            messagebox.showerror("Learning", "Unable to load the selected experiment.")
+
+    def _on_resume_last_experiment(self) -> None:
+        last = self.experiment_store.load_last_session()
+        if not last:
+            messagebox.showinfo("Learning", "No saved learning experiment was found.")
+            return
+        experiment_id, payload = last
+        if not self._restore_from_store_payload(payload, experiment_id=experiment_id):
+            messagebox.showerror("Learning", "Unable to resume the last saved experiment.")
 
     def _restore_experiment_panel(self) -> None:
         experiment = getattr(self.learning_controller.learning_state, "current_experiment", None)
@@ -348,27 +460,25 @@ class LearningTabFrame(ttk.Frame):
         """Restore persisted learning tab session payload."""
         if not isinstance(payload, dict):
             return False
+        experiment_id = str(payload.get("last_experiment_id") or "").strip() or None
+        if experiment_id:
+            stored = self.experiment_store.load_session(experiment_id)
+            if self._restore_from_store_payload(stored, experiment_id=experiment_id):
+                return True
+        if isinstance(payload.get("session"), dict):
+            restored = self._restore_from_store_payload(payload.get("session"))
+            if restored and self._active_experiment_id is None:
+                self._save_to_store(force_new=True)
+            return restored
         try:
             enabled = bool(payload.get("enabled", True))
             self._learning_enabled_var.set(enabled)
             self._on_learning_toggle()
-        except Exception:
-            pass
-        try:
             mode = str(payload.get("automation_mode", "suggest_only") or "suggest_only")
             self._automation_mode_var.set(mode)
             self._on_automation_mode_changed()
         except Exception:
             pass
-        restore = getattr(self.learning_controller, "restore_resume_state", None)
-        if callable(restore):
-            try:
-                restored = bool(restore(payload.get("session")))
-                if restored:
-                    self._restore_experiment_panel()
-                return restored
-            except Exception:
-                return False
         return False
 
 

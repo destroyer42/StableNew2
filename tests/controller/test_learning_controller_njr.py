@@ -1,4 +1,4 @@
-"""Unit tests for PR-LEARN-010: Direct NJR construction in LearningController.
+"""Unit tests for PR-LEARN-010/032: LearningController NJR construction.
 
 Tests:
 1. NJR construction with explicit stage card config
@@ -7,8 +7,10 @@ Tests:
 4. End-to-end config propagation
 """
 
-import pytest
+from pathlib import Path
 from unittest.mock import Mock, MagicMock
+
+import pytest
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -59,7 +61,44 @@ class TestLearningControllerNJR:
                 "upscale_enabled": False,
             },
         }
+        img2img_card = Mock()
+        img2img_card.to_config_dict.return_value = {
+            "img2img": {
+                "model": "test_model.safetensors",
+                "vae": "test_vae.safetensors",
+                "sampler_name": "Euler a",
+                "scheduler": "normal",
+                "steps": 18,
+                "cfg_scale": 6.5,
+                "denoising_strength": 0.35,
+            }
+        }
+        adetailer_card = Mock()
+        adetailer_card.to_config_dict.return_value = {
+            "adetailer": {
+                "model": "test_model.safetensors",
+                "vae": "test_vae.safetensors",
+                "sampler_name": "DPM++ 2M",
+                "scheduler": "Karras",
+                "steps": 12,
+                "cfg_scale": 5.5,
+                "denoising_strength": 0.25,
+            }
+        }
+        upscale_card = Mock()
+        upscale_card.to_config_dict.return_value = {
+            "upscale": {
+                "model": "test_model.safetensors",
+                "vae": "test_vae.safetensors",
+                "steps": 20,
+                "cfg_scale": 7.0,
+                "upscale_factor": 2.0,
+            }
+        }
         stage_panel.txt2img_card = txt2img_card
+        stage_panel.img2img_card = img2img_card
+        stage_panel.adetailer_card = adetailer_card
+        stage_panel.upscale_card = upscale_card
         app_controller._get_stage_cards_panel.return_value = stage_panel
         
         return app_controller
@@ -138,6 +177,29 @@ class TestLearningControllerNJR:
         metadata = record.extra_metadata
         assert "prompt" not in metadata
         assert "positive_prompt" not in metadata
+
+    def test_build_variant_njr_for_img2img_uses_input_image(self, controller, learning_state, tmp_path: Path):
+        input_image = tmp_path / "input.png"
+        input_image.write_bytes(b"fake")
+
+        learning_state.current_experiment = LearningExperiment(
+            name="ImageExperiment",
+            stage="img2img",
+            input_image_path=str(input_image),
+            variable_under_test="Denoise Strength",
+            prompt_text="a beautiful landscape",
+            images_per_value=2,
+        )
+        variant = LearningVariant(param_value=0.45, planned_images=2)
+
+        record = controller._build_variant_njr(variant, learning_state.current_experiment)
+
+        assert isinstance(record, NormalizedJobRecord)
+        assert record.start_stage == "img2img"
+        assert record.stage_chain[0].stage_type == "img2img"
+        assert record.stage_chain[0].denoising_strength == 0.45
+        assert record.input_image_paths == [str(input_image), str(input_image)]
+        assert record.extra_metadata["learning_stage"] == "img2img"
 
     def test_submit_variant_job_uses_job_service(self, controller, learning_state, mock_pipeline_controller):
         """Test 3: Job submission via JobService, not PackJobEntry."""

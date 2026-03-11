@@ -454,6 +454,16 @@ class MainWindowV2:
                 self.review_tab.app_controller = controller
             except Exception:
                 pass
+        if hasattr(self, "photo_optimize_tab"):
+            try:
+                self.photo_optimize_tab.app_controller = controller
+                bind_app_state = getattr(self.photo_optimize_tab, "bind_app_state", None)
+                if callable(bind_app_state):
+                    bind_app_state(self.app_state)
+                else:
+                    self.photo_optimize_tab.app_state = self.app_state
+            except Exception:
+                pass
 
     def _ensure_window_geometry(self) -> None:
         """Apply default geometry/minimums so the three-column layout is visible."""

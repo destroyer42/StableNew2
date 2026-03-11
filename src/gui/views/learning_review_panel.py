@@ -8,6 +8,8 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.learning_state import LearningVariant
+from src.gui.ui_tokens import TOKENS
+from src.learning.rating_schema import blend_rating, get_active_categories
 
 
 class LearningReviewPanel(ttk.Frame):
@@ -20,6 +22,14 @@ class LearningReviewPanel(ttk.Frame):
         # Current variant being reviewed
         self.current_variant: LearningVariant | None = None
         self.current_experiment = None
+        self._context_flag_vars: dict[str, tk.BooleanVar] = {
+            "people": tk.BooleanVar(value=True),
+            "animals": tk.BooleanVar(value=False),
+            "landscape": tk.BooleanVar(value=False),
+            "architecture": tk.BooleanVar(value=False),
+            "close_up": tk.BooleanVar(value=False),
+        }
+        self._subscore_vars: dict[str, tk.IntVar] = {}
 
         # Configure layout
         self.columnconfigure(0, weight=1)
@@ -43,7 +53,15 @@ class LearningReviewPanel(ttk.Frame):
         self.metadata_frame = ttk.LabelFrame(self, text="Metadata", padding=5)
         self.metadata_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
 
-        self.metadata_text = tk.Text(self.metadata_frame, height=4, width=40, state="disabled")
+        self.metadata_text = tk.Text(
+            self.metadata_frame,
+            height=5,
+            width=40,
+            state="disabled",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
+        )
         self.metadata_text.pack(fill="x")
 
         # Recommendations section
@@ -51,7 +69,13 @@ class LearningReviewPanel(ttk.Frame):
         self.recommendations_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
 
         self.recommendations_text = tk.Text(
-            self.recommendations_frame, height=6, width=40, state="disabled"
+            self.recommendations_frame,
+            height=6,
+            width=40,
+            state="disabled",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
         )
         self.recommendations_text.pack(fill="x")
 
@@ -85,15 +109,23 @@ class LearningReviewPanel(ttk.Frame):
         from src.gui.widgets.image_thumbnail import ImageThumbnail
 
         # Image list (top)
-        self.image_listbox = tk.Listbox(self.image_frame, height=5)
+        self.image_listbox = tk.Listbox(
+            self.image_frame,
+            height=5,
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            selectbackground=TOKENS.colors.accent_primary,
+            selectforeground=TOKENS.colors.text_primary,
+            exportselection=False,
+        )
         self.image_listbox.grid(row=0, column=0, sticky="ew")
         self.image_listbox.bind("<<ListboxSelect>>", self._on_image_selected)
 
         # Image thumbnail (bottom)
         self.image_thumbnail = ImageThumbnail(
             self.image_frame,
-            max_width=250,
-            max_height=250,
+            max_width=360,
+            max_height=360,
         )
         self.image_thumbnail.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
         self.image_thumbnail.clear()
@@ -117,9 +149,30 @@ class LearningReviewPanel(ttk.Frame):
             btn.pack(side="left")
             self.rating_buttons.append(btn)
 
+        self.context_frame = ttk.LabelFrame(self.rating_frame, text="Context", padding=5)
+        self.context_frame.pack(fill="x", pady=(8, 6))
+        for index, (key, var) in enumerate(self._context_flag_vars.items()):
+            ttk.Checkbutton(
+                self.context_frame,
+                text=key.replace("_", " ").title(),
+                variable=var,
+                command=self._rebuild_subscore_controls,
+            ).grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 8), pady=2)
+
+        self.subscore_frame = ttk.LabelFrame(self.rating_frame, text="Sub-scores", padding=5)
+        self.subscore_frame.pack(fill="x", pady=(0, 6))
+        self._rebuild_subscore_controls()
+
         # Notes
         ttk.Label(self.rating_frame, text="Notes:").pack(anchor="w")
-        self.notes_text = tk.Text(self.rating_frame, height=3, width=40)
+        self.notes_text = tk.Text(
+            self.rating_frame,
+            height=3,
+            width=40,
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
+        )
         self.notes_text.pack(fill="x")
 
         # Rate button
@@ -167,6 +220,8 @@ class LearningReviewPanel(ttk.Frame):
         self.rating_var.set(0)
         self.notes_text.delete(1.0, tk.END)
         self.feedback_label.config(text="")
+        for var in self._subscore_vars.values():
+            var.set(0)
 
         # Enable/disable rating controls based on status
         state = "normal" if variant.status == "completed" and variant.image_refs else "disabled"
@@ -174,6 +229,16 @@ class LearningReviewPanel(ttk.Frame):
         for btn in self.rating_buttons:
             btn.config(state=state)
         self.notes_text.config(state=tk.NORMAL if state == "normal" else tk.DISABLED)
+        for child in self.context_frame.winfo_children():
+            try:
+                child.configure(state=state)
+            except Exception:
+                continue
+        for child in self.subscore_frame.winfo_children():
+            try:
+                child.configure(state=state)
+            except Exception:
+                continue
 
     def _update_metadata(self, variant: LearningVariant, experiment: Any | None) -> None:
         """Update the metadata display."""
@@ -184,6 +249,7 @@ class LearningReviewPanel(ttk.Frame):
             metadata = f"Experiment: {experiment.name}\n"
             metadata += f"Variable: {experiment.variable_under_test}\n"
             metadata += f"Value: {variant.param_value}\n"
+            metadata += f"Stage: {getattr(experiment, 'stage', 'txt2img')}\n"
             metadata += f"Images: {variant.completed_images}/{variant.planned_images}\n"
             self.metadata_text.insert(tk.END, metadata)
         else:
@@ -225,6 +291,7 @@ class LearningReviewPanel(ttk.Frame):
 
         rating = self.rating_var.get()
         notes = self.notes_text.get(1.0, tk.END).strip()
+        details = self._build_rating_details(rating)
 
         if rating == 0:
             self.feedback_label.config(text="Please select a rating", foreground="red")
@@ -259,7 +326,7 @@ class LearningReviewPanel(ttk.Frame):
         if controller:
             if hasattr(controller, "record_rating"):
                 try:
-                    controller.record_rating(image_ref, rating, notes)
+                    controller.record_rating(image_ref, rating, notes, details)
                     self.feedback_label.config(
                         text="Rating saved successfully!", foreground="green"
                     )
@@ -275,6 +342,44 @@ class LearningReviewPanel(ttk.Frame):
                 self.feedback_label.config(text="Rating system not available", foreground="red")
         else:
             self.feedback_label.config(text="Controller not available", foreground="red")
+
+    def _rebuild_subscore_controls(self) -> None:
+        for child in self.subscore_frame.winfo_children():
+            child.destroy()
+        self._subscore_vars = {}
+        categories = get_active_categories(self._current_context_flags())
+        for row, category in enumerate(categories):
+            ttk.Label(self.subscore_frame, text=f"{category.label}:").grid(
+                row=row,
+                column=0,
+                sticky="w",
+                pady=2,
+            )
+            var = tk.IntVar(value=0)
+            self._subscore_vars[category.key] = var
+            for idx in range(1, 6):
+                ttk.Radiobutton(
+                    self.subscore_frame,
+                    text=str(idx),
+                    variable=var,
+                    value=idx,
+                ).grid(row=row, column=idx, sticky="w", padx=2)
+
+    def _current_context_flags(self) -> dict[str, bool]:
+        vars_map = getattr(self, "_context_flag_vars", {}) or {}
+        return {key: bool(var.get()) for key, var in vars_map.items()}
+
+    def _build_rating_details(self, overall_rating: int) -> dict[str, Any]:
+        subscores = {
+            key: int(var.get())
+            for key, var in (getattr(self, "_subscore_vars", {}) or {}).items()
+            if int(var.get() or 0) > 0
+        }
+        return {
+            "context_flags": self._current_context_flags(),
+            "subscores": subscores,
+            "blended_rating": blend_rating(overall_rating, subscores),
+        }
 
     def update_recommendations(self, recommendations: Any) -> None:
         """Update the recommendations display with new data."""

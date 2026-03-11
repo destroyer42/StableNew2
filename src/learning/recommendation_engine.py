@@ -162,6 +162,9 @@ class RecommendationEngine:
 
         for record in records:
             metadata = record.get("metadata", {})
+            record_kind = str(metadata.get("record_kind") or "").strip()
+            if record_kind and record_kind not in {"learning_experiment_rating", "review_tab_feedback"}:
+                continue
 
             # Only consider records with user ratings
             user_rating = metadata.get("user_rating")
@@ -198,6 +201,7 @@ class RecommendationEngine:
 
             scored_record = {
                 "rating": rating,
+                "record_kind": record_kind or "legacy",
                 "experiment_name": experiment_name,
                 "variable_under_test": variable_under_test,
                 "variant_value": variant_value,
@@ -418,7 +422,34 @@ class RecommendationEngine:
             self._cache_timestamp = time.time()
             self._cache_mtime = self.records_path.stat().st_mtime if self.records_path.exists() else 0.0
         scored_records = self._cache.get("scored_records", []) if self._cache else []
-        optimal_settings = self._compute_optimal_settings(scored_records, query_context, prompt_text)
+        stage_name = str(stage or "txt2img")
+        relevant_records = [
+            record
+            for record in scored_records
+            if str(record.get("stage", "") or "txt2img") == stage_name
+        ]
+        experiment_records = [
+            record for record in relevant_records if str(record.get("record_kind", "")) == "learning_experiment_rating"
+        ]
+        review_records = [
+            record for record in relevant_records if str(record.get("record_kind", "")) == "review_tab_feedback"
+        ]
+        if len(experiment_records) >= 3:
+            evidence_records = experiment_records
+        elif experiment_records:
+            evidence_records = []
+        else:
+            evidence_records = review_records
+
+        if not evidence_records:
+            return RecommendationSet(
+                prompt_text=prompt_text,
+                stage=stage,
+                timestamp=time.time(),
+                recommendations=[],
+            )
+
+        optimal_settings = self._compute_optimal_settings(evidence_records, query_context, prompt_text)
 
         # Create recommendation set
         rec_set = RecommendationSet(

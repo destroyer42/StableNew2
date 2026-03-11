@@ -46,6 +46,19 @@ def test_build_photo_optimize_defaults_uses_current_pipeline_config() -> None:
     assert defaults["config"]["img2img"]["denoising_strength"] == 0.2
 
 
+def test_interrogate_photo_path_uses_api_client(tmp_path: Path) -> None:
+    controller = _build_controller()
+    source = tmp_path / "source" / "portrait.png"
+    _write_image(source)
+    controller._api_client.interrogate.return_value = "portrait, clean face"
+
+    caption = controller.interrogate_photo_path(source)
+
+    assert caption == "portrait, clean face"
+    controller._api_client.interrogate.assert_called_once()
+    assert controller._append_log.called
+
+
 def test_on_optimize_photo_assets_groups_by_compatible_baseline(tmp_path: Path) -> None:
     controller = _build_controller()
     image_a = tmp_path / "a.png"

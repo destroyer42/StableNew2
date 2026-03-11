@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from dataclasses import dataclass
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from src.gui.controllers.learning_controller import LearningController
@@ -21,10 +22,17 @@ class MockRecommendation:
     mean_rating: float = 4.0
 
 
+def _make_controller(state: LearningState) -> LearningController:
+    pipeline_controller = SimpleNamespace()
+    controller = LearningController(learning_state=state, pipeline_controller=pipeline_controller)
+    controller.set_automation_mode("apply_with_confirm")
+    return controller
+
+
 def test_apply_recommendation_updates_cfg():
     """Verify CFG scale recommendation is applied."""
     state = LearningState()
-    controller = LearningController(learning_state=state)
+    controller = _make_controller(state)
     
     # Mock stage cards
     mock_txt2img_card = MagicMock()
@@ -43,7 +51,7 @@ def test_apply_recommendation_updates_cfg():
 def test_apply_recommendation_updates_steps():
     """Verify Steps recommendation is applied."""
     state = LearningState()
-    controller = LearningController(learning_state=state)
+    controller = _make_controller(state)
     
     mock_txt2img_card = MagicMock()
     mock_txt2img_card.steps_var = MagicMock()
@@ -60,7 +68,7 @@ def test_apply_recommendation_updates_steps():
 def test_apply_unknown_parameter_returns_false():
     """Verify unknown parameters are handled gracefully."""
     state = LearningState()
-    controller = LearningController(learning_state=state)
+    controller = _make_controller(state)
     
     mock_stage_cards = MagicMock()
     
@@ -72,7 +80,7 @@ def test_apply_unknown_parameter_returns_false():
 def test_apply_recommendations_to_pipeline_success():
     """Verify applying multiple recommendations."""
     state = LearningState()
-    controller = LearningController(learning_state=state)
+    controller = _make_controller(state)
     
     # Mock pipeline controller with stage cards
     mock_txt2img_card = MagicMock()
@@ -103,7 +111,8 @@ def test_apply_recommendations_to_pipeline_success():
 def test_apply_recommendations_no_pipeline_controller():
     """Verify failure when pipeline controller is missing."""
     state = LearningState()
-    controller = LearningController(learning_state=state)
+    controller = _make_controller(state)
+    controller.pipeline_controller = None
     
     recs = [MockRecommendation(parameter_name="CFG Scale", recommended_value=7.5)]
     
@@ -115,7 +124,7 @@ def test_apply_recommendations_no_pipeline_controller():
 def test_extract_rec_list_from_dataclass():
     """Verify extraction of recommendation list from dataclass."""
     state = LearningState()
-    controller = LearningController(learning_state=state)
+    controller = _make_controller(state)
     
     rec = MockRecommendation(parameter_name="CFG", recommended_value=7.0)
     rec_list = controller._extract_rec_list([rec])
@@ -127,7 +136,7 @@ def test_extract_rec_list_from_dataclass():
 def test_extract_rec_list_from_recommendation_set():
     """Verify extraction from object with .recommendations attribute."""
     state = LearningState()
-    controller = LearningController(learning_state=state)
+    controller = _make_controller(state)
     
     mock_rec_set = MagicMock()
     mock_rec_set.recommendations = [
@@ -140,39 +149,31 @@ def test_extract_rec_list_from_recommendation_set():
     assert rec_list[0].parameter_name == "Steps"
 
 
-def test_apply_button_enabled_with_recommendations():
+def test_apply_button_enabled_with_recommendations(tk_root):
     """Verify apply button is enabled when recommendations exist."""
     from src.gui.views.learning_review_panel import LearningReviewPanel
-    
-    root = tk.Tk()
-    try:
-        panel = LearningReviewPanel(root)
-        
-        # Initially disabled
-        assert str(panel.apply_button['state']) == 'disabled'
-        
-        # Update with recommendations
-        recs = [MockRecommendation(parameter_name="CFG", recommended_value=7.0)]
-        panel.update_recommendations(recs)
-        
-        # Should be enabled
-        assert str(panel.apply_button['state']) != 'disabled'
-    finally:
-        root.destroy()
+
+    panel = LearningReviewPanel(tk_root)
+
+    # Initially disabled
+    assert str(panel.apply_button["state"]) == "disabled"
+
+    # Update with recommendations
+    recs = [MockRecommendation(parameter_name="CFG", recommended_value=7.0)]
+    panel.update_recommendations(recs)
+
+    # Should be enabled
+    assert str(panel.apply_button["state"]) != "disabled"
 
 
-def test_apply_button_disabled_without_recommendations():
+def test_apply_button_disabled_without_recommendations(tk_root):
     """Verify apply button is disabled when no recommendations."""
     from src.gui.views.learning_review_panel import LearningReviewPanel
-    
-    root = tk.Tk()
-    try:
-        panel = LearningReviewPanel(root)
-        
-        # Update with no recommendations
-        panel.update_recommendations(None)
-        
-        # Should be disabled
-        assert str(panel.apply_button['state']) == 'disabled'
-    finally:
-        root.destroy()
+
+    panel = LearningReviewPanel(tk_root)
+
+    # Update with no recommendations
+    panel.update_recommendations(None)
+
+    # Should be disabled
+    assert str(panel.apply_button["state"]) == "disabled"

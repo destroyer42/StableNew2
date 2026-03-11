@@ -990,6 +990,47 @@ class SDWebUIClient:
         logger.info("img2img completed successfully")
         return data
 
+    def interrogate(self, image_base64: str, *, model: str = "clip") -> str | None:
+        """
+        Generate a caption for an image using the WebUI interrogate endpoint.
+
+        Args:
+            image_base64: Base64 image data
+            model: Interrogate backend, usually ``clip`` or ``deepdanbooru``
+
+        Returns:
+            Caption text, or None on failure
+        """
+        payload = {
+            "image": _format_as_data_url(image_base64),
+            "model": model or "clip",
+        }
+        with self._request_context(
+            "post",
+            "/sdapi/v1/interrogate",
+            json=payload,
+            stage="interrogate",
+            timeout=30,
+        ) as response:
+            if response is None:
+                return None
+
+            try:
+                data = response.json()
+            except ValueError as exc:
+                logger.error("interrogate response parsing failed: %s", exc)
+                return None
+
+        caption = ""
+        if isinstance(data, dict):
+            caption = str(data.get("caption") or "").strip()
+        if not caption:
+            logger.warning("interrogate returned no caption")
+            return None
+
+        logger.info("interrogate completed successfully")
+        return caption
+
     def upscale(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """
         Upscale image using extra-single-image endpoint.
