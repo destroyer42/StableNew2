@@ -5840,6 +5840,96 @@ class AppController:
         else:
             self._append_log(f"[controller] Failed to delete preset '{preset_name}'")
 
+    # ------------------------------------------------------------------
+    # PR-CORE-VIDEO-002: Movie Clips entrypoints
+    # ------------------------------------------------------------------
+
+    def on_build_movie_clip(
+        self,
+        image_paths: list,
+        settings: dict,
+        on_complete: Any = None,
+        on_error: Any = None,
+    ) -> None:
+        """Build a movie clip from the given image paths and settings.
+
+        Runs clip assembly on a background thread so the GUI stays responsive.
+        Calls on_complete(output_path_str) or on_error(reason_str) on the GUI
+        thread when finished.
+        """
+        from pathlib import Path as _Path
+        from src.video.movie_clip_service import MovieClipService
+        from src.video.movie_clip_models import ClipRequest, ClipSettings
+
+        def _worker() -> None:
+            try:
+                paths = [_Path(p) if not isinstance(p, _Path) else p for p in image_paths]
+                fps = int(settings.get("fps", 24))
+                codec = str(settings.get("codec", "libx264"))
+                quality = str(settings.get("quality", "medium"))
+                mode = str(settings.get("mode", "sequence"))
+
+                clip_settings = ClipSettings(fps=fps, codec=codec, quality=quality, mode=mode)
+
+                output_dir = _Path("output") / "movie_clips"
+                request = ClipRequest(
+                    image_paths=paths,
+                    output_dir=output_dir,
+                    settings=clip_settings,
+                    clip_name="clip",
+                )
+
+                service = MovieClipService()
+                result = service.build_clip(request)
+
+                if result.success and result.output_path:
+                    if callable(on_complete):
+                        self._run_in_gui_thread(lambda: on_complete(str(result.output_path)))
+                else:
+                    reason = result.error or "Unknown error"
+                    if callable(on_error):
+                        self._run_in_gui_thread(lambda: on_error(reason))
+            except Exception as exc:
+                logger.exception("[controller] on_build_movie_clip worker failed")
+                if callable(on_error):
+                    self._run_in_gui_thread(lambda: on_error(str(exc)))
+
+        t = threading.Thread(target=_worker, daemon=True, name="movie-clip-builder")
+        t.start()
+
+    def on_load_movie_clip_source(
+        self,
+        source_dir: str,
+        on_loaded: Any = None,
+        on_error: Any = None,
+    ) -> None:
+        """Resolve and return sorted image filenames from source_dir.
+
+        Calls on_loaded(image_names: list[str]) or on_error(reason) on the GUI thread.
+        """
+        from pathlib import Path as _Path
+        _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
+
+        def _worker() -> None:
+            try:
+                folder = _Path(source_dir)
+                if not folder.is_dir():
+                    if callable(on_error):
+                        self._run_in_gui_thread(lambda: on_error(f"Not a directory: {source_dir}"))
+                    return
+                names = sorted(
+                    [p.name for p in folder.iterdir() if p.suffix.lower() in _IMAGE_EXTS]
+                )
+                if callable(on_loaded):
+                    self._run_in_gui_thread(lambda: on_loaded(names))
+            except Exception as exc:
+                logger.exception("[controller] on_load_movie_clip_source worker failed")
+                if callable(on_error):
+                    self._run_in_gui_thread(lambda: on_error(str(exc)))
+
+        t = threading.Thread(target=_worker, daemon=True, name="movie-clip-source-loader")
+        t.start()
+
 
 # Convenience entrypoint for testing the skeleton standalone
 if __name__ == "__main__":

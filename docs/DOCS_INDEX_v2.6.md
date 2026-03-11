@@ -33,6 +33,7 @@ This index defines the active document set for StableNew v2.6 and identifies whi
 - `docs/Learning_System_Spec_v2.5.md` until a v2.6 replacement exists
 - `docs/Cluster_Compute_Spec_v2.5.md` until a v2.6 replacement exists
 - `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/Movie_Clips_Workflow_v2.6.md` — Movie Clips MVP tab and service boundary
 
 1.4 Tier 4 - Implementation And PR Specs
 

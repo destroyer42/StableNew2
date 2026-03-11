@@ -2101,3 +2101,127 @@ class LearningController:
 
         analytics = LearningAnalytics(self._learning_record_writer)
         analytics.export_to_csv(Path(file_path))
+
+    # ------------------------------------------------------------------
+    # PR-GUI-LEARN-041: Discovered-review orchestration
+    # ------------------------------------------------------------------
+
+    def _get_discovered_store(self):
+        """Return a DiscoveredReviewStore instance, creating it lazily."""
+        from src.learning.discovered_review_store import DiscoveredReviewStore
+        from src.learning.learning_paths import get_discovered_experiments_root
+
+        if not hasattr(self, "_discovered_review_store"):
+            self._discovered_review_store = DiscoveredReviewStore(
+                get_discovered_experiments_root(create=True)
+            )
+        return self._discovered_review_store
+
+    def refresh_discovered_inbox(self, status: str | None = None) -> list:
+        """Return current handles from the discovered-review store.
+
+        Parameters
+        ----------
+        status:
+            If provided, filter by this status string.  Pass None for all.
+
+        Returns
+        -------
+        list[DiscoveredReviewHandle]
+        """
+        from src.learning.discovered_review_models import (
+            STATUS_IN_REVIEW,
+            STATUS_WAITING_REVIEW,
+        )
+
+        store = self._get_discovered_store()
+        if status == "active":
+            return store.list_handles_by_status(
+                {STATUS_WAITING_REVIEW, STATUS_IN_REVIEW}
+            )
+        return store.list_handles(status=status)
+
+    def load_discovered_group(self, group_id: str):
+        """Load and return a full DiscoveredReviewExperiment by ID.
+
+        Also updates selected_discovered_group_id in LearningState.
+        """
+        store = self._get_discovered_store()
+        experiment = store.load_group(group_id)
+        if experiment is not None:
+            self.learning_state.selected_discovered_group_id = group_id
+        return experiment
+
+    def save_discovered_item_rating(
+        self, group_id: str, item_id: str, rating: int, notes: str = ""
+    ) -> None:
+        """Persist a per-item rating into the discovered-review store."""
+        store = self._get_discovered_store()
+        store.save_item_rating(group_id, item_id, rating, notes)
+
+    def close_discovered_group(self, group_id: str) -> None:
+        """Transition a discovered group to 'closed' status."""
+        store = self._get_discovered_store()
+        store.close_group(group_id)
+
+    def ignore_discovered_group(self, group_id: str) -> None:
+        """Transition a discovered group to 'ignored' status."""
+        store = self._get_discovered_store()
+        store.ignore_group(group_id)
+
+    def reopen_discovered_group(self, group_id: str) -> None:
+        """Reopen a closed/ignored discovered group back to waiting_review."""
+        store = self._get_discovered_store()
+        store.reopen_group(group_id)
+
+    def trigger_background_scan(
+        self, output_root: str, on_complete: "Any | None" = None
+    ) -> None:
+        """Run an incremental output scan in a background thread.
+
+        Parameters
+        ----------
+        output_root:
+            Root directory to scan for image artifacts.
+        on_complete:
+            Optional callback(new_count: int) invoked on the main thread when
+            the scan completes.  Uses ``after(0, ...)`` via the stored after_fn
+            if available, otherwise calls directly.
+        """
+        import threading
+        from pathlib import Path
+
+        from src.learning.discovered_grouping import GroupingEngine
+        from src.learning.output_scanner import OutputScanner
+
+        def _run() -> None:
+            try:
+                store = self._get_discovered_store()
+                scan_index = store.load_scan_index()
+                scanner = OutputScanner(Path(output_root), scan_index=scan_index)
+                records = scanner.scan_incremental()
+                store.save_scan_index(scanner.scan_index)
+
+                existing_ids = {h.group_id for h in store.list_handles()}
+                engine = GroupingEngine()
+                candidates = engine.build_candidates(records, existing_group_ids=existing_ids)
+
+                for candidate in candidates:
+                    store.save_group(candidate)
+
+                new_count = len(candidates)
+            except Exception:
+                new_count = 0
+
+            if callable(on_complete):
+                after_fn = getattr(self, "_after_fn", None)
+                if callable(after_fn):
+                    after_fn(0, lambda: on_complete(new_count))
+                else:
+                    try:
+                        on_complete(new_count)
+                    except Exception:
+                        pass
+
+        thread = threading.Thread(target=_run, daemon=True, name="discovered-scan")
+        thread.start()

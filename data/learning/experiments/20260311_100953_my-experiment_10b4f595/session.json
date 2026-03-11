@@ -7,13 +7,13 @@
     "input_image_path": "",
     "metadata": {
       "comparison_mode": true,
-      "end_value": 30.0,
+      "end_value": 12.0,
       "fixed_strength": 1.0,
       "lora_mode": "comparison",
       "lora_name": "",
       "selected_items": [],
       "selected_loras": [],
-      "start_value": 10.0,
+      "start_value": 2.0,
       "step_value": 2.0,
       "strength_end": 1.5,
       "strength_start": 0.5,
@@ -23,134 +23,67 @@
     "prompt_text": "",
     "stage": "txt2img",
     "values": [
+      2.0,
+      4.0,
+      6.0,
+      8.0,
       10.0,
-      12.0,
-      14.0,
-      16.0,
-      18.0,
-      20.0,
-      22.0,
-      24.0,
-      26.0,
-      28.0,
-      30.0
+      12.0
     ],
-    "variable_under_test": "Steps"
+    "variable_under_test": "CFG Scale"
   },
   "learning_enabled": true,
   "plan": [
     {
-      "completed_images": 1,
+      "completed_images": 0,
       "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052508.png"
-      ],
+      "image_refs": [],
+      "param_value": 2.0,
+      "planned_images": 2,
+      "status": "queued"
+    },
+    {
+      "completed_images": 0,
+      "experiment_id": "My ExperimentTwo",
+      "image_refs": [],
+      "param_value": 4.0,
+      "planned_images": 2,
+      "status": "queued"
+    },
+    {
+      "completed_images": 0,
+      "experiment_id": "My ExperimentTwo",
+      "image_refs": [],
+      "param_value": 6.0,
+      "planned_images": 2,
+      "status": "queued"
+    },
+    {
+      "completed_images": 0,
+      "experiment_id": "My ExperimentTwo",
+      "image_refs": [],
+      "param_value": 8.0,
+      "planned_images": 2,
+      "status": "queued"
+    },
+    {
+      "completed_images": 0,
+      "experiment_id": "My ExperimentTwo",
+      "image_refs": [],
       "param_value": 10.0,
       "planned_images": 2,
-      "status": "completed"
+      "status": "queued"
     },
     {
-      "completed_images": 1,
+      "completed_images": 0,
       "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052545.png"
-      ],
+      "image_refs": [],
       "param_value": 12.0,
       "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052618.png"
-      ],
-      "param_value": 14.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052646.png"
-      ],
-      "param_value": 16.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052716.png"
-      ],
-      "param_value": 18.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052747.png"
-      ],
-      "param_value": 20.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052818.png"
-      ],
-      "param_value": 22.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052854.png"
-      ],
-      "param_value": 24.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052926.png"
-      ],
-      "param_value": 26.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311052959.png"
-      ],
-      "param_value": 28.0,
-      "planned_images": 2,
-      "status": "completed"
-    },
-    {
-      "completed_images": 1,
-      "experiment_id": "My ExperimentTwo",
-      "image_refs": [
-        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_051403_learning_My_ExperimentTwo\\txt2img_p01_v01_78aa74f1_0311053033.png"
-      ],
-      "param_value": 30.0,
-      "planned_images": 2,
-      "status": "completed"
+      "status": "queued"
     }
   ],
   "selected_image_index": 0,
   "selected_variant_index": -1,
-  "workflow_state": "Workflow: Reviewing"
+  "workflow_state": "Workflow: Running"
 }
