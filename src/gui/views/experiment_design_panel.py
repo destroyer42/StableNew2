@@ -6,6 +6,8 @@ from tkinter import filedialog, ttk
 from typing import Any
 
 from src.gui.controllers.learning_controller import LearningController
+from src.gui.ui_tokens import TOKENS
+from src.learning.experiment_naming import build_experiment_identity
 from src.learning.stage_capabilities import get_stage_capability, get_variables_for_stage, list_supported_stages
 from src.learning.variable_selection_contract import normalize_resource_entries
 
@@ -24,6 +26,9 @@ class ExperimentDesignPanel(ttk.Frame):
         super().__init__(master, *args, **kwargs)
         self.learning_controller = learning_controller
         self.prompt_workspace_state = prompt_workspace_state
+        self._name_auto_generated = True
+        self._description_auto_generated = True
+        self._suspend_identity_tracking = False
 
         # Configure layout
         self.columnconfigure(0, weight=1)
@@ -48,17 +53,23 @@ class ExperimentDesignPanel(ttk.Frame):
         title_label = ttk.Label(self, text="Experiment Design", font=("TkDefaultFont", 12, "bold"))
         title_label.grid(row=0, column=0, pady=(0, 10), sticky="w")
 
+        self.stage_hint_var = tk.StringVar(value="")
+        stage_hint = ttk.Label(self, textvariable=self.stage_hint_var, foreground=TOKENS.colors.text_muted)
+        stage_hint.grid(row=0, column=0, sticky="e")
+
         # Experiment Name
         ttk.Label(self, text="Experiment Name:").grid(row=1, column=0, sticky="w", pady=(0, 2))
-        self.name_var = tk.StringVar(value="My Experiment")
+        self.name_var = tk.StringVar(value="")
         self.name_entry = ttk.Entry(self, textvariable=self.name_var)
         self.name_entry.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        self.name_var.trace_add("write", lambda *_: self._on_name_changed())
 
         # Description
         ttk.Label(self, text="Description:").grid(row=3, column=0, sticky="w", pady=(0, 2))
         self.desc_var = tk.StringVar(value="")
         self.desc_entry = ttk.Entry(self, textvariable=self.desc_var)
         self.desc_entry.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        self.desc_var.trace_add("write", lambda *_: self._on_description_changed())
 
         # Target Stage
         ttk.Label(self, text="Target Stage:").grid(row=5, column=0, sticky="w", pady=(0, 2))
@@ -162,10 +173,26 @@ class ExperimentDesignPanel(ttk.Frame):
         self.lora_frame.grid_remove()
 
         # Images per Variant
-        ttk.Label(self, text="Images per Variant:").grid(row=11, column=0, sticky="w", pady=(0, 2))
+        images_row = ttk.Frame(self)
+        images_row.grid(row=11, column=0, sticky="ew", pady=(0, 10))
+        images_row.columnconfigure(1, weight=1)
+        ttk.Label(images_row, text="Images per Variant:").grid(row=0, column=0, sticky="w", pady=(0, 2))
         self.images_var = tk.IntVar(value=1)
-        self.images_spin = tk.Spinbox(self, from_=1, to=10, textvariable=self.images_var)
-        self.images_spin.grid(row=12, column=0, sticky="ew", pady=(0, 10))
+        self.images_spin = tk.Spinbox(images_row, from_=1, to=10, textvariable=self.images_var, width=8)
+        self.images_spin.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+        identity_actions = ttk.Frame(self)
+        identity_actions.grid(row=12, column=0, sticky="e", pady=(0, 10))
+        ttk.Button(
+            identity_actions,
+            text="Suggest Name",
+            command=self._suggest_identity,
+        ).pack(side="left", padx=(0, 6))
+        ttk.Button(
+            identity_actions,
+            text="Suggest Description",
+            command=lambda: self._suggest_identity(name_only=False),
+        ).pack(side="left")
 
         # Prompt Source
         prompt_frame = ttk.LabelFrame(self, text="Prompt Source", padding=5)
@@ -190,8 +217,18 @@ class ExperimentDesignPanel(ttk.Frame):
         ).grid(row=1, column=0, sticky="w", pady=2)
 
         self.custom_prompt_var = tk.StringVar(value="")
-        self.custom_prompt_text = tk.Text(prompt_frame, height=3, wrap=tk.WORD)
+        self.custom_prompt_text = tk.Text(
+            prompt_frame,
+            height=3,
+            wrap=tk.WORD,
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
+            highlightbackground=TOKENS.colors.border_subtle,
+            highlightcolor=TOKENS.colors.accent_primary,
+        )
         self.custom_prompt_text.grid(row=2, column=0, sticky="ew", pady=(2, 0))
+        self.custom_prompt_text.bind("<KeyRelease>", lambda _e: self._on_prompt_text_edited())
         
         # Populate text field with workspace prompt initially
         self._on_prompt_source_changed()
@@ -216,7 +253,16 @@ class ExperimentDesignPanel(ttk.Frame):
         self.feedback_var = tk.StringVar(value="")
         self.feedback_label = ttk.Label(self, textvariable=self.feedback_var, foreground="red")
         self.feedback_label.grid(row=15, column=0, sticky="w", pady=(0, 10))
+        self.summary_var = tk.StringVar(value="")
+        self.summary_label = ttk.Label(
+            self,
+            textvariable=self.summary_var,
+            justify="left",
+            foreground=TOKENS.colors.text_muted,
+        )
+        self.summary_label.grid(row=16, column=0, sticky="ew", pady=(0, 6))
         self._on_stage_changed()
+        self._suggest_identity()
 
     def _on_prompt_source_changed(self) -> None:
         """Handle prompt source radio button changes.
@@ -247,6 +293,7 @@ class ExperimentDesignPanel(ttk.Frame):
         else:
             # Custom mode - enable text field for editing
             self.custom_prompt_text.config(state="normal")
+        self._refresh_identity_preview()
 
     def _on_build_preview(self) -> None:
         """Handle build preview button click."""
@@ -415,9 +462,17 @@ class ExperimentDesignPanel(ttk.Frame):
             self._show_lora_composite_widget(meta)
         else:
             self._show_range_widget()
+        self._refresh_identity_preview()
 
     def _on_stage_changed(self, event=None) -> None:
         capability = get_stage_capability(self.stage_var.get())
+        self.stage_hint_var.set(
+            (
+                f"{capability.display_name}: requires an input image and stage-specific settings."
+                if capability.requires_input_image
+                else f"{capability.display_name}: generates directly from prompt with no source image."
+            )
+        )
         if capability.requires_input_image:
             self.input_image_frame.grid()
         else:
@@ -428,6 +483,7 @@ class ExperimentDesignPanel(ttk.Frame):
         if self.variable_var.get() not in allowed_variables:
             self.variable_var.set("")
             self._show_range_widget()
+        self._refresh_identity_preview()
 
     def _on_browse_input_image(self) -> None:
         selected = filedialog.askopenfilename(
@@ -437,6 +493,7 @@ class ExperimentDesignPanel(ttk.Frame):
         )
         if selected:
             self.input_image_var.set(selected)
+            self._refresh_identity_preview()
     
     def _show_range_widget(self) -> None:
         """Show numeric range widget (start/stop/step)."""
@@ -572,6 +629,88 @@ class ExperimentDesignPanel(ttk.Frame):
         """Update the count label showing selected items."""
         count = sum(1 for var in self.choice_vars.values() if var.get())
         self.choice_count_var.set(f"{count} items selected")
+
+    def _on_name_changed(self) -> None:
+        if self._suspend_identity_tracking:
+            return
+        current = self.name_var.get().strip()
+        if current:
+            self._name_auto_generated = False
+        self._refresh_identity_preview()
+
+    def _on_description_changed(self) -> None:
+        if self._suspend_identity_tracking:
+            return
+        current = self.desc_var.get().strip()
+        if current:
+            self._description_auto_generated = False
+        self._refresh_identity_preview()
+
+    def _on_prompt_text_edited(self) -> None:
+        self._refresh_identity_preview()
+
+    def _get_prompt_preview_text(self) -> str:
+        if self.prompt_source_var.get() == "custom":
+            return self.custom_prompt_text.get("1.0", tk.END).strip()
+        if self.prompt_workspace_state:
+            try:
+                return self.prompt_workspace_state.get_current_prompt_text() or ""
+            except Exception:
+                return ""
+        return ""
+
+    def _current_model_vae(self) -> tuple[str, str]:
+        ctrl = self.learning_controller
+        if ctrl and hasattr(ctrl, "_get_baseline_config"):
+            try:
+                baseline = ctrl._get_baseline_config()
+                txt2img = dict((baseline or {}).get("txt2img") or {})
+                return (
+                    str(txt2img.get("model") or ""),
+                    str(txt2img.get("vae") or ""),
+                )
+            except Exception:
+                return "", ""
+        return "", ""
+
+    def _refresh_identity_preview(self) -> None:
+        model, vae = self._current_model_vae()
+        identity = build_experiment_identity(
+            stage=self.stage_var.get(),
+            variable_label=self.variable_var.get(),
+            prompt_text=self._get_prompt_preview_text(),
+            model=model,
+            vae=vae,
+        )
+        current_name = self.name_var.get().strip()
+        current_desc = self.desc_var.get().strip()
+        summary = identity["summary"]
+        if current_name:
+            summary = f"{summary}\nFolder: {current_name}"
+        if current_desc:
+            summary = f"{summary}\n{current_desc}"
+        if hasattr(self, "summary_var"):
+            self.summary_var.set(summary)
+
+    def _suggest_identity(self, *, name_only: bool = True) -> None:
+        model, vae = self._current_model_vae()
+        identity = build_experiment_identity(
+            stage=self.stage_var.get(),
+            variable_label=self.variable_var.get(),
+            prompt_text=self._get_prompt_preview_text(),
+            model=model,
+            vae=vae,
+        )
+        self._suspend_identity_tracking = True
+        try:
+            self._name_auto_generated = True
+            self.name_var.set(identity["name"])
+            if not name_only or not self.desc_var.get().strip() or self._description_auto_generated:
+                self._description_auto_generated = True
+                self.desc_var.set(identity["description"])
+        finally:
+            self._suspend_identity_tracking = False
+        self._refresh_identity_preview()
 
     def _filter_checklist_items(self, meta) -> None:
         """Filter checklist items based on search text.
@@ -877,3 +1016,6 @@ class ExperimentDesignPanel(ttk.Frame):
         selected_items = {str(item) for item in metadata.get("selected_items", [])}
         for item, var in self.choice_vars.items():
             var.set(item in selected_items)
+        self._name_auto_generated = False
+        self._description_auto_generated = False
+        self._refresh_identity_preview()

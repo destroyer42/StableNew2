@@ -81,3 +81,20 @@ def test_experiment_design_panel_can_switch_away_from_lora_mode() -> None:
     assert panel.value_frame.winfo_manager() == "grid"
 
     panel.destroy()
+
+
+def test_experiment_design_panel_suggests_identity() -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    panel = ExperimentDesignPanel(root)
+    panel.variable_var.set("Steps")
+    panel._on_variable_changed()  # noqa: SLF001
+    panel._suggest_identity(name_only=False)  # noqa: SLF001
+
+    assert panel.name_var.get().strip()
+    assert "Steps" in panel.desc_var.get()
+    assert panel.summary_var.get().strip()
+
+    panel.destroy()
