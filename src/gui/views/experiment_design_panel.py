@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
+from pathlib import Path
+from tkinter import filedialog, ttk
 from typing import Any
 
 from src.gui.controllers.learning_controller import LearningController
+from src.learning.stage_capabilities import get_stage_capability, get_variables_for_stage, list_supported_stages
+from src.learning.variable_selection_contract import normalize_resource_entries
 
 
 class ExperimentDesignPanel(ttk.Frame):
@@ -28,13 +31,14 @@ class ExperimentDesignPanel(ttk.Frame):
         self.rowconfigure(1, weight=0)  # Experiment Name
         self.rowconfigure(2, weight=0)  # Description
         self.rowconfigure(3, weight=0)  # Target Stage
-        self.rowconfigure(4, weight=0)  # Variable Under Test
-        self.rowconfigure(5, weight=0)  # Value Specification
-        self.rowconfigure(6, weight=0)  # Images per Variant
-        self.rowconfigure(7, weight=0)  # Prompt Source
-        self.rowconfigure(8, weight=0)  # Buttons
-        self.rowconfigure(9, weight=0)  # Feedback
-        self.rowconfigure(10, weight=1)  # Spacer
+        self.rowconfigure(4, weight=0)  # Input Image
+        self.rowconfigure(5, weight=0)  # Variable Under Test
+        self.rowconfigure(6, weight=0)  # Value Specification
+        self.rowconfigure(7, weight=0)  # Images per Variant
+        self.rowconfigure(8, weight=0)  # Prompt Source
+        self.rowconfigure(9, weight=0)  # Buttons
+        self.rowconfigure(10, weight=0)  # Feedback
+        self.rowconfigure(11, weight=1)  # Spacer
 
         self._build_ui()
 
@@ -62,38 +66,45 @@ class ExperimentDesignPanel(ttk.Frame):
         self.stage_combo = ttk.Combobox(
             self,
             textvariable=self.stage_var,
-            values=["txt2img", "img2img", "upscale"],
+            values=list_supported_stages(),
             state="readonly",
         )
         self.stage_combo.grid(row=6, column=0, sticky="ew", pady=(0, 10))
+        self.stage_combo.bind("<<ComboboxSelected>>", self._on_stage_changed)
+
+        self.input_image_frame = ttk.LabelFrame(self, text="Input Image", padding=5)
+        self.input_image_frame.grid(row=7, column=0, sticky="ew", pady=(0, 10))
+        self.input_image_frame.columnconfigure(0, weight=1)
+        self.input_image_var = tk.StringVar(value="")
+        self.input_image_entry = ttk.Entry(
+            self.input_image_frame,
+            textvariable=self.input_image_var,
+        )
+        self.input_image_entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.input_image_button = ttk.Button(
+            self.input_image_frame,
+            text="Browse",
+            command=self._on_browse_input_image,
+        )
+        self.input_image_button.grid(row=0, column=1, sticky="e")
 
         # Variable Under Test
-        ttk.Label(self, text="Variable Under Test:").grid(row=7, column=0, sticky="w", pady=(0, 2))
+        ttk.Label(self, text="Variable Under Test:").grid(row=8, column=0, sticky="w", pady=(0, 2))
         self.variable_var = tk.StringVar(value="")
         self.variable_combo = ttk.Combobox(
             self,
             textvariable=self.variable_var,
-            values=[
-                "CFG Scale",
-                "Steps",
-                "Sampler",
-                "Scheduler",
-                "Model",  # PR-LEARN-021
-                "VAE",    # PR-LEARN-021
-                "LoRA Strength",
-                "Denoise Strength",
-                "Upscale Factor",
-            ],
+            values=get_variables_for_stage(self.stage_var.get()),
             state="readonly",
         )
-        self.variable_combo.grid(row=8, column=0, sticky="ew", pady=(0, 10))
+        self.variable_combo.grid(row=9, column=0, sticky="ew", pady=(0, 10))
         
         # PR-LEARN-020: Bind variable selection to widget switcher
         self.variable_combo.bind("<<ComboboxSelected>>", self._on_variable_changed)
 
         # Value Specification Frame (numeric range)
         self.value_frame = ttk.LabelFrame(self, text="Value Specification", padding=5)
-        self.value_frame.grid(row=9, column=0, sticky="ew", pady=(0, 10))
+        self.value_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
         self.value_frame.columnconfigure(0, weight=1)
         self.value_frame.columnconfigure(1, weight=1)
         self.value_frame.columnconfigure(2, weight=1)
@@ -141,6 +152,7 @@ class ExperimentDesignPanel(ttk.Frame):
         
         # Store checkbox variables
         self.choice_vars: dict[str, tk.BooleanVar] = {}
+        self._choice_display_map: dict[str, str] = {}
         
         # PR-LEARN-022: Build LoRA composite frame (hidden by default)
         self.lora_frame = ttk.LabelFrame(self, text="LoRA Configuration", padding=5)
@@ -150,14 +162,14 @@ class ExperimentDesignPanel(ttk.Frame):
         self.lora_frame.grid_remove()
 
         # Images per Variant
-        ttk.Label(self, text="Images per Variant:").grid(row=10, column=0, sticky="w", pady=(0, 2))
+        ttk.Label(self, text="Images per Variant:").grid(row=11, column=0, sticky="w", pady=(0, 2))
         self.images_var = tk.IntVar(value=1)
         self.images_spin = tk.Spinbox(self, from_=1, to=10, textvariable=self.images_var)
-        self.images_spin.grid(row=11, column=0, sticky="ew", pady=(0, 10))
+        self.images_spin.grid(row=12, column=0, sticky="ew", pady=(0, 10))
 
         # Prompt Source
         prompt_frame = ttk.LabelFrame(self, text="Prompt Source", padding=5)
-        prompt_frame.grid(row=12, column=0, sticky="ew", pady=(0, 10))
+        prompt_frame.grid(row=13, column=0, sticky="ew", pady=(0, 10))
         prompt_frame.columnconfigure(0, weight=1)
 
         self.prompt_source_var = tk.StringVar(value="workspace")
@@ -186,7 +198,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Buttons
         button_frame = ttk.Frame(self)
-        button_frame.grid(row=13, column=0, sticky="ew", pady=(0, 10))
+        button_frame.grid(row=14, column=0, sticky="ew", pady=(0, 10))
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
 
@@ -203,7 +215,8 @@ class ExperimentDesignPanel(ttk.Frame):
         # Feedback
         self.feedback_var = tk.StringVar(value="")
         self.feedback_label = ttk.Label(self, textvariable=self.feedback_var, foreground="red")
-        self.feedback_label.grid(row=14, column=0, sticky="w", pady=(0, 10))
+        self.feedback_label.grid(row=15, column=0, sticky="w", pady=(0, 10))
+        self._on_stage_changed()
 
     def _on_prompt_source_changed(self) -> None:
         """Handle prompt source radio button changes.
@@ -246,6 +259,7 @@ class ExperimentDesignPanel(ttk.Frame):
             "name": self.name_var.get().strip(),
             "description": self.desc_var.get().strip(),
             "stage": self.stage_var.get(),
+            "input_image_path": self.input_image_var.get().strip(),
             "variable_under_test": self.variable_var.get(),
             "start_value": self.start_var.get(),
             "end_value": self.end_var.get(),
@@ -317,7 +331,15 @@ class ExperimentDesignPanel(ttk.Frame):
 
         if not data["variable_under_test"]:
             return "Variable under test must be selected"
-        
+
+        capability = get_stage_capability(data.get("stage"))
+        if capability.requires_input_image:
+            input_image_path = str(data.get("input_image_path", "") or "").strip()
+            if not input_image_path:
+                return f"{capability.display_name} experiments require an input image"
+            if not Path(input_image_path).exists():
+                return "Selected input image does not exist"
+
         # Get metadata for variable
         meta = get_variable_metadata(data["variable_under_test"])
         
@@ -393,14 +415,37 @@ class ExperimentDesignPanel(ttk.Frame):
             self._show_lora_composite_widget(meta)
         else:
             self._show_range_widget()
+
+    def _on_stage_changed(self, event=None) -> None:
+        capability = get_stage_capability(self.stage_var.get())
+        if capability.requires_input_image:
+            self.input_image_frame.grid()
+        else:
+            self.input_image_frame.grid_remove()
+            self.input_image_var.set("")
+        allowed_variables = get_variables_for_stage(self.stage_var.get())
+        self.variable_combo.configure(values=allowed_variables)
+        if self.variable_var.get() not in allowed_variables:
+            self.variable_var.set("")
+            self._show_range_widget()
+
+    def _on_browse_input_image(self) -> None:
+        selected = filedialog.askopenfilename(
+            parent=self,
+            title="Select Input Image",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("All Files", "*.*")],
+        )
+        if selected:
+            self.input_image_var.set(selected)
     
     def _show_range_widget(self) -> None:
         """Show numeric range widget (start/stop/step)."""
         # Show value frame
-        self.value_frame.grid(row=9, column=0, sticky="ew", pady=(0, 10))
-        
+        self.value_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
+
         # Hide checklist frame
         self.checklist_frame.grid_remove()
+        self.lora_frame.grid_remove()
     
     def _show_checklist_widget(self, meta) -> None:
         """Show checklist widget for discrete choices.
@@ -409,9 +454,10 @@ class ExperimentDesignPanel(ttk.Frame):
         """
         # Hide value frame
         self.value_frame.grid_remove()
-        
-        # Show checklist frame at row 9
-        self.checklist_frame.grid(row=9, column=0, sticky="ew", pady=(0, 10))
+        self.lora_frame.grid_remove()
+
+        # Show checklist frame at row 10
+        self.checklist_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
         
         # Update checklist label
         self.checklist_frame.config(text=f"Select {meta.display_name} to Test")
@@ -430,6 +476,7 @@ class ExperimentDesignPanel(ttk.Frame):
             widget.destroy()
         
         self.choice_vars.clear()
+        self._choice_display_map = {}
         
         # Get available choices from app_state
         choices = []
@@ -492,13 +539,18 @@ class ExperimentDesignPanel(ttk.Frame):
         self.checkbox_container = ttk.Frame(self.checklist_inner_frame)
         self.checkbox_container.pack(fill="both", expand=True)
         
+        normalized_values, mapping = normalize_resource_entries(list(choices or []))
+        entries = normalized_values if mapping else [str(choice) for choice in choices]
+        if mapping:
+            self._choice_display_map = dict(mapping)
         # Create checkboxes for each choice
-        for choice in choices:
+        for choice in entries:
+            internal_choice = self._choice_display_map.get(choice, choice)
             var = tk.BooleanVar(value=False)
             cb = ttk.Checkbutton(self.checkbox_container, text=choice, variable=var)
             cb.pack(anchor="w", pady=2)
-            self.choice_vars[choice] = var
-            
+            self.choice_vars[internal_choice] = var
+
             # Bind checkbox changes to update count
             var.trace_add("write", lambda *args: self._update_choice_count())
         
@@ -557,8 +609,8 @@ class ExperimentDesignPanel(ttk.Frame):
             pass
         self.checklist_frame.grid_remove()
         
-        # Show LoRA frame at row 9
-        self.lora_frame.grid(row=9, column=0, sticky="ew", pady=(0, 10))
+        # Show LoRA frame at row 10
+        self.lora_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
         
         # Clear existing content
         for widget in self.lora_frame.winfo_children():
@@ -800,3 +852,28 @@ class ExperimentDesignPanel(ttk.Frame):
         """Update LoRA selection count."""
         count = sum(1 for var in self.lora_choice_vars.values() if var.get())
         self.lora_count_var.set(f"{count} LoRAs selected")
+
+    def restore_state(self, experiment: Any) -> None:
+        self.name_var.set(str(getattr(experiment, "name", "") or ""))
+        self.desc_var.set(str(getattr(experiment, "description", "") or ""))
+        self.stage_var.set(str(getattr(experiment, "stage", "txt2img") or "txt2img"))
+        self._on_stage_changed()
+        self.input_image_var.set(str(getattr(experiment, "input_image_path", "") or ""))
+        self.variable_var.set(str(getattr(experiment, "variable_under_test", "") or ""))
+        metadata = dict(getattr(experiment, "metadata", {}) or {})
+        self.start_var.set(float(metadata.get("start_value", self.start_var.get())))
+        self.end_var.set(float(metadata.get("end_value", self.end_var.get())))
+        self.step_var.set(float(metadata.get("step_value", self.step_var.get())))
+        self.images_var.set(int(getattr(experiment, "images_per_value", 1) or 1))
+        prompt_text = str(getattr(experiment, "prompt_text", "") or "")
+        self.prompt_source_var.set("custom" if prompt_text else "workspace")
+        self._on_prompt_source_changed()
+        self.custom_prompt_text.config(state="normal")
+        self.custom_prompt_text.delete("1.0", tk.END)
+        self.custom_prompt_text.insert("1.0", prompt_text)
+        if self.prompt_source_var.get() == "workspace":
+            self._on_prompt_source_changed()
+        self._on_variable_changed()
+        selected_items = {str(item) for item in metadata.get("selected_items", [])}
+        for item, var in self.choice_vars.items():
+            var.set(item in selected_items)

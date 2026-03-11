@@ -23,9 +23,13 @@ def test_learning_tab_persists_and_restores_resume_session() -> None:
 
     with TemporaryDirectory() as tmp_dir:
         state_path = Path(tmp_dir) / "ui_state.json"
+        experiments_root = Path(tmp_dir) / "experiments"
         store = UIStateStore(state_path)
 
-        with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store):
+        with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ):
             tab = LearningTabFrame(
                 root,
                 app_state=AppStateV2(),
@@ -55,7 +59,10 @@ def test_learning_tab_persists_and_restores_resume_session() -> None:
             tab._persist_learning_session_state()  # noqa: SLF001
             saved = store.load_state()
             assert saved is not None
-            assert saved["learning"]["session"]["current_experiment"]["name"] == "Resume Test"
+            experiment_id = saved["learning"]["last_experiment_id"]
+            assert experiment_id
+            session_path = experiments_root / experiment_id / "session.json"
+            assert session_path.exists()
 
             restored_tab = LearningTabFrame(
                 root,

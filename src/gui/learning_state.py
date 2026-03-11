@@ -19,6 +19,7 @@ class LearningExperiment:
     baseline_config: dict[str, Any] = field(default_factory=dict)
     prompt_text: str = ""
     stage: str = "txt2img"
+    input_image_path: str = ""
     variable_under_test: str = ""
     values: list[Any] = field(default_factory=list)
     images_per_value: int = 1
@@ -31,6 +32,7 @@ class LearningExperiment:
             "baseline_config": dict(self.baseline_config or {}),
             "prompt_text": self.prompt_text,
             "stage": self.stage,
+            "input_image_path": self.input_image_path,
             "variable_under_test": self.variable_under_test,
             "values": list(self.values or []),
             "images_per_value": int(self.images_per_value or 0),
@@ -45,6 +47,7 @@ class LearningExperiment:
             baseline_config=dict(payload.get("baseline_config") or {}),
             prompt_text=str(payload.get("prompt_text", "")),
             stage=str(payload.get("stage", "txt2img")),
+            input_image_path=str(payload.get("input_image_path", "")),
             variable_under_test=str(payload.get("variable_under_test", "")),
             values=list(payload.get("values") or []),
             images_per_value=int(payload.get("images_per_value", 1) or 1),
