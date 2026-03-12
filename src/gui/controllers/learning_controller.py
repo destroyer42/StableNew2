@@ -14,6 +14,11 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.stage_capabilities import get_stage_capability
+from src.learning.learning_controller_services.experiment_persistence import (
+    build_resume_payload,
+    validate_resume_payload,
+    extract_workflow_state,
+)
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.queue.job_model import Job, JobPriority
@@ -1304,16 +1309,16 @@ class LearningController:
             return None
         if self._is_review_complete():
             return None
-        payload = self.learning_state.to_dict()
-        payload["workflow_state"] = self._workflow_state
-        payload["learning_enabled"] = bool(self._learning_enabled)
-        payload["resume_schema_version"] = 1
-        payload["saved_at"] = datetime.utcnow().isoformat() + "Z"
-        return payload
+        # Delegate serialisation to experiment_persistence (PR-047).
+        return build_resume_payload(
+            state_dict=self.learning_state.to_dict(),
+            workflow_state=self._workflow_state,
+            learning_enabled=bool(self._learning_enabled),
+        )
 
     def restore_resume_state(self, payload: dict[str, Any] | None) -> bool:
         """Restore learning session from persisted payload."""
-        if not isinstance(payload, dict):
+        if not validate_resume_payload(payload):
             return False
         try:
             restored = LearningState.from_dict(payload)
@@ -1327,7 +1332,8 @@ class LearningController:
         self.load_existing_ratings()
         self._update_plan_table()
 
-        desired_state = str(payload.get("workflow_state", "") or "").strip().lower()
+        # Delegate workflow-state extraction to experiment_persistence (PR-047).
+        desired_state = extract_workflow_state(payload)
         if desired_state:
             self._set_workflow_state(desired_state)
         else:
@@ -1880,11 +1886,15 @@ class LearningController:
         if not self.pipeline_controller:
             return False
 
-        # PR-044: Block automation for low-confidence / manual-only evidence tiers.
-        # Only experiment_strong evidence is eligible for auto-apply.
-        if hasattr(recommendations, "automation_eligible"):
-            if not recommendations.automation_eligible:
-                return False
+        # PR-044/055: manual-only evidence tiers must still support explicit
+        # apply-with-confirm. Only the fully automatic path is gated on
+        # automation_eligible.
+        if (
+            self._automation_mode == "auto_micro_experiment"
+            and hasattr(recommendations, "automation_eligible")
+            and not recommendations.automation_eligible
+        ):
+            return False
 
         # Get stage cards panel
         stage_cards = getattr(self.pipeline_controller, "stage_cards_panel", None)

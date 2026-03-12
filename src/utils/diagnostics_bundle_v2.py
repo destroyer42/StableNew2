@@ -55,7 +55,7 @@ def build_async(
     cooldown_s: float = 30.0,
     on_done: callable | None = None,
     webui_tail: Mapping[str, Any] | None = None,
-) -> None:
+) -> threading.Thread | None:
     """Create a diagnostics bundle asynchronously (single-flight per reason)."""
     now = time.monotonic()
     with _BUNDLE_LOCK:
@@ -63,7 +63,7 @@ def build_async(
         if reason in _IN_FLIGHT:
             return
         if (now - last) < float(cooldown_s):
-            return
+            return None
         _IN_FLIGHT.add(reason)
         _LAST_BUNDLE_TS[reason] = now
 
@@ -87,7 +87,9 @@ def build_async(
                 except Exception:
                     pass
 
-    threading.Thread(target=_worker, daemon=False, name=f"DiagBundle-{reason}").start()
+    thread = threading.Thread(target=_worker, daemon=False, name=f"DiagBundle-{reason}")
+    thread.start()
+    return thread
 
 
 def build_crash_bundle(

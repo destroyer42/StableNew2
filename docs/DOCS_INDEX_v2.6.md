@@ -27,13 +27,18 @@ This index defines the active document set for StableNew v2.6 and identifies whi
 - `.github/copilot-instructions.md`
 - `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
 
+1.2a Tier 2 Meta Documents
+
+- `docs/Canonical_Document_Ownership_v2.6.md` — ownership table, precedence, archive rules, and contradiction checklist
+
 1.3 Tier 3 - Subsystem Specifications
 
-- `docs/Randomizer_Spec_v2.5.md` until a v2.6 replacement exists
-- `docs/Learning_System_Spec_v2.5.md` until a v2.6 replacement exists
-- `docs/Cluster_Compute_Spec_v2.5.md` until a v2.6 replacement exists
+- `docs/Learning_System_Spec_v2.6.md` — active v2.6 learning subsystem spec
+- `docs/Randomizer_Spec_v2.5.md` — retained v2.5; no v2.6 replacement exists yet (see Canonical_Document_Ownership_v2.6.md §6)
+- `docs/Cluster_Compute_Spec_v2.5.md` — retained v2.5; no v2.6 replacement exists yet (see Canonical_Document_Ownership_v2.6.md §6)
 - `docs/Image_Metadata_Contract_v2.6.md`
 - `docs/Movie_Clips_Workflow_v2.6.md` — Movie Clips MVP tab and service boundary
+- `docs/GUI_Ownership_Map_v2.6.md` — file-placement rules for `src/gui/` vs `src/gui_v2/`; migration boundary
 
 1.4 Tier 4 - Implementation And PR Specs
 
@@ -60,7 +65,9 @@ These support development but do not override canonical docs.
 
 2. Active Agent Instruction Surface
 
-Active machine-facing guidance lives in:
+Active machine-facing guidance is catalogued in `.github/INSTRUCTION_SURFACE.md`.
+That manifest is the single source of truth for what is active, what is archived,
+and what the precedence order is. The files themselves live at:
 
 - `AGENTS.md`
 - `.github/copilot-instructions.md`

@@ -59,6 +59,9 @@ from src.pipeline.last_run_store_v2_5 import (
 )
 from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
+from src.controller.app_controller_services.learning_completion_router import (
+    build_learning_completion_handler,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - type-only import
     from src.controller.archive.pipeline_config_types import PipelineConfig
@@ -818,24 +821,15 @@ class AppController:
     
     def _create_learning_completion_handler(self):
         """Create a completion handler that routes to learning subsystem.
-        
+
         PR-LEARN-003: Routes job completion events to the learning controller
         so experiments can update variant status as jobs complete.
+
+        Extracted to app_controller_services.learning_completion_router (PR-047).
         """
-        def handler(job, result):
-            # Route to learning controller via main window
-            if hasattr(self, "main_window") and self.main_window:
-                learning_tab = getattr(self.main_window, "learning_tab", None)
-                controller_obj = None
-                if learning_tab:
-                    controller_obj = getattr(learning_tab, "learning_controller", None)
-                    if controller_obj is None:
-                        controller_obj = getattr(learning_tab, "controller", None)
-                if controller_obj is not None:
-                    callback = getattr(controller_obj, "on_job_completed_callback", None)
-                    if callable(callback):
-                        callback(job, result)
-        return handler
+        return build_learning_completion_handler(
+            get_main_window=lambda: getattr(self, "main_window", None),
+        )
 
     def _create_photo_optimize_completion_handler(self):
         def handler(job, result):

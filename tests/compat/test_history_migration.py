@@ -73,7 +73,7 @@ class TestHistoryVersionMigration:
         # v2.6 format: normalized_record_snapshot
         assert "normalized_record_snapshot" in entry_data, "v2.6 entries should have normalized_record_snapshot"
         
-        entry = HistoryRecord(**entry_data)
+        entry = HistoryRecord.from_dict(entry_data)
         assert entry.id == "v2.6-canonical-003"
         assert entry.normalized_record_snapshot is not None
         assert isinstance(entry.normalized_record_snapshot, NormalizedJobRecord)

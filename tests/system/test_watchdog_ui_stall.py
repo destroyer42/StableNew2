@@ -2,6 +2,7 @@ import time
 
 from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
 from src.services.watchdog_system_v2 import SystemWatchdogV2
+from src.utils.diagnostics_bundle_v2 import _IN_FLIGHT, _LAST_BUNDLE_TS
 
 
 class DummyAppController:
@@ -15,6 +16,8 @@ class DummyAppController:
 
 
 def test_ui_heartbeat_stall_triggers_diagnostics(tmp_path):
+    _IN_FLIGHT.clear()
+    _LAST_BUNDLE_TS.clear()
     bundle_dir = tmp_path / "diagnostics"
     bundle_dir.mkdir()
     app = DummyAppController()
@@ -22,15 +25,18 @@ def test_ui_heartbeat_stall_triggers_diagnostics(tmp_path):
     watchdog = SystemWatchdogV2(app, diag, check_interval_s=0.25)
     watchdog.start()
     # Simulate UI freeze by not updating heartbeat
-    app.last_ui_heartbeat_ts -= 5.0
+    app.last_ui_heartbeat_ts -= 15.0
     # Wait for watchdog to trigger synchronously
     time.sleep(1.5)
     watchdog.stop()
+    diag.wait_for_idle(timeout_s=10.0)
     zips = list(bundle_dir.glob("stablenew_diagnostics_*.zip"))
     assert zips, "No diagnostics bundle created on UI stall"
 
 
 def test_queue_runner_stall_triggers_diagnostics(tmp_path):
+    _IN_FLIGHT.clear()
+    _LAST_BUNDLE_TS.clear()
     bundle_dir = tmp_path / "diagnostics"
     bundle_dir.mkdir()
     app = DummyAppController()
@@ -42,5 +48,6 @@ def test_queue_runner_stall_triggers_diagnostics(tmp_path):
     # Wait for watchdog to trigger synchronously
     time.sleep(1.5)
     watchdog.stop()
+    diag.wait_for_idle(timeout_s=10.0)
     zips = list(bundle_dir.glob("stablenew_diagnostics_*.zip"))
     assert zips, "No diagnostics bundle created on runner stall"

@@ -78,10 +78,12 @@ class StableNewGUI(MainWindowV2):
         return None
 
 
-ENTRYPOINT_GUI_CLASS = StableNewGUI
+ENTRYPOINT_GUI_CLASS = MainWindowV2
 
-
-main_window_v2_module.MainWindowV2 = StableNewGUI
+# Note: The monkeypatch of main_window_v2_module.MainWindowV2 has been removed.
+# StableNewGUI remains as a compatibility shim for tests that construct it
+# directly (via gui_app_factory), but it no longer overwrites MainWindowV2
+# in the v2 module namespace (PR-048).
 
 
 # Backfill module alias expected by legacy tests that patch TkDialog dialogs.

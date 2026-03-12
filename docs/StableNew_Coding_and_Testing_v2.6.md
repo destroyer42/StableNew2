@@ -143,11 +143,14 @@ If it can’t be deleted, it must be explicitly documented in TECH_DEBT.md.
 2.3 Explicit Data Models Only
 
 No dict-of-dict-of-dict structures.
-Use Pydantic models everywhere:
+Use explicit data models. In v2.6, Python dataclasses are the preferred choice.
+TypedDicts are acceptable for read-only lookup structures. Pydantic is not
+currently used in the codebase; it may be adopted subsystem-by-subsystem
+if explicitly approved in a PR spec. Do not introduce Pydantic without a plan.
+
+Requirements for all data model types:
 
 Clear schema
-
-Validation builtin
 
 Type safety
 

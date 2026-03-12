@@ -95,9 +95,12 @@ def test_watchdog_doesnt_trigger_during_normal_generation():
 def test_watchdog_still_triggers_on_true_stall():
     """Verify watchdog still triggers if UI truly stalls for 90+ seconds."""
     from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
+    from src.utils.diagnostics_bundle_v2 import _IN_FLIGHT, _LAST_BUNDLE_TS
     import tempfile
     
     with tempfile.TemporaryDirectory() as tmpdir:
+        _IN_FLIGHT.clear()
+        _LAST_BUNDLE_TS.clear()
         # Create mock app controller that is truly stalled
         class StalledApp:
             def __init__(self):
@@ -124,6 +127,8 @@ def test_watchdog_still_triggers_on_true_stall():
         
         # Stop watchdog
         watchdog.stop()
+        diag.wait_for_idle(timeout_s=10.0)
+        time.sleep(0.1)
         
         # Check that diagnostic file WAS created (true stall detected)
         import os

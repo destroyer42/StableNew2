@@ -209,21 +209,37 @@ def _make_controller_with_stage_cards(state: LearningState):
 
 
 def test_apply_blocked_when_review_only_tier():
-    """PR-044: automation must be blocked for review_only evidence."""
+    """Manual-only evidence should still allow apply_with_confirm."""
     state = LearningState()
-    controller, _ = _make_controller_with_stage_cards(state)
-    recs = _make_fallback_rec_set(EVIDENCE_TIER_REVIEW_ONLY)
+    controller, stage_cards = _make_controller_with_stage_cards(state)
+    recs = RecommendationSet(
+        prompt_text="portrait",
+        stage="txt2img",
+        timestamp=0.0,
+        recommendations=[MockRecommendation(parameter_name="CFG Scale", recommended_value=8.1)],
+        evidence_tier=EVIDENCE_TIER_REVIEW_ONLY,
+        automation_eligible=False,
+    )
     result = controller.apply_recommendations_to_pipeline(recs)
-    assert result is False, "Automation must be blocked for review_only tier"
+    assert result is True
+    stage_cards.txt2img_card.cfg_var.set.assert_called_with(8.1)
 
 
 def test_apply_blocked_when_sparse_plus_review_tier():
-    """PR-044: automation must be blocked for experiment_sparse_plus_review evidence."""
+    """Manual-only sparse+review evidence should still allow apply_with_confirm."""
     state = LearningState()
-    controller, _ = _make_controller_with_stage_cards(state)
-    recs = _make_fallback_rec_set(EVIDENCE_TIER_SPARSE_PLUS_REVIEW)
+    controller, stage_cards = _make_controller_with_stage_cards(state)
+    recs = RecommendationSet(
+        prompt_text="portrait",
+        stage="txt2img",
+        timestamp=0.0,
+        recommendations=[MockRecommendation(parameter_name="Steps", recommended_value=28)],
+        evidence_tier=EVIDENCE_TIER_SPARSE_PLUS_REVIEW,
+        automation_eligible=False,
+    )
     result = controller.apply_recommendations_to_pipeline(recs)
-    assert result is False, "Automation must be blocked for sparse+review tier"
+    assert result is True
+    stage_cards.txt2img_card.steps_var.set.assert_called_with(28)
 
 
 def test_apply_allowed_when_experiment_strong_tier():
@@ -270,3 +286,22 @@ def test_apply_button_disabled_without_recommendations(tk_root):
 
     # Should be disabled
     assert str(panel.apply_button["state"]) == "disabled"
+
+
+def test_apply_button_enabled_for_manual_only_recommendations(tk_root):
+    """Manual-only evidence should still expose the apply-with-confirm button."""
+    from src.gui.views.learning_review_panel import LearningReviewPanel
+
+    panel = LearningReviewPanel(tk_root)
+    recs = RecommendationSet(
+        prompt_text="portrait",
+        stage="txt2img",
+        timestamp=0.0,
+        recommendations=[MockRecommendation(parameter_name="CFG Scale", recommended_value=8.0)],
+        evidence_tier=EVIDENCE_TIER_REVIEW_ONLY,
+        automation_eligible=False,
+    )
+
+    panel.update_recommendations(recs)
+
+    assert str(panel.apply_button["state"]) == "normal"

@@ -30,6 +30,7 @@ from src.gui.theme_v2 import (
 from src.gui.utils.display_helpers import extract_seed_from_job, format_seed_display
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
+from src.controller.ports.runtime_ports import NJRSummaryPort, NJRUISummaryPort
 
 logger = logging.getLogger(__name__)
 
@@ -232,8 +233,8 @@ class PreviewPanelV2(ttk.Frame):
         self.set_job_summaries(summary_entries)
 
     def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
-        unified = job.to_unified_summary() if hasattr(job, "to_unified_summary") else None
-        ui_summary = job.to_ui_summary() if hasattr(job, "to_ui_summary") else None
+        unified = job.to_unified_summary() if isinstance(job, NJRSummaryPort) else None
+        ui_summary = job.to_ui_summary() if isinstance(job, NJRUISummaryPort) else None
 
         positive_preview = ""
         negative_preview = ""

@@ -535,6 +535,20 @@ Error traces
 DebugHub is read-only.
 
 8. GUI Architecture
+
+### 8.0 Source Directory Ownership
+
+There are two active GUI source directories:
+
+- **`src/gui/`** — the canonical active Tk runtime.  All new Tk widgets, panels,
+  dialogs, and view wiring go here.
+- **`src/gui_v2/`** — toolkit-agnostic adapter scaffolding only (adapters and
+  validation helpers that contain no Tk imports).  This is NOT a second rendering
+  layer.  No new Tk widgets belong here.
+
+File-placement rules are fully documented in
+`docs/GUI_Ownership_Map_v2.6.md`.
+
 8.1 Pipeline Tab
 
 Pipeline Tab is responsible for:

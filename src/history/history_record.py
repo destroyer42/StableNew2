@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 from src.history.history_schema_v26 import HISTORY_SCHEMA_VERSION, InvalidHistoryRecord
+from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 _DEFAULT_TIMESTAMP = "1970-01-01T00:00:00Z"
 _LEGACY_KEYS = {
@@ -59,7 +60,11 @@ class HistoryRecord:
     def from_dict(cls, data: Mapping[str, Any]) -> HistoryRecord:
         record_id = str(data.get("id") or data.get("job_id") or data.get("jobId") or "")
         snapshot = _clean_snapshot(
-            data.get("njr_snapshot") or data.get("snapshot") or data.get("normalized_job") or {}
+            data.get("njr_snapshot")
+            or data.get("normalized_record_snapshot")
+            or data.get("snapshot")
+            or data.get("normalized_job")
+            or {}
         )
         timestamp = _coerce_timestamp(
             data.get("timestamp") or data.get("created_at") or data.get("recorded_at")
@@ -88,6 +93,14 @@ class HistoryRecord:
             ),
         )
 
+    @property
+    def normalized_record_snapshot(self) -> NormalizedJobRecord | None:
+        """Compatibility accessor for older history-loading callers."""
+        try:
+            return self.to_njr()
+        except InvalidHistoryRecord:
+            return None
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize to JSON-ready dict."""
         base = {
@@ -106,8 +119,12 @@ class HistoryRecord:
 
     def to_njr(self) -> NormalizedJobRecord:
         snapshot = self.njr_snapshot or {}
-        if "normalized_job" not in snapshot:
+        wrapped_snapshot = (
+            snapshot if "normalized_job" in snapshot else {"normalized_job": snapshot}
+        )
+        record = normalized_job_from_snapshot(wrapped_snapshot)
+        if record is None:
             raise InvalidHistoryRecord(
                 "History record is legacy/view-only (missing normalized_job)."
             )
-        return NormalizedJobRecord.from_snapshot(snapshot)
+        return record

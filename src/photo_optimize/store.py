@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.state.workspace_paths import workspace_paths as _wp
+
 from .models import (
     PHOTO_OPTIMIZE_SCHEMA_VERSION,
     PhotoOptimizeAsset,
@@ -17,7 +19,7 @@ from .models import (
     default_stage_defaults,
 )
 
-PHOTO_OPTIMIZE_ROOT = Path("data") / "photo_optimize"
+PHOTO_OPTIMIZE_ROOT: Path = _wp.photo_optimize_root(create=False)
 
 
 def _utc_now() -> str:

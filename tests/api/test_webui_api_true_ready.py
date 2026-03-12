@@ -1,21 +1,23 @@
-"""Tests for WebUIAPI.wait_until_true_ready() gate relaxation (PR-CORE1-D11F).
+"""Tests for WebUIAPI.wait_until_true_ready() strict readiness contract.
 
-Tests that the true-ready gate returns once API endpoints (models + options) are
-responsive, and does NOT require stdout boot markers (which may be version-specific).
+The true-ready gate must require both API endpoint readiness and a recognizable
+boot marker when stdout is available.
 """
 
 from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
 
 
-class TestWaitUntilTrueReadyRelaxedGate:
-    """True-ready gate should accept API readiness without boot marker."""
+class TestWaitUntilTrueReadyStrictGate:
+    """True-ready gate should require both API readiness and boot marker."""
 
-    def test_returns_when_endpoints_ok_without_boot_marker(self):
-        """Gate returns successfully when models/options OK, even if boot marker never appears."""
+    def test_times_out_when_endpoints_ok_without_boot_marker(self):
+        """Gate must not return successfully when the boot marker never appears."""
         client = Mock()
         api = WebUIAPI(client=client)
 
@@ -41,16 +43,17 @@ class TestWaitUntilTrueReadyRelaxedGate:
 
         # Patch sleep to avoid real delays
         with patch.object(api, "_sleep"):
-            # Should return after first poll cycle (API ready, no wait for marker)
-            result = api.wait_until_true_ready(
-                timeout_s=10.0,
-                poll_interval_s=0.1,
-                get_stdout_tail=get_stdout_without_marker,
-            )
+            with pytest.raises(WebUIReadinessTimeout) as excinfo:
+                api.wait_until_true_ready(
+                    timeout_s=0.1,
+                    poll_interval_s=0.01,
+                    get_stdout_tail=get_stdout_without_marker,
+                )
 
-        assert result is True
-        # Should have returned quickly without excessive polls
-        assert poll_count[0] <= 3
+        assert excinfo.value.checks_status["models_endpoint"] is True
+        assert excinfo.value.checks_status["options_endpoint"] is True
+        assert excinfo.value.checks_status["boot_marker_found"] is False
+        assert poll_count[0] >= 1
 
     def test_still_times_out_when_endpoints_not_ok(self):
         """Gate still respects timeout if API endpoints are not responsive."""
@@ -83,17 +86,15 @@ class TestWaitUntilTrueReadyRelaxedGate:
 
                 mock_time.time.side_effect = time_side_effect
                 with patch("src.api.webui_api.logger"):
-                    try:
+                    with pytest.raises(WebUIReadinessTimeout) as excinfo:
                         api.wait_until_true_ready(
                             timeout_s=10.0,
                             poll_interval_s=0.1,
                             get_stdout_tail=get_stdout,
                         )
-                        assert False, "Should have raised WebUIReadinessTimeout"
-                    except WebUIReadinessTimeout as e:
-                        # Should still include checks_status in exception
-                        assert e.checks_status is not None
-                        assert e.checks_status.get("models_endpoint") is False
+
+        assert excinfo.value.checks_status is not None
+        assert excinfo.value.checks_status.get("models_endpoint") is False
 
     def test_error_message_includes_boot_marker_status(self):
         """On timeout, error includes boot_marker_found status for diagnostics."""
@@ -112,16 +113,16 @@ class TestWaitUntilTrueReadyRelaxedGate:
         def get_stdout():
             return "Output without markers"
 
-        # Force immediate return (since API is ready)
         with patch.object(api, "_sleep"):
-            result = api.wait_until_true_ready(
-                timeout_s=10.0,
-                poll_interval_s=0.1,
-                get_stdout_tail=get_stdout,
-            )
+            with pytest.raises(WebUIReadinessTimeout) as excinfo:
+                api.wait_until_true_ready(
+                    timeout_s=0.1,
+                    poll_interval_s=0.01,
+                    get_stdout_tail=get_stdout,
+                )
 
-        # Should succeed (endpoints OK)
-        assert result is True
+        assert excinfo.value.checks_status["boot_marker_found"] is False
+        assert "boot_marker_found" in str(excinfo.value.checks_status)
 
     def test_no_stdout_callback_assumes_marker_present(self):
         """When no stdout callback provided, gate assumes boot marker present."""
@@ -143,11 +144,10 @@ class TestWaitUntilTrueReadyRelaxedGate:
                 get_stdout_tail=None,  # No callback
             )
 
-        # Should return successfully (endpoints OK, boot marker assumed)
         assert result is True
 
     def test_partial_endpoint_failure_still_waits(self):
-        """If one endpoint fails, gate continues polling until both OK or timeout."""
+        """If one endpoint fails, gate continues polling until endpoints and marker all pass."""
         client = Mock()
         api = WebUIAPI(client=client)
 
@@ -170,7 +170,7 @@ class TestWaitUntilTrueReadyRelaxedGate:
         client._session.get = mock_get
 
         def get_stdout():
-            return "Loading..."
+            return "Loading...\nStartup time: 5s"
 
         with patch.object(api, "_sleep"):
             result = api.wait_until_true_ready(

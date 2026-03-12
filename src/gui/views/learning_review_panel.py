@@ -480,9 +480,9 @@ class LearningReviewPanel(ttk.Frame):
         self.recommendations_text.insert(tk.END, "".join(lines))
         self.recommendations_text.config(state="disabled")
 
-        # PR-044: Enable apply button only when automation_eligible; always show recs
-        automation_eligible = getattr(recommendations, "automation_eligible", True)
-        if rec_list and automation_eligible:
+        # PR-044/055: manual-only evidence can still be applied via the
+        # confirm flow; only auto modes should enforce automation_eligible.
+        if rec_list:
             self.apply_button.config(state="normal")
         else:
             self.apply_button.config(state="disabled")

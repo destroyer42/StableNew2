@@ -37,7 +37,7 @@ from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
 
 # Used by tests and entrypoint contract
-ENTRYPOINT_GUI_CLASS = main_window.StableNewGUI
+ENTRYPOINT_GUI_CLASS = main_window.ENTRYPOINT_GUI_CLASS
 
 
 # PR-PROCESS-001: Emergency cleanup for WebUI processes
@@ -113,7 +113,7 @@ def wait_for_webui_ready(
     )
 
 
-ENTRYPOINT_GUI_CLASS = main_window.StableNewGUI
+ENTRYPOINT_GUI_CLASS = main_window.ENTRYPOINT_GUI_CLASS
 
 # --- Thin wrapper for healthcheck ---
 

@@ -58,6 +58,12 @@ class SystemWatchdogV2:
         if self._thread and self._thread.is_alive():
             # PR-WATCHDOG-001: Increased timeout for reliable shutdown
             self._thread.join(timeout=10.0)
+        wait_for_idle = getattr(self.diagnostics, "wait_for_idle", None)
+        if callable(wait_for_idle):
+            try:
+                wait_for_idle(timeout_s=5.0)
+            except Exception:
+                pass
 
     def _loop(self) -> None:
         """Main watchdog loop - monitors system health.
