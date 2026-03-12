@@ -762,7 +762,8 @@ class MainWindowV2:
             pass
 
         try:
-            if self.webui_process_manager:
+            controller_owns_shutdown = bool(getattr(self, "app_controller", None))
+            if self.webui_process_manager and not controller_owns_shutdown:
                 stop = getattr(self.webui_process_manager, "shutdown", None) or getattr(
                     self.webui_process_manager, "stop", None
                 )

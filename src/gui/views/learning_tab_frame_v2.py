@@ -192,9 +192,10 @@ class LearningTabFrame(ttk.Frame):
 
         # Configure body layout
         self.body_frame.columnconfigure(0, weight=1, uniform="learning_col")
-        self.body_frame.columnconfigure(1, weight=2, uniform="learning_col")
-        self.body_frame.columnconfigure(2, weight=1, uniform="learning_col")
+        self.body_frame.columnconfigure(1, weight=3, uniform="learning_col")
+        self.body_frame.columnconfigure(2, weight=2, uniform="learning_col")
         self.body_frame.rowconfigure(0, weight=1)
+        self.body_frame.rowconfigure(1, weight=3)
 
         # Left panel: Experiment Design
         self.experiment_panel = ExperimentDesignPanel(
@@ -205,11 +206,11 @@ class LearningTabFrame(ttk.Frame):
             else None,
             style=CARD_FRAME_STYLE,
         )
-        self.experiment_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
+        self.experiment_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 2), pady=4)
 
         # Center panel: Learning Plan Table
         self.plan_table = LearningPlanTable(self.body_frame, style=CARD_FRAME_STYLE)
-        self.plan_table.grid(row=0, column=1, sticky="nsew", padx=2, pady=4)
+        self.plan_table.grid(row=0, column=1, columnspan=2, sticky="nsew", padx=2, pady=(4, 2))
 
         # Connect controller to plan table
         self.learning_controller._plan_table = self.plan_table
@@ -217,7 +218,7 @@ class LearningTabFrame(ttk.Frame):
 
         # Right panel: Learning Review
         self.review_panel = LearningReviewPanel(self.body_frame, style=CARD_FRAME_STYLE)
-        self.review_panel.grid(row=0, column=2, sticky="nsew", padx=(2, 0), pady=4)
+        self.review_panel.grid(row=1, column=1, columnspan=2, sticky="nsew", padx=2, pady=(2, 4))
 
         # Connect controller to review panel (bidirectional)
         self.learning_controller._review_panel = self.review_panel

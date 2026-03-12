@@ -13,7 +13,7 @@ from src.learning.rating_schema import blend_rating, get_active_categories
 
 
 class LearningReviewPanel(ttk.Frame):
-    """Right panel for learning review and rating controls."""
+    """Image-first learning review surface with side controls."""
 
     def __init__(self, master: tk.Misc, *args, **kwargs) -> None:
         super().__init__(master, *args, **kwargs)
@@ -32,16 +32,28 @@ class LearningReviewPanel(ttk.Frame):
         self._subscore_vars: dict[str, tk.IntVar] = {}
 
         # Configure layout
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=0)  # Status section
-        self.rowconfigure(1, weight=0)  # Metadata section
-        self.rowconfigure(2, weight=0)  # Recommendations section
-        self.rowconfigure(3, weight=1)  # Image display section
-        self.rowconfigure(4, weight=0)  # Rating section
+        self.columnconfigure(0, weight=5)
+        self.columnconfigure(1, weight=3)
+        self.rowconfigure(0, weight=1)
+
+        # Left: image-first review workspace
+        self.preview_column = ttk.Frame(self)
+        self.preview_column.grid(row=0, column=0, sticky="nsew", padx=(5, 3), pady=5)
+        self.preview_column.columnconfigure(0, weight=1)
+        self.preview_column.rowconfigure(0, weight=1)
+
+        # Right: status / metadata / recommendations / rating stack
+        self.side_column = ttk.Frame(self)
+        self.side_column.grid(row=0, column=1, sticky="nsew", padx=(3, 5), pady=5)
+        self.side_column.columnconfigure(0, weight=1)
+        self.side_column.rowconfigure(0, weight=0)
+        self.side_column.rowconfigure(1, weight=0)
+        self.side_column.rowconfigure(2, weight=0)
+        self.side_column.rowconfigure(3, weight=1)
 
         # Status section
-        self.status_frame = ttk.LabelFrame(self, text="Variant Status", padding=5)
-        self.status_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        self.status_frame = ttk.LabelFrame(self.side_column, text="Variant Status", padding=5)
+        self.status_frame.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
         self.status_label = ttk.Label(self.status_frame, text="No variant selected")
         self.status_label.pack(anchor="w")
@@ -50,13 +62,13 @@ class LearningReviewPanel(ttk.Frame):
         self.progress_label.pack(anchor="w")
 
         # Metadata section
-        self.metadata_frame = ttk.LabelFrame(self, text="Metadata", padding=5)
-        self.metadata_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        self.metadata_frame = ttk.LabelFrame(self.side_column, text="Metadata", padding=5)
+        self.metadata_frame.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 
         self.metadata_text = tk.Text(
             self.metadata_frame,
-            height=5,
-            width=40,
+            height=4,
+            width=32,
             state="disabled",
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -65,13 +77,13 @@ class LearningReviewPanel(ttk.Frame):
         self.metadata_text.pack(fill="x")
 
         # Recommendations section
-        self.recommendations_frame = ttk.LabelFrame(self, text="Recommended Settings", padding=5)
-        self.recommendations_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        self.recommendations_frame = ttk.LabelFrame(self.side_column, text="Recommended Settings", padding=5)
+        self.recommendations_frame.grid(row=2, column=0, sticky="ew", pady=(0, 6))
 
         self.recommendations_text = tk.Text(
             self.recommendations_frame,
-            height=6,
-            width=40,
+            height=4,
+            width=32,
             state="disabled",
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -100,8 +112,8 @@ class LearningReviewPanel(ttk.Frame):
         self.analytics_button.pack(side="left", padx=2)
 
         # Image display section
-        self.image_frame = ttk.LabelFrame(self, text="Images", padding=5)
-        self.image_frame.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
+        self.image_frame = ttk.LabelFrame(self.preview_column, text="Images", padding=5)
+        self.image_frame.grid(row=0, column=0, sticky="nsew")
         self.image_frame.columnconfigure(0, weight=1)
         self.image_frame.rowconfigure(1, weight=1)  # Thumbnail row gets weight
 
@@ -111,7 +123,7 @@ class LearningReviewPanel(ttk.Frame):
         # Image list (top)
         self.image_listbox = tk.Listbox(
             self.image_frame,
-            height=5,
+            height=4,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
             selectbackground=TOKENS.colors.accent_primary,
@@ -124,8 +136,8 @@ class LearningReviewPanel(ttk.Frame):
         # Image thumbnail (bottom)
         self.image_thumbnail = ImageThumbnail(
             self.image_frame,
-            max_width=360,
-            max_height=360,
+            max_width=960,
+            max_height=960,
         )
         self.image_thumbnail.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
         self.image_thumbnail.clear()
@@ -134,8 +146,8 @@ class LearningReviewPanel(ttk.Frame):
         self._image_full_paths: list[str] = []
 
         # Rating section
-        self.rating_frame = ttk.LabelFrame(self, text="Rating", padding=5)
-        self.rating_frame.grid(row=4, column=0, sticky="ew", padx=5, pady=5)
+        self.rating_frame = ttk.LabelFrame(self.side_column, text="Rating", padding=5)
+        self.rating_frame.grid(row=3, column=0, sticky="nsew")
 
         # Rating controls
         rating_frame = ttk.Frame(self.rating_frame)

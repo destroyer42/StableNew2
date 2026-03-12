@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 
@@ -116,3 +117,51 @@ def test_prompt_pack_job_builder_populates_preview_fields(tmp_path: Path) -> Non
     assert record.base_model == "model.safetensors"
     assert "sorceress" in record.positive_prompt.lower()
     assert any(stage.stage_type == "txt2img" for stage in record.stage_chain)
+
+
+def test_prompt_pack_job_builder_random_matrix_mode_shuffles_combinations(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_txt = config_manager.packs_dir / "random-matrix-pack.txt"
+    pack_txt.write_text("A [[job]] in a [[environment]]", encoding="utf-8")
+    pack_json = pack_txt.with_suffix(".json")
+    pack_json.write_text(
+        json.dumps(
+            {
+                "pack_data": {
+                    "matrix": {
+                        "enabled": True,
+                        "mode": "random",
+                        "limit": 3,
+                        "slots": [
+                            {"name": "job", "values": ["wizard", "knight", "archer"]},
+                            {"name": "environment", "values": ["forest", "castle"]},
+                        ],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+    )
+    entry = PackJobEntry(
+        pack_id=pack_txt.name,
+        pack_name="Random Matrix Pack",
+        prompt_text="A [[job]] in a [[environment]]",
+        config_snapshot={"randomization": {"enabled": False}},
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False, "max_variants": 1},
+    )
+
+    expanded = builder._expand_entry_by_matrix(entry)  # noqa: SLF001
+
+    assert len(expanded) == 3
+    unique_pairs = {
+        (item.matrix_slot_values.get("job"), item.matrix_slot_values.get("environment"))
+        for item in expanded
+    }
+    assert len(unique_pairs) == 3

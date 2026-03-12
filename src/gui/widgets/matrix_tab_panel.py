@@ -11,6 +11,8 @@ prompt expansion, with real-time preview of combinations.
 """
 
 import tkinter as tk
+import itertools
+import random
 from tkinter import ttk, messagebox
 from typing import Callable
 
@@ -325,7 +327,7 @@ class MatrixTabPanel(ttk.Frame):
 
         prompt_text = current_slot.text
 
-        # Build combinations using Cartesian product
+        # Build combinations using the configured matrix mode
         combinations = self._build_combinations(matrix_config)
 
         # Apply limit if configured
@@ -359,7 +361,7 @@ class MatrixTabPanel(ttk.Frame):
         self.preview_text.config(state="disabled")
 
     def _build_combinations(self, matrix_config: MatrixConfig) -> list[dict[str, str]]:
-        """Build Cartesian product of all slot values."""
+        """Build prompt combinations for the configured matrix mode."""
         if not matrix_config.slots:
             return []
 
@@ -368,9 +370,18 @@ class MatrixTabPanel(ttk.Frame):
         if not valid_slots:
             return []
 
-        # Build Cartesian product
-        combinations = []
         limit = matrix_config.limit if matrix_config.limit > 0 else 9999
+        slot_names = [slot.name for slot in valid_slots]
+        slot_values = [slot.values for slot in valid_slots]
+
+        if matrix_config.mode == "random":
+            all_combos = [dict(zip(slot_names, combo)) for combo in itertools.product(*slot_values)]
+            if not all_combos:
+                return []
+            random.shuffle(all_combos)
+            return all_combos[:limit]
+
+        combinations = []
 
         def backtrack(slot_index: int, current_combo: dict[str, str]) -> None:
             if len(combinations) >= limit:

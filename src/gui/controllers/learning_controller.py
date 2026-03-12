@@ -704,7 +704,7 @@ class LearningController:
         learning_ctx = LearningJobContext(
             experiment_id=experiment.name,
             experiment_name=experiment.name,
-            variant_index=0,  # Not used for single variant jobs
+            variant_index=max(0, self._get_variant_index(variant)),
             variable_under_test=experiment.variable_under_test,
             variant_value=variant.param_value,
         )

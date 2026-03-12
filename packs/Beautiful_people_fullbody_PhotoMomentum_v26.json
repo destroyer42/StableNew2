@@ -5,10 +5,11 @@
       {
         "index": 0,
         "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          "stable_yogis_realism_positives_v1",
+          "Stable_Yogis_Anatomy_Positives_V1"
         ],
         "negative_embeddings": [
           "negative_hands",
@@ -34,7 +35,7 @@
       {
         "index": 0,
         "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -71,7 +72,7 @@
       {
         "index": 2,
         "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes,  straps, shoulder straps, bra straps",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1",
@@ -102,7 +103,7 @@
       {
         "index": 2,
         "text": "(masterpiece, best quality, photorealistic) portrait, detailed skin, natural light, romantic atmosphere a blonde-haired perky-large-breasted athletic beautiful blue-eyed sun-kissed tan woman lies atop another gorgeous woman with opposite orientations, each one with their head aligned with the groin of the other, as  they slowly caress and kiss each other's vaginas, in a bedroom, wearing  nothing, legs spread, detailed shaved aroused wet vagina, incredible skin, slight perspiration, glistening, looking sultry",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes,  straps, shoulder straps, bra straps",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1",
@@ -167,7 +168,9 @@
           "values": [
             "crouched over another gorgeous woman in a 69 position",
             "licking the vagina of another woman who is lying down",
-            "is licking the vagina of another woman who is kneeling down"
+            "is licking the vagina of another woman who is kneeling down",
+            "fingering the butthole of another woman",
+            "sucking the pussy of another woman"
           ]
         },
         {

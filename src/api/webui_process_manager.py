@@ -399,6 +399,9 @@ class WebUIProcessManager:
         )
 
     def _stop_output_capture(self) -> None:
+        from src.utils.thread_registry import get_thread_registry
+
+        registry = get_thread_registry()
         for stream in (
             getattr(self._process, "stdout", None),
             getattr(self._process, "stderr", None),
@@ -410,9 +413,13 @@ class WebUIProcessManager:
                 pass
         # PR-SHUTDOWN-FIX: Increase timeout to 5s since stdout/stderr threads
         # may be blocked reading from pipes that take time to close
-        for thread in (self._stdout_thread, self._stderr_thread):
+        for attr_name in ("_stdout_thread", "_stderr_thread"):
+            thread = getattr(self, attr_name, None)
             if thread and thread.is_alive():
                 thread.join(timeout=5.0)
+            if thread is not None:
+                registry.unregister(thread)
+            setattr(self, attr_name, None)
         for handle in (self._stdout_log_file, self._stderr_log_file):
             try:
                 if handle is not None:
@@ -1047,9 +1054,15 @@ class WebUIProcessManager:
 
     def _stop_orphan_monitor(self) -> None:
         """Stop the orphan monitor thread."""
+        from src.utils.thread_registry import get_thread_registry
+
+        registry = get_thread_registry()
         self._orphan_monitor_stop.set()
         if self._orphan_monitor_thread and self._orphan_monitor_thread.is_alive():
             self._orphan_monitor_thread.join(timeout=2.0)
+        if self._orphan_monitor_thread is not None:
+            registry.unregister(self._orphan_monitor_thread)
+        self._orphan_monitor_thread = None
 
     def _orphan_monitor_loop(self) -> None:
         """
@@ -1486,9 +1499,15 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
 
     def _stop_orphan_monitor(self) -> None:
         """Stop the orphan monitor thread."""
+        from src.utils.thread_registry import get_thread_registry
+
+        registry = get_thread_registry()
         self._orphan_monitor_stop.set()
         if self._orphan_monitor_thread and self._orphan_monitor_thread.is_alive():
             self._orphan_monitor_thread.join(timeout=2.0)
+        if self._orphan_monitor_thread is not None:
+            registry.unregister(self._orphan_monitor_thread)
+        self._orphan_monitor_thread = None
 
     def _orphan_monitor_loop(self) -> None:
         """Monitor loop that checks if StableNew GUI is still running."""

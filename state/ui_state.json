@@ -1,15 +1,15 @@
 {
   "window": {
-    "geometry": "1984x1110+385+67",
+    "geometry": "2131x1360+403+843",
     "state": "normal"
   },
   "tabs": {
-    "selected_index": 0
+    "selected_index": 2
   },
   "learning": {
     "enabled": true,
     "automation_mode": "suggest_only",
-    "last_experiment_id": null
+    "last_experiment_id": "20260311_042334_my-experiment_f214ac09"
   },
   "schema_version": "2.6",
   "photo_optimize": {

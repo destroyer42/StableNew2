@@ -201,6 +201,16 @@ class TestLearningControllerNJR:
         assert record.input_image_paths == [str(input_image), str(input_image)]
         assert record.extra_metadata["learning_stage"] == "img2img"
 
+    def test_build_variant_njr_uses_plan_variant_index(self, controller, learning_state):
+        variant_a = LearningVariant(param_value=7.0, planned_images=1)
+        variant_b = LearningVariant(param_value=8.5, planned_images=1)
+        learning_state.plan.extend([variant_a, variant_b])
+
+        record = controller._build_variant_njr(variant_b, learning_state.current_experiment)
+
+        assert record.learning_context is not None
+        assert record.learning_context.variant_index == 1
+
     def test_submit_variant_job_uses_job_service(self, controller, learning_state, mock_pipeline_controller):
         """Test 3: Job submission via JobService, not PackJobEntry."""
         variant = LearningVariant(param_value=7.0, planned_images=1)

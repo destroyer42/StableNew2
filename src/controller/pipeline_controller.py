@@ -1258,13 +1258,17 @@ class PipelineController(_GUIPipelineController):
                 _logger.exception("on_queue_move_down_v2 failed", exc_info=True)
         return False
 
-    def on_queue_remove_job_v2(self, job_id: str) -> None:
+    def on_queue_remove_job_v2(self, job_id: str) -> bool:
         queue = getattr(self._job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
-                queue.remove(job_id)
+                removed = queue.remove(job_id)
+                if removed is not None and self._app_state:
+                    self._refresh_app_state_queue()
+                return removed is not None
             except Exception:
                 _logger.exception("on_queue_remove_job_v2 failed", exc_info=True)
+        return False
 
     def on_queue_clear_v2(self) -> None:
         queue = getattr(self._job_service, "job_queue", None)
@@ -1277,6 +1281,11 @@ class PipelineController(_GUIPipelineController):
     def on_set_auto_run_v2(self, enabled: bool) -> None:
         if self._app_state:
             self._app_state.set_auto_run_queue(bool(enabled))
+        if self._job_controller and hasattr(self._job_controller, "set_auto_run_enabled"):
+            try:
+                self._job_controller.set_auto_run_enabled(bool(enabled))
+            except Exception:
+                _logger.exception("Failed to sync auto-run to JobExecutionController", exc_info=True)
         self._sync_auto_run_setting(bool(enabled))
         if not enabled or not self._job_service:
             return
@@ -1296,6 +1305,11 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         self._job_service.pause()
+        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+            try:
+                self._job_controller.set_queue_paused(True)
+            except Exception:
+                _logger.exception("Failed to sync pause state to JobExecutionController", exc_info=True)
         if self._app_state:
             self._app_state.set_is_queue_paused(True)
 
@@ -1303,6 +1317,11 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         self._job_service.resume()
+        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+            try:
+                self._job_controller.set_queue_paused(False)
+            except Exception:
+                _logger.exception("Failed to sync pause state to JobExecutionController", exc_info=True)
         if self._app_state:
             self._app_state.set_is_queue_paused(False)
 
@@ -1812,6 +1831,14 @@ class PipelineController(_GUIPipelineController):
             except Exception:
                 pass
         return self._job_history_service
+
+    def get_job_execution_controller(self) -> JobExecutionController:
+        """Return the queue execution controller backing this pipeline controller."""
+        return self._job_controller
+
+    def get_job_service(self) -> JobService | None:
+        """Return the queue service used by pipeline-facing GUI actions."""
+        return self._job_service
 
     # -------------------------------------------------------------------------
     def get_diagnostics_snapshot(self) -> dict[str, Any]:

@@ -211,11 +211,12 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
     # Start bootstrap in background thread (PR-THREAD-001)
     from src.utils.thread_registry import get_thread_registry
     registry = get_thread_registry()
-    thread = registry.spawn(
+    registry.spawn(
         target=_bootstrap_worker,
         name="WebUI-Bootstrap",
-        daemon=False,
-        purpose="Async WebUI bootstrap during startup"
+        daemon=True,
+        purpose="Async WebUI bootstrap during startup",
+        suppress_daemon_warning=True,
     )
 
 

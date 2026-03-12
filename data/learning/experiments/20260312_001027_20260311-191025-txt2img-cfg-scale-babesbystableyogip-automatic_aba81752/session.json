@@ -1,0 +1,90 @@
+{
+  "automation_mode": "suggest_only",
+  "current_experiment": {
+    "baseline_config": {},
+    "description": "A txt2img comparison of CFG Scale using the prompt '(masterpiece, best quality) portrait...', with model 'babesByStableYogiPony_xlV4' and VAE 'automatic', conducted 11MAR2026@1910.",
+    "images_per_value": 2,
+    "input_image_path": "",
+    "metadata": {
+      "comparison_mode": false,
+      "end_value": 12.0,
+      "fixed_strength": 1.0,
+      "lora_mode": "strength",
+      "lora_name": null,
+      "selected_items": [],
+      "selected_loras": [],
+      "start_value": 3.0,
+      "step_value": 2.0,
+      "strength_end": 1.5,
+      "strength_start": 0.5,
+      "strength_step": 0.1
+    },
+    "name": "20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic",
+    "prompt_text": "",
+    "stage": "txt2img",
+    "values": [
+      3.0,
+      5.0,
+      7.0,
+      9.0,
+      11.0
+    ],
+    "variable_under_test": "CFG Scale"
+  },
+  "learning_enabled": true,
+  "plan": [
+    {
+      "completed_images": 1,
+      "experiment_id": "20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic",
+      "image_refs": [
+        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_191039_learning_20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic\\txt2img_p01_v01_78aa74f1_0311191039.png"
+      ],
+      "param_value": 3.0,
+      "planned_images": 2,
+      "status": "completed"
+    },
+    {
+      "completed_images": 1,
+      "experiment_id": "20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic",
+      "image_refs": [
+        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_191039_learning_20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic\\txt2img_p01_v01_78aa74f1_0311191100.png"
+      ],
+      "param_value": 5.0,
+      "planned_images": 2,
+      "status": "completed"
+    },
+    {
+      "completed_images": 1,
+      "experiment_id": "20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic",
+      "image_refs": [
+        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_191039_learning_20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic\\txt2img_p01_v01_78aa74f1_0311191121.png"
+      ],
+      "param_value": 7.0,
+      "planned_images": 2,
+      "status": "completed"
+    },
+    {
+      "completed_images": 1,
+      "experiment_id": "20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic",
+      "image_refs": [
+        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_191039_learning_20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic\\txt2img_p01_v01_78aa74f1_0311191142.png"
+      ],
+      "param_value": 9.0,
+      "planned_images": 2,
+      "status": "completed"
+    },
+    {
+      "completed_images": 1,
+      "experiment_id": "20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic",
+      "image_refs": [
+        "C:\\Users\\rob\\projects\\StableNew\\output\\20260311_191039_learning_20260311_191025_txt2img_CFG_Scale_babesByStableYogiP_automatic\\txt2img_p01_v01_78aa74f1_0311191157.png"
+      ],
+      "param_value": 11.0,
+      "planned_images": 2,
+      "status": "completed"
+    }
+  ],
+  "selected_image_index": 0,
+  "selected_variant_index": 0,
+  "workflow_state": "Workflow: Reviewing"
+}

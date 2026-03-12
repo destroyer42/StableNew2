@@ -36,7 +36,11 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from src.api.client import SDWebUIClient
 from src.api.webui_api import WebUIAPI
-from src.api.webui_process_manager import WebUIProcessManager, clear_global_webui_process_manager
+from src.api.webui_process_manager import (
+    WebUIProcessManager,
+    clear_global_webui_process_manager,
+    get_global_webui_process_manager,
+)
 from src.api.webui_resource_service import WebUIResourceService
 from src.api.webui_resources import WebUIResource
 from src.controller.webui_connection_controller import (
@@ -54,7 +58,7 @@ from src.pipeline.last_run_store_v2_5 import (
     update_current_config_from_last_run,
 )
 from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
-from src.pipeline.job_models_v2 import UnifiedJobSummary
+from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 
 if TYPE_CHECKING:  # pragma: no cover - type-only import
     from src.controller.archive.pipeline_config_types import PipelineConfig
@@ -78,13 +82,6 @@ from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.duration_stats_service import DurationStatsService
-from src.services.queue_store_v2 import (
-    QueueSnapshotV1,
-    SCHEMA_VERSION,
-    UnsupportedQueueSchemaError,
-    load_queue_snapshot,
-    save_queue_snapshot,
-)
 from src.utils import (
     InMemoryLogHandler,
     LogContext,
@@ -381,19 +378,7 @@ class AppController:
         if os.environ.get("PYTEST_CURRENT_TEST"):
             history_path = Path(tempfile.gettempdir()) / f"job_history_{os.getpid()}.json"
         self._job_history_path = history_path
-        if self.job_service is None:
-            self.job_service = self._build_job_service()
-        if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
-            self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
-        
-        # PR-PIPE-002: Initialize duration stats service for queue ETA
-        history_store = getattr(self.job_service, "history_store", None) if self.job_service else None
-        self._duration_stats_service = DurationStatsService(history_store=history_store)
-        if self._duration_stats_service:
-            try:
-                self._duration_stats_service.refresh()
-            except Exception as exc:
-                self._append_log(f"[duration_stats] Initial refresh failed: {exc}")
+        self._duration_stats_service = None
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
         self._diagnostics_lock = threading.Lock()
@@ -404,6 +389,7 @@ class AppController:
         self._original_tk_report_callback_exception: Callable[..., Any] | None = None
         self._shutdown_started_at: float | None = None
         self._shutdown_completed = False
+        self._shutdown_watchdog_thread: threading.Thread | None = None
         self.packs: list[PromptPackInfo] = []
         self._selected_pack_index: int | None = None
         # Initialize PipelineController for modern pipeline execution (bridge)
@@ -419,6 +405,29 @@ class AppController:
                 app_state=self.app_state,
                 app_controller=self,  # PR-HEARTBEAT-FIX: Pass self for heartbeat updates
             )
+
+        pipeline_job_service = None
+        get_job_service = getattr(self.pipeline_controller, "get_job_service", None)
+        if callable(get_job_service):
+            pipeline_job_service = get_job_service()
+        elif hasattr(self.pipeline_controller, "_job_service"):
+            pipeline_job_service = getattr(self.pipeline_controller, "_job_service", None)
+        if pipeline_job_service is not None:
+            self.job_service = pipeline_job_service
+        elif self.job_service is None:
+            self.job_service = self._build_job_service()
+
+        if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
+            self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
+
+        # PR-PIPE-002: Initialize duration stats service for queue ETA
+        history_store = getattr(self.job_service, "history_store", None) if self.job_service else None
+        self._duration_stats_service = DurationStatsService(history_store=history_store)
+        if self._duration_stats_service:
+            try:
+                self._duration_stats_service.refresh()
+            except Exception as exc:
+                self._append_log(f"[duration_stats] Initial refresh failed: {exc}")
         
         # PR-LEARN-012: Initialize LearningExecutionController (NEW implementation)
         from src.learning.execution_controller import LearningExecutionController
@@ -2207,150 +2216,27 @@ class AppController:
     # ------------------------------------------------------------------
 
     def _load_queue_state(self) -> None:
-        """Load persisted queue state on startup.
-
-        PR-QUEUE-PERSIST: Restores queue jobs from NJR snapshots and control flags from disk.
-        Jobs are restored via their NormalizedJobRecord snapshots, which are serializable.
-        """
-        try:
-            snapshot = load_queue_snapshot()
-        except UnsupportedQueueSchemaError as exc:
-            logger.warning(
-                "QUEUE_STATE_UNSUPPORTED | schema_version=%s | ignoring persisted queue state",
-                getattr(exc, "schema_version", None),
-            )
+        """Sync queue flags and queue view from JobExecutionController-owned state."""
+        pipeline_controller = getattr(self, "pipeline_controller", None)
+        job_exec = getattr(pipeline_controller, "_job_controller", None)
+        if job_exec is None:
             return
-        except Exception:
-            logger.exception("Failed to load queue state")
-            return
-        if snapshot is None:
-            return
-
-        # Restore auto_run and paused flags to AppState
         if self.app_state:
-            self.app_state.set_auto_run_queue(snapshot.auto_run_enabled)
-            self.app_state.set_is_queue_paused(snapshot.paused)
-
-        # PR-QUEUE-PERSIST: Also restore auto_run_enabled to job_service
-        if (
-            hasattr(self, "pipeline_controller")
-            and self.pipeline_controller
-            and hasattr(self.pipeline_controller, "job_service")
-            and self.pipeline_controller.job_service
-        ):
-            self.pipeline_controller.job_service.auto_run_enabled = snapshot.auto_run_enabled
-
-        # PR-QUEUE-PERSIST: Restore jobs from NJR snapshots
-        jobs_to_restore = []
-        for job_data in snapshot.jobs:
-            try:
-                # Extract NJR from snapshot
-                njr_data = job_data.get("njr_snapshot")
-                if not njr_data:
-                    logger.warning(f"Job {job_data.get('job_id', 'unknown')} missing NJR snapshot, skipping")
-                    continue
-                
-                # Deserialize NJR
-                from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
-                njr = normalized_job_from_snapshot(njr_data)
-                if njr is None:
-                    logger.warning(f"Failed to deserialize NJR for job {job_data.get('job_id', 'unknown')}")
-                    continue
-                
-                # Create Job wrapper with NJR attached
-                from src.queue.job_model import Job, JobPriority, JobStatus
-                from datetime import datetime
-                job = Job(
-                    job_id=job_data.get("job_id", str(uuid.uuid4())),
-                    priority=JobPriority(job_data.get("priority", 1)),
-                    status=JobStatus.QUEUED,
-                    created_at=datetime.fromisoformat(job_data["created_at"]) if "created_at" in job_data else datetime.utcnow(),
-                    config_snapshot=job_data.get("config_snapshot"),
-                    source=job_data.get("source", "restored"),
-                )
-                job._normalized_record = njr  # Attach NJR for execution
-                jobs_to_restore.append(job)
-                
-            except Exception as exc:
-                logger.warning(f"Failed to restore job from snapshot: {exc}", exc_info=True)
-                continue
-        
-        # Restore jobs to queue
-        if jobs_to_restore and self.job_service and self.job_service.job_queue:
-            try:
-                self.job_service.job_queue.restore_jobs(jobs_to_restore)
-                logger.info(f"Restored {len(jobs_to_restore)} jobs from persisted queue state")
-            except Exception as exc:
-                logger.error(f"Failed to restore jobs to queue: {exc}", exc_info=True)
-        
-        logger.debug(
-            f"Restored queue state: auto_run={snapshot.auto_run_enabled}, "
-            f"paused={snapshot.paused}, {len(jobs_to_restore)}/{len(snapshot.jobs)} jobs restored"
-        )
+            self.app_state.set_auto_run_queue(bool(getattr(job_exec, "auto_run_enabled", False)))
+            self.app_state.set_is_queue_paused(bool(getattr(job_exec, "is_queue_paused", False)))
+        if self.job_service:
+            self.job_service.auto_run_enabled = bool(getattr(job_exec, "auto_run_enabled", False))
+        self._refresh_app_state_queue()
 
     def _save_queue_state(self) -> None:
-        """Save current queue state for persistence.
-
-        PR-QUEUE-PERSIST: Persists queue jobs via their NJR snapshots plus control flags to disk.
-        Jobs with NormalizedJobRecord attached are fully serializable and restorable.
-        """
-        auto_run = getattr(self.app_state, "auto_run_queue", False) if self.app_state else False
-        paused = getattr(self.app_state, "is_queue_paused", False) if self.app_state else False
-
-        # PR-QUEUE-PERSIST: Extract and serialize jobs with NJR snapshots
-        jobs_data = []
-        if self.job_service and self.job_service.job_queue:
-            try:
-                queued_jobs = self.job_service.job_queue.list_jobs(status_filter=JobStatus.QUEUED)
-                for job in queued_jobs:
-                    try:
-                        # PR-PERSIST-FIX: Double-check job is still QUEUED (race condition protection)
-                        if job.status != JobStatus.QUEUED:
-                            logger.debug(f"Job {job.job_id} status changed to {job.status.value}, skipping")
-                            continue
-                        
-                        # Only persist jobs that have NJR attached
-                        njr = getattr(job, "_normalized_record", None)
-                        if njr is None:
-                            logger.debug(f"Job {job.job_id} missing NJR, skipping persistence")
-                            continue
-                        
-                        # Serialize NJR to dict
-                        from src.utils.snapshot_builder_v2 import _serialize_normalized_job
-                        njr_dict = _serialize_normalized_job(njr)
-                        
-                        job_data = {
-                            "queue_id": job.job_id,  # queue_store_v2 expects 'queue_id'
-                            "priority": int(job.priority),
-                            "status": job.status.value,
-                            "created_at": job.created_at.isoformat(),
-                            "njr_snapshot": {
-                                "normalized_job": njr_dict  # Wrap in normalized_job key
-                            },
-                            "queue_schema": SCHEMA_VERSION,  # Required by queue_store_v2
-                            "metadata": {
-                                "config_snapshot": job.config_snapshot,
-                                "source": job.source,
-                            },
-                        }
-                        jobs_data.append(job_data)
-                    except Exception as exc:
-                        logger.warning(f"Failed to serialize job {job.job_id}: {exc}")
-                        continue
-            except Exception as exc:
-                logger.error(f"Failed to extract jobs for persistence: {exc}")
-
-        snapshot = QueueSnapshotV1(
-            jobs=jobs_data,
-            auto_run_enabled=auto_run,
-            paused=paused,
-        )
-        try:
-            save_queue_snapshot(snapshot)
-            if jobs_data:
-                logger.debug(f"Persisted queue state: {len(jobs_data)} jobs saved")
-        except Exception as exc:
-            logger.error(f"Failed to save queue state: {exc}")
+        """Persist queue state through the JobExecutionController owner."""
+        pipeline_controller = getattr(self, "pipeline_controller", None)
+        job_exec = getattr(pipeline_controller, "_job_controller", None)
+        if job_exec is None:
+            return
+        persist = getattr(job_exec, "persist_queue_state", None)
+        if callable(persist):
+            persist()
 
     def _execute_job(self, job: Job) -> dict[str, Any]:
         """Execute a job via NJR only (PR-CORE1-D11 pack-only path)."""
@@ -2581,8 +2467,14 @@ class AppController:
                     logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
                     summaries.append(job.job_id)
             else:
-                logger.debug(f"Job {job.job_id} missing NJR, cannot display in GUI")
+                logger.debug(f"Job {job.job_id} missing NJR, using fallback queue summary")
                 summaries.append(job.job_id)
+                try:
+                    status_value = str(getattr(job, "status", "queued")).lower()
+                    status = JobStatusV2(status_value) if status_value in JobStatusV2._value2member_map_ else JobStatusV2.QUEUED
+                    queue_jobs.append(UnifiedJobSummary.from_job(job, status))
+                except Exception:
+                    pass
         self.app_state.set_queue_items(summaries)
         self.app_state.set_queue_jobs(queue_jobs)
 
@@ -2717,6 +2609,7 @@ class AppController:
                 result = queue.remove(job_id) is not None
                 if result:
                     self._refresh_app_state_queue()
+                    self._save_queue_state()
                 return result
             except Exception as exc:
                 self._append_log(f"[controller] on_queue_remove_job_v2 error: {exc!r}")
@@ -2742,6 +2635,9 @@ class AppController:
         """Pause queue processing."""
         if self.app_state:
             self.app_state.set_is_queue_paused(True)
+        job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
+        if job_exec and hasattr(job_exec, "set_queue_paused"):
+            job_exec.set_queue_paused(True)
         if self.job_service:
             queue = getattr(self.job_service, "job_queue", None)
             if queue and hasattr(queue, "pause"):
@@ -2752,6 +2648,9 @@ class AppController:
         """Resume queue processing."""
         if self.app_state:
             self.app_state.set_is_queue_paused(False)
+        job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
+        if job_exec and hasattr(job_exec, "set_queue_paused"):
+            job_exec.set_queue_paused(False)
         if self.job_service:
             queue = getattr(self.job_service, "job_queue", None)
             if queue and hasattr(queue, "resume"):
@@ -2762,6 +2661,9 @@ class AppController:
         """Set auto-run queue enabled/disabled."""
         if self.app_state:
             self.app_state.set_auto_run_queue(enabled)
+        job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
+        if job_exec and hasattr(job_exec, "set_auto_run_enabled"):
+            job_exec.set_auto_run_enabled(enabled)
         if self.job_service:
             self.job_service.auto_run_enabled = enabled
             # If enabling auto-run and queue has jobs, start the runner
@@ -3899,15 +3801,14 @@ class AppController:
         label = reason or "shutdown"
         logger.info("[controller] ===== SHUTDOWN_APP CALLED (%s) =====", label)
         
-        # PR-THREAD-001: Use tracked thread for shutdown watchdog
         if self._shutdown_started_at is None:
             self._shutdown_started_at = time.time()
-            self._spawn_tracked_thread(
+            self._shutdown_watchdog_thread = threading.Thread(
                 target=self._shutdown_watchdog,
                 name="ShutdownWatchdog",
-                daemon=False,
-                purpose="Monitor shutdown for hangs"
+                daemon=True,
             )
+            self._shutdown_watchdog_thread.start()
         
         try:
             logger.info("[controller] Step 1/8: Cancelling active jobs...")
@@ -4037,10 +3938,13 @@ class AppController:
                 break
 
     def _shutdown_webui(self) -> None:
-        manager = self.webui_process_manager
+        manager = self.webui_process_manager or get_global_webui_process_manager()
         if not manager:
             logger.info("[controller] _shutdown_webui: No WebUI manager to shutdown")
             return
+        if self.webui_process_manager is None:
+            self.webui_process_manager = manager
+            logger.info("[controller] _shutdown_webui: Using global WebUI manager fallback")
         stop_fn = (
             getattr(manager, "stop_webui", None)
             or getattr(manager, "shutdown", None)

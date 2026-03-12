@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import itertools
 import logging
+import random
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -153,14 +154,10 @@ class PromptPackNormalizedJobBuilder:
         
         # Generate combinations based on mode
         if matrix_mode == "random":
-            # Random mode: generate N random combinations (each slot independently randomized)
-            import random
             target_count = limit if limit > 0 else 10  # Default to 10 if no limit specified
-            combinations = []
-            for _ in range(target_count):
-                # Pick a random value from each slot independently
-                combo = tuple(random.choice(slot_values_lists[i]) for i in range(len(slot_names)))
-                combinations.append(combo)
+            combinations = list(itertools.product(*slot_values_lists))
+            random.shuffle(combinations)
+            combinations = combinations[:target_count]
             _logger.info(f"[Matrix Expansion] Generated {len(combinations)} random combinations for {entry.pack_id} with slots: {slot_names}")
         else:
             # Sequential mode: generate all Cartesian product combinations
