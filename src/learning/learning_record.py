@@ -59,6 +59,47 @@ class LearningRecord:
         return json.dumps(asdict(self), sort_keys=True)
 
     @staticmethod
+    def extract_rating_detail(metadata: dict[str, Any]) -> dict[str, Any]:
+        """Normalize rating-detail fields from both record shapes.
+
+        Handles two on-disk shapes:
+        - ``learning_experiment_rating``: subscores stored under ``rating_details``,
+          context flags under ``rating_context``.
+        - ``review_tab_feedback``: subscores stored directly under ``subscores``,
+          context flags under ``review_context``.
+        - Legacy flat-rating records: returns empty dicts.
+
+        Returns a dict with:
+          - ``subscores``: normalised {anatomy, composition, prompt_adherence} floats 1-5
+          - ``context_flags``: normalised context dict (may be empty)
+          - ``schema_version``: int from ``rating_schema_version``, 0 for old records
+        """
+        if not metadata:
+            return {"subscores": {}, "context_flags": {}, "schema_version": 0}
+
+        schema_version = int(metadata.get("rating_schema_version") or 0)
+
+        # Subscores: review_tab stores under 'subscores'; experiments under 'rating_details'
+        subscores_raw = metadata.get("subscores") or metadata.get("rating_details") or {}
+        subscores: dict[str, float] = {}
+        if isinstance(subscores_raw, dict):
+            for key in ("anatomy", "composition", "prompt_adherence"):
+                val = subscores_raw.get(key)
+                if val is not None:
+                    try:
+                        f = float(val)
+                        if 1.0 <= f <= 5.0:
+                            subscores[key] = f
+                    except (TypeError, ValueError):
+                        pass
+
+        # Context flags: experiments use 'rating_context'; review_tab uses 'review_context'
+        context_raw = metadata.get("rating_context") or metadata.get("review_context") or {}
+        context_flags = dict(context_raw) if isinstance(context_raw, dict) else {}
+
+        return {"subscores": subscores, "context_flags": context_flags, "schema_version": schema_version}
+
+    @staticmethod
     def from_json(text: str) -> LearningRecord:
         payload = json.loads(text)
         return LearningRecord(

@@ -1476,6 +1476,9 @@ class LearningController:
                 "rating_schema_version": 2,
                 "rating_context": context_flags,
                 "rating_details": subscores,
+                # PR-046: mirror subscores under the canonical key used by review_tab records
+                # so both record shapes normalize identically via extract_rating_detail()
+                "subscores": subscores,
                 "learning_context": {
                     "experiment_id": experiment.name,
                     "variant_id": target_variant.id
@@ -1867,27 +1870,35 @@ class LearningController:
     
     def apply_recommendations_to_pipeline(self, recommendations: Any) -> bool:
         """Apply recommendations to the pipeline stage cards.
-        
+
+        PR-044: Blocks automation when evidence tier is not experiment_strong.
+
         Returns True if successful, False otherwise.
         """
         if self._automation_mode == "suggest_only":
             return False
         if not self.pipeline_controller:
             return False
-        
+
+        # PR-044: Block automation for low-confidence / manual-only evidence tiers.
+        # Only experiment_strong evidence is eligible for auto-apply.
+        if hasattr(recommendations, "automation_eligible"):
+            if not recommendations.automation_eligible:
+                return False
+
         # Get stage cards panel
         stage_cards = getattr(self.pipeline_controller, "stage_cards_panel", None)
         if not stage_cards:
             # Try via app_state or other paths
             stage_cards = self._find_stage_cards_panel()
-        
+
         if not stage_cards:
             return False
-        
+
         # Extract recommendations
         rec_list = self._extract_rec_list(recommendations)
         self._automation_snapshot = {}
-        
+
         applied = 0
         for rec in rec_list:
             if hasattr(rec, "parameter_name"):

@@ -86,7 +86,7 @@ Archived agent or SOP files under `docs/archive/` are reference-only.
 
 3.3 Coding And PR Workflow
 
-- `docs/StableNew_Coding_and_Testing_v2.6.md`
+- `docs/StableNew_Coding_and_Testing_v2.6.md` — includes §8 Runtime Artifact Policy (PR-CLEANUP-LEARN-045): `data/learning/experiments/`, `data/photo_optimize/assets/`, `state/` are gitignored runtime artifacts; `tests/fixtures/` is for committed static fixtures only
 - `docs/PR_TEMPLATE_v2.6.md`
 - `AGENTS.md`
 - `.github/copilot-instructions.md`

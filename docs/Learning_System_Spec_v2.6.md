@@ -99,6 +99,48 @@ The Learning subsystem must store stable internal values, not raw UI display lab
 
 LoRA experiments must be derived from runtime prompt and baseline state, not only ad hoc GUI state.
 
+---
+
+## 5. Rating Detail Analytics (PR-CORE-LEARN-046)
+
+### 5.1 Overview
+
+The recommendation engine consumes richer rating detail when present, while preserving full backward compatibility with older flat-rating records.
+
+### 5.2 Record Shapes
+
+Two on-disk shapes are supported:
+
+| Field | `learning_experiment_rating` | `review_tab_feedback` |
+|---|---|---|
+| Subscores stored under | `subscores` and `rating_details` | `subscores` |
+| Context flags under | `rating_context` | `review_context` |
+| Schema version | `rating_schema_version: 2` | absent (0) |
+
+The canonical normalization entry-point is `LearningRecord.extract_rating_detail(metadata)`, which returns `{subscores, context_flags, schema_version}` for any record shape.
+
+### 5.3 Weighting Rules
+
+Context-aware weight adjustments are applied by `RecommendationEngine._apply_rating_detail_adjustment()`.
+
+All adjustments are **deterministic, bounded (±0.15 total), and additive on top of the base contextual weight**. The aggregate `user_rating` remains the primary signal.
+
+| Rule | Condition | Adjustment |
+|---|---|---|
+| Subscore quality | avg subscore vs 3.0 | `(avg − 3.0) × 0.025` → at most ±0.05 |
+| Context mismatch | query has people, record does not, anatomy < 3.0 | −0.10 |
+
+A minimum floor of `0.05` is always applied so no record's weight reaches zero.
+
+### 5.4 People Detection
+
+`RecommendationEngine._build_query_context()` infers `has_people` from the query prompt text using a keyword list (`_PEOPLE_KEYWORDS`). This value is propagated as a string (`"True"`/`"False"`) in the query context dict.
+
+### 5.5 Backward Compatibility
+
+Records without any subscore or context detail receive zero adjustment (the helper returns empty dicts and the adjustment function is a no-op when `subscores` is empty). Older records continue to contribute exactly as before PR-046.
+
+
 Supported patterns:
 
 - one LoRA across multiple strengths

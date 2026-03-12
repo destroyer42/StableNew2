@@ -423,6 +423,20 @@ class LearningReviewPanel(ttk.Frame):
         
         lines.append("Recommended Settings\n")
         lines.append("-" * 30 + "\n\n")
+
+        # PR-044: surface evidence tier and automation eligibility
+        evidence_tier = getattr(recommendations, "evidence_tier", None)
+        automation_eligible = getattr(recommendations, "automation_eligible", True)
+        if evidence_tier and evidence_tier != "experiment_strong":
+            tier_labels = {
+                "experiment_sparse_plus_review": "Evidence: sparse experiment + review (manual-only)",
+                "review_only": "Evidence: review feedback only (manual-only)",
+                "no_evidence": "Evidence: none",
+            }
+            tier_label = tier_labels.get(evidence_tier, f"Evidence tier: {evidence_tier}")
+            lines.append(f"[{tier_label}]\n\n")
+        elif evidence_tier == "experiment_strong":
+            lines.append("[Evidence: experiment (auto-eligible)]\n\n")
         
         for rec in rec_list[:5]:
             # Handle both dataclass and dict formats
@@ -465,9 +479,10 @@ class LearningReviewPanel(ttk.Frame):
         
         self.recommendations_text.insert(tk.END, "".join(lines))
         self.recommendations_text.config(state="disabled")
-        
-        # Enable/disable apply button based on recommendations
-        if rec_list:
+
+        # PR-044: Enable apply button only when automation_eligible; always show recs
+        automation_eligible = getattr(recommendations, "automation_eligible", True)
+        if rec_list and automation_eligible:
             self.apply_button.config(state="normal")
         else:
             self.apply_button.config(state="disabled")

@@ -13,6 +13,8 @@ def _write_records(path: Path, records: list[dict]) -> None:
 
 
 def test_recommendation_engine_requires_sufficient_learning_records(tmp_path: Path) -> None:
+    """PR-044: With 1 experiment record + review feedback, recommendations are returned
+    but flagged as manual-only (not experiment_strong)."""
     path = tmp_path / "records.jsonl"
     _write_records(
         path,
@@ -41,7 +43,12 @@ def test_recommendation_engine_requires_sufficient_learning_records(tmp_path: Pa
     engine = RecommendationEngine(path)
     result = engine.recommend("portrait", "txt2img")
 
-    assert result.recommendations == []
+    # PR-044 fix: sparse experiment + review evidence MUST return recommendations,
+    # but with automation_eligible=False (not experiment_strong tier).
+    assert result.evidence_tier == "experiment_sparse_plus_review"
+    assert result.automation_eligible is False
+    # Recommendations should be present (not empty) because usable evidence exists
+    assert result.recommendations, "Expected recommendations from sparse+review evidence"
 
 
 def test_recommendation_engine_ignores_review_tab_feedback_for_learning_recommendations(tmp_path: Path) -> None:

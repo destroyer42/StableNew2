@@ -21,6 +21,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# PR-046: keywords used to infer people-presence from a prompt text
+_PEOPLE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "woman", "man", "girl", "boy", "person", "people", "portrait",
+        "face", "couple", "model", "male", "female", "lady", "gentleman",
+        "child", "teen", "adult",
+    }
+)
+
 
 @dataclass
 class ParameterRecommendation:
@@ -49,6 +58,13 @@ class ParameterRecommendation:
         }
 
 
+# Evidence tier constants (PR-044)
+EVIDENCE_TIER_EXPERIMENT_STRONG = "experiment_strong"
+EVIDENCE_TIER_SPARSE_PLUS_REVIEW = "experiment_sparse_plus_review"
+EVIDENCE_TIER_REVIEW_ONLY = "review_only"
+EVIDENCE_TIER_NO_EVIDENCE = "no_evidence"
+
+
 @dataclass
 class RecommendationSet:
     """Complete set of recommendations for a prompt/stage combination."""
@@ -57,6 +73,9 @@ class RecommendationSet:
     stage: str
     timestamp: float
     recommendations: list[ParameterRecommendation] = field(default_factory=list)
+    # PR-044: evidence provenance
+    evidence_tier: str = EVIDENCE_TIER_NO_EVIDENCE
+    automation_eligible: bool = False
 
     def get_best_for_parameter(self, param_name: str) -> ParameterRecommendation | None:
         """Get the best recommendation for a specific parameter."""
@@ -124,12 +143,20 @@ class RecommendationEngine:
         return "large"
 
     def _build_query_context(self, prompt_text: str, stage: str) -> dict[str, str]:
+        # PR-046: detect people presence for context-aware subscore weighting
+        lower_tokens = {
+            t.strip().lower()
+            for t in str(prompt_text or "").replace(",", " ").split()
+            if t.strip()
+        }
+        has_people = bool(lower_tokens & _PEOPLE_KEYWORDS)
         return {
             "stage": str(stage or "txt2img"),
             "style_bucket": "default",
             "prompt_similarity_bucket": "high",
             "resolution_bucket": "unknown",
             "model": "",
+            "has_people": str(has_people),
         }
 
     def _load_records(self) -> list[dict[str, Any]]:
@@ -229,6 +256,8 @@ class RecommendationEngine:
                     base_config.get("width"),
                     base_config.get("height"),
                 ),
+                # PR-046: normalized rating detail for context-aware weighting
+                **self._normalize_metadata_detail(metadata),
             }
             scored_records.append(scored_record)
 
@@ -271,7 +300,94 @@ class RecommendationEngine:
             weight -= 0.2
         rationale_bits.append(f"prompt-{prompt_bucket}")
 
+        # PR-046: conservative rating-detail adjustment (bounded ±0.15)
+        query_has_people = str(query_context.get("has_people", "")).lower() == "true"
+        weight, detail_tag = self._apply_rating_detail_adjustment(weight, record, query_has_people)
+        if detail_tag:
+            rationale_bits.append(detail_tag)
+
         return max(0.05, weight), ",".join(rationale_bits)
+
+    @staticmethod
+    def _normalize_metadata_detail(metadata: dict[str, Any]) -> dict[str, Any]:
+        """Inline metadata normalization for scored records (PR-046).
+
+        Returns {'subscores': {...}, 'context_flags': {...}} using the same
+        logic as ``LearningRecord.extract_rating_detail`` but without the import.
+        """
+        subscores_raw = metadata.get("subscores") or metadata.get("rating_details") or {}
+        subscores: dict[str, float] = {}
+        if isinstance(subscores_raw, dict):
+            for key in ("anatomy", "composition", "prompt_adherence"):
+                val = subscores_raw.get(key)
+                if val is not None:
+                    try:
+                        f = float(val)
+                        if 1.0 <= f <= 5.0:
+                            subscores[key] = f
+                    except (TypeError, ValueError):
+                        pass
+        context_raw = metadata.get("rating_context") or metadata.get("review_context") or {}
+        context_flags = dict(context_raw) if isinstance(context_raw, dict) else {}
+        return {"subscores": subscores, "context_flags": context_flags}
+
+    @staticmethod
+    def _apply_rating_detail_adjustment(
+        weight: float,
+        scored_record: dict[str, Any],
+        query_has_people: bool,
+    ) -> tuple[float, str]:
+        """Apply conservative bounded (±0.15) weight adjustment from rating detail.
+
+        Two adjustments applied when detail is present:
+        1. Subscore quality: avg subscore vs baseline 3.0 → ±0.05 max.
+        2. Context-mismatch penalty: -0.10 when record has no people but query
+           requires people AND anatomy subscore is poor (< 3.0).
+
+        Returns (adjusted_weight, rationale_tag). ``rationale_tag`` is empty
+        when no adjustment is made.
+        """
+        subscores = scored_record.get("subscores") or {}
+        context_flags = scored_record.get("context_flags") or {}
+
+        if not subscores:
+            return weight, ""
+
+        # 1. Subscore quality adjustment — maps avg [1,5] → [-0.05, +0.05]
+        valid: list[float] = []
+        for val in subscores.values():
+            try:
+                f = float(val)
+                if 1.0 <= f <= 5.0:
+                    valid.append(f)
+            except (TypeError, ValueError):
+                pass
+
+        adjustment = 0.0
+        tag_parts: list[str] = []
+        if valid:
+            avg_sub = sum(valid) / len(valid)
+            quality_adj = (avg_sub - 3.0) * 0.025
+            adjustment += quality_adj
+            if quality_adj != 0.0:
+                tag_parts.append(f"subscore-adj:{quality_adj:+.3f}")
+
+        # 2. Context-mismatch penalty
+        record_has_people = context_flags.get("has_people")
+        if record_has_people is not None:
+            record_has_people_bool = bool(record_has_people)
+            if query_has_people and not record_has_people_bool:
+                anatomy_score = subscores.get("anatomy")
+                if anatomy_score is not None:
+                    try:
+                        if float(anatomy_score) < 3.0:
+                            adjustment -= 0.10
+                            tag_parts.append("ctx-mismatch:-0.10")
+                    except (TypeError, ValueError):
+                        pass
+
+        new_weight = max(0.05, weight + adjustment)
+        return new_weight, ",".join(tag_parts)
 
     def _compute_optimal_settings(
         self,
@@ -434,12 +550,24 @@ class RecommendationEngine:
         review_records = [
             record for record in relevant_records if str(record.get("record_kind", "")) == "review_tab_feedback"
         ]
+        # PR-044: deterministic evidence-tier policy — never suppress usable evidence
         if len(experiment_records) >= 3:
             evidence_records = experiment_records
+            evidence_tier = EVIDENCE_TIER_EXPERIMENT_STRONG
+            automation_eligible = True
         elif experiment_records:
-            evidence_records = []
-        else:
+            # Sparse experiment data: merge with any review feedback; flag manual-only
+            evidence_records = experiment_records + review_records
+            evidence_tier = EVIDENCE_TIER_SPARSE_PLUS_REVIEW
+            automation_eligible = False
+        elif review_records:
             evidence_records = review_records
+            evidence_tier = EVIDENCE_TIER_REVIEW_ONLY
+            automation_eligible = False
+        else:
+            evidence_records = []
+            evidence_tier = EVIDENCE_TIER_NO_EVIDENCE
+            automation_eligible = False
 
         if not evidence_records:
             return RecommendationSet(
@@ -447,16 +575,20 @@ class RecommendationEngine:
                 stage=stage,
                 timestamp=time.time(),
                 recommendations=[],
+                evidence_tier=EVIDENCE_TIER_NO_EVIDENCE,
+                automation_eligible=False,
             )
 
         optimal_settings = self._compute_optimal_settings(evidence_records, query_context, prompt_text)
 
-        # Create recommendation set
+        # Create recommendation set with PR-044 tier provenance
         rec_set = RecommendationSet(
             prompt_text=prompt_text,
             stage=stage,
             timestamp=time.time(),
             recommendations=list(optimal_settings.values()),
+            evidence_tier=evidence_tier,
+            automation_eligible=automation_eligible,
         )
 
         # Sort by confidence score (highest first)
