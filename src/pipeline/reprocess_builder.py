@@ -34,7 +34,7 @@ class ReprocessJobBuilder:
     """
     
     # Valid stages for reprocessing (stages that can accept input images)
-    VALID_REPROCESS_STAGES = {"img2img", "adetailer", "upscale"}
+    VALID_REPROCESS_STAGES = {"img2img", "adetailer", "upscale", "animatediff"}
     DEFAULT_STAGE_VALUES: dict[str, dict[str, Any]] = {
         "img2img": {
             "steps": 15,
@@ -52,6 +52,12 @@ class ReprocessJobBuilder:
             "steps": 20,
             "cfg_scale": 7.0,
             "denoising_strength": 0.35,
+            "sampler_name": "Euler a",
+        },
+        "animatediff": {
+            "steps": 16,
+            "cfg_scale": 7.0,
+            "denoising_strength": 0.3,
             "sampler_name": "Euler a",
         },
     }
@@ -73,7 +79,7 @@ class ReprocessJobBuilder:
     def build_reprocess_job(
         self,
         input_image_paths: list[str | Path],
-        stages: list[Literal["img2img", "adetailer", "upscale"]],
+        stages: list[Literal["img2img", "adetailer", "upscale", "animatediff"]],
         config: dict[str, Any] | None = None,
         output_dir: str = "output",
         prompt: str = "",
@@ -304,7 +310,7 @@ class ReprocessJobBuilder:
     def build_reprocess_jobs_batched(
         self,
         input_image_paths: list[str | Path],
-        stages: list[Literal["img2img", "adetailer", "upscale"]],
+        stages: list[Literal["img2img", "adetailer", "upscale", "animatediff"]],
         batch_size: int = 10,
         **kwargs,
     ) -> list[NormalizedJobRecord]:

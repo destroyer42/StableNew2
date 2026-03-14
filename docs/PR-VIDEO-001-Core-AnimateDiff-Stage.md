@@ -1,5 +1,13 @@
 # PR-VIDEO-001: Core AnimateDiff Stage Implementation
 
+> Stale draft. Do not execute this PR spec directly.
+>
+> It predates the current-state discovery in
+> [`docs/D-VIDEO-004-AnimateDiff-Current-State-Discovery.md`](./D-VIDEO-004-AnimateDiff-Current-State-Discovery.md)
+> and is superseded for Phase 1 planning by
+> [`docs/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md`](./OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md).
+> Retained only as historical planning context.
+
 **Related Discovery**: D-VIDEO-001  
 **Architecture Version**: v2.6  
 **PR Date**: 2026-01-11  

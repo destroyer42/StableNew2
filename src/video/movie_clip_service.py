@@ -73,7 +73,7 @@ class MovieClipService:
             return ClipResult.failure(reason)
 
         if not self._creator.ffmpeg_available:
-            return ClipResult.failure("FFmpeg is not available on PATH")
+            return ClipResult.failure("FFmpeg is not available or could not be resolved")
 
         # 2. Normalise ordering
         ordered_images = _normalize_image_order(request.image_paths)

@@ -1,5 +1,11 @@
 # D-VIDEO-001 — AnimateDiff Integration Discovery
 
+> Superseded for current implementation planning by
+> [`docs/D-VIDEO-004-AnimateDiff-Current-State-Discovery.md`](./D-VIDEO-004-AnimateDiff-Current-State-Discovery.md).
+> This document remains useful as historical context, but its implementation
+> assumptions and API examples should not be executed as-is against the current
+> codebase.
+
 **Status:** Discovery  
 **Version:** v2.6  
 **Date:** 2026-01-11  

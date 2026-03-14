@@ -593,6 +593,69 @@ class PipelineRunner:
                     current_stage_paths = next_stage_paths
                     logger.info(f"🔵 [BATCH_PIPELINE] upscale completed {len(current_stage_paths)} images")
                     
+                elif stage.stage_name == "animatediff":
+                    if not current_stage_paths:
+                        logger.warning("animatediff stage skipped: no input images from previous stage")
+                        continue
+
+                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "animatediff"), None)
+                    if stage_config:
+                        config_dict = asdict(stage_config)
+                        if "extra" in config_dict:
+                            config_dict.update(config_dict.pop("extra"))
+                    else:
+                        config_dict = {}
+                    config_dict["enabled"] = True
+                    if njr.scheduler:
+                        config_dict["scheduler"] = njr.scheduler
+
+                    next_stage_paths = []
+                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+
+                    from src.utils.file_io import build_safe_image_name
+                    from pathlib import Path as PathLib
+
+                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
+                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
+                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
+                    original_inputs = getattr(njr, 'input_image_paths', None)
+                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
+
+                    for img_idx, input_path in enumerate(current_stage_paths):
+                        if use_original_name and img_idx < len(original_inputs):
+                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]
+                            unique_prefix = f"{base_prefix}_{input_stem}"
+                        else:
+                            unique_prefix = base_prefix
+                        image_name = build_safe_image_name(
+                            base_prefix=unique_prefix,
+                            matrix_values=matrix_values,
+                            seed=None,
+                            batch_index=img_idx,
+                            pack_name=pack_name,
+                            max_length=100,
+                        )
+                        result = self._pipeline.run_animatediff_stage(
+                            input_image_path=Path(input_path),
+                            prompt=prompt,
+                            negative_prompt=negative_prompt,
+                            config=config_dict,
+                            output_dir=run_dir,
+                            image_name=image_name,
+                            cancel_token=cancel_token,
+                        )
+                        if result and "video_path" in result:
+                            next_stage_paths.append(result["video_path"])
+                        variants.append(result)
+
+                    current_stage_paths = next_stage_paths
+                    if next_stage_paths:
+                        metadata["animatediff_artifact"] = {
+                            "video_paths": list(next_stage_paths),
+                            "count": len(next_stage_paths),
+                        }
+                    logger.info(f"ðŸ”µ [BATCH_PIPELINE] animatediff completed {len(current_stage_paths)} clip(s)")
+
                 else:
                     logger.warning(f"Unknown stage type: {stage.stage_name}, skipping")
                     continue
@@ -611,8 +674,8 @@ class PipelineRunner:
                 # Increment stage index for next iteration
                 self._pipeline._current_stage_index += 1
                 
-            # Success only if we have at least one successful variant
-            success = len(variants) > 0 and any(v for v in variants if v is not None)
+            # A pipeline only succeeds if the final enabled stage produced durable outputs.
+            success = bool(current_stage_paths)
             if not success and error is None:
                 error = "No images were generated successfully"
         except Exception as exc:
@@ -766,11 +829,12 @@ class PipelineRunner:
         ):
             raise CancellationError(f"Cancelled during {context}")
 
-    def _is_generative_stage_type(self, stage_type: str) -> bool:
+    def _is_image_producing_stage_type(self, stage_type: str) -> bool:
         return stage_type in {
             StageTypeEnum.TXT2IMG.value,
             StageTypeEnum.IMG2IMG.value,
             StageTypeEnum.UPSCALE.value,
+            StageTypeEnum.ADETAILER.value,
         }
 
     def _validate_stage_plan(self, plan: StageExecutionPlan) -> None:
@@ -780,14 +844,29 @@ class PipelineRunner:
         adetailers = [
             stage for stage in stages if stage.stage_type == StageTypeEnum.ADETAILER.value
         ]
+        animatediffs = [
+            stage for stage in stages if stage.stage_type == StageTypeEnum.ANIMATEDIFF.value
+        ]
         if len(adetailers) > 1:
             raise ValueError("Multiple ADetailer stages are not supported.")
-        if adetailers and stages[-1].stage_type != StageTypeEnum.ADETAILER.value:
-            raise ValueError("ADetailer stage must be the final stage.")
+        if len(animatediffs) > 1:
+            raise ValueError("Multiple AnimateDiff stages are not supported.")
+        if animatediffs and stages[-1].stage_type != StageTypeEnum.ANIMATEDIFF.value:
+            raise ValueError("AnimateDiff stage must be the final stage.")
+        if adetailers and stages[-1].stage_type != StageTypeEnum.ADETAILER.value and not animatediffs:
+            raise ValueError("ADetailer stage must be the final still-image stage.")
         if adetailers and not any(
-            self._is_generative_stage_type(stage.stage_type) for stage in stages
+            self._is_image_producing_stage_type(stage.stage_type)
+            for stage in stages
+            if stage.stage_type != StageTypeEnum.ADETAILER.value
         ):
             raise ValueError("ADetailer stage requires a preceding generation stage.")
+        if animatediffs and not any(
+            self._is_image_producing_stage_type(stage.stage_type)
+            for stage in stages
+            if stage.stage_type != StageTypeEnum.ANIMATEDIFF.value
+        ):
+            raise ValueError("AnimateDiff stage requires a preceding image-producing stage.")
 
     def set_learning_enabled(self, enabled: bool) -> None:
         """Toggle passive learning record emission."""
@@ -1174,7 +1253,21 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
             
     if isinstance(value, Mapping):
         try:
-            return PipelineRunResult.from_dict(dict(value), default_run_id=default_run_id).to_dict()
+            mapping = dict(value)
+            if "success" not in mapping:
+                return {
+                    "run_id": str(mapping.get("run_id") or default_run_id or ""),
+                    "success": None,
+                    "error": mapping.get("error"),
+                    "variants": [dict(variant) for variant in mapping.get("variants") or []],
+                    "learning_records": [dict(record) for record in mapping.get("learning_records") or []],
+                    "randomizer_mode": str(mapping.get("randomizer_mode") or ""),
+                    "randomizer_plan_size": int(mapping.get("randomizer_plan_size") or 0),
+                    "metadata": dict(mapping.get("metadata") or {}),
+                    "stage_plan": mapping.get("stage_plan"),
+                    "stage_events": [dict(event) for event in mapping.get("stage_events") or []],
+                }
+            return PipelineRunResult.from_dict(mapping, default_run_id=default_run_id).to_dict()
         except Exception as e:
             logger.error(f"Failed to normalize Mapping to PipelineRunResult: {e}")
             

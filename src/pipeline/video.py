@@ -1,17 +1,104 @@
-"""Video creation utilities using FFmpeg"""
+"""Video creation utilities using FFmpeg."""
 
 import logging
+import os
+import shutil
 import subprocess
 from pathlib import Path
+
+from src.utils import save_image_from_base64
 
 logger = logging.getLogger(__name__)
 
 
+def _candidate_ffmpeg_paths() -> list[Path]:
+    """Return likely FFmpeg executable candidates in preferred order."""
+    candidates: list[Path] = []
+    env_override = os.environ.get("STABLENEW_FFMPEG_PATH", "").strip()
+    if env_override:
+        candidates.append(Path(env_override).expanduser())
+
+    which_path = shutil.which("ffmpeg")
+    if which_path:
+        candidates.append(Path(which_path))
+
+    if os.name == "nt":
+        local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
+        if local_appdata:
+            candidates.append(Path(local_appdata) / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe")
+            candidates.extend(
+                sorted(
+                    (
+                        Path(local_appdata)
+                        / "Microsoft"
+                        / "WinGet"
+                        / "Packages"
+                    ).glob("*FFmpeg*\\**\\bin\\ffmpeg.exe")
+                )
+            )
+
+        candidates.extend(
+            [
+                Path.home() / "scoop" / "shims" / "ffmpeg.exe",
+                Path("C:/ffmpeg/bin/ffmpeg.exe"),
+                Path("C:/tools/ffmpeg/bin/ffmpeg.exe"),
+                Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
+                Path("C:/Program Files (x86)/ffmpeg/bin/ffmpeg.exe"),
+            ]
+        )
+
+    return candidates
+
+
+def resolve_ffmpeg_executable() -> Path | None:
+    """Resolve the FFmpeg executable path."""
+    seen: set[str] = set()
+    for candidate in _candidate_ffmpeg_paths():
+        normalized = str(candidate).lower() if os.name == "nt" else str(candidate)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
+
+
+def _write_concat_input_file(image_paths: list[Path], list_file: Path, frame_duration: float) -> None:
+    """Write an FFmpeg concat-demuxer input file for still images."""
+    with list_file.open("w", encoding="utf-8") as f:
+        for img_path in image_paths:
+            escaped = str(img_path.absolute()).replace("'", r"'\''")
+            f.write(f"file '{escaped}'\n")
+            f.write(f"duration {frame_duration}\n")
+        if image_paths:
+            escaped = str(image_paths[-1].absolute()).replace("'", r"'\''")
+            f.write(f"file '{escaped}'\n")
+
+
+def write_video_frames(
+    frame_images: list[str],
+    frames_dir: Path,
+    *,
+    frame_prefix: str = "frame",
+) -> list[Path]:
+    """Persist base64 video frames to disk with deterministic sequential names."""
+
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths: list[Path] = []
+    for index, frame_image in enumerate(frame_images):
+        frame_path = frames_dir / f"{frame_prefix}_{index:06d}.png"
+        actual_path = save_image_from_base64(frame_image, frame_path)
+        if actual_path:
+            saved_paths.append(actual_path)
+    return saved_paths
+
+
 class VideoCreator:
-    """Create videos from image sequences using FFmpeg"""
+    """Create videos from image sequences using FFmpeg."""
 
     def __init__(self):
-        """Initialize video creator"""
+        """Initialize video creator."""
+        self.ffmpeg_executable = resolve_ffmpeg_executable()
         self.ffmpeg_available = self._check_ffmpeg()
 
     def _check_ffmpeg(self) -> bool:
@@ -21,15 +108,25 @@ class VideoCreator:
         Returns:
             True if FFmpeg is available
         """
+        if not self.ffmpeg_executable:
+            logger.warning(
+                "FFmpeg executable could not be resolved; checked PATH, "
+                "STABLENEW_FFMPEG_PATH, and common Windows install locations"
+            )
+            return False
+
         try:
             result = subprocess.run(
-                ["ffmpeg", "-version"], capture_output=True, text=True, timeout=5
+                [str(self.ffmpeg_executable), "-version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
-                logger.info("FFmpeg is available")
+                logger.info("FFmpeg is available: %s", self.ffmpeg_executable)
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            logger.warning("FFmpeg not found or not responding")
+            logger.warning("FFmpeg not found or not responding: %s", self.ffmpeg_executable)
 
         return False
 
@@ -80,40 +177,44 @@ class VideoCreator:
                 temp_name = f"frame_{i:06d}{img_path.suffix}"
                 temp_path = temp_dir / temp_name
 
-                # Create symlink or copy
+                # Prefer symlinks for speed, but fall back to a real copy on
+                # Windows installs that do not have symlink privileges.
                 try:
-                    if hasattr(temp_path, "symlink_to"):
-                        temp_path.symlink_to(img_path.absolute())
-                    else:
-                        import shutil
-
+                    temp_path.symlink_to(img_path.absolute())
+                except Exception:
+                    try:
                         shutil.copy2(img_path, temp_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to link/copy {img_path.name}: {e}")
+                        continue
                     temp_images.append(temp_path)
-                except Exception as e:
-                    logger.warning(f"Failed to link/copy {img_path.name}: {e}")
+                    continue
+                temp_images.append(temp_path)
 
             if not temp_images:
                 logger.error("No valid images for video creation")
                 return False
 
-            # Build FFmpeg command
-            input_pattern = str(temp_dir / "frame_%06d*")
+            list_file = output_path.parent / "ffmpeg_input.txt"
+            _write_concat_input_file(temp_images, list_file, 1 / max(1, fps))
 
             cmd = [
-                "ffmpeg",
+                str(self.ffmpeg_executable),
+                "-f",
+                "concat",
+                "-safe",
+                "0",
                 "-y",  # Overwrite output
-                "-framerate",
-                str(fps),
-                "-pattern_type",
-                "glob",
                 "-i",
-                input_pattern,
+                str(list_file),
                 "-c:v",
                 codec,
                 "-preset",
                 quality,
                 "-pix_fmt",
                 "yuv420p",  # Compatibility
+                "-r",
+                str(fps),
                 str(output_path),
             ]
 
@@ -130,8 +231,7 @@ class VideoCreator:
 
             # Cleanup temp directory
             try:
-                import shutil
-
+                list_file.unlink(missing_ok=True)
                 shutil.rmtree(temp_dir)
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp directory: {e}")
@@ -187,18 +287,12 @@ class VideoCreator:
         try:
             # Create a temporary file list for FFmpeg
             list_file = output_path.parent / "ffmpeg_input.txt"
-            with open(list_file, "w", encoding="utf-8") as f:
-                for img_path in image_paths:
-                    # FFmpeg concat demuxer format
-                    f.write(f"file '{img_path.absolute()}'\n")
-                    f.write(f"duration {1 / fps}\n")
-                # Add last image again for proper duration
-                if image_paths:
-                    f.write(f"file '{image_paths[-1].absolute()}'\n")
+            per_image_duration = max(duration_per_image, 1 / max(1, fps))
+            _write_concat_input_file(image_paths, list_file, per_image_duration)
 
             # Build FFmpeg command
             cmd = [
-                "ffmpeg",
+                str(self.ffmpeg_executable),
                 "-f",
                 "concat",
                 "-safe",
@@ -211,6 +305,8 @@ class VideoCreator:
                 quality,
                 "-pix_fmt",
                 "yuv420p",
+                "-r",
+                str(fps),
                 "-y",  # Overwrite output file
                 str(output_path),
             ]

@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -29,6 +29,9 @@ from src.utils.retry_policy_v2 import (
 )
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from src.pipeline.animatediff_models import AnimateDiffCapability
 
 
 @dataclass
@@ -1397,6 +1400,41 @@ class SDWebUIClient:
         logger.debug("Retrieved %s schedulers", len(schedulers))
         return schedulers
 
+    def get_scripts(self) -> dict[str, Any]:
+        """Return the WebUI scripts catalog, or an empty payload on failure."""
+
+        with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
+            if response is None:
+                logger.warning("Failed to get scripts from API")
+                return {}
+
+            try:
+                data = response.json()
+            except ValueError as exc:
+                logger.warning("Failed to parse scripts response: %s", exc)
+                return {}
+
+        if isinstance(data, dict):
+            return data
+        logger.warning("Unexpected scripts payload type: %s", type(data).__name__)
+        return {}
+
+    def get_animatediff_capability(self) -> "AnimateDiffCapability":
+        """Detect AnimateDiff support from the WebUI scripts contract."""
+
+        from src.pipeline.animatediff_models import (
+            AnimateDiffCapability,
+            parse_animatediff_capability,
+        )
+
+        scripts_payload = self.get_scripts()
+        if not scripts_payload:
+            return AnimateDiffCapability(
+                available=False,
+                reason="Could not retrieve WebUI scripts catalog",
+            )
+        return parse_animatediff_capability(scripts_payload)
+
     def get_adetailer_models(self) -> list[str]:
         """
         Get list of available ADetailer models.
@@ -1405,42 +1443,39 @@ class SDWebUIClient:
             List of ADetailer model names (detection models including yolo and mediapipe)
         """
         # Try to get from scripts API
-        with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
-            if response is None:
-                logger.warning("Failed to get scripts from API; using ADetailer defaults")
-                return self._get_default_adetailer_models()
-            
-            try:
-                data = response.json()
-                # Look for ADetailer in txt2img scripts
-                txt2img_scripts = data.get("txt2img", [])
-                for script in txt2img_scripts:
-                    if isinstance(script, dict) and "adetailer" in script.get("name", "").lower():
-                        # Try to extract model list from args
-                        # ADetailer typically has args with 'ad_model' or similar
-                        args = script.get("args", [])
-                        if not args:
-                            continue
-                            
-                        # The first arg in ADetailer is usually the model selector
-                        # It may be a dict with 'choices' or 'value' field
-                        for i, arg in enumerate(args):
-                            if isinstance(arg, dict):
-                                # Check for choices field (dropdown options)
-                                if "choices" in arg:
-                                    choices = arg.get("choices", [])
-                                    if choices and len(choices) > 3:  # Sanity check
-                                        logger.debug("Retrieved %s ADetailer models from scripts API (arg %s)", len(choices), i)
-                                        return choices
-                                # Also check label for model-related args
-                                label = arg.get("label", "").lower()
-                                if "model" in label and "choices" in arg:
-                                    choices = arg.get("choices", [])
-                                    if choices:
-                                        logger.debug("Retrieved %s ADetailer models from scripts API (via label)", len(choices))
-                                        return choices
-            except Exception as exc:
-                logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
+        data = self.get_scripts()
+        if not data:
+            logger.warning("Failed to get scripts from API; using ADetailer defaults")
+            return self._get_default_adetailer_models()
+        try:
+            txt2img_scripts = data.get("txt2img", [])
+            for script in txt2img_scripts:
+                if isinstance(script, dict) and "adetailer" in script.get("name", "").lower():
+                    args = script.get("args", [])
+                    if not args:
+                        continue
+                    for i, arg in enumerate(args):
+                        if isinstance(arg, dict):
+                            if "choices" in arg:
+                                choices = arg.get("choices", [])
+                                if choices and len(choices) > 3:
+                                    logger.debug(
+                                        "Retrieved %s ADetailer models from scripts API (arg %s)",
+                                        len(choices),
+                                        i,
+                                    )
+                                    return choices
+                            label = arg.get("label", "").lower()
+                            if "model" in label and "choices" in arg:
+                                choices = arg.get("choices", [])
+                                if choices:
+                                    logger.debug(
+                                        "Retrieved %s ADetailer models from scripts API (via label)",
+                                        len(choices),
+                                    )
+                                    return choices
+        except Exception as exc:
+            logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
         
         # Fallback defaults
         defaults = self._get_default_adetailer_models()

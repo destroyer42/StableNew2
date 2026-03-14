@@ -1,5 +1,13 @@
 # PR-VIDEO-003: AnimateDiff Learning Integration
 
+> Stale draft. Do not execute this PR spec directly.
+>
+> This document assumes earlier AnimateDiff runtime and GUI phases that are not
+> current-state approved. Re-plan learning work only after the updated Phase 1
+> runtime spec in
+> [`docs/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md`](./OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md)
+> and a fresh GUI phase spec are complete.
+
 **Related Discovery**: D-VIDEO-001  
 **Architecture Version**: v2.6  
 **PR Date**: 2026-01-11  

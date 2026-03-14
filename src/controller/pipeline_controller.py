@@ -614,7 +614,10 @@ class PipelineController(_GUIPipelineController):
         self._last_stage_events: list[dict[Any, Any]] | None = None
         self._learning_enabled: bool = False
         self._learning_queue_cap: int = 3
-        self._job_controller = JobExecutionController(execute_job=self._execute_job)
+        self._job_controller = JobExecutionController(
+            execute_job=self._execute_job,
+            replay_runner=self,
+        )
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
         self._gui_defaults_resolver = (
@@ -1463,20 +1466,8 @@ class PipelineController(_GUIPipelineController):
         """
         record = getattr(job, "_normalized_record", None)
         if record is not None:
-            api_client = SDWebUIClient(
-                base_url="http://127.0.0.1:7860",
-            )
-            structured_logger = StructuredLogger()
-            
-            # Get status callback from app_controller if available
-            status_callback = None
-            app_controller = getattr(self, "app_controller", None)
-            if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
-                status_callback = app_controller._get_runtime_status_callback()
-            
-            runner = PipelineRunner(api_client, structured_logger, status_callback=status_callback)
             try:
-                result = runner.run_njr(record, self.cancel_token)
+                result = self.run_njr(record)
                 return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
             except Exception as exc:  # noqa: BLE001
                 envelope = get_attached_envelope(exc)
@@ -1491,6 +1482,39 @@ class PipelineController(_GUIPipelineController):
                 }
         error_msg = "Job missing _normalized_record; NJR-only execution requires NormalizedJobRecord snapshots."
         return {"error": error_msg, "job_id": job.job_id}
+
+    def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None] | None:
+        app_controller = getattr(self, "app_controller", None)
+        if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
+            return app_controller._get_runtime_status_callback()
+        return None
+
+    def _create_runtime_pipeline_runner(self) -> PipelineRunner:
+        if self._pipeline_runner is not None:
+            return self._pipeline_runner
+        return PipelineRunner(
+            SDWebUIClient(base_url="http://127.0.0.1:7860"),
+            StructuredLogger(),
+            status_callback=self._get_runtime_status_callback(),
+        )
+
+    def run_njr(
+        self,
+        record: NormalizedJobRecord,
+        cancel_token: Any | None = None,
+        run_plan: Any | None = None,
+        log_fn: Callable[[str], None] | None = None,
+    ) -> PipelineRunResult:
+        """Execute an NJR through the controller-owned canonical runner path."""
+        runner = self._create_runtime_pipeline_runner()
+        result = runner.run_njr(
+            record,
+            cancel_token=cancel_token if cancel_token is not None else self.cancel_token,
+            run_plan=run_plan,
+            log_fn=log_fn,
+        )
+        self.record_run_result(result)
+        return result
 
     def _infer_job_stage(self, job: Job) -> str | None:
         record = getattr(job, "_normalized_record", None)
@@ -1806,16 +1830,8 @@ class PipelineController(_GUIPipelineController):
         Returns:
             PipelineRunResult
         """
-        if self._pipeline_runner is not None:
-            record = build_njr_from_legacy_pipeline_config(config)
-            result = self._pipeline_runner.run_njr(record, self.cancel_token)
-        else:
-            api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-            structured_logger = StructuredLogger()
-            runner = PipelineRunner(api_client, structured_logger)
-            record = build_njr_from_legacy_pipeline_config(config)
-            result = runner.run_njr(record, self.cancel_token)
-        self.record_run_result(result)
+        record = build_njr_from_legacy_pipeline_config(config)
+        result = self.run_njr(record)
         return result
 
     def get_job_history_service(self) -> JobHistoryService | None:

@@ -378,8 +378,6 @@ class SingleNodeJobRunner:
                 logger.info(f"🔍 DEBUG: Before fallback logic - success={success}, error_message={error_message}")
                 if success is None:
                     success = error_message is None
-                if success is False and error_message is None:
-                    success = True
                 logger.info(f"🔍 DEBUG: After fallback logic - success={success}")
                 if success:
                     self.job_queue.mark_completed(job.job_id, result=canonical_result)
@@ -472,8 +470,6 @@ class SingleNodeJobRunner:
             success = canonical_result.get("success")
             if success is None:
                 success = error_message is None
-            if success is False and error_message is None:
-                success = True
             if success:
                 self.job_queue.mark_completed(job.job_id, result=canonical_result)
                 notify_status = JobStatus.COMPLETED

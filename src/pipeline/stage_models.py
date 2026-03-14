@@ -7,7 +7,7 @@ This module defines the canonical stage types and data structures used by
 StageSequencer and PipelineRunner. All stage ordering and execution flows
 must use these types.
 
-Canonical ordering: txt2img → img2img → upscale → adetailer
+Canonical ordering: txt2img -> img2img -> upscale -> adetailer -> animatediff
 
 Refiner and Hires are metadata on generation stages, not separate stage types.
 """
@@ -23,7 +23,7 @@ from typing import Any
 class StageType(str, Enum):
     """Canonical pipeline stage types.
 
-    Ordering: TXT2IMG → IMG2IMG → UPSCALE → ADETAILER
+    Ordering: TXT2IMG -> IMG2IMG -> UPSCALE -> ADETAILER -> ANIMATEDIFF
 
     Note: Refiner and Hires are metadata on generation stages (TXT2IMG, IMG2IMG),
     not separate stage types.
@@ -33,6 +33,7 @@ class StageType(str, Enum):
     IMG2IMG = "img2img"
     UPSCALE = "upscale"
     ADETAILER = "adetailer"
+    ANIMATEDIFF = "animatediff"
 
     def is_generation_stage(self) -> bool:
         """Return True if this is a generation stage (txt2img or img2img)."""
@@ -55,7 +56,7 @@ class StageExecution:
     """A single stage entry in a StageExecutionPlan.
 
     Attributes:
-        stage_type: The type of stage (txt2img, img2img, upscale, adetailer)
+        stage_type: The type of stage (txt2img, img2img, upscale, adetailer, animatediff)
         config_key: Pointer to the logical slot in pipeline config (e.g., "txt2img")
         config: Shallow snapshot of values needed to build the payload
         order_index: Position in the execution order (0-based)

@@ -1,5 +1,14 @@
 # PR-VIDEO-002: AnimateDiff GUI Integration
 
+> Stale draft. Do not execute this PR spec directly.
+>
+> This document depends on older core-runtime assumptions from
+> [`docs/PR-VIDEO-001-Core-AnimateDiff-Stage.md`](./PR-VIDEO-001-Core-AnimateDiff-Stage.md),
+> which is now stale. GUI work should be re-planned only after the updated
+> Phase 1 runtime scope in
+> [`docs/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md`](./OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md)
+> is implemented and verified.
+
 **Related Discovery**: D-VIDEO-001  
 **Architecture Version**: v2.6  
 **PR Date**: 2026-01-11  

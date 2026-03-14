@@ -1,5 +1,10 @@
 # D-VIDEO-003 - AnimateDiff Research Scaffold and Investigation Framework
 
+> For the current Phase 1 runtime-planning baseline, see
+> [`docs/D-VIDEO-004-AnimateDiff-Current-State-Discovery.md`](./D-VIDEO-004-AnimateDiff-Current-State-Discovery.md).
+> This scaffold remains active for broader future research beyond the narrower
+> contract-gated runtime foundation described in D-VIDEO-004.
+
 **Status:** Research Scaffold
 **Version:** v2.6
 **Date:** 2026-03-11
@@ -245,4 +250,3 @@ When this is resumed later, the recommended order is:
 5. only then draft PRs
 
 Do not start implementation before those steps are complete.
-

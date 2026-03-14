@@ -22,6 +22,7 @@ _STAGE_DISPLAY_MAP: dict[str, str] = {
     "img2img": "img2img",
     "upscale": "upscale",
     "adetailer": "ADetailer",
+    "animatediff": "AnimateDiff",
 }
 
 
@@ -161,7 +162,7 @@ class JobStatusV2(str, Enum):
     FAILED = "failed"
 
 
-StageType = Literal["txt2img", "img2img", "adetailer", "upscale"]
+StageType = Literal["txt2img", "img2img", "adetailer", "upscale", "animatediff"]
 
 
 # ---------------------------------------------------------------------------
@@ -638,7 +639,7 @@ class NormalizedJobRecord:
     # Reprocessing support: provide input images to skip txt2img
     input_image_paths: list[str] = field(default_factory=list)
     # Start stage for reprocessing: skip stages before this one
-    # Options: "txt2img", "img2img", "adetailer", "upscale"
+    # Options: "txt2img", "img2img", "adetailer", "upscale", "animatediff"
     start_stage: str | None = None
     # PR-LEARN-003: Learning experiment context for completion routing
     learning_context: LearningJobContext | None = None
@@ -680,7 +681,7 @@ class NormalizedJobRecord:
         if isinstance(stages, list):
             return [str(stage) for stage in stages if stage]
         flags = []
-        for stage in ("txt2img", "img2img", "upscale", "adetailer"):
+        for stage in ("txt2img", "img2img", "upscale", "adetailer", "animatediff"):
             enabled = self._config_value(f"stage_{stage}_enabled", stage)
             if enabled or (isinstance(enabled, bool) and enabled):
                 flags.append(stage)
