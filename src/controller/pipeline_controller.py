@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from src.controller.archive.pipeline_config_assembler import (
@@ -669,9 +669,16 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         if forced_value is None:
-            if self._app_state is None:
-                return
-            enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+            if self._app_state is not None:
+                enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+            else:
+                enabled = bool(
+                    getattr(
+                        self._job_controller,
+                        "auto_run_enabled",
+                        getattr(self._job_service, "auto_run_enabled", False),
+                    )
+                )
         else:
             enabled = bool(forced_value)
         self._job_service.auto_run_enabled = enabled
@@ -1135,6 +1142,12 @@ class PipelineController(_GUIPipelineController):
             if njr:
                 try:
                     summary = UnifiedJobSummary.from_normalized_record(njr)
+                    status_value = getattr(job, "status", None)
+                    status_text = (
+                        status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                    ).strip()
+                    if status_text:
+                        summary = replace(summary, status=status_text.upper())
                     queue_jobs.append(summary)
                     summaries.append(summary.positive_prompt_preview or job.job_id)
                 except Exception as exc:
@@ -1170,6 +1183,11 @@ class PipelineController(_GUIPipelineController):
 
     def _list_service_jobs(self) -> list[Job]:
         queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "list_active_jobs_ordered"):
+            try:
+                return list(queue.list_active_jobs_ordered())
+            except Exception:
+                return []
         if queue and hasattr(queue, "list_jobs"):
             try:
                 return list(queue.list_jobs())
@@ -1182,12 +1200,20 @@ class PipelineController(_GUIPipelineController):
             return
         if job is None:
             self._app_state.set_running_job(None)
+            if hasattr(self._app_state, "set_runtime_status"):
+                self._app_state.set_runtime_status(None)
             return
         # Convert Job to UnifiedJobSummary via NJR
         njr = getattr(job, "_normalized_record", None)
         if njr:
             try:
                 summary = UnifiedJobSummary.from_normalized_record(njr)
+                status_value = getattr(job, "status", None)
+                status_text = (
+                    status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                ).strip()
+                if status_text:
+                    summary = replace(summary, status=status_text.upper())
                 self._app_state.set_running_job(summary)
             except Exception as exc:
                 _logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")

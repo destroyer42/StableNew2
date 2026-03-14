@@ -7,6 +7,8 @@ This prevents HTTP 500 errors and process crashes from calling /txt2img during b
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 from src.api.webui_api import WebUIReadinessTimeout
 from src.pipeline.executor import Pipeline, PipelineStageError
 from src.utils import StructuredLogger
@@ -118,3 +120,23 @@ class TestTrueReadyGateBlocks:
         assert exception_raised_2
         # Gate may be called again or memoized depending on implementation
         assert len(gate_calls) >= 1
+
+
+def test_true_ready_gate_accepts_live_idle_api_without_boot_marker():
+    client = Mock()
+    client.check_api_ready.return_value = True
+    client.base_url = "http://127.0.0.1:7860"
+    client._session = Mock()
+
+    options_response = Mock(status_code=200)
+    progress_response = Mock(status_code=200)
+    progress_response.json.return_value = {
+        "progress": 0.0,
+        "state": {"job": "", "job_count": 0},
+    }
+    client._session.get.side_effect = [options_response, progress_response]
+
+    pipeline = Pipeline(client, StructuredLogger())
+    pipeline._ensure_webui_true_ready()
+
+    assert pipeline._true_ready_gated is True

@@ -62,3 +62,34 @@ def test_review_tab_modify_mode_uses_resolved_metadata_prompt(
         assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget("text")
     finally:
         tab.destroy()
+
+
+def test_review_tab_modify_mode_short_delta_preserves_base_prompt(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
+    image_path = tmp_path / "review_short_delta.png"
+    _write_image(image_path)
+    payload = {
+        "stage_manifest": {
+            "final_prompt": "resolved portrait prompt",
+            "config": {
+                "negative_prompt": "bad hands",
+            },
+        },
+    }
+
+    tab = ReviewTabFrame(tk_root)
+    try:
+        with patch(
+            "src.gui.views.review_tab_frame_v2.extract_embedded_metadata",
+            return_value=ReadPayloadResult(payload=payload, status="ok"),
+        ):
+            tab._show_image(image_path)
+
+        tab.prompt_mode_var.set("modify")
+        tab.prompt_text.delete("1.0", tk.END)
+        tab.prompt_text.insert("1.0", "cinematic lighting")
+        tab._refresh_prompt_diff()
+        assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget("text")
+    finally:
+        tab.destroy()

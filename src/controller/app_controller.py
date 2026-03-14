@@ -28,7 +28,7 @@ import traceback
 import json
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
@@ -77,6 +77,7 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
+from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.learning.model_profiles import get_model_profile_defaults_for_model
 from src.photo_optimize import get_photo_optimize_store
@@ -1384,7 +1385,7 @@ class AppController:
 
         This path is used by the Review tab. For each image:
         - Reads embedded stage metadata (if present) for prompt/model/VAE/config baseline.
-        - Applies prompt deltas in append/replace mode.
+        - Applies prompt deltas in append/replace/modify mode.
         - Builds a single-image NJR and submits it to the queue.
         """
         from src.pipeline.reprocess_builder import ReprocessJobBuilder
@@ -1437,6 +1438,12 @@ class AppController:
 
             merged_config = self._merge_nested_dicts(fallback_config, metadata_config)
             self._apply_model_vae_to_config(merged_config, model=base_model, vae=base_vae)
+            self._apply_reprocess_prompt_overrides(
+                merged_config,
+                stages=stages,
+                prompt=effective_prompt,
+                negative_prompt=effective_negative_prompt,
+            )
             config_signature = json.dumps(merged_config, sort_keys=True, default=str)
             group_key = (
                 effective_prompt,
@@ -1707,15 +1714,7 @@ class AppController:
 
     @staticmethod
     def _apply_prompt_delta(base: str, delta: str, mode: str) -> str:
-        base_clean = (base or "").strip()
-        delta_clean = (delta or "").strip()
-        if not delta_clean:
-            return base_clean
-        if mode in {"replace", "modify"}:
-            return delta_clean
-        if not base_clean:
-            return delta_clean
-        return f"{base_clean}, {delta_clean}"
+        return ReviewWorkflowAdapter.apply_prompt_delta(base, delta, mode)
 
     def _extract_reprocess_output_paths(self, job: Job, result: Any) -> list[str]:
         njr = getattr(job, "_normalized_record", None)
@@ -1830,6 +1829,31 @@ class AppController:
             img2img_cfg = config.setdefault("img2img", {})
             if isinstance(img2img_cfg, dict):
                 img2img_cfg["vae"] = vae
+
+    @staticmethod
+    def _apply_reprocess_prompt_overrides(
+        config: dict[str, Any],
+        *,
+        stages: list[str],
+        prompt: str,
+        negative_prompt: str,
+    ) -> None:
+        """Apply effective prompt edits into stage configs that prefer nested prompts.
+
+        Review-tab prompt edits are stored at the NJR top level, but ADetailer execution
+        prefers `adetailer_prompt` / `adetailer_negative_prompt` from nested config.
+        Keep those in sync so Review reprocess behaves as the user expects.
+        """
+        if "adetailer" not in stages:
+            return
+
+        adetailer_cfg = config.setdefault("adetailer", {})
+        if isinstance(adetailer_cfg, dict):
+            adetailer_cfg["adetailer_prompt"] = prompt
+            adetailer_cfg["adetailer_negative_prompt"] = negative_prompt
+
+        config["adetailer_prompt"] = prompt
+        config["adetailer_negative_prompt"] = negative_prompt
 
     def _submit_reprocess_njrs(self, njrs: list[Any], *, source: str) -> int:
         from src.queue.job_model import Job, JobPriority
@@ -2401,6 +2425,8 @@ class AppController:
         def _apply() -> None:
             if self.app_state:
                 self.app_state.set_running_job(None)
+                if hasattr(self.app_state, "set_runtime_status"):
+                    self.app_state.set_runtime_status(None)
             self._refresh_job_history()
 
         self._run_in_gui_thread(_apply)
@@ -2409,6 +2435,8 @@ class AppController:
         def _apply() -> None:
             if self.app_state:
                 self.app_state.set_running_job(None)
+                if hasattr(self.app_state, "set_runtime_status"):
+                    self.app_state.set_runtime_status(None)
             self._refresh_job_history()
             try:
                 self._handle_structured_job_failure(job)
@@ -2455,6 +2483,12 @@ class AppController:
             if njr:
                 try:
                     summary = UnifiedJobSummary.from_normalized_record(njr)
+                    status_value = getattr(job, "status", None)
+                    status_text = (
+                        status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                    ).strip()
+                    if status_text:
+                        summary = replace(summary, status=status_text.upper())
                     queue_jobs.append(summary)
                     summaries.append(summary.positive_prompt_preview or job.job_id)
                 except Exception as exc:
@@ -2474,6 +2508,11 @@ class AppController:
 
     def _list_service_jobs(self) -> list[Job]:
         queue = getattr(self.job_service, "queue", None)
+        if queue and hasattr(queue, "list_active_jobs_ordered"):
+            try:
+                return list(queue.list_active_jobs_ordered())
+            except Exception:
+                return []
         if queue and hasattr(queue, "list_jobs"):
             try:
                 return list(queue.list_jobs())
@@ -2486,6 +2525,8 @@ class AppController:
             return
         if job is None:
             self.app_state.set_running_job(None)
+            if hasattr(self.app_state, "set_runtime_status"):
+                self.app_state.set_runtime_status(None)
             # Also clear running job panel if it exists
             if hasattr(self, "main_window") and self.main_window:
                 tab_frame = getattr(self.main_window, "pipeline_tab", None)
@@ -2501,6 +2542,12 @@ class AppController:
         if njr:
             try:
                 summary = UnifiedJobSummary.from_normalized_record(njr)
+                status_value = getattr(job, "status", None)
+                status_text = (
+                    status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                ).strip()
+                if status_text:
+                    summary = replace(summary, status=status_text.upper())
             except Exception as exc:
                 logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
         else:

@@ -247,6 +247,7 @@ class PipelineTabFrame(ttk.Frame):
                 self.app_state.subscribe("job_draft", self._on_job_draft_changed)
                 self.app_state.subscribe("queue_items", self._on_queue_items_changed)
                 self.app_state.subscribe("running_job", self._on_running_job_changed)
+                self.app_state.subscribe("runtime_status", self._on_running_job_changed)
                 self.app_state.subscribe("queue_status", self._on_queue_status_changed)
                 self.app_state.subscribe("history_items", self._on_history_items_changed)
             except Exception:

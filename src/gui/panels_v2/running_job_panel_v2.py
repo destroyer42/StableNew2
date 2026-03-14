@@ -136,10 +136,10 @@ class RunningJobPanelV2(ttk.Frame):
 
         self.pause_resume_button = ttk.Button(
             button_frame,
-            text="Pause Job",
+            text="Pause Queue",
             style=SECONDARY_BUTTON_STYLE,
             command=self._on_pause_resume,
-            width=10,
+            width=12,
         )
         self.pause_resume_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
 
@@ -240,7 +240,7 @@ class RunningJobPanelV2(ttk.Frame):
             self.elapsed_label.configure(text="")
             self.eta_label.configure(text="")
             self.queue_origin_label.configure(text="")  # PR-GUI-F2
-            self.pause_resume_button.configure(text="Pause Job")
+            self.pause_resume_button.configure(text="Pause Queue")
             self.pause_resume_button.state(["disabled"])
             self.cancel_button.state(["disabled"])
             return
@@ -352,9 +352,9 @@ class RunningJobPanelV2(ttk.Frame):
         can_control = is_running or is_paused
 
         if is_paused:
-            self.pause_resume_button.configure(text="Resume Job")
+            self.pause_resume_button.configure(text="Resume Queue")
         else:
-            self.pause_resume_button.configure(text="Pause Job")
+            self.pause_resume_button.configure(text="Pause Queue")
 
         self.pause_resume_button.state(["!disabled"] if can_control else ["disabled"])
         self.cancel_button.state(["!disabled"] if can_control else ["disabled"])
@@ -366,7 +366,7 @@ class RunningJobPanelV2(ttk.Frame):
             self._stop_timer()
 
     def _on_pause_resume(self) -> None:
-        """Handle pause/resume button click."""
+        """Handle pause/resume queue click while a job is active."""
         if not self.controller or not self._current_job:
             return
 

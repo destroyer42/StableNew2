@@ -61,6 +61,19 @@ def test_sync_auto_run_setting_reads_app_state_flag():
     assert controller._job_service.auto_run_enabled is True
 
 
+def test_sync_auto_run_setting_falls_back_to_job_controller_when_no_app_state():
+    controller = PipelineController()
+    controller._job_service = mock.Mock()
+    controller._job_service.auto_run_enabled = False
+    controller._app_state = None
+    controller._job_controller = mock.Mock()
+    controller._job_controller.auto_run_enabled = True
+
+    controller._sync_auto_run_setting()
+
+    assert controller._job_service.auto_run_enabled is True
+
+
 def test_on_queue_remove_refreshes_app_state_when_job_removed():
     controller = PipelineController()
     controller._app_state = mock.Mock()

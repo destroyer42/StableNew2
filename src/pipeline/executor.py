@@ -695,6 +695,14 @@ class Pipeline:
             from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
             from src.api.webui_process_manager import get_global_webui_process_manager
 
+            # Fast-path for normal runtime operation: if the API is already live,
+            # options are readable, and the backend is idle, generation can begin
+            # without re-checking a historical stdout boot marker.
+            if self._is_webui_generation_ready():
+                self._true_ready_gated = True
+                logger.info("Pipeline generation gate: WebUI live API readiness confirmed")
+                return
+
             manager = get_global_webui_process_manager()
             helper = WebUIAPI(client=self.client)
 
@@ -737,6 +745,38 @@ class Pipeline:
                 stage="pre-generation-gate",
             )
             raise PipelineStageError(error) from exc
+
+    def _is_webui_generation_ready(self) -> bool:
+        """Return True when the WebUI API is already live and idle for generation."""
+        try:
+            if not self.client.check_api_ready(max_retries=1, retry_delay=0.1):
+                return False
+        except Exception:
+            return False
+
+        session = getattr(self.client, "_session", None)
+        base_url = getattr(self.client, "base_url", "").rstrip("/")
+        if session is None or not base_url:
+            return False
+
+        try:
+            options_response = session.get(f"{base_url}/sdapi/v1/options", timeout=5.0)
+            if options_response.status_code != 200:
+                return False
+        except Exception:
+            return False
+
+        try:
+            progress_response = session.get(f"{base_url}/sdapi/v1/progress", timeout=5.0)
+            if progress_response.status_code != 200:
+                return False
+            payload = progress_response.json()
+            state = payload.get("state") or {}
+            progress = float(payload.get("progress", 0.0) or 0.0)
+            current_job = str(state.get("job") or "").strip()
+            return progress == 0.0 and not current_job
+        except Exception:
+            return False
 
     def _check_webui_health_before_stage(self, stage: str) -> None:
         """

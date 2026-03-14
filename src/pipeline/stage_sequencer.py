@@ -7,7 +7,7 @@ This module provides the canonical StageSequencer class for building
 stage execution plans. All pipeline runs should go through StageSequencer.build_plan().
 
 The canonical stage ordering is:
-    txt2img -> img2img -> upscale -> adetailer -> animatediff
+    txt2img -> img2img -> adetailer -> upscale -> animatediff
 
 Refiner and Hires are metadata on generation stages, not separate stage types.
 """
@@ -15,7 +15,7 @@ Refiner and Hires are metadata on generation stages, not separate stage types.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from src.pipeline.stage_models import (
@@ -166,20 +166,6 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
 
     generative_enabled = bool(generation_stages)
 
-    if up_enabled:
-        payload = _stage_payload(config, "upscale")
-        _require_fields(payload, ["upscaler"], "upscale")
-        metadata = _build_stage_metadata(config, payload, stage="upscale")
-        stage = StageExecution(
-            stage_type="upscale",
-            config=StageConfig(enabled=up_enabled, payload=payload, metadata=metadata),
-            order_index=order,
-            requires_input_image=generative_enabled,
-            produces_output_image=True,
-        )
-        stages.append(stage)
-        order += 1
-
     if ad_enabled:
         if not generative_enabled and not up_enabled:
             raise InvalidStagePlanError(
@@ -192,6 +178,20 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
             config=StageConfig(enabled=ad_enabled, payload=payload, metadata=metadata),
             order_index=order,
             requires_input_image=True,
+            produces_output_image=True,
+        )
+        stages.append(stage)
+        order += 1
+
+    if up_enabled:
+        payload = _stage_payload(config, "upscale")
+        _require_fields(payload, ["upscaler"], "upscale")
+        metadata = _build_stage_metadata(config, payload, stage="upscale")
+        stage = StageExecution(
+            stage_type="upscale",
+            config=StageConfig(enabled=up_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=generative_enabled or ad_enabled,
             produces_output_image=True,
         )
         stages.append(stage)
@@ -247,14 +247,14 @@ def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]
     order_map = {
         "txt2img": 0,
         "img2img": 1,
-        "upscale": 2,
-        "adetailer": 3,
+        "adetailer": 2,
+        "upscale": 3,
         "animatediff": 4,
     }
     ordered = sorted(stages, key=lambda stage: (order_map.get(stage.stage_type, 99), stage.order_index))
     if ordered != stages:
         logger.warning("Stage plan order normalized to canonical runtime order.")
-    return ordered
+    return [replace(stage, order_index=index) for index, stage in enumerate(ordered)]
 
 
 def _build_stage_metadata(

@@ -161,6 +161,16 @@ class TestLearningControllerNJR:
         assert record.extra_metadata["learning_variable"] == "CFG Scale"
         assert record.extra_metadata["learning_variant_value"] == 8.5
 
+    def test_build_variant_njr_carries_images_per_value_to_images_per_prompt(
+        self, controller, learning_state
+    ):
+        learning_state.current_experiment.images_per_value = 3
+        variant = LearningVariant(param_value=8.5, planned_images=3)
+
+        record = controller._build_variant_njr(variant, learning_state.current_experiment)
+
+        assert record.images_per_prompt == 3
+
     def test_njr_prompt_not_duplicated(self, controller, learning_state):
         """Test 2: Verify single prompt occurrence in NJR."""
         variant = LearningVariant(param_value=7.0, planned_images=1)

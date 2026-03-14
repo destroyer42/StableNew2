@@ -6,6 +6,7 @@ from typing import Any
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
+from src.pipeline.job_models_v2 import JobStatusV2, NormalizedJobRecord
 from src.queue.job_model import Job, JobStatus
 
 
@@ -74,6 +75,45 @@ def _attach_dummy_draft(controller: AppController) -> None:
     controller.app_state.add_packs_to_job_draft([entry])
 
 
+def _make_njr(job_id: str = "job-1") -> NormalizedJobRecord:
+    return NormalizedJobRecord(
+        job_id=job_id,
+        config={"prompt": "portrait"},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=123,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=1.0,
+        prompt_pack_id="pack-1",
+        prompt_pack_name="Pack 1",
+        prompt_pack_row_index=0,
+        positive_prompt="portrait",
+        negative_prompt="",
+        steps=20,
+        cfg_scale=7.0,
+        width=512,
+        height=512,
+        sampler_name="Euler a",
+        scheduler="ddim",
+        clip_skip=0,
+        base_model="sdxl",
+        stage_chain=[],
+        loop_type="pipeline",
+        loop_count=1,
+        images_per_prompt=1,
+        variant_mode="standard",
+        run_mode="QUEUE",
+        queue_source="ADD_TO_QUEUE",
+        randomization_enabled=False,
+        config_variant_label="base",
+        config_variant_index=0,
+        status=JobStatusV2.QUEUED,
+    )
+
+
 def test_on_add_job_to_queue_enqueues_and_updates_state() -> None:
     controller, fake_service = _build_controller()
     _attach_dummy_draft(controller)
@@ -117,3 +157,37 @@ def test_queue_controls_delegate_and_update_ui_state() -> None:
 
     fake_service.emit(FakeJobService.EVENT_QUEUE_STATUS, "idle")
     assert controller.app_state.queue_status == "idle"
+
+
+def test_running_job_summary_uses_live_job_status() -> None:
+    controller, _fake_service = _build_controller()
+    job = Job(job_id="job-running")
+    job.status = JobStatus.RUNNING
+    job._normalized_record = _make_njr(job.job_id)  # type: ignore[attr-defined]
+
+    controller._set_running_job(job)
+
+    assert controller.app_state.running_job is not None
+    assert controller.app_state.running_job.status == "RUNNING"
+
+
+def test_queue_refresh_uses_live_status_for_njr_jobs() -> None:
+    controller, fake_service = _build_controller()
+    job = Job(job_id="job-running")
+    job.status = JobStatus.RUNNING
+    job._normalized_record = _make_njr(job.job_id)  # type: ignore[attr-defined]
+    fake_service.set_jobs([job])
+
+    controller._refresh_app_state_queue()
+
+    assert controller.app_state.queue_jobs
+    assert controller.app_state.queue_jobs[0].status == "RUNNING"
+
+
+def test_job_finish_clears_runtime_status() -> None:
+    controller, _fake_service = _build_controller()
+    controller.app_state.set_runtime_status(object())  # type: ignore[arg-type]
+
+    controller._on_job_finished(Job(job_id="job-done"))
+
+    assert controller.app_state.runtime_status is None

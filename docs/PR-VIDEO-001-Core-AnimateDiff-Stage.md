@@ -134,7 +134,9 @@ This PR implements **Phase 1** of AnimateDiff integration, adding a new `animate
 
 ### 1. Stage Type Extension
 - Add `StageType.ANIMATEDIFF = "animatediff"` to stage models
-- Update stage type ordering: `txt2img → img2img → upscale → adetailer → animatediff`
+- Deprecated ordering note: this document predates the corrected canonical
+  stage chain. Current order is
+  `txt2img → img2img → adetailer → upscale → animatediff`.
 - Update `is_generation_stage()` to exclude animatediff
 
 ### 2. Stage Sequencer Extension

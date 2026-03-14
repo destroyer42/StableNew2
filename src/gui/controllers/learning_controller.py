@@ -768,6 +768,7 @@ class LearningController:
             clip_skip=clip_skip,
             prompt_pack_id=f"learning_{experiment.name}",
             stage_chain=[txt2img_stage],  # Required: at least one stage
+            images_per_prompt=max(1, int(experiment.images_per_value or 1)),
             learning_context=learning_ctx,  # For metadata and tracking
             extra_metadata={
                 "learning_enabled": True,

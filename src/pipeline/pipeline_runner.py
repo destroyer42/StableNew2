@@ -853,14 +853,30 @@ class PipelineRunner:
             raise ValueError("Multiple AnimateDiff stages are not supported.")
         if animatediffs and stages[-1].stage_type != StageTypeEnum.ANIMATEDIFF.value:
             raise ValueError("AnimateDiff stage must be the final stage.")
-        if adetailers and stages[-1].stage_type != StageTypeEnum.ADETAILER.value and not animatediffs:
-            raise ValueError("ADetailer stage must be the final still-image stage.")
         if adetailers and not any(
             self._is_image_producing_stage_type(stage.stage_type)
             for stage in stages
             if stage.stage_type != StageTypeEnum.ADETAILER.value
         ):
             raise ValueError("ADetailer stage requires a preceding generation stage.")
+        if adetailers:
+            first_adetailer_index = next(
+                i for i, stage in enumerate(stages) if stage.stage_type == StageTypeEnum.ADETAILER.value
+            )
+            trailing_img2img = any(
+                stage.stage_type == StageTypeEnum.IMG2IMG.value for stage in stages[first_adetailer_index + 1 :]
+            )
+            if trailing_img2img:
+                raise ValueError("ADetailer stage must not run before img2img.")
+            trailing_non_animatediff = [
+                stage.stage_type
+                for stage in stages[first_adetailer_index + 1 :]
+                if stage.stage_type != StageTypeEnum.ANIMATEDIFF.value
+            ]
+            if any(stage_type != StageTypeEnum.UPSCALE.value for stage_type in trailing_non_animatediff):
+                raise ValueError(
+                    "Only upscale and animatediff stages may follow ADetailer."
+                )
         if animatediffs and not any(
             self._is_image_producing_stage_type(stage.stage_type)
             for stage in stages

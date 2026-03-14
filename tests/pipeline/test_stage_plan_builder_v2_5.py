@@ -65,9 +65,9 @@ def test_build_plan_txt2img_upscale_adetailer_order():
         adetailer={"adetailer_model": "adetailer_v1.pt"},
     )
     plan = build_stage_execution_plan(config)
-    assert [stage.stage_type for stage in plan.stages] == ["txt2img", "upscale", "adetailer"]
-    assert plan.stages[-1].stage_type == "adetailer"
-    assert plan.stages[1].stage_type == "upscale"
+    assert [stage.stage_type for stage in plan.stages] == ["txt2img", "adetailer", "upscale"]
+    assert plan.stages[-1].stage_type == "upscale"
+    assert plan.stages[1].stage_type == "adetailer"
 
 
 def test_build_plan_img2img_and_adetailer():

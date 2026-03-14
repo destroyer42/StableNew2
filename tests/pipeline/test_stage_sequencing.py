@@ -93,7 +93,7 @@ class TestStageSequencerBuildPlan:
         assert plan.stages[0].produces_output_image is True
 
     def test_full_chain_txt2img_upscale_adetailer(self):
-        """Full chain: txt2img + upscale + ADetailer."""
+        """Full chain: txt2img + ADetailer + upscale."""
         sequencer = StageSequencer()
         config = _base_config()
         config["upscale"]["enabled"] = True
@@ -104,16 +104,16 @@ class TestStageSequencerBuildPlan:
         plan = sequencer.build_plan(config)
 
         assert len(plan.stages) == 3
-        assert [s.stage_type for s in plan.stages] == ["txt2img", "upscale", "adetailer"]
+        assert [s.stage_type for s in plan.stages] == ["txt2img", "adetailer", "upscale"]
         # Verify ordering
         assert plan.stages[0].order_index == 0
         assert plan.stages[1].order_index == 1
         assert plan.stages[2].order_index == 2
-        # ADetailer should be last
-        assert plan.stages[-1].stage_type == "adetailer"
+        # Upscale should be last still-image stage
+        assert plan.stages[-1].stage_type == "upscale"
 
     def test_txt2img_img2img_upscale_adetailer(self):
-        """Full 4-stage chain: txt2img + img2img + upscale + ADetailer."""
+        """Full 4-stage chain: txt2img + img2img + ADetailer + upscale."""
         sequencer = StageSequencer()
         config = _base_config()
         config["img2img"]["enabled"] = True
@@ -129,8 +129,8 @@ class TestStageSequencerBuildPlan:
         assert [s.stage_type for s in plan.stages] == [
             "txt2img",
             "img2img",
-            "upscale",
             "adetailer",
+            "upscale",
         ]
 
     def test_img2img_with_upscale_no_txt2img(self):

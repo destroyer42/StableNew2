@@ -56,7 +56,10 @@ StableNew has **partial video infrastructure** from legacy development:
 
 **Canonical Stage Ordering:**
 ```
-txt2img → img2img → upscale → adetailer
+Deprecated note: the stage order in this section is outdated.
+Current canonical still-image order is:
+
+txt2img → img2img → adetailer → upscale
 ```
 
 AnimateDiff must integrate as either:
@@ -335,7 +338,10 @@ stage_chain=[
 
 **Canonical Stage Ordering (Extended):**
 ```
-txt2img → img2img → upscale → adetailer → animatediff
+Deprecated note: the stage order in this section is outdated.
+Current canonical order is:
+
+txt2img → img2img → adetailer → upscale → animatediff
 ```
 
 **Stage Types (Extended):**
