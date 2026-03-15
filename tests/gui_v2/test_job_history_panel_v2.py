@@ -11,12 +11,16 @@ class DummyController:
     def __init__(self) -> None:
         self.refresh_calls = 0
         self.replay_calls = 0
+        self.svd_calls: list[str] = []
 
     def refresh_job_history(self) -> None:
         self.refresh_calls += 1
 
     def on_replay_history_job_v2(self, job_id: str) -> None:
         self.replay_calls += 1
+
+    def send_history_job_image_to_svd(self, job_id: str) -> None:
+        self.svd_calls.append(job_id)
 
 
 def _make_entry(job_id: str) -> JobHistoryEntry:
@@ -58,10 +62,12 @@ def test_job_history_panel_updates_and_opens_folder(tk_root, tmp_path, monkeypat
     panel.history_tree.event_generate("<<TreeviewSelect>>")
     panel.open_btn.invoke()
     panel.replay_btn.invoke()
+    panel.svd_btn.invoke()
 
     assert open_calls, "Open folder should be invoked for selected job"
     assert controller.refresh_calls == 0
     assert controller.replay_calls == 1
+    assert controller.svd_calls == ["job123"]
     panel.refresh_btn.invoke()
     assert controller.refresh_calls == 1
 

@@ -8,6 +8,7 @@ from tkinter import filedialog, ttk
 
 from src.config import app_config
 from src.gui.theme_v2 import HEADING_LABEL_STYLE
+from src.state.output_routing import OUTPUT_ROUTE_AUTO, OUTPUT_ROUTE_PIPELINE, OUTPUT_ROUTE_TESTING
 
 
 class OutputSettingsPanelV2(ttk.Frame):
@@ -19,6 +20,7 @@ class OutputSettingsPanelV2(ttk.Frame):
 
     FORMATS = ("png", "jpg", "webp")
     SEED_MODES = ("fixed", "increment", "random")
+    OUTPUT_ROUTES = (OUTPUT_ROUTE_AUTO, OUTPUT_ROUTE_PIPELINE, OUTPUT_ROUTE_TESTING)
 
     def __init__(self, master: tk.Misc, *, embed_mode: bool = False) -> None:
         super().__init__(master, style="Panel.TFrame", padding=0 if embed_mode else 8)
@@ -40,6 +42,7 @@ class OutputSettingsPanelV2(ttk.Frame):
         self.image_format_var = tk.StringVar(value=app_config.image_format_default())
         self.batch_size_var = tk.StringVar(value=str(app_config.batch_size_default()))
         self.seed_mode_var = tk.StringVar(value=app_config.seed_mode_default())
+        self.output_route_var = tk.StringVar(value=OUTPUT_ROUTE_AUTO)
 
         # Build output dir row with browse button
         self._build_dir_row(parent, "Output Dir", self.output_dir_var, 1, 0)
@@ -76,6 +79,21 @@ class OutputSettingsPanelV2(ttk.Frame):
             style="Dark.TCombobox",
         )
         seed_combo.pack(side="left")
+
+        ttk.Label(controls_row, text="Route:", style="TLabel").pack(side="left", padx=(16, 4))
+        route_combo = ttk.Combobox(
+            controls_row,
+            textvariable=self.output_route_var,
+            values=self.OUTPUT_ROUTES,
+            state="readonly",
+            width=10,
+            style="Dark.TCombobox",
+        )
+        route_combo.pack(side="left")
+        self._create_tooltip(
+            route_combo,
+            "Auto keeps route-based defaults. Use Testing to isolate debug output in output\\Testing.",
+        )
 
         parent.columnconfigure(1, weight=1)
 
@@ -129,6 +147,7 @@ class OutputSettingsPanelV2(ttk.Frame):
                 self.batch_size_var.get(), app_config.batch_size_default()
             ),
             "seed_mode": self.seed_mode_var.get().strip(),
+            "output_route": self.output_route_var.get().strip() or OUTPUT_ROUTE_AUTO,
         }
 
     def apply_from_overrides(self, overrides: dict[str, object]) -> None:
@@ -150,6 +169,11 @@ class OutputSettingsPanelV2(ttk.Frame):
         seed = overrides.get("seed_mode")
         if seed:
             self.seed_mode_var.set(str(seed))
+        route = overrides.get("output_route")
+        if route:
+            route_name = str(route)
+            if route_name in self.OUTPUT_ROUTES:
+                self.output_route_var.set(route_name)
 
     @staticmethod
     def _safe_int(value: object, default: int) -> int:

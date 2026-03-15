@@ -20,6 +20,7 @@ will be wired in later via a PipelineRunner abstraction.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -86,6 +87,7 @@ from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.duration_stats_service import DurationStatsService
+from src.state.output_routing import OUTPUT_ROUTE_MOVIE_CLIPS, get_output_route_root
 from src.utils import (
     InMemoryLogHandler,
     LogContext,
@@ -3149,8 +3151,9 @@ class AppController:
                 pass
             return
         try:
+            modal_parent = getattr(self.main_window, "root", None) or self.main_window
             self._error_modal = ErrorModalV2(
-                self.main_window,
+                modal_parent,
                 envelope=envelope,
                 on_close=self._clear_error_modal,
             )
@@ -5002,6 +5005,7 @@ class AppController:
                 "filename_pattern": pipeline_section.get("filename_pattern", "{seed}"),
                 "image_format": pipeline_section.get("image_format", "png"),
                 "seed_mode": pipeline_section.get("seed_mode", "fixed"),
+                "output_route": pipeline_section.get("output_route", "Auto"),
             }
             try:
                 output_panel.apply_from_overrides(output_overrides)
@@ -5107,6 +5111,7 @@ class AppController:
                 current_config["pipeline"]["filename_pattern"] = output_overrides.get("filename_pattern", "{seed}")
                 current_config["pipeline"]["image_format"] = output_overrides.get("image_format", "png")
                 current_config["pipeline"]["seed_mode"] = output_overrides.get("seed_mode", "fixed")
+                current_config["pipeline"]["output_route"] = output_overrides.get("output_route", "Auto")
                 self._append_log(f"[controller] Gathered output settings from GUI")
             except Exception as e:
                 self._append_log(f"[controller] Error gathering output settings: {e}")
@@ -5826,7 +5831,7 @@ class AppController:
 
                 clip_settings = ClipSettings(fps=fps, codec=codec, quality=quality, mode=mode)
 
-                output_dir = _Path("output") / "movie_clips"
+                output_dir = get_output_route_root("output", OUTPUT_ROUTE_MOVIE_CLIPS)
                 request = ClipRequest(
                     image_paths=paths,
                     output_dir=output_dir,
@@ -5899,9 +5904,13 @@ class AppController:
         return controller
 
     def get_supported_svd_models(self) -> list[str]:
-        from src.video.svd_models import get_supported_svd_models
+        from src.video.svd_models import get_default_svd_model_id, get_supported_svd_models
 
-        return list(get_supported_svd_models().keys())
+        supported = list(get_supported_svd_models().keys())
+        default_model = get_default_svd_model_id()
+        if default_model in supported:
+            return [default_model, *[model_id for model_id in supported if model_id != default_model]]
+        return supported
 
     def build_svd_defaults(self) -> dict[str, Any]:
         from src.video.svd_config import SVDConfig
@@ -5917,7 +5926,15 @@ class AppController:
         valid, reason = controller.validate_source_image(source_image_path)
         if not valid:
             raise ValueError(reason or "SVD source image is invalid")
-        job_id = controller.submit_svd_job(source_image_path=source_image_path, config=config)
+        pipeline_payload = form_data.get("pipeline") if isinstance(form_data, dict) else None
+        output_route = None
+        if isinstance(pipeline_payload, dict):
+            output_route = pipeline_payload.get("output_route")
+        job_id = controller.submit_svd_job(
+            source_image_path=source_image_path,
+            config=config,
+            output_route=str(output_route) if output_route else None,
+        )
         self._append_log(f"[svd] Queued SVD Img2Vid job {job_id} for {Path(source_image_path).name}")
         return job_id
 
@@ -5930,6 +5947,77 @@ class AppController:
                 if path.suffix.lower() in _IMAGE_OUTPUT_EXTENSIONS and path.exists():
                     return str(path)
         return None
+
+    def send_image_to_svd(self, image_path: str | Path) -> str:
+        path = Path(image_path)
+        if not path.exists():
+            raise FileNotFoundError(f"SVD source image does not exist: {path}")
+        main_window = getattr(self, "main_window", None)
+        if main_window is None:
+            raise RuntimeError("Main window is not available")
+        svd_tab = getattr(main_window, "svd_tab", None)
+        if svd_tab is None:
+            raise RuntimeError("SVD tab is not available")
+        notebook = getattr(main_window, "center_notebook", None)
+        if notebook is not None:
+            try:
+                notebook.select(svd_tab)
+            except Exception:
+                pass
+        setter = getattr(svd_tab, "set_source_image_path", None)
+        if not callable(setter):
+            raise RuntimeError("SVD tab does not support source handoff")
+        setter(str(path), status_message=f"Loaded into SVD tab: {path.name}")
+        self._append_log(f"[svd] Routed image to SVD tab: {path.name}")
+        return str(path)
+
+    def send_history_job_image_to_svd(self, job_id: str) -> str:
+        entry = self._get_history_entry_by_job_id(job_id)
+        if entry is None:
+            raise ValueError(f"History job not found: {job_id}")
+        image_path = self._get_history_image_path(entry)
+        if image_path is None:
+            raise ValueError(f"History job {job_id} has no image output available for SVD")
+        return self.send_image_to_svd(image_path)
+
+    def clear_svd_model_cache(self, model_id: str | None = None) -> None:
+        controller = self._get_svd_controller()
+        clearer = getattr(controller, "clear_model_cache", None)
+        if not callable(clearer):
+            raise RuntimeError("SVD cache controls are not available")
+        clearer(model_id=model_id)
+        if model_id:
+            self._append_log(f"[svd] Cleared loaded SVD model cache for {model_id}")
+        else:
+            self._append_log("[svd] Cleared all loaded SVD model caches")
+
+    def open_path_in_file_browser(self, path: str | Path) -> None:
+        candidate = Path(path)
+        if not candidate.exists():
+            candidate = candidate.parent
+        if os.name == "nt":
+            os.startfile(str(candidate))
+            return
+        if sys.platform == "darwin":
+            subprocess.run(["open", str(candidate)], check=False)
+            return
+        subprocess.run(["xdg-open", str(candidate)], check=False)
+
+    def get_recent_svd_history(self, limit: int = 25) -> list[dict[str, Any]]:
+        app_state = getattr(self, "app_state", None)
+        history_items = list(getattr(app_state, "history_items", []) or [])
+        records: list[dict[str, Any]] = []
+        for entry in history_items:
+            record = self._build_svd_history_record(entry)
+            if record is not None:
+                records.append(record)
+        records.sort(
+            key=lambda item: self._history_sort_key(
+                item.get("completed_at") or item.get("started_at") or item.get("created_at")
+            ),
+            reverse=True,
+        )
+        return records[: max(int(limit), 1)]
 
     def _iter_history_image_candidates(self, entry: Any) -> list[str]:
         candidates: list[str] = []
@@ -5963,6 +6051,106 @@ class AppController:
                 seen.add(candidate)
                 deduped.append(candidate)
         return deduped
+
+    def _get_history_entry_by_job_id(self, job_id: str) -> Any | None:
+        app_state = getattr(self, "app_state", None)
+        history_items = list(getattr(app_state, "history_items", []) or [])
+        for entry in history_items:
+            if getattr(entry, "job_id", None) == job_id:
+                return entry
+        return None
+
+    def _get_history_image_path(self, entry: Any) -> str | None:
+        for candidate in self._iter_history_image_candidates(entry):
+            path = Path(candidate)
+            if path.suffix.lower() in _IMAGE_OUTPUT_EXTENSIONS and path.exists():
+                return str(path)
+        return None
+
+    def _extract_history_result_metadata(self, entry: Any) -> dict[str, Any]:
+        result = getattr(entry, "result", None)
+        if not isinstance(result, dict):
+            return {}
+        metadata = result.get("metadata")
+        if isinstance(metadata, dict):
+            return metadata
+        if isinstance(metadata, list):
+            for item in reversed(metadata):
+                if isinstance(item, dict):
+                    return item
+        return {}
+
+    @staticmethod
+    def _history_sort_key(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)
+
+    def _build_svd_history_record(self, entry: Any) -> dict[str, Any] | None:
+        metadata = self._extract_history_result_metadata(entry)
+        result = getattr(entry, "result", None)
+        artifact = None
+        if isinstance(metadata.get("svd_native_artifact"), dict):
+            artifact = metadata["svd_native_artifact"]
+        elif isinstance(result, dict) and isinstance(result.get("svd_native_artifact"), dict):
+            artifact = result["svd_native_artifact"]
+        if not isinstance(artifact, dict):
+            return None
+
+        variants = []
+        if isinstance(result, dict):
+            raw_variants = result.get("variants")
+            if isinstance(raw_variants, list):
+                variants = [item for item in raw_variants if isinstance(item, dict)]
+        primary_variant = variants[0] if variants else {}
+
+        video_paths = [str(item) for item in artifact.get("video_paths", []) if item]
+        gif_paths = [str(item) for item in artifact.get("gif_paths", []) if item]
+        output_paths = [str(item) for item in artifact.get("output_paths", []) if item]
+        manifest_paths = [str(item) for item in artifact.get("manifest_paths", []) if item]
+        thumbnail_path = artifact.get("thumbnail_path") or primary_variant.get("thumbnail_path")
+        source_image_path = primary_variant.get("source_image_path")
+        if not source_image_path:
+            snapshot = getattr(entry, "snapshot", None)
+            if isinstance(snapshot, dict):
+                normalized = snapshot.get("normalized_job")
+                if isinstance(normalized, dict):
+                    input_paths = normalized.get("input_image_paths")
+                    if isinstance(input_paths, list) and input_paths:
+                        source_image_path = input_paths[0]
+        primary_output = (
+            (video_paths[0] if video_paths else None)
+            or (gif_paths[0] if gif_paths else None)
+            or (output_paths[0] if output_paths else None)
+        )
+        output_dir = None
+        if primary_output:
+            output_dir = str(Path(primary_output).parent)
+        elif thumbnail_path:
+            output_dir = str(Path(thumbnail_path).parent)
+        elif manifest_paths:
+            output_dir = str(Path(manifest_paths[0]).parent.parent)
+
+        return {
+            "job_id": getattr(entry, "job_id", ""),
+            "status": getattr(getattr(entry, "status", None), "value", str(getattr(entry, "status", ""))),
+            "created_at": getattr(entry, "created_at", None),
+            "started_at": getattr(entry, "started_at", None),
+            "completed_at": getattr(entry, "completed_at", None),
+            "source_image_path": str(source_image_path) if source_image_path else None,
+            "thumbnail_path": str(thumbnail_path) if thumbnail_path else None,
+            "video_path": video_paths[0] if video_paths else None,
+            "gif_path": gif_paths[0] if gif_paths else None,
+            "output_path": primary_output,
+            "output_dir": output_dir,
+            "manifest_path": manifest_paths[0] if manifest_paths else None,
+            "frame_count": primary_variant.get("frame_count"),
+            "fps": primary_variant.get("fps"),
+            "model_id": primary_variant.get("model_id"),
+            "count": artifact.get("count"),
+        }
 
 
 # Convenience entrypoint for testing the skeleton standalone

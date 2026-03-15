@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from src.controller.svd_controller import SVDController
 from src.pipeline.job_requests_v2 import PipelineRunRequest
+from src.state.output_routing import OUTPUT_ROUTE_TESTING
 from src.video.svd_config import SVDConfig
 
 
@@ -27,13 +28,16 @@ def test_submit_svd_job_enqueues_svd_native_njr(tmp_path) -> None:
     job_id = controller.submit_svd_job(
         source_image_path=source_path,
         config=SVDConfig(),
+        output_route=OUTPUT_ROUTE_TESTING,
     )
 
     assert job_id == "job-svd-001"
     njr = captured["njrs"][0]
     assert njr.start_stage == "svd_native"
     assert njr.input_image_paths == [str(source_path)]
+    assert "SVD animation source" in njr.positive_prompt
     assert [stage.stage_type for stage in njr.stage_chain] == ["svd_native"]
+    assert njr.config["pipeline"]["output_route"] == OUTPUT_ROUTE_TESTING
     request = captured["request"]
     assert request.prompt_pack_id == "svd_native"
     assert request.requested_job_label == "SVD Img2Vid"

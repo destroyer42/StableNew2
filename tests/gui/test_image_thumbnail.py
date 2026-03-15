@@ -91,3 +91,21 @@ def test_thumbnail_clear():
     assert thumb._current_path is None
     thumb.delete.assert_called_with("all")
     thumb.create_text.assert_called()
+
+
+def test_thumbnail_open_current_path_uses_default_viewer(monkeypatch, tmp_path: Path):
+    """Verify clicking a loaded image opens the file in the default viewer."""
+    from src.gui.widgets.image_thumbnail import ImageThumbnail
+
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(b"png")
+
+    thumb = ImageThumbnail.__new__(ImageThumbnail)
+    thumb._current_path = str(image_path)
+
+    opened: list[str] = []
+    monkeypatch.setattr("os.startfile", lambda path: opened.append(path))
+
+    thumb._open_current_path()
+
+    assert opened == [str(image_path)]

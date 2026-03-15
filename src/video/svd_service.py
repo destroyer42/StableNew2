@@ -26,7 +26,7 @@ class SVDService:
             diffusers = importlib.import_module("diffusers")
             getattr(diffusers, "StableVideoDiffusionPipeline")
         except Exception as exc:
-            return False, str(exc)
+            return False, self._format_dependency_error(exc)
         return True, None
 
     def clear_model_cache(self, model_id: str | None = None) -> None:
@@ -104,7 +104,7 @@ class SVDService:
             diffusers = importlib.import_module("diffusers")
             pipeline_cls = getattr(diffusers, "StableVideoDiffusionPipeline")
         except Exception as exc:
-            raise SVDModelLoadError(f"Failed to import SVD runtime dependencies: {exc}") from exc
+            raise SVDModelLoadError(self._format_dependency_error(exc)) from exc
 
         dtype = self._resolve_torch_dtype(torch, config.torch_dtype)
         kwargs: dict[str, Any] = {
@@ -152,3 +152,19 @@ class SVDService:
             return mapping[torch_dtype]
         except KeyError as exc:
             raise SVDModelLoadError(f"Unsupported torch dtype: {torch_dtype}") from exc
+
+    @staticmethod
+    def _format_dependency_error(exc: Exception) -> str:
+        if isinstance(exc, ModuleNotFoundError):
+            missing = getattr(exc, "name", None) or str(exc)
+            return (
+                "Native SVD dependencies are not installed in the active Python environment "
+                f"(missing module: {missing}). Install them with "
+                "`python -m pip install -r requirements-svd.txt` "
+                "or `pip install .[svd]`."
+            )
+        return (
+            "Native SVD dependencies are unavailable. Install them with "
+            "`python -m pip install -r requirements-svd.txt` "
+            f"and retry. Original error: {exc}"
+        )

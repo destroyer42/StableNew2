@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
+from src.state.output_routing import OUTPUT_ROUTE_SVD
 from src.video.svd_config import SVDConfig
 from src.video.svd_preprocess import validate_svd_source_image
 from src.video.svd_service import SVDService
@@ -31,20 +32,29 @@ class SVDController:
     def build_svd_config(self, form_data: dict[str, object]) -> SVDConfig:
         return SVDConfig.from_dict(form_data)
 
+    def clear_model_cache(self, *, model_id: str | None = None) -> None:
+        self._svd_service.clear_model_cache(model_id=model_id)
+
     def submit_svd_job(
         self,
         *,
         source_image_path: str | Path,
         config: SVDConfig,
+        output_route: str | None = None,
     ) -> str:
         builder = ReprocessJobBuilder()
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
+        source_name = Path(source_image_path).stem.replace("_", " ").strip() or "selected image"
+        route_name = str(output_route or OUTPUT_ROUTE_SVD).strip() or OUTPUT_ROUTE_SVD
         njr = builder.build_reprocess_job(
             input_image_paths=[str(source_image_path)],
             stages=["svd_native"],
-            config={"svd_native": config.to_dict()},
+            config={
+                "svd_native": config.to_dict(),
+                "pipeline": {"output_route": route_name},
+            },
             output_dir=str(output_dir),
-            prompt="",
+            prompt=f"SVD animation source: {source_name}",
             negative_prompt="",
             pack_name="SVD",
         )

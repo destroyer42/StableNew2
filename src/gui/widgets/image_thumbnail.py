@@ -1,6 +1,8 @@
 """Reusable image thumbnail widget for Tkinter."""
 from __future__ import annotations
 
+import os
+import subprocess
 import tkinter as tk
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,9 @@ class ImageThumbnail(tk.Canvas):
 
         # Bind resize event
         self.bind("<Configure>", self._on_resize)
+        self.bind("<Button-1>", self._on_activate)
+        self.bind("<Double-Button-1>", self._on_activate)
+        self._update_clickability()
 
     def load_image(self, path: str | None) -> bool:
         """Load and display an image from the given path.
@@ -41,6 +46,7 @@ class ImageThumbnail(tk.Canvas):
         self.delete("all")
         self._photo_image = None
         self._current_path = path
+        self._update_clickability()
 
         if not path:
             self._show_placeholder("No image selected")
@@ -117,3 +123,28 @@ class ImageThumbnail(tk.Canvas):
         self._photo_image = None
         self._current_path = None
         self._show_placeholder("No image selected")
+        self._update_clickability()
+
+    def _on_activate(self, _event: tk.Event | None = None) -> None:
+        self._open_current_path()
+
+    def _open_current_path(self) -> None:
+        if not self._current_path:
+            return
+        candidate = Path(self._current_path)
+        if not candidate.exists():
+            return
+        if os.name == "nt":
+            os.startfile(str(candidate))
+            return
+        if os.sys.platform == "darwin":
+            subprocess.Popen(["open", str(candidate)])
+            return
+        subprocess.Popen(["xdg-open", str(candidate)])
+
+    def _update_clickability(self) -> None:
+        cursor = "hand2" if self._current_path else ""
+        try:
+            self.configure(cursor=cursor)
+        except Exception:
+            pass

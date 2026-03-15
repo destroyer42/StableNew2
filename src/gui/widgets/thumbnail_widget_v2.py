@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -38,6 +40,8 @@ class ThumbnailWidget(ttk.Frame):
         self._background = background
         self._photo_image: "ImageTk.PhotoImage | None" = None
         self._load_thread: threading.Thread | None = None
+        self._current_path: str | None = None
+        self._open_path: str | None = None
 
         # Create canvas for image display
         self._canvas = tk.Canvas(
@@ -49,9 +53,12 @@ class ThumbnailWidget(ttk.Frame):
             highlightbackground="#3a3a3a",
         )
         self._canvas.pack(fill="both", expand=True)
+        self._canvas.bind("<Button-1>", self._on_activate)
+        self._canvas.bind("<Double-Button-1>", self._on_activate)
 
         # Show initial placeholder
         self._show_placeholder()
+        self._update_clickability()
 
     def _show_placeholder(self, text: str | None = None) -> None:
         """Display placeholder text."""
@@ -90,6 +97,9 @@ class ThumbnailWidget(ttk.Frame):
 
     def set_image_from_path(self, path: Path | str) -> None:
         """Load and display thumbnail from file path (async)."""
+        self._current_path = str(path)
+        self._open_path = str(path)
+        self._update_clickability()
         self.set_loading()
 
         def _load() -> None:
@@ -131,6 +141,9 @@ class ThumbnailWidget(ttk.Frame):
         import io
 
         try:
+            self._current_path = None
+            self._open_path = None
+            self._update_clickability()
             from PIL import Image as PILImage
 
             from src.utils.image_utils import generate_thumbnail
@@ -150,8 +163,44 @@ class ThumbnailWidget(ttk.Frame):
     def clear(self) -> None:
         """Clear the thumbnail and show placeholder."""
         self._photo_image = None
+        self._current_path = None
+        self._open_path = None
         self._show_placeholder()
+        self._update_clickability()
 
     def set_loading(self) -> None:
         """Show loading indicator."""
         self._show_placeholder("Loading...")
+
+    def set_open_target(self, path: Path | str | None) -> None:
+        """Set the file path opened when the thumbnail is activated."""
+        self._open_path = None if path in (None, "") else str(path)
+        self._update_clickability()
+
+    def _on_activate(self, _event: tk.Event | None = None) -> None:
+        self._open_current_path()
+
+    def _open_current_path(self) -> None:
+        target = self._open_path or self._current_path
+        if not target:
+            return
+        candidate = Path(target)
+        if not candidate.exists():
+            return
+        try:
+            if os.name == "nt":
+                os.startfile(str(candidate))
+            elif os.sys.platform == "darwin":
+                subprocess.Popen(["open", str(candidate)])
+            else:
+                subprocess.Popen(["xdg-open", str(candidate)])
+        except Exception:
+            logger.exception("Failed to open thumbnail target: %s", candidate)
+
+    def _update_clickability(self) -> None:
+        target = self._open_path or self._current_path
+        cursor = "hand2" if target else ""
+        try:
+            self._canvas.configure(cursor=cursor)
+        except Exception:
+            pass

@@ -60,6 +60,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         self.replay_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.svd_btn = ttk.Button(
+            action_bar,
+            text="Animate with SVD",
+            command=self._on_send_to_svd,
+            state=tk.DISABLED,
+        )
+        self.svd_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
@@ -127,6 +134,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.bind("<Motion>", self._on_tree_motion)
         self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
+        self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self.history_tree.bind("<Button-3>", self._on_context_menu)
 
@@ -165,6 +173,7 @@ class JobHistoryPanelV2(ttk.Frame):
             self._item_to_job[item_id] = entry.job_id
         self._selected_job_id = None
         self.open_btn.configure(state=tk.DISABLED)
+        self.svd_btn.configure(state=tk.DISABLED)
 
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
@@ -199,6 +208,7 @@ class JobHistoryPanelV2(ttk.Frame):
             self._selected_job_id = None
             self.open_btn.configure(state=tk.DISABLED)
             self.replay_btn.configure(state=tk.DISABLED)
+            self.svd_btn.configure(state=tk.DISABLED)
             return
         item_id = selection[0]
         job_id = self._item_to_job.get(item_id)
@@ -208,10 +218,12 @@ class JobHistoryPanelV2(ttk.Frame):
             self._selected_job_id = None
             self.open_btn.configure(state=tk.DISABLED)
             self.replay_btn.configure(state=tk.DISABLED)
+            self.svd_btn.configure(state=tk.DISABLED)
             self.explain_btn.configure(state=tk.DISABLED)
             return
         self.open_btn.configure(state=tk.NORMAL)
         self.replay_btn.configure(state=tk.NORMAL)
+        self.svd_btn.configure(state=tk.NORMAL)
         self.explain_btn.configure(state=tk.NORMAL)
 
     def _on_open_folder(self) -> None:
@@ -249,6 +261,16 @@ class JobHistoryPanelV2(ttk.Frame):
             except Exception:
                 pass
 
+    def _on_send_to_svd(self) -> None:
+        if not self._selected_job_id or not self.controller:
+            return
+        handler = getattr(self.controller, "send_history_job_image_to_svd", None)
+        if callable(handler):
+            try:
+                handler(self._selected_job_id)
+            except Exception:
+                pass
+
     def _on_context_menu(self, event: tk.Event) -> None:
         item = self.history_tree.identify_row(event.y)
         if not item:
@@ -260,6 +282,7 @@ class JobHistoryPanelV2(ttk.Frame):
             return
         self._selected_job_id = job_id
         self.explain_btn.configure(state=tk.NORMAL)
+        self.svd_btn.configure(state=tk.NORMAL)
         self._history_menu.tk_popup(event.x_root, event.y_root)
 
     def _get_display_status(self, entry: JobHistoryEntry) -> str:
@@ -346,6 +369,8 @@ class JobHistoryPanelV2(ttk.Frame):
                 return Path(str(model)).stem
         metadata = self._extract_result_metadata(entry)
         model = metadata.get("model") or metadata.get("sd_model_checkpoint")
+        if not model and entry.result and isinstance(entry.result, dict):
+            model = entry.result.get("model") or entry.result.get("sd_model_checkpoint")
         if model:
             return Path(str(model)).stem
         return "-"
@@ -364,6 +389,14 @@ class JobHistoryPanelV2(ttk.Frame):
         seed = metadata.get("actual_seed") or metadata.get("final_seed")
         if seed is not None and seed != -1:
             return str(seed)
+        if seed == -1:
+            return "Random"
+        if entry.result and isinstance(entry.result, dict):
+            seed = entry.result.get("actual_seed") or entry.result.get("final_seed")
+            if seed is not None and seed != -1:
+                return str(seed)
+            if seed == -1:
+                return "Random"
         
         # Try NJR snapshot
         if entry.snapshot:
@@ -373,6 +406,8 @@ class JobHistoryPanelV2(ttk.Frame):
                 return str(seed)
             # Last resort: show requested seed even if -1
             seed = njr.get("seed")
+            if seed == -1:
+                return "Random"
             if seed is not None and seed != -1:
                 return str(seed)
         

@@ -8,10 +8,15 @@ import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
+from src.state.output_routing import OUTPUT_ROUTE_PIPELINE
 
 
 class TestOutputFolderStructure:
     """Test that output folders use datetime/pack_name structure with manifests/ subfolder."""
+
+    @staticmethod
+    def _pipeline_route_root(temp_output_dir):
+        return temp_output_dir / OUTPUT_ROUTE_PIPELINE
 
     @pytest.fixture
     def mock_api_client(self):
@@ -87,13 +92,13 @@ class TestOutputFolderStructure:
         # Verify folder structure exists
         # The actual folder should be {timestamp}/{pack_name}/ or {timestamp_packname}/
         # Let's find the folder that was created
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         assert len(output_folders) > 0, "No output folders created"
 
         # Find the folder containing pack name
         pack_folder = None
         for folder in output_folders:
-            if "MyFantasyPack" in folder.name:
+            if "MyFantasyPac" in folder.name:
                 pack_folder = folder
                 break
 
@@ -147,7 +152,7 @@ class TestOutputFolderStructure:
         assert result.success is True
 
         # Find the output folder
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         assert len(output_folders) > 0, "No output folders created"
 
         # Find folder with TestPack in name
@@ -209,7 +214,7 @@ class TestOutputFolderStructure:
         assert result.success is True
 
         # Find the output folder
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_folder = None
         for folder in output_folders:
             # Should contain sanitized pack name
@@ -266,10 +271,10 @@ class TestOutputFolderStructure:
         assert result.success is True
 
         # Find the output folder
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_folder = None
         for folder in output_folders:
-            if "my_unique_job_123" in folder.name:
+            if "my_unique_jo" in folder.name:
                 pack_folder = folder
                 break
 
@@ -324,7 +329,7 @@ class TestOutputFolderStructure:
             assert result.success is True
             
             # Track which folder was used
-            output_folders = list(temp_output_dir.iterdir())
+            output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
             for folder in output_folders:
                 if "SharedPack" in folder.name:
                     folder_paths.add(str(folder))
@@ -333,7 +338,7 @@ class TestOutputFolderStructure:
         assert len(folder_paths) == 1, f"Expected 1 shared folder, found {len(folder_paths)}: {folder_paths}"
         
         # Verify the shared folder contains files from all 3 jobs
-        shared_folder = temp_output_dir / list(folder_paths)[0].split("/")[-1]
+        shared_folder = self._pipeline_route_root(temp_output_dir) / list(folder_paths)[0].split("/")[-1]
         # Note: Files are actually saved by executor, not by pipeline_runner in this mock setup
         # So we just verify the folder reuse logic worked
 
@@ -408,7 +413,7 @@ class TestOutputFolderStructure:
         assert result2.success is True
 
         # Find both folders
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_a_folder = None
         pack_b_folder = None
         

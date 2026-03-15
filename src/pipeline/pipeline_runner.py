@@ -26,6 +26,7 @@ from src.pipeline.stage_sequencer import (
     StageSequencer,
     StageTypeEnum,
 )
+from src.state.output_routing import classify_njr_output_route, get_output_route_root
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
 
@@ -33,6 +34,14 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.controller.app_controller import CancelToken
+
+
+def _merge_output_dir_into_metadata(data: Mapping[str, Any]) -> dict[str, Any]:
+    metadata = dict(data.get("metadata") or {})
+    output_dir = data.get("output_dir")
+    if output_dir and "output_dir" not in metadata:
+        metadata["output_dir"] = output_dir
+    return metadata
 
 
 class PipelineRunner:
@@ -118,10 +127,14 @@ class PipelineRunner:
             folder_name = f"{pack_part}-{model_part}-{vae_part}"
             cache_key = folder_name
             logger.debug(f"Using pack-model-vae folder: {folder_name}")
+
+        output_route = classify_njr_output_route(njr)
+        route_root = get_output_route_root(self._runs_base_dir, output_route, create=True)
+        route_cache_key = f"{output_route}:{cache_key}"
         
         # Check cache for existing folder for this pack+model+vae
         now = datetime.now()
-        cached_entry = PipelineRunner._pack_folder_cache.get(cache_key)
+        cached_entry = PipelineRunner._pack_folder_cache.get(route_cache_key)
         
         if cached_entry:
             timestamp_created, run_dir = cached_entry
@@ -134,16 +147,16 @@ class PipelineRunner:
                 logger.info(f"⏰ Cache expired, creating new folder")
                 timestamp = now.strftime("%Y%m%d_%H%M%S")
                 run_id = f"{timestamp}_{folder_name}"
-                run_dir = Path(self._runs_base_dir) / run_id
+                run_dir = route_root / run_id
                 run_dir.mkdir(parents=True, exist_ok=True)
-                PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
+                PipelineRunner._pack_folder_cache[route_cache_key] = (now, run_dir)
         else:
             # No cached folder, create new one with timestamp prefix
             timestamp = now.strftime("%Y%m%d_%H%M%S")
             run_id = f"{timestamp}_{folder_name}"
-            run_dir = Path(self._runs_base_dir) / run_id
+            run_dir = route_root / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
-            PipelineRunner._pack_folder_cache[cache_key] = (now, run_dir)
+            PipelineRunner._pack_folder_cache[route_cache_key] = (now, run_dir)
             logger.info(f"📁 Created new folder: {run_dir}")
         
         # Create manifests subfolder for JSON metadata
@@ -174,6 +187,8 @@ class PipelineRunner:
         variants = []
         learning_records = []
         metadata = dict(njr.config or {})
+        metadata["output_dir"] = str(run_dir)
+        metadata["output_route"] = output_route
         try:
             # Execute stages sequentially, passing outputs forward
             # Track all image paths through the pipeline (supports batch processing)
@@ -830,7 +845,7 @@ class PipelineRunner:
                 enhanced_metadata,
                 packs=packs_list,
                 stage_outputs=stage_outputs,
-                base_dir=self._runs_base_dir
+                base_dir=route_root
             )
         except Exception:
             pass
@@ -1284,6 +1299,7 @@ class PipelineRunResult:
             "run_id": self.run_id,
             "success": self.success,
             "error": self.error,
+            "output_dir": self.metadata.get("output_dir"),
             "variants": [dict(variant) for variant in (self.variants or []) if variant is not None],
             "learning_records": [asdict(record) for record in (self.learning_records or []) if record is not None],
             "randomizer_mode": self.randomizer_mode,
@@ -1330,7 +1346,7 @@ class PipelineRunResult:
             learning_records=learning_records,
             randomizer_mode=str(data.get("randomizer_mode") or ""),
             randomizer_plan_size=int(data.get("randomizer_plan_size") or 0),
-            metadata=dict(data.get("metadata") or {}),
+            metadata=_merge_output_dir_into_metadata(data),
             stage_plan=None,
             stage_events=stage_events,
         )
@@ -1355,11 +1371,12 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
                     "run_id": str(mapping.get("run_id") or default_run_id or ""),
                     "success": None,
                     "error": mapping.get("error"),
+                    "output_dir": mapping.get("output_dir"),
                     "variants": [dict(variant) for variant in mapping.get("variants") or []],
                     "learning_records": [dict(record) for record in mapping.get("learning_records") or []],
                     "randomizer_mode": str(mapping.get("randomizer_mode") or ""),
                     "randomizer_plan_size": int(mapping.get("randomizer_plan_size") or 0),
-                    "metadata": dict(mapping.get("metadata") or {}),
+                    "metadata": _merge_output_dir_into_metadata(mapping),
                     "stage_plan": mapping.get("stage_plan"),
                     "stage_events": [dict(event) for event in mapping.get("stage_events") or []],
                 }

@@ -34,6 +34,13 @@ _SUPPORTED_SVD_MODELS: dict[str, SVDModelSpec] = {
         recommended=True,
         notes="Recommended Phase 1 default for short hero-frame animation.",
     ),
+    "stabilityai/stable-video-diffusion-img2vid-xt-1-1": SVDModelSpec(
+        model_id="stabilityai/stable-video-diffusion-img2vid-xt-1-1",
+        display_name="Stable Video Diffusion Img2Vid XT 1.1",
+        default_num_frames=25,
+        recommended=False,
+        notes="Newer consistency-focused checkpoint; download once before using local-only mode.",
+    ),
 }
 
 
