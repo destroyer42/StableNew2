@@ -7,7 +7,7 @@ This module provides the canonical StageSequencer class for building
 stage execution plans. All pipeline runs should go through StageSequencer.build_plan().
 
 The canonical stage ordering is:
-    txt2img → img2img → upscale → adetailer
+    txt2img -> img2img -> adetailer -> upscale -> animatediff
 
 Refiner and Hires are metadata on generation stages, not separate stage types.
 """
@@ -15,7 +15,7 @@ Refiner and Hires are metadata on generation stages, not separate stage types.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from src.pipeline.stage_models import (
@@ -59,7 +59,7 @@ class StageConfig:
 class StageExecution:
     """A single stage in the execution plan."""
 
-    stage_type: str  # Keep as str for backward compatibility
+    stage_type: str
     config: StageConfig
     order_index: int
     requires_input_image: bool
@@ -115,12 +115,9 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
 
     pipeline_flags = config.get("pipeline", {}) or {}
 
-    # Determine which stages are enabled using pipeline flags as primary source
-    # Fall back to section-level enabled flags for backward compatibility
     txt_enabled = pipeline_flags.get("txt2img_enabled", True) and _extract_enabled(
         config, "txt2img", True
     )
-    # Get img2img enabled flag without default
     img2img_val = pipeline_flags.get("img2img_enabled")
     img_enabled = (bool(img2img_val) if img2img_val is not None else False) or _extract_enabled(
         config, "img2img", False
@@ -130,6 +127,9 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     )
     up_enabled = pipeline_flags.get("upscale_enabled", False) or _extract_enabled(
         config, "upscale", False
+    )
+    animatediff_enabled = pipeline_flags.get("animatediff_enabled", False) or _extract_enabled(
+        config, "animatediff", False
     )
 
     order = 0
@@ -166,21 +166,6 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
 
     generative_enabled = bool(generation_stages)
 
-    if up_enabled:
-        payload = _stage_payload(config, "upscale")
-        _require_fields(payload, ["upscaler"], "upscale")
-        metadata = _build_stage_metadata(config, payload, stage="upscale")
-        stage = StageExecution(
-            stage_type="upscale",
-            config=StageConfig(enabled=up_enabled, payload=payload, metadata=metadata),
-            order_index=order,
-            # Upscale requires input if there's a preceding generation stage
-            requires_input_image=generative_enabled,
-            produces_output_image=True,
-        )
-        stages.append(stage)
-        order += 1
-
     if ad_enabled:
         if not generative_enabled and not up_enabled:
             raise InvalidStagePlanError(
@@ -198,6 +183,37 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
         stages.append(stage)
         order += 1
 
+    if up_enabled:
+        payload = _stage_payload(config, "upscale")
+        _require_fields(payload, ["upscaler"], "upscale")
+        metadata = _build_stage_metadata(config, payload, stage="upscale")
+        stage = StageExecution(
+            stage_type="upscale",
+            config=StageConfig(enabled=up_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=generative_enabled or ad_enabled,
+            produces_output_image=True,
+        )
+        stages.append(stage)
+        order += 1
+
+    if animatediff_enabled:
+        if not any(_is_image_producing_stage(stage) for stage in stages):
+            raise InvalidStagePlanError(
+                "AnimateDiff requires a preceding image-producing stage."
+            )
+        payload = _stage_payload(config, "animatediff")
+        metadata = _build_stage_metadata(config, payload, stage="animatediff")
+        stage = StageExecution(
+            stage_type="animatediff",
+            config=StageConfig(enabled=animatediff_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=True,
+            produces_output_image=False,
+        )
+        stages.append(stage)
+        order += 1
+
     if not stages:
         raise ValueError("Pipeline has no enabled stages.")
 
@@ -205,46 +221,54 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     return StageExecutionPlan(stages=ordered, run_id=run_id, one_click_action=one_click_action)
 
 
-def _is_generative_stage(stage: StageExecution) -> bool:
-    """Return True if stage is a generative stage (txt2img, img2img, upscale)."""
-    return stage.stage_type in {"txt2img", "img2img", "upscale"}
+def _is_image_producing_stage(stage: StageExecution) -> bool:
+    """Return True if stage produces still images that later stages can consume."""
+
+    return stage.stage_type in {"txt2img", "img2img", "upscale", "adetailer"}
 
 
 def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]:
-    """Ensure ADetailer is always the final stage."""
-    generation = [stage for stage in stages if _is_generative_stage(stage)]
+    """Ensure post stages are ordered canonically, with AnimateDiff last."""
+
     adetailers = [stage for stage in stages if stage.stage_type == "adetailer"]
+    animatediffs = [stage for stage in stages if stage.stage_type == "animatediff"]
 
-    if adetailers and not generation:
+    if len(animatediffs) > 1:
+        raise InvalidStagePlanError("Multiple AnimateDiff stages are not supported.")
+    if adetailers and not any(
+        _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "adetailer"
+    ):
         raise InvalidStagePlanError("ADetailer stage requires a preceding generation stage.")
+    if animatediffs and not any(
+        _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "animatediff"
+    ):
+        raise InvalidStagePlanError("AnimateDiff stage requires a preceding image-producing stage.")
 
-    if adetailers and stages and stages[-1].stage_type != "adetailer":
-        logger.warning(
-            "ADetailer stage detected before generation/hires stages; "
-            "auto-moving ADetailer to final position."
-        )
-
-    if not adetailers:
-        return stages
-
-    ordered = generation + adetailers
-    if ordered == stages:
-        return stages
-    return ordered
+    order_map = {
+        "txt2img": 0,
+        "img2img": 1,
+        "adetailer": 2,
+        "upscale": 3,
+        "animatediff": 4,
+    }
+    ordered = sorted(stages, key=lambda stage: (order_map.get(stage.stage_type, 99), stage.order_index))
+    if ordered != stages:
+        logger.warning("Stage plan order normalized to canonical runtime order.")
+    return [replace(stage, order_index=index) for index, stage in enumerate(ordered)]
 
 
 def _build_stage_metadata(
     config: dict[str, Any], payload: dict[str, Any], *, stage: str
 ) -> StageMetadata:
     """Build StageMetadata from config and payload."""
+
     pipeline_flags = config.get("pipeline", {}) or {}
     hires_fix = config.get("hires_fix", {}) or {}
 
-    # Get img2img value without default - calculate before StageMetadata construction
     img2img_val = pipeline_flags.get("img2img_enabled")
     img2img_enabled = bool(img2img_val) if img2img_val is not None else False
 
-    metadata = StageMetadata(
+    return StageMetadata(
         refiner_enabled=payload.get("refiner_enabled", False),
         refiner_model_name=payload.get("refiner_model_name"),
         refiner_switch_at=payload.get("refiner_switch_at"),
@@ -260,35 +284,17 @@ def _build_stage_metadata(
             "img2img_enabled": img2img_enabled,
             "upscale_enabled": pipeline_flags.get("upscale_enabled", False),
             "adetailer_enabled": pipeline_flags.get("adetailer_enabled", False),
+            "animatediff_enabled": pipeline_flags.get("animatediff_enabled", False),
         },
     )
-    return metadata
 
 
 class StageSequencer:
-    """Builds canonical stage execution plans from pipeline configuration.
-
-    This is the single source of truth for stage ordering. All pipeline runs
-    should go through StageSequencer.build_plan().
-
-    Usage:
-        sequencer = StageSequencer()
-        plan = sequencer.build_plan(pipeline_config)
-    """
+    """Builds canonical stage execution plans from pipeline configuration."""
 
     def build_plan(self, pipeline_config: dict[str, Any]) -> StageExecutionPlan:
-        """Build an ordered stage execution plan from a pipeline config dict.
+        """Build an ordered stage execution plan from a pipeline config dict."""
 
-        Args:
-            pipeline_config: Dictionary containing stage configurations and flags.
-
-        Returns:
-            StageExecutionPlan with ordered stages.
-
-        Raises:
-            InvalidStagePlanError: If ADetailer is enabled without any generation stage.
-            ValueError: If required fields are missing or no stages are enabled.
-        """
         return build_stage_execution_plan(pipeline_config)
 
 

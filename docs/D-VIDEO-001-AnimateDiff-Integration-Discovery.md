@@ -1,5 +1,11 @@
 # D-VIDEO-001 — AnimateDiff Integration Discovery
 
+> Superseded for current implementation planning by
+> [`docs/D-VIDEO-004-AnimateDiff-Current-State-Discovery.md`](./D-VIDEO-004-AnimateDiff-Current-State-Discovery.md).
+> This document remains useful as historical context, but its implementation
+> assumptions and API examples should not be executed as-is against the current
+> codebase.
+
 **Status:** Discovery  
 **Version:** v2.6  
 **Date:** 2026-01-11  
@@ -50,7 +56,10 @@ StableNew has **partial video infrastructure** from legacy development:
 
 **Canonical Stage Ordering:**
 ```
-txt2img → img2img → upscale → adetailer
+Deprecated note: the stage order in this section is outdated.
+Current canonical still-image order is:
+
+txt2img → img2img → adetailer → upscale
 ```
 
 AnimateDiff must integrate as either:
@@ -329,7 +338,10 @@ stage_chain=[
 
 **Canonical Stage Ordering (Extended):**
 ```
-txt2img → img2img → upscale → adetailer → animatediff
+Deprecated note: the stage order in this section is outdated.
+Current canonical order is:
+
+txt2img → img2img → adetailer → upscale → animatediff
 ```
 
 **Stage Types (Extended):**

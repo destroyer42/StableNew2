@@ -46,3 +46,18 @@ def test_build_run_plan_falls_back_when_all_disabled() -> None:
     assert len(plan.jobs) == 1
     assert plan.jobs[0].stage_name == "txt2img"
     assert plan.enabled_stages == ["txt2img"]
+
+
+def test_build_run_plan_normalizes_legacy_upscale_before_adetailer() -> None:
+    njr = _make_njr(
+        [
+            StageConfig(stage_type="txt2img", enabled=True),
+            StageConfig(stage_type="upscale", enabled=True),
+            StageConfig(stage_type="adetailer", enabled=True),
+        ]
+    )
+
+    plan = build_run_plan_from_njr(njr)
+
+    assert [job.stage_name for job in plan.jobs] == ["txt2img", "adetailer", "upscale"]
+    assert plan.enabled_stages == ["txt2img", "adetailer", "upscale"]

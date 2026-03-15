@@ -359,3 +359,29 @@ def test_job_execution_controller_restores_and_persists(monkeypatch) -> None:
     assert any(entry["queue_id"] == "new-job" for entry in persisted.jobs)
     for entry in persisted.jobs:
         assert "pipeline_config" not in entry["njr_snapshot"]
+
+
+def test_job_execution_controller_ignores_running_snapshot_entries(monkeypatch) -> None:
+    entry = {
+        "queue_id": "running-job",
+        "njr_snapshot": {"normalized_job": asdict(_make_normalized_record("running-job"))},
+        "priority": 1,
+        "status": "running",
+        "created_at": "2025-07-01T12:00:00Z",
+        "queue_schema": SCHEMA_VERSION,
+        "metadata": {"run_mode": "queue", "source": "gui", "prompt_source": "pack"},
+    }
+
+    monkeypatch.setattr(
+        "src.controller.job_execution_controller.load_queue_snapshot",
+        lambda *_, **__: QueueSnapshotV1(jobs=[entry], auto_run_enabled=True, paused=False),
+    )
+    monkeypatch.setattr(
+        "src.controller.job_execution_controller.save_queue_snapshot",
+        lambda *_, **__: True,
+    )
+
+    controller = JobExecutionController(execute_job=lambda job: {"ok": True})
+
+    assert controller.auto_run_enabled is True
+    assert controller.get_queue().list_jobs() == []

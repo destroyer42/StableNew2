@@ -57,6 +57,8 @@ def test_reprocess_with_prompt_delta_uses_metadata_baseline(tmp_path) -> None:
     assert njr.base_model == "modelA.safetensors"
     assert njr.config["steps"] == 32
     assert njr.config["img2img"]["denoising_strength"] == 0.42
+    assert njr.config["adetailer"]["adetailer_prompt"] == "portrait photo, bending forward"
+    assert njr.config["adetailer"]["adetailer_negative_prompt"] == "blurry, extra hands"
     assert njr.config["vae"] == "vaeA"
     assert njr.config["txt2img"]["model"] == "modelA.safetensors"
     assert job.source == "review_tab"
@@ -83,7 +85,42 @@ def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) 
     njr = job._normalized_record
     assert njr.positive_prompt == "new prompt"
     assert njr.negative_prompt == ""
+    assert njr.config["adetailer"]["adetailer_prompt"] == "new prompt"
+    assert njr.config["adetailer"]["adetailer_negative_prompt"] == ""
     assert njr.config["steps"] == 20
+
+
+def test_reprocess_with_prompt_modify_short_delta_preserves_baseline(tmp_path) -> None:
+    controller = _build_controller()
+    image = tmp_path / "img_modify.png"
+    image.write_bytes(b"")
+
+    controller._extract_reprocess_baseline_from_image = Mock(
+        return_value={
+            "prompt": "portrait photo, studio lighting",
+            "negative_prompt": "blurry",
+            "model": "modelA.safetensors",
+            "vae": "vaeA",
+            "config": {},
+        }
+    )
+
+    submitted = controller.on_reprocess_images_with_prompt_delta(
+        image_paths=[str(image)],
+        stages=["adetailer"],
+        prompt_delta="better teeth",
+        negative_prompt_delta="-blurry, extra tongue",
+        prompt_mode="modify",
+        negative_prompt_mode="modify",
+    )
+
+    assert submitted == 1
+    job = controller.job_service.submit_queued.call_args[0][0]
+    njr = job._normalized_record
+    assert njr.positive_prompt == "portrait photo, studio lighting, better teeth"
+    assert njr.negative_prompt == "extra tongue"
+    assert njr.config["adetailer"]["adetailer_prompt"] == "portrait photo, studio lighting, better teeth"
+    assert njr.config["adetailer"]["adetailer_negative_prompt"] == "extra tongue"
 
 
 def test_reprocess_img2img_fallback_sets_stage_steps(tmp_path) -> None:

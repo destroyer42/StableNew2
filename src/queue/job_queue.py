@@ -77,6 +77,20 @@ class JobQueue:
                 return list(self._jobs.values())
             return [job for job in self._jobs.values() if job.status == status_filter]
 
+    def list_active_jobs_ordered(self) -> list[Job]:
+        """Return running + queued jobs in display order.
+
+        Running jobs appear first, followed by queued jobs in actual queue order.
+        """
+        with self._lock:
+            running_jobs = [job for job in self._jobs.values() if job.status == JobStatus.RUNNING]
+            queued_jobs = [
+                self._jobs[jid]
+                for _, _, jid in self._get_ordered_queued_jobs()
+                if jid in self._jobs
+            ]
+            return running_jobs + queued_jobs
+
     def get_job(self, job_id: str) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -177,6 +191,7 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at top.
         """
+        moved = False
         with self._lock:
             # Find queued jobs in order
             queued = self._get_ordered_queued_jobs()
@@ -189,9 +204,11 @@ class JobQueue:
                     if priority != prev_priority:
                         return False
                     self._swap_queue_positions(job_id, prev_jid, counter, prev_counter)
-                    self._notify_state_listeners()
-                    return True
-            return False
+                    moved = True
+                    break
+        if moved:
+            self._notify_state_listeners()
+        return moved
 
     def move_down(self, job_id: str) -> bool:
         """Move a queued job down one position (lower priority).
@@ -202,6 +219,7 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at bottom.
         """
+        moved = False
         with self._lock:
             queued = self._get_ordered_queued_jobs()
             for i, (priority, counter, jid) in enumerate(queued):
@@ -213,9 +231,11 @@ class JobQueue:
                     if priority != next_priority:
                         return False
                     self._swap_queue_positions(job_id, next_jid, counter, next_counter)
-                    self._notify_state_listeners()
-                    return True
-            return False
+                    moved = True
+                    break
+        if moved:
+            self._notify_state_listeners()
+        return moved
 
     def move_to_front(self, job_id: str) -> bool:
         """Move a queued job to the front of the queue (highest priority within its priority level).
@@ -226,6 +246,7 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at front.
         """
+        moved = False
         with self._lock:
             queued = self._get_ordered_queued_jobs()
             if not queued:
@@ -265,8 +286,10 @@ class JobQueue:
                     new_queue.append((priority, counter, jid))
             self._queue = new_queue
             heapq.heapify(self._queue)
+            moved = True
+        if moved:
             self._notify_state_listeners()
-            return True
+        return moved
 
     def move_to_back(self, job_id: str) -> bool:
         """Move a queued job to the back of the queue (lowest priority within its priority level).
@@ -277,6 +300,7 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at back.
         """
+        moved = False
         with self._lock:
             queued = self._get_ordered_queued_jobs()
             if not queued:
@@ -316,8 +340,10 @@ class JobQueue:
                     new_queue.append((priority, counter, jid))
             self._queue = new_queue
             heapq.heapify(self._queue)
+            moved = True
+        if moved:
             self._notify_state_listeners()
-            return True
+        return moved
 
     def remove(self, job_id: str) -> Job | None:
         """Remove a job from the queue.
@@ -328,20 +354,25 @@ class JobQueue:
         Returns:
             The removed Job, or None if not found.
         """
+        removed: Job | None = None
         with self._lock:
-            job = self._jobs.pop(job_id, None)
-            if job is None:
-                job = self._finalized_jobs.pop(job_id, None)
-            else:
+            live_job = self._jobs.get(job_id)
+            if live_job is not None:
+                if live_job.status == JobStatus.RUNNING:
+                    return None
+                removed = self._jobs.pop(job_id, None)
                 self._finalized_jobs.pop(job_id, None)
-            if job:
-                # Remove from heap by marking as cancelled
-                job.status = JobStatus.CANCELLED
-                # Rebuild queue without this job
-            self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != job_id]
-            heapq.heapify(self._queue)
+            else:
+                removed = self._finalized_jobs.pop(job_id, None)
+
+            if removed is not None:
+                if removed.status == JobStatus.QUEUED:
+                    removed.status = JobStatus.CANCELLED
+                self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != job_id]
+                heapq.heapify(self._queue)
+        if removed is not None:
             self._notify_state_listeners()
-            return job
+        return removed
 
     def clear(self) -> int:
         """Clear all queued jobs (not running or completed).
@@ -360,8 +391,9 @@ class JobQueue:
             # Rebuild queue without queued jobs
             self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid not in queued_ids]
             heapq.heapify(self._queue)
+        if count:
             self._notify_state_listeners()
-            return count
+        return count
 
     def _get_ordered_queued_jobs(self) -> list[tuple[int, int, str]]:
         """Get queued jobs in priority order (internal, must hold lock)."""

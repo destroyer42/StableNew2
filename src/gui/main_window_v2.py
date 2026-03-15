@@ -18,6 +18,7 @@ from src.gui.log_trace_panel_v2 import LogTracePanelV2
 from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
+from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
@@ -231,6 +232,16 @@ class MainWindowV2:
 
         self.photo_optimize_tab = self.add_tab("photo_optimize", "Photo Optomize", _make_photo_optimize)
         self._restore_photo_optimize_tab_state()
+
+        def _make_movie_clips(parent):
+            return MovieClipsTabFrameV2(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.movie_clips_tab = self.add_tab("movie_clips", "Movie Clips", _make_movie_clips)
+        self._restore_movie_clips_tab_state()
 
         # PR-PERSIST-001: Restore selected tab
         self._restore_tab_selection()
@@ -751,7 +762,8 @@ class MainWindowV2:
             pass
 
         try:
-            if self.webui_process_manager:
+            controller_owns_shutdown = bool(getattr(self, "app_controller", None))
+            if self.webui_process_manager and not controller_owns_shutdown:
                 stop = getattr(self.webui_process_manager, "shutdown", None) or getattr(
                     self.webui_process_manager, "stop", None
                 )
@@ -954,7 +966,19 @@ class MainWindowV2:
             except Exception:
                 if "photo_optimize" not in state:
                     state["photo_optimize"] = {}
-            
+            try:
+                clips_tab = getattr(self, "movie_clips_tab", None)
+                clips_getter = getattr(clips_tab, "get_movie_clips_state", None)
+                if callable(clips_getter):
+                    clips_state = clips_getter()
+                    if isinstance(clips_state, dict):
+                        state["movie_clips"] = clips_state
+                    elif "movie_clips" not in state:
+                        state["movie_clips"] = {}
+            except Exception:
+                if "movie_clips" not in state:
+                    state["movie_clips"] = {}
+
             ui_store.save_state(state)
             logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
         except Exception as e:
@@ -1003,6 +1027,19 @@ class MainWindowV2:
                 restore(photo_state)
         except Exception as e:
             logger.warning(f"Failed to restore Photo Optomize tab state: {e}")
+
+    def _restore_movie_clips_tab_state(self) -> None:
+        """Restore persisted Movie Clips tab state."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            clips_state = state.get("movie_clips")
+            tab = getattr(self, "movie_clips_tab", None)
+            restore = getattr(tab, "restore_movie_clips_state", None)
+            if callable(restore):
+                restore(clips_state)
+        except Exception as e:
+            logger.warning(f"Failed to restore Movie Clips tab state: {e}")
 
 
 def run_app(

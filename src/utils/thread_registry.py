@@ -40,6 +40,7 @@ class TrackedThread:
     name: str
     spawned_at: float
     purpose: str | None = None
+    suppress_daemon_warning: bool = False
 
 
 class ThreadRegistry:
@@ -126,6 +127,7 @@ class ThreadRegistry:
             name=name,
             spawned_at=time.monotonic(),
             purpose=purpose,
+            suppress_daemon_warning=suppress_daemon_warning,
         )
         
         with self._registry_lock:
@@ -226,7 +228,7 @@ class ThreadRegistry:
             thread = tracked.thread
             
             if thread.daemon:
-                if thread.is_alive():
+                if thread.is_alive() and not tracked.suppress_daemon_warning:
                     logger.warning(
                         f"[thread_registry] Daemon thread '{tracked.name}' "
                         f"still alive (age={time.monotonic() - tracked.spawned_at:.1f}s)"

@@ -7,7 +7,9 @@ on:
     branches: [ "**" ]
 
 jobs:
-  build:
+  # Required gate: lint + fast deterministic tests.
+  # This job MUST pass. Failures are not masked.
+  required:
     runs-on: ubuntu-latest
 
     strategy:
@@ -23,7 +25,48 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install system deps for Tk (for GUI tests)
+    - name: Install pip tools
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install pytest ruff
+
+    - name: Lint (Ruff) — required
+      run: |
+        ruff check src
+
+    - name: Run fast deterministic tests — required
+      run: |
+        pytest tests/ --ignore=tests/gui/ --ignore=tests/gui_v2/ --ignore=tests/journey/ --ignore=tests/journeys/ --ignore=tests/integration/ -x -q --disable-warnings
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: required-test-results-${{ matrix.python-version }}
+        path: |
+          .pytest_cache/
+
+  # Optional gate: full suite including GUI (requires Tk/Xvfb) and journey tests.
+  # Failures here are reported but do not block merges.
+  full-suite:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    strategy:
+      matrix:
+        python-version: [ "3.11", "3.12" ]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system deps for Tk (required for GUI tests)
       run: |
         sudo apt-get update
         sudo apt-get install -y python3-tk xvfb
@@ -34,20 +77,16 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install pytest pytest-xvfb ruff
 
-    - name: Lint (Ruff)
-      run: |
-        ruff check src || true
-
-    - name: Run tests
+    - name: Run full test suite (Xvfb)
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          pytest -vv --maxfail=1 --disable-warnings --showlocals || true
+          pytest -vv --maxfail=5 --disable-warnings --showlocals
 
-    - name: Upload test results (coverage, junit, logs)
+    - name: Upload full test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results
+        name: full-test-results-${{ matrix.python-version }}
         path: |
           .pytest_cache/

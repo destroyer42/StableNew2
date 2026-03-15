@@ -238,7 +238,7 @@ class UnifiedPromptResolver:
 class UnifiedConfigResolver:
     """Resolves stage toggles, seeds, and sizing into a single config snapshot."""
 
-    DEFAULT_STAGE_ORDER: list[str] = ["txt2img", "img2img", "upscale", "adetailer"]
+    DEFAULT_STAGE_ORDER: list[str] = ["txt2img", "img2img", "adetailer", "upscale"]
     DEFAULT_FLAGS: dict[str, bool] = {
         "txt2img": True,
         "img2img": False,

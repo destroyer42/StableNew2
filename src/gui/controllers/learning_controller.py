@@ -14,6 +14,11 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.stage_capabilities import get_stage_capability
+from src.learning.learning_controller_services.experiment_persistence import (
+    build_resume_payload,
+    validate_resume_payload,
+    extract_workflow_state,
+)
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.queue.job_model import Job, JobPriority
@@ -704,7 +709,7 @@ class LearningController:
         learning_ctx = LearningJobContext(
             experiment_id=experiment.name,
             experiment_name=experiment.name,
-            variant_index=0,  # Not used for single variant jobs
+            variant_index=max(0, self._get_variant_index(variant)),
             variable_under_test=experiment.variable_under_test,
             variant_value=variant.param_value,
         )
@@ -763,6 +768,7 @@ class LearningController:
             clip_skip=clip_skip,
             prompt_pack_id=f"learning_{experiment.name}",
             stage_chain=[txt2img_stage],  # Required: at least one stage
+            images_per_prompt=max(1, int(experiment.images_per_value or 1)),
             learning_context=learning_ctx,  # For metadata and tracking
             extra_metadata={
                 "learning_enabled": True,
@@ -1304,16 +1310,16 @@ class LearningController:
             return None
         if self._is_review_complete():
             return None
-        payload = self.learning_state.to_dict()
-        payload["workflow_state"] = self._workflow_state
-        payload["learning_enabled"] = bool(self._learning_enabled)
-        payload["resume_schema_version"] = 1
-        payload["saved_at"] = datetime.utcnow().isoformat() + "Z"
-        return payload
+        # Delegate serialisation to experiment_persistence (PR-047).
+        return build_resume_payload(
+            state_dict=self.learning_state.to_dict(),
+            workflow_state=self._workflow_state,
+            learning_enabled=bool(self._learning_enabled),
+        )
 
     def restore_resume_state(self, payload: dict[str, Any] | None) -> bool:
         """Restore learning session from persisted payload."""
-        if not isinstance(payload, dict):
+        if not validate_resume_payload(payload):
             return False
         try:
             restored = LearningState.from_dict(payload)
@@ -1327,7 +1333,8 @@ class LearningController:
         self.load_existing_ratings()
         self._update_plan_table()
 
-        desired_state = str(payload.get("workflow_state", "") or "").strip().lower()
+        # Delegate workflow-state extraction to experiment_persistence (PR-047).
+        desired_state = extract_workflow_state(payload)
         if desired_state:
             self._set_workflow_state(desired_state)
         else:
@@ -1476,6 +1483,9 @@ class LearningController:
                 "rating_schema_version": 2,
                 "rating_context": context_flags,
                 "rating_details": subscores,
+                # PR-046: mirror subscores under the canonical key used by review_tab records
+                # so both record shapes normalize identically via extract_rating_detail()
+                "subscores": subscores,
                 "learning_context": {
                     "experiment_id": experiment.name,
                     "variant_id": target_variant.id
@@ -1867,27 +1877,39 @@ class LearningController:
     
     def apply_recommendations_to_pipeline(self, recommendations: Any) -> bool:
         """Apply recommendations to the pipeline stage cards.
-        
+
+        PR-044: Blocks automation when evidence tier is not experiment_strong.
+
         Returns True if successful, False otherwise.
         """
         if self._automation_mode == "suggest_only":
             return False
         if not self.pipeline_controller:
             return False
-        
+
+        # PR-044/055: manual-only evidence tiers must still support explicit
+        # apply-with-confirm. Only the fully automatic path is gated on
+        # automation_eligible.
+        if (
+            self._automation_mode == "auto_micro_experiment"
+            and hasattr(recommendations, "automation_eligible")
+            and not recommendations.automation_eligible
+        ):
+            return False
+
         # Get stage cards panel
         stage_cards = getattr(self.pipeline_controller, "stage_cards_panel", None)
         if not stage_cards:
             # Try via app_state or other paths
             stage_cards = self._find_stage_cards_panel()
-        
+
         if not stage_cards:
             return False
-        
+
         # Extract recommendations
         rec_list = self._extract_rec_list(recommendations)
         self._automation_snapshot = {}
-        
+
         applied = 0
         for rec in rec_list:
             if hasattr(rec, "parameter_name"):
@@ -2101,3 +2123,127 @@ class LearningController:
 
         analytics = LearningAnalytics(self._learning_record_writer)
         analytics.export_to_csv(Path(file_path))
+
+    # ------------------------------------------------------------------
+    # PR-GUI-LEARN-041: Discovered-review orchestration
+    # ------------------------------------------------------------------
+
+    def _get_discovered_store(self):
+        """Return a DiscoveredReviewStore instance, creating it lazily."""
+        from src.learning.discovered_review_store import DiscoveredReviewStore
+        from src.learning.learning_paths import get_discovered_experiments_root
+
+        if not hasattr(self, "_discovered_review_store"):
+            self._discovered_review_store = DiscoveredReviewStore(
+                get_discovered_experiments_root(create=True)
+            )
+        return self._discovered_review_store
+
+    def refresh_discovered_inbox(self, status: str | None = None) -> list:
+        """Return current handles from the discovered-review store.
+
+        Parameters
+        ----------
+        status:
+            If provided, filter by this status string.  Pass None for all.
+
+        Returns
+        -------
+        list[DiscoveredReviewHandle]
+        """
+        from src.learning.discovered_review_models import (
+            STATUS_IN_REVIEW,
+            STATUS_WAITING_REVIEW,
+        )
+
+        store = self._get_discovered_store()
+        if status == "active":
+            return store.list_handles_by_status(
+                {STATUS_WAITING_REVIEW, STATUS_IN_REVIEW}
+            )
+        return store.list_handles(status=status)
+
+    def load_discovered_group(self, group_id: str):
+        """Load and return a full DiscoveredReviewExperiment by ID.
+
+        Also updates selected_discovered_group_id in LearningState.
+        """
+        store = self._get_discovered_store()
+        experiment = store.load_group(group_id)
+        if experiment is not None:
+            self.learning_state.selected_discovered_group_id = group_id
+        return experiment
+
+    def save_discovered_item_rating(
+        self, group_id: str, item_id: str, rating: int, notes: str = ""
+    ) -> None:
+        """Persist a per-item rating into the discovered-review store."""
+        store = self._get_discovered_store()
+        store.save_item_rating(group_id, item_id, rating, notes)
+
+    def close_discovered_group(self, group_id: str) -> None:
+        """Transition a discovered group to 'closed' status."""
+        store = self._get_discovered_store()
+        store.close_group(group_id)
+
+    def ignore_discovered_group(self, group_id: str) -> None:
+        """Transition a discovered group to 'ignored' status."""
+        store = self._get_discovered_store()
+        store.ignore_group(group_id)
+
+    def reopen_discovered_group(self, group_id: str) -> None:
+        """Reopen a closed/ignored discovered group back to waiting_review."""
+        store = self._get_discovered_store()
+        store.reopen_group(group_id)
+
+    def trigger_background_scan(
+        self, output_root: str, on_complete: "Any | None" = None
+    ) -> None:
+        """Run an incremental output scan in a background thread.
+
+        Parameters
+        ----------
+        output_root:
+            Root directory to scan for image artifacts.
+        on_complete:
+            Optional callback(new_count: int) invoked on the main thread when
+            the scan completes.  Uses ``after(0, ...)`` via the stored after_fn
+            if available, otherwise calls directly.
+        """
+        import threading
+        from pathlib import Path
+
+        from src.learning.discovered_grouping import GroupingEngine
+        from src.learning.output_scanner import OutputScanner
+
+        def _run() -> None:
+            try:
+                store = self._get_discovered_store()
+                scan_index = store.load_scan_index()
+                scanner = OutputScanner(Path(output_root), scan_index=scan_index)
+                records = scanner.scan_incremental()
+                store.save_scan_index(scanner.scan_index)
+
+                existing_ids = {h.group_id for h in store.list_handles()}
+                engine = GroupingEngine()
+                candidates = engine.build_candidates(records, existing_group_ids=existing_ids)
+
+                for candidate in candidates:
+                    store.save_group(candidate)
+
+                new_count = len(candidates)
+            except Exception:
+                new_count = 0
+
+            if callable(on_complete):
+                after_fn = getattr(self, "_after_fn", None)
+                if callable(after_fn):
+                    after_fn(0, lambda: on_complete(new_count))
+                else:
+                    try:
+                        on_complete(new_count)
+                    except Exception:
+                        pass
+
+        thread = threading.Thread(target=_run, daemon=True, name="discovered-scan")
+        thread.start()

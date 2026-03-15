@@ -81,6 +81,24 @@ def test_review_feedback_payload_uses_resolved_prompt_fallbacks() -> None:
     assert payload["after_negative_prompt"] == "washed out, extra fingers"
 
 
+def test_review_adapter_modify_mode_applies_targeted_delta() -> None:
+    adapter = ReviewWorkflowAdapter()
+
+    prompt = adapter.apply_prompt_delta(
+        "portrait, smiling, blue eyes",
+        "smiling -> laughing, -blue eyes, cinematic lighting",
+        "modify",
+    )
+    negative = adapter.apply_prompt_delta(
+        "blurry, extra fingers",
+        "-blurry, deformed mouth",
+        "modify",
+    )
+
+    assert prompt == "portrait, laughing, cinematic lighting"
+    assert negative == "extra fingers, deformed mouth"
+
+
 def test_view_contract_state_helpers() -> None:
     sel = update_selection_list(["a", "b", "c"], [0, 2, 9])
     assert sel.selected_indices == (0, 2)

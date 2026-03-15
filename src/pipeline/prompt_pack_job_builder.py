@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import itertools
 import logging
+import random
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -153,14 +154,10 @@ class PromptPackNormalizedJobBuilder:
         
         # Generate combinations based on mode
         if matrix_mode == "random":
-            # Random mode: generate N random combinations (each slot independently randomized)
-            import random
             target_count = limit if limit > 0 else 10  # Default to 10 if no limit specified
-            combinations = []
-            for _ in range(target_count):
-                # Pick a random value from each slot independently
-                combo = tuple(random.choice(slot_values_lists[i]) for i in range(len(slot_names)))
-                combinations.append(combo)
+            combinations = list(itertools.product(*slot_values_lists))
+            random.shuffle(combinations)
+            combinations = combinations[:target_count]
             _logger.info(f"[Matrix Expansion] Generated {len(combinations)} random combinations for {entry.pack_id} with slots: {slot_names}")
         else:
             # Sequential mode: generate all Cartesian product combinations
@@ -401,9 +398,10 @@ class PromptPackNormalizedJobBuilder:
             "img2img": merged_config.get("img2img", {}),
             "adetailer": merged_config.get("adetailer", {}),
             "upscale": merged_config.get("upscale", {}),
+            "animatediff": merged_config.get("animatediff", {}),
         }
         chain: list[StageConfig] = []
-        for stage in ("txt2img", "img2img", "adetailer", "upscale"):
+        for stage in ("txt2img", "img2img", "adetailer", "upscale", "animatediff"):
             data = stage_sections.get(stage, {}) or {}
             enabled = bool(stage_flags.get(stage, stage == "txt2img"))
             extra: dict[str, Any] = {}
@@ -444,6 +442,20 @@ class PromptPackNormalizedJobBuilder:
                         "gfpgan_visibility": data.get("gfpgan_visibility"),
                         "codeformer_visibility": data.get("codeformer_visibility"),
                         "codeformer_weight": data.get("codeformer_weight"),
+                    }
+                )
+            if stage == "animatediff":
+                extra.update(
+                    {
+                        "motion_module": data.get("motion_module"),
+                        "fps": data.get("fps"),
+                        "video_length": data.get("video_length"),
+                        "loop_number": data.get("loop_number"),
+                        "closed_loop": data.get("closed_loop"),
+                        "batch_size": data.get("batch_size"),
+                        "stride": data.get("stride"),
+                        "overlap": data.get("overlap"),
+                        "format": data.get("format"),
                     }
                 )
             # BUGFIX: ADetailer stage should NOT have model/VAE fields set from config
@@ -557,6 +569,7 @@ class PromptPackNormalizedJobBuilder:
             "img2img": img2img_enabled,
             "adetailer": bool(pipeline_section.get("adetailer_enabled", False)),
             "upscale": bool(pipeline_section.get("upscale_enabled", False)),
+            "animatediff": bool(pipeline_section.get("animatediff_enabled", False)),
         }
         normalized = dict(defaults)
         for key, value in overrides.items():

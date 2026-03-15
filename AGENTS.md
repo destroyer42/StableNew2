@@ -1,5 +1,11 @@
 AGENTS.md (v2.6 Canonical Edition)
 Roles, Responsibilities, Boundaries, and Interaction Rules for Multi-Agent Development in StableNew
+
+Active Instruction Surface: See `.github/INSTRUCTION_SURFACE.md` for the full
+manifest of all active machine-facing guidance files, precedence order, and
+archive rules. Any new agent profile or path-scoped instruction file must be
+registered there in the same PR that creates it.
+
 1. Purpose
 
 StableNew is developed collaboratively by a multi-agent system:

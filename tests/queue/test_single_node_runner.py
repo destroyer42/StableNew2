@@ -90,3 +90,40 @@ def test_worker_warns_long_running_jobs(monkeypatch, caplog) -> None:
     runner.stop()
 
     assert any("QUEUE_JOB_WARNING" in record.getMessage() for record in caplog.records)
+
+
+def test_worker_marks_job_failed_on_explicit_false_success() -> None:
+    job_queue = JobQueue()
+
+    def run_callable(job: Job) -> dict[str, object]:
+        return {"run_id": job.job_id, "success": False}
+
+    runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=run_callable, poll_interval=0.01)
+    runner.start()
+
+    job = Job(job_id="runner-explicit-fail")
+    job_queue.submit(job)
+
+    failed = _wait_for_status(job_queue, "runner-explicit-fail", status=JobStatus.FAILED)
+    runner.stop()
+
+    assert failed is not None
+    assert failed.error_message == "Job failed without error message"
+
+
+def test_worker_allows_legacy_result_without_success_to_complete() -> None:
+    job_queue = JobQueue()
+
+    def run_callable(job: Job) -> dict[str, str]:
+        return {"job_id": job.job_id, "status": "completed"}
+
+    runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=run_callable, poll_interval=0.01)
+    runner.start()
+
+    job = Job(job_id="runner-legacy-result")
+    job_queue.submit(job)
+
+    completed = _wait_for_status(job_queue, "runner-legacy-result", status=JobStatus.COMPLETED)
+    runner.stop()
+
+    assert completed is not None

@@ -20,7 +20,13 @@ def _base_config():
         },
         "img2img": {"enabled": False, "model": "m", "sampler_name": "Euler", "steps": 10},
         "upscale": {"enabled": False, "upscaler": "R-ESRGAN 4x+"},
-        "pipeline": {"txt2img_enabled": True, "img2img_enabled": False, "upscale_enabled": False},
+        "animatediff": {"enabled": False, "fps": 8, "video_length": 16},
+        "pipeline": {
+            "txt2img_enabled": True,
+            "img2img_enabled": False,
+            "upscale_enabled": False,
+            "animatediff_enabled": False,
+        },
     }
 
 
@@ -65,8 +71,8 @@ def test_plan_builder_includes_adetailer_before_upscale():
     cfg["upscale"]["enabled"] = True
     cfg["adetailer"] = {"enabled": True}
     plan = build_stage_execution_plan(cfg)
-    assert [s.stage_type for s in plan.stages] == ["txt2img", "upscale", "adetailer"]
-    assert plan.stages[1].stage_type == "upscale"
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "adetailer", "upscale"]
+    assert plan.stages[1].stage_type == "adetailer"
     assert plan.stages[1].requires_input_image is True
 
 
@@ -115,7 +121,7 @@ def test_plan_builder_adetailer_and_upscale_sequence():
     cfg["pipeline"]["upscale_enabled"] = True
     cfg["adetailer"] = {"enabled": True}
     plan = build_stage_execution_plan(cfg)
-    assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "upscale", "adetailer"]
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "adetailer", "upscale"]
 
 
 def test_plan_builder_adetailer_without_generative_stage_raises():
@@ -131,7 +137,7 @@ def test_plan_builder_adetailer_without_generative_stage_raises():
 
 
 def test_plan_builder_reorders_adetailer_with_warning(caplog):
-    """Test that stages are built in correct order (txt2img -> upscale -> adetailer).
+    """Test that stages are built in correct order (txt2img -> adetailer -> upscale).
 
     Note: No reordering warning is expected because stages are added in canonical order.
     The warning only fires if stages were somehow added out of order and need reordering.
@@ -143,7 +149,7 @@ def test_plan_builder_reorders_adetailer_with_warning(caplog):
     cfg["upscale"]["enabled"] = True
     caplog.set_level(logging.WARNING)
     plan = build_stage_execution_plan(cfg)
-    assert [s.stage_type for s in plan.stages] == ["txt2img", "upscale", "adetailer"]
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "adetailer", "upscale"]
     # No reordering warning expected since stages are already in canonical order
 
 
@@ -164,3 +170,22 @@ def test_plan_builder_carries_hires_metadata():
     assert metadata.hires_upscale_factor == 1.5
     assert metadata.hires_steps == 10
     assert metadata.hires_denoise == 0.4
+
+
+def test_plan_builder_txt2img_and_animatediff():
+    cfg = _base_config()
+    cfg["animatediff"]["enabled"] = True
+    cfg["pipeline"]["animatediff_enabled"] = True
+    plan = build_stage_execution_plan(cfg)
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "animatediff"]
+    assert plan.stages[-1].requires_input_image is True
+
+
+def test_plan_builder_animatediff_without_prior_stage_raises():
+    cfg = _base_config()
+    cfg["txt2img"]["enabled"] = False
+    cfg["pipeline"]["txt2img_enabled"] = False
+    cfg["animatediff"]["enabled"] = True
+    cfg["pipeline"]["animatediff_enabled"] = True
+    with pytest.raises(ValueError):
+        build_stage_execution_plan(cfg)

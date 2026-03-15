@@ -369,6 +369,10 @@ class JobExecutionController:
             self._ensure_worker_started()
         self._persist_queue_state()
 
+    def persist_queue_state(self) -> None:
+        """Persist the current queue snapshot through the controller-owned store."""
+        self._persist_queue_state()
+
     @property
     def is_queue_paused(self) -> bool:
         return self._queue_paused
@@ -479,7 +483,7 @@ class JobExecutionController:
         if not isinstance(entry, Mapping):
             return None
         status_value = str(entry.get("status") or JobStatus.QUEUED.value).lower()
-        if status_value not in {JobStatus.QUEUED.value, JobStatus.RUNNING.value}:
+        if status_value != JobStatus.QUEUED.value:
             return None
         snapshot = entry.get("njr_snapshot") or {}
         record = _njr_from_snapshot(snapshot)

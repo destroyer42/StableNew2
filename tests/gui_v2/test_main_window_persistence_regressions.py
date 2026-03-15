@@ -51,6 +51,22 @@ class _StubPipelineController:
         self._job_controller = job_controller
 
 
+class _StubControllerForCleanup:
+    def __init__(self) -> None:
+        self.called = 0
+
+    def stop_all_background_work(self) -> None:
+        self.called += 1
+
+
+class _StubWebUIManager:
+    def __init__(self) -> None:
+        self.called = 0
+
+    def shutdown(self) -> None:
+        self.called += 1
+
+
 def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none(tmp_path: Path) -> None:
     store = UIStateStore(tmp_path / "ui_state.json")
     store.save_state(
@@ -106,3 +122,19 @@ def test_trigger_deferred_queue_autostart_calls_job_controller() -> None:
     window._trigger_deferred_queue_autostart()
 
     assert job_controller.called == 1
+
+
+def test_cleanup_does_not_double_shutdown_webui_when_controller_present() -> None:
+    window = MainWindowV2.__new__(MainWindowV2)
+    window._disposed = False
+    window._invoker = None
+    window.pipeline_controller = None
+    window.app_state = type("State", (), {"disable_notifications": lambda self: None})()
+    window.app_controller = _StubControllerForCleanup()
+    window.webui_process_manager = _StubWebUIManager()
+    window._save_ui_state = lambda: None
+
+    window.cleanup()
+
+    assert window.app_controller.called == 1
+    assert window.webui_process_manager.called == 0

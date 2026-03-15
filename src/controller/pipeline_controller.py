@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from src.controller.archive.pipeline_config_assembler import (
@@ -614,7 +614,10 @@ class PipelineController(_GUIPipelineController):
         self._last_stage_events: list[dict[Any, Any]] | None = None
         self._learning_enabled: bool = False
         self._learning_queue_cap: int = 3
-        self._job_controller = JobExecutionController(execute_job=self._execute_job)
+        self._job_controller = JobExecutionController(
+            execute_job=self._execute_job,
+            replay_runner=self,
+        )
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
         self._gui_defaults_resolver = (
@@ -666,9 +669,16 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         if forced_value is None:
-            if self._app_state is None:
-                return
-            enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+            if self._app_state is not None:
+                enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+            else:
+                enabled = bool(
+                    getattr(
+                        self._job_controller,
+                        "auto_run_enabled",
+                        getattr(self._job_service, "auto_run_enabled", False),
+                    )
+                )
         else:
             enabled = bool(forced_value)
         self._job_service.auto_run_enabled = enabled
@@ -1132,6 +1142,12 @@ class PipelineController(_GUIPipelineController):
             if njr:
                 try:
                     summary = UnifiedJobSummary.from_normalized_record(njr)
+                    status_value = getattr(job, "status", None)
+                    status_text = (
+                        status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                    ).strip()
+                    if status_text:
+                        summary = replace(summary, status=status_text.upper())
                     queue_jobs.append(summary)
                     summaries.append(summary.positive_prompt_preview or job.job_id)
                 except Exception as exc:
@@ -1167,6 +1183,11 @@ class PipelineController(_GUIPipelineController):
 
     def _list_service_jobs(self) -> list[Job]:
         queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "list_active_jobs_ordered"):
+            try:
+                return list(queue.list_active_jobs_ordered())
+            except Exception:
+                return []
         if queue and hasattr(queue, "list_jobs"):
             try:
                 return list(queue.list_jobs())
@@ -1179,12 +1200,20 @@ class PipelineController(_GUIPipelineController):
             return
         if job is None:
             self._app_state.set_running_job(None)
+            if hasattr(self._app_state, "set_runtime_status"):
+                self._app_state.set_runtime_status(None)
             return
         # Convert Job to UnifiedJobSummary via NJR
         njr = getattr(job, "_normalized_record", None)
         if njr:
             try:
                 summary = UnifiedJobSummary.from_normalized_record(njr)
+                status_value = getattr(job, "status", None)
+                status_text = (
+                    status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                ).strip()
+                if status_text:
+                    summary = replace(summary, status=status_text.upper())
                 self._app_state.set_running_job(summary)
             except Exception as exc:
                 _logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
@@ -1258,13 +1287,17 @@ class PipelineController(_GUIPipelineController):
                 _logger.exception("on_queue_move_down_v2 failed", exc_info=True)
         return False
 
-    def on_queue_remove_job_v2(self, job_id: str) -> None:
+    def on_queue_remove_job_v2(self, job_id: str) -> bool:
         queue = getattr(self._job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
-                queue.remove(job_id)
+                removed = queue.remove(job_id)
+                if removed is not None and self._app_state:
+                    self._refresh_app_state_queue()
+                return removed is not None
             except Exception:
                 _logger.exception("on_queue_remove_job_v2 failed", exc_info=True)
+        return False
 
     def on_queue_clear_v2(self) -> None:
         queue = getattr(self._job_service, "job_queue", None)
@@ -1277,6 +1310,11 @@ class PipelineController(_GUIPipelineController):
     def on_set_auto_run_v2(self, enabled: bool) -> None:
         if self._app_state:
             self._app_state.set_auto_run_queue(bool(enabled))
+        if self._job_controller and hasattr(self._job_controller, "set_auto_run_enabled"):
+            try:
+                self._job_controller.set_auto_run_enabled(bool(enabled))
+            except Exception:
+                _logger.exception("Failed to sync auto-run to JobExecutionController", exc_info=True)
         self._sync_auto_run_setting(bool(enabled))
         if not enabled or not self._job_service:
             return
@@ -1296,6 +1334,11 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         self._job_service.pause()
+        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+            try:
+                self._job_controller.set_queue_paused(True)
+            except Exception:
+                _logger.exception("Failed to sync pause state to JobExecutionController", exc_info=True)
         if self._app_state:
             self._app_state.set_is_queue_paused(True)
 
@@ -1303,6 +1346,11 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         self._job_service.resume()
+        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+            try:
+                self._job_controller.set_queue_paused(False)
+            except Exception:
+                _logger.exception("Failed to sync pause state to JobExecutionController", exc_info=True)
         if self._app_state:
             self._app_state.set_is_queue_paused(False)
 
@@ -1444,20 +1492,8 @@ class PipelineController(_GUIPipelineController):
         """
         record = getattr(job, "_normalized_record", None)
         if record is not None:
-            api_client = SDWebUIClient(
-                base_url="http://127.0.0.1:7860",
-            )
-            structured_logger = StructuredLogger()
-            
-            # Get status callback from app_controller if available
-            status_callback = None
-            app_controller = getattr(self, "app_controller", None)
-            if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
-                status_callback = app_controller._get_runtime_status_callback()
-            
-            runner = PipelineRunner(api_client, structured_logger, status_callback=status_callback)
             try:
-                result = runner.run_njr(record, self.cancel_token)
+                result = self.run_njr(record)
                 return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
             except Exception as exc:  # noqa: BLE001
                 envelope = get_attached_envelope(exc)
@@ -1472,6 +1508,39 @@ class PipelineController(_GUIPipelineController):
                 }
         error_msg = "Job missing _normalized_record; NJR-only execution requires NormalizedJobRecord snapshots."
         return {"error": error_msg, "job_id": job.job_id}
+
+    def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None] | None:
+        app_controller = getattr(self, "app_controller", None)
+        if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
+            return app_controller._get_runtime_status_callback()
+        return None
+
+    def _create_runtime_pipeline_runner(self) -> PipelineRunner:
+        if self._pipeline_runner is not None:
+            return self._pipeline_runner
+        return PipelineRunner(
+            SDWebUIClient(base_url="http://127.0.0.1:7860"),
+            StructuredLogger(),
+            status_callback=self._get_runtime_status_callback(),
+        )
+
+    def run_njr(
+        self,
+        record: NormalizedJobRecord,
+        cancel_token: Any | None = None,
+        run_plan: Any | None = None,
+        log_fn: Callable[[str], None] | None = None,
+    ) -> PipelineRunResult:
+        """Execute an NJR through the controller-owned canonical runner path."""
+        runner = self._create_runtime_pipeline_runner()
+        result = runner.run_njr(
+            record,
+            cancel_token=cancel_token if cancel_token is not None else self.cancel_token,
+            run_plan=run_plan,
+            log_fn=log_fn,
+        )
+        self.record_run_result(result)
+        return result
 
     def _infer_job_stage(self, job: Job) -> str | None:
         record = getattr(job, "_normalized_record", None)
@@ -1787,16 +1856,8 @@ class PipelineController(_GUIPipelineController):
         Returns:
             PipelineRunResult
         """
-        if self._pipeline_runner is not None:
-            record = build_njr_from_legacy_pipeline_config(config)
-            result = self._pipeline_runner.run_njr(record, self.cancel_token)
-        else:
-            api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-            structured_logger = StructuredLogger()
-            runner = PipelineRunner(api_client, structured_logger)
-            record = build_njr_from_legacy_pipeline_config(config)
-            result = runner.run_njr(record, self.cancel_token)
-        self.record_run_result(result)
+        record = build_njr_from_legacy_pipeline_config(config)
+        result = self.run_njr(record)
         return result
 
     def get_job_history_service(self) -> JobHistoryService | None:
@@ -1812,6 +1873,14 @@ class PipelineController(_GUIPipelineController):
             except Exception:
                 pass
         return self._job_history_service
+
+    def get_job_execution_controller(self) -> JobExecutionController:
+        """Return the queue execution controller backing this pipeline controller."""
+        return self._job_controller
+
+    def get_job_service(self) -> JobService | None:
+        """Return the queue service used by pipeline-facing GUI actions."""
+        return self._job_service
 
     # -------------------------------------------------------------------------
     def get_diagnostics_snapshot(self) -> dict[str, Any]:

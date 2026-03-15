@@ -101,8 +101,8 @@ def test_queue_panel_invokes_controller_actions(tk_root: tk.Tk) -> None:
     controller = QueueController()
     panel = QueuePanelV2(tk_root, controller=controller)
     panel._jobs = [
-        SimpleNamespace(job_id="job-1"),
-        SimpleNamespace(job_id="job-2"),
+        SimpleNamespace(job_id="job-1", status="QUEUED"),
+        SimpleNamespace(job_id="job-2", status="QUEUED"),
     ]
     panel._get_selected_job = lambda: panel._jobs[0]
     panel._get_selected_index = lambda: 0
@@ -122,12 +122,62 @@ def test_queue_panel_invokes_controller_actions(tk_root: tk.Tk) -> None:
         ("auto", False),
         "pause",
         "resume",
-        ("move_up", "job-1"),
         ("move_down", "job-1"),
         ("remove", "job-1"),
         "clear",
         "send",
     ]
+
+
+def test_queue_panel_disables_remove_and_clear_for_running_only_queue(tk_root: tk.Tk) -> None:
+    panel = QueuePanelV2(tk_root)
+    running_job = SimpleNamespace(job_id="job-1", status="RUNNING", get_display_summary=lambda: "job")
+
+    panel.update_jobs([running_job])
+    panel.job_listbox.selection_set(0)
+    panel._update_button_states()
+
+    assert "disabled" in panel.remove_button.state()
+    assert "disabled" in panel.clear_button.state()
+    assert "disabled" in panel.send_job_button.state()
+
+    panel.destroy()
+
+
+def test_queue_panel_move_buttons_use_queued_position_not_visual_index(tk_root: tk.Tk) -> None:
+    panel = QueuePanelV2(tk_root)
+    running_job = SimpleNamespace(job_id="running", status="RUNNING", get_display_summary=lambda: "running")
+    queued_job = SimpleNamespace(job_id="queued", status="QUEUED", get_display_summary=lambda: "queued")
+
+    panel.update_jobs([running_job, queued_job])
+    panel.job_listbox.selection_set(1)
+    panel._update_button_states()
+
+    assert "disabled" in panel.move_up_button.state()
+    assert "disabled" in panel.move_to_front_button.state()
+    assert "disabled" in panel.move_down_button.state()
+    assert "disabled" in panel.move_to_back_button.state()
+    assert "disabled" not in panel.remove_button.state()
+
+    panel.destroy()
+
+
+def test_queue_panel_enables_move_up_for_second_queued_job_below_running(tk_root: tk.Tk) -> None:
+    panel = QueuePanelV2(tk_root)
+    running_job = SimpleNamespace(job_id="running", status="RUNNING", get_display_summary=lambda: "running")
+    queued_job_1 = SimpleNamespace(job_id="queued-1", status="QUEUED", get_display_summary=lambda: "queued-1")
+    queued_job_2 = SimpleNamespace(job_id="queued-2", status="QUEUED", get_display_summary=lambda: "queued-2")
+
+    panel.update_jobs([running_job, queued_job_1, queued_job_2])
+    panel.job_listbox.selection_set(2)
+    panel._update_button_states()
+
+    assert "disabled" not in panel.move_up_button.state()
+    assert "disabled" not in panel.move_to_front_button.state()
+    assert "disabled" in panel.move_down_button.state()
+    assert "disabled" in panel.move_to_back_button.state()
+
+    panel.destroy()
 
 
 def test_job_status_updates_use_ui_dispatcher() -> None:

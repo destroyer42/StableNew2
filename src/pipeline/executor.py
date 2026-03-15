@@ -22,6 +22,13 @@ from PIL import Image
 from src.api.client import WebUIPayloadValidationError, PROGRESS_STALL_THRESHOLD_SEC
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
+from src.pipeline.animatediff_models import (
+    AnimateDiffConfig,
+    attach_animatediff_to_payload,
+    normalize_animatediff_response,
+    resolve_animatediff_motion_module,
+)
+from src.pipeline.video import VideoCreator, write_video_frames
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 
 from ..api import SDWebUIClient
@@ -688,6 +695,14 @@ class Pipeline:
             from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
             from src.api.webui_process_manager import get_global_webui_process_manager
 
+            # Fast-path for normal runtime operation: if the API is already live,
+            # options are readable, and the backend is idle, generation can begin
+            # without re-checking a historical stdout boot marker.
+            if self._is_webui_generation_ready():
+                self._true_ready_gated = True
+                logger.info("Pipeline generation gate: WebUI live API readiness confirmed")
+                return
+
             manager = get_global_webui_process_manager()
             helper = WebUIAPI(client=self.client)
 
@@ -730,6 +745,38 @@ class Pipeline:
                 stage="pre-generation-gate",
             )
             raise PipelineStageError(error) from exc
+
+    def _is_webui_generation_ready(self) -> bool:
+        """Return True when the WebUI API is already live and idle for generation."""
+        try:
+            if not self.client.check_api_ready(max_retries=1, retry_delay=0.1):
+                return False
+        except Exception:
+            return False
+
+        session = getattr(self.client, "_session", None)
+        base_url = getattr(self.client, "base_url", "").rstrip("/")
+        if session is None or not base_url:
+            return False
+
+        try:
+            options_response = session.get(f"{base_url}/sdapi/v1/options", timeout=5.0)
+            if options_response.status_code != 200:
+                return False
+        except Exception:
+            return False
+
+        try:
+            progress_response = session.get(f"{base_url}/sdapi/v1/progress", timeout=5.0)
+            if progress_response.status_code != 200:
+                return False
+            payload = progress_response.json()
+            state = payload.get("state") or {}
+            progress = float(payload.get("progress", 0.0) or 0.0)
+            current_job = str(state.get("job") or "").strip()
+            return progress == 0.0 and not current_job
+        except Exception:
+            return False
 
     def _check_webui_health_before_stage(self, stage: str) -> None:
         """
@@ -3791,6 +3838,173 @@ class Pipeline:
             raise
         except Exception as e:
             logger.error(f"img2img stage failed: {e}")
+            return None
+
+    def run_animatediff_stage(
+        self,
+        input_image_path: Path | None,
+        prompt: str,
+        negative_prompt: str,
+        config: dict[str, Any],
+        output_dir: Path,
+        image_name: str,
+        cancel_token=None,
+    ) -> dict[str, Any] | None:
+        """Run AnimateDiff through the standard WebUI txt2img/img2img endpoints."""
+
+        self._record_stage_event("animatediff", "enter", 1, 1, False)
+        try:
+            self._ensure_not_cancelled(cancel_token, "animatediff stage start")
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            capability = self.client.get_animatediff_capability()
+            if not capability.available:
+                raise RuntimeError(
+                    capability.reason or "AnimateDiff is not available from the WebUI scripts API"
+                )
+
+            animatediff_cfg = AnimateDiffConfig.from_dict(config)
+            if not animatediff_cfg.enabled:
+                raise RuntimeError("AnimateDiff stage is disabled in the runtime config")
+
+            current_model = self.client.get_current_model()
+            if not isinstance(current_model, str) or not current_model.strip():
+                current_model = None
+            requested_model = (
+                config.get("model")
+                or config.get("sd_model_checkpoint")
+                or current_model
+            )
+            requested_vae = config.get("vae")
+            if requested_model or requested_vae:
+                self._ensure_model_and_vae(requested_model, requested_vae)
+
+            self._ensure_hypernetwork(
+                config.get("hypernetwork"),
+                config.get("hypernetwork_strength"),
+            )
+
+            sampler_config = self._parse_sampler_config(config)
+            self._ensure_webui_true_ready()
+            self._check_webui_health_before_stage("animatediff")
+
+            run_mode = "img2img" if input_image_path is not None else "txt2img"
+            payload: dict[str, Any] = {
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "steps": config.get("steps", 16),
+                "cfg_scale": config.get("cfg_scale", 7.0),
+                "width": config.get("width", 512),
+                "height": config.get("height", 512),
+                "seed": config.get("seed", -1),
+                "clip_skip": config.get("clip_skip", 2),
+                "batch_size": 1,
+                "n_iter": 1,
+            }
+            payload.update(sampler_config)
+            if input_image_path is not None:
+                input_image_b64 = self._load_image_base64(input_image_path)
+                if not input_image_b64:
+                    raise RuntimeError(f"Failed to load AnimateDiff input image: {input_image_path}")
+                payload["init_images"] = [input_image_b64]
+                denoising_strength = config.get("denoising_strength")
+                if denoising_strength in (None, ""):
+                    denoising_strength = 0.3
+                payload["denoising_strength"] = denoising_strength
+
+            resolved_motion_module = resolve_animatediff_motion_module(
+                animatediff_cfg,
+                capability,
+                requested_model,
+            )
+            if resolved_motion_module and resolved_motion_module != animatediff_cfg.motion_module:
+                animatediff_cfg = AnimateDiffConfig(
+                    enabled=animatediff_cfg.enabled,
+                    motion_module=resolved_motion_module,
+                    fps=animatediff_cfg.fps,
+                    video_length=animatediff_cfg.video_length,
+                    loop_number=animatediff_cfg.loop_number,
+                    closed_loop=animatediff_cfg.closed_loop,
+                    batch_size=animatediff_cfg.batch_size,
+                    stride=animatediff_cfg.stride,
+                    overlap=animatediff_cfg.overlap,
+                    format=list(animatediff_cfg.format),
+                )
+                logger.info(
+                    "animatediff stage auto-selected motion module %s for model %s",
+                    resolved_motion_module,
+                    requested_model or "<unknown>",
+                )
+
+            payload = attach_animatediff_to_payload(payload, animatediff_cfg, capability)
+            response = self.client.img2img(payload) if run_mode == "img2img" else self.client.txt2img(payload)
+            normalized = normalize_animatediff_response(response)
+            frame_images = normalized["frame_images"]
+            expected_frame_count = max(2, animatediff_cfg.video_length)
+            if not frame_images:
+                raise RuntimeError("AnimateDiff returned no frame images")
+            if not normalized.get("animate_detected") and len(frame_images) < expected_frame_count:
+                raise RuntimeError(
+                    "AnimateDiff payload was accepted by WebUI but did not produce an AnimateDiff response"
+                )
+
+            from src.utils.file_io import get_unique_output_path
+
+            video_path = get_unique_output_path(output_dir / f"{image_name}.mp4")
+            frames_dir = output_dir / f"{video_path.stem}_frames"
+            frame_paths = write_video_frames(frame_images, frames_dir, frame_prefix="frame")
+            if not frame_paths:
+                raise RuntimeError("AnimateDiff frames could not be written to disk")
+
+            video_creator = VideoCreator()
+            if not video_creator.create_video_from_images(
+                frame_paths,
+                video_path,
+                fps=animatediff_cfg.fps,
+            ):
+                raise RuntimeError("AnimateDiff video assembly failed")
+
+            gen_info = self._extract_generation_info(response or {})
+            metadata = {
+                "name": image_name,
+                "stage": "animatediff",
+                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "input_image": str(input_image_path) if input_image_path else None,
+                "config": self._clean_metadata_payload(payload),
+                "path": str(video_path),
+                "video_path": str(video_path),
+                "frame_paths": [str(path) for path in frame_paths],
+                "frame_count": len(frame_paths),
+                "fps": animatediff_cfg.fps,
+                "motion_module": animatediff_cfg.motion_module,
+                "extension_contract": normalized["extension_contract"],
+                "requested_seed": payload.get("seed", -1),
+                "actual_seed": gen_info.get("seed"),
+                "actual_subseed": gen_info.get("subseed"),
+            }
+
+            manifest_dir = output_dir / "manifests"
+            manifest_dir.mkdir(exist_ok=True, parents=True)
+            manifest_path = manifest_dir / f"{video_path.stem}.json"
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(metadata, handle, indent=2, ensure_ascii=False)
+
+            self._record_stage_event(
+                "animatediff",
+                "exit",
+                len(frame_paths),
+                len(frame_paths),
+                False,
+                extra={"video_path": str(video_path)},
+            )
+            return metadata
+        except CancellationError:
+            self._record_stage_event("animatediff", "cancelled", 1, 1, True)
+            raise
+        except Exception as exc:
+            logger.error("animatediff stage failed: %s", exc)
             return None
 
     def run_upscale_stage(

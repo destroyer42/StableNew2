@@ -3,6 +3,8 @@ from types import SimpleNamespace
 # Need WebUIConnectionState for stubbing the ensure_connected result
 from src.controller.pipeline_controller import PipelineController
 from src.controller.webui_connection_controller import WebUIConnectionState
+from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import JobStatus
 
 
@@ -67,3 +69,39 @@ def test_stop_pipeline_delegates_to_job_controller(monkeypatch):
     controller._active_job_id = "job-42"
     controller.stop_pipeline()
     assert fake.cancelled == ["job-42"]
+
+
+def test_job_execution_controller_replay_uses_pipeline_runner(monkeypatch):
+    monkeypatch.setattr(
+        "src.controller.pipeline_controller.is_queue_execution_enabled", lambda: True
+    )
+
+    class FakeRunner:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def run_njr(self, record, cancel_token=None, run_plan=None, log_fn=None):
+            self.calls.append(record.job_id)
+            return PipelineRunResult(
+                run_id=record.job_id,
+                success=True,
+                error=None,
+                variants=[{"path": "output/test.png"}],
+                learning_records=[],
+            )
+
+    runner = FakeRunner()
+    controller = PipelineController(pipeline_runner=runner)
+    record = NormalizedJobRecord(
+        job_id="queue-replay-njr",
+        config={"prompt": "castle"},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=123,
+    )
+
+    result = controller.get_job_execution_controller().run_njr(record)
+
+    assert runner.calls == ["queue-replay-njr"]
+    assert result.success is True
+    assert controller.get_last_run_result() is result

@@ -227,13 +227,15 @@ class WebUIAPI:
                 logger.debug("Progress endpoint check failed: %s", exc)
                 checks_status["progress_idle"] = False
 
-            # API readiness requires: models endpoint + options endpoint
-            # Boot marker and progress checks are observability-only
+            # API readiness requires: models endpoint + options endpoint.
+            # When stdout is available, also require a boot marker so we do not
+            # declare readiness during the model-loading window.
             api_ready = (
                 checks_status["models_endpoint"]
                 and checks_status["options_endpoint"]
             )
-            if api_ready:
+            boot_ready = checks_status["boot_marker_found"] if get_stdout_tail else True
+            if api_ready and boot_ready:
                 elapsed = time.time() - start_time
                 boot_marker_status = "found" if checks_status["boot_marker_found"] else "not found"
                 progress_status = "idle" if checks_status.get("progress_idle", False) else "busy"

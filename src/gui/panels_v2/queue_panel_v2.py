@@ -265,6 +265,40 @@ class QueuePanelV2(ttk.Frame):
             return self._jobs[idx]
         return None
 
+    @staticmethod
+    def _job_status_value(job: Any | None) -> str:
+        status = getattr(job, "status", "") if job is not None else ""
+        if hasattr(status, "value"):
+            status = status.value
+        return str(status or "").strip().lower()
+
+    def _has_queued_jobs(self) -> bool:
+        return any(self._job_status_value(job) == "queued" for job in self._jobs)
+
+    def _queued_job_indices(self) -> list[int]:
+        return [
+            index
+            for index, job in enumerate(self._jobs)
+            if self._job_status_value(job) == "queued"
+        ]
+
+    def _selected_queued_position(self) -> tuple[int, list[int]] | tuple[None, list[int]]:
+        idx = self._get_selected_index()
+        queued_indices = self._queued_job_indices()
+        if idx is None:
+            return None, queued_indices
+        try:
+            return queued_indices.index(idx), queued_indices
+        except ValueError:
+            return None, queued_indices
+
+    def _select_job_id(self, job_id: str) -> int | None:
+        for index, job in enumerate(self._jobs):
+            if getattr(job, "job_id", None) == job_id:
+                self._select_index(index)
+                return index
+        return None
+
     def _format_queue_eta(self, total_seconds: float) -> str:
         """Format total queue ETA to human-readable string."""
         if total_seconds < 60:
@@ -318,48 +352,62 @@ class QueuePanelV2(ttk.Frame):
     def _update_button_states(self) -> None:
         """Update button enabled/disabled states based on selection and queue contents."""
         idx = self._get_selected_index()
+        selected_job = self._get_selected_job()
         has_selection = idx is not None
-        has_jobs = len(self._jobs) > 0
-        has_multiple_jobs = len(self._jobs) > 1
+        has_queued_jobs = self._has_queued_jobs()
+        selected_is_queued = self._job_status_value(selected_job) == "queued"
+        queued_position, queued_indices = self._selected_queued_position()
+        has_selected_queued_position = queued_position is not None
+        last_queued_position = len(queued_indices) - 1
 
         # Move to front: enabled if selection exists and not already first
-        can_move_to_front = has_selection and idx is not None and idx > 0
+        can_move_to_front = has_selection and selected_is_queued and has_selected_queued_position and queued_position > 0
         self.move_to_front_button.state(["!disabled"] if can_move_to_front else ["disabled"])
 
         # Move up: enabled if selection is not first
-        can_move_up = has_selection and idx is not None and idx > 0
+        can_move_up = has_selection and selected_is_queued and has_selected_queued_position and queued_position > 0
         self.move_up_button.state(["!disabled"] if can_move_up else ["disabled"])
 
         # Move down: enabled if selection is not last
-        can_move_down = has_selection and idx is not None and idx < len(self._jobs) - 1
+        can_move_down = (
+            has_selection
+            and selected_is_queued
+            and has_selected_queued_position
+            and queued_position < last_queued_position
+        )
         self.move_down_button.state(["!disabled"] if can_move_down else ["disabled"])
 
         # Move to back: enabled if selection exists and not already last
-        can_move_to_back = has_selection and idx is not None and idx < len(self._jobs) - 1
+        can_move_to_back = (
+            has_selection
+            and selected_is_queued
+            and has_selected_queued_position
+            and queued_position < last_queued_position
+        )
         self.move_to_back_button.state(["!disabled"] if can_move_to_back else ["disabled"])
 
-        # Remove: enabled if something is selected
-        self.remove_button.state(["!disabled"] if has_selection else ["disabled"])
+        # Remove only applies to queued jobs; running jobs must be cancelled separately.
+        self.remove_button.state(["!disabled"] if selected_is_queued else ["disabled"])
 
-        # Clear: enabled if there are any jobs
-        self.clear_button.state(["!disabled"] if has_jobs else ["disabled"])
+        # Clear removes queued jobs only.
+        self.clear_button.state(["!disabled"] if has_queued_jobs else ["disabled"])
 
         # PR-GUI-F3: Send Job - enabled if queue has jobs and not currently running a job
         # Also respects pause state (controller handles actual pause blocking)
         running_job = getattr(self.app_state, "running_job", None) if self.app_state else None
-        can_send = has_jobs and running_job is None
+        can_send = has_queued_jobs and running_job is None
         self.send_job_button.state(["!disabled"] if can_send else ["disabled"])
 
     def _on_move_up(self) -> None:
         """Move the selected job up in the queue with visual feedback."""
         job = self._get_selected_job()
-        idx = self._get_selected_index()
+        queued_position, _ = self._selected_queued_position()
         
-        if not job or idx is None:
+        if not job or queued_position is None:
             return
         
         # Check if already at top
-        if idx == 0:
+        if queued_position == 0:
             # Subtle feedback: item is already at top
             self._show_boundary_feedback("top")
             return
@@ -370,30 +418,26 @@ class QueuePanelV2(ttk.Frame):
                 self.controller, "on_queue_move_up_v2", None
             )
             if callable(move_fn):
-                move_fn(job.job_id)
-            
-            # Update selection to follow the moved item
-            new_idx = idx - 1
-            
-            # Schedule visual feedback after listbox updates
-            def _apply_feedback() -> None:
-                self._select_index(new_idx)
-                self._flash_move(new_idx)
-                self._emit_status_message(f"Moved job to position #{new_idx + 1}")
-            
-            # Small delay to let update_jobs complete
-            self.after(50, _apply_feedback)
+                moved = bool(move_fn(job.job_id))
+                if moved:
+                    def _apply_feedback() -> None:
+                        new_idx = self._select_job_id(job.job_id)
+                        if new_idx is not None:
+                            self._flash_move(new_idx)
+                        self._emit_status_message("Moved job up in queue")
+
+                    self.after(50, _apply_feedback)
 
     def _on_move_down(self) -> None:
         """Move the selected job down in the queue with visual feedback."""
         job = self._get_selected_job()
-        idx = self._get_selected_index()
+        queued_position, queued_indices = self._selected_queued_position()
         
-        if not job or idx is None:
+        if not job or queued_position is None:
             return
         
         # Check if already at bottom
-        if idx >= len(self._jobs) - 1:
+        if queued_position >= len(queued_indices) - 1:
             self._show_boundary_feedback("bottom")
             return
         
@@ -403,27 +447,26 @@ class QueuePanelV2(ttk.Frame):
                 self.controller, "on_queue_move_down_v2", None
             )
             if callable(move_fn):
-                move_fn(job.job_id)
-            
-            new_idx = idx + 1
-            
-            def _apply_feedback() -> None:
-                self._select_index(new_idx)
-                self._flash_move(new_idx)
-                self._emit_status_message(f"Moved job to position #{new_idx + 1}")
-            
-            self.after(50, _apply_feedback)
+                moved = bool(move_fn(job.job_id))
+                if moved:
+                    def _apply_feedback() -> None:
+                        new_idx = self._select_job_id(job.job_id)
+                        if new_idx is not None:
+                            self._flash_move(new_idx)
+                        self._emit_status_message("Moved job down in queue")
+
+                    self.after(50, _apply_feedback)
 
     def _on_move_to_front(self) -> None:
         """Move the selected job to the front of the queue."""
         job = self._get_selected_job()
-        idx = self._get_selected_index()
+        queued_position, _ = self._selected_queued_position()
         
-        if not job or idx is None:
+        if not job or queued_position is None:
             return
         
         # Check if already at front
-        if idx == 0:
+        if queued_position == 0:
             self._show_boundary_feedback("top")
             return
         
@@ -431,28 +474,26 @@ class QueuePanelV2(ttk.Frame):
         if self.controller:
             move_fn = getattr(self.controller, "move_queue_job_to_front", None)
             if callable(move_fn):
-                move_fn(job.job_id)
-            
-            # Update selection to follow the moved item (now at front)
-            new_idx = 0
-            
-            def _apply_feedback() -> None:
-                self._select_index(new_idx)
-                self._flash_move(new_idx)
-                self._emit_status_message(f"Moved job to front (position #1)")
-            
-            self.after(50, _apply_feedback)
+                moved = bool(move_fn(job.job_id))
+                if moved:
+                    def _apply_feedback() -> None:
+                        new_idx = self._select_job_id(job.job_id)
+                        if new_idx is not None:
+                            self._flash_move(new_idx)
+                        self._emit_status_message("Moved job to front of queue")
+
+                    self.after(50, _apply_feedback)
 
     def _on_move_to_back(self) -> None:
         """Move the selected job to the back of the queue."""
         job = self._get_selected_job()
-        idx = self._get_selected_index()
+        queued_position, queued_indices = self._selected_queued_position()
         
-        if not job or idx is None:
+        if not job or queued_position is None:
             return
         
         # Check if already at back
-        if idx >= len(self._jobs) - 1:
+        if queued_position >= len(queued_indices) - 1:
             self._show_boundary_feedback("bottom")
             return
         
@@ -460,26 +501,28 @@ class QueuePanelV2(ttk.Frame):
         if self.controller:
             move_fn = getattr(self.controller, "move_queue_job_to_back", None)
             if callable(move_fn):
-                move_fn(job.job_id)
-            
-            # Update selection to follow the moved item (now at back)
-            new_idx = len(self._jobs) - 1
-            
-            def _apply_feedback() -> None:
-                self._select_index(new_idx)
-                self._flash_move(new_idx)
-                self._emit_status_message(f"Moved job to back (position #{new_idx + 1})")
-            
-            self.after(50, _apply_feedback)
+                moved = bool(move_fn(job.job_id))
+                if moved:
+                    def _apply_feedback() -> None:
+                        new_idx = self._select_job_id(job.job_id)
+                        if new_idx is not None:
+                            self._flash_move(new_idx)
+                        self._emit_status_message("Moved job to back of queue")
+
+                    self.after(50, _apply_feedback)
 
     def _on_remove(self) -> None:
         """Remove the selected job from the queue with feedback."""
         job = self._get_selected_job()
         idx = self._get_selected_index()
-        
+
         if not job:
             return
-        
+        if self._job_status_value(job) != "queued":
+            self._emit_status_message("Running jobs must be cancelled, not removed", level="warning")
+            self._update_button_states()
+            return
+
         if self.controller:
             self.controller.on_queue_remove_job_v2(job.job_id)
             self._emit_status_message(f"Removed job from position #{idx + 1}" if idx is not None else "Removed job")
@@ -492,7 +535,7 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_clear(self) -> None:
         """Clear all jobs from the queue."""
-        if self.controller:
+        if self.controller and self._has_queued_jobs():
             self.controller.on_queue_clear_v2()
 
     # PR-PIPE-003: Visual feedback methods
