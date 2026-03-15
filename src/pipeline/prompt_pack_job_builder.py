@@ -396,12 +396,12 @@ class PromptPackNormalizedJobBuilder:
         stage_sections = {
             "txt2img": merged_config.get("txt2img", {}),
             "img2img": merged_config.get("img2img", {}),
-            "upscale": merged_config.get("upscale", {}),
             "adetailer": merged_config.get("adetailer", {}),
+            "upscale": merged_config.get("upscale", {}),
             "animatediff": merged_config.get("animatediff", {}),
         }
         chain: list[StageConfig] = []
-        for stage in ("txt2img", "img2img", "upscale", "adetailer", "animatediff"):
+        for stage in ("txt2img", "img2img", "adetailer", "upscale", "animatediff"):
             data = stage_sections.get(stage, {}) or {}
             enabled = bool(stage_flags.get(stage, stage == "txt2img"))
             extra: dict[str, Any] = {}

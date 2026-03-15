@@ -2,7 +2,7 @@
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-11
+Updated: 2026-03-14
 
 0. Purpose
 
@@ -47,6 +47,8 @@ This index defines the active document set for StableNew v2.6 and identifies whi
 - `docs/PR_MAR26/`
 - `docs/D-VIDEO-004-AnimateDiff-Current-State-Discovery.md` — current AnimateDiff Phase 1 discovery baseline
 - `docs/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md` — current approval-target PR spec for AnimateDiff runtime work
+- `docs/D-VIDEO-005-SVD-Native-Tab-Discovery.md` — current discovery baseline for native SVD img2vid tab work
+- `docs/OpenSpec/PR-CORE-VIDEO-005-SVD-Phase-1-Native-Tab.md` — current approval-target PR spec for SVD Phase 1 native tab work
 
 These documents implement or sequence canonical work but do not outrank Tiers 1-2.
 

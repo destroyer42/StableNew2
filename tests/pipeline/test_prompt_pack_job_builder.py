@@ -165,3 +165,37 @@ def test_prompt_pack_job_builder_random_matrix_mode_shuffles_combinations(tmp_pa
         for item in expanded
     }
     assert len(unique_pairs) == 3
+
+
+def test_prompt_pack_job_builder_orders_adetailer_before_upscale(tmp_path: Path) -> None:
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=StubConfigManager(tmp_path),
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+    )
+    entry = PackJobEntry(
+        pack_id="ordered-pack",
+        pack_name="Ordered Pack",
+        prompt_text="A portrait",
+        config_snapshot={
+            "pipeline": {
+                "adetailer_enabled": True,
+                "upscale_enabled": True,
+            },
+            "adetailer": {"enabled": True, "adetailer_enabled": True},
+            "upscale": {"enabled": True, "upscaler": "R-ESRGAN 4x+"},
+        },
+        stage_flags={"txt2img": True, "adetailer": True, "upscale": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    record = records[0]
+    assert [stage.stage_type for stage in record.stage_chain if stage.enabled] == [
+        "txt2img",
+        "adetailer",
+        "upscale",
+    ]

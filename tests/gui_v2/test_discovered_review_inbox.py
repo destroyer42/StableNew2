@@ -299,6 +299,28 @@ def test_review_table_reload_clears_previous_rows(tk_root: tk.Tk) -> None:
     table.destroy()
 
 
+@pytest.mark.gui
+def test_review_table_load_items_selects_first_item_and_updates_preview(tk_root: tk.Tk) -> None:
+    table = DiscoveredReviewTable(tk_root)
+    item = _make_item(item_id="item-preview")
+    table.load_items([item])
+    assert table.get_selected_item_id() == "item-preview"
+    assert table._preview_thumbnail._current_path == item.artifact_path
+    assert "txt2img" in table._preview_meta_var.get()
+    table.destroy()
+
+
+@pytest.mark.gui
+def test_review_table_empty_load_clears_preview(tk_root: tk.Tk) -> None:
+    table = DiscoveredReviewTable(tk_root)
+    table.load_items([_make_item(item_id="item-preview")])
+    table.load_items([])
+    assert table.get_selected_item_id() is None
+    assert table._preview_thumbnail._current_path is None
+    assert "select an item" in table._preview_meta_var.get().lower()
+    table.destroy()
+
+
 # ---------------------------------------------------------------------------
 # LearningController discovered-review orchestration tests
 # ---------------------------------------------------------------------------

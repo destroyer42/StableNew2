@@ -132,3 +132,28 @@ def test_learning_review_panel_prioritizes_image_column() -> None:
         assert int(panel.grid_columnconfigure(0)["weight"]) > int(panel.grid_columnconfigure(1)["weight"])
     finally:
         panel.destroy()
+
+
+def test_learning_review_panel_viewer_window_size_prefers_image_dimensions() -> None:
+    width, height = LearningReviewPanel._compute_viewer_window_size(
+        image_width=768,
+        image_height=1280,
+        screen_width=1920,
+        screen_height=1080,
+    )
+
+    assert width >= 768
+    assert width <= int(1920 * 0.9)
+    assert height == int(1080 * 0.9)
+
+
+def test_learning_review_panel_viewer_window_size_caps_to_screen() -> None:
+    width, height = LearningReviewPanel._compute_viewer_window_size(
+        image_width=2200,
+        image_height=3400,
+        screen_width=1600,
+        screen_height=900,
+    )
+
+    assert width == int(1600 * 0.9)
+    assert height == int(900 * 0.9)

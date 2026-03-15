@@ -4,12 +4,20 @@
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
 from src.gui.learning_state import LearningVariant
 from src.gui.ui_tokens import TOKENS
 from src.learning.rating_schema import blend_rating, get_active_categories
+
+try:
+    from PIL import Image, ImageTk
+
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 
 class LearningReviewPanel(ttk.Frame):
@@ -132,6 +140,7 @@ class LearningReviewPanel(ttk.Frame):
         )
         self.image_listbox.grid(row=0, column=0, sticky="ew")
         self.image_listbox.bind("<<ListboxSelect>>", self._on_image_selected)
+        self.image_listbox.bind("<Double-Button-1>", self._on_open_selected_image)
 
         # Image thumbnail (bottom)
         self.image_thumbnail = ImageThumbnail(
@@ -141,9 +150,14 @@ class LearningReviewPanel(ttk.Frame):
         )
         self.image_thumbnail.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
         self.image_thumbnail.clear()
+        self.image_thumbnail.bind("<Double-Button-1>", self._on_open_selected_image)
 
         # Store full paths for loading images
         self._image_full_paths: list[str] = []
+        self._viewer_window: tk.Toplevel | None = None
+        self._viewer_canvas: tk.Canvas | None = None
+        self._viewer_photo: Any = None
+        self._viewer_image_id: int | None = None
 
         # Rating section
         self.rating_frame = ttk.LabelFrame(self.side_column, text="Rating", padding=5)
@@ -280,6 +294,120 @@ class LearningReviewPanel(ttk.Frame):
                 self.image_thumbnail.load_image(full_path)
         else:
             self.image_thumbnail.clear()
+
+    def _on_open_selected_image(self, _event: tk.Event | None = None) -> None:
+        """Open the currently selected image in a resizable viewer."""
+        image_path = self._get_selected_image_path()
+        if image_path:
+            self._open_image_viewer(image_path)
+
+    def _get_selected_image_path(self) -> str | None:
+        selection = self.image_listbox.curselection()
+        if not selection or not hasattr(self, "_image_full_paths"):
+            return None
+        index = selection[0]
+        if index < 0 or index >= len(self._image_full_paths):
+            return None
+        return self._image_full_paths[index]
+
+    @staticmethod
+    def _compute_viewer_window_size(
+        image_width: int,
+        image_height: int,
+        screen_width: int,
+        screen_height: int,
+    ) -> tuple[int, int]:
+        max_width = max(640, int(screen_width * 0.9))
+        max_height = max(480, int(screen_height * 0.9))
+        desired_width = min(max_width, image_width + 40)
+        desired_height = min(max_height, image_height + 80)
+        return max(480, desired_width), max(360, desired_height)
+
+    def _open_image_viewer(self, image_path: str) -> None:
+        if not PIL_AVAILABLE:
+            self.feedback_label.config(
+                text="Full image viewer requires Pillow",
+                foreground="red",
+            )
+            return
+
+        path_obj = Path(image_path)
+        if not path_obj.exists():
+            self.feedback_label.config(
+                text=f"Image not found: {path_obj.name}",
+                foreground="red",
+            )
+            return
+
+        try:
+            with Image.open(path_obj) as image:
+                image = image.convert("RGBA")
+                image_width, image_height = image.size
+                photo = ImageTk.PhotoImage(image)
+        except Exception as exc:
+            self.feedback_label.config(
+                text=f"Failed to open image: {exc}",
+                foreground="red",
+            )
+            return
+
+        if self._viewer_window and self._viewer_window.winfo_exists():
+            viewer = self._viewer_window
+            for child in viewer.winfo_children():
+                child.destroy()
+        else:
+            viewer = tk.Toplevel(self)
+            self._viewer_window = viewer
+            viewer.bind("<Destroy>", self._on_viewer_destroyed, add="+")
+
+        viewer.title(f"Image Viewer - {path_obj.name}")
+        viewer.transient(self.winfo_toplevel())
+        viewer.resizable(True, True)
+
+        frame = ttk.Frame(viewer, padding=6)
+        frame.pack(fill=tk.BOTH, expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+
+        canvas = tk.Canvas(
+            frame,
+            bg=TOKENS.colors.surface_secondary,
+            highlightthickness=0,
+        )
+        v_scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+        h_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
+        canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+
+        canvas.grid(row=0, column=0, sticky="nsew")
+        v_scroll.grid(row=0, column=1, sticky="ns")
+        h_scroll.grid(row=1, column=0, sticky="ew")
+
+        self._viewer_canvas = canvas
+        self._viewer_photo = photo
+        self._viewer_image_id = canvas.create_image(0, 0, image=photo, anchor="nw")
+        canvas.configure(scrollregion=(0, 0, image_width, image_height))
+
+        width, height = self._compute_viewer_window_size(
+            image_width,
+            image_height,
+            viewer.winfo_screenwidth(),
+            viewer.winfo_screenheight(),
+        )
+        viewer.geometry(f"{width}x{height}")
+
+        status = ttk.Label(
+            frame,
+            text=f"{image_width} x {image_height}  |  Double-click another image to reuse this viewer",
+        )
+        status.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        viewer.lift()
+        viewer.focus_force()
+
+    def _on_viewer_destroyed(self, _event: tk.Event | None = None) -> None:
+        self._viewer_window = None
+        self._viewer_canvas = None
+        self._viewer_photo = None
+        self._viewer_image_id = None
 
     def _extract_filename(self, path: str) -> str:
         """Extract filename from full path."""

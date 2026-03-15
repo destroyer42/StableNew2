@@ -11,6 +11,7 @@ from typing import Any, Callable
 import tkinter as tk
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.learning.discovered_review_models import (
     RATING_MAX,
     RATING_MIN,
@@ -65,7 +66,8 @@ class DiscoveredReviewTable(ttk.Frame):
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(1, weight=3)
+        self.rowconfigure(2, weight=2)
 
         # header label
         self._header_label = ttk.Label(
@@ -119,9 +121,31 @@ class DiscoveredReviewTable(ttk.Frame):
         scrollbar.grid(row=0, column=1, sticky="ns")
         self._tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
+        preview_frame = ttk.LabelFrame(self, text="Selected Image", padding=(6, 4))
+        preview_frame.grid(row=2, column=0, sticky="nsew", padx=2, pady=(4, 2))
+        preview_frame.columnconfigure(0, weight=1)
+        preview_frame.rowconfigure(1, weight=1)
+
+        self._preview_meta_var = tk.StringVar(value="Select an item to preview its image")
+        ttk.Label(
+            preview_frame,
+            textvariable=self._preview_meta_var,
+            style=BODY_LABEL_STYLE,
+            anchor="w",
+            justify="left",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+
+        self._preview_thumbnail = ImageThumbnail(
+            preview_frame,
+            max_width=1200,
+            max_height=1200,
+        )
+        self._preview_thumbnail.grid(row=1, column=0, sticky="nsew")
+        self._preview_thumbnail.clear()
+
         # rating control strip
         rating_bar = ttk.Frame(self, style=SURFACE_FRAME_STYLE, padding=(4, 2))
-        rating_bar.grid(row=2, column=0, sticky="ew")
+        rating_bar.grid(row=3, column=0, sticky="ew")
         ttk.Label(rating_bar, text="Rate selected:", style=BODY_LABEL_STYLE).pack(
             side="left", padx=(0, 4)
         )
@@ -196,6 +220,7 @@ class DiscoveredReviewTable(ttk.Frame):
                 iid=item.item_id,
                 values=fixed_values + varying_values + path_value,
             )
+        self._select_initial_item()
 
     # ------------------------------------------------------------------
     # Event handlers
@@ -203,6 +228,7 @@ class DiscoveredReviewTable(ttk.Frame):
 
     def _on_tree_select(self, _event: Any = None) -> None:
         item_id = self.get_selected_item_id()
+        self._update_preview(item_id)
         if item_id and self._on_item_selected:
             self._on_item_selected(item_id)
 
@@ -213,6 +239,39 @@ class DiscoveredReviewTable(ttk.Frame):
         self.refresh_item_rating(item_id, rating)
         if self._on_rate_item:
             self._on_rate_item(item_id, rating)
+
+    def _select_initial_item(self) -> None:
+        children = self._tree.get_children()
+        if not children:
+            self._update_preview(None)
+            return
+        first_item_id = children[0]
+        self._tree.selection_set(first_item_id)
+        self._tree.focus(first_item_id)
+        self._update_preview(first_item_id)
+        if self._on_item_selected:
+            self._on_item_selected(first_item_id)
+
+    def _update_preview(self, item_id: str | None) -> None:
+        item = self._get_item(item_id)
+        if item is None:
+            self._preview_meta_var.set("Select an item to preview its image")
+            self._preview_thumbnail.clear()
+            return
+        dimensions = ""
+        if item.width and item.height:
+            dimensions = f"{item.width} x {item.height}"
+        meta_parts = [part for part in (item.stage, item.model, dimensions) if part]
+        self._preview_meta_var.set(" | ".join(meta_parts) or "Image selected")
+        self._preview_thumbnail.load_image(item.artifact_path)
+
+    def _get_item(self, item_id: str | None) -> DiscoveredReviewItem | None:
+        if not item_id:
+            return None
+        for item in self._items:
+            if item.item_id == item_id:
+                return item
+        return None
 
 
 def _truncate(text: str, max_len: int) -> str:

@@ -318,9 +318,18 @@ class StubPipeline:
         self.calls.append(("upscale", {"input": str(input_image), **payload}))
         return {"images": ["upscale_output"], "path": str(run_dir / "upscale.png")}
 
-    def run_adetailer_stage(self, input_image, payload: dict, run_dir, **kwargs) -> dict[str, Any]:
-        self.calls.append(("adetailer", {"input": str(input_image), **payload}))
-        return {"images": ["adetailer_output"], "path": str(run_dir / "adetailer.png")}
+    def run_adetailer_stage(
+        self,
+        input_image=None,
+        payload: dict | None = None,
+        run_dir=None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        actual_input = kwargs.get("input_image_path", input_image)
+        actual_payload = kwargs.get("config", payload) or {}
+        actual_run_dir = kwargs.get("output_dir", run_dir)
+        self.calls.append(("adetailer", {"input": str(actual_input), **actual_payload}))
+        return {"images": ["adetailer_output"], "path": str(actual_run_dir / "adetailer.png")}
 
     def _load_image_base64(self, path) -> str:
         return "base64_encoded_image"
@@ -367,7 +376,7 @@ class TestPipelineRunnerWithPlan:
 
         assert stub_pipeline.calls[0][0] == "txt2img"
         assert result.stage_plan is not None
-        assert result.stage_plan.enabled_stages == ["txt2img", "upscale", "adetailer"]
+        assert result.stage_plan.enabled_stages == ["txt2img", "adetailer", "upscale"]
 
     def test_runner_with_sequencer_injection(self, mock_api_client, mock_logger, tmp_path):
         """Runner should use injected StageSequencer."""
