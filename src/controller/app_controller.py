@@ -5903,10 +5903,15 @@ class AppController:
             self._svd_controller = controller
         return controller
 
-    def get_supported_svd_models(self) -> list[str]:
-        from src.video.svd_models import get_default_svd_model_id, get_supported_svd_models
+    def get_supported_svd_models(
+        self,
+        *,
+        cache_dir: str | None = None,
+        local_files_only: bool = False,
+    ) -> list[str]:
+        from src.video.svd_models import get_default_svd_model_id, get_svd_model_options
 
-        supported = list(get_supported_svd_models().keys())
+        supported = list(get_svd_model_options(cache_dir=cache_dir, local_files_only=local_files_only))
         default_model = get_default_svd_model_id()
         if default_model in supported:
             return [default_model, *[model_id for model_id in supported if model_id != default_model]]

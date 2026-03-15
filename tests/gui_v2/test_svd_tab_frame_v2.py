@@ -158,6 +158,26 @@ def test_svd_tab_prefers_xt_default_model_when_controller_list_is_unsorted(tk_ro
         tab.destroy()
 
 
+def test_svd_tab_local_files_only_refreshes_model_options(tk_root: tk.Tk) -> None:
+    controller = Mock()
+    controller.get_supported_svd_models.side_effect = [
+        [
+            "stabilityai/stable-video-diffusion-img2vid-xt",
+            "stabilityai/stable-video-diffusion-img2vid-xt-1-1",
+        ],
+        ["stabilityai/stable-video-diffusion-img2vid-xt-1-1"],
+    ]
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        assert "stabilityai/stable-video-diffusion-img2vid-xt" in list(tab.model_combo.cget("values"))
+        tab.local_files_only_var.set(True)
+        assert list(tab.model_combo.cget("values")) == ["stabilityai/stable-video-diffusion-img2vid-xt-1-1"]
+        assert tab.model_var.get() == "stabilityai/stable-video-diffusion-img2vid-xt-1-1"
+    finally:
+        tab.destroy()
+
+
 def test_svd_tab_preset_applies_expected_values(tk_root: tk.Tk) -> None:
     tab = SVDTabFrameV2(tk_root)
     try:

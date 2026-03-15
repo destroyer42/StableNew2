@@ -9,7 +9,7 @@ from typing import Any
 
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
-from src.video.svd_models import get_default_svd_model_id, get_supported_svd_models
+from src.video.svd_models import get_default_svd_model_id, get_svd_model_options, get_supported_svd_models
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,7 @@ class SVDTabFrameV2(ttk.Frame):
         self.rife_executable_var = tk.StringVar()
         self.frame_upscale_enabled_var = tk.BooleanVar(value=False)
         self.frame_upscale_factor_var = tk.DoubleVar(value=2.0)
+        self.local_files_only_var.trace_add("write", self._on_model_availability_changed)
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -547,24 +548,64 @@ class SVDTabFrameV2(ttk.Frame):
         ).grid(row=row, column=1, sticky="ew", pady=(0, 6))
 
     def _get_model_options(self) -> list[str]:
+        cache_dir = None
+        if hasattr(self, "cache_dir_var"):
+            value = str(self.cache_dir_var.get()).strip()
+            cache_dir = value or None
+        local_files_only = False
+        if hasattr(self, "local_files_only_var"):
+            local_files_only = bool(self.local_files_only_var.get())
         controller = self.app_controller
         getter = getattr(controller, "get_supported_svd_models", None)
         if callable(getter):
             try:
-                values = [str(value) for value in getter() if value]
+                values = [
+                    str(value)
+                    for value in getter(cache_dir=cache_dir, local_files_only=local_files_only)
+                    if value
+                ]
                 if values:
                     preferred = get_default_svd_model_id()
                     if preferred in values:
                         return [preferred, *[value for value in values if value != preferred]]
                     return values
+            except TypeError:
+                try:
+                    values = [str(value) for value in getter() if value]
+                    if values:
+                        preferred = get_default_svd_model_id()
+                        if preferred in values:
+                            return [preferred, *[value for value in values if value != preferred]]
+                        return values
+                except Exception:
+                    logger.exception("Failed to load SVD model options from controller")
             except Exception:
                 logger.exception("Failed to load SVD model options from controller")
-        supported = get_supported_svd_models()
         preferred = get_default_svd_model_id()
-        values = list(supported.keys())
+        values = list(get_svd_model_options(cache_dir=cache_dir, local_files_only=local_files_only))
         if preferred in values:
             return [preferred, *[value for value in values if value != preferred]]
         return values
+
+    def _refresh_model_options(self) -> None:
+        values = self._get_model_options()
+        if not values:
+            values = list(get_supported_svd_models().keys())
+        current = self.model_var.get().strip()
+        preferred = get_default_svd_model_id()
+        if hasattr(self, "model_combo"):
+            self.model_combo.configure(values=values)
+        if current in values:
+            return
+        if preferred in values:
+            self.model_var.set(preferred)
+        elif values:
+            self.model_var.set(values[0])
+
+    def _on_model_availability_changed(self, *_args: Any) -> None:
+        self._refresh_model_options()
+        self._refresh_summary()
+        self._refresh_capabilities()
 
     def set_source_image_path(self, path: str | Path, *, status_message: str | None = None) -> None:
         string_path = str(path)
@@ -750,6 +791,7 @@ class SVDTabFrameV2(ttk.Frame):
         path = filedialog.askdirectory(title="Select SVD cache directory", initialdir=initial_dir)
         if path:
             self.cache_dir_var.set(path)
+            self._refresh_model_options()
             self._refresh_summary()
             self._set_status(f"SVD cache directory set to {path}")
             self._refresh_capabilities()
@@ -984,6 +1026,7 @@ class SVDTabFrameV2(ttk.Frame):
             self.local_files_only_var.set(bool(payload.get("local_files_only", self.local_files_only_var.get())))
             self.decode_chunk_size_var.set(int(payload.get("decode_chunk_size", self.decode_chunk_size_var.get())))
             self.cache_dir_var.set(str(payload.get("cache_dir") or ""))
+            self._refresh_model_options()
             self.face_restore_enabled_var.set(bool(payload.get("face_restore_enabled", self.face_restore_enabled_var.get())))
             face_restore_method = str(payload.get("face_restore_method") or self.face_restore_method_var.get())
             if face_restore_method in _FACE_RESTORE_METHODS:

@@ -19,6 +19,26 @@ def test_get_supported_svd_models_returns_model_ids() -> None:
     assert "stabilityai/stable-video-diffusion-img2vid-xt-1-1" in model_ids
 
 
+def test_get_supported_svd_models_respects_cache_and_local_only(monkeypatch) -> None:
+    controller = AppController.__new__(AppController)
+
+    monkeypatch.setattr(
+        "src.video.svd_models.get_svd_model_options",
+        lambda *, cache_dir=None, local_files_only=False: (
+            ["stabilityai/stable-video-diffusion-img2vid-xt-1-1"]
+            if local_files_only and cache_dir == "C:/cache/svd"
+            else [
+                "stabilityai/stable-video-diffusion-img2vid-xt-1-1",
+                "stabilityai/stable-video-diffusion-img2vid-xt",
+            ]
+        ),
+    )
+
+    model_ids = controller.get_supported_svd_models(cache_dir="C:/cache/svd", local_files_only=True)
+
+    assert model_ids == ["stabilityai/stable-video-diffusion-img2vid-xt-1-1"]
+
+
 def test_get_svd_postprocess_capabilities_returns_named_entries() -> None:
     controller = AppController.__new__(AppController)
     controller._svd_controller = Mock()
