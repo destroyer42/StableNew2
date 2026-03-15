@@ -24,6 +24,7 @@ _TARGET_PRESETS: dict[str, tuple[int, int]] = {
 }
 _RESIZE_MODES = ("letterbox", "center_crop", "contain_then_crop")
 _OUTPUT_FORMATS = ("mp4", "gif", "frames")
+_FACE_RESTORE_METHODS = ("CodeFormer", "GFPGAN")
 _DEFAULT_TARGET_PRESET = "Landscape 1024x576"
 _DEFAULT_SVD_PRESET = "Quality 25f MP4"
 _SVD_OUTPUT_ROUTES = (OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING)
@@ -108,6 +109,7 @@ class SVDTabFrameV2(ttk.Frame):
         self.app_state = app_state
         self._last_folder = ""
         self._status_text = ""
+        self._capability_text = ""
         self._recent_runs_by_item: dict[str, dict[str, Any]] = {}
         self._recent_selected_item: str | None = None
 
@@ -137,6 +139,14 @@ class SVDTabFrameV2(ttk.Frame):
         self.local_files_only_var = tk.BooleanVar(value=False)
         self.decode_chunk_size_var = tk.IntVar(value=2)
         self.cache_dir_var = tk.StringVar()
+        self.face_restore_enabled_var = tk.BooleanVar(value=False)
+        self.face_restore_method_var = tk.StringVar(value="CodeFormer")
+        self.face_restore_fidelity_var = tk.DoubleVar(value=0.7)
+        self.interpolation_enabled_var = tk.BooleanVar(value=False)
+        self.interpolation_multiplier_var = tk.IntVar(value=2)
+        self.rife_executable_var = tk.StringVar()
+        self.frame_upscale_enabled_var = tk.BooleanVar(value=False)
+        self.frame_upscale_factor_var = tk.DoubleVar(value=2.0)
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -144,6 +154,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._build_header()
         self._build_body(model_options)
         self._apply_preset(_DEFAULT_SVD_PRESET, update_status=False)
+        self._refresh_capabilities()
         self._refresh_summary()
         self._refresh_recent_runs()
 
@@ -218,6 +229,14 @@ class SVDTabFrameV2(ttk.Frame):
             wraplength=520,
         )
         self.summary_label.grid(row=1, column=0, sticky="nw", pady=(10, 0))
+        self.capabilities_label = ttk.Label(
+            help_frame,
+            text="",
+            style="Dark.TLabel",
+            justify="left",
+            wraplength=520,
+        )
+        self.capabilities_label.grid(row=2, column=0, sticky="nw", pady=(10, 0))
 
         settings = ttk.LabelFrame(body, text="Settings", style="Dark.TLabelframe", padding=8)
         settings.grid(row=0, column=1, sticky="ns")
@@ -303,6 +322,76 @@ class SVDTabFrameV2(ttk.Frame):
             style="Dark.TButton",
             command=self._on_browse_cache_dir,
         ).grid(row=0, column=1, sticky="e")
+        row += 1
+
+        ttk.Checkbutton(
+            settings,
+            text="Face cleanup",
+            variable=self.face_restore_enabled_var,
+            style="Dark.TCheckbutton",
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        row += 1
+        self._add_combo(settings, row, "Face method", self.face_restore_method_var, list(_FACE_RESTORE_METHODS))
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "Face fidelity",
+            self.face_restore_fidelity_var,
+            from_=0.0,
+            to=1.0,
+            increment=0.05,
+        )
+        row += 1
+        ttk.Checkbutton(
+            settings,
+            text="RIFE interpolate",
+            variable=self.interpolation_enabled_var,
+            style="Dark.TCheckbutton",
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "RIFE multiplier",
+            self.interpolation_multiplier_var,
+            from_=2,
+            to=4,
+        )
+        row += 1
+        ttk.Label(settings, text="RIFE exe", style="Dark.TLabel").grid(
+            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
+        )
+        rife_frame = ttk.Frame(settings, style="Panel.TFrame")
+        rife_frame.grid(row=row, column=1, sticky="ew", pady=(0, 6))
+        rife_frame.columnconfigure(0, weight=1)
+        ttk.Entry(rife_frame, textvariable=self.rife_executable_var, style="Dark.TEntry", width=22).grid(
+            row=0, column=0, sticky="ew", padx=(0, 4)
+        )
+        ttk.Button(
+            rife_frame,
+            text="...",
+            width=3,
+            style="Dark.TButton",
+            command=self._on_browse_rife_executable,
+        ).grid(row=0, column=1, sticky="e")
+        row += 1
+        ttk.Checkbutton(
+            settings,
+            text="Upscale frames",
+            variable=self.frame_upscale_enabled_var,
+            style="Dark.TCheckbutton",
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "Upscale factor",
+            self.frame_upscale_factor_var,
+            from_=1.0,
+            to=4.0,
+            increment=0.5,
+        )
         row += 1
 
         ttk.Button(
@@ -567,7 +656,49 @@ class SVDTabFrameV2(ttk.Frame):
                 "save_frames": bool(self.save_frames_var.get()),
                 "save_preview_image": True,
             },
+            "postprocess": {
+                "face_restore": {
+                    "enabled": bool(self.face_restore_enabled_var.get()),
+                    "method": self.face_restore_method_var.get(),
+                    "fidelity_weight": float(self.face_restore_fidelity_var.get()),
+                },
+                "interpolation": {
+                    "enabled": bool(self.interpolation_enabled_var.get()),
+                    "multiplier": int(self.interpolation_multiplier_var.get()),
+                    "executable_path": self.rife_executable_var.get().strip() or None,
+                },
+                "upscale": {
+                    "enabled": bool(self.frame_upscale_enabled_var.get()),
+                    "scale": float(self.frame_upscale_factor_var.get()),
+                },
+            },
         }
+
+    def _refresh_capabilities(self) -> None:
+        controller = self.app_controller
+        getter = getattr(controller, "get_svd_postprocess_capabilities", None)
+        if not callable(getter):
+            self._capability_text = ""
+            self.capabilities_label.configure(text="")
+            return
+        try:
+            capabilities = getter(self._build_form_data())
+        except Exception:
+            logger.exception("Failed to load SVD postprocess capabilities from controller")
+            self._capability_text = "Capabilities: unavailable"
+            self.capabilities_label.configure(text=self._capability_text)
+            return
+        parts: list[str] = []
+        for key in ("codeformer", "realesrgan", "rife", "gfpgan"):
+            entry = capabilities.get(key)
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name") or key)
+            status = str(entry.get("status") or "unknown")
+            detail = str(entry.get("detail") or "").strip()
+            parts.append(f"{name}: {status}" + (f" ({detail})" if detail else ""))
+        self._capability_text = "Capabilities: " + " | ".join(parts) if parts else ""
+        self.capabilities_label.configure(text=self._capability_text)
 
     def _refresh_summary(self, source: str | None = None) -> None:
         source_name = Path(source or self.source_image_var.get() or "").name or "No source image"
@@ -576,7 +707,8 @@ class SVDTabFrameV2(ttk.Frame):
             text=(
                 f"Source: {source_name}\n"
                 f"Preset: {self.preset_var.get()} | Frames: {int(self.frames_var.get())} at {int(self.fps_var.get())} fps | Steps: {int(self.inference_steps_var.get())}\n"
-                f"Output: {self.output_format_var.get()} | Route: {self.output_route_var.get()} | Resize: {self.resize_mode_var.get()} | Cache: {cache_dir}"
+                f"Output: {self.output_format_var.get()} | Route: {self.output_route_var.get()} | Resize: {self.resize_mode_var.get()} | Cache: {cache_dir}\n"
+                f"Postprocess: face={bool(self.face_restore_enabled_var.get())} | rife={bool(self.interpolation_enabled_var.get())} | upscale={bool(self.frame_upscale_enabled_var.get())}"
             )
         )
 
@@ -611,6 +743,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._refresh_summary()
         if update_status:
             self._set_status(f"Applied preset: {preset_name}")
+        self._refresh_capabilities()
 
     def _on_browse_cache_dir(self) -> None:
         initial_dir = self.cache_dir_var.get().strip() or self._last_folder or None
@@ -619,6 +752,20 @@ class SVDTabFrameV2(ttk.Frame):
             self.cache_dir_var.set(path)
             self._refresh_summary()
             self._set_status(f"SVD cache directory set to {path}")
+            self._refresh_capabilities()
+
+    def _on_browse_rife_executable(self) -> None:
+        initial_dir = self._last_folder or None
+        path = filedialog.askopenfilename(
+            title="Select rife-ncnn-vulkan executable",
+            initialdir=initial_dir,
+            filetypes=[("Executable", "*.exe"), ("All files", "*.*")],
+        )
+        if path:
+            self.rife_executable_var.set(path)
+            self._refresh_summary()
+            self._set_status(f"RIFE executable set to {Path(path).name}")
+            self._refresh_capabilities()
 
     def _on_clear_model_cache(self) -> None:
         controller = self.app_controller
@@ -788,6 +935,14 @@ class SVDTabFrameV2(ttk.Frame):
             "local_files_only": bool(self.local_files_only_var.get()),
             "decode_chunk_size": int(self.decode_chunk_size_var.get()),
             "cache_dir": self.cache_dir_var.get(),
+            "face_restore_enabled": bool(self.face_restore_enabled_var.get()),
+            "face_restore_method": self.face_restore_method_var.get(),
+            "face_restore_fidelity": float(self.face_restore_fidelity_var.get()),
+            "interpolation_enabled": bool(self.interpolation_enabled_var.get()),
+            "interpolation_multiplier": int(self.interpolation_multiplier_var.get()),
+            "rife_executable_path": self.rife_executable_var.get(),
+            "frame_upscale_enabled": bool(self.frame_upscale_enabled_var.get()),
+            "frame_upscale_factor": float(self.frame_upscale_factor_var.get()),
         }
 
     def restore_svd_state(self, payload: dict[str, Any] | None) -> bool:
@@ -829,6 +984,17 @@ class SVDTabFrameV2(ttk.Frame):
             self.local_files_only_var.set(bool(payload.get("local_files_only", self.local_files_only_var.get())))
             self.decode_chunk_size_var.set(int(payload.get("decode_chunk_size", self.decode_chunk_size_var.get())))
             self.cache_dir_var.set(str(payload.get("cache_dir") or ""))
+            self.face_restore_enabled_var.set(bool(payload.get("face_restore_enabled", self.face_restore_enabled_var.get())))
+            face_restore_method = str(payload.get("face_restore_method") or self.face_restore_method_var.get())
+            if face_restore_method in _FACE_RESTORE_METHODS:
+                self.face_restore_method_var.set(face_restore_method)
+            self.face_restore_fidelity_var.set(float(payload.get("face_restore_fidelity", self.face_restore_fidelity_var.get())))
+            self.interpolation_enabled_var.set(bool(payload.get("interpolation_enabled", self.interpolation_enabled_var.get())))
+            self.interpolation_multiplier_var.set(int(payload.get("interpolation_multiplier", self.interpolation_multiplier_var.get())))
+            self.rife_executable_var.set(str(payload.get("rife_executable_path") or ""))
+            self.frame_upscale_enabled_var.set(bool(payload.get("frame_upscale_enabled", self.frame_upscale_enabled_var.get())))
+            self.frame_upscale_factor_var.set(float(payload.get("frame_upscale_factor", self.frame_upscale_factor_var.get())))
+            self._refresh_capabilities()
             self._refresh_summary(source_path or None)
             return True
         except Exception as exc:

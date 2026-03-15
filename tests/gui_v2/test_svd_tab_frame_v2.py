@@ -16,8 +16,10 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert hasattr(tab, "model_combo")
         assert hasattr(tab, "animate_btn")
         assert hasattr(tab, "recent_tree")
+        assert hasattr(tab, "capabilities_label")
         assert tab.output_format_var.get() == "mp4"
         assert tab.preset_var.get() == "Quality 25f MP4"
+        assert tab.face_restore_method_var.get() == "CodeFormer"
     finally:
         tab.destroy()
 
@@ -46,6 +48,14 @@ def test_svd_tab_state_round_trip(tk_root: tk.Tk) -> None:
             "local_files_only": True,
             "decode_chunk_size": 4,
             "cache_dir": "C:/cache/svd",
+            "face_restore_enabled": True,
+            "face_restore_method": "CodeFormer",
+            "face_restore_fidelity": 0.65,
+            "interpolation_enabled": True,
+            "interpolation_multiplier": 2,
+            "rife_executable_path": "C:/tools/rife/rife-ncnn-vulkan.exe",
+            "frame_upscale_enabled": True,
+            "frame_upscale_factor": 2.5,
         }
         assert tab.restore_svd_state(payload) is True
         state = tab.get_svd_state()
@@ -58,6 +68,9 @@ def test_svd_tab_state_round_trip(tk_root: tk.Tk) -> None:
         assert state["save_frames"] is True
         assert state["local_files_only"] is True
         assert state["cache_dir"] == "C:/cache/svd"
+        assert state["face_restore_enabled"] is True
+        assert state["interpolation_enabled"] is True
+        assert state["frame_upscale_enabled"] is True
     finally:
         tab.destroy()
 
@@ -81,6 +94,35 @@ def test_svd_tab_submit_calls_controller(tk_root: tk.Tk, tmp_path: Path) -> None
         assert kwargs["source_image_path"] == str(image_path)
         assert kwargs["form_data"]["inference"]["model_id"] == tab.model_var.get()
         assert kwargs["form_data"]["pipeline"]["output_route"] == "SVD"
+        assert kwargs["form_data"]["postprocess"]["face_restore"]["method"] == "CodeFormer"
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_refreshes_capabilities_from_controller(tk_root: tk.Tk) -> None:
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_svd_postprocess_capabilities.return_value = {
+        "codeformer": {
+            "name": "CodeFormer",
+            "status": "ready",
+            "available": True,
+            "detail": "Detected local weights",
+        },
+        "realesrgan": {
+            "name": "RealESRGAN",
+            "status": "experimental",
+            "available": True,
+            "detail": "Detected local weight",
+        },
+    }
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        assert "CodeFormer: ready" in tab.capabilities_label.cget("text")
+        controller.get_svd_postprocess_capabilities.assert_called()
     finally:
         tab.destroy()
 

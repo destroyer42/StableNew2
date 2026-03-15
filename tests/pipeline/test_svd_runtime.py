@@ -37,6 +37,7 @@ def test_run_svd_native_stage_returns_artifact_metadata(tmp_path: Path, monkeypa
         seed = 123
         model_id = "stabilityai/stable-video-diffusion-img2vid-xt"
         preprocess = _FakePreprocess()
+        postprocess = {"applied": ["face_restore", "upscale"]}
 
     class _FakeRunner:
         def __init__(self, *, output_root):
@@ -65,6 +66,7 @@ def test_run_svd_native_stage_returns_artifact_metadata(tmp_path: Path, monkeypa
     assert result["manifest_path"] == str(manifest_path)
     assert result["thumbnail_path"] == str(preview_path)
     assert result["preprocess"]["target_width"] == 1024
+    assert result["postprocess"]["applied"] == ["face_restore", "upscale"]
     assert result["frame_count"] == 25
 
 

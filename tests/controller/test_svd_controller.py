@@ -41,3 +41,43 @@ def test_submit_svd_job_enqueues_svd_native_njr(tmp_path) -> None:
     request = captured["request"]
     assert request.prompt_pack_id == "svd_native"
     assert request.requested_job_label == "SVD Img2Vid"
+
+
+def test_get_postprocess_capabilities_exposes_runtime_status() -> None:
+    app_controller = SimpleNamespace(output_dir="output", job_service=Mock())
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+
+    result = controller.get_postprocess_capabilities()
+
+    assert "codeformer" in result
+    assert "realesrgan" in result
+    assert "rife" in result
+    assert "gfpgan" in result
+
+
+def test_submit_svd_job_rejects_missing_rife_runtime(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("STABLENEW_RIFE_EXE", raising=False)
+    monkeypatch.setenv("PATH", "")
+    source_path = tmp_path / "source.png"
+    source_path.write_bytes(b"png")
+    app_controller = SimpleNamespace(
+        output_dir=str(tmp_path),
+        job_service=SimpleNamespace(enqueue_njrs=lambda *_args, **_kwargs: ["job-svd-001"]),
+    )
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    config = SVDConfig.from_dict(
+        {
+            "postprocess": {
+                "interpolation": {
+                    "enabled": True,
+                    "multiplier": 2,
+                }
+            }
+        }
+    )
+
+    try:
+        controller.submit_svd_job(source_image_path=source_path, config=config)
+        assert False, "expected submit_svd_job to reject missing RIFE runtime"
+    except RuntimeError as exc:
+        assert "RIFE" in str(exc)

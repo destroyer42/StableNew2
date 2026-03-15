@@ -28,6 +28,7 @@ def write_svd_run_manifest(*, run_dir: str | Path, config: SVDConfig, result: SV
         "seed": result.seed,
         "model_id": result.model_id,
         "config": config.to_dict(),
+        "postprocess": result.postprocess,
         "preprocess": {
             "source_path": str(result.preprocess.source_path),
             "prepared_path": str(result.preprocess.prepared_path),
@@ -56,4 +57,5 @@ def build_svd_history_record(*, config: SVDConfig, result: SVDResult) -> dict[st
         "fps": result.fps,
         "seed": result.seed,
         "config": config.to_dict(),
+        "postprocess": result.postprocess,
     }

@@ -7,7 +7,9 @@ from pathlib import Path
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
+from src.video.svd_capabilities import get_svd_postprocess_capabilities
 from src.video.svd_config import SVDConfig
+from src.video.svd_postprocess import validate_svd_postprocess_config
 from src.video.svd_preprocess import validate_svd_source_image
 from src.video.svd_service import SVDService
 
@@ -32,6 +34,18 @@ class SVDController:
     def build_svd_config(self, form_data: dict[str, object]) -> SVDConfig:
         return SVDConfig.from_dict(form_data)
 
+    def get_postprocess_capabilities(self, config: SVDConfig | None = None) -> dict[str, dict[str, object]]:
+        return {
+            name: capability.to_dict()
+            for name, capability in get_svd_postprocess_capabilities(config).items()
+        }
+
+    def validate_config(self, config: SVDConfig) -> tuple[bool, str | None]:
+        try:
+            return validate_svd_postprocess_config(config)
+        except Exception as exc:
+            return False, str(exc)
+
     def clear_model_cache(self, *, model_id: str | None = None) -> None:
         self._svd_service.clear_model_cache(model_id=model_id)
 
@@ -42,6 +56,9 @@ class SVDController:
         config: SVDConfig,
         output_route: str | None = None,
     ) -> str:
+        valid, reason = self.validate_config(config)
+        if not valid:
+            raise RuntimeError(reason or "SVD configuration is invalid")
         builder = ReprocessJobBuilder()
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
         source_name = Path(source_image_path).stem.replace("_", " ").strip() or "selected image"

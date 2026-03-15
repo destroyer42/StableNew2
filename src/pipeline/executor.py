@@ -4060,6 +4060,7 @@ class Pipeline:
                 "model_id": result.model_id,
                 "seed": result.seed,
                 "source_image_path": str(result.source_image_path),
+                "postprocess": result.postprocess,
                 "preprocess": {
                     "source_path": str(result.preprocess.source_path),
                     "prepared_path": str(result.preprocess.prepared_path),

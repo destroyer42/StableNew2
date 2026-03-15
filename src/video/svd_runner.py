@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.video.svd_config import SVDConfig
-from src.video.svd_errors import SVDModelLoadError
+from src.video.svd_errors import SVDModelLoadError, SVDPostprocessError
 from src.video.svd_models import SVDResult
+from src.video.svd_postprocess import SVDPostprocessRunner, validate_svd_postprocess_config
 from src.video.svd_preprocess import prepare_svd_input, validate_svd_source_image
 from src.video.svd_registry import write_svd_run_manifest
 from src.video.svd_service import SVDService
@@ -25,7 +26,9 @@ class SVDRunner:
         available, reason = self._service.is_available()
         if not available:
             raise SVDModelLoadError(reason or "SVD runtime is unavailable")
-        _ = config
+        valid, reason = validate_svd_postprocess_config(config)
+        if not valid:
+            raise SVDPostprocessError(reason or "SVD postprocess configuration is invalid")
 
     def run(
         self,
@@ -44,6 +47,11 @@ class SVDRunner:
         frames = self._service.generate_frames(
             prepared_image_path=preprocess.prepared_path,
             config=config.inference,
+        )
+        frames, postprocess_metadata = SVDPostprocessRunner().process_frames(
+            frames=frames,
+            config=config,
+            work_dir=temp_dir / "postprocess",
         )
 
         source_path = Path(source_image_path)
@@ -89,6 +97,7 @@ class SVDRunner:
             seed=config.inference.seed,
             model_id=config.inference.model_id,
             preprocess=preprocess,
+            postprocess=postprocess_metadata,
         )
         manifest_path = write_svd_run_manifest(run_dir=self._output_root, config=config, result=result)
         return SVDResult(
@@ -103,4 +112,5 @@ class SVDRunner:
             seed=result.seed,
             model_id=result.model_id,
             preprocess=result.preprocess,
+            postprocess=result.postprocess,
         )

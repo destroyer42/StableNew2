@@ -19,6 +19,21 @@ def test_get_supported_svd_models_returns_model_ids() -> None:
     assert "stabilityai/stable-video-diffusion-img2vid-xt-1-1" in model_ids
 
 
+def test_get_svd_postprocess_capabilities_returns_named_entries() -> None:
+    controller = AppController.__new__(AppController)
+    controller._svd_controller = Mock()
+    controller._svd_controller.get_postprocess_capabilities.return_value = {
+        "codeformer": {"name": "CodeFormer", "status": "ready", "available": True, "detail": "ok"}
+    }
+    controller._svd_controller.build_svd_config.return_value = "cfg"
+
+    result = controller.get_svd_postprocess_capabilities({"postprocess": {}})
+
+    assert "codeformer" in result
+    controller._svd_controller.build_svd_config.assert_called_once()
+    controller._svd_controller.get_postprocess_capabilities.assert_called_once_with("cfg")
+
+
 def test_on_webui_ready_triggers_deferred_autostart() -> None:
     class _JobController:
         def __init__(self) -> None:

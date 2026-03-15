@@ -6,3 +6,5 @@ safetensors>=0.4.3
 imageio>=2.34.0
 imageio-ffmpeg>=0.5.1
 opencv-python>=4.10.0
+facexlib>=0.3.0
+codeformer>=0.0.11

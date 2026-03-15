@@ -25,3 +25,7 @@ class SVDInferenceError(SVDError):
 
 class SVDExportError(SVDError):
     """Raised when generated frames cannot be exported."""
+
+
+class SVDPostprocessError(SVDError):
+    """Raised when optional SVD frame postprocessing fails."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from src.video.svd_config import SVDResizeMode
 from src.video.svd_errors import SVDConfigError
@@ -89,3 +89,4 @@ class SVDResult:
     seed: int | None
     model_id: str
     preprocess: SVDPreprocessResult
+    postprocess: dict[str, Any] | None = None

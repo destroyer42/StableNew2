@@ -5920,6 +5920,11 @@ class AppController:
     def validate_svd_source_image(self, path: str | Path) -> tuple[bool, str | None]:
         return self._get_svd_controller().validate_source_image(path)
 
+    def get_svd_postprocess_capabilities(self, form_data: dict[str, Any] | None = None) -> dict[str, dict[str, object]]:
+        controller = self._get_svd_controller()
+        config = controller.build_svd_config(form_data) if isinstance(form_data, dict) else None
+        return controller.get_postprocess_capabilities(config)
+
     def submit_svd_job(self, *, source_image_path: str | Path, form_data: dict[str, Any]) -> str:
         controller = self._get_svd_controller()
         config = controller.build_svd_config(form_data)
