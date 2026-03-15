@@ -118,6 +118,49 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
     assert result.metadata["animatediff_artifact"]["count"] == 1
 
 
+def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    input_path.write_bytes(b"seed")
+    output_video = tmp_path / "svd.mp4"
+    manifest = tmp_path / "svd.json"
+    preview = tmp_path / "preview.png"
+    record = NormalizedJobRecord(
+        job_id="runner-svd-native",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[StageConfig(stage_type="svd_native", enabled=True, extra={})],
+        input_image_paths=[str(input_path)],
+        start_stage="svd_native",
+    )
+    pipeline = Mock()
+    pipeline.run_svd_native_stage.return_value = {
+        "path": str(output_video),
+        "video_path": str(output_video),
+        "gif_path": None,
+        "frame_paths": [],
+        "manifest_path": str(manifest),
+        "thumbnail_path": str(preview),
+        "frame_count": 25,
+    }
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    pipeline.run_svd_native_stage.assert_called_once()
+    assert result.success is True
+    assert result.metadata["svd_native_artifact"]["count"] == 1
+    assert record.thumbnail_path == str(preview)
+    assert record.output_paths == [str(output_video)]
+
+
 def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Path) -> None:
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     record = NormalizedJobRecord(

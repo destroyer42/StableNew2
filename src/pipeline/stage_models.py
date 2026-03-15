@@ -34,6 +34,7 @@ class StageType(str, Enum):
     UPSCALE = "upscale"
     ADETAILER = "adetailer"
     ANIMATEDIFF = "animatediff"
+    SVD_NATIVE = "svd_native"
 
     def is_generation_stage(self) -> bool:
         """Return True if this is a generation stage (txt2img or img2img)."""

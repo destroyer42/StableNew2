@@ -156,6 +156,33 @@ class TestQueuePersistence:
         state_file.write_text("not valid json {{{")
         assert load_queue_snapshot(state_file) is None
 
+    def test_load_pretty_printed_json_snapshot_fallback(self, tmp_path: Path) -> None:
+        state_file = tmp_path / "queue_state.json"
+        payload = {
+            "jobs": [
+                {
+                    "queue_id": "pretty-job",
+                    "njr_snapshot": {"normalized_job": {"job_id": "pretty-job"}},
+                    "priority": 1,
+                    "status": "queued",
+                    "created_at": "2025-01-01T00:00:00Z",
+                    "queue_schema": SCHEMA_VERSION,
+                }
+            ],
+            "auto_run_enabled": True,
+            "paused": False,
+            "schema_version": SCHEMA_VERSION,
+        }
+        state_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+        loaded = load_queue_snapshot(state_file)
+
+        assert loaded is not None
+        assert loaded.auto_run_enabled is True
+        assert loaded.paused is False
+        assert len(loaded.jobs) == 1
+        assert loaded.jobs[0]["queue_id"] == "pretty-job"
+
     def test_delete_removes_file(self, tmp_path: Path) -> None:
         state_file = tmp_path / "queue_state.json"
         state_file.write_text("{}")
@@ -344,7 +371,7 @@ def test_job_execution_controller_restores_and_persists(monkeypatch) -> None:
     queue = controller.get_queue()
     assert len(queue.list_jobs()) == 1
     assert controller.auto_run_enabled
-    assert controller.is_queue_paused
+    assert controller.is_queue_paused is False
 
     job = Job("new-job", JobPriority.NORMAL)
     record = _make_normalized_record("new-job")
@@ -355,7 +382,7 @@ def test_job_execution_controller_restores_and_persists(monkeypatch) -> None:
     assert saved_snapshots
     persisted = saved_snapshots[-1]
     assert persisted.auto_run_enabled
-    assert persisted.paused
+    assert persisted.paused is False
     assert any(entry["queue_id"] == "new-job" for entry in persisted.jobs)
     for entry in persisted.jobs:
         assert "pipeline_config" not in entry["njr_snapshot"]

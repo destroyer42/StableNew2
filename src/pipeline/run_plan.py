@@ -10,6 +10,7 @@ _CANONICAL_STAGE_ORDER = {
     "adetailer": 2,
     "upscale": 3,
     "animatediff": 4,
+    "svd_native": 5,
 }
 
 

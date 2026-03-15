@@ -4007,6 +4007,92 @@ class Pipeline:
             logger.error("animatediff stage failed: %s", exc)
             return None
 
+    def run_svd_native_stage(
+        self,
+        *,
+        input_image_path: Path | None,
+        stage_config: dict[str, Any],
+        output_dir: Path,
+        job_id: str,
+        cancel_token=None,
+    ) -> dict[str, Any] | None:
+        """Run the native Stable Video Diffusion stage against an existing image."""
+
+        self._record_stage_event("svd_native", "enter", 1, 1, False)
+        try:
+            self._ensure_not_cancelled(cancel_token, "svd_native stage start")
+            if input_image_path is None:
+                raise RuntimeError("svd_native stage requires an input image")
+
+            from src.video.svd_config import SVDConfig
+            from src.video.svd_runner import SVDRunner
+
+            config = SVDConfig.from_dict(stage_config)
+            runner = SVDRunner(output_root=output_dir)
+            result = runner.run(
+                source_image_path=input_image_path,
+                config=config,
+                job_id=job_id,
+            )
+
+            output_paths = [str(path) for path in result.frame_paths]
+            primary_path = None
+            if result.video_path is not None:
+                primary_path = str(result.video_path)
+                output_paths = [primary_path]
+            elif result.gif_path is not None:
+                primary_path = str(result.gif_path)
+                output_paths = [primary_path]
+            elif output_paths:
+                primary_path = output_paths[0]
+
+            metadata = {
+                "stage": "svd_native",
+                "path": primary_path,
+                "output_paths": output_paths,
+                "video_path": str(result.video_path) if result.video_path else None,
+                "gif_path": str(result.gif_path) if result.gif_path else None,
+                "frame_paths": [str(path) for path in result.frame_paths],
+                "frame_count": result.frame_count,
+                "fps": result.fps,
+                "thumbnail_path": str(result.thumbnail_path) if result.thumbnail_path else None,
+                "manifest_path": str(result.metadata_path) if result.metadata_path else None,
+                "model_id": result.model_id,
+                "seed": result.seed,
+                "source_image_path": str(result.source_image_path),
+                "preprocess": {
+                    "source_path": str(result.preprocess.source_path),
+                    "prepared_path": str(result.preprocess.prepared_path),
+                    "original_width": result.preprocess.original_width,
+                    "original_height": result.preprocess.original_height,
+                    "target_width": result.preprocess.target_width,
+                    "target_height": result.preprocess.target_height,
+                    "resize_mode": result.preprocess.resize_mode,
+                    "was_resized": result.preprocess.was_resized,
+                    "was_padded": result.preprocess.was_padded,
+                    "was_cropped": result.preprocess.was_cropped,
+                },
+            }
+            self._record_stage_event(
+                "svd_native",
+                "exit",
+                result.frame_count,
+                result.frame_count,
+                False,
+                extra={
+                    "path": primary_path,
+                    "video_path": metadata["video_path"],
+                    "gif_path": metadata["gif_path"],
+                },
+            )
+            return metadata
+        except CancellationError:
+            self._record_stage_event("svd_native", "cancelled", 1, 1, True)
+            raise
+        except Exception as exc:
+            logger.error("svd_native stage failed: %s", exc)
+            return None
+
     def run_upscale_stage(
         self,
         input_image_path: Path,

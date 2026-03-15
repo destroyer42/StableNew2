@@ -109,6 +109,8 @@ from src.utils.prompt_packs import PromptPackInfo, discover_packs
 
 logger = logging.getLogger(__name__)
 
+_IMAGE_OUTPUT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
+
 
 class LifecycleState(Enum):
     IDLE = auto()
@@ -4645,6 +4647,14 @@ class AppController:
             name="WebUIResourceRefresh",
             purpose="Refresh WebUI resources after connection"
         )
+        try:
+            pipeline_controller = getattr(self, "pipeline_controller", None)
+            job_controller = getattr(pipeline_controller, "_job_controller", None)
+            trigger = getattr(job_controller, "trigger_deferred_autostart", None)
+            if callable(trigger):
+                trigger()
+        except Exception as exc:
+            logger.debug("[webui] Deferred queue autostart trigger after READY failed: %s", exc)
 
     def _normalize_resource_map(self, payload: dict[str, Any]) -> dict[str, list[Any]]:
         resources = self._empty_resource_map()
@@ -5874,6 +5884,85 @@ class AppController:
 
         t = threading.Thread(target=_worker, daemon=True, name="movie-clip-source-loader")
         t.start()
+
+    # ------------------------------------------------------------------
+    # Native SVD entrypoints
+    # ------------------------------------------------------------------
+
+    def _get_svd_controller(self):
+        controller = getattr(self, "_svd_controller", None)
+        if controller is None:
+            from src.controller.svd_controller import SVDController
+
+            controller = SVDController(app_controller=self)
+            self._svd_controller = controller
+        return controller
+
+    def get_supported_svd_models(self) -> list[str]:
+        from src.video.svd_models import get_supported_svd_models
+
+        return list(get_supported_svd_models().keys())
+
+    def build_svd_defaults(self) -> dict[str, Any]:
+        from src.video.svd_config import SVDConfig
+
+        return SVDConfig().to_dict()
+
+    def validate_svd_source_image(self, path: str | Path) -> tuple[bool, str | None]:
+        return self._get_svd_controller().validate_source_image(path)
+
+    def submit_svd_job(self, *, source_image_path: str | Path, form_data: dict[str, Any]) -> str:
+        controller = self._get_svd_controller()
+        config = controller.build_svd_config(form_data)
+        valid, reason = controller.validate_source_image(source_image_path)
+        if not valid:
+            raise ValueError(reason or "SVD source image is invalid")
+        job_id = controller.submit_svd_job(source_image_path=source_image_path, config=config)
+        self._append_log(f"[svd] Queued SVD Img2Vid job {job_id} for {Path(source_image_path).name}")
+        return job_id
+
+    def get_latest_output_image_path(self) -> str | None:
+        app_state = getattr(self, "app_state", None)
+        history_items = list(getattr(app_state, "history_items", []) or [])
+        for entry in history_items:
+            for candidate in self._iter_history_image_candidates(entry):
+                path = Path(candidate)
+                if path.suffix.lower() in _IMAGE_OUTPUT_EXTENSIONS and path.exists():
+                    return str(path)
+        return None
+
+    def _iter_history_image_candidates(self, entry: Any) -> list[str]:
+        candidates: list[str] = []
+        result = getattr(entry, "result", None)
+        if isinstance(result, dict):
+            for key in ("output_paths", "frame_paths", "video_paths", "gif_paths"):
+                value = result.get(key)
+                if isinstance(value, list):
+                    candidates.extend(str(item) for item in value if item)
+            path_value = result.get("path")
+            if path_value:
+                candidates.append(str(path_value))
+            thumbnail = result.get("thumbnail_path")
+            if thumbnail:
+                candidates.append(str(thumbnail))
+        snapshot = getattr(entry, "snapshot", None)
+        if isinstance(snapshot, dict):
+            normalized = snapshot.get("normalized_job")
+            if isinstance(normalized, dict):
+                for key in ("output_paths",):
+                    value = normalized.get(key)
+                    if isinstance(value, list):
+                        candidates.extend(str(item) for item in value if item)
+                thumbnail = normalized.get("thumbnail_path")
+                if thumbnail:
+                    candidates.append(str(thumbnail))
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                deduped.append(candidate)
+        return deduped
 
 
 # Convenience entrypoint for testing the skeleton standalone

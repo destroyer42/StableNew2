@@ -656,6 +656,69 @@ class PipelineRunner:
                         }
                     logger.info(f"ðŸ”µ [BATCH_PIPELINE] animatediff completed {len(current_stage_paths)} clip(s)")
 
+                elif stage.stage_name == "svd_native":
+                    if not current_stage_paths:
+                        logger.warning("svd_native stage skipped: no input images from previous stage")
+                        continue
+
+                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "svd_native"), None)
+                    if stage_config:
+                        config_dict = asdict(stage_config)
+                        if "extra" in config_dict:
+                            config_dict.update(config_dict.pop("extra"))
+                    else:
+                        config_dict = {}
+
+                    next_stage_paths = []
+                    thumbnail_path = None
+                    manifest_paths: list[str] = []
+                    video_paths: list[str] = []
+                    gif_paths: list[str] = []
+                    frame_path_count = 0
+
+                    for input_path in current_stage_paths:
+                        result = self._pipeline.run_svd_native_stage(
+                            input_image_path=Path(input_path),
+                            stage_config=config_dict,
+                            output_dir=run_dir,
+                            job_id=njr.job_id,
+                            cancel_token=cancel_token,
+                        )
+                        if not result:
+                            continue
+                        variants.append(result)
+                        thumbnail_path = thumbnail_path or result.get("thumbnail_path")
+                        manifest_path = result.get("manifest_path")
+                        if manifest_path:
+                            manifest_paths.append(manifest_path)
+                        video_path = result.get("video_path")
+                        gif_path = result.get("gif_path")
+                        frame_paths = list(result.get("frame_paths") or [])
+                        if video_path:
+                            video_paths.append(video_path)
+                            next_stage_paths.append(video_path)
+                        elif gif_path:
+                            gif_paths.append(gif_path)
+                            next_stage_paths.append(gif_path)
+                        elif frame_paths:
+                            frame_path_count += len(frame_paths)
+                            next_stage_paths.extend(frame_paths)
+                        elif result.get("path"):
+                            next_stage_paths.append(result["path"])
+
+                    current_stage_paths = next_stage_paths
+                    if next_stage_paths or manifest_paths:
+                        metadata["svd_native_artifact"] = {
+                            "output_paths": list(next_stage_paths),
+                            "video_paths": video_paths,
+                            "gif_paths": gif_paths,
+                            "frame_path_count": frame_path_count,
+                            "manifest_paths": manifest_paths,
+                            "thumbnail_path": thumbnail_path,
+                            "count": len(next_stage_paths),
+                        }
+                    logger.info(f"[BATCH_PIPELINE] svd_native completed {len(current_stage_paths)} output artifact(s)")
+
                 else:
                     logger.warning(f"Unknown stage type: {stage.stage_name}, skipping")
                     continue
@@ -722,7 +785,11 @@ class PipelineRunner:
         logger.info(f"🔍 DEBUG: to_dict() success={result_dict.get('success')}, error={result_dict.get('error')}")
         try:
             njr.output_paths = list(current_stage_paths or [])
-            njr.thumbnail_path = njr.output_paths[-1] if njr.output_paths else None
+            artifact_thumbnail = (
+                (metadata.get("svd_native_artifact") or {}).get("thumbnail_path")
+                or (metadata.get("animatediff_artifact") or {}).get("thumbnail_path")
+            )
+            njr.thumbnail_path = artifact_thumbnail or (njr.output_paths[-1] if njr.output_paths else None)
         except Exception:
             pass
         try:
@@ -847,12 +914,19 @@ class PipelineRunner:
         animatediffs = [
             stage for stage in stages if stage.stage_type == StageTypeEnum.ANIMATEDIFF.value
         ]
+        svd_native = [
+            stage for stage in stages if stage.stage_type == StageTypeEnum.SVD_NATIVE.value
+        ]
         if len(adetailers) > 1:
             raise ValueError("Multiple ADetailer stages are not supported.")
         if len(animatediffs) > 1:
             raise ValueError("Multiple AnimateDiff stages are not supported.")
+        if len(svd_native) > 1:
+            raise ValueError("Multiple SVD Native stages are not supported.")
         if animatediffs and stages[-1].stage_type != StageTypeEnum.ANIMATEDIFF.value:
             raise ValueError("AnimateDiff stage must be the final stage.")
+        if svd_native and stages[-1].stage_type != StageTypeEnum.SVD_NATIVE.value:
+            raise ValueError("SVD Native stage must be the final stage.")
         if adetailers and not any(
             self._is_image_producing_stage_type(stage.stage_type)
             for stage in stages
@@ -883,6 +957,12 @@ class PipelineRunner:
             if stage.stage_type != StageTypeEnum.ANIMATEDIFF.value
         ):
             raise ValueError("AnimateDiff stage requires a preceding image-producing stage.")
+        if svd_native and not any(
+            self._is_image_producing_stage_type(stage.stage_type)
+            for stage in stages
+            if stage.stage_type != StageTypeEnum.SVD_NATIVE.value
+        ):
+            raise ValueError("SVD Native stage requires a preceding image-producing stage.")
 
     def set_learning_enabled(self, enabled: bool) -> None:
         """Toggle passive learning record emission."""

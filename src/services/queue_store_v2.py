@@ -6,6 +6,7 @@ Every job entry stores exactly one NormalizedJobRecord snapshot plus metadata.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Mapping
@@ -104,7 +105,7 @@ def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | Non
         return None
 
     entries = _QUEUE_CODEC.read_jsonl(state_path)
-    data: dict[str, Any] | None = entries[-1] if entries else None
+    data: dict[str, Any] | None = entries[-1] if entries else _load_whole_json_snapshot(state_path)
     if not data:
         return None
 
@@ -138,6 +139,31 @@ def load_queue_snapshot(path: Path | str | None = None) -> QueueSnapshotV1 | Non
         snapshot.paused,
     )
     return snapshot
+
+
+def _load_whole_json_snapshot(state_path: Path) -> dict[str, Any] | None:
+    """Fallback loader for accidentally pretty-printed whole-file JSON snapshots.
+
+    Queue persistence is written as a single-line JSONL record. If the file was
+    manually rewritten as multi-line JSON, line-oriented parsing produces decode
+    warnings for every line and returns no entries. This fallback recovers that
+    file shape without changing the canonical on-disk format.
+    """
+    try:
+        raw_text = state_path.read_text(encoding="utf-8").strip()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Failed reading queue state fallback JSON (%s): %s", state_path, exc)
+        return None
+    if not raw_text:
+        return None
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    logger.info("Recovered queue state from whole-file JSON snapshot: %s", state_path)
+    return parsed
 
 
 def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = None) -> bool:

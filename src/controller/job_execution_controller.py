@@ -398,7 +398,13 @@ class JobExecutionController:
             return
 
         self._auto_run_enabled = bool(snapshot.auto_run_enabled)
-        self._queue_paused = bool(snapshot.paused)
+        restored_paused = bool(snapshot.paused)
+        if restored_paused:
+            logger.info(
+                "[STARTUP-PERF] Ignoring persisted paused queue state on restore; "
+                "only queued jobs are persisted across restart"
+            )
+        self._queue_paused = False
 
         restored_jobs: list[Job] = []
         for entry in snapshot.jobs:

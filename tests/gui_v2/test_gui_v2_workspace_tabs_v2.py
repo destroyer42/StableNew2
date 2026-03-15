@@ -22,10 +22,12 @@ def test_workspace_tabs_present() -> None:
         assert "Prompt" in labels
         assert "Pipeline" in labels
         assert "Learning" in labels
+        assert "SVD Img2Vid" in labels
 
         assert isinstance(getattr(window, "prompt_tab", None), object)
         assert isinstance(getattr(window, "pipeline_tab", None), object)
         assert isinstance(getattr(window, "learning_tab", None), object)
+        assert isinstance(getattr(window, "svd_tab", None), object)
 
         for frame_attr in ("prompt_tab", "pipeline_tab", "learning_tab"):
             frame = getattr(window, frame_attr, None)
