@@ -22,6 +22,14 @@ from PIL import Image
 from src.api.client import WebUIPayloadValidationError, PROGRESS_STALL_THRESHOLD_SEC
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
+from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
+from src.prompting.prompt_optimizer_registry import (
+    build_prompt_optimization_record,
+    write_prompt_optimization_record,
+)
+from src.prompting.prompt_optimizer_service import PromptOptimizerService
+from src.prompting.prompt_splitter import split_prompt_chunks
+from src.prompting.prompt_types import PromptOptimizationPairResult
 from src.pipeline.animatediff_models import (
     AnimateDiffConfig,
     attach_animatediff_to_payload,
@@ -186,13 +194,10 @@ class Pipeline:
         self._model_discovery_attempted = False
         self._webui_defaults_applied = False
         self._true_ready_gated = False  # Track if we've already waited for true-readiness
-        self._last_txt2img_results: list[dict[str, Any]] = []
         self._last_img2img_result: dict[str, Any] | None = None
         self._last_upscale_result: dict[str, Any] | None = None
         self._last_adetailer_result: dict[str, Any] | None = None
-        self._last_full_pipeline_results: dict[str, Any] = {}
         self._stage_events: list[dict[str, Any]] = []
-        self._current_run_dir: Path | None = None
         # PR-PIPE-001: Track current job ID for manifest linkage
         self._current_job_id: str | None = None
         self._current_njr_sha256: str | None = None
@@ -255,6 +260,94 @@ class Pipeline:
             metrics["model_switches"],
             metrics["vae_switches"],
         )
+
+    def _run_prompt_optimizer(
+        self,
+        *,
+        positive_prompt: str,
+        negative_prompt: str,
+        config: dict[str, Any] | None,
+        stage_name: str,
+    ) -> tuple[PromptOptimizationPairResult, PromptOptimizerConfig]:
+        config_payload = dict((config or {}).get("prompt_optimizer") or {})
+        try:
+            optimizer_config = PromptOptimizerConfig.from_dict(config_payload)
+        except Exception as exc:
+            logger.warning("Prompt optimizer disabled due to invalid config for %s: %s", stage_name, exc)
+            optimizer_config = PromptOptimizerConfig(enabled=False)
+        service = PromptOptimizerService(optimizer_config)
+        enabled = service.should_optimize_for_pipeline(stage_name)
+        positive_prompt = str(positive_prompt or "")
+        negative_prompt = str(negative_prompt or "")
+        positive_chunks = len(split_prompt_chunks(positive_prompt))
+        negative_chunks = len(split_prompt_chunks(negative_prompt))
+        if enabled:
+            logger.info(
+                "PROMPT OPTIMIZER ENABLED | pipeline=%s | positive_chunks=%d | negative_chunks=%d",
+                stage_name,
+                positive_chunks,
+                negative_chunks,
+            )
+        else:
+            logger.info(
+                "PROMPT OPTIMIZER DISABLED | pipeline=%s | positive_chunks=%d | negative_chunks=%d",
+                stage_name,
+                positive_chunks,
+                negative_chunks,
+            )
+        result = service.optimize_prompts(positive_prompt, negative_prompt, pipeline_name=stage_name)
+        logger.info(
+            "PROMPT OPTIMIZER RESULT | pipeline=%s | positive_changed=%s | negative_changed=%s | positive_len=%d->%d | negative_len=%d->%d",
+            stage_name,
+            result.positive.changed,
+            result.negative.changed,
+            len(result.positive.original_prompt),
+            len(result.positive.optimized_prompt),
+            len(result.negative.original_prompt),
+            len(result.negative.optimized_prompt),
+        )
+        if optimizer_config.warn_on_large_chunk_count and (
+            positive_chunks >= optimizer_config.large_chunk_warning_threshold
+            or negative_chunks >= optimizer_config.large_chunk_warning_threshold
+        ):
+            logger.warning(
+                "PROMPT OPTIMIZER CHUNK WARNING | pipeline=%s | positive_chunks=%d | negative_chunks=%d | threshold=%d",
+                stage_name,
+                positive_chunks,
+                negative_chunks,
+                optimizer_config.large_chunk_warning_threshold,
+            )
+        if optimizer_config.log_before_after:
+            logger.info("ORIGINAL POSITIVE: %s", result.positive.original_prompt)
+            logger.info("OPTIMIZED POSITIVE: %s", result.positive.optimized_prompt)
+            logger.info("ORIGINAL NEGATIVE: %s", result.negative.original_prompt)
+            logger.info("OPTIMIZED NEGATIVE: %s", result.negative.optimized_prompt)
+        if optimizer_config.log_bucket_assignments:
+            logger.debug("PROMPT OPTIMIZER BUCKETS | pipeline=%s | positive=%s", stage_name, result.positive.buckets)
+            logger.debug("PROMPT OPTIMIZER BUCKETS | pipeline=%s | negative=%s", stage_name, result.negative.buckets)
+            if result.positive.dropped_duplicates or result.negative.dropped_duplicates:
+                logger.debug(
+                    "PROMPT OPTIMIZER DROPPED | pipeline=%s | positive=%s | negative=%s",
+                    stage_name,
+                    result.positive.dropped_duplicates,
+                    result.negative.dropped_duplicates,
+                )
+        return result, optimizer_config
+
+    def _maybe_write_prompt_optimization_sidecar(
+        self,
+        *,
+        manifest_path: Path,
+        result: PromptOptimizationPairResult,
+        config: PromptOptimizerConfig,
+    ) -> None:
+        if not (config.log_before_after or config.log_bucket_assignments):
+            return
+        sidecar = manifest_path.with_name(f"{manifest_path.stem}.prompt_optimization.json")
+        try:
+            write_prompt_optimization_record(sidecar, result)
+        except Exception as exc:
+            logger.debug("Failed to write prompt optimization sidecar %s: %s", sidecar, exc)
 
     def _clean_metadata_payload(self, payload: Any) -> Any:
         """Remove large binary blobs (e.g., base64 images) from metadata payloads."""
@@ -1497,401 +1590,6 @@ class Pipeline:
                 return name if name else None
         return None
 
-    def run_txt2img(
-        self,
-        prompt: str,
-        config: dict[str, Any],
-        run_dir: Path,
-        batch_size: int = 1,
-        cancel_token=None,
-    ) -> list[dict[str, Any]]:
-        """
-        Run txt2img generation with cancellation handling.
-        """
-
-        try:
-            return self._run_txt2img_impl(prompt, config, run_dir, batch_size, cancel_token)
-        except CancellationError as exc:
-            if isinstance(cancel_token, CancelToken):
-                self._log_pipeline_cancellation("txt2img", exc)
-                return getattr(self, "_last_txt2img_results", [])
-            raise
-
-    def _run_txt2img_impl(
-        self,
-        prompt: str,
-        config: dict[str, Any],
-        run_dir: Path,
-        batch_size: int = 1,
-        cancel_token=None,
-    ) -> list[dict[str, Any]]:
-        """
-        Run txt2img generation.
-
-        Args:
-            prompt: Text prompt
-            config: Configuration for txt2img
-            run_dir: Run directory
-            batch_size: Number of images to generate
-            cancel_token: Optional cancellation token
-
-        Returns:
-            List of generated image metadata
-        """
-        self._last_txt2img_results: list[dict[str, Any]] = []
-
-        # Check for cancellation before starting
-        self._ensure_not_cancelled(cancel_token, "txt2img start")
-
-        # Emit status update for stage start
-        total_steps = config.get("steps", 20)
-        self._emit_stage_start("txt2img", total_steps=total_steps)
-
-        logger.info(f"Starting txt2img with prompt: {prompt[:50]}...")
-        # Extract name prefix if present
-        name_prefix = self._extract_name_prefix(prompt)
-
-        # Apply global NSFW prevention to negative prompt (with optional adjustments)
-        base_negative = config.get("negative_prompt", "")
-        negative_adjust = (config.get("negative_adjust") or "").strip()
-        combined_negative = (
-            base_negative if not negative_adjust else f"{base_negative} {negative_adjust}".strip()
-        )
-        enhanced_negative = self.config_manager.add_global_negative(combined_negative)
-        logger.info(
-            f"🛡️ Applied global NSFW prevention - Original: '{base_negative}' → Enhanced: '{enhanced_negative[:100]}...'"
-        )
-
-        # Parse sampler configuration
-        sampler_config = self._parse_sampler_config(config)
-
-        # Set model and VAE if specified
-        requested_model = (
-            config.get("model")
-            or config.get("model_name")
-            or config.get("base_model")
-            or config.get("sd_model_checkpoint")
-        )
-        # Handle VAE: distinguish between not specified (None) and explicitly empty ("")
-        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
-        self._ensure_model_and_vae(requested_model, requested_vae)
-        
-        # Query WebUI for ACTUAL current model and VAE (what's really being used)
-        # This ensures manifest reflects reality, not just what we requested
-        logger.info(f"🔍 Querying WebUI for current model and VAE...")
-        model_name = self.client.get_current_model() or requested_model or "Unknown"
-        vae_name = self.client.get_current_vae() or "Automatic"
-        logger.info(f"📝 Manifest will use - Model: {model_name}, VAE: {vae_name}")
-
-        payload = {
-            "prompt": prompt,
-            "negative_prompt": enhanced_negative,
-            "steps": config.get("steps", 20),
-            "cfg_scale": config.get("cfg_scale", 7.0),
-            "width": config.get("width", 512),
-            "height": config.get("height", 512),
-            "seed": config.get("seed", -1),
-            "seed_resize_from_h": config.get("seed_resize_from_h", -1),
-            "seed_resize_from_w": config.get("seed_resize_from_w", -1),
-            "clip_skip": config.get("clip_skip", 2),
-            "batch_size": batch_size,
-            "n_iter": config.get("n_iter", 1),
-            "restore_faces": config.get("restore_faces", False),
-            "tiling": config.get("tiling", False),
-            "do_not_save_samples": config.get("do_not_save_samples", False),
-            "do_not_save_grid": config.get("do_not_save_grid", False),
-        }
-
-        # Always include hires.fix parameters (will be ignored if enable_hr is False)
-        hires_denoise = config.get("denoising_strength")
-        if hires_denoise is None:
-            hires_denoise = config.get("hr_denoising_strength") or config.get("hires_denoise")
-        payload.update(
-            {
-                "enable_hr": config.get("enable_hr", False),
-                "hr_scale": config.get("hr_scale", 2.0),
-                "hr_upscaler": config.get("hr_upscaler", "Latent"),
-                "hr_second_pass_steps": config.get("hr_second_pass_steps", 0),
-                "hr_resize_x": config.get("hr_resize_x", 0),
-                "hr_resize_y": config.get("hr_resize_y", 0),
-                "denoising_strength": hires_denoise if hires_denoise is not None else 0.7,
-            }
-        )
-        # Optional separate sampler for hires second pass
-        try:
-            hr_sampler_name = config.get("hr_sampler_name")
-            if hr_sampler_name:
-                payload["hr_sampler_name"] = hr_sampler_name
-        except Exception:
-            pass
-
-        payload.update(sampler_config)
-
-        # Add styles if specified
-        if config.get("styles"):
-            payload["styles"] = config["styles"]
-
-        self._apply_webui_defaults_once()
-        
-        # Pre-generation memory management for hires fix (only if memory pressure detected)
-        if payload.get("enable_hr", False):
-            try:
-                import gc
-                import psutil
-                
-                mem = psutil.virtual_memory()
-                mem_percent = mem.percent
-                mem_available_gb = mem.available / (1024**3)
-                
-                # Only intervene if memory pressure is HIGH (>85% or <3GB available)
-                if mem_percent > 85.0 or mem_available_gb < 3.0:
-                    logger.warning(
-                        "⚠️ High memory pressure before hires fix: %.1f%% used, %.1fGB available - freeing caches",
-                        mem_percent, mem_available_gb
-                    )
-                    
-                    # Force GC and VRAM clear
-                    gc.collect()
-                    if hasattr(self.client, 'free_vram'):
-                        self.client.free_vram(unload_model=False, force_gc=True)
-                        
-            except Exception as exc:
-                logger.debug("Pre-generation memory check failed (non-fatal): %s", exc)
-        
-        # Create progress callback that reports to controller
-        def on_txt2img_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
-            if self.progress_controller:
-                eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
-                if current_step is not None and total_steps is not None:
-                    eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
-                self.progress_controller.report_progress("txt2img", percent, eta_text)
-        
-        # Track timing for this stage
-        stage_start = time.monotonic()
-        response = self._generate_images_with_progress(
-            "txt2img",
-            payload,
-            poll_interval=0.5,
-            progress_callback=on_txt2img_progress,
-            stage_label="txt2img",
-        )
-        stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
-        
-        # Extract actual seed from response
-        gen_info = self._extract_generation_info(response) if response else {}
-
-        # Check for cancellation after API call
-        self._ensure_not_cancelled(cancel_token, "txt2img post-call")
-
-        if not response or "images" not in response:
-            logger.error("txt2img failed")
-            return []
-
-        results = self._last_txt2img_results
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        for idx, img_base64 in enumerate(response["images"]):
-            # Check for cancellation before saving each image
-            self._ensure_not_cancelled(cancel_token, f"txt2img save {idx}")
-            # Build image name with optional prefix
-            if name_prefix:
-                image_name = f"{name_prefix}_{timestamp}_{idx:03d}"
-            else:
-                image_name = f"txt2img_{timestamp}_{idx:03d}"
-
-            image_name = self._ensure_stage_prefix(image_name, "txt2img")
-            safe_name = build_safe_image_stem(
-                image_name,
-                output_dir=run_dir / "txt2img",
-                unique_token=self._current_job_id,
-            )
-            image_path = run_dir / "txt2img" / f"{safe_name}.png"
-
-            metadata = {
-                "name": safe_name,
-                "stage": "txt2img",
-                "timestamp": timestamp,
-                "prompt": prompt,
-                "config": self._clean_metadata_payload(payload),
-                "path": str(image_path),
-                # PR-PIPE-001: Enhanced metadata fields
-                "job_id": getattr(self, "_current_job_id", None),
-                "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
-                "model": model_name or "Unknown",
-                "vae": vae_name or "Automatic",
-                "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
-                "stage_duration_ms": stage_duration_ms,
-                # Stage history for full pipeline tracking
-                "stage_history": [],  # txt2img is first stage, no prior history
-                # Legacy fields for backward compatibility
-                "requested_seed": config.get("seed", -1),
-                "actual_seed": gen_info.get("seed"),
-            }
-            
-            # PR-GUI-DATA-001: Add refiner configuration
-            refiner_enabled = config.get("use_refiner", False)
-            refiner_model = config.get("refiner_model_name") or config.get("refiner_checkpoint")
-            refiner_switch_at = config.get("refiner_switch_at", 0.8)
-            
-            if refiner_enabled and refiner_model:
-                metadata["refiner"] = {
-                    "enabled": True,
-                    "model": refiner_model,
-                    "switch_at": refiner_switch_at,
-                }
-            else:
-                # Include refiner block even when disabled so manifest is complete
-                metadata["refiner"] = {
-                    "enabled": False,
-                    "model": refiner_model or None,
-                    "switch_at": refiner_switch_at if refiner_model else None,
-                }
-            metadata_builder = self._build_image_metadata_builder(
-                image_path=image_path,
-                stage="txt2img",
-                run_dir=run_dir,
-                manifest=metadata,
-            )
-            actual_path = save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder)
-            if actual_path:
-                self.logger.save_manifest(run_dir, actual_path.stem, metadata)
-                results.append(metadata)
-
-        logger.info(f"txt2img completed: {len(results)} images generated")
-        
-        # Post-generation memory check for hires fix (warn if still under pressure)
-        if payload.get("enable_hr", False):
-            try:
-                import psutil
-                mem = psutil.virtual_memory()
-                if mem.percent > 90.0:
-                    logger.warning(
-                        "⚠️ Memory still high after generation: %.1f%% used - consider reducing batch size or disabling hires fix",
-                        mem.percent
-                    )
-            except Exception:
-                pass
-        
-        return results
-        """
-        Run txt2img generation.
-
-        Args:
-            prompt: Text prompt
-            config: Configuration for txt2img
-            run_dir: Run directory
-            batch_size: Number of images to generate
-            cancel_token: Optional cancellation token
-
-        Returns:
-            List of generated image metadata
-        """
-        # Check for cancellation before starting
-        self._ensure_not_cancelled(cancel_token, "txt2img start")
-
-        logger.info(f"Starting txt2img with prompt: {prompt[:50]}...")
-        # Extract name prefix if present
-        name_prefix = self._extract_name_prefix(prompt)
-        # Apply global NSFW prevention to negative prompt
-        base_negative = config.get("negative_prompt", "")
-        enhanced_negative = self.config_manager.add_global_negative(base_negative)
-        logger.info(
-            f"🛡️ Applied global NSFW prevention - Original: '{base_negative}' → Enhanced: '{enhanced_negative[:100]}...'"
-        )
-
-        # Parse sampler configuration
-        sampler_config = self._parse_sampler_config(config)
-
-        # Set model and VAE if specified
-        model_name = config.get("model") or config.get("sd_model_checkpoint")
-        # Handle VAE: only set if non-empty
-        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
-        self._ensure_model_and_vae(model_name, requested_vae)
-
-        payload = {
-            "prompt": prompt,
-            "negative_prompt": enhanced_negative,
-            "steps": config.get("steps", 20),
-            "cfg_scale": config.get("cfg_scale", 7.0),
-            "width": config.get("width", 512),
-            "height": config.get("height", 512),
-            "seed": config.get("seed", -1),
-            "seed_resize_from_h": config.get("seed_resize_from_h", -1),
-            "seed_resize_from_w": config.get("seed_resize_from_w", -1),
-            "clip_skip": config.get("clip_skip", 2),
-            "batch_size": batch_size,
-            "n_iter": config.get("n_iter", 1),
-            "restore_faces": config.get("restore_faces", False),
-            "tiling": config.get("tiling", False),
-            "do_not_save_samples": config.get("do_not_save_samples", False),
-            "do_not_save_grid": config.get("do_not_save_grid", False),
-        }
-
-        # Always include hires.fix parameters (will be ignored if enable_hr is False)
-        payload.update(
-            {
-                "enable_hr": config.get("enable_hr", False),
-                "hr_scale": config.get("hr_scale", 2.0),
-                "hr_upscaler": config.get("hr_upscaler", "Latent"),
-                "hr_second_pass_steps": config.get("hr_second_pass_steps", 0),
-                "hr_resize_x": config.get("hr_resize_x", 0),
-                "hr_resize_y": config.get("hr_resize_y", 0),
-                "denoising_strength": config.get("denoising_strength", 0.7),
-            }
-        )
-
-        payload.update(sampler_config)
-
-        # Add styles if specified
-        if config.get("styles"):
-            payload["styles"] = config["styles"]
-
-        self._apply_webui_defaults_once()
-        response = self._generate_images("txt2img", payload)
-
-        # Check for cancellation after API call
-        self._ensure_not_cancelled(cancel_token, "txt2img post-call")
-
-        if not response or "images" not in response:
-            logger.error("txt2img failed")
-            return []
-
-        results = []
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        for idx, img_base64 in enumerate(response["images"]):
-            # Check for cancellation before saving each image
-            self._ensure_not_cancelled(cancel_token, f"txt2img save {idx}")
-            # Build image name with optional prefix
-            if name_prefix:
-                image_name = f"{name_prefix}_{timestamp}_{idx:03d}"
-            else:
-                image_name = f"txt2img_{timestamp}_{idx:03d}"
-            image_path = run_dir / "txt2img" / f"{image_name}.png"
-
-            metadata = {
-                "name": image_name,
-                "stage": "txt2img",
-                "timestamp": timestamp,
-                "prompt": prompt,
-                "config": self._clean_metadata_payload(payload),
-                "path": str(image_path),
-                "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
-            }
-            metadata_builder = self._build_image_metadata_builder(
-                image_path=image_path,
-                stage="txt2img",
-                run_dir=run_dir,
-                manifest=metadata,
-            )
-            actual_path = save_image_from_base64(img_base64, image_path, metadata_builder=metadata_builder)
-            if actual_path:
-                self.logger.save_manifest(run_dir, actual_path.stem, metadata)
-                results.append(metadata)
-
-        logger.info(f"txt2img completed: {len(results)} images generated")
-        return results
-
     def run_img2img(
         self,
         input_image_path: Path,
@@ -2186,6 +1884,14 @@ class Pipeline:
         # Use adetailer-specific prompt if provided, otherwise use txt2img prompt
         adetailer_prompt = config.get("adetailer_prompt", "")
         final_prompt = adetailer_prompt if adetailer_prompt else prompt
+        prompt_optimizer_result, prompt_optimizer_config = self._run_prompt_optimizer(
+            positive_prompt=final_prompt,
+            negative_prompt=ad_neg_final,
+            config=config,
+            stage_name="adetailer",
+        )
+        final_prompt = prompt_optimizer_result.positive.optimized_prompt
+        ad_neg_final = prompt_optimizer_result.negative.optimized_prompt
         logger.info("🔵 [ADETAILER_DEBUG] adetailer_prompt='%s', txt2img_prompt='%s', final_prompt='%s'", 
                     adetailer_prompt[:60] if adetailer_prompt else "(empty)",
                     prompt[:60] if prompt else "(empty)",
@@ -2359,6 +2065,7 @@ class Pipeline:
             "input_image": str(input_image_path),
             "config": self._clean_metadata_payload(payload),
             "path": str(image_path),
+            "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
@@ -2392,6 +2099,11 @@ class Pipeline:
                 manifest_path.parent.mkdir(exist_ok=True, parents=True)
                 with open(manifest_path, "w", encoding="utf-8") as f:
                     json.dump(metadata, f, indent=2, ensure_ascii=False)
+                self._maybe_write_prompt_optimization_sidecar(
+                    manifest_path=manifest_path,
+                    result=prompt_optimizer_result,
+                    config=prompt_optimizer_config,
+                )
             except Exception as e:
                 logger.error(f"Error writing manifest file {manifest_path}: {e}")
                 # Continue anyway - manifest is not critical
@@ -2500,348 +2212,6 @@ class Pipeline:
             return metadata
 
         return None
-
-    def run_full_pipeline(
-        self,
-        prompt: str,
-        config: dict[str, Any],
-        run_name: str | None = None,
-        batch_size: int = 1,
-        cancel_token=None,
-    ) -> dict[str, Any]:
-        """
-        Run the full pipeline with cancellation handling.
-        """
-
-        self.reset_stage_events()
-        self._begin_run_metrics()
-
-        try:
-            result = self._run_full_pipeline_impl(
-                prompt, config, run_name=run_name, batch_size=batch_size, cancel_token=cancel_token
-            )
-            if self._current_run_dir:
-                self.logger.record_run_status(self._current_run_dir, "success")
-            return result
-        except CancellationError as exc:
-            if isinstance(cancel_token, CancelToken):
-                self._log_pipeline_cancellation("full pipeline", exc)
-                if self._current_run_dir:
-                    self.logger.record_run_status(self._current_run_dir, "cancelled", str(exc))
-                return getattr(
-                    self,
-                    "_last_full_pipeline_results",
-                    {
-                        "run_dir": "",
-                        "prompt": prompt,
-                        "txt2img": [],
-                        "img2img": [],
-                        "upscaled": [],
-                        "summary": [],
-                    },
-                )
-            raise
-        finally:
-            current_results = getattr(self, "_last_full_pipeline_results", {}) or {}
-            current_results["efficiency_metrics"] = self.get_run_efficiency_metrics(
-                len(current_results.get("summary", []))
-            )
-            self._log_run_efficiency_metrics(
-                run_type="full_pipeline",
-                images_processed=len(current_results.get("summary", [])),
-            )
-
-    def _run_full_pipeline_impl(
-        self,
-        prompt: str,
-        config: dict[str, Any],
-        run_name: str | None = None,
-        batch_size: int = 1,
-        cancel_token=None,
-    ) -> dict[str, Any]:
-        """
-        Run complete pipeline: txt2img → img2img (optional) → upscale (optional).
-
-        Args:
-            prompt: Text prompt
-            config: Full pipeline configuration with optional pipeline.img2img_enabled and pipeline.upscale_enabled
-            run_name: Optional run name
-            batch_size: Number of images to generate
-            cancel_token: Optional cancellation token
-
-        Returns:
-            Pipeline results summary
-        """
-        self._current_run_dir = self.logger.create_run_directory(run_name)
-        self._last_full_pipeline_results = {
-            "run_dir": str(self._current_run_dir),
-            "prompt": prompt,
-            "txt2img": [],
-            "img2img": [],
-            "adetailer": [],
-            "upscaled": [],
-            "summary": [],
-        }
-
-        # Check for cancellation at start (after run dir exists for status logging)
-        self._ensure_not_cancelled(cancel_token, "pipeline start")
-
-        logger.info("=" * 60)
-        logger.info("Starting full pipeline execution")
-
-        # Check pipeline stage configuration - no defaults, use actual config values
-        pipeline_cfg: dict[str, Any] = config.get("pipeline", {}) or {}
-        img2img_val = pipeline_cfg.get("img2img_enabled")
-        img2img_enabled: bool = bool(img2img_val) if img2img_val is not None else False
-        adetailer_enabled: bool = pipeline_cfg.get("adetailer_enabled") or False
-        upscale_enabled: bool = pipeline_cfg.get("upscale_enabled") or False
-        upscale_only_last: bool = pipeline_cfg.get("upscale_only_last", False)
-
-        logger.info(
-            "Pipeline stages: txt2img=ON, img2img=%s, adetailer=%s, upscale=%s (upscale_only_last=%s)",
-            "ON" if img2img_enabled else "SKIP",
-            "ON" if adetailer_enabled else "SKIP",
-            "ON" if upscale_enabled else "SKIP",
-            upscale_only_last,
-        )
-        logger.info("=" * 60)
-
-        run_dir = self._current_run_dir
-        results = self._last_full_pipeline_results
-
-        progress_controller = self.progress_controller
-        total_units = 1
-        completed_units = 0
-        start_time = time.monotonic()
-
-        def compute_eta(units_done: float) -> str:
-            if units_done <= 0:
-                return "ETA: --"
-            elapsed = time.monotonic() - start_time
-            if elapsed <= 0:
-                return "ETA: --"
-            remaining_units = max(total_units - units_done, 0)
-            if remaining_units <= 0:
-                return "ETA: 00:00"
-            avg_per_unit = elapsed / units_done
-            if avg_per_unit <= 0:
-                return "ETA: --"
-            return self._format_eta(avg_per_unit * remaining_units)
-
-        def emit(stage_label: str, units_override: float | None = None) -> None:
-            if progress_controller is None:
-                return
-            units_done = completed_units if units_override is None else units_override
-            percent = 0.0
-            if total_units > 0:
-                percent = max(0.0, min(100.0, (units_done / total_units) * 100.0))
-            eta_text = compute_eta(units_done)
-            progress_controller.report_progress(stage_label, percent, eta_text)
-
-        emit("txt2img", completed_units)
-
-        # Step 1: txt2img
-        txt2img_results = self.run_txt2img(
-            prompt, config.get("txt2img", {}), run_dir, batch_size, cancel_token
-        )
-        results["txt2img"] = txt2img_results
-
-        completed_units += 1
-        emit("txt2img", completed_units)
-
-        # Check for cancellation after txt2img
-        self._ensure_not_cancelled(cancel_token, "pipeline post-txt2img")
-
-        if not txt2img_results:
-            logger.error("Pipeline failed at txt2img stage")
-            return results
-
-        total_images = len(txt2img_results)
-        if total_images:
-            self._record_stage_event("txt2img", "enter", 1, total_images, False)
-            for idx in range(1, total_images + 1):
-                self._record_stage_event("txt2img", "exit", idx, total_images, False)
-
-        txt2img_cfg = config.get("txt2img", {}) or {}
-        diag_batch_size = txt2img_cfg.get("batch_size", batch_size)
-        diag_n_iter = txt2img_cfg.get("n_iter", 1)
-        logger.info(
-            "PIPELINE DIAG: txt2img produced %d images (batch_size=%s, n_iter=%s)",
-            total_images,
-            diag_batch_size,
-            diag_n_iter,
-        )
-
-        per_image_units = (
-            int(bool(img2img_enabled)) + int(bool(adetailer_enabled)) + int(bool(upscale_enabled))
-        )
-        if per_image_units and total_images:
-            total_units = 1 + total_images * per_image_units
-        else:
-            total_units = max(total_units, 1)
-
-        # Step 2: img2img cleanup (optional, for each generated image)
-        for index, txt2img_meta in enumerate(txt2img_results, start=1):
-            last_image_path = txt2img_meta["path"]
-            final_image_path = last_image_path
-            adetailer_meta = None
-            last_stage_meta = txt2img_meta
-            image_label = f"{index}/{total_images}" if total_images else str(index)
-            do_upscale = upscale_enabled and (not upscale_only_last or index == total_images)
-
-            if (
-                cancel_token
-                and getattr(cancel_token, "is_cancelled", None)
-                and cancel_token.is_cancelled()
-            ):
-                pending_stage = (
-                    "img2img"
-                    if img2img_enabled
-                    else "adetailer"
-                    if adetailer_enabled
-                    else "upscale"
-                    if do_upscale
-                    else None
-                )
-                if pending_stage:
-                    self._record_stage_event(pending_stage, "cancelled", index, total_images, True)
-                raise CancellationError("Cancelled during pipeline")
-
-            if img2img_enabled:
-                emit(f"img2img ({image_label})", completed_units)
-                self._record_stage_event("img2img", "enter", index, total_images, False)
-                try:
-                    img2img_meta = self.run_img2img(
-                        Path(txt2img_meta["path"]),
-                        prompt,
-                        config.get("img2img", {}),
-                        run_dir,
-                        cancel_token,
-                    )
-                except CancellationError:
-                    self._record_stage_event("img2img", "cancelled", index, total_images, True)
-                    raise
-                if img2img_meta:
-                    results["img2img"].append(img2img_meta)
-                    last_image_path = img2img_meta["path"]
-                    last_stage_meta = img2img_meta
-                    logger.info(f"img2img completed for {txt2img_meta['name']}")
-                else:
-                    logger.warning(
-                        f"img2img failed for {txt2img_meta['name']}, using txt2img output for next steps"
-                    )
-                self._record_stage_event("img2img", "exit", index, total_images, False)
-                completed_units += 1
-                emit(f"img2img ({image_label})", completed_units)
-            else:
-                logger.info(f"img2img skipped for {txt2img_meta['name']}")
-
-            if adetailer_enabled:
-                emit(f"adetailer ({image_label})", completed_units)
-                self._record_stage_event("adetailer", "enter", index, total_images, False)
-                adetailer_cfg = dict(config.get("adetailer", {}))
-                adetailer_cfg.setdefault("pipeline", pipeline_cfg)
-                fallback_negative = self._resolve_negative_prompt(
-                    last_stage_meta,
-                    txt2img_meta,
-                    (config.get("txt2img", {}) or {}).get("negative_prompt", ""),
-                )
-                try:
-                    adetailer_meta = self.run_adetailer(
-                        Path(last_image_path),
-                        prompt,
-                        fallback_negative,
-                        adetailer_cfg,
-                        run_dir,
-                        cancel_token=cancel_token,
-                    )
-                except CancellationError:
-                    self._record_stage_event("adetailer", "cancelled", index, total_images, True)
-                    raise
-                if adetailer_meta:
-                    results["adetailer"].append(adetailer_meta)
-                    last_image_path = adetailer_meta["path"]
-                    last_stage_meta = adetailer_meta
-                    final_image_path = last_image_path
-                    logger.info(f"adetailer completed for {Path(txt2img_meta['path']).name}")
-                else:
-                    logger.warning(
-                        f"adetailer failed for {Path(last_image_path).name}, using previous output"
-                    )
-                self._record_stage_event("adetailer", "exit", index, total_images, False)
-                completed_units += 1
-                emit(f"adetailer ({image_label})", completed_units)
-
-            if do_upscale:
-                emit(f"upscale ({image_label})", completed_units)
-                self._record_stage_event("upscale", "enter", index, total_images, False)
-                try:
-                    upscaled_meta = self.run_upscale(
-                        Path(last_image_path), config.get("upscale", {}), run_dir, cancel_token
-                    )
-                except CancellationError:
-                    self._record_stage_event("upscale", "cancelled", index, total_images, True)
-                    raise
-                if upscaled_meta:
-                    results["upscaled"].append(upscaled_meta)
-                    final_image_path = upscaled_meta["path"]
-                    logger.info(f"upscale completed for {Path(last_image_path).name}")
-                else:
-                    logger.warning(
-                        f"upscale failed for {Path(last_image_path).name}, using previous output"
-                    )
-                    final_image_path = last_image_path
-                self._record_stage_event("upscale", "exit", index, total_images, False)
-                completed_units += 1
-                emit(f"upscale ({image_label})", completed_units)
-            else:
-                if upscale_enabled and upscale_only_last:
-                    logger.info(
-                        "⊘ upscale skipped for %s (upscale_only_last=True, index=%d/%d)",
-                        Path(last_image_path).name,
-                        index,
-                        total_images,
-                    )
-                else:
-                    logger.info(f"⊘ upscale skipped for {Path(last_image_path).name}")
-                final_image_path = last_image_path
-
-            summary_entry = {
-                "prompt": prompt,
-                "txt2img_path": txt2img_meta["path"],
-                "final_image_path": final_image_path,
-                "timestamp": txt2img_meta["timestamp"],
-                "stages_completed": ["txt2img"],
-            }
-
-            if img2img_enabled and len(results["img2img"]) > 0:
-                summary_entry["img2img_path"] = results["img2img"][-1]["path"]
-                summary_entry["stages_completed"].append("img2img")
-
-            if adetailer_enabled and adetailer_meta:
-                summary_entry["adetailer_path"] = adetailer_meta["path"]
-                summary_entry["stages_completed"].append("adetailer")
-
-            if upscale_enabled and len(results["upscaled"]) > 0:
-                summary_entry["upscaled_path"] = results["upscaled"][-1]["path"]
-                summary_entry["stages_completed"].append("upscale")
-
-            results["summary"].append(summary_entry)
-
-        if progress_controller and (not cancel_token or not cancel_token.is_cancelled()):
-            completed_units = max(completed_units, total_units)
-            emit("Completed", completed_units)
-
-        # Create CSV summary
-        if results["summary"]:
-            self.logger.create_csv_summary(run_dir, results["summary"])
-
-        logger.info("=" * 60)
-        logger.info(f"Pipeline completed: {len(results['summary'])} images processed")
-        logger.info(f"Output directory: {run_dir}")
-        logger.info("=" * 60)
-
-        return results
 
     def run_pack_pipeline(
         self,
@@ -3502,10 +2872,20 @@ class Pipeline:
             prompt_after, negative_after = self._apply_aesthetic_to_payload(payload, config)
             payload["prompt"] = prompt_after
             payload["negative_prompt"] = negative_after
+            prompt_optimizer_result, prompt_optimizer_config = self._run_prompt_optimizer(
+                positive_prompt=payload.get("prompt", ""),
+                negative_prompt=payload.get("negative_prompt", ""),
+                config=config,
+                stage_name="txt2img",
+            )
+            payload["prompt"] = prompt_optimizer_result.positive.optimized_prompt
+            payload["negative_prompt"] = prompt_optimizer_result.negative.optimized_prompt
             try:
                 logger.info(
                     "🎨 Final txt2img negative prompt (with global + aesthetic): '%s'",
-                    (negative_after[:160] + "...") if len(negative_after) > 160 else negative_after,
+                    (payload["negative_prompt"][:160] + "...")
+                    if len(payload["negative_prompt"]) > 160
+                    else payload["negative_prompt"],
                 )
             except Exception:
                 pass
@@ -3573,11 +2953,11 @@ class Pipeline:
                 "stage": "txt2img",
                 "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
                 "original_prompt": original_positive_prompt,
-                "final_prompt": enhanced_positive,
+                "final_prompt": payload.get("prompt", enhanced_positive),
                 "global_positive_applied": positive_global_applied,
                 "global_positive_terms": positive_global_terms if positive_global_applied else "",
                 "original_negative_prompt": original_negative_prompt,
-                "final_negative_prompt": enhanced_negative,
+                "final_negative_prompt": payload.get("negative_prompt", enhanced_negative),
                 "global_negative_applied": negative_global_applied,
                 "global_negative_terms": negative_global_terms if negative_global_applied else "",
                 "seed": payload.get("seed", -1),
@@ -3590,6 +2970,7 @@ class Pipeline:
                 "actual_subseed": gen_info.get("subseed"),
                 "model": model_name,
                 "vae": vae_name,
+                "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
             }
             
             for batch_idx in range(num_images_received):
@@ -3637,6 +3018,11 @@ class Pipeline:
                     with open(variant_manifest_path, "w", encoding="utf-8") as f:
                         json.dump(image_metadata, f, indent=2, ensure_ascii=False)
                     logger.debug(f"Saved variant manifest: {variant_manifest_path.name}")
+                    self._maybe_write_prompt_optimization_sidecar(
+                        manifest_path=variant_manifest_path,
+                        result=prompt_optimizer_result,
+                        config=prompt_optimizer_config,
+                    )
                 except Exception as e:
                     logger.error(f"Failed to save variant manifest {variant_manifest_path}: {e}")
             
@@ -3656,11 +3042,11 @@ class Pipeline:
                     "stage": "txt2img",
                     "timestamp": timestamp,
                     "original_prompt": original_positive_prompt,
-                    "final_prompt": enhanced_positive,
+                    "final_prompt": payload.get("prompt", enhanced_positive),
                     "global_positive_applied": positive_global_applied,
                     "global_positive_terms": positive_global_terms if positive_global_applied else "",
                     "original_negative_prompt": original_negative_prompt,
-                    "final_negative_prompt": enhanced_negative,
+                    "final_negative_prompt": payload.get("negative_prompt", enhanced_negative),
                     "global_negative_applied": negative_global_applied,
                     "global_negative_terms": negative_global_terms if negative_global_applied else "",
                     "seed": payload.get("seed", -1),
@@ -3670,6 +3056,7 @@ class Pipeline:
                     "output_path": str(image_path),
                     "path": str(image_path),
                     "all_paths": [str(p) for p in saved_paths],  # All generated images for batch processing
+                    "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
                 }
 
                 # Manifests already saved per-variant in the loop above
@@ -3784,11 +3171,21 @@ class Pipeline:
             )
             payload["prompt"] = prompt_after
             payload["negative_prompt"] = negative_after
+            prompt_optimizer_result, prompt_optimizer_config = self._run_prompt_optimizer(
+                positive_prompt=payload.get("prompt", ""),
+                negative_prompt=payload.get("negative_prompt", ""),
+                config=full_config or config,
+                stage_name="img2img",
+            )
+            payload["prompt"] = prompt_optimizer_result.positive.optimized_prompt
+            payload["negative_prompt"] = prompt_optimizer_result.negative.optimized_prompt
             try:
                 logger.info(
                     "🎨 Final img2img negative prompt (with%s global + aesthetic): '%s'",
                     "" if apply_global else "out",
-                    (negative_after[:160] + "...") if len(negative_after) > 160 else negative_after,
+                    (payload["negative_prompt"][:160] + "...")
+                    if len(payload["negative_prompt"]) > 160
+                    else payload["negative_prompt"],
                 )
             except Exception:
                 pass
@@ -3836,6 +3233,7 @@ class Pipeline:
                 "config": self._clean_metadata_payload(payload),
                 "path": str(image_path),
                 "seeds": self._build_seed_metadata(payload, gen_info),  # D-MANIFEST-001
+                "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
                 # Legacy fields for backward compatibility
                 "requested_seed": payload.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),
@@ -3861,6 +3259,11 @@ class Pipeline:
                     manifest_path.parent.mkdir(exist_ok=True, parents=True)
                     with open(manifest_path, "w", encoding="utf-8") as f:
                         json.dump(metadata, f, indent=2, ensure_ascii=False)
+                    self._maybe_write_prompt_optimization_sidecar(
+                        manifest_path=manifest_path,
+                        result=prompt_optimizer_result,
+                        config=prompt_optimizer_config,
+                    )
                 except Exception as e:
                     logger.error(f"Error writing manifest file {manifest_path}: {e}")
 
@@ -4527,6 +3930,8 @@ class Pipeline:
             adetailer_cfg.setdefault(
                 "pipeline", config.get("pipeline", {}) if isinstance(config, dict) else {}
             )
+            if isinstance(config, dict) and "prompt_optimizer" in config:
+                adetailer_cfg.setdefault("prompt_optimizer", config.get("prompt_optimizer"))
             # Use adetailer-specific prompts if provided, otherwise fallback to txt2img prompts
             config_positive = adetailer_cfg.get("adetailer_prompt", "").strip()
             config_negative = adetailer_cfg.get("adetailer_negative_prompt", "").strip()

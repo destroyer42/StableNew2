@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
+
 DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
     "blurry, bad quality, distorted, ugly, malformed, nsfw, nude, naked, explicit, "
     "sexual content, adult content, immodest"
@@ -356,6 +358,7 @@ class ConfigManager:
                 "apply_global_negative_upscale": True,
                 "apply_global_negative_adetailer": True,
             },
+            "prompt_optimizer": dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS),
             "hires_fix": {
                 "enabled": False,
                 "upscaler_name": "Latent",
@@ -706,6 +709,10 @@ class ConfigManager:
         stored = self._load_settings()
         merged = dict(defaults)
         merged.update(stored)
+        if isinstance(defaults.get("prompt_optimizer"), dict) and isinstance(stored.get("prompt_optimizer"), dict):
+            prompt_optimizer = dict(defaults["prompt_optimizer"])
+            prompt_optimizer.update(stored["prompt_optimizer"])
+            merged["prompt_optimizer"] = prompt_optimizer
         return merged
 
     def get_setting(self, key: str, default: Any = None) -> Any:
@@ -742,6 +749,7 @@ class ConfigManager:
             "webui_options_write_enabled": True,
             "output_dir": str(Path("output")),
             "model_dir": str(Path("models")),
+            "prompt_optimizer": dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS),
         }
 
     def get_default_engine_settings(self) -> dict[str, Any]:

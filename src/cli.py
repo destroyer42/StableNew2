@@ -5,8 +5,36 @@ import logging
 from pathlib import Path
 
 from .api import SDWebUIClient
-from .pipeline import Pipeline, VideoCreator
+from .pipeline import PipelineRunner, VideoCreator
+from .pipeline.cli_njr_builder import build_cli_njr
 from .utils import ConfigManager, StructuredLogger, find_webui_api_port, setup_logging
+
+
+def _collect_video_source_paths(result_variants: list[dict[str, object]]) -> list[Path]:
+    preferred_stages = ("upscale", "adetailer", "img2img", "txt2img")
+    by_stage: dict[str, list[Path]] = {stage: [] for stage in preferred_stages}
+
+    for variant in result_variants:
+        if not isinstance(variant, dict):
+            continue
+        stage = str(variant.get("stage", "") or "")
+        if stage not in by_stage:
+            continue
+        all_paths = variant.get("all_paths")
+        if isinstance(all_paths, list):
+            for value in all_paths:
+                if value:
+                    by_stage[stage].append(Path(str(value)))
+            continue
+        path_value = variant.get("path")
+        if path_value:
+            by_stage[stage].append(Path(str(path_value)))
+
+    for stage in preferred_stages:
+        paths = [path for path in by_stage[stage] if path]
+        if paths:
+            return paths
+    return []
 
 
 def main():
@@ -76,10 +104,12 @@ def main():
     # Modify config based on arguments
     if args.no_img2img:
         config.pop("img2img", None)
+        config.setdefault("pipeline", {})["img2img_enabled"] = False
         logger.info("img2img stage disabled")
 
     if args.no_upscale:
         config.pop("upscale", None)
+        config.setdefault("pipeline", {})["upscale_enabled"] = False
         logger.info("Upscale stage disabled")
 
     # Modify config based on arguments
@@ -108,39 +138,51 @@ def main():
         logger.info("Common ports to check: 7860, 7861, 7862, 7863, 7864")
         return 1
 
-    # Initialize pipeline
-    pipeline = Pipeline(client, structured_logger)
+    runner = PipelineRunner(client, structured_logger)
 
     # Run pipeline
     try:
-        results = pipeline.run_full_pipeline(args.prompt, config, args.run_name, args.batch_size)
+        njr = build_cli_njr(
+            prompt=args.prompt,
+            config=config,
+            batch_size=args.batch_size,
+            run_name=args.run_name,
+        )
+        result = runner.run_njr(njr, cancel_token=None)
+        if not result.success:
+            logger.error("Pipeline failed: %s", result.error or "unknown error")
+            return 1
+
+        output_dir = Path(str(result.metadata.get("output_dir") or "output"))
+        variants = [variant for variant in result.variants if isinstance(variant, dict)]
 
         logger.info("=" * 60)
         logger.info("Pipeline Results:")
-        logger.info(f"  Run directory: {results['run_dir']}")
-        logger.info(f"  txt2img images: {len(results['txt2img'])}")
-        logger.info(f"  img2img images: {len(results['img2img'])}")
-        logger.info(f"  Upscaled images: {len(results['upscaled'])}")
+        logger.info(f"  Run directory: {output_dir}")
+        logger.info(f"  Run ID: {result.run_id}")
+        logger.info(f"  Variant records: {len(variants)}")
+        logger.info(f"  Final outputs: {len(njr.output_paths)}")
         logger.info("=" * 60)
 
         # Create video if requested
         if args.create_video:
             logger.info("Creating video...")
             video_creator = VideoCreator()
-            run_dir = Path(results["run_dir"])
-
-            # Try to create video from upscaled images first
-            for subdir in ["upscaled", "img2img", "txt2img"]:
-                image_dir = run_dir / subdir
-                if image_dir.exists():
-                    video_path = run_dir / "video" / f"{subdir}_video.mp4"
-                    video_path.parent.mkdir(exist_ok=True)
-
-                    if video_creator.create_video_from_directory(
-                        image_dir, video_path, fps=config.get("video", {}).get("fps", 24)
-                    ):
-                        logger.info(f"Video created: {video_path}")
-                        break
+            video_paths = _collect_video_source_paths(variants)
+            if video_paths:
+                video_dir = output_dir / "video"
+                video_dir.mkdir(parents=True, exist_ok=True)
+                video_path = video_dir / "cli_video.mp4"
+                if video_creator.create_video_from_images(
+                    video_paths,
+                    video_path,
+                    fps=config.get("video", {}).get("fps", 24),
+                ):
+                    logger.info(f"Video created: {video_path}")
+                else:
+                    logger.warning("Video creation failed")
+            else:
+                logger.warning("No image artifacts available for video creation")
 
         logger.info("=" * 60)
         logger.info("StableNew CLI - Completed successfully")

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from tkinter import messagebox, ttk
 from typing import Any
 
+from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.utils.config import ConfigManager
 
 
@@ -37,6 +38,20 @@ class EngineSettingsDialog(ttk.Frame):
         self._webui_total_timeout_var = tk.DoubleVar()
         self._output_dir_var = tk.StringVar()
         self._model_dir_var = tk.StringVar()
+        self._prompt_optimizer_vars: dict[str, tk.Variable] = {
+            "enabled": tk.BooleanVar(),
+            "optimize_positive": tk.BooleanVar(),
+            "optimize_negative": tk.BooleanVar(),
+            "dedupe_enabled": tk.BooleanVar(),
+            "preserve_lora_relative_order": tk.BooleanVar(),
+            "preserve_unknown_order": tk.BooleanVar(),
+            "enable_score_based_classification": tk.BooleanVar(),
+            "allow_subject_anchor_boost": tk.BooleanVar(),
+            "log_before_after": tk.BooleanVar(),
+            "log_bucket_assignments": tk.BooleanVar(),
+            "large_chunk_warning_threshold": tk.IntVar(),
+            "subject_anchor_boost_min_chunk_count": tk.IntVar(),
+        }
 
         self._field_vars: dict[str, tk.Variable] = {
             "webui_base_url": self._webui_base_url_var,
@@ -66,14 +81,18 @@ class EngineSettingsDialog(ttk.Frame):
         webui_frame = ttk.LabelFrame(self, text="WebUI", padding=8)
         paths_frame = ttk.LabelFrame(self, text="Paths", padding=8)
         health_frame = ttk.LabelFrame(self, text="Health Checks", padding=8)
+        optimizer_frame = ttk.LabelFrame(self, text="Prompt Optimizer", padding=8)
 
         webui_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=4)
         paths_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=4)
         health_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=4)
+        optimizer_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=4)
 
         webui_frame.columnconfigure(1, weight=1)
         paths_frame.columnconfigure(1, weight=1)
         health_frame.columnconfigure(1, weight=1)
+        optimizer_frame.columnconfigure(0, weight=1)
+        optimizer_frame.columnconfigure(1, weight=1)
 
         self._add_label_entry(webui_frame, "API URL:", self._webui_base_url_var, row=0)
         self._add_label_entry(webui_frame, "WebUI workdir:", self._webui_workdir_var, row=1)
@@ -114,10 +133,42 @@ class EngineSettingsDialog(ttk.Frame):
             row=3,
             var_type="float",
         )
+        optimizer_specs = [
+            ("enabled", "Enable"),
+            ("optimize_positive", "Optimize Positive"),
+            ("optimize_negative", "Optimize Negative"),
+            ("dedupe_enabled", "Enable Dedupe"),
+            ("preserve_lora_relative_order", "Preserve LoRAs"),
+            ("preserve_unknown_order", "Preserve Unknown"),
+            ("enable_score_based_classification", "Score-Based"),
+            ("allow_subject_anchor_boost", "Anchor Boost"),
+            ("log_before_after", "Log Before/After"),
+            ("log_bucket_assignments", "Log Buckets"),
+        ]
+        for index, (key, label) in enumerate(optimizer_specs):
+            ttk.Checkbutton(
+                optimizer_frame,
+                text=label,
+                variable=self._prompt_optimizer_vars[key],
+            ).grid(row=index // 2, column=index % 2, sticky="w", pady=2)
+        self._add_label_entry(
+            optimizer_frame,
+            "Chunk warning threshold:",
+            self._prompt_optimizer_vars["large_chunk_warning_threshold"],
+            row=5,
+            var_type="int",
+        )
+        self._add_label_entry(
+            optimizer_frame,
+            "Anchor min chunk count:",
+            self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"],
+            row=6,
+            var_type="int",
+        )
 
     def _build_actions(self) -> None:
         btn_frame = ttk.Frame(self)
-        btn_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=(8, 8))
+        btn_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=(8, 8))
         btn_frame.columnconfigure((0, 1, 2), weight=1)
 
         restore_btn = ttk.Button(btn_frame, text="Restore Defaults", command=self.restore_defaults)
@@ -184,6 +235,15 @@ class EngineSettingsDialog(ttk.Frame):
                 var.set(float(value or 0.0))
             else:
                 var.set(str(value or ""))
+        prompt_defaults = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
+        prompt_defaults.update(defaults.get("prompt_optimizer") or {})
+        prompt_defaults.update(settings.get("prompt_optimizer") or {})
+        for key, var in self._prompt_optimizer_vars.items():
+            value = prompt_defaults.get(key)
+            if isinstance(var, tk.BooleanVar):
+                var.set(bool(value))
+            else:
+                var.set(int(value or 0))
 
     def collect_values(self) -> dict[str, Any]:
         values: dict[str, Any] = {}
@@ -196,6 +256,12 @@ class EngineSettingsDialog(ttk.Frame):
                 values[key] = float(var.get())
             else:
                 values[key] = str(var.get()).strip()
+        values["prompt_optimizer"] = {
+            key: (bool(var.get()) if isinstance(var, tk.BooleanVar) else int(var.get()))
+            for key, var in self._prompt_optimizer_vars.items()
+        }
+        values["prompt_optimizer"]["warn_on_large_chunk_count"] = True
+        values["prompt_optimizer"]["opt_out_pipeline_names"] = []
         return values
 
     def _validate(self, values: dict[str, Any]) -> bool:
@@ -236,3 +302,11 @@ class EngineSettingsDialog(ttk.Frame):
                 var.set(float(value or 0.0))
             else:
                 var.set(str(value or ""))
+        prompt_defaults = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
+        prompt_defaults.update(defaults.get("prompt_optimizer") or {})
+        for key, var in self._prompt_optimizer_vars.items():
+            value = prompt_defaults.get(key)
+            if isinstance(var, tk.BooleanVar):
+                var.set(bool(value))
+            else:
+                var.set(int(value or 0))

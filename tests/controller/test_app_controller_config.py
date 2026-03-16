@@ -95,6 +95,7 @@ class DummyWindow:
         self.header_zone = DummyHeaderZone()
         self.left_zone = DummyLeftZone()
         self.bottom_zone = DummyBottomZone()
+        self.prompt_tab = DummyPromptTab()
         self.updated_packs: list[list[str]] = []
         self.connected_controller = None
 
@@ -106,6 +107,17 @@ class DummyWindow:
 
     def connect_controller(self, controller):
         self.connected_controller = controller
+
+
+class DummyPromptTab:
+    def __init__(self):
+        self.config = {"enabled": True, "dedupe_enabled": True}
+
+    def get_prompt_optimizer_config(self):
+        return dict(self.config)
+
+    def apply_prompt_optimizer_config(self, config):
+        self.config = dict(config or {})
 
 
 @pytest.fixture(autouse=True)
@@ -160,3 +172,20 @@ def test_controller_update_config_only_updates_specified_fields(tmp_path):
     assert cfg["width"] == 768
     assert cfg["cfg_scale"] == 9.0
     assert cfg["height"] == 1024  # unchanged
+
+
+def test_run_config_with_lora_includes_prompt_optimizer_from_prompt_tab(tmp_path):
+    window = DummyWindow()
+    controller = AppController(
+        window,
+        threaded=False,
+        packs_dir=tmp_path / "packs",
+        pipeline_runner=NoopPipelineRunner(),
+        job_service=make_stubbed_job_service(),
+    )
+    controller.app_state.run_config = make_run_config()
+
+    payload = controller._run_config_with_lora()
+
+    assert payload["prompt_optimizer"]["enabled"] is True
+    assert payload["prompt_optimizer"]["dedupe_enabled"] is True

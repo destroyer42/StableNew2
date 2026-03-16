@@ -1,0 +1,13 @@
+[
+  {
+    "input": "watermark, text, blurry, low quality, bad anatomy, bad hands, extra fingers, cropped, anime, cartoon",
+    "expected_buckets": {
+      "anatomy_defects": ["bad anatomy"],
+      "face_hand_defects": ["bad hands", "extra fingers"],
+      "render_artifacts": ["blurry", "low quality"],
+      "composition_defects": ["cropped"],
+      "text_logo_watermark": ["watermark", "text"],
+      "style_blockers": ["anime", "cartoon"]
+    }
+  }
+]

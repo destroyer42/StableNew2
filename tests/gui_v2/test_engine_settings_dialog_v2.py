@@ -19,12 +19,14 @@ def test_engine_settings_dialog_collects_values(tmp_path: Path, tk_root: tk.Tk) 
     dialog = _build_dialog(tk_root, config_manager)
     dialog._webui_base_url_var.set("http://example.org")
     dialog._webui_autostart_var.set(False)
+    dialog._prompt_optimizer_vars["enabled"].set(False)
 
     values = dialog.collect_values()
 
     assert values["webui_base_url"] == "http://example.org"
     assert values["webui_autostart_enabled"] is False
     assert "output_dir" in values
+    assert values["prompt_optimizer"]["enabled"] is False
 
     dialog.master.destroy()
 
@@ -37,5 +39,6 @@ def test_engine_settings_dialog_restore_defaults(tmp_path: Path, tk_root: tk.Tk)
 
     defaults = config_manager.get_default_engine_settings()
     assert dialog._webui_base_url_var.get() == defaults["webui_base_url"]
+    assert dialog._prompt_optimizer_vars["enabled"].get() == bool(defaults["prompt_optimizer"]["enabled"])
 
     dialog.master.destroy()

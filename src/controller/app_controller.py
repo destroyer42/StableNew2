@@ -2839,6 +2839,9 @@ class AppController:
             return
         self._config_manager.update_settings(new_values)
         self._config_manager.save_settings()
+        prompt_optimizer = new_values.get("prompt_optimizer")
+        if isinstance(prompt_optimizer, dict):
+            self._apply_prompt_optimizer_ui_config(prompt_optimizer)
         self._append_log("[controller] Settings updated.")
 
     def on_open_advanced_editor(self) -> None:
@@ -4081,6 +4084,7 @@ class AppController:
                     pass
                 else:
                     self._apply_randomizer_from_config(preset_config)
+            self._sync_prompt_optimizer_run_config(preset_config)
 
             # Extract core config fields from preset and apply to core config panel
             core_overrides = self._extract_core_overrides_from_preset(preset_config)
@@ -4692,6 +4696,33 @@ class AppController:
     def _get_sidebar_panel(self) -> Any:
         return getattr(self.main_window, "sidebar_panel_v2", None)
 
+    def _get_prompt_tab(self) -> Any:
+        return getattr(self.main_window, "prompt_tab", None)
+
+    def _read_prompt_optimizer_ui_config(self) -> dict[str, Any] | None:
+        prompt_tab = self._get_prompt_tab()
+        if prompt_tab and hasattr(prompt_tab, "get_prompt_optimizer_config"):
+            try:
+                config = prompt_tab.get_prompt_optimizer_config()
+            except Exception:
+                return None
+            if isinstance(config, dict):
+                return dict(config)
+        return None
+
+    def _apply_prompt_optimizer_ui_config(self, config: dict[str, Any] | None) -> None:
+        prompt_tab = self._get_prompt_tab()
+        if prompt_tab and hasattr(prompt_tab, "apply_prompt_optimizer_config"):
+            try:
+                prompt_tab.apply_prompt_optimizer_config(config)
+            except Exception as exc:
+                self._append_log(f"[controller] Failed to apply prompt optimizer config: {exc}")
+
+    def _sync_prompt_optimizer_run_config(self, config: dict[str, Any]) -> None:
+        prompt_optimizer = config.get("prompt_optimizer")
+        if isinstance(prompt_optimizer, dict):
+            self._apply_prompt_optimizer_ui_config(prompt_optimizer)
+
     # ------------------------------------------------------------------
     # Pipeline Pack Config & Job Builder (PR-035)
     # ------------------------------------------------------------------
@@ -4865,6 +4896,9 @@ class AppController:
         base = self.app_state.run_config.copy() if self.app_state else {}
         if self.app_state and self.app_state.lora_strengths:
             base["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
+        prompt_optimizer_config = self._read_prompt_optimizer_ui_config()
+        if prompt_optimizer_config is not None:
+            base["prompt_optimizer"] = prompt_optimizer_config
         
         # Defensive checks for state access
         if "randomization_enabled" not in base:
@@ -4976,6 +5010,7 @@ class AppController:
             self.app_state.set_run_config(pack_config)
             self._maybe_set_app_state_lora_strengths(pack_config)
             self._apply_randomizer_from_config(pack_config)
+        self._sync_prompt_optimizer_run_config(pack_config)
 
         # Update stage cards if available
         # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
@@ -5086,6 +5121,9 @@ class AppController:
         # Add LoRA settings
         if self.app_state and self.app_state.lora_strengths:
             current_config["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
+        prompt_optimizer_config = self._read_prompt_optimizer_ui_config()
+        if prompt_optimizer_config is not None:
+            current_config["prompt_optimizer"] = prompt_optimizer_config
         
         if not current_config:
             self._append_log("[controller] No current config to apply")
@@ -5250,6 +5288,9 @@ class AppController:
                 current_config.update(panel_randomizer)
         except (AttributeError, TypeError):
             pass
+        prompt_optimizer_config = self._read_prompt_optimizer_ui_config()
+        if prompt_optimizer_config is not None:
+            current_config["prompt_optimizer"] = prompt_optimizer_config
         
         return current_config
 
@@ -5761,6 +5802,7 @@ class AppController:
         if self.app_state:
             self.app_state.set_run_config(preset_config)
             self._apply_randomizer_from_config(preset_config)
+        self._sync_prompt_optimizer_run_config(preset_config)
 
         # Update stage cards
         # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2

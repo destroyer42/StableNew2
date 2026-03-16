@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from src.prompting.prompt_optimizer_service import optimize_with_config
 from src.pipeline.stage_models import StageType
 
 
@@ -74,6 +75,7 @@ def build_sdxl_payload(
     if stage_type == StageType.ADETAILER:
         _apply_adetailer_fields(payload, config, last_image_meta)
 
+    _apply_prompt_optimizer(payload, config, stage_type)
     return payload
 
 
@@ -120,6 +122,23 @@ def _build_base_payload(config: dict[str, Any]) -> dict[str, Any]:
         # clip skip
         "clip_skip": config.get("clip_skip", 2),
     }
+
+
+def _apply_prompt_optimizer(
+    payload: dict[str, Any],
+    config: dict[str, Any],
+    stage_type: StageType,
+) -> None:
+    if "prompt" not in payload and "negative_prompt" not in payload:
+        return
+    result = optimize_with_config(
+        payload.get("prompt", ""),
+        payload.get("negative_prompt", ""),
+        config_payload=config.get("prompt_optimizer"),
+        pipeline_name=stage_type.value if isinstance(stage_type, StageType) else str(stage_type),
+    )
+    payload["prompt"] = result.positive.optimized_prompt
+    payload["negative_prompt"] = result.negative.optimized_prompt
 
 
 def _apply_refiner_fields(payload: dict[str, Any], stage: StageExecutionLike) -> None:

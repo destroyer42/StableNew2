@@ -1,0 +1,6 @@
+[
+  {
+    "input": "(beautiful woman:1.2), [dramatic lighting], natural skin texture",
+    "chunks": ["(beautiful woman:1.2)", "[dramatic lighting]", "natural skin texture"]
+  }
+]
