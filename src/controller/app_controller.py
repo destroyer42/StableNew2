@@ -63,6 +63,7 @@ from src.pipeline.last_run_store_v2_5 import (
     update_current_config_from_last_run,
 )
 from src.pipeline.reprocess_builder import (
+    ImageEditSpec,
     ReprocessJobBuilder,
     ReprocessSourceItem,
     extract_reprocess_output_paths,
@@ -1437,6 +1438,105 @@ class AppController:
             f"[reprocess] Review-tab submit: {submitted_count} jobs, "
             f"metadata baseline used for {metadata_hits}/{len(image_paths)} images "
             f"across {plan.group_count} compatibility group(s), batch_size={batch_size}"
+        )
+        return submitted_count
+
+    def on_submit_image_edits(
+        self,
+        *,
+        image_paths: list[str],
+        mask_paths: list[str],
+        prompt_delta: str = "",
+        negative_prompt_delta: str = "",
+        prompt_mode: str = "append",
+        negative_prompt_mode: str = "append",
+    ) -> int:
+        """Submit masked image edits through the canonical reprocess/img2img path."""
+        if not image_paths:
+            raise ValueError("No images provided for editing")
+        if not mask_paths:
+            raise ValueError("No masks provided for editing")
+        if len(image_paths) != len(mask_paths):
+            raise ValueError("image_paths and mask_paths must have the same length")
+        if prompt_mode not in {"append", "replace", "modify"}:
+            raise ValueError("prompt_mode must be 'append', 'replace', or 'modify'")
+        if negative_prompt_mode not in {"append", "replace", "modify"}:
+            raise ValueError("negative_prompt_mode must be 'append', 'replace', or 'modify'")
+
+        fallback_config = self._build_reprocess_config(["img2img"])
+        builder = ReprocessJobBuilder()
+        items: list[ReprocessSourceItem] = []
+        metadata_hits = 0
+
+        for image_path, mask_path in zip(image_paths, mask_paths, strict=False):
+            image_file = Path(image_path)
+            mask_file = Path(mask_path)
+            if not image_file.exists():
+                raise FileNotFoundError(f"Image not found: {image_file}")
+            if not mask_file.exists():
+                raise FileNotFoundError(f"Mask not found: {mask_file}")
+
+            metadata_baseline = self._extract_reprocess_baseline_from_image(image_file)
+            if metadata_baseline:
+                metadata_hits += 1
+            base_prompt = str(metadata_baseline.get("prompt") or "")
+            base_negative_prompt = str(metadata_baseline.get("negative_prompt") or "")
+            base_model = metadata_baseline.get("model")
+            base_vae = metadata_baseline.get("vae")
+            metadata_config = (
+                metadata_baseline.get("config")
+                if isinstance(metadata_baseline.get("config"), dict)
+                else {}
+            )
+            effective_prompt = self._apply_prompt_delta(base_prompt, prompt_delta, prompt_mode)
+            effective_negative_prompt = self._apply_prompt_delta(
+                base_negative_prompt,
+                negative_prompt_delta,
+                negative_prompt_mode,
+            )
+            items.append(
+                ReprocessSourceItem(
+                    input_image_path=str(image_file),
+                    prompt=effective_prompt,
+                    negative_prompt=effective_negative_prompt,
+                    model=base_model,
+                    vae=base_vae,
+                    config=metadata_config,
+                    metadata={
+                        "baseline_source": "embedded_metadata" if metadata_baseline else "fallback",
+                    },
+                    image_edit=ImageEditSpec(mask_image_path=str(mask_file)),
+                )
+            )
+
+        plan = builder.build_grouped_reprocess_jobs(
+            items=items,
+            stages=["img2img"],
+            fallback_config=fallback_config,
+            batch_size=1,
+            pack_name="ImageEdit",
+            source="image_edit",
+            extra_metadata_builder=lambda chunk, _job_output_dir: {
+                "image_edit": {
+                    "schema": "stablenew.image_edit.v2.6",
+                    "source": "image_edit",
+                    "item_count": len(chunk),
+                    "operations": [
+                        (item.image_edit.to_dict() if item.image_edit else {})
+                        for item in chunk
+                    ],
+                    "prompt_mode": prompt_mode,
+                    "prompt_delta": prompt_delta,
+                    "negative_prompt_mode": negative_prompt_mode,
+                    "negative_prompt_delta": negative_prompt_delta,
+                }
+            },
+        )
+
+        submitted_count = self._submit_reprocess_njrs(plan.jobs, source="image_edit")
+        self._append_log(
+            f"[image_edit] Submitted {submitted_count} masked edit job(s); "
+            f"metadata baseline used for {metadata_hits}/{len(image_paths)} image(s)"
         )
         return submitted_count
 
@@ -5976,6 +6076,20 @@ class AppController:
             return value.isoformat()
         return str(value)
 
+    @staticmethod
+    def _load_svd_manifest_payload(manifest_paths: Iterable[str]) -> dict[str, Any]:
+        for manifest_path in manifest_paths:
+            path = Path(str(manifest_path or "")).expanduser()
+            if not path.exists() or not path.is_file():
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(payload, dict):
+                return payload
+        return {}
+
     def _build_svd_history_record(self, entry: Any) -> dict[str, Any] | None:
         metadata = self._extract_history_result_metadata(entry)
         result = getattr(entry, "result", None)
@@ -5984,8 +6098,6 @@ class AppController:
             artifact = metadata["svd_native_artifact"]
         elif isinstance(result, dict) and isinstance(result.get("svd_native_artifact"), dict):
             artifact = result["svd_native_artifact"]
-        if not isinstance(artifact, dict):
-            return None
 
         variants = []
         if isinstance(result, dict):
@@ -5993,21 +6105,89 @@ class AppController:
             if isinstance(raw_variants, list):
                 variants = [item for item in raw_variants if isinstance(item, dict)]
         primary_variant = variants[0] if variants else {}
+        artifacts = []
+        if isinstance(artifact, dict):
+            raw_artifacts = artifact.get("artifacts")
+            if isinstance(raw_artifacts, list):
+                artifacts = [item for item in raw_artifacts if isinstance(item, dict)]
+        if not artifacts:
+            artifacts = [
+                dict(item.get("artifact"))
+                for item in variants
+                if isinstance(item.get("artifact"), dict)
+            ]
+        primary_artifact = artifacts[0] if artifacts else {}
+
+        manifest_candidates: list[str] = []
+        if isinstance(artifact, dict):
+            manifest_candidates.extend(str(item) for item in artifact.get("manifest_paths", []) if item)
+        manifest_value = primary_variant.get("manifest_path") or primary_artifact.get("manifest_path")
+        if manifest_value:
+            manifest_candidates.append(str(manifest_value))
+        manifest_payload = self._load_svd_manifest_payload(manifest_candidates)
+        manifest_artifact = (
+            dict(manifest_payload.get("artifact"))
+            if isinstance(manifest_payload.get("artifact"), dict)
+            else {}
+        )
+
+        if not isinstance(artifact, dict) and not manifest_payload and not primary_artifact:
+            return None
+
         postprocess = primary_variant.get("postprocess")
         if not isinstance(postprocess, dict):
-            postprocess = {}
+            postprocess = manifest_payload.get("postprocess") if isinstance(manifest_payload.get("postprocess"), dict) else {}
         applied = [str(item) for item in postprocess.get("applied", []) if item]
         input_frame_count = postprocess.get("input_frame_count")
         output_frame_count = postprocess.get("output_frame_count")
         output_width = postprocess.get("output_width")
         output_height = postprocess.get("output_height")
 
-        video_paths = [str(item) for item in artifact.get("video_paths", []) if item]
-        gif_paths = [str(item) for item in artifact.get("gif_paths", []) if item]
-        output_paths = [str(item) for item in artifact.get("output_paths", []) if item]
-        manifest_paths = [str(item) for item in artifact.get("manifest_paths", []) if item]
-        thumbnail_path = artifact.get("thumbnail_path") or primary_variant.get("thumbnail_path")
-        source_image_path = primary_variant.get("source_image_path")
+        video_paths = [str(item) for item in (artifact or {}).get("video_paths", []) if item]
+        if not video_paths:
+            video_paths = [str(item) for item in manifest_payload.get("video_paths", []) if item]
+        if not video_paths:
+            video_value = primary_variant.get("video_path")
+            if video_value:
+                video_paths = [str(video_value)]
+
+        gif_paths = [str(item) for item in (artifact or {}).get("gif_paths", []) if item]
+        if not gif_paths:
+            gif_paths = [str(item) for item in manifest_payload.get("gif_paths", []) if item]
+        if not gif_paths:
+            gif_value = primary_variant.get("gif_path")
+            if gif_value:
+                gif_paths = [str(gif_value)]
+
+        output_paths = [str(item) for item in (artifact or {}).get("output_paths", []) if item]
+        if not output_paths and isinstance(primary_artifact, dict):
+            output_paths = [str(item) for item in primary_artifact.get("output_paths", []) if item]
+        if not output_paths:
+            output_paths = [str(item) for item in manifest_payload.get("output_paths", []) if item]
+        if not output_paths:
+            output_paths = [str(item) for item in manifest_payload.get("frame_paths", []) if item]
+        if not output_paths and primary_variant.get("path"):
+            output_paths = [str(primary_variant["path"])]
+
+        manifest_paths = [str(item) for item in (artifact or {}).get("manifest_paths", []) if item]
+        if not manifest_paths:
+            manifest_paths = [str(item) for item in manifest_payload.get("manifest_paths", []) if item]
+        if not manifest_paths and manifest_value:
+            manifest_paths = [str(manifest_value)]
+
+        thumbnail_path = (
+            (artifact or {}).get("thumbnail_path")
+            or primary_variant.get("thumbnail_path")
+            or primary_artifact.get("thumbnail_path")
+            or manifest_payload.get("thumbnail_path")
+            or manifest_artifact.get("thumbnail_path")
+        )
+        source_image_path = (
+            primary_variant.get("source_image_path")
+            or primary_artifact.get("input_image_path")
+            or manifest_payload.get("source_image_path")
+            or manifest_artifact.get("input_image_path")
+        )
         if not source_image_path:
             snapshot = getattr(entry, "snapshot", None)
             if isinstance(snapshot, dict):
@@ -6042,10 +6222,10 @@ class AppController:
             "output_path": primary_output,
             "output_dir": output_dir,
             "manifest_path": manifest_paths[0] if manifest_paths else None,
-            "frame_count": primary_variant.get("frame_count"),
-            "fps": primary_variant.get("fps"),
-            "model_id": primary_variant.get("model_id"),
-            "count": artifact.get("count"),
+            "frame_count": primary_variant.get("frame_count") or manifest_payload.get("frame_count"),
+            "fps": primary_variant.get("fps") or manifest_payload.get("fps"),
+            "model_id": primary_variant.get("model_id") or manifest_payload.get("model_id"),
+            "count": (artifact or {}).get("count") or manifest_payload.get("count") or len(output_paths),
             "postprocess": postprocess or None,
             "postprocess_applied": applied,
             "postprocess_stage_count": len(applied),

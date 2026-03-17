@@ -3442,6 +3442,19 @@ class Pipeline:
                 "n_iter": 1,
             }
 
+            mask_image_path = config.get("mask_image_path") or config.get("mask_path")
+            if mask_image_path:
+                mask_image_b64 = self._load_image_base64(Path(str(mask_image_path)))
+                if not mask_image_b64:
+                    logger.error(f"Failed to load mask image: {mask_image_path}")
+                    return None
+                payload["mask"] = mask_image_b64
+                payload["mask_blur"] = int(config.get("mask_blur", 4))
+                payload["inpaint_full_res"] = bool(config.get("inpaint_full_res", True))
+                payload["inpaint_full_res_padding"] = int(config.get("inpaint_full_res_padding", 32))
+                payload["inpainting_fill"] = int(config.get("inpainting_fill", 1))
+                payload["inpainting_mask_invert"] = 1 if config.get("inpainting_mask_invert", False) else 0
+
             payload.update(sampler_config)
 
             # Apply aesthetic adjustments AFTER global negative safety terms so they layer on top
@@ -3499,6 +3512,8 @@ class Pipeline:
                 "name": image_name,
                 "stage": "img2img",
                 "timestamp": timestamp,
+                "source_image_path": str(input_image_path),
+                "mask_image_path": str(mask_image_path) if mask_image_path else None,
                 "original_prompt": prompt,
                 "final_prompt": payload.get("prompt", prompt),
                 "original_negative_prompt": original_negative_prompt,
@@ -3699,10 +3714,14 @@ class Pipeline:
                 "prompt": prompt,
                 "negative_prompt": negative_prompt,
                 "input_image": str(input_image_path) if input_image_path else None,
+                "source_image_path": str(input_image_path) if input_image_path else None,
                 "config": self._clean_metadata_payload(payload),
                 "path": str(video_path),
+                "output_path": str(video_path),
                 "video_path": str(video_path),
+                "output_paths": [str(video_path)],
                 "frame_paths": [str(path) for path in frame_paths],
+                "frame_path_count": len(frame_paths),
                 "frame_count": len(frame_paths),
                 "fps": animatediff_cfg.fps,
                 "motion_module": animatediff_cfg.motion_module,
@@ -3715,6 +3734,9 @@ class Pipeline:
             manifest_dir = output_dir / "manifests"
             manifest_dir.mkdir(exist_ok=True, parents=True)
             manifest_path = manifest_dir / f"{video_path.stem}.json"
+            metadata["manifest_path"] = str(manifest_path)
+            metadata["manifest_paths"] = [str(manifest_path)]
+            metadata["count"] = 1
             metadata["artifact"] = artifact_manifest_payload(
                 stage="animatediff",
                 image_or_output_path=video_path,

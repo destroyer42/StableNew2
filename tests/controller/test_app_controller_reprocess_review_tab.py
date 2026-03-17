@@ -228,3 +228,39 @@ def test_extract_reprocess_baseline_uses_prompt_resolution_fallbacks(tmp_path) -
     assert baseline["negative_prompt"] == "config negative"
     assert baseline["model"] == "modelA.safetensors"
     assert baseline["vae"] == "vaeA"
+
+
+def test_submit_image_edits_builds_masked_img2img_jobs(tmp_path) -> None:
+    controller = _build_controller()
+    image = tmp_path / "img_edit.png"
+    mask = tmp_path / "img_edit_mask.png"
+    image.write_bytes(b"")
+    mask.write_bytes(b"")
+
+    controller._extract_reprocess_baseline_from_image = Mock(
+        return_value={
+            "prompt": "portrait photo",
+            "negative_prompt": "blurry",
+            "model": "modelA.safetensors",
+            "vae": "vaeA",
+            "config": {"img2img": {"denoising_strength": 0.41}},
+        }
+    )
+
+    submitted = controller.on_submit_image_edits(
+        image_paths=[str(image)],
+        mask_paths=[str(mask)],
+        prompt_delta="fix eyes",
+        negative_prompt_delta="extra iris",
+        prompt_mode="append",
+        negative_prompt_mode="append",
+    )
+
+    assert submitted == 1
+    njr = controller.job_service._enqueue_calls[0][0][0]
+    assert njr.stage_chain[0].stage_type == "img2img"
+    assert njr.stage_chain[0].extra["mask_image_path"] == str(mask)
+    assert njr.positive_prompt == "portrait photo, fix eyes"
+    assert njr.negative_prompt == "blurry, extra iris"
+    assert njr.extra_metadata["image_edit"]["schema"] == "stablenew.image_edit.v2.6"
+    assert njr.extra_metadata["reprocess"]["source_items"][0]["image_edit"]["mask_image_path"] == str(mask)

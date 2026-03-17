@@ -285,6 +285,60 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         values = self.panel.history_tree.item(children[0])["values"]
         assert len(values) == 11
 
+    def test_extract_image_count_prefers_canonical_video_artifact_count(self) -> None:
+        """Canonical video artifact count should drive the Images column."""
+        entry = JobHistoryEntry(
+            job_id="video-job",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            result={
+                "metadata": {
+                    "animatediff_artifact": {
+                        "count": 1,
+                        "primary_path": "output/run-1/clip.mp4",
+                        "output_paths": ["output/run-1/clip.mp4"],
+                        "artifacts": [
+                            {
+                                "schema": "stablenew.artifact.v2.6",
+                                "artifact_type": "video",
+                                "primary_path": "output/run-1/clip.mp4",
+                                "output_paths": ["output/run-1/clip.mp4"],
+                            }
+                        ],
+                    }
+                }
+            },
+        )
+
+        assert self.panel._extract_image_count(entry) == "1"
+
+    def test_extract_output_folder_prefers_canonical_artifact_path(self) -> None:
+        """Output folder display should derive from the canonical primary artifact path."""
+        entry = JobHistoryEntry(
+            job_id="video-job",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            result={
+                "metadata": {
+                    "animatediff_artifact": {
+                        "count": 1,
+                        "primary_path": "output/run-2/clip.mp4",
+                        "output_paths": ["output/run-2/clip.mp4"],
+                        "artifacts": [
+                            {
+                                "schema": "stablenew.artifact.v2.6",
+                                "artifact_type": "video",
+                                "primary_path": "output/run-2/clip.mp4",
+                                "output_paths": ["output/run-2/clip.mp4"],
+                            }
+                        ],
+                    }
+                }
+            },
+        )
+
+        assert self.panel._extract_output_folder(entry) == "run-2"
+
 
 if __name__ == "__main__":
     unittest.main()

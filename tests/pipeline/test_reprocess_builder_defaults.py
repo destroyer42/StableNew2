@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.pipeline.reprocess_builder import (
+    ImageEditSpec,
     ReprocessJobBuilder,
     ReprocessSourceItem,
     extract_reprocess_output_paths,
@@ -124,3 +125,33 @@ def test_extract_reprocess_output_paths_prefers_artifact_contract(tmp_path: Path
     )
 
     assert paths == [str(output_one), str(output_two)]
+
+
+def test_grouped_reprocess_jobs_preserve_image_edit_mask_config(tmp_path: Path) -> None:
+    image_path = tmp_path / "input.png"
+    mask_path = tmp_path / "mask.png"
+    image_path.write_bytes(b"")
+    mask_path.write_bytes(b"")
+    builder = ReprocessJobBuilder()
+
+    plan = builder.build_grouped_reprocess_jobs(
+        items=[
+            ReprocessSourceItem(
+                input_image_path=str(image_path),
+                prompt="repair eyes",
+                image_edit=ImageEditSpec(mask_image_path=str(mask_path), mask_blur=8),
+            )
+        ],
+        stages=["img2img"],
+        fallback_config={"img2img": {"denoising_strength": 0.25}},
+        source="image_edit",
+    )
+
+    assert len(plan.jobs) == 1
+    job = plan.jobs[0]
+    assert job.stage_chain[0].stage_type == "img2img"
+    assert job.stage_chain[0].extra["mask_image_path"] == str(mask_path)
+    assert job.stage_chain[0].extra["mask_blur"] == 8
+    source_item = job.extra_metadata["reprocess"]["source_items"][0]
+    assert source_item["image_edit"]["schema"] == "stablenew.image_edit.v2.6"
+    assert source_item["image_edit"]["mask_image_path"] == str(mask_path)

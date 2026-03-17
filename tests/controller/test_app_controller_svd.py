@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -216,6 +217,140 @@ def test_get_recent_svd_history_extracts_variant_details(tmp_path) -> None:
     assert records[0]["postprocess_applied"] == ["interpolation", "upscale"]
     assert records[0]["postprocess_output_frame_count"] == 49
     assert records[0]["postprocess_output_width"] == 2048
+
+
+def test_get_recent_svd_history_falls_back_to_manifest_when_summary_missing(tmp_path) -> None:
+    source_path = tmp_path / "source.png"
+    gif_path = tmp_path / "clip.gif"
+    preview_path = tmp_path / "preview.png"
+    manifest_path = tmp_path / "manifest.json"
+    for path, content in (
+        (source_path, b"png"),
+        (gif_path, b"gif"),
+        (preview_path, b"png"),
+    ):
+        path.write_bytes(content)
+
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "source_image_path": str(source_path),
+                "gif_path": str(gif_path),
+                "gif_paths": [str(gif_path)],
+                "output_paths": [str(gif_path)],
+                "manifest_paths": [str(manifest_path)],
+                "thumbnail_path": str(preview_path),
+                "frame_count": 14,
+                "fps": 8,
+                "model_id": "stabilityai/stable-video-diffusion-img2vid",
+                "postprocess": {"applied": ["upscale"], "output_width": 1536},
+                "artifact": {
+                    "schema": "stablenew.artifact.v2.6",
+                    "stage": "svd_native",
+                    "artifact_type": "video",
+                    "primary_path": str(gif_path),
+                    "output_paths": [str(gif_path)],
+                    "manifest_path": str(manifest_path),
+                    "thumbnail_path": str(preview_path),
+                    "input_image_path": str(source_path),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    entry = JobHistoryEntry(
+        job_id="job-svd-manifest",
+        created_at=datetime.utcnow(),
+        completed_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        result={
+            "variants": [
+                {
+                    "manifest_path": str(manifest_path),
+                }
+            ]
+        },
+    )
+
+    controller = AppController.__new__(AppController)
+    controller.app_state = SimpleNamespace(history_items=[entry])
+
+    records = controller.get_recent_svd_history()
+
+    assert len(records) == 1
+    assert records[0]["gif_path"] == str(gif_path)
+    assert records[0]["output_path"] == str(gif_path)
+    assert records[0]["source_image_path"] == str(source_path)
+    assert records[0]["postprocess_applied"] == ["upscale"]
+    assert records[0]["postprocess_output_width"] == 1536
+
+
+def test_get_recent_svd_history_uses_frames_only_outputs(tmp_path) -> None:
+    source_path = tmp_path / "source.png"
+    frame_dir = tmp_path / "frames"
+    frame_dir.mkdir()
+    frame_one = frame_dir / "frame_0001.png"
+    frame_two = frame_dir / "frame_0002.png"
+    preview_path = tmp_path / "preview.png"
+    manifest_path = tmp_path / "manifest.json"
+    for path, content in (
+        (source_path, b"png"),
+        (frame_one, b"png"),
+        (frame_two, b"png"),
+        (preview_path, b"png"),
+        (manifest_path, b"{}"),
+    ):
+        path.write_bytes(content)
+
+    entry = JobHistoryEntry(
+        job_id="job-svd-frames",
+        created_at=datetime.utcnow(),
+        completed_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        result={
+            "variants": [
+                {
+                    "source_image_path": str(source_path),
+                    "frame_paths": [str(frame_one), str(frame_two)],
+                    "thumbnail_path": str(preview_path),
+                    "manifest_path": str(manifest_path),
+                    "frame_count": 25,
+                    "fps": 7,
+                    "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "svd_native",
+                        "artifact_type": "video",
+                        "primary_path": str(frame_one),
+                        "output_paths": [str(frame_one), str(frame_two)],
+                        "manifest_path": str(manifest_path),
+                        "thumbnail_path": str(preview_path),
+                        "input_image_path": str(source_path),
+                    },
+                }
+            ],
+            "metadata": {
+                "svd_native_artifact": {
+                    "output_paths": [str(frame_one), str(frame_two)],
+                    "manifest_paths": [str(manifest_path)],
+                    "thumbnail_path": str(preview_path),
+                    "count": 2,
+                }
+            },
+        },
+    )
+
+    controller = AppController.__new__(AppController)
+    controller.app_state = SimpleNamespace(history_items=[entry])
+
+    records = controller.get_recent_svd_history()
+
+    assert len(records) == 1
+    assert records[0]["video_path"] is None
+    assert records[0]["gif_path"] is None
+    assert records[0]["output_path"] == str(frame_one)
+    assert records[0]["count"] == 2
 
 
 def test_show_structured_error_modal_uses_tk_root_parent(monkeypatch) -> None:

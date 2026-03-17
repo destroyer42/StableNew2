@@ -58,7 +58,16 @@ def test_run_animatediff_stage_saves_frames_and_video(tmp_path: Path, monkeypatc
     assert Path(result["video_path"]).exists()
     assert result["frame_count"] == 2
     assert len(result["frame_paths"]) == 2
-    assert Path(tmp_path / "manifests" / "animatediff_test.json").exists()
+    manifest_path = tmp_path / "manifests" / "animatediff_test.json"
+    assert manifest_path.exists()
+    assert result["output_path"] == result["video_path"]
+    assert result["output_paths"] == [result["video_path"]]
+    assert result["manifest_path"] == str(manifest_path)
+    assert result["manifest_paths"] == [str(manifest_path)]
+    assert result["count"] == 1
+    assert result["artifact"]["schema"] == "stablenew.artifact.v2.6"
+    assert result["artifact"]["manifest_path"] == str(manifest_path)
+    assert result["artifact"]["primary_path"] == result["video_path"]
 
 
 def test_run_animatediff_stage_returns_none_when_capability_missing(tmp_path: Path) -> None:

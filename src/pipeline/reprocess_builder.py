@@ -32,6 +32,32 @@ from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, Pi
 
 
 REPROCESS_SCHEMA_VERSION = "stablenew.reprocess.v2.6"
+IMAGE_EDIT_SCHEMA_VERSION = "stablenew.image_edit.v2.6"
+
+
+@dataclass(slots=True)
+class ImageEditSpec:
+    mask_image_path: str
+    operation: str = "masked_inpaint"
+    mask_blur: int = 4
+    inpaint_full_res: bool = True
+    inpaint_full_res_padding: int = 32
+    inpainting_fill: int = 1
+    inpainting_mask_invert: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": IMAGE_EDIT_SCHEMA_VERSION,
+            "operation": self.operation,
+            "mask_image_path": self.mask_image_path,
+            "mask_blur": self.mask_blur,
+            "inpaint_full_res": self.inpaint_full_res,
+            "inpaint_full_res_padding": self.inpaint_full_res_padding,
+            "inpainting_fill": self.inpainting_fill,
+            "inpainting_mask_invert": self.inpainting_mask_invert,
+            "metadata": deepcopy(self.metadata or {}),
+        }
 
 
 @dataclass(slots=True)
@@ -44,6 +70,7 @@ class ReprocessSourceItem:
     config: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     output_dir: str | None = None
+    image_edit: ImageEditSpec | None = None
 
 
 @dataclass(slots=True)
@@ -287,6 +314,30 @@ class ReprocessJobBuilder:
         config["adetailer_prompt"] = prompt
         config["adetailer_negative_prompt"] = negative_prompt
 
+    @staticmethod
+    def apply_image_edit_overrides(
+        config: dict[str, Any],
+        *,
+        stages: list[str],
+        image_edit: ImageEditSpec | None,
+    ) -> None:
+        if image_edit is None or "img2img" not in stages:
+            return
+        img2img_cfg = config.setdefault("img2img", {})
+        if not isinstance(img2img_cfg, dict):
+            img2img_cfg = {}
+            config["img2img"] = img2img_cfg
+        img2img_cfg.update(
+            {
+                "mask_image_path": image_edit.mask_image_path,
+                "mask_blur": int(image_edit.mask_blur),
+                "inpaint_full_res": bool(image_edit.inpaint_full_res),
+                "inpaint_full_res_padding": int(image_edit.inpaint_full_res_padding),
+                "inpainting_fill": int(image_edit.inpainting_fill),
+                "inpainting_mask_invert": bool(image_edit.inpainting_mask_invert),
+            }
+        )
+
     def _resolve_stage_steps(
         self,
         stage_name: str,
@@ -470,6 +521,11 @@ class ReprocessJobBuilder:
                 prompt=str(item.prompt or ""),
                 negative_prompt=str(item.negative_prompt or ""),
             )
+            self.apply_image_edit_overrides(
+                merged_config,
+                stages=list(stages),
+                image_edit=item.image_edit,
+            )
             resolved_output_dir = str(item.output_dir or output_dir)
             config_signature = json.dumps(merged_config, sort_keys=True, default=str)
             group_key = (
@@ -512,6 +568,7 @@ class ReprocessJobBuilder:
                                 "model": str(item.model or ""),
                                 "vae": item.vae,
                                 "metadata": deepcopy(item.metadata or {}),
+                                "image_edit": item.image_edit.to_dict() if item.image_edit else None,
                             }
                             for item in chunk
                         ]

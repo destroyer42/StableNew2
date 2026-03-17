@@ -9,19 +9,22 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Regex patterns from existing parser
-EMBEDDING_TAG_RE = re.compile(r"<embedding:([^>]+)>")
 LORA_TAG_RE = re.compile(r"<lora:([^:>]+):([^>]+)>")
+from src.utils.embedding_prompt_utils import (
+    extract_embedding_entries,
+    render_embedding_reference,
+    strip_embedding_entries,
+)
 
 
 @dataclass
 class ParsedPromptComponents:
     """Structured components from a parsed prompt pack TXT."""
     
-    positive_embeddings: list[str]
+    positive_embeddings: list[tuple[str, float]]
     positive_text: str
     loras: list[tuple[str, float]]
-    negative_embeddings: list[str]
+    negative_embeddings: list[tuple[str, float]]
     negative_text: str
 
 
@@ -43,10 +46,10 @@ def parse_prompt_txt_to_components(text: str) -> ParsedPromptComponents:
     """
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     
-    positive_embeddings: list[str] = []
+    positive_embeddings: list[tuple[str, float]] = []
     positive_text_lines: list[str] = []
     loras: list[tuple[str, float]] = []
-    negative_embeddings: list[str] = []
+    negative_embeddings: list[tuple[str, float]] = []
     negative_text_lines: list[str] = []
     
     in_negative_section = False
@@ -63,21 +66,21 @@ def parse_prompt_txt_to_components(text: str) -> ParsedPromptComponents:
             content = line[4:].strip()
             
             # Extract embeddings from negative line
-            neg_embeds = EMBEDDING_TAG_RE.findall(content)
+            neg_embeds = extract_embedding_entries(content)
             negative_embeddings.extend(neg_embeds)
             
             # Remove embeddings to get pure text
-            clean_text = EMBEDDING_TAG_RE.sub('', content).strip()
+            clean_text = strip_embedding_entries(content).strip()
             if clean_text:
                 negative_text_lines.append(clean_text)
             
             continue
         
         # Check if line contains only embeddings (positive section)
-        embeddings_in_line = EMBEDDING_TAG_RE.findall(line)
+        embeddings_in_line = extract_embedding_entries(line)
         if embeddings_in_line and not in_negative_section:
             # Check if line is ONLY embeddings
-            temp = EMBEDDING_TAG_RE.sub('', line).strip()
+            temp = strip_embedding_entries(line).strip()
             if not temp or temp == '':
                 # Pure embedding line
                 positive_embeddings.extend(embeddings_in_line)
@@ -128,7 +131,10 @@ def assemble_prompt_txt_from_components(components: ParsedPromptComponents) -> s
     
     # Add positive embeddings
     if components.positive_embeddings:
-        embedding_line = ' '.join(f'<embedding:{e}>' for e in components.positive_embeddings)
+        embedding_line = " ".join(
+            render_embedding_reference(name, weight)
+            for name, weight in components.positive_embeddings
+        )
         lines.append(embedding_line)
     
     # Add positive text
@@ -142,7 +148,10 @@ def assemble_prompt_txt_from_components(components: ParsedPromptComponents) -> s
     
     # Add negative embeddings
     if components.negative_embeddings:
-        neg_embed_line = 'neg: ' + ' '.join(f'<embedding:{e}>' for e in components.negative_embeddings)
+        neg_embed_line = "neg: " + " ".join(
+            render_embedding_reference(name, weight)
+            for name, weight in components.negative_embeddings
+        )
         lines.append(neg_embed_line)
     
     # Add negative text

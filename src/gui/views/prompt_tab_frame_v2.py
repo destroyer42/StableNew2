@@ -34,6 +34,7 @@ from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.utils.config import ConfigManager
+from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.prompt_txt_parser import parse_prompt_txt_to_components, parse_multi_slot_txt
 
 
@@ -677,8 +678,8 @@ class PromptTabFrame(ttk.Frame):
         
         # Positive embeddings
         if current_slot.positive_embeddings:
-            for emb_name in current_slot.positive_embeddings:
-                preview_lines.append(f"<embedding:{emb_name}>")
+            for emb_name, emb_weight in normalize_embedding_entries(current_slot.positive_embeddings):
+                preview_lines.append(render_embedding_reference(emb_name, emb_weight))
         
         # Positive prompt
         positive_text = current_slot.text.strip()
@@ -698,8 +699,8 @@ class PromptTabFrame(ttk.Frame):
         
         # Negative embeddings
         if current_slot.negative_embeddings:
-            for emb_name in current_slot.negative_embeddings:
-                preview_lines.append(f"neg: <embedding:{emb_name}>")
+            for emb_name, emb_weight in normalize_embedding_entries(current_slot.negative_embeddings):
+                preview_lines.append(f"neg: {render_embedding_reference(emb_name, emb_weight)}")
         
         # Negative prompt
         negative_text = current_slot.negative.strip()

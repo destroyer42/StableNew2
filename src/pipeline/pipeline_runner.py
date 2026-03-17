@@ -30,6 +30,8 @@ from src.pipeline.stage_sequencer import (
 from src.state.output_routing import classify_njr_output_route, get_output_route_root
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
+from src.video.video_backend_registry import VideoBackendRegistry, build_default_video_backend_registry
+from src.video.video_backend_types import VideoExecutionRequest, VideoExecutionResult
 
 logger = get_logger(__name__)
 
@@ -55,6 +57,28 @@ class PipelineRunner:
     # Cache for active pack folders keyed by route + canonical folder key.
     _pack_folder_cache: dict[str, Path] = {}
     _folder_cache_timeout_minutes = 30  # Reuse folder if same pack within 30 minutes
+
+    @staticmethod
+    def _pin_stage_model_to_njr_base(
+        config_dict: dict[str, Any],
+        *,
+        njr: NormalizedJobRecord,
+        stage_name: str,
+    ) -> None:
+        """Default downstream image stages to the NJR base model unless overridden."""
+        if stage_name not in {"img2img", "adetailer", "upscale"}:
+            return
+        if config_dict.get("model") or config_dict.get("sd_model_checkpoint"):
+            return
+        base_model = str(getattr(njr, "base_model", "") or "").strip()
+        if not base_model:
+            return
+        config_dict["model"] = base_model
+        logger.info(
+            "[MODEL_PIN] Pinned %s stage to NJR base model: %s",
+            stage_name,
+            base_model,
+        )
 
     @staticmethod
     def _sanitize_output_component(name: str) -> str:
@@ -137,6 +161,153 @@ class PipelineRunner:
         run_dir.mkdir(parents=True, exist_ok=True)
         cls._pack_folder_cache[route_cache_key] = run_dir
         return run_dir
+
+    @staticmethod
+    def _stage_config_dict_for_video(njr: NormalizedJobRecord, stage_name: str) -> dict[str, Any]:
+        stage_config = next((s for s in njr.stage_chain if s.stage_type == stage_name), None)
+        if stage_config is None:
+            return {}
+        config_dict = asdict(stage_config)
+        if "extra" in config_dict:
+            config_dict.update(config_dict.pop("extra"))
+        return config_dict
+
+    def _execute_video_stage(
+        self,
+        *,
+        stage_name: str,
+        njr: NormalizedJobRecord,
+        current_stage_paths: list[str],
+        prompt: str,
+        negative_prompt: str,
+        run_dir: Path,
+        cancel_token: CancelToken | None,
+        variants: list[dict[str, Any]],
+        metadata: dict[str, Any],
+    ) -> list[str]:
+        backend = self._video_backends.get_for_stage(stage_name)
+        config_dict = self._stage_config_dict_for_video(njr, stage_name)
+        if stage_name == "animatediff":
+            config_dict["enabled"] = True
+            if njr.scheduler:
+                config_dict["scheduler"] = njr.scheduler
+
+        next_stage_paths: list[str] = []
+        manifest_paths: list[str] = []
+        artifact_records: list[dict[str, Any]] = []
+        backend_results: list[VideoExecutionResult] = []
+        prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+
+        from pathlib import Path as PathLib
+        from src.utils.file_io import build_safe_image_name
+
+        base_prefix = f"{stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
+        matrix_values = getattr(njr, "matrix_slot_values", None) if hasattr(njr, "matrix_slot_values") else None
+        pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
+        original_inputs = getattr(njr, "input_image_paths", None)
+        use_original_name = original_inputs and getattr(njr, "start_stage", None)
+
+        video_paths: list[str] = []
+        gif_paths: list[str] = []
+        thumbnail_path: str | None = None
+        frame_path_count = 0
+
+        for img_idx, input_path in enumerate(current_stage_paths):
+            image_name = None
+            if stage_name == "animatediff":
+                if use_original_name and img_idx < len(original_inputs):
+                    input_stem = PathLib(original_inputs[img_idx]).stem[:30]
+                    unique_prefix = f"{base_prefix}_{input_stem}"
+                else:
+                    unique_prefix = base_prefix
+                image_name = build_safe_image_name(
+                    base_prefix=unique_prefix,
+                    matrix_values=matrix_values,
+                    seed=None,
+                    batch_index=img_idx,
+                    pack_name=pack_name,
+                    max_length=100,
+                )
+            request = VideoExecutionRequest(
+                backend_id=backend.backend_id,
+                stage_name=stage_name,
+                stage_config=dict(config_dict),
+                output_dir=run_dir,
+                input_image_path=Path(input_path) if input_path else None,
+                image_name=image_name,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                job_id=njr.job_id,
+                cancel_token=cancel_token,
+                context_metadata={
+                    "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
+                    "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
+                    "variant_index": getattr(njr, "variant_index", 0),
+                    "batch_index": img_idx,
+                },
+            )
+            execution_result = backend.execute(self._pipeline, request)
+            if execution_result is None:
+                continue
+
+            backend_results.append(execution_result)
+            variant_payload = execution_result.to_variant_payload()
+            variants.append(variant_payload)
+            if execution_result.artifact:
+                artifact_records.append(dict(execution_result.artifact))
+            if execution_result.manifest_path:
+                manifest_paths.append(str(execution_result.manifest_path))
+            if execution_result.thumbnail_path:
+                thumbnail_path = thumbnail_path or str(execution_result.thumbnail_path)
+            if execution_result.output_paths:
+                next_stage_paths.extend(str(item) for item in execution_result.output_paths if item)
+            elif execution_result.primary_path:
+                next_stage_paths.append(str(execution_result.primary_path))
+
+            video_path = variant_payload.get("video_path")
+            gif_path = variant_payload.get("gif_path")
+            frame_paths = [str(item) for item in variant_payload.get("frame_paths") or [] if item]
+            if video_path:
+                video_paths.append(str(video_path))
+            if gif_path:
+                gif_paths.append(str(gif_path))
+            if frame_paths and not video_path and not gif_path:
+                frame_path_count += len(frame_paths)
+
+        if stage_name == "animatediff" and next_stage_paths:
+            metadata["animatediff_artifact"] = {
+                "video_paths": list(next_stage_paths),
+                "output_paths": list(next_stage_paths),
+                "manifest_paths": manifest_paths,
+                "primary_path": next_stage_paths[0],
+                "count": len(next_stage_paths),
+                "artifacts": artifact_records,
+            }
+        elif stage_name == "svd_native" and (next_stage_paths or manifest_paths):
+            metadata["svd_native_artifact"] = {
+                "output_paths": list(next_stage_paths),
+                "video_paths": video_paths,
+                "gif_paths": gif_paths,
+                "frame_path_count": frame_path_count,
+                "manifest_paths": manifest_paths,
+                "thumbnail_path": thumbnail_path,
+                "primary_path": next_stage_paths[0] if next_stage_paths else None,
+                "count": len(next_stage_paths),
+                "artifacts": artifact_records,
+            }
+
+        if backend_results:
+            video_backend_results = metadata.setdefault("video_backend_results", {})
+            video_backend_results[stage_name] = {
+                "backend_id": backend.backend_id,
+                "count": len(backend_results),
+                "output_paths": list(next_stage_paths),
+                "manifest_paths": manifest_paths,
+                "primary_path": next_stage_paths[0] if next_stage_paths else None,
+                "artifacts": artifact_records,
+            }
+
+        return next_stage_paths
 
     def run_njr(
         self,
@@ -459,6 +630,12 @@ class PipelineRunner:
                             config_dict.update(config_dict.pop("extra"))
                     else:
                         config_dict = {}
+
+                    self._pin_stage_model_to_njr_base(
+                        config_dict,
+                        njr=njr,
+                        stage_name="img2img",
+                    )
                     
                     # Add scheduler from NJR if present
                     if njr.scheduler:
@@ -533,6 +710,11 @@ class PipelineRunner:
                             config_dict.update(extra)
                     else:
                         config_dict = {}
+                    self._pin_stage_model_to_njr_base(
+                        config_dict,
+                        njr=njr,
+                        stage_name="adetailer",
+                    )
                     # CRITICAL: Add adetailer_enabled flag that run_adetailer() expects
                     config_dict["adetailer_enabled"] = True
                     # Add scheduler from NJR if present
@@ -641,6 +823,12 @@ class PipelineRunner:
                     else:
                         config_dict = {}
                         logger.warning("[UPSCALE_CONFIG_DEBUG] No upscale stage config found in stage_chain")
+
+                    self._pin_stage_model_to_njr_base(
+                        config_dict,
+                        njr=njr,
+                        stage_name="upscale",
+                    )
                     
                     # Process ALL images from previous stage through upscaler
                     next_stage_paths = []
@@ -705,131 +893,27 @@ class PipelineRunner:
                     current_stage_paths = next_stage_paths
                     logger.info(f"ðŸ”µ [BATCH_PIPELINE] upscale completed {len(current_stage_paths)} images")
                     
-                elif stage.stage_name == "animatediff":
+                elif self._video_backends.is_registered_stage(stage.stage_name):
                     if not current_stage_paths:
-                        logger.warning("animatediff stage skipped: no input images from previous stage")
+                        logger.warning("%s stage skipped: no input images from previous stage", stage.stage_name)
                         continue
 
-                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "animatediff"), None)
-                    if stage_config:
-                        config_dict = asdict(stage_config)
-                        if "extra" in config_dict:
-                            config_dict.update(config_dict.pop("extra"))
-                    else:
-                        config_dict = {}
-                    config_dict["enabled"] = True
-                    if njr.scheduler:
-                        config_dict["scheduler"] = njr.scheduler
-
-                    next_stage_paths = []
-                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
-
-                    from src.utils.file_io import build_safe_image_name
-                    from pathlib import Path as PathLib
-
-                    base_prefix = f"{stage.stage_name}_p{prompt_row+1:02d}_v{njr.variant_index+1:02d}"
-                    matrix_values = getattr(njr, 'matrix_slot_values', None) if hasattr(njr, 'matrix_slot_values') else None
-                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
-                    original_inputs = getattr(njr, 'input_image_paths', None)
-                    use_original_name = original_inputs and getattr(njr, 'start_stage', None)
-
-                    for img_idx, input_path in enumerate(current_stage_paths):
-                        if use_original_name and img_idx < len(original_inputs):
-                            input_stem = PathLib(original_inputs[img_idx]).stem[:30]
-                            unique_prefix = f"{base_prefix}_{input_stem}"
-                        else:
-                            unique_prefix = base_prefix
-                        image_name = build_safe_image_name(
-                            base_prefix=unique_prefix,
-                            matrix_values=matrix_values,
-                            seed=None,
-                            batch_index=img_idx,
-                            pack_name=pack_name,
-                            max_length=100,
-                        )
-                        result = self._pipeline.run_animatediff_stage(
-                            input_image_path=Path(input_path),
-                            prompt=prompt,
-                            negative_prompt=negative_prompt,
-                            config=config_dict,
-                            output_dir=run_dir,
-                            image_name=image_name,
-                            cancel_token=cancel_token,
-                        )
-                        if result and "video_path" in result:
-                            next_stage_paths.append(result["video_path"])
-                        variants.append(result)
-
-                    current_stage_paths = next_stage_paths
-                    if next_stage_paths:
-                        metadata["animatediff_artifact"] = {
-                            "video_paths": list(next_stage_paths),
-                            "count": len(next_stage_paths),
-                        }
-                    logger.info(f"Ã°Å¸â€Âµ [BATCH_PIPELINE] animatediff completed {len(current_stage_paths)} clip(s)")
-
-                elif stage.stage_name == "svd_native":
-                    if not current_stage_paths:
-                        logger.warning("svd_native stage skipped: no input images from previous stage")
-                        continue
-
-                    stage_config = next((s for s in njr.stage_chain if s.stage_type == "svd_native"), None)
-                    if stage_config:
-                        config_dict = asdict(stage_config)
-                        if "extra" in config_dict:
-                            config_dict.update(config_dict.pop("extra"))
-                    else:
-                        config_dict = {}
-
-                    next_stage_paths = []
-                    thumbnail_path = None
-                    manifest_paths: list[str] = []
-                    video_paths: list[str] = []
-                    gif_paths: list[str] = []
-                    frame_path_count = 0
-
-                    for input_path in current_stage_paths:
-                        result = self._pipeline.run_svd_native_stage(
-                            input_image_path=Path(input_path),
-                            stage_config=config_dict,
-                            output_dir=run_dir,
-                            job_id=njr.job_id,
-                            cancel_token=cancel_token,
-                        )
-                        if not result:
-                            continue
-                        variants.append(result)
-                        thumbnail_path = thumbnail_path or result.get("thumbnail_path")
-                        manifest_path = result.get("manifest_path")
-                        if manifest_path:
-                            manifest_paths.append(manifest_path)
-                        video_path = result.get("video_path")
-                        gif_path = result.get("gif_path")
-                        frame_paths = list(result.get("frame_paths") or [])
-                        if video_path:
-                            video_paths.append(video_path)
-                            next_stage_paths.append(video_path)
-                        elif gif_path:
-                            gif_paths.append(gif_path)
-                            next_stage_paths.append(gif_path)
-                        elif frame_paths:
-                            frame_path_count += len(frame_paths)
-                            next_stage_paths.extend(frame_paths)
-                        elif result.get("path"):
-                            next_stage_paths.append(result["path"])
-
-                    current_stage_paths = next_stage_paths
-                    if next_stage_paths or manifest_paths:
-                        metadata["svd_native_artifact"] = {
-                            "output_paths": list(next_stage_paths),
-                            "video_paths": video_paths,
-                            "gif_paths": gif_paths,
-                            "frame_path_count": frame_path_count,
-                            "manifest_paths": manifest_paths,
-                            "thumbnail_path": thumbnail_path,
-                            "count": len(next_stage_paths),
-                        }
-                    logger.info(f"[BATCH_PIPELINE] svd_native completed {len(current_stage_paths)} output artifact(s)")
+                    current_stage_paths = self._execute_video_stage(
+                        stage_name=stage.stage_name,
+                        njr=njr,
+                        current_stage_paths=current_stage_paths,
+                        prompt=prompt,
+                        negative_prompt=negative_prompt,
+                        run_dir=run_dir,
+                        cancel_token=cancel_token,
+                        variants=variants,
+                        metadata=metadata,
+                    )
+                    logger.info(
+                        "[BATCH_PIPELINE] %s completed %d output artifact(s)",
+                        stage.stage_name,
+                        len(current_stage_paths),
+                    )
 
                 else:
                     logger.warning(f"Unknown stage type: {stage.stage_name}, skipping")
@@ -998,6 +1082,7 @@ class PipelineRunner:
         learning_enabled: bool = False,
         sequencer: StageSequencer | None = None,
         status_callback: Callable[[dict[str, Any]], None] | None = None,
+        video_backend_registry: VideoBackendRegistry | None = None,
     ) -> None:
         self._api_client = api_client
         self._structured_logger = structured_logger
@@ -1009,6 +1094,7 @@ class PipelineRunner:
         self._runs_base_dir = runs_base_dir or "output"
         self._learning_enabled = bool(learning_enabled)
         self._sequencer = sequencer or StageSequencer()
+        self._video_backends = video_backend_registry or build_default_video_backend_registry()
 
     def _ensure_not_cancelled(self, cancel_token: CancelToken | None, context: str) -> None:
         if (

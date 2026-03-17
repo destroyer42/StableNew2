@@ -112,8 +112,19 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
     pipeline = Mock()
     pipeline.run_animatediff_stage.return_value = {
         "video_path": str(tmp_path / "clip.mp4"),
+        "output_paths": [str(tmp_path / "clip.mp4")],
         "frame_paths": [str(tmp_path / "frame_000000.png")],
         "frame_count": 1,
+        "manifest_path": str(tmp_path / "clip.json"),
+        "artifact": {
+            "schema": "stablenew.artifact.v2.6",
+            "stage": "animatediff",
+            "artifact_type": "video",
+            "primary_path": str(tmp_path / "clip.mp4"),
+            "output_paths": [str(tmp_path / "clip.mp4")],
+            "manifest_path": str(tmp_path / "clip.json"),
+            "input_image_path": str(input_path),
+        },
     }
     runner._pipeline = pipeline
 
@@ -122,6 +133,11 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
     pipeline.run_animatediff_stage.assert_called_once()
     assert result.success is True
     assert result.metadata["animatediff_artifact"]["count"] == 1
+    assert result.metadata["animatediff_artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
+    assert result.metadata["animatediff_artifact"]["manifest_paths"] == [str(tmp_path / "clip.json")]
+    assert result.metadata["animatediff_artifact"]["artifacts"][0]["schema"] == "stablenew.artifact.v2.6"
+    assert result.metadata["video_backend_results"]["animatediff"]["backend_id"] == "animatediff"
+    assert result.variants[0]["video_backend_id"] == "animatediff"
 
 
 def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
@@ -155,6 +171,16 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
         "manifest_path": str(manifest),
         "thumbnail_path": str(preview),
         "frame_count": 25,
+        "artifact": {
+            "schema": "stablenew.artifact.v2.6",
+            "stage": "svd_native",
+            "artifact_type": "video",
+            "primary_path": str(output_video),
+            "output_paths": [str(output_video)],
+            "manifest_path": str(manifest),
+            "thumbnail_path": str(preview),
+            "input_image_path": str(input_path),
+        },
     }
     runner._pipeline = pipeline
 
@@ -163,6 +189,10 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
     pipeline.run_svd_native_stage.assert_called_once()
     assert result.success is True
     assert result.metadata["svd_native_artifact"]["count"] == 1
+    assert result.metadata["svd_native_artifact"]["primary_path"] == str(output_video)
+    assert result.metadata["svd_native_artifact"]["artifacts"][0]["schema"] == "stablenew.artifact.v2.6"
+    assert result.metadata["video_backend_results"]["svd_native"]["backend_id"] == "svd_native"
+    assert result.variants[0]["video_backend_id"] == "svd_native"
     assert record.thumbnail_path == str(preview)
     assert record.output_paths == [str(output_video)]
 

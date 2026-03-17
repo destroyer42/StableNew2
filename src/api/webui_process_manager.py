@@ -62,6 +62,96 @@ def _save_webui_cache(cache: dict[str, Any]) -> None:
         pass
 
 
+def _normalize_process_path(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        return str(Path(value).resolve()).lower().replace("\\", "/")
+    except Exception:
+        return str(value).strip().lower().replace("\\", "/")
+
+
+def _command_basename(arg: Any) -> str:
+    try:
+        return Path(str(arg)).name.lower()
+    except Exception:
+        return str(arg).strip().lower()
+
+
+def _cmdline_contains_webui_launch(cmdline: list[str] | tuple[str, ...] | None) -> bool:
+    launch_names = {
+        "launch.py",
+        "webui.py",
+        "webui-user.bat",
+        "webui-user.sh",
+        "webui.bat",
+    }
+    return any(_command_basename(arg) in launch_names for arg in (cmdline or []))
+
+
+def _cmdline_mentions_workdir(
+    cmdline: list[str] | tuple[str, ...] | None,
+    working_dir: str | None,
+) -> bool:
+    normalized_workdir = _normalize_process_path(working_dir)
+    if not normalized_workdir:
+        return False
+    return any(
+        normalized_workdir in _normalize_process_path(str(arg))
+        for arg in (cmdline or [])
+    )
+
+
+def _get_webui_python_match_reasons(
+    *,
+    process_name: str | None,
+    cmdline: list[str] | tuple[str, ...] | None,
+    cwd: str | None,
+    working_dir: str | None,
+) -> list[str]:
+    name = (process_name or "").lower()
+    if "python" not in name:
+        return []
+
+    reasons: list[str] = []
+    cwd_match = bool(working_dir) and _normalize_process_path(cwd) == _normalize_process_path(working_dir)
+    launch_match = _cmdline_contains_webui_launch(cmdline)
+    cmdline_workdir_match = _cmdline_mentions_workdir(cmdline, working_dir)
+
+    if cwd_match:
+        reasons.append("cwd matches webui_dir")
+    if launch_match and cmdline_workdir_match:
+        reasons.append("launch script under webui_dir")
+    elif launch_match and cwd_match:
+        reasons.append("launch script from webui cwd")
+
+    return reasons
+
+
+def _get_webui_shell_match_reasons(
+    *,
+    process_name: str | None,
+    cmdline: list[str] | tuple[str, ...] | None,
+    cwd: str | None,
+    working_dir: str | None,
+) -> list[str]:
+    name = (process_name or "").lower()
+    if name not in {"cmd.exe", "conhost.exe", "powershell.exe", "pwsh.exe", "bash.exe"}:
+        return []
+
+    reasons: list[str] = []
+    cwd_match = bool(working_dir) and _normalize_process_path(cwd) == _normalize_process_path(working_dir)
+    launch_match = _cmdline_contains_webui_launch(cmdline)
+    cmdline_workdir_match = _cmdline_mentions_workdir(cmdline, working_dir)
+
+    if cwd_match and launch_match:
+        reasons.append("shell cwd matches webui_dir and launch script present")
+    elif launch_match and cmdline_workdir_match:
+        reasons.append("shell launch command targets webui_dir")
+
+    return reasons
+
+
 @dataclass
 class WebUIProcessConfig:
     command: list[str]
@@ -840,39 +930,13 @@ class WebUIProcessManager:
                             mem_info = proc.info.get('memory_info')
                             mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
                             
-                            # Check if this looks like a WebUI process
-                            is_webui = False
-                            match_reason = []
-                            
-                            # Check 1: Command line contains webui, launch, or similar
-                            cmdline_str = ' '.join(cmdline).lower() if cmdline else ''
-                            webui_keywords = ['webui', 'launch.py', 'launch_webui', 'stable-diffusion', 'gradio']
-                            for keyword in webui_keywords:
-                                if keyword in cmdline_str:
-                                    is_webui = True
-                                    match_reason.append(f"cmdline contains '{keyword}'")
-                                    break
-                            
-                            # Check 2: Working directory matches our WebUI
-                            if webui_dir and cwd:
-                                try:
-                                    if Path(cwd).resolve() == Path(webui_dir).resolve():
-                                        is_webui = True
-                                        match_reason.append(f"cwd matches webui_dir")
-                                except Exception:
-                                    pass
-                            
-                            # Check 3: FAILSAFE - Memory > 2000MB (likely a leaked WebUI process)
-                            # Raised from 500MB to 2000MB to avoid killing legitimate Python processes
-                            # WebUI typically uses 4-12GB; this only catches obvious leaks
-                            if mem_mb > 2000:
-                                is_webui = True
-                                match_reason.append(f"memory {mem_mb:.1f} MB > 2000 MB threshold")
-                                logger.warning(
-                                    "Found large python.exe process PID %s (%.1f MB) - likely WebUI leak",
-                                    proc.pid,
-                                    mem_mb,
-                                )
+                            match_reason = _get_webui_python_match_reasons(
+                                process_name=proc.info.get('name'),
+                                cmdline=cmdline,
+                                cwd=cwd,
+                                working_dir=webui_dir,
+                            )
+                            is_webui = bool(match_reason)
                             
                             # DIAGNOSTIC: Log WHY we're killing or NOT killing each process
                             if is_webui:
@@ -939,35 +1003,26 @@ class WebUIProcessManager:
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cwd', 'memory_info']):
                     try:
                         name = proc.info['name']
-                        if name and name.lower() in ('cmd.exe', 'conhost.exe'):
+                        if name:
                             cmdline = proc.info.get('cmdline', [])
                             cwd = proc.info.get('cwd', '')
                             mem_info = proc.info.get('memory_info')
                             mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
-                            
-                            # Match by working directory
-                            is_webui_dir = False
-                            if webui_dir and cwd:
-                                try:
-                                    is_webui_dir = Path(cwd).resolve() == Path(webui_dir).resolve()
-                                except Exception:
-                                    pass
-                            
-                            # Match by cmdline mentioning webui or launch
-                            is_webui_cmdline = any(
-                                'webui' in str(arg).lower() or 
-                                'launch' in str(arg).lower()
-                                for arg in cmdline
+                            match_reason = _get_webui_shell_match_reasons(
+                                process_name=name,
+                                cmdline=cmdline,
+                                cwd=cwd,
+                                working_dir=webui_dir,
                             )
-                            
-                            if is_webui_dir or is_webui_cmdline:
+                            if match_reason:
                                 logger.warning(
-                                    ">>> Killing shell process: PID=%s name=%s cwd=%s mem=%.1fMB cmdline=%s",
+                                    ">>> Killing shell process: PID=%s name=%s cwd=%s mem=%.1fMB cmdline=%s - Reasons: %s",
                                     proc.pid,
                                     name,
                                     cwd[:40] + "..." if len(cwd) > 40 else cwd,
                                     mem_mb,
-                                    ' '.join(cmdline[:3]) if cmdline else "N/A"
+                                    ' '.join(cmdline[:3]) if cmdline else "N/A",
+                                    ', '.join(match_reason),
                                 )
                                 proc.kill()
                                 shell_pids_killed.append(proc.pid)
@@ -1198,25 +1253,14 @@ class WebUIProcessManager:
                     # Process terminated, access denied, or cwd not available
                     pass
                 
-                # Is this a WebUI process?
-                is_webui = False
-                
-                # Check by working directory
-                if webui_dir and cwd:
-                    try:
-                        if Path(cwd).resolve() == Path(webui_dir).resolve():
-                            is_webui = True
-                    except Exception:
-                        pass
-                
-                # Check by cmdline
-                if not is_webui:
-                    cmdline_str = ' '.join(cmdline).lower() if cmdline else ''
-                    webui_keywords = ['webui', 'launch.py', 'launch_webui', 'stable-diffusion', 'gradio']
-                    for keyword in webui_keywords:
-                        if keyword in cmdline_str:
-                            is_webui = True
-                            break
+                is_webui = bool(
+                    _get_webui_python_match_reasons(
+                        process_name=proc.info.get('name'),
+                        cmdline=cmdline,
+                        cwd=cwd,
+                        working_dir=webui_dir,
+                    )
+                )
                 
                 if is_webui and ppid:
                     # Check if parent is system or nonexistent
@@ -1354,26 +1398,25 @@ def kill_orphaned_webui_processes_blocking_port(port: int = 7860, working_dir: s
                     proc_name = proc.name().lower()
                     cmdline = ' '.join(proc.cmdline()).lower() if proc.cmdline() else ''
                     
-                    # Check if this looks like a WebUI process
-                    is_webui = False
-                    
-                    # Check by process name
-                    if 'python' in proc_name or 'cmd' in proc_name:
-                        # Check cmdline for WebUI indicators
-                        webui_keywords = ['webui', 'launch.py', 'launch_webui', 'stable-diffusion', 'gradio']
-                        for keyword in webui_keywords:
-                            if keyword in cmdline:
-                                is_webui = True
-                                break
-                    
-                    # Check by working directory if provided
-                    if working_dir and not is_webui:
-                        try:
-                            proc_cwd = proc.cwd()
-                            if Path(proc_cwd).resolve() == Path(working_dir).resolve():
-                                is_webui = True
-                        except Exception:
-                            pass
+                    proc_cwd = None
+                    try:
+                        proc_cwd = proc.cwd()
+                    except Exception:
+                        proc_cwd = None
+
+                    python_match = _get_webui_python_match_reasons(
+                        process_name=proc.name(),
+                        cmdline=proc.cmdline(),
+                        cwd=proc_cwd,
+                        working_dir=working_dir,
+                    )
+                    shell_match = _get_webui_shell_match_reasons(
+                        process_name=proc.name(),
+                        cmdline=proc.cmdline(),
+                        cwd=proc_cwd,
+                        working_dir=working_dir,
+                    )
+                    is_webui = bool(python_match or shell_match)
                     
                     if is_webui:
                         logger.warning(
