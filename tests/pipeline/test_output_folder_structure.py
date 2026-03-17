@@ -427,3 +427,99 @@ class TestOutputFolderStructure:
         assert pack_a_folder is not None, "PackA folder not found"
         assert pack_b_folder is not None, "PackB folder not found"
         assert pack_a_folder != pack_b_folder, "Different packs should have different folders"
+
+    def test_same_pack_folder_reused_after_runner_restart(
+        self, mock_api_client, mock_structured_logger, temp_output_dir
+    ):
+        """Folder reuse should survive a fresh runner instance, not only in-memory cache."""
+        PipelineRunner._pack_folder_cache.clear()
+        first_runner = PipelineRunner(
+            api_client=mock_api_client,
+            structured_logger=mock_structured_logger,
+            runs_base_dir=str(temp_output_dir),
+        )
+        second_runner = PipelineRunner(
+            api_client=mock_api_client,
+            structured_logger=mock_structured_logger,
+            runs_base_dir=str(temp_output_dir),
+        )
+
+        njr = NormalizedJobRecord(
+            job_id="restart_reuse",
+            config={},
+            path_output_dir=str(temp_output_dir),
+            filename_template="image_{index:04d}",
+            prompt_pack_name="RestartPack",
+            positive_prompt="A ranger",
+            negative_prompt="",
+            base_model="sd_xl_base_1.0.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+            images_per_prompt=1,
+            stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
+        )
+
+        mock_result = {
+            "path": f"{temp_output_dir}/txt2img_00.png",
+            "all_paths": [f"{temp_output_dir}/txt2img_00.png"],
+            "name": "txt2img_00",
+            "stage": "txt2img",
+        }
+        first_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+        second_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+
+        first_result = first_runner.run_njr(njr)
+        assert first_result.success is True
+
+        PipelineRunner._pack_folder_cache.clear()
+        second_result = second_runner.run_njr(njr)
+        assert second_result.success is True
+        assert first_result.run_id == second_result.run_id
+
+    def test_njr_output_dir_overrides_runner_base_dir(
+        self, mock_api_client, mock_structured_logger, tmp_path
+    ):
+        """Canonical job output dir should win over the runner default base dir."""
+        PipelineRunner._pack_folder_cache.clear()
+        runner = PipelineRunner(
+            api_client=mock_api_client,
+            structured_logger=mock_structured_logger,
+            runs_base_dir=str(tmp_path / "default_output"),
+        )
+        explicit_output_dir = tmp_path / "explicit_output"
+
+        njr = NormalizedJobRecord(
+            job_id="explicit_dir_job",
+            config={},
+            path_output_dir=str(explicit_output_dir),
+            filename_template="image_{index:04d}",
+            prompt_pack_name="ExplicitPack",
+            positive_prompt="A pilot",
+            negative_prompt="",
+            base_model="sd_xl_base_1.0.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+            images_per_prompt=1,
+            stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
+        )
+
+        mock_result = {
+            "path": f"{explicit_output_dir}/txt2img_00.png",
+            "all_paths": [f"{explicit_output_dir}/txt2img_00.png"],
+            "name": "txt2img_00",
+            "stage": "txt2img",
+        }
+        runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+
+        result = runner.run_njr(njr)
+
+        assert result.success is True
+        route_root = explicit_output_dir / OUTPUT_ROUTE_PIPELINE
+        assert route_root.exists()
+        assert any("ExplicitPack" in folder.name for folder in route_root.iterdir())

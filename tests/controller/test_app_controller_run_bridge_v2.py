@@ -9,14 +9,27 @@ class DummyAppState:
         self.job_draft = type("JD", (), {"pack_id": ""})()
 
 
+class DummyPipelineController:
+    def __init__(self) -> None:
+        self.start_calls: list[dict[str, str]] = []
+        self.enqueue_calls: list[dict[str, str]] = []
+
+    def start_pipeline(self, *, run_config=None):
+        self.start_calls.append(run_config or {})
+        return True
+
+    def enqueue_draft_jobs(self, *, run_config=None):
+        self.enqueue_calls.append(run_config or {})
+        return 1
+
+
 class DummyController(AppController):
     def __init__(self) -> None:
         self.app_state = DummyAppState()
         self._last_run_config = None
         self._log: list[str] = []
         self.start_run = lambda: None
-        self.run_pipeline_v2_bridge = lambda: True
-        self.pipeline_controller = None
+        self.pipeline_controller = DummyPipelineController()
 
     def _append_log(self, message: str) -> None:
         self._log.append(message)

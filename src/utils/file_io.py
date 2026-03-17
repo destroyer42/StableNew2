@@ -297,7 +297,7 @@ def build_safe_image_name(
     
     Prevents Windows MAX_PATH issues by:
     - Limiting filename length based on max_length parameter
-    - Using pack name or hash for uniqueness when truncating
+    - Using stable prompt/job identifiers for uniqueness
     - Sanitizing all characters for filesystem compatibility
     
     Args:
@@ -312,41 +312,38 @@ def build_safe_image_name(
     Returns:
         Safe filename string (without extension)
     
-    Example (new format):
+    Example:
         build_safe_image_name(
             "txt2img_p01_v01",
             pack_name="Fantasy_Heroes_v2",
             batch_index=0
         )
-        → "txt2img_p01_v01_FantasyHer_batch1"
+        -> "txt2img_p01_v01_FantasyHer_4b0fbb7a_batch1"
     """
     # Start with sanitized base prefix
     safe_prefix = get_safe_filename(base_prefix)
-    
-    # Build identifier: prefer pack name over hash
-    identifier = ""
+
+    identifier_parts: list[str] = []
     if pack_name and pack_name.strip():
         # Sanitize and truncate pack name to 10 chars max
         safe_pack = get_safe_filename(pack_name.strip())[:10]
         if safe_pack:
-            identifier = safe_pack
-    
-    # Fallback to hash if no pack name
-    if not identifier:
-        hash_input_parts = [safe_prefix]
-        if matrix_values:
-            # Stable ordering for consistent hashing
-            matrix_str = "_".join(f"{k}={v}" for k, v in sorted(matrix_values.items()))
-            hash_input_parts.append(matrix_str)
-        if seed is not None:
-            hash_input_parts.append(f"seed={seed}")
+            identifier_parts.append(safe_pack)
+
+    hash_input_parts = [safe_prefix]
+    if matrix_values:
+        # Stable ordering for consistent hashing
+        matrix_str = "_".join(f"{k}={v}" for k, v in sorted(matrix_values.items()))
+        hash_input_parts.append(matrix_str)
+    if seed is not None:
+        hash_input_parts.append(f"seed={seed}")
+    # Keep a stable hash whenever prompt/job identity carries extra entropy that
+    # is not obvious from the stage prefix alone.
+    if matrix_values or seed is not None or not identifier_parts:
         hash_input = "|".join(hash_input_parts)
-        identifier = hashlib.md5(hash_input.encode("utf-8")).hexdigest()[:8]
-    
-    # Add timestamp suffix for uniqueness (MMDDhhmmss format, 10 chars)
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%m%d%H%M%S")
-    timestamp_suffix = f"_{timestamp}"
+        identifier_parts.append(hashlib.md5(hash_input.encode("utf-8")).hexdigest()[:8])
+
+    identifier = "_".join(part for part in identifier_parts if part) or "unnamed"
     
     # Build batch suffix with 1-based indexing
     batch_suffix = ""
@@ -354,15 +351,15 @@ def build_safe_image_name(
         display_index = batch_index + 1 if use_one_based_indexing else batch_index
         batch_suffix = f"_batch{display_index}"
     
-    # Calculate space: prefix + "_" + identifier + timestamp_suffix + batch_suffix + ".png"
-    reserved = len("_") + len(identifier) + len(timestamp_suffix) + len(batch_suffix) + len(".png")
+    # Calculate space: prefix + "_" + identifier + batch_suffix + ".png"
+    reserved = len("_") + len(identifier) + len(batch_suffix) + len(".png")
     max_prefix_len = max_length - reserved
     
     if len(safe_prefix) > max_prefix_len:
         safe_prefix = safe_prefix[:max_prefix_len]
     
     # Build final name
-    final_name = f"{safe_prefix}_{identifier}{timestamp_suffix}{batch_suffix}"
+    final_name = f"{safe_prefix}_{identifier}{batch_suffix}"
     
     return final_name
 

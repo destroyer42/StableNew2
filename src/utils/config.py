@@ -242,6 +242,8 @@ class ConfigManager:
                 "seed": -1,  # -1 for random
                 "seed_resize_from_h": -1,
                 "seed_resize_from_w": -1,
+                # Advanced txt2img metadata; not part of the preferred
+                # still-image stage chain (txt2img -> img2img -> adetailer -> upscale).
                 "enable_hr": False,  # High-res fix / hires.fix
                 "hr_scale": 2.0,  # Hires.fix upscale factor
                 "hr_upscaler": "Latent",  # Hires.fix upscaler
@@ -256,7 +258,7 @@ class ConfigManager:
                 "hypernetwork": "None",
                 "hypernetwork_strength": 1.0,
                 "styles": [],  # Style names to apply
-                # SDXL refiner controls
+                # Advanced SDXL refiner controls for base txt2img generation.
                 "refiner_checkpoint": "",
                 "refiner_switch_at": 0.8,  # ratio 0-1 used by WebUI
                 "refiner_switch_steps": 0,  # optional: absolute step number within base pass; 0=unused
@@ -350,8 +352,10 @@ class ConfigManager:
                 "img2img_enabled": False,
                 "adetailer_enabled": False,
                 "upscale_enabled": False,
+                # Preferred still-image flow is txt2img -> optional img2img
+                # -> optional adetailer -> optional final upscale.
                 "allow_hr_with_stages": False,
-                "refiner_compare_mode": False,  # When True and refiner+hires enabled, branch original & refined
+                "refiner_compare_mode": False,  # Advanced txt2img-only compare mode.
                 # Global negative application toggles per-stage (default True for backward compatibility)
                 "apply_global_negative_txt2img": True,
                 "apply_global_negative_img2img": True,
@@ -360,6 +364,7 @@ class ConfigManager:
             },
             "prompt_optimizer": dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS),
             "hires_fix": {
+                # Advanced txt2img metadata mirrored for canonical config persistence.
                 "enabled": False,
                 "upscaler_name": "Latent",
                 "upscale_factor": 2.0,
@@ -434,6 +439,8 @@ class ConfigManager:
         return merged
 
     def _ensure_refiner_hires_fields(self, config: dict[str, Any]) -> None:
+        """Keep advanced txt2img refiner/hires metadata keys present in saved configs."""
+
         txt2img = config.setdefault("txt2img", {})
         hires = config.setdefault("hires_fix", {})
         defaults = {

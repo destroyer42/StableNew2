@@ -548,7 +548,7 @@ class WebUIProcessManager:
         max_delay: float = 8.0,
     ) -> bool:
         """Restart the WebUI process and wait for its API to become available."""
-        
+
         # CRITICAL: Don't restart WebUI if StableNew GUI is not running
         from src.utils.single_instance import SingleInstanceLock
         if not SingleInstanceLock.is_gui_running():
@@ -560,91 +560,128 @@ class WebUIProcessManager:
 
         ctx = LogContext(subsystem="api")
         log_with_ctx(logger, logging.INFO, "Restarting WebUI process", ctx=ctx)
-        self.stop_webui()
-        try:
-            self.start()
-        except Exception as exc:
-            log_with_ctx(
-                logger,
-                logging.ERROR,
-                "Failed to restart WebUI process",
-                ctx=ctx,
-                extra_fields={"error": str(exc)} if exc else {},
-            )
-            return False
-
-        if not wait_ready:
-            return True
-
-        client = None
-        ready = False
         base_url = self._configured_base_url()
-        try:
-            from src.api.client import SDWebUIClient
-            from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
+        attempts = max(1, int(max_attempts))
+        base_delay_s = max(0.0, float(base_delay))
+        max_delay_s = max(0.0, float(max_delay))
 
-            client = SDWebUIClient(base_url=base_url)
-            helper = WebUIAPI(client=client)
-
-            # Use true-readiness gate (API + boot marker)
+        for attempt_index in range(1, attempts + 1):
+            ready = False
             try:
-                helper.wait_until_true_ready(
-                    timeout_s=60.0,
-                    poll_interval_s=2.0,
-                    get_stdout_tail=self.get_stdout_tail_text,
-                )
-                ready = True
+                self.stop_webui()
+            except Exception as exc:
                 log_with_ctx(
                     logger,
-                    logging.INFO,
-                    "WebUI TRUE-READY confirmed after restart",
+                    logging.WARNING,
+                    "Failed to stop WebUI before restart attempt",
                     ctx=ctx,
+                    extra_fields={
+                        "attempt": attempt_index,
+                        "max_attempts": attempts,
+                        "error": str(exc),
+                    },
                 )
-            except WebUIReadinessTimeout as e:
+
+            try:
+                self.start()
+            except Exception as exc:
                 log_with_ctx(
                     logger,
                     logging.ERROR,
-                    "WebUI true-readiness timeout after restart",
+                    "Failed to restart WebUI process",
                     ctx=ctx,
                     extra_fields={
-                        "total_waited_s": e.total_waited,
-                        "checks": str(e.checks_status),
-                        "stdout_tail_snippet": e.stdout_tail[:500] if e.stdout_tail else "",
+                        "attempt": attempt_index,
+                        "max_attempts": attempts,
+                        "error": str(exc),
                     },
                 )
                 ready = False
-        except Exception as exc:  # pragma: no cover - best effort
+            else:
+                if not wait_ready:
+                    ready = True
+                else:
+                    client = None
+                    try:
+                        from src.api.client import SDWebUIClient
+                        from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
+
+                        client = SDWebUIClient(base_url=base_url)
+                        helper = WebUIAPI(client=client)
+                        helper.wait_until_true_ready(
+                            timeout_s=60.0,
+                            poll_interval_s=2.0,
+                            get_stdout_tail=self.get_stdout_tail_text,
+                        )
+                        ready = True
+                        log_with_ctx(
+                            logger,
+                            logging.INFO,
+                            "WebUI TRUE-READY confirmed after restart",
+                            ctx=ctx,
+                            extra_fields={
+                                "attempt": attempt_index,
+                                "max_attempts": attempts,
+                            },
+                        )
+                    except WebUIReadinessTimeout as exc:
+                        log_with_ctx(
+                            logger,
+                            logging.ERROR,
+                            "WebUI true-readiness timeout after restart",
+                            ctx=ctx,
+                            extra_fields={
+                                "attempt": attempt_index,
+                                "max_attempts": attempts,
+                                "total_waited_s": exc.total_waited,
+                                "checks": str(exc.checks_status),
+                                "stdout_tail_snippet": exc.stdout_tail[:500] if exc.stdout_tail else "",
+                            },
+                        )
+                        ready = False
+                    except Exception as exc:  # pragma: no cover - best effort
+                        log_with_ctx(
+                            logger,
+                            logging.ERROR,
+                            "WebUI readiness check failed after restart",
+                            ctx=ctx,
+                            extra_fields={
+                                "attempt": attempt_index,
+                                "max_attempts": attempts,
+                                "error": str(exc),
+                                "base_url": base_url,
+                            },
+                        )
+                        ready = False
+                    finally:
+                        if client is not None:
+                            try:
+                                client.close()
+                            except Exception:
+                                pass
+
             log_with_ctx(
                 logger,
-                logging.ERROR,
-                "WebUI readiness check failed after restart",
+                logging.INFO if ready else logging.WARNING,
+                "WebUI restart attempt result",
                 ctx=ctx,
                 extra_fields={
-                    "error": str(exc),
+                    "attempt": attempt_index,
+                    "max_attempts": attempts,
+                    "ready": ready,
                     "base_url": base_url,
-                }
-                if exc
-                else {},
+                },
             )
-            ready = False
-        finally:
-            if client is not None:
-                try:
-                    client.close()
-                except Exception:
-                    pass
+            if ready:
+                return True
+            if attempt_index < attempts:
+                delay_s = base_delay_s * (2 ** (attempt_index - 1)) if base_delay_s > 0 else 0.0
+                if max_delay_s > 0:
+                    delay_s = min(delay_s, max_delay_s)
+                if delay_s > 0:
+                    time.sleep(delay_s)
 
-        log_with_ctx(
-            logger,
-            logging.INFO if ready else logging.ERROR,
-            "WebUI restart readiness",
-            ctx=ctx,
-            extra_fields={
-                "ready": ready,
-                "base_url": base_url,
-            },
-        )
-        return ready
+        return False
 
     def _finalize_process(self, process: subprocess.Popen) -> None:
         try:

@@ -2,7 +2,7 @@
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-14
+Updated: 2026-03-16
 
 0. Purpose
 
@@ -61,6 +61,7 @@ These documents implement or sequence canonical work but do not outrank Tiers 1-
 
 1.6 Tier 6 - Operator And Reference Guides
 
+- `README.md` - top-level project entrypoint; must align with v2.6 canonical docs
 - `docs/agentic/USAGE_GUIDE.md`
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `.github/workflows/copilot-setup-steps.yml`
@@ -84,6 +85,7 @@ Archived agent or SOP files under `docs/archive/` are reference-only.
 
 3.1 Foundations
 
+- `README.md`
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
@@ -124,4 +126,6 @@ Archive location for the 2026 agentic refresh:
 
 - If active agent file locations change, update this index in the same PR.
 - If canonical governance changes, update `AGENTS.md` and the executor brief together.
+- If the top-level runtime story changes, update `README.md` in the same PR as the
+  canonical docs it summarizes.
 - If a document is only historical, move it to `docs/archive/` rather than leaving it active.

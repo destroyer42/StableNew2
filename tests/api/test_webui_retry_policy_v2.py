@@ -82,3 +82,27 @@ def test_retry_callback_records_attempts(monkeypatch: pytest.MonkeyPatch) -> Non
     assert attempt_index == 1
     assert max_attempts == 3
     assert reason in {"Timeout", "TimeoutError", "requests.exceptions.Timeout"}
+
+
+def test_timeout_retry_recycles_http_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Timeout retries should rebuild the HTTP session before the next attempt."""
+
+    attempts, stub_request = _setup_retry_requests(failures=1)
+    monkeypatch.setattr("src.api.client.requests.Session.request", stub_request)
+    client = SDWebUIClient()
+    client._sleep = lambda _: None
+
+    resets: list[str] = []
+    original_reset = client._reset_http_session
+
+    def _wrapped_reset() -> None:
+        resets.append("reset")
+        original_reset()
+
+    monkeypatch.setattr(client, "_reset_http_session", _wrapped_reset)
+
+    result = client.txt2img({"prompt": "session reset test"})
+
+    assert result is not None
+    assert len(attempts) == 2
+    assert resets == ["reset"]

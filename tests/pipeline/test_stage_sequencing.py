@@ -210,6 +210,44 @@ class TestStageSequencerBuildPlan:
         assert metadata.hires_denoise == 0.4
         assert metadata.hires_steps == 10
 
+    def test_preferred_flow_keeps_txt2img_metadata_off_later_stages(self):
+        """Refiner/hires metadata should not bleed into img2img/adetailer/upscale stages."""
+        sequencer = StageSequencer()
+        config = _base_config()
+        config["img2img"]["enabled"] = True
+        config["pipeline"]["img2img_enabled"] = True
+        config["adetailer"]["enabled"] = True
+        config["pipeline"]["adetailer_enabled"] = True
+        config["upscale"]["enabled"] = True
+        config["pipeline"]["upscale_enabled"] = True
+        config["txt2img"]["refiner_enabled"] = True
+        config["txt2img"]["refiner_model_name"] = "sd_xl_refiner_1.0"
+        config["txt2img"]["refiner_switch_at"] = 0.8
+        config["hires_fix"] = {
+            "enabled": True,
+            "upscale_factor": 1.5,
+            "denoise_strength": 0.4,
+            "steps": 10,
+        }
+
+        plan = sequencer.build_plan(config)
+
+        assert [stage.stage_type for stage in plan.stages] == [
+            "txt2img",
+            "img2img",
+            "adetailer",
+            "upscale",
+        ]
+        for stage in plan.stages[1:]:
+            metadata = stage.config.metadata
+            assert metadata.refiner_enabled is False
+            assert metadata.refiner_model_name is None
+            assert metadata.refiner_switch_at is None
+            assert metadata.hires_enabled is False
+            assert metadata.hires_upscale_factor is None
+            assert metadata.hires_denoise is None
+            assert metadata.hires_steps is None
+
     def test_has_generation_stage(self):
         """has_generation_stage() should return True when txt2img/img2img present."""
         sequencer = StageSequencer()

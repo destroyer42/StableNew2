@@ -4,7 +4,7 @@ from typing import Any
 
 import requests
 
-from src.api.client import SDWebUIClient
+from src.api.client import SDWebUIClient, WebUIUnavailableError
 from src.api.types import GenerateErrorCode
 
 
@@ -36,6 +36,26 @@ def test_generate_images_connection_error(monkeypatch):
     assert outcome.error is not None
     assert outcome.error.code == GenerateErrorCode.CONNECTION
     assert "network fail" in outcome.error.message
+
+
+def test_generate_images_webui_unavailable_error_maps_to_connection(monkeypatch):
+    client = SDWebUIClient()
+
+    def fake_txt2img(payload):
+        raise WebUIUnavailableError(
+            endpoint="/sdapi/v1/txt2img",
+            method="POST",
+            stage="txt2img",
+            reason="Read timed out",
+        )
+
+    monkeypatch.setattr(client, "txt2img", fake_txt2img)
+    outcome = client.generate_images(stage="txt2img", payload={})
+
+    assert not outcome.ok
+    assert outcome.error is not None
+    assert outcome.error.code == GenerateErrorCode.CONNECTION
+    assert "WebUI unavailable" in outcome.error.message
 
 
 class _FakeResponse:

@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src.controller.app_controller import AppController
 from src.gui.controller import PipelineController
 from src.services.watchdog_system_v2 import SystemWatchdogV2
 
@@ -48,6 +49,15 @@ def test_progress_reporting_updates_heartbeat():
         # Note: It's updated with time.monotonic(), so we can't check exact value
         # But we can verify the code path doesn't crash
         print("✓ Progress reporting executed without errors")
+
+
+def test_app_controller_runner_activity_updates_timestamp():
+    controller = AppController.__new__(AppController)
+    controller.last_runner_activity_ts = 0.0
+
+    AppController.notify_runner_activity(controller)
+
+    assert controller.last_runner_activity_ts > 0.0
 
 
 def test_watchdog_doesnt_trigger_during_normal_generation():

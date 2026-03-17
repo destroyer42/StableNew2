@@ -87,7 +87,7 @@ def test_learning_tab_frame_passes_execution_controller():
 
 
 def test_learning_controller_handles_missing_execution_controller():
-    """Verify LearningController works without execution_controller (fallback mode)."""
+    """Verify LearningController auto-creates the canonical execution controller."""
     from src.gui.controllers.learning_controller import LearningController
     from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
 
@@ -107,9 +107,10 @@ def test_learning_controller_handles_missing_execution_controller():
 
     # Create mock pipeline controller
     mock_pipeline_ctrl = MagicMock()
-    mock_queue_controller = MagicMock()
-    mock_queue_controller.submit_pack_job = MagicMock(return_value=True)
-    mock_pipeline_ctrl.queue_controller = mock_queue_controller
+    mock_job_service = MagicMock()
+    mock_job_service.enqueue_njrs = MagicMock(return_value=["learning-job-1"])
+    mock_job_service.register_callback = MagicMock()
+    mock_pipeline_ctrl._job_service = mock_job_service
 
     # Create controller WITHOUT execution_controller
     controller = LearningController(
@@ -118,11 +119,11 @@ def test_learning_controller_handles_missing_execution_controller():
         execution_controller=None,  # No execution controller
     )
 
-    # Run plan - should fall back to direct submission
+    # Run plan - should still use canonical NJR submission
     controller.run_plan()
 
-    # Verify direct queue submission was used
-    assert mock_queue_controller.submit_pack_job.called
+    assert controller.execution_controller is not None
+    assert mock_job_service.enqueue_njrs.called
 
 
 def test_learning_execution_controller_can_run_plan():

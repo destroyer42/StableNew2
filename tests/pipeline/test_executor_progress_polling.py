@@ -24,7 +24,12 @@ class TestPollProgressLoop(unittest.TestCase):
         """Test polling loop invokes callback with progress updates."""
         progress_values = []
 
-        def on_progress(percent: float, eta: float | None) -> None:
+        def on_progress(
+            percent: float,
+            eta: float | None,
+            current_step: int | None = None,
+            total_steps: int | None = None,
+        ) -> None:
             progress_values.append(percent)
 
         # Mock progress responses
@@ -90,7 +95,12 @@ class TestPollProgressLoop(unittest.TestCase):
         """Test polling loop only forwards progress updates."""
         progress_values = []
 
-        def on_progress(percent: float, eta: float | None) -> None:
+        def on_progress(
+            percent: float,
+            eta: float | None,
+            current_step: int | None = None,
+            total_steps: int | None = None,
+        ) -> None:
             progress_values.append(percent)
 
         # Mock progress with regression (0.5 → 0.3 → 0.7)
@@ -119,7 +129,12 @@ class TestPollProgressLoop(unittest.TestCase):
         """Test polling loop handles None responses gracefully."""
         call_count = [0]
 
-        def on_progress(percent: float, eta: float | None) -> None:
+        def on_progress(
+            percent: float,
+            eta: float | None,
+            current_step: int | None = None,
+            total_steps: int | None = None,
+        ) -> None:
             call_count[0] += 1
 
         # Return None (idle state)
@@ -144,7 +159,12 @@ class TestPollProgressLoop(unittest.TestCase):
         """Test polling loop continues after exceptions."""
         progress_values = []
 
-        def on_progress(percent: float, eta: float | None) -> None:
+        def on_progress(
+            percent: float,
+            eta: float | None,
+            current_step: int | None = None,
+            total_steps: int | None = None,
+        ) -> None:
             progress_values.append(percent)
 
         # First call raises exception, second succeeds
@@ -213,11 +233,54 @@ class TestGenerateWithProgress(unittest.TestCase):
         # Should still complete successfully
         self.pipeline._generate_images.assert_called_once()
 
+    def test_run_txt2img_stage_uses_progress_wrapper(self) -> None:
+        """txt2img should use the same progress-aware wrapper as other generation stages."""
+        self.pipeline._apply_webui_defaults_once = Mock()
+        self.pipeline._ensure_model_and_vae = Mock()
+        self.pipeline._ensure_hypernetwork = Mock()
+        self.pipeline._run_prompt_optimizer = Mock(
+            return_value=(
+                Mock(
+                    positive=Mock(optimized_prompt="prompt"),
+                    negative=Mock(optimized_prompt="negative"),
+                ),
+                {},
+            )
+        )
+        self.pipeline._apply_aesthetic_to_payload = Mock(return_value=("prompt", "negative"))
+        self.pipeline._generate_images_with_progress = Mock(
+            return_value={"images": ["img"], "info": {}}
+        )
+        self.pipeline._extract_generation_info = Mock(return_value={})
+
+        with (
+            patch("src.pipeline.executor.save_image_from_base64", return_value=Path("out.png")),
+            patch.object(self.pipeline, "_build_image_metadata_builder", return_value=None),
+        ):
+            result = self.pipeline.run_txt2img_stage(
+                "prompt",
+                "negative",
+                {"txt2img": {"steps": 20}, "batch_size": 1},
+                Path("outdir"),
+                "image_name",
+            )
+
+        assert result is not None
+        self.pipeline._generate_images_with_progress.assert_called_once()
+        args, kwargs = self.pipeline._generate_images_with_progress.call_args
+        assert args[0] == "txt2img"
+        assert kwargs["stage_label"] == "txt2img"
+
     def test_progress_polling_concurrent_with_generation(self) -> None:
         """Test progress polling runs concurrently with generation."""
         callback_called = threading.Event()
 
-        def on_progress(percent: float, eta: float | None) -> None:
+        def on_progress(
+            percent: float,
+            eta: float | None,
+            current_step: int | None = None,
+            total_steps: int | None = None,
+        ) -> None:
             callback_called.set()
 
         # Mock slow generation
@@ -250,7 +313,12 @@ class TestGenerateWithProgress(unittest.TestCase):
         """Test polling stops when generation completes."""
         call_count = [0]
 
-        def on_progress(percent: float, eta: float | None) -> None:
+        def on_progress(
+            percent: float,
+            eta: float | None,
+            current_step: int | None = None,
+            total_steps: int | None = None,
+        ) -> None:
             call_count[0] += 1
 
         self.client.get_progress.return_value = ProgressInfo(

@@ -69,6 +69,8 @@ def test_run_svd_native_stage_returns_artifact_metadata(tmp_path: Path, monkeypa
     assert result["preprocess"]["target_width"] == 1024
     assert result["postprocess"]["applied"] == ["face_restore", "upscale"]
     assert result["frame_count"] == 25
+    assert result["artifact"]["primary_path"] == str(output_path)
+    assert result["artifact"]["manifest_path"] == str(manifest_path)
 
 
 def test_run_svd_native_stage_requires_input_image(tmp_path: Path) -> None:

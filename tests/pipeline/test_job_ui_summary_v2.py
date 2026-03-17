@@ -35,8 +35,8 @@ def test_to_ui_summary_includes_negative_prompt_and_flags():
     summary = job.to_ui_summary()
 
     assert summary.negative_preview.startswith("bad")
-    assert summary.stages_display == "txt2img → upscale"
-    assert summary.estimated_images == 2  # variant_total
+    assert summary.stages_display == "txt2img + upscale"
+    assert summary.estimated_images == 1  # images_per_prompt * loop_count
 
 
 def test_to_ui_summary_formats_label():

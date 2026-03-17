@@ -80,10 +80,10 @@ def test_on_add_to_queue_updates_run_config_and_uses_pipeline_controller() -> No
     assert controller._last_run_config == run_config
 
 
-def test_on_add_job_to_queue_v2_falls_back_to_legacy_when_pipeline_controller_missing() -> None:
+def test_on_add_job_to_queue_v2_noops_when_pipeline_controller_missing() -> None:
     controller = make_event_controller(None)
     controller.on_add_job_to_queue_v2()
-    assert controller._start_run_v2_calls == 1
+    assert controller._start_run_v2_calls == 0
     assert controller._last_run_config["run_mode"] == RunMode.QUEUE.value
 
 

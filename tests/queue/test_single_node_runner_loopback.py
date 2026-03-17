@@ -1,27 +1,27 @@
-"""Single node runner loopback tests (LEGACY).
-
-Tests runner execution with legacy PipelineConfig.
-"""
+"""Single node runner loopback tests for NJR-backed jobs."""
 
 from __future__ import annotations
 
 import time
 
-import pytest
-
-from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 
 
-def _cfg():
-    return PipelineConfig(
-        prompt="p", model="m", sampler="Euler", width=512, height=512, steps=10, cfg_scale=7.0
+def _record(job_id: str) -> NormalizedJobRecord:
+    return NormalizedJobRecord(
+        job_id=job_id,
+        config={"prompt": "p", "model": "m"},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=1,
+        positive_prompt="p",
+        base_model="m",
     )
 
 
-@pytest.mark.legacy
 def test_single_node_runner_executes_jobs_and_updates_status():
     queue = JobQueue()
     executed = []
@@ -31,8 +31,14 @@ def test_single_node_runner_executes_jobs_and_updates_status():
         return {"job": job.job_id, "status": "done"}
 
     runner = SingleNodeJobRunner(queue, _run, poll_interval=0.01)
-    queue.submit(Job("j1", _cfg()))
-    queue.submit(Job("j2", _cfg()))
+    job_one = Job(job_id="j1")
+    job_one._normalized_record = _record("j1")
+    job_one.snapshot = {"normalized_job": job_one._normalized_record.to_queue_snapshot()}
+    job_two = Job(job_id="j2")
+    job_two._normalized_record = _record("j2")
+    job_two.snapshot = {"normalized_job": job_two._normalized_record.to_queue_snapshot()}
+    queue.submit(job_one)
+    queue.submit(job_two)
 
     runner.start()
     time.sleep(0.1)

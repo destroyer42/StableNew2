@@ -14,3 +14,8 @@ def test_job_dict_does_not_include_pipeline_config():
     job = Job(job_id="j2", priority=JobPriority.NORMAL)
     as_dict = job.to_dict()
     assert "pipeline_config" not in as_dict
+
+
+def test_second_positional_argument_maps_to_priority() -> None:
+    job = Job("j3", JobPriority.HIGH)
+    assert job.priority == JobPriority.HIGH

@@ -964,16 +964,20 @@ class JobView:
         prompt_text = (
             record.positive_prompt
             or (record.txt2img_prompt_info and record.txt2img_prompt_info.final_prompt)
-            or ""
+            or record._extract_prompt_field("final_prompt", "prompt", "positive_prompt")
         )
         negative_text = (
             record.negative_prompt
             or (record.txt2img_prompt_info and record.txt2img_prompt_info.final_negative_prompt)
+            or record._extract_prompt_field("final_negative_prompt", "negative_prompt")
             or None
         )
         positive_preview = _truncate_display_text(prompt_text, 120)
         negative_preview = _truncate_display_text(negative_text, 120) if negative_text else None
-        stage_names = [stage.stage_type for stage in record.stage_chain if stage.stage_type]
+        if record.stage_chain:
+            stage_names = record.stage_chain_labels
+        else:
+            stage_names = record._extract_stage_names()
         stages_display = _format_stage_display(stage_names)
         variant_label = _format_variant_label(record.variant_index, record.variant_total)
         batch_label = _format_batch_label(record.batch_index, record.batch_total)

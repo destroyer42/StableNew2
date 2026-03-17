@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 
 import pytest
 
 from src.controller.job_service import JobService, QueueStatus
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import Job, JobPriority, JobStatus, StageCheckpoint
 
 
 class FakeQueue:
@@ -13,6 +14,7 @@ class FakeQueue:
         self.jobs: list[Job] = []
         self.running = []
         self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
+        self.paused = False
 
     def submit(self, job: Job) -> None:
         self.jobs.append(job)
@@ -33,6 +35,22 @@ class FakeQueue:
 
     def mark_cancelled(self, job_id: str, reason: str | None = None) -> None:
         self._update_status(job_id, JobStatus.CANCELLED)
+
+    def pause(self) -> None:
+        self.paused = True
+
+    def resume(self) -> None:
+        self.paused = False
+
+    def cancel_running_job(self, *, return_to_queue: bool = False) -> Job | None:
+        running = next((job for job in self.jobs if job.status == JobStatus.RUNNING), None)
+        if running is None:
+            return None
+        if return_to_queue:
+            running.status = JobStatus.QUEUED
+            return running
+        self._update_status(running.job_id, JobStatus.CANCELLED)
+        return running
 
     def _update_status(self, job_id: str, status: JobStatus) -> None:
         updated: Job | None = None
@@ -57,6 +75,7 @@ class FakeRunner:
         self.started = False
         self.stopped = False
         self.cancelled = False
+        self.cancel_return_to_queue = False
         self._callback: Callable[[Job, JobStatus], None] | None = None
         self.current_job: Job | None = None
 
@@ -66,10 +85,14 @@ class FakeRunner:
     def stop(self) -> None:
         self.stopped = True
 
-    def cancel_current(self) -> None:
+    def cancel_current(self, *, return_to_queue: bool = False) -> None:
         self.cancelled = True
+        self.cancel_return_to_queue = bool(return_to_queue)
         if self.current_job and self._callback:
-            self._callback(self.current_job, JobStatus.CANCELLED)
+            self._callback(
+                self.current_job,
+                JobStatus.QUEUED if self.cancel_return_to_queue else JobStatus.CANCELLED,
+            )
 
     def is_running(self) -> bool:
         return self.started and not self.stopped
@@ -130,6 +153,7 @@ def test_pause_resume_toggle_status(service: JobService) -> None:
     service.pause()
     service.resume()
     assert ["paused", "running"] == statuses
+    assert service.queue.paused is False
 
 
 def test_cancel_current_triggers_failed_event(service: JobService) -> None:
@@ -144,6 +168,19 @@ def test_cancel_current_triggers_failed_event(service: JobService) -> None:
     service.runner.current_job = job
     service.cancel_current()
     assert failures
+
+
+def test_cancel_current_return_to_queue_uses_runner_contract(service: JobService) -> None:
+    job = make_job("return")
+    service.enqueue(job)
+    service.queue.mark_running(job.job_id)
+    service.runner.current_job = job
+
+    returned = service.cancel_current(return_to_queue=True)
+
+    assert returned is job
+    assert service.runner.cancelled is True
+    assert service.runner.cancel_return_to_queue is True
 
 
 def test_job_service_emits_started_and_finished(service: JobService) -> None:
@@ -180,3 +217,34 @@ def test_job_service_emits_failed_event_on_queue_failure(service: JobService) ->
     service.queue.mark_failed(job.job_id, "uh-oh")
 
     assert failures == ["queue-fail"]
+
+
+def test_get_diagnostics_snapshot_includes_queue_and_checkpoint_state(service: JobService) -> None:
+    job = make_job("diag")
+    job.status = JobStatus.RUNNING
+    job.result = {
+        "success": False,
+        "error": "boom",
+        "metadata": {"duration_ms": 123, "recovery_classification": "pre_stage_health_failed"},
+        "stage_events": [{"stage": "txt2img"}],
+        "variants": [{"path": "output/test.png"}],
+    }
+    job.execution_metadata.stage_checkpoints.append(
+        StageCheckpoint(stage_name="txt2img", output_paths=["output/test.png"])
+    )
+    job.execution_metadata.last_control_action = "return_to_queue"
+    job.execution_metadata.return_to_queue_count = 2
+    service.queue.jobs.append(job)
+    service.runner.current_job = job
+    service.runner.started = True
+
+    snapshot = service.get_diagnostics_snapshot()
+
+    assert snapshot["queue"]["current_job_id"] == "diag"
+    assert snapshot["queue"]["runner_running"] is True
+    job_entry = snapshot["jobs"][0]
+    assert job_entry["stage_checkpoints"] == [asdict(job.execution_metadata.stage_checkpoints[0])]
+    assert job_entry["last_control_action"] == "return_to_queue"
+    assert job_entry["return_to_queue_count"] == 2
+    assert job_entry["result_summary"]["duration_ms"] == 123
+    assert job_entry["result_summary"]["output_count"] == 1

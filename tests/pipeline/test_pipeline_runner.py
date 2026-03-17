@@ -36,12 +36,18 @@ def test_run_njr_delegates_to_executor() -> None:
     runner = PipelineRunner(Mock(), Mock())
     record = _minimal_normalized_record()
     pipeline = Mock()
+    pipeline.client = Mock()
     pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
     runner._pipeline = pipeline
     result = runner.run_njr(record, cancel_token=None)
+    pipeline.client.free_vram.assert_called_once_with(
+        unload_model=False,
+        refresh_checkpoints=False,
+    )
     pipeline.run_txt2img_stage.assert_called_once()
     assert result.success is True
-    assert result.variants == [{"path": "output.png"}]
+    assert result.variants[0]["path"] == "output.png"
+    assert result.variants[0]["artifact"]["primary_path"] == "output.png"
 
 
 def test_pipeline_run_result_to_dict_and_back() -> None:

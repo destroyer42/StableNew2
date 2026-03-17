@@ -86,3 +86,27 @@ def test_manual_job_missing_prompt_pack_id_allowed(service: JobService) -> None:
     service._prepare_job_for_submission(job)
     assert job.status == JobStatus.FAILED
     assert job.result and job.result.get("code") == "pack_required"
+
+
+def test_job_from_njr_preserves_reprocess_source_and_prompt_source(service: JobService) -> None:
+    record = _make_record(prompt_source="reprocess", prompt_pack_id="reprocess_pack")
+    record.extra_metadata = {
+        "submission_source": "review_tab",
+        "reprocess": {"source": "review_tab"},
+    }
+    job = service._job_from_njr(
+        record,
+        run_request=type(
+            "Req",
+            (),
+            {
+                "run_mode": type("Mode", (), {"value": "queue"})(),
+                "source": type("Source", (), {"value": "add_to_queue"})(),
+                "prompt_pack_id": "reprocess_pack",
+            },
+        )(),
+    )
+
+    assert job.source == "review_tab"
+    assert job.prompt_source == "reprocess"
+    assert job.snapshot["run_config"]["prompt_source"] == "reprocess"

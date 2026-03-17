@@ -1,21 +1,18 @@
-"""Tests for queue NJR-only execution path (PR-CORE1-B2).
+"""Tests for queue NJR-only execution path.
 
 Validates that:
 - Queue entries created via NJR path have NJR snapshots
-- Execution uses NJR-only path for new jobs (pipeline_config is None)
-- Legacy pipeline_config-only jobs still work but are marked as legacy
-
-LEGACY TEST SUITE: These tests validate backward compatibility with PipelineConfig.
-Keep these tests to ensure migration path works correctly.
+- Execution uses NJR-only path for active jobs
 """
 
 from __future__ import annotations
 
+import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobPriority, JobStatus
@@ -35,9 +32,23 @@ def _make_dummy_njr() -> NormalizedJobRecord:
     )
 
 
-@pytest.mark.legacy
+def _wait_for_history_entry(
+    history_store: JSONLJobHistoryStore,
+    job_id: str,
+    *,
+    timeout: float = 1.0,
+) -> object | None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        entry = history_store.get_job(job_id)
+        if entry is not None:
+            return entry
+        time.sleep(0.01)
+    return None
+
+
 class TestQueueNJRPath:
-    """Test NJR-only execution for queue jobs (includes legacy compatibility tests)."""
+    """Test NJR-only execution for queue jobs."""
 
     def test_queue_job_with_njr_snapshot(self, tmp_path: Path):
         """Queue job created from NJR should have NJR snapshot in storage."""
@@ -61,10 +72,9 @@ class TestQueueNJRPath:
         assert retrieved is not None
         assert hasattr(retrieved, "_normalized_record")
         assert retrieved._normalized_record is not None
-        assert getattr(retrieved, "pipeline_config", None) is None
 
     def test_njr_backed_job_execution_uses_njr_only(self, tmp_path: Path):
-        """Job with NJR should execute via NJR path only (no pipeline_config fallback)."""
+        """Job with NJR should execute via NJR path only."""
         history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
         queue = JobQueue(history_store=history_store)
 
@@ -82,41 +92,10 @@ class TestQueueNJRPath:
         # In actual execution, app_controller._execute_job should:
         # 1. See _normalized_record is present
         # 2. Call _run_job (NJR path)
-        # 3. NOT fall back to pipeline_config even if _run_job fails
+        # 3. NOT depend on a legacy pipeline_config payload
         retrieved = queue.get_job("njr-exec-1")
         assert hasattr(retrieved, "_normalized_record")
         assert retrieved._normalized_record is not None
-        # pipeline_config should remain None for NJR-only jobs
-        assert getattr(retrieved, "pipeline_config", None) is None
-
-    def test_legacy_pipeline_config_only_job(self, tmp_path: Path):
-        """Legacy job with only pipeline_config (no NJR) should still work."""
-        history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-        queue = JobQueue(history_store=history_store)
-
-        # Create legacy job (pre-v2.6 style)
-        job = Job(
-            job_id="legacy-1",
-            priority=JobPriority.NORMAL,
-        )
-        # No _normalized_record attribute
-        job.pipeline_config = PipelineConfig(
-            prompt="legacy test",
-            model="sdxl",
-            sampler="Euler a",
-            steps=20,
-            cfg_scale=7.5,
-            width=512,
-            height=512,
-        )
-
-        queue.submit(job)
-
-        # Verify legacy job works
-        retrieved = queue.get_job("legacy-1")
-        assert retrieved is not None
-        assert not hasattr(retrieved, "_normalized_record") or retrieved._normalized_record is None
-        assert getattr(retrieved, "pipeline_config", None) is not None
 
     def test_history_entry_with_njr_snapshot(self, tmp_path: Path):
         """History entries for NJR jobs should include NJR snapshot."""
@@ -136,17 +115,18 @@ class TestQueueNJRPath:
 
         # Record submission
         history_store.record_job_submission(job)
+        assert _wait_for_history_entry(history_store, "history-njr-1") is not None
 
         # Mark completed
         history_store.record_status_change(
             job_id="history-njr-1",
             status=JobStatus.COMPLETED,
-            ts=None,
+            ts=datetime.utcnow(),
             result={"status": "success"},
         )
 
         # Retrieve from history
-        entry = history_store.get_job("history-njr-1")
+        entry = _wait_for_history_entry(history_store, "history-njr-1")
         assert entry is not None
         assert entry.snapshot is not None
         assert "normalized_job" in entry.snapshot
@@ -154,7 +134,7 @@ class TestQueueNJRPath:
         assert entry.snapshot["normalized_job"] is not None
 
     def test_new_jobs_dont_rely_on_pipeline_config_for_execution(self, tmp_path: Path):
-        """PR-CORE1-B2: New queue jobs should not rely on pipeline_config for execution."""
+        """New queue jobs should not rely on legacy execution payloads."""
         history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
         queue = JobQueue(history_store=history_store)
 
@@ -168,7 +148,6 @@ class TestQueueNJRPath:
             prompt_source="pack",
         )
         job._normalized_record = njr
-        # pipeline_config is intentionally absent for new NJR-only jobs
 
         queue.submit(job)
 
@@ -176,6 +155,4 @@ class TestQueueNJRPath:
         retrieved = queue.get_job("new-job-1")
         assert hasattr(retrieved, "_normalized_record")
         assert retrieved._normalized_record is not None
-        assert getattr(retrieved, "pipeline_config", None) is None
-        # PR-CORE1-B2 contract: Execution MUST use _normalized_record, not pipeline_config
-        # This is enforced in app_controller._execute_job
+        # Execution MUST use _normalized_record and snapshot data

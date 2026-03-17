@@ -1,16 +1,35 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.replay_engine import ReplayEngine
 from src.pipeline.run_plan import build_run_plan_from_njr
+from src.queue.job_model import Job, StageCheckpoint
 
 
 class StubRunner:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    def run_njr(self, njr: NormalizedJobRecord, cancel_token=None, run_plan=None, log_fn=None):
-        self.calls.append({"njr": njr, "cancel_token": cancel_token, "run_plan": run_plan})
+    def run_njr(
+        self,
+        njr: NormalizedJobRecord,
+        cancel_token=None,
+        run_plan=None,
+        log_fn=None,
+        checkpoint_callback=None,
+    ):
+        if checkpoint_callback is not None:
+            checkpoint_callback("txt2img", ["output/generated.png"], {"image_count": 1})
+        self.calls.append(
+            {
+                "njr": njr,
+                "cancel_token": cancel_token,
+                "run_plan": run_plan,
+                "checkpoint_callback": checkpoint_callback,
+            }
+        )
         return {"status": "ok", "run_plan": run_plan}
 
 
@@ -65,3 +84,39 @@ def test_replay_engine_invokes_runner_with_built_plan() -> None:
     assert call["run_plan"] is not None
     assert call["run_plan"].jobs[0].prompt_text == "castle"
     assert result["status"] == "ok"
+
+
+def test_replay_engine_resumes_from_last_valid_checkpoint(tmp_path: Path) -> None:
+    checkpoint_file = tmp_path / "txt2img.png"
+    checkpoint_file.write_bytes(b"png")
+    njr = _make_njr()
+    njr.stage_chain = [
+        StageConfig(stage_type="txt2img", enabled=True),
+        StageConfig(stage_type="adetailer", enabled=True),
+        StageConfig(stage_type="upscale", enabled=True),
+    ]
+    job = Job(job_id=njr.job_id, prompt_pack_id="test-pack")
+    job.execution_metadata.stage_checkpoints.append(
+        StageCheckpoint(stage_name="adetailer", output_paths=[str(checkpoint_file)])
+    )
+    runner = StubRunner()
+    engine = ReplayEngine(runner, cancel_token=None)
+
+    engine.replay_njr(njr, job=job)
+
+    resumed = runner.calls[0]["njr"]
+    assert resumed.start_stage == "upscale"
+    assert resumed.input_image_paths == [str(checkpoint_file)]
+
+
+def test_replay_engine_checkpoint_callback_updates_job_metadata() -> None:
+    njr = _make_njr()
+    job = Job(job_id=njr.job_id, prompt_pack_id="test-pack")
+    runner = StubRunner()
+    engine = ReplayEngine(runner, cancel_token=None)
+
+    engine.replay_njr(njr, job=job)
+
+    assert job.execution_metadata.stage_checkpoints
+    assert job.execution_metadata.stage_checkpoints[0].stage_name == "txt2img"
+    assert job.execution_metadata.stage_checkpoints[0].output_paths == ["output/generated.png"]

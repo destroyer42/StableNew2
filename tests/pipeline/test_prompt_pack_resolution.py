@@ -24,3 +24,5 @@ def test_resolve_from_pack_row_substitutes_matrix_tokens() -> None:
     assert result.positive_embeddings == ("alpha", "beta")
     assert result.negative_embeddings == ("neg_hands",)
     assert ("detail", 0.6) in result.lora_tags
+    assert result.positive.endswith("<lora:detail:0.6>")
+    assert result.negative.startswith("global hush, pack noise, <embedding:neg_hands>")

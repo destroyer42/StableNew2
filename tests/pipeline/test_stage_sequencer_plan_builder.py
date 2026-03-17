@@ -124,6 +124,46 @@ def test_plan_builder_adetailer_and_upscale_sequence():
     assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "adetailer", "upscale"]
 
 
+def test_plan_builder_preferred_flow_keeps_txt2img_metadata_local():
+    """Refiner/hires metadata should stay on txt2img, not bleed into later stages."""
+    cfg = _base_config()
+    cfg["img2img"]["enabled"] = True
+    cfg["pipeline"]["img2img_enabled"] = True
+    cfg["pipeline"]["adetailer_enabled"] = True
+    cfg["adetailer"] = {"enabled": True}
+    cfg["upscale"]["enabled"] = True
+    cfg["pipeline"]["upscale_enabled"] = True
+    cfg["txt2img"]["refiner_enabled"] = True
+    cfg["txt2img"]["refiner_model_name"] = "sdxl_refiner"
+    cfg["txt2img"]["refiner_switch_at"] = 0.75
+    cfg["hires_fix"] = {
+        "enabled": True,
+        "upscale_factor": 1.5,
+        "upscaler_name": "Latent",
+        "steps": 12,
+        "denoise": 0.35,
+    }
+
+    plan = build_stage_execution_plan(cfg)
+
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "img2img", "adetailer", "upscale"]
+    txt_meta = plan.stages[0].config.metadata
+    assert txt_meta.refiner_enabled is True
+    assert txt_meta.refiner_model_name == "sdxl_refiner"
+    assert txt_meta.hires_enabled is True
+
+    for stage in plan.stages[1:]:
+        metadata = stage.config.metadata
+        assert metadata.refiner_enabled is False
+        assert metadata.refiner_model_name is None
+        assert metadata.refiner_switch_at is None
+        assert metadata.hires_enabled is False
+        assert metadata.hires_upscale_factor is None
+        assert metadata.hires_upscaler_name is None
+        assert metadata.hires_denoise is None
+        assert metadata.hires_steps is None
+
+
 def test_plan_builder_adetailer_without_generative_stage_raises():
     cfg = _base_config()
     cfg["txt2img"]["enabled"] = False
@@ -189,3 +229,23 @@ def test_plan_builder_animatediff_without_prior_stage_raises():
     cfg["pipeline"]["animatediff_enabled"] = True
     with pytest.raises(ValueError):
         build_stage_execution_plan(cfg)
+
+
+def test_plan_builder_accepts_flat_alias_config() -> None:
+    cfg = {
+        "model_name": "alias-model",
+        "sampler": "DPM++ 2M",
+        "scheduler_name": "Karras",
+        "steps": 30,
+        "cfg_scale": 6.5,
+        "width": 832,
+        "height": 1216,
+    }
+
+    plan = build_stage_execution_plan(cfg)
+
+    assert [s.stage_type for s in plan.stages] == ["txt2img"]
+    payload = plan.stages[0].config.payload
+    assert payload["model"] == "alias-model"
+    assert payload["sampler_name"] == "DPM++ 2M"
+    assert payload["scheduler"] == "Karras"

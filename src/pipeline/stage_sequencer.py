@@ -9,7 +9,11 @@ stage execution plans. All pipeline runs should go through StageSequencer.build_
 The canonical stage ordering is:
     txt2img -> img2img -> adetailer -> upscale -> animatediff
 
-Refiner and Hires are metadata on generation stages, not separate stage types.
+The preferred still-image flow is:
+    txt2img -> optional img2img -> optional adetailer -> optional final upscale
+
+Refiner and Hires are advanced txt2img metadata, not separate stage types and
+not part of the preferred still-image stage chain.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import logging
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from src.pipeline.config_normalizer import normalize_pipeline_config
 from src.pipeline.stage_models import (
     InvalidStagePlanError,
     StageType,
@@ -29,7 +34,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class StageMetadata:
-    """Metadata attached to a stage (refiner, hires, flags)."""
+    """Metadata attached to a stage.
+
+    Refiner and hires fields are canonical txt2img metadata. Later stages in the
+    preferred still-image flow should not inherit them implicitly.
+    """
 
     refiner_enabled: bool = False
     refiner_model_name: str | None = None
@@ -108,6 +117,7 @@ def _stage_payload(config: dict[str, Any], section: str) -> dict[str, Any]:
 def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     """Build an ordered stage execution plan from a pipeline config dict."""
 
+    config = normalize_pipeline_config(config)
     stages: list[StageExecution] = []
     pipeline_meta = config.get("metadata", {}) or {}
     run_id = pipeline_meta.get("run_id") or config.get("run_id")
@@ -264,21 +274,38 @@ def _build_stage_metadata(
 
     pipeline_flags = config.get("pipeline", {}) or {}
     hires_fix = config.get("hires_fix", {}) or {}
+    is_txt2img_stage = stage == "txt2img"
 
     img2img_val = pipeline_flags.get("img2img_enabled")
     img2img_enabled = bool(img2img_val) if img2img_val is not None else False
 
     return StageMetadata(
-        refiner_enabled=payload.get("refiner_enabled", False),
-        refiner_model_name=payload.get("refiner_model_name"),
-        refiner_switch_at=payload.get("refiner_switch_at"),
-        hires_enabled=hires_fix.get("enabled", False) or payload.get("hires_enabled", False),
-        hires_upscale_factor=hires_fix.get("upscale_factor") or payload.get("upscale_factor"),
-        hires_upscaler_name=hires_fix.get("upscaler_name") or payload.get("hires_upscaler_name"),
-        hires_denoise=hires_fix.get("denoise")
-        or hires_fix.get("denoise_strength")
-        or payload.get("hires_denoise"),
-        hires_steps=hires_fix.get("steps"),
+        refiner_enabled=bool(payload.get("refiner_enabled", False)) if is_txt2img_stage else False,
+        refiner_model_name=payload.get("refiner_model_name") if is_txt2img_stage else None,
+        refiner_switch_at=payload.get("refiner_switch_at") if is_txt2img_stage else None,
+        hires_enabled=(
+            bool(hires_fix.get("enabled", False) or payload.get("hires_enabled", False))
+            if is_txt2img_stage
+            else False
+        ),
+        hires_upscale_factor=(
+            hires_fix.get("upscale_factor") or payload.get("upscale_factor")
+            if is_txt2img_stage
+            else None
+        ),
+        hires_upscaler_name=(
+            hires_fix.get("upscaler_name") or payload.get("hires_upscaler_name")
+            if is_txt2img_stage
+            else None
+        ),
+        hires_denoise=(
+            hires_fix.get("denoise")
+            or hires_fix.get("denoise_strength")
+            or payload.get("hires_denoise")
+            if is_txt2img_stage
+            else None
+        ),
+        hires_steps=hires_fix.get("steps") if is_txt2img_stage else None,
         stage_flags={
             "txt2img_enabled": pipeline_flags.get("txt2img_enabled", False),
             "img2img_enabled": img2img_enabled,
@@ -290,7 +317,11 @@ def _build_stage_metadata(
 
 
 class StageSequencer:
-    """Builds canonical stage execution plans from pipeline configuration."""
+    """Build canonical stage execution plans from pipeline configuration.
+
+    Preferred still-image flow:
+        txt2img -> optional img2img -> optional adetailer -> optional final upscale
+    """
 
     def build_plan(self, pipeline_config: dict[str, Any]) -> StageExecutionPlan:
         """Build an ordered stage execution plan from a pipeline config dict."""

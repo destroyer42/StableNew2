@@ -117,6 +117,9 @@ def _record_from_manifest(manifest_path: Path, artifact_path: Path) -> ScanRecor
     stage_manifest = data.get("stage_manifest") or {}
     if isinstance(stage_manifest, str):
         stage_manifest = {}
+    artifact = data.get("artifact") or {}
+    if isinstance(artifact, str):
+        artifact = {}
 
     def _safe_int(v: Any) -> int:
         try:
@@ -171,6 +174,7 @@ def _record_from_manifest(manifest_path: Path, artifact_path: Path) -> ScanRecor
         stage_manifest.get("height") or gen.get("height") or data.get("height")
     )
     input_img = _pick(
+        artifact.get("input_image_path"),
         stage_manifest.get("input_image"),
         gen.get("input_image"),
         data.get("input_image"),

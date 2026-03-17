@@ -11,7 +11,7 @@ import pytest
 from src.controller.job_execution_controller import JobExecutionController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_history_store import JSONLJobHistoryStore
-from src.queue.job_model import Job, JobPriority
+from src.queue.job_model import Job, JobPriority, StageCheckpoint
 from src.services.queue_store_v2 import (
     SCHEMA_VERSION,
     QueueSnapshotV1,
@@ -319,7 +319,19 @@ class TestQueuePersistenceFlags:
         assert loaded.jobs[0]["queue_schema"] == SCHEMA_VERSION
 
 
-def test_queue_history_snapshots_share_njr(tmp_path: Path) -> None:
+def test_queue_history_snapshots_share_njr(tmp_path: Path, monkeypatch) -> None:
+    class _SyncWorker:
+        def enqueue(self, task, critical: bool = False) -> bool:
+            file_path = Path(task.data["file_path"])
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(task.data["payload"], ensure_ascii=False) + "\n")
+            return True
+
+    monkeypatch.setattr(
+        "src.services.persistence_worker.get_persistence_worker",
+        lambda: _SyncWorker(),
+    )
     record = _make_normalized_record("shared-njr")
     job = Job(job_id=record.job_id, priority=JobPriority.NORMAL)
     job.snapshot = {"normalized_job": asdict(record)}
@@ -386,6 +398,68 @@ def test_job_execution_controller_restores_and_persists(monkeypatch) -> None:
     assert any(entry["queue_id"] == "new-job" for entry in persisted.jobs)
     for entry in persisted.jobs:
         assert "pipeline_config" not in entry["njr_snapshot"]
+
+
+def test_job_execution_controller_persists_and_restores_stage_checkpoints(monkeypatch) -> None:
+    entry = {
+        "queue_id": "checkpoint-job",
+        "njr_snapshot": {"normalized_job": asdict(_make_normalized_record("checkpoint-job"))},
+        "priority": 1,
+        "status": "queued",
+        "created_at": "2025-07-01T12:00:00Z",
+        "queue_schema": SCHEMA_VERSION,
+        "metadata": {
+            "run_mode": "queue",
+            "source": "gui",
+            "prompt_source": "pack",
+            "execution_metadata": {
+                "stage_checkpoints": [
+                    {
+                        "stage_name": "adetailer",
+                        "completed_at": 123.0,
+                        "output_paths": ["output/intermediate.png"],
+                        "metadata": {"image_count": 1},
+                    }
+                ],
+                "return_to_queue_count": 1,
+                "last_control_action": "return_to_queue",
+            },
+        },
+    }
+
+    saved_snapshots: list[QueueSnapshotV1] = []
+
+    monkeypatch.setattr(
+        "src.controller.job_execution_controller.load_queue_snapshot",
+        lambda *_, **__: QueueSnapshotV1(jobs=[entry], auto_run_enabled=True, paused=False),
+    )
+    monkeypatch.setattr(
+        "src.controller.job_execution_controller.save_queue_snapshot",
+        lambda snapshot: saved_snapshots.append(snapshot) or True,
+    )
+
+    controller = JobExecutionController(execute_job=lambda job: {"ok": True})
+    restored = controller.get_queue().get_job("checkpoint-job")
+
+    assert restored is not None
+    assert restored.execution_metadata.stage_checkpoints
+    assert restored.execution_metadata.stage_checkpoints[0].stage_name == "adetailer"
+    assert restored.execution_metadata.return_to_queue_count == 1
+
+    job = Job("persist-checkpoint", JobPriority.NORMAL, prompt_pack_id="pack-1")
+    record = _make_normalized_record("persist-checkpoint")
+    job._normalized_record = record  # type: ignore[attr-defined]
+    job.snapshot = {"normalized_job": asdict(record)}
+    job.execution_metadata.stage_checkpoints.append(
+        StageCheckpoint(stage_name="txt2img", output_paths=["output/generated.png"])
+    )
+    controller.get_queue().submit(job)
+
+    persisted_entry = next(
+        item for item in saved_snapshots[-1].jobs if item["queue_id"] == "persist-checkpoint"
+    )
+    execution_metadata = persisted_entry["metadata"]["execution_metadata"]
+    assert execution_metadata["stage_checkpoints"][0]["stage_name"] == "txt2img"
 
 
 def test_job_execution_controller_ignores_running_snapshot_entries(monkeypatch) -> None:

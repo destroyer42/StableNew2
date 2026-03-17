@@ -14,16 +14,42 @@ Typical use cases:
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
+from copy import deepcopy
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     NormalizedJobRecord,
     StageConfig,
 )
+from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
+
+
+REPROCESS_SCHEMA_VERSION = "stablenew.reprocess.v2.6"
+
+
+@dataclass(slots=True)
+class ReprocessSourceItem:
+    input_image_path: str
+    prompt: str = ""
+    negative_prompt: str = ""
+    model: str | None = None
+    vae: str | None = None
+    config: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    output_dir: str | None = None
+
+
+@dataclass(slots=True)
+class ReprocessJobPlan:
+    jobs: list[NormalizedJobRecord] = field(default_factory=list)
+    group_count: int = 0
 
 
 class ReprocessJobBuilder:
@@ -92,6 +118,8 @@ class ReprocessJobBuilder:
         negative_prompt: str = "",
         model: str | None = None,
         pack_name: str = "Reprocess",
+        source: str = "reprocess",
+        extra_metadata: dict[str, Any] | None = None,
     ) -> NormalizedJobRecord:
         """Build a single reprocessing job for a batch of images.
         
@@ -155,8 +183,21 @@ class ReprocessJobBuilder:
         # Determine start_stage (first stage in our chain)
         start_stage = stages[0]
         
-        # Build the NJR
-        return NormalizedJobRecord(
+        base_metadata = {
+            "submission_source": str(source or "reprocess"),
+            "reprocess_mode": True,
+            "original_image_count": len(path_strs),
+            "reprocess_stages": list(stages),
+            "reprocess": {
+                "schema": REPROCESS_SCHEMA_VERSION,
+                "source": str(source or "reprocess"),
+                "input_count": len(path_strs),
+                "input_image_paths": list(path_strs),
+                "requested_stages": list(stages),
+            },
+        }
+
+        record = NormalizedJobRecord(
             job_id=self._id_fn(),
             config=config,
             path_output_dir=output_dir,
@@ -177,12 +218,10 @@ class ReprocessJobBuilder:
             input_image_paths=path_strs,
             start_stage=start_stage,
             status=JobStatusV2.QUEUED,
-            extra_metadata={
-                "reprocess_mode": True,
-                "original_image_count": len(path_strs),
-                "reprocess_stages": list(stages),
-            },
+            extra_metadata=self._merge_nested_dicts(base_metadata, extra_metadata or {}),
         )
+        record.prompt_source = "reprocess"  # type: ignore[attr-defined]
+        return record
 
     @staticmethod
     def _first_present(*values: Any, default: Any = None) -> Any:
@@ -193,6 +232,60 @@ class ReprocessJobBuilder:
                 continue
             return value
         return default
+
+    @staticmethod
+    def _merge_nested_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(base)
+        for key, value in (override or {}).items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = ReprocessJobBuilder._merge_nested_dicts(
+                    dict(merged.get(key) or {}),
+                    dict(value),
+                )
+            else:
+                merged[key] = deepcopy(value)
+        return merged
+
+    @staticmethod
+    def apply_model_vae_to_config(
+        config: dict[str, Any],
+        *,
+        model: str | None,
+        vae: str | None,
+    ) -> None:
+        if model:
+            config["model"] = model
+            txt2img_cfg = config.setdefault("txt2img", {})
+            if isinstance(txt2img_cfg, dict):
+                txt2img_cfg["model"] = model
+            img2img_cfg = config.setdefault("img2img", {})
+            if isinstance(img2img_cfg, dict):
+                img2img_cfg["model"] = model
+        if vae is not None:
+            config["vae"] = vae
+            txt2img_cfg = config.setdefault("txt2img", {})
+            if isinstance(txt2img_cfg, dict):
+                txt2img_cfg["vae"] = vae
+            img2img_cfg = config.setdefault("img2img", {})
+            if isinstance(img2img_cfg, dict):
+                img2img_cfg["vae"] = vae
+
+    @staticmethod
+    def apply_prompt_overrides(
+        config: dict[str, Any],
+        *,
+        stages: list[str],
+        prompt: str,
+        negative_prompt: str,
+    ) -> None:
+        if "adetailer" not in stages:
+            return
+        adetailer_cfg = config.setdefault("adetailer", {})
+        if isinstance(adetailer_cfg, dict):
+            adetailer_cfg["adetailer_prompt"] = prompt
+            adetailer_cfg["adetailer_negative_prompt"] = negative_prompt
+        config["adetailer_prompt"] = prompt
+        config["adetailer_negative_prompt"] = negative_prompt
 
     def _resolve_stage_steps(
         self,
@@ -343,6 +436,156 @@ class ReprocessJobBuilder:
             )
             jobs.append(job)
         return jobs
+
+    def build_grouped_reprocess_jobs(
+        self,
+        *,
+        items: list[ReprocessSourceItem],
+        stages: list[Literal["img2img", "adetailer", "upscale", "animatediff", "svd_native"]],
+        fallback_config: dict[str, Any] | None = None,
+        batch_size: int = 1,
+        pack_name: str = "Reprocess",
+        source: str = "reprocess",
+        output_dir: str = "output",
+        output_dir_factory=None,
+        extra_metadata_builder=None,
+    ) -> ReprocessJobPlan:
+        if not items:
+            return ReprocessJobPlan()
+        if batch_size <= 0:
+            raise ValueError("batch_size must be >= 1")
+
+        grouped: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+        base_config = fallback_config or {}
+        for item in items:
+            merged_config = self._merge_nested_dicts(base_config, dict(item.config or {}))
+            self.apply_model_vae_to_config(
+                merged_config,
+                model=item.model,
+                vae=item.vae,
+            )
+            self.apply_prompt_overrides(
+                merged_config,
+                stages=list(stages),
+                prompt=str(item.prompt or ""),
+                negative_prompt=str(item.negative_prompt or ""),
+            )
+            resolved_output_dir = str(item.output_dir or output_dir)
+            config_signature = json.dumps(merged_config, sort_keys=True, default=str)
+            group_key = (
+                str(item.prompt or ""),
+                str(item.negative_prompt or ""),
+                str(item.model or ""),
+                config_signature,
+                resolved_output_dir,
+            )
+            group = grouped.get(group_key)
+            if group is None:
+                group = {
+                    "items": [],
+                    "config": merged_config,
+                    "prompt": str(item.prompt or ""),
+                    "negative_prompt": str(item.negative_prompt or ""),
+                    "model": item.model,
+                    "output_dir": resolved_output_dir,
+                }
+                grouped[group_key] = group
+            group["items"].append(item)
+
+        jobs: list[NormalizedJobRecord] = []
+        for group in grouped.values():
+            group_items = list(group["items"])
+            for idx in range(0, len(group_items), batch_size):
+                chunk = group_items[idx : idx + batch_size]
+                job_output_dir = (
+                    str(output_dir_factory(chunk))
+                    if callable(output_dir_factory)
+                    else str(group["output_dir"])
+                )
+                chunk_metadata = {
+                    "reprocess": {
+                        "source_items": [
+                            {
+                                "input_image_path": str(item.input_image_path),
+                                "prompt": str(item.prompt or ""),
+                                "negative_prompt": str(item.negative_prompt or ""),
+                                "model": str(item.model or ""),
+                                "vae": item.vae,
+                                "metadata": deepcopy(item.metadata or {}),
+                            }
+                            for item in chunk
+                        ]
+                    }
+                }
+                if callable(extra_metadata_builder):
+                    chunk_metadata = self._merge_nested_dicts(
+                        chunk_metadata,
+                        extra_metadata_builder(chunk, job_output_dir) or {},
+                    )
+                jobs.append(
+                    self.build_reprocess_job(
+                        input_image_paths=[item.input_image_path for item in chunk],
+                        stages=stages,
+                        config=group["config"],
+                        output_dir=job_output_dir,
+                        prompt=group["prompt"],
+                        negative_prompt=group["negative_prompt"],
+                        model=group["model"],
+                        pack_name=pack_name,
+                        source=source,
+                        extra_metadata=chunk_metadata,
+                    )
+                )
+        return ReprocessJobPlan(jobs=jobs, group_count=len(grouped))
+
+    def build_run_request(
+        self,
+        njrs: list[NormalizedJobRecord],
+        *,
+        source: str,
+        requested_job_label: str | None = None,
+    ) -> PipelineRunRequest:
+        if not njrs:
+            raise ValueError("At least one reprocess NJR is required")
+        output_dirs = {str(getattr(record, "path_output_dir", "") or "") for record in njrs}
+        shared_output_dir = next(iter(output_dirs)) if len(output_dirs) == 1 else None
+        prompt_pack_id = str(getattr(njrs[0], "prompt_pack_id", "") or f"reprocess_{source}")
+        return PipelineRunRequest(
+            prompt_pack_id=prompt_pack_id,
+            selected_row_ids=[str(source or "reprocess")],
+            config_snapshot_id=f"reprocess_{source}",
+            run_mode=PipelineRunMode.QUEUE,
+            source=PipelineRunSource.ADD_TO_QUEUE,
+            explicit_output_dir=shared_output_dir,
+            tags=["reprocess", str(source or "reprocess")],
+            requested_job_label=requested_job_label or "Reprocess",
+            max_njr_count=max(1, len(njrs)),
+            allow_legacy_fallback=False,
+        )
+
+
+def extract_reprocess_output_paths(record: Any, result: Any) -> list[str]:
+    existing = list(getattr(record, "output_paths", []) or [])
+    if existing:
+        return [str(item) for item in existing if item]
+    payload = result if isinstance(result, dict) else {}
+    direct = payload.get("output_paths")
+    if isinstance(direct, list) and direct:
+        return [str(item) for item in direct if item]
+    variants = payload.get("variants")
+    if isinstance(variants, list) and variants:
+        paths: list[str] = []
+        for variant in variants:
+            if not isinstance(variant, dict):
+                continue
+            for path in extract_artifact_paths(variant):
+                if path and path not in paths:
+                    paths.append(str(path))
+        input_count = len(getattr(record, "input_image_paths", []) or [])
+        if input_count > 0 and len(paths) > input_count:
+            paths = paths[-input_count:]
+        return paths
+    return []
 
 
 def create_adetailer_fixup_jobs(

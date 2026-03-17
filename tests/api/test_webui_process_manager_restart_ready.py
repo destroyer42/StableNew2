@@ -25,6 +25,7 @@ class TestRestartWebuiSuccess:
             patch.object(manager, "is_running", return_value=False),
             patch.object(manager, "get_stdout_tail_text", return_value=""),
             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+            patch("src.api.webui_process_manager.time.sleep"),
         ):
             mock_api_instance = Mock()
             mock_api_instance.wait_until_true_ready = Mock()  # No exception = success
@@ -51,6 +52,7 @@ class TestRestartWebuiSuccess:
             patch.object(manager, "is_running", return_value=False),
             patch.object(manager, "get_stdout_tail_text", return_value=""),
             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+            patch("src.api.webui_process_manager.time.sleep"),
         ):
             mock_api_instance = Mock()
             mock_api_instance.wait_until_true_ready = Mock(side_effect=WebUIReadinessTimeout(
@@ -64,7 +66,7 @@ class TestRestartWebuiSuccess:
             result = manager.restart_webui(wait_ready=True, max_attempts=6)
 
         assert result is False
-        mock_api_instance.wait_until_true_ready.assert_called_once()
+        assert mock_api_instance.wait_until_true_ready.call_count == 6
 
     def test_restart_without_wait_ready_returns_true(self):
         """Verify restart_webui returns True when wait_ready=False."""
@@ -101,6 +103,7 @@ class TestRestartWebuiExceptionHandling:
             patch.object(manager, "is_running", return_value=False),
             patch.object(manager, "get_stdout_tail_text", return_value=""),
             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+            patch("src.api.webui_process_manager.time.sleep"),
         ):
             mock_api_instance = Mock()
             mock_api_instance.wait_until_true_ready = Mock(side_effect=RuntimeError("API check failed"))
@@ -121,6 +124,7 @@ class TestRestartWebuiExceptionHandling:
         with (
             patch.object(manager, "stop_webui"),
             patch.object(manager, "start", side_effect=RuntimeError("Start failed")),
+            patch("src.api.webui_process_manager.time.sleep"),
         ):
             result = manager.restart_webui(wait_ready=True, max_attempts=6)
 
@@ -184,6 +188,52 @@ class TestRestartWebuiParameterPassing:
         # wait_until_true_ready uses fixed timeout_s and poll_interval_s
         mock_api_instance.wait_until_true_ready.assert_called_once()
 
+    def test_restart_retries_until_later_attempt_succeeds(self):
+        from src.api.webui_api import WebUIReadinessTimeout
+
+        config = WebUIProcessConfig(
+            command=["dummy_cmd"],
+            base_url="http://127.0.0.1:7860",
+        )
+        manager = WebUIProcessManager(config)
+
+        with (
+            patch("src.utils.single_instance.SingleInstanceLock.is_gui_running", return_value=True),
+            patch.object(manager, "stop_webui") as mock_stop,
+            patch.object(manager, "start") as mock_start,
+            patch.object(manager, "get_stdout_tail_text", return_value=""),
+            patch("src.api.client.SDWebUIClient") as mock_client_class,
+            patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+            patch("src.api.webui_process_manager.time.sleep") as mock_sleep,
+        ):
+            mock_client = Mock()
+            mock_client.close = Mock()
+            mock_client_class.return_value = mock_client
+
+            mock_api_instance = Mock()
+            mock_api_instance.wait_until_true_ready = Mock(
+                side_effect=[
+                    WebUIReadinessTimeout(
+                        message="Readiness timeout",
+                        total_waited=60.0,
+                        checks_status={},
+                        stdout_tail="",
+                    ),
+                    None,
+                ]
+            )
+            mock_webui_api_class.return_value = mock_api_instance
+
+            result = manager.restart_webui(
+                wait_ready=True, max_attempts=3, base_delay=0.5, max_delay=4.0
+            )
+
+        assert result is True
+        assert mock_stop.call_count == 2
+        assert mock_start.call_count == 2
+        assert mock_api_instance.wait_until_true_ready.call_count == 2
+        mock_sleep.assert_called_once_with(0.5)
+
 
 class TestRestartWebuiClientManagement:
     """Test restart_webui properly manages SDWebUIClient lifecycle."""
@@ -203,6 +253,7 @@ class TestRestartWebuiClientManagement:
             patch.object(manager, "get_stdout_tail_text", return_value=""),
             patch("src.api.client.SDWebUIClient") as mock_client_class,
             patch("src.api.webui_api.WebUIAPI") as mock_webui_api_class,
+            patch("src.api.webui_process_manager.time.sleep"),
         ):
             mock_client = Mock()
             mock_client.close = Mock()
@@ -251,4 +302,4 @@ class TestRestartWebuiClientManagement:
             result = manager.restart_webui(wait_ready=True, max_attempts=6)
 
         assert result is False
-        mock_client.close.assert_called_once()
+        assert mock_client.close.call_count == 6

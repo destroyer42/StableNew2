@@ -7,21 +7,14 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
+from src.api.webui_resource_service import CANONICAL_WEBUI_RESOURCE_KEYS, normalize_resource_map
 from src.utils.config import ConfigManager
 
 
 class DropdownLoader:
     """Helper that unifies dropdown data for the Pipeline tab."""
 
-    _RESOURCE_KEYS: Sequence[str] = (
-        "models",
-        "vaes",
-        "samplers",
-        "schedulers",
-        "upscalers",
-        "adetailer_models",
-        "adetailer_detectors",
-    )
+    _RESOURCE_KEYS: Sequence[str] = CANONICAL_WEBUI_RESOURCE_KEYS
     _MODEL_HASH_PATTERN = re.compile(r"(?:\s*\[[^\]]+\])+\s*$")
 
     def __init__(self, config_manager: ConfigManager | None = None) -> None:
@@ -100,9 +93,7 @@ class DropdownLoader:
     def _normalize_resources(self, resources: dict[str, list[Any]] | None) -> dict[str, list[Any]]:
         if resources is None:
             return self._last_dropdowns or {key: [] for key in self._RESOURCE_KEYS}
-        normalized: dict[str, list[Any]] = {
-            key: list(resources.get(key) or []) for key in self._RESOURCE_KEYS
-        }
+        normalized = normalize_resource_map(resources)
         self._last_dropdowns = normalized
         return normalized
 

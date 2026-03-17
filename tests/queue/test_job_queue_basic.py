@@ -52,6 +52,19 @@ def test_restore_jobs_repopulate_queue() -> None:
     assert restored is job
 
 
+def test_queue_pause_resume_blocks_and_restores_dequeue() -> None:
+    queue = JobQueue()
+    queue.submit(Job("j1"))
+
+    queue.pause()
+    assert queue.is_paused() is True
+    assert queue.get_next_job() is None
+
+    queue.resume()
+    assert queue.is_paused() is False
+    assert queue.get_next_job().job_id == "j1"
+
+
 def test_remove_listener_can_reenter_queue_without_deadlock() -> None:
     queue = JobQueue()
     queue.submit(Job("j1"))
@@ -115,3 +128,22 @@ def test_list_active_jobs_ordered_returns_running_then_queue_order() -> None:
     ordered = queue.list_active_jobs_ordered()
 
     assert [job.job_id for job in ordered] == ["queued-1", "queued-2"]
+
+
+def test_cancel_running_job_return_to_queue_requeues_at_back() -> None:
+    queue = JobQueue()
+    first = Job("first")
+    second = Job("second")
+    queue.submit(first)
+    queue.submit(second)
+
+    running = queue.get_next_job()
+    queue.mark_running(running.job_id)
+
+    returned = queue.cancel_running_job(return_to_queue=True)
+
+    assert returned is running
+    assert running.status == JobStatus.QUEUED
+    ordered = queue.list_active_jobs_ordered()
+    assert [job.job_id for job in ordered] == ["second", "first"]
+    assert running.execution_metadata.return_to_queue_count == 1

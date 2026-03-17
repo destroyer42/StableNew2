@@ -54,7 +54,6 @@ class HistoryRecord:
     runtime: dict[str, Any] = field(default_factory=dict)
     ui_summary: dict[str, Any] = field(default_factory=dict)
     result: dict[str, Any] | None = None
-    history_version: str | None = None  # transitional compatibility
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> HistoryRecord:
@@ -88,9 +87,6 @@ class HistoryRecord:
             runtime=runtime,
             ui_summary=ui_summary,
             result=result,
-            history_version=str(
-                data.get("history_version") or data.get("history_schema") or HISTORY_SCHEMA_VERSION
-            ),
         )
 
     @property

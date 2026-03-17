@@ -14,7 +14,7 @@ from typing import Any
 
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.pipeline.pipeline_runner import normalize_run_result
-from src.queue.job_model import Job, JobStatus, RetryAttempt
+from src.queue.job_model import Job, JobStatus, RetryAttempt, StageCheckpoint
 from src.queue.job_queue import JobQueue
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
@@ -175,6 +175,64 @@ def _record_retry_attempt(
     )
 
 
+def _extract_stage_checkpoints(canonical_result: dict[str, Any]) -> list[StageCheckpoint]:
+    stage_events = canonical_result.get("stage_events") or []
+    variants = canonical_result.get("variants") or []
+    output_paths: list[str] = []
+    for variant in variants:
+        if not isinstance(variant, dict):
+            continue
+        path = variant.get("path") or variant.get("output_path")
+        if path:
+            output_paths.append(str(path))
+    exit_stages: list[str] = []
+    for event in stage_events:
+        if not isinstance(event, dict):
+            continue
+        if str(event.get("event") or "").lower() != "exit":
+            continue
+        stage_name = str(event.get("stage") or "").strip()
+        if stage_name and stage_name not in exit_stages:
+            exit_stages.append(stage_name)
+    checkpoints: list[StageCheckpoint] = []
+    for index, stage_name in enumerate(exit_stages):
+        checkpoints.append(
+            StageCheckpoint(
+                stage_name=stage_name,
+                output_paths=list(output_paths) if index == len(exit_stages) - 1 else [],
+                metadata={"source": "canonical_result", "event": "exit"},
+            )
+        )
+    if not checkpoints and output_paths:
+        checkpoints.append(
+            StageCheckpoint(
+                stage_name="final_output",
+                output_paths=list(output_paths),
+                metadata={"source": "canonical_result", "event": "final_output"},
+            )
+        )
+    return checkpoints
+
+
+def _merge_stage_checkpoints(
+    existing: list[StageCheckpoint], incoming: list[StageCheckpoint]
+) -> list[StageCheckpoint]:
+    if not existing:
+        return list(incoming)
+    merged: list[StageCheckpoint] = list(existing)
+    by_stage = {checkpoint.stage_name: index for index, checkpoint in enumerate(merged)}
+    for checkpoint in incoming:
+        index = by_stage.get(checkpoint.stage_name)
+        if index is None:
+            merged.append(checkpoint)
+            by_stage[checkpoint.stage_name] = len(merged) - 1
+            continue
+        current = merged[index]
+        if checkpoint.output_paths and not current.output_paths:
+            merged[index] = checkpoint
+    return merged
+
+
 def _restart_webui_process(job_id: str) -> bool:
     manager = get_global_webui_process_manager()
     if manager is None:
@@ -223,6 +281,7 @@ class SingleNodeJobRunner:
         self._on_status_change = on_status_change
         self._current_job: Job | None = None
         self._cancel_current = threading.Event()
+        self._cancel_return_to_queue = False
         # PR-CORE1-D21B: Activity callback
         self._on_activity = on_activity
         # BUGFIX: Pause state callback
@@ -347,10 +406,16 @@ class SingleNodeJobRunner:
             self._notify(job, JobStatus.RUNNING)
             self._current_job = job
             self._cancel_current.clear()
+            self._cancel_return_to_queue = False
             try:
                 if self._cancel_current.is_set():
-                    self.job_queue.mark_cancelled(job.job_id)
-                    self._notify(job, JobStatus.CANCELLED)
+                    queued_job = self.job_queue.cancel_running_job(
+                        return_to_queue=self._cancel_return_to_queue
+                    )
+                    self._notify(
+                        queued_job or job,
+                        JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
+                    )
                     continue
                 if self.run_callable:
                     job_log = (
@@ -373,6 +438,21 @@ class SingleNodeJobRunner:
                 metadata = canonical_result.get("metadata") or {}
                 metadata["duration_ms"] = duration_ms
                 canonical_result["metadata"] = metadata
+                checkpoints = _extract_stage_checkpoints(canonical_result)
+                if checkpoints:
+                    job.execution_metadata.stage_checkpoints = _merge_stage_checkpoints(
+                        job.execution_metadata.stage_checkpoints,
+                        checkpoints,
+                    )
+                if self._cancel_current.is_set():
+                    queued_job = self.job_queue.cancel_running_job(
+                        return_to_queue=self._cancel_return_to_queue
+                    )
+                    self._notify(
+                        queued_job or job,
+                        JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
+                    )
+                    continue
                 error_message = canonical_result.get("error")
                 success = canonical_result.get("success")
                 logger.info(f"🔍 DEBUG: Before fallback logic - success={success}, error_message={error_message}")
@@ -434,6 +514,7 @@ class SingleNodeJobRunner:
                 self._notify(job, JobStatus.FAILED)
             finally:
                 self._current_job = None
+                self._cancel_return_to_queue = False
                 # Apply cooldown for reprocess jobs to let WebUI stabilize
                 job_source = getattr(job, "source", None) or ""
                 if job_source == "reprocess_panel":
@@ -456,7 +537,17 @@ class SingleNodeJobRunner:
         self._notify(job, JobStatus.RUNNING)
         self._current_job = job
         self._cancel_current.clear()
+        self._cancel_return_to_queue = False
         try:
+            if self._cancel_current.is_set():
+                queued_job = self.job_queue.cancel_running_job(
+                    return_to_queue=self._cancel_return_to_queue
+                )
+                self._notify(
+                    queued_job or job,
+                    JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
+                )
+                return None
             # PR-CORE1-D21B: Activity before running job
             if self._on_activity:
                 self._on_activity()
@@ -466,6 +557,21 @@ class SingleNodeJobRunner:
             else:
                 result = None
             canonical_result = normalize_run_result(result, default_run_id=job.job_id)
+            checkpoints = _extract_stage_checkpoints(canonical_result)
+            if checkpoints:
+                job.execution_metadata.stage_checkpoints = _merge_stage_checkpoints(
+                    job.execution_metadata.stage_checkpoints,
+                    checkpoints,
+                )
+            if self._cancel_current.is_set():
+                queued_job = self.job_queue.cancel_running_job(
+                    return_to_queue=self._cancel_return_to_queue
+                )
+                self._notify(
+                    queued_job or job,
+                    JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
+                )
+                return canonical_result
             error_message = canonical_result.get("error")
             success = canonical_result.get("success")
             if success is None:
@@ -502,6 +608,7 @@ class SingleNodeJobRunner:
             raise
         finally:
             self._current_job = None
+            self._cancel_return_to_queue = False
 
     def _notify(self, job: Job, status: JobStatus) -> None:
         if self._on_status_change:
@@ -510,7 +617,12 @@ class SingleNodeJobRunner:
             except Exception:
                 pass
 
-    def cancel_current(self) -> None:
+    @property
+    def current_job(self) -> Job | None:
+        return self._current_job
+
+    def cancel_current(self, *, return_to_queue: bool = False) -> None:
+        self._cancel_return_to_queue = bool(return_to_queue)
         self._cancel_current.set()
 
     def is_running(self) -> bool:

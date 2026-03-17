@@ -13,7 +13,13 @@ import logging
 from typing import Any
 
 from src.gui.learning_state import LearningState, LearningVariant
+from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.job_requests_v2 import (
+    PipelineRunMode,
+    PipelineRunRequest,
+    PipelineRunSource,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -102,17 +108,10 @@ class LearningExecutionController:
         for idx, variant in enumerate(variants):
             if isinstance(variant, dict):
                 _logger.info(f"[ExecutionController] Variant {idx} keys: {list(variant.keys())}")
-                # Each variant can have "path", "output_path", or "all_paths"
-                if 'all_paths' in variant:
-                    paths = variant['all_paths']
+                paths = extract_artifact_paths(variant)
+                if paths:
                     image_paths.extend(paths)
-                    _logger.info(f"[ExecutionController] Variant {idx} has all_paths: {len(paths)} images")
-                elif 'path' in variant:
-                    image_paths.append(variant['path'])
-                    _logger.info(f"[ExecutionController] Variant {idx} has single path: {variant['path']}")
-                elif 'output_path' in variant:
-                    image_paths.append(variant['output_path'])
-                    _logger.info(f"[ExecutionController] Variant {idx} has output_path: {variant['output_path']}")
+                    _logger.info(f"[ExecutionController] Variant {idx} yielded {len(paths)} artifact path(s)")
                 else:
                     _logger.warning(f"[ExecutionController] Variant {idx} has no recognized path keys")
         
@@ -169,36 +168,11 @@ class LearningExecutionController:
         if not self.job_service:
             _logger.error("[LearningExecutionController] No JobService available")
             return False
+        if not hasattr(self.job_service, "enqueue_njrs"):
+            _logger.error("[LearningExecutionController] JobService missing enqueue_njrs()")
+            return False
         
         try:
-            # Create Queue Job from NJR
-            from src.queue.job_model import Job, JobPriority
-            
-            job = Job(
-                job_id=record.job_id,
-                priority=JobPriority.NORMAL,
-                run_mode="queue",
-                source="learning",
-                prompt_source="manual",
-                prompt_pack_id=record.prompt_pack_id,
-                config_snapshot={
-                    "prompt": record.positive_prompt,
-                    "model": record.base_model,
-                    "vae": record.vae,
-                    "sampler": record.sampler_name,
-                    "scheduler": record.scheduler,
-                    "steps": record.steps,
-                    "cfg_scale": record.cfg_scale,
-                },
-                learning_enabled=True,
-            )
-            
-            # Attach NJR
-            job._normalized_record = record  # type: ignore[attr-defined]
-            
-            # Set payload with completion tracking
-            job.payload = lambda j=job: self._execute_with_tracking(j)
-            
             # Track variant mapping
             self._job_to_variant[record.job_id] = variant
             self._job_contexts[record.job_id] = LearningJobContext(
@@ -209,8 +183,12 @@ class LearningExecutionController:
                 job_id=record.job_id,
             )
             
-            # Submit
-            self.job_service.submit_job_with_run_mode(job)
+            run_request = self._build_run_request(
+                record=record,
+                experiment_name=experiment_name,
+                variable_under_test=variable_under_test,
+            )
+            self.job_service.enqueue_njrs([record], run_request)
             
             _logger.info(
                 f"[LearningExecutionController] Submitted job: "
@@ -221,47 +199,34 @@ class LearningExecutionController:
             return True
             
         except Exception as exc:
+            self._job_to_variant.pop(record.job_id, None)
+            self._job_contexts.pop(record.job_id, None)
             _logger.exception(f"[LearningExecutionController] Failed to submit job: {exc}")
             return False
-    
-    def _execute_with_tracking(self, job: Any) -> dict[str, Any]:
-        """Execute job and track completion.
-        
-        This is called by the runner when job is dequeued.
-        """
-        job_id = job.job_id
-        _logger.info(f"[LearningExecutionController] Executing job: {job_id}")
-        
-        try:
-            # Get runner (assumes job has access to runner/executor)
-            record = getattr(job, "_normalized_record", None)
-            if not record:
-                raise RuntimeError("Job missing _normalized_record")
-            
-            # Execute via runner (delegate to actual execution)
-            # This should call the actual pipeline runner
-            result = self._execute_job(job)
-            
-            # Handle completion
-            self.on_job_completed(job_id, result)
-            
-            return result
-            
-        except Exception as exc:
-            _logger.exception(f"[LearningExecutionController] Job failed: {job_id}")
-            self.on_job_failed(job_id, exc)
-            return {"status": "failed", "error": str(exc)}
-    
-    def _execute_job(self, job: Any) -> dict[str, Any]:
-        """Execute the actual job.
-        
-        This should delegate to the pipeline runner.
-        Placeholder for now - actual implementation depends on runner integration.
-        """
-        # TODO: Integrate with actual runner
-        # For now, assume job.payload was set by caller to actual execution
-        _logger.warning("[LearningExecutionController] _execute_job placeholder called")
-        return {"status": "completed", "images": []}
+
+    def _build_run_request(
+        self,
+        *,
+        record: NormalizedJobRecord,
+        experiment_name: str,
+        variable_under_test: str,
+    ) -> PipelineRunRequest:
+        stage_name = "txt2img"
+        if record.stage_chain:
+            stage_name = str(record.stage_chain[0].stage_type or "txt2img")
+        prompt_pack_id = str(record.prompt_pack_id or f"learning_{experiment_name}")
+        return PipelineRunRequest(
+            prompt_pack_id=prompt_pack_id,
+            selected_row_ids=[record.job_id],
+            config_snapshot_id=f"learning_{experiment_name}_{variable_under_test}",
+            run_mode=PipelineRunMode.QUEUE,
+            source=PipelineRunSource.ADD_TO_QUEUE,
+            explicit_output_dir=str(record.path_output_dir or "") or None,
+            tags=["learning", stage_name],
+            requested_job_label=f"Learning: {experiment_name}",
+            max_njr_count=1,
+            allow_legacy_fallback=False,
+        )
     
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
         """Handle job completion.

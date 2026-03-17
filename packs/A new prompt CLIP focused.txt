@@ -1,5 +1,57 @@
 <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
-(masterpiece, 8k, photorealistic) wide angle perspective, in the middle of the courtroom of a king's castle, the witcher Geralt with silver hair and two longswords over his right shoulder, in chainmail with a wolf medallion, leans against a wall watching the crowd, to include the king, queen, and beautiful buxom princess who are holding court. Warm light, cinematic, epic, fantasy. Natural facial proportions.
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
 <lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8>
 neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:Realism Lora By Stable Yogi_V3_Lite:0.8>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:Portrait Engine V1.0:0.8>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:aidmaImageUpgraderSDXL-v0.3:0.8>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:sdxl1.0_realastic_female_lora:0.8>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:finenude_v0_2a:0.8>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:detailed_notrigger:0.8>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:Realism_Lora_By_Stable_yogi_SDXL8.1:0.8>
+neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:Artistic Image Enhancement v1.1 Lite:0.8> <lora:sdxl_photorealistic_slider_v1-0:0.8> <lora:Beautiful_Female_Face_XL_Adetailer_LoRa-000014:0.8>
+neg: <embedding:NEGATIVE_HANDS> <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:ac_neg1> <embedding:bad_prompt> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps
+
+a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed female porn star, [[pose]] sultrily on her bed, [[activity]], fluid leaking out, exquisite detail, photorealistic, [[angle]] full body shot
+<lora:NSFWFilterXL_animagine:0.8> <lora:JuggerCineXL2:0.8> <lora:detailed_notrigger:0.8>
 neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps

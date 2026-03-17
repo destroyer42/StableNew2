@@ -3,11 +3,8 @@
 
 """Persistent history storage for queue jobs.
 
-PR-CORE1-B2/C2: For v2.6 jobs, history entries should include NJR snapshots in
-the 'snapshot' field. The snapshot['normalized_job'] contains the
-NormalizedJobRecord data. Legacy entries on disk may still expose pipeline_config
-blobs, but new entries no longer persist pipeline_config—legacy_njr_adapter
-reconstructs NJRs when needed.
+Queue history stores NJR-backed snapshots in `snapshot["normalized_job"]`.
+New runtime entries are NJR-only.
 """
 
 from __future__ import annotations

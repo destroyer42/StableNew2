@@ -8,6 +8,7 @@ from src.controller.app_controller import AppController, RunConfigDict, RunMode,
 class FakePipelineController:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.enqueue_calls: list[dict[str, Any] | None] = []
         self._last_run_config: dict[str, Any] | None = None
 
     def start_pipeline(self, *args: Any, **kwargs: Any) -> bool:
@@ -16,6 +17,12 @@ class FakePipelineController:
         if "run_config" in kwargs:
             self._last_run_config = kwargs["run_config"]
         return True
+
+    def enqueue_draft_jobs(self, *, run_config: dict[str, Any] | None = None) -> int:
+        self.enqueue_calls.append(run_config)
+        if run_config is not None:
+            self._last_run_config = run_config
+        return 1
 
 
 class DummyAppState:
@@ -74,7 +81,10 @@ def test_on_run_job_now_v2_passes_queue_mode_and_run_now_source():
 def test_on_add_job_to_queue_v2_uses_queue_mode_and_add_source():
     controller = DummyAppController(FakePipelineController())
     controller.on_add_job_to_queue_v2()
-    assert_last_run_config(controller, RunMode.QUEUE.value, RunSource.ADD_TO_QUEUE_BUTTON.value)
+    assert controller.pipeline_controller.enqueue_calls
+    run_config = controller.pipeline_controller.enqueue_calls[-1]
+    assert run_config["run_mode"] == RunMode.QUEUE.value
+    assert run_config["source"] == RunSource.ADD_TO_QUEUE_BUTTON.value
     assert controller.app_state.pipeline_state.run_mode == RunMode.QUEUE.value
     assert (
         controller.pipeline_controller._last_run_config["source"]

@@ -9,7 +9,11 @@ must use these types.
 
 Canonical ordering: txt2img -> img2img -> adetailer -> upscale -> animatediff
 
-Refiner and Hires are metadata on generation stages, not separate stage types.
+Preferred still-image flow: txt2img -> optional img2img -> optional adetailer
+-> optional final upscale
+
+Refiner and Hires are advanced txt2img metadata, not separate stage types and
+not part of the preferred still-image stage chain.
 """
 
 from __future__ import annotations
@@ -25,8 +29,8 @@ class StageType(str, Enum):
 
     Ordering: TXT2IMG -> IMG2IMG -> ADETAILER -> UPSCALE -> ANIMATEDIFF
 
-    Note: Refiner and Hires are metadata on generation stages (TXT2IMG, IMG2IMG),
-    not separate stage types.
+    Note: Refiner and Hires are advanced txt2img metadata, not separate stage
+    types.
     """
 
     TXT2IMG = "txt2img"
@@ -64,7 +68,7 @@ class StageExecution:
         requires_input_image: Whether this stage needs input from a previous stage
         produces_output_image: Whether this stage produces an output image
 
-        Refiner/Hires metadata (optional, only used on generation stages):
+        Refiner/Hires metadata (optional, canonical on txt2img stages):
         refiner_enabled: Whether SDXL refiner is enabled
         refiner_model_name: Name of the refiner model
         refiner_switch_step: Step at which to switch to refiner

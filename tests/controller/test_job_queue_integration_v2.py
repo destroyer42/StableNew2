@@ -23,6 +23,7 @@ class FakeJobService:
         self.pause_calls = 0
         self.resume_calls = 0
         self.cancel_calls = 0
+        self.cancel_return_calls = 0
         self.last_job = None
         self._jobs: list[Job] = []
         self.queue = self
@@ -44,8 +45,10 @@ class FakeJobService:
     def resume(self) -> None:
         self.resume_calls += 1
 
-    def cancel_current(self) -> None:
+    def cancel_current(self, *, return_to_queue: bool = False) -> None:
         self.cancel_calls += 1
+        if return_to_queue:
+            self.cancel_return_calls += 1
 
     def emit(self, event: str, *args) -> None:
         for callback in self._listeners.get(event, []):
@@ -157,6 +160,15 @@ def test_queue_controls_delegate_and_update_ui_state() -> None:
 
     fake_service.emit(FakeJobService.EVENT_QUEUE_STATUS, "idle")
     assert controller.app_state.queue_status == "idle"
+
+
+def test_cancel_and_return_uses_job_service_contract() -> None:
+    controller, fake_service = _build_controller()
+
+    controller.on_cancel_job_and_return_v2()
+
+    assert fake_service.cancel_calls == 1
+    assert fake_service.cancel_return_calls == 1
 
 
 def test_running_job_summary_uses_live_job_status() -> None:

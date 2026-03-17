@@ -121,7 +121,11 @@ class WebUIAPI:
         get_stdout_tail: Callable[[], str] | None = None,
     ) -> bool:
         """
-        Wait until WebUI is TRULY ready: API responds AND boot marker appears in stdout.
+        Wait until WebUI is TRULY ready.
+
+        Primary readiness comes from API reachability plus an idle progress endpoint.
+        A stdout boot marker is still used when available, but it is treated as an
+        observability signal rather than a hard requirement once the API is clearly idle.
 
         Boot markers checked (in order):
           - "Startup time:"
@@ -134,7 +138,7 @@ class WebUIAPI:
             get_stdout_tail: Optional callable that returns recent stdout lines as string
 
         Returns:
-            True if ready (API + marker found)
+            True if ready
 
         Raises:
             WebUIReadinessTimeout if timeout or other fatal error
@@ -227,15 +231,17 @@ class WebUIAPI:
                 logger.debug("Progress endpoint check failed: %s", exc)
                 checks_status["progress_idle"] = False
 
-            # API readiness requires: models endpoint + options endpoint.
-            # When stdout is available, also require a boot marker so we do not
-            # declare readiness during the model-loading window.
+            # API readiness requires both the models and options endpoints.
+            # When stdout is available, prefer to see a boot marker, but if the
+            # progress endpoint is already idle then the instance is usable even
+            # if stdout capture missed the marker.
             api_ready = (
                 checks_status["models_endpoint"]
                 and checks_status["options_endpoint"]
             )
             boot_ready = checks_status["boot_marker_found"] if get_stdout_tail else True
-            if api_ready and boot_ready:
+            progress_ready = checks_status.get("progress_idle", False)
+            if api_ready and (boot_ready or progress_ready):
                 elapsed = time.time() - start_time
                 boot_marker_status = "found" if checks_status["boot_marker_found"] else "not found"
                 progress_status = "idle" if checks_status.get("progress_idle", False) else "busy"

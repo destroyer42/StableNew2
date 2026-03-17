@@ -22,3 +22,19 @@ def test_parse_single_block() -> None:
     assert row.lora_tags[0][1] == 0.7
     assert "negative_hands" in row.negative_embeddings
     assert "blurry" in ",".join(row.negative_phrases)
+
+
+def test_parse_three_line_block_keeps_loras_and_negative_embeddings_separate() -> None:
+    content = """gorgeous portrait, cinematic lighting
+<lora:detailMaster:0.7> <lora:antiAlias:0.4>
+neg: <embedding:negative_hands> blurry, artifacts"""
+
+    rows = parse_prompt_pack_text(content)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.quality_line == "gorgeous portrait, cinematic lighting"
+    assert row.subject_template == ""
+    assert row.lora_tags == (("detailMaster", 0.7), ("antiAlias", 0.4))
+    assert row.negative_embeddings == ("negative_hands",)
+    assert row.negative_phrases == ("blurry", "artifacts")

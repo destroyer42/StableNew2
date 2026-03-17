@@ -42,7 +42,11 @@ from src.api.webui_process_manager import (
     clear_global_webui_process_manager,
     get_global_webui_process_manager,
 )
-from src.api.webui_resource_service import WebUIResourceService
+from src.api.webui_resource_service import (
+    WebUIResourceService,
+    build_empty_resource_map,
+    normalize_resource_map,
+)
 from src.api.webui_resources import WebUIResource
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
@@ -57,6 +61,11 @@ from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
     current_config_to_last_run,
     update_current_config_from_last_run,
+)
+from src.pipeline.reprocess_builder import (
+    ReprocessJobBuilder,
+    ReprocessSourceItem,
+    extract_reprocess_output_paths,
 )
 from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
@@ -910,29 +919,14 @@ class AppController:
 
         self.last_queue_activity_ts = time.monotonic()
 
-    def run_pipeline_v2_bridge(self) -> bool:
-        """
-        Optional bridge into the modern PipelineController path.
+    def notify_runner_activity(self) -> None:
+        import time
 
-        Returns True if a PipelineController was attached and called successfully.
-        """
-        controller = self.pipeline_controller
-        if controller is None:
-            return False
-
-        try:
-            controller.start_pipeline()
-            return True
-        except Exception as exc:  # noqa: BLE001
-            self._append_log(f"[controller] PipelineController bridge error: {exc!r}")
-            return False
+        self.last_runner_activity_ts = time.monotonic()
 
     def start_run_v2(self) -> None:
         """
-        Preferred, backward-compatible entrypoint for the V2 pipeline path.
-
-        Tries the PipelineController bridge first; on failure, falls back to legacy start_run().
-        Returns the result of the executed path.
+        Preferred entrypoint for the canonical controller pipeline path.
         """
         self._ensure_run_mode_default("run")
         return self._start_run_v2(RunMode.DIRECT, RunSource.RUN_BUTTON)
@@ -1200,32 +1194,28 @@ class AppController:
         run_config = self._build_run_config(mode, source)
         self._last_run_config = dict(run_config)
         controller = getattr(self, "pipeline_controller", None)
-        if controller is not None:
-            try:
-                pytest_flag = os.environ.get("PYTEST_CURRENT_TEST")
-                if not pytest_flag:
-                    os.environ.pop("PYTEST_CURRENT_TEST", None)
-                else:
-                    self._invoke_mock_generate_for_tests()
-                self._capture_stage_plan_for_tests(controller)
-                self._append_log(
-                    f"[controller] _start_run_v2 via PipelineController.start_pipeline "
-                    f"(mode={mode.value}, source={source.value})"
-                )
-                return controller.start_pipeline(run_config=run_config)
-            except TypeError:
-                try:
-                    return controller.start_pipeline()
-                except Exception as exc:  # noqa: BLE001
-                    self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
-            except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
-        self._append_log("[controller] _start_run_v2 falling back to legacy start_run().")
-        return self.start_run()
+        if controller is None:
+            self._append_log("[controller] _start_run_v2 aborted: pipeline_controller is unavailable.")
+            return False
+        try:
+            pytest_flag = os.environ.get("PYTEST_CURRENT_TEST")
+            if not pytest_flag:
+                os.environ.pop("PYTEST_CURRENT_TEST", None)
+            else:
+                self._invoke_mock_generate_for_tests()
+            self._capture_stage_plan_for_tests(controller)
+            self._append_log(
+                f"[controller] _start_run_v2 via PipelineController.start_pipeline "
+                f"(mode={mode.value}, source={source.value})"
+            )
+            return controller.start_pipeline(run_config=run_config)
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
+            return False
 
     def on_run_job_now_v2(self) -> Any:
         """
-        V2 entrypoint for "Run Now": use the explicit `on_run_now` API and fall back to legacy run.
+        V2 entrypoint for "Run Now": prefer the explicit `on_run_now` API.
         """
         self._ensure_run_mode_default("run_now")
         try:
@@ -1246,7 +1236,7 @@ class AppController:
         return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
 
     def on_add_job_to_queue_v2(self) -> None:
-        """Queue-first Add-to-Queue entrypoint; uses explicit APIs and falls back to legacy run."""
+        """Queue-first Add-to-Queue entrypoint for preview-backed jobs."""
         import threading
 
         thread_name = threading.current_thread().name
@@ -1267,18 +1257,11 @@ class AppController:
                 self._append_log(
                     f"[controller] enqueue_draft_jobs error: {exc!r} (thread={thread_name})"
                 )
-        handler = getattr(self, "on_add_job_to_queue", None)
-        if callable(handler):
-            try:
-                handler()
-                self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
-                return
-            except Exception as exc:  # noqa: BLE001
-                self._append_log(
-                    f"[controller] fallback add job to queue error: {exc!r} (thread={thread_name})"
-                )
-        self._ensure_run_mode_default("add_to_queue")
-        self._start_run_v2(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)
+        else:
+            self._append_log(
+                f"[controller] enqueue_draft_jobs unavailable: pipeline_controller missing "
+                f"(thread={thread_name})"
+            )
         self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
 
     def _prepare_queue_run_config(self) -> dict[str, Any]:
@@ -1319,8 +1302,6 @@ class AppController:
         Raises:
             ValueError: If no images or stages provided, or if invalid stage names
         """
-        from src.pipeline.reprocess_builder import ReprocessJobBuilder
-        
         if not image_paths:
             raise ValueError("No images provided for reprocessing")
         if not stages:
@@ -1343,27 +1324,18 @@ class AppController:
             if "upscale" in stages:
                 self._append_log(f"[reprocess] DEBUG: config['upscale'] = {config.get('upscale', 'NOT SET')}")
                 self._append_log(f"[reprocess] DEBUG: config['upscaler'] flat key = {config.get('upscaler', 'NOT SET')}")
+
+            items = [ReprocessSourceItem(input_image_path=str(path)) for path in image_paths]
+            plan = builder.build_grouped_reprocess_jobs(
+                items=items,
+                stages=stages,
+                fallback_config=config,
+                batch_size=batch_size,
+                pack_name="Reprocess",
+                source="reprocess_panel",
+            )
             
-            # Build reprocess jobs (batched or individual)
-            if batch_size > 1:
-                njrs = builder.build_reprocess_jobs_batched(
-                    input_image_paths=image_paths,
-                    stages=stages,
-                    batch_size=batch_size,
-                    config=config,
-                )
-            else:
-                # One job per image
-                njrs = []
-                for image_path in image_paths:
-                    njr = builder.build_reprocess_job(
-                        input_image_paths=[image_path],
-                        stages=stages,
-                        config=config,
-                    )
-                    njrs.append(njr)
-            
-            submitted_count = self._submit_reprocess_njrs(njrs, source="reprocess_panel")
+            submitted_count = self._submit_reprocess_njrs(plan.jobs, source="reprocess_panel")
             
             self._append_log(
                 f"[reprocess] Submitted {submitted_count} job(s) for {len(image_paths)} image(s) "
@@ -1393,8 +1365,6 @@ class AppController:
         - Applies prompt deltas in append/replace/modify mode.
         - Builds a single-image NJR and submits it to the queue.
         """
-        from src.pipeline.reprocess_builder import ReprocessJobBuilder
-
         if not image_paths:
             raise ValueError("No images provided for reprocessing")
         if not stages:
@@ -1413,9 +1383,8 @@ class AppController:
 
         builder = ReprocessJobBuilder()
         fallback_config = self._build_reprocess_config(stages)
-        njrs = []
         metadata_hits = 0
-        group_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        items: list[ReprocessSourceItem] = []
 
         for image_path in image_paths:
             image_file = Path(image_path)
@@ -1440,54 +1409,34 @@ class AppController:
             effective_negative_prompt = self._apply_prompt_delta(
                 base_negative_prompt, negative_prompt_delta, negative_prompt_mode
             )
-
-            merged_config = self._merge_nested_dicts(fallback_config, metadata_config)
-            self._apply_model_vae_to_config(merged_config, model=base_model, vae=base_vae)
-            self._apply_reprocess_prompt_overrides(
-                merged_config,
-                stages=stages,
-                prompt=effective_prompt,
-                negative_prompt=effective_negative_prompt,
-            )
-            config_signature = json.dumps(merged_config, sort_keys=True, default=str)
-            group_key = (
-                effective_prompt,
-                effective_negative_prompt,
-                base_model or "",
-                config_signature,
-            )
-            group = group_map.get(group_key)
-            if group is None:
-                group = {
-                    "paths": [],
-                    "config": merged_config,
-                    "prompt": effective_prompt,
-                    "negative_prompt": effective_negative_prompt,
-                    "model": base_model,
-                }
-                group_map[group_key] = group
-            group["paths"].append(str(image_file))
-
-        for group in group_map.values():
-            paths = group["paths"]
-            for idx in range(0, len(paths), batch_size):
-                chunk = paths[idx : idx + batch_size]
-                njr = builder.build_reprocess_job(
-                    input_image_paths=chunk,
-                    stages=stages,
-                    config=group["config"],
-                    prompt=group["prompt"],
-                    negative_prompt=group["negative_prompt"],
-                    model=group["model"],
-                    pack_name="ReviewReprocess",
+            items.append(
+                ReprocessSourceItem(
+                    input_image_path=str(image_file),
+                    prompt=effective_prompt,
+                    negative_prompt=effective_negative_prompt,
+                    model=base_model,
+                    vae=base_vae,
+                    config=metadata_config,
+                    metadata={
+                        "baseline_source": "embedded_metadata" if metadata_baseline else "fallback",
+                    },
                 )
-                njrs.append(njr)
+            )
 
-        submitted_count = self._submit_reprocess_njrs(njrs, source="review_tab")
+        plan = builder.build_grouped_reprocess_jobs(
+            items=items,
+            stages=stages,
+            fallback_config=fallback_config,
+            batch_size=batch_size,
+            pack_name="ReviewReprocess",
+            source="review_tab",
+        )
+
+        submitted_count = self._submit_reprocess_njrs(plan.jobs, source="review_tab")
         self._append_log(
             f"[reprocess] Review-tab submit: {submitted_count} jobs, "
             f"metadata baseline used for {metadata_hits}/{len(image_paths)} images "
-            f"across {len(group_map)} compatibility group(s), batch_size={batch_size}"
+            f"across {plan.group_count} compatibility group(s), batch_size={batch_size}"
         )
         return submitted_count
 
@@ -1554,8 +1503,6 @@ class AppController:
         negative_prompt_mode: str = "append",
         batch_size: int = 1,
     ) -> int:
-        from src.pipeline.reprocess_builder import ReprocessJobBuilder
-
         if not assets:
             raise ValueError("No photo assets were provided for optimization")
         if not stages:
@@ -1574,8 +1521,7 @@ class AppController:
         fallback_config = self._build_reprocess_config(stages)
         builder = ReprocessJobBuilder()
         store = get_photo_optimize_store()
-        group_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
-        njrs = []
+        items: list[ReprocessSourceItem] = []
 
         for asset in assets:
             asset_id = str(asset.get("asset_id") or "")
@@ -1605,73 +1551,68 @@ class AppController:
                 negative_prompt_delta,
                 negative_prompt_mode,
             )
-            merged_config = self._merge_nested_dicts(fallback_config, base_config)
-            self._apply_model_vae_to_config(
-                merged_config,
+            config_snapshot = ReprocessJobBuilder._merge_nested_dicts(fallback_config, base_config)
+            ReprocessJobBuilder.apply_model_vae_to_config(
+                config_snapshot,
                 model=base_model or None,
                 vae=base_vae or None,
             )
-            config_signature = json.dumps(merged_config, sort_keys=True, default=str)
-            group_key = (
-                effective_prompt,
-                effective_negative_prompt,
-                base_model,
-                config_signature,
-            )
-            group = group_map.get(group_key)
-            if group is None:
-                group = {
-                    "assets": [],
-                    "config": merged_config,
-                    "prompt": effective_prompt,
-                    "negative_prompt": effective_negative_prompt,
-                    "model": base_model,
-                }
-                group_map[group_key] = group
-            group["assets"].append(
-                {
-                    "asset_id": asset_id,
-                    "input_image_path": input_image_path,
-                    "effective_prompt": effective_prompt,
-                    "effective_negative_prompt": effective_negative_prompt,
-                    "config_snapshot": deepcopy(merged_config),
-                    "stages": list(stages),
-                }
+            items.append(
+                ReprocessSourceItem(
+                    input_image_path=input_image_path,
+                    prompt=effective_prompt,
+                    negative_prompt=effective_negative_prompt,
+                    model=base_model or None,
+                    vae=base_vae or None,
+                    config=base_config,
+                    metadata={
+                        "photo_asset": {
+                            "asset_id": asset_id,
+                            "input_image_path": input_image_path,
+                            "effective_prompt": effective_prompt,
+                            "effective_negative_prompt": effective_negative_prompt,
+                            "config_snapshot": config_snapshot,
+                            "stages": list(stages),
+                        }
+                    },
+                )
             )
 
-        for group in group_map.values():
-            assets_in_group = list(group["assets"])
-            for idx in range(0, len(assets_in_group), batch_size):
-                chunk = assets_in_group[idx : idx + batch_size]
-                output_dir = store.create_staging_run_dir("photo_optimize")
-                njr = builder.build_reprocess_job(
-                    input_image_paths=[item["input_image_path"] for item in chunk],
-                    stages=stages,
-                    config=group["config"],
-                    prompt=group["prompt"],
-                    negative_prompt=group["negative_prompt"],
-                    model=group["model"] or None,
-                    output_dir=str(output_dir),
-                    pack_name="PhotoOptimize",
-                )
-                photo_metadata = {
+        def _output_dir_factory(_chunk: list[ReprocessSourceItem]) -> str:
+            return str(store.create_staging_run_dir("photo_optimize"))
+
+        def _extra_metadata_builder(chunk: list[ReprocessSourceItem], job_output_dir: str) -> dict[str, Any]:
+            return {
+                "photo_optimize": {
                     "source": "photo_optimize_tab",
-                    "run_id": output_dir.name,
+                    "run_id": Path(job_output_dir).name,
                     "stages": list(stages),
                     "prompt_mode": prompt_mode,
                     "prompt_delta": prompt_delta,
                     "negative_prompt_mode": negative_prompt_mode,
                     "negative_prompt_delta": negative_prompt_delta,
-                    "assets": chunk,
+                    "assets": [
+                        deepcopy((item.metadata or {}).get("photo_asset") or {})
+                        for item in chunk
+                    ],
                 }
-                njr.extra_metadata = dict(njr.extra_metadata or {})
-                njr.extra_metadata["photo_optimize"] = photo_metadata
-                njrs.append(njr)
+            }
 
-        submitted_count = self._submit_reprocess_njrs(njrs, source="photo_optimize_tab")
+        plan = builder.build_grouped_reprocess_jobs(
+            items=items,
+            stages=stages,
+            fallback_config=fallback_config,
+            batch_size=batch_size,
+            pack_name="PhotoOptimize",
+            source="photo_optimize_tab",
+            output_dir_factory=_output_dir_factory,
+            extra_metadata_builder=_extra_metadata_builder,
+        )
+
+        submitted_count = self._submit_reprocess_njrs(plan.jobs, source="photo_optimize_tab")
         self._append_log(
             f"[photo_optimize] Submitted {submitted_count} job(s) across "
-            f"{len(group_map)} compatibility group(s), batch_size={batch_size}"
+            f"{plan.group_count} compatibility group(s), batch_size={batch_size}"
         )
         return submitted_count
 
@@ -1723,31 +1664,10 @@ class AppController:
 
     def _extract_reprocess_output_paths(self, job: Job, result: Any) -> list[str]:
         njr = getattr(job, "_normalized_record", None)
-        if njr is not None:
-            existing = list(getattr(njr, "output_paths", []) or [])
-            if existing:
-                return [str(item) for item in existing]
         payload = getattr(job, "result", None)
         if not isinstance(payload, dict) and isinstance(result, dict):
             payload = result
-        if isinstance(payload, dict):
-            direct = payload.get("output_paths")
-            if isinstance(direct, list) and direct:
-                return [str(item) for item in direct]
-            variants = payload.get("variants")
-            if isinstance(variants, list) and variants:
-                paths: list[str] = []
-                for variant in variants:
-                    if not isinstance(variant, dict):
-                        continue
-                    path = variant.get("path") or variant.get("output_path")
-                    if path:
-                        paths.append(str(path))
-                input_count = len(getattr(njr, "input_image_paths", []) or []) if njr is not None else 0
-                if input_count > 0 and len(paths) > input_count:
-                    paths = paths[-input_count:]
-                return paths
-        return []
+        return extract_reprocess_output_paths(njr, payload)
 
     def _handle_photo_optimize_completion(self, job: Job, result: Any) -> None:
         njr = getattr(job, "_normalized_record", None)
@@ -1798,114 +1718,19 @@ class AppController:
             if callable(refresh):
                 self._ui_dispatch(lambda: refresh(processed_asset_ids))
 
-    @staticmethod
-    def _merge_nested_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-        merged = deepcopy(base)
-        for key, value in (override or {}).items():
-            if isinstance(value, Mapping) and isinstance(merged.get(key), dict):
-                merged[key] = AppController._merge_nested_dicts(
-                    merged.get(key, {}),
-                    dict(value),
-                )
-            else:
-                merged[key] = deepcopy(value)
-        return merged
-
-    @staticmethod
-    def _apply_model_vae_to_config(
-        config: dict[str, Any],
-        *,
-        model: str | None,
-        vae: str | None,
-    ) -> None:
-        if model:
-            config["model"] = model
-            txt2img_cfg = config.setdefault("txt2img", {})
-            if isinstance(txt2img_cfg, dict):
-                txt2img_cfg["model"] = model
-            img2img_cfg = config.setdefault("img2img", {})
-            if isinstance(img2img_cfg, dict):
-                img2img_cfg["model"] = model
-        if vae is not None:
-            config["vae"] = vae
-            txt2img_cfg = config.setdefault("txt2img", {})
-            if isinstance(txt2img_cfg, dict):
-                txt2img_cfg["vae"] = vae
-            img2img_cfg = config.setdefault("img2img", {})
-            if isinstance(img2img_cfg, dict):
-                img2img_cfg["vae"] = vae
-
-    @staticmethod
-    def _apply_reprocess_prompt_overrides(
-        config: dict[str, Any],
-        *,
-        stages: list[str],
-        prompt: str,
-        negative_prompt: str,
-    ) -> None:
-        """Apply effective prompt edits into stage configs that prefer nested prompts.
-
-        Review-tab prompt edits are stored at the NJR top level, but ADetailer execution
-        prefers `adetailer_prompt` / `adetailer_negative_prompt` from nested config.
-        Keep those in sync so Review reprocess behaves as the user expects.
-        """
-        if "adetailer" not in stages:
-            return
-
-        adetailer_cfg = config.setdefault("adetailer", {})
-        if isinstance(adetailer_cfg, dict):
-            adetailer_cfg["adetailer_prompt"] = prompt
-            adetailer_cfg["adetailer_negative_prompt"] = negative_prompt
-
-        config["adetailer_prompt"] = prompt
-        config["adetailer_negative_prompt"] = negative_prompt
-
     def _submit_reprocess_njrs(self, njrs: list[Any], *, source: str) -> int:
-        from src.queue.job_model import Job, JobPriority
-
         if not self.job_service:
             raise RuntimeError("Job service not available")
-
-        submitted_count = 0
-        client_ref = getattr(self, "_api_client", None)
-        for njr in njrs:
-            config_snapshot = njr.to_queue_snapshot()
-            job = Job(
-                job_id=njr.job_id,
-                priority=JobPriority.NORMAL,
-                run_mode="queue",
-                source=source,
-                prompt_source="reprocess",
-                prompt_pack_id=None,
-                config_snapshot=config_snapshot,
-                learning_enabled=False,
-            )
-
-            job._normalized_record = njr  # type: ignore[attr-defined]
-
-            def _run_reprocess_job(j: Job, client_ref=client_ref) -> dict:
-                from src.pipeline.pipeline_runner import run_njr_v2
-
-                njr_obj = getattr(j, "_normalized_record", None)
-                if njr_obj is None:
-                    raise RuntimeError("Reprocess job missing NormalizedJobRecord")
-                try:
-                    if client_ref and hasattr(client_ref, "free_vram"):
-                        client_ref.free_vram(unload_model=True)
-                except Exception:
-                    pass
-                result = run_njr_v2(
-                    njr_obj,
-                    client=client_ref,
-                    cancel_token=self.cancel_token,
-                )
-                return result or {}
-
-            job.payload = lambda j=job: _run_reprocess_job(j)
-            self.job_service.submit_queued(job)
-            submitted_count += 1
-
-        return submitted_count
+        if not njrs:
+            return 0
+        builder = ReprocessJobBuilder()
+        request = builder.build_run_request(
+            njrs,
+            source=source,
+            requested_job_label="Photo Optimize" if source == "photo_optimize_tab" else "Reprocess",
+        )
+        job_ids = self.job_service.enqueue_njrs(njrs, request)
+        return len(job_ids)
     
     def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
         """Build configuration dict for reprocess jobs.
@@ -2760,10 +2585,7 @@ class AppController:
         PR-GUI-F3: Allows user to cancel a job but keep it for retry later.
         """
         if self.job_service:
-            self.job_service.cancel_current()
-            queue = getattr(self.job_service, "queue", None)
-            if queue and hasattr(queue, "cancel_running_job"):
-                queue.cancel_running_job(return_to_queue=True)
+            self.job_service.cancel_current(return_to_queue=True)
             # Also trigger the cancel token if available
             cancel_token = getattr(self, "_cancel_token", None)
             if cancel_token and hasattr(cancel_token, "cancel"):
@@ -3110,6 +2932,13 @@ class AppController:
     ) -> Path | None:
         if not self.gui_log_handler or not self.job_service:
             return None
+        webui_tail = None
+        manager = getattr(self, "webui_process_manager", None)
+        if manager and hasattr(manager, "get_recent_output_tail"):
+            try:
+                webui_tail = manager.get_recent_output_tail()
+            except Exception:
+                webui_tail = None
         context = dict(extra_context) if extra_context else None
         if self._last_error_envelope:
             context = dict(context or {})
@@ -3120,6 +2949,9 @@ class AppController:
                 log_handler=self.gui_log_handler,
                 job_service=self.job_service,
                 extra_context=context,
+                webui_tail=webui_tail,
+                include_process_state=True,
+                include_queue_state=True,
             )
             if path:
                 self._last_diagnostics_bundle = path
@@ -3209,6 +3041,16 @@ class AppController:
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         snapshot = self.job_service.get_diagnostics_snapshot() if self.job_service else {}
         data = dict(snapshot)
+        manager = getattr(self, "webui_process_manager", None)
+        if manager and hasattr(manager, "get_recent_output_tail"):
+            try:
+                data["webui_tail"] = manager.get_recent_output_tail()
+            except Exception:
+                data["webui_tail"] = None
+        data["controller"] = {
+            "last_ui_heartbeat_ts": getattr(self, "last_ui_heartbeat_ts", None),
+            "last_runner_activity_ts": getattr(self, "last_runner_activity_ts", None),
+        }
         data["last_bundle"] = (
             str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
         )
@@ -4384,9 +4226,8 @@ class AppController:
     def _build_pipeline_config(self) -> PipelineConfig:
         """DEPRECATED (PR-CORE1-12): Internal pipeline_config builder.
 
-        NOTE: Still used by PipelineController._build_pipeline_config_from_state()
-        during NJR construction. This is INTERNAL ONLY and will be refactored in
-        future to directly build NJR fields without intermediate PipelineConfig.
+        NOTE: Retained only for deprecated config/profile helpers and tests.
+        Controller execution no longer routes through PipelineConfig.
 
         DO NOT use this for execution payloads.
         """
@@ -4530,15 +4371,7 @@ class AppController:
         # TODO: set preview_label image or text based on latest run or preview.
 
     def _empty_resource_map(self) -> dict[str, list[Any]]:
-        return {
-            "models": [],
-            "vaes": [],
-            "samplers": [],
-            "schedulers": [],
-            "upscalers": [],
-            "adetailer_models": [],
-            "adetailer_detectors": [],
-        }
+        return build_empty_resource_map()
 
     def _emit_webui_resources_updated(self, resources: dict[str, list[Any]] | None) -> None:
         if resources is None:
@@ -4611,11 +4444,20 @@ class AppController:
             
             counts = tuple(
                 len(normalized[key])
-                for key in ("models", "vaes", "samplers", "schedulers", "upscalers")
+                for key in (
+                    "models",
+                    "vaes",
+                    "samplers",
+                    "schedulers",
+                    "upscalers",
+                    "hypernetworks",
+                    "embeddings",
+                )
             )
             msg = (
                 f"Resource update: {counts[0]} models, {counts[1]} vaes, "
-                f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers"
+                f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers, "
+                f"{counts[5]} hypernetworks, {counts[6]} embeddings"
             )
             self._append_log(f"[resources] {msg}")
             logger.debug(msg)
@@ -4665,12 +4507,7 @@ class AppController:
             logger.debug("[webui] Deferred queue autostart trigger after READY failed: %s", exc)
 
     def _normalize_resource_map(self, payload: dict[str, Any]) -> dict[str, list[Any]]:
-        resources = self._empty_resource_map()
-        for name in resources:
-            resources[name] = list(payload.get(name) or [])
-        resources["adetailer_models"] = list(payload.get("adetailer_models") or [])
-        resources["adetailer_detectors"] = list(payload.get("adetailer_detectors") or [])
-        return resources
+        return normalize_resource_map(payload)
 
     def _update_gui_dropdowns(self) -> None:
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)

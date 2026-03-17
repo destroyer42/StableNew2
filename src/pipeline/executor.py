@@ -30,6 +30,7 @@ from src.prompting.prompt_optimizer_registry import (
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.prompting.prompt_splitter import split_prompt_chunks
 from src.prompting.prompt_types import PromptOptimizationPairResult
+from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.pipeline.animatediff_models import (
     AnimateDiffConfig,
     attach_animatediff_to_payload,
@@ -64,6 +65,8 @@ def _cached_image_base64(path_str: str) -> str | None:
 
 
 logger = logging.getLogger(__name__)
+
+_RECOVERY_TIMEOUT_KEYWORDS = ("read timed out", "readtimeout", "timeout", "timed out")
 
 
 def _capture_webui_tail() -> dict[str, Any] | None:
@@ -349,6 +352,48 @@ class Pipeline:
         except Exception as exc:
             logger.debug("Failed to write prompt optimization sidecar %s: %s", sidecar, exc)
 
+    def _attach_manifest_artifact(
+        self,
+        *,
+        metadata: dict[str, Any],
+        stage: str,
+        primary_path: Path | str,
+        manifest_path: Path | str | None,
+        output_paths: list[str] | None = None,
+        thumbnail_path: Path | str | None = None,
+        input_image_path: Path | str | None = None,
+        artifact_type: str | None = None,
+    ) -> dict[str, Any]:
+        payload = dict(metadata or {})
+        payload["artifact"] = artifact_manifest_payload(
+            stage=stage,
+            image_or_output_path=primary_path,
+            manifest_path=manifest_path,
+            output_paths=output_paths,
+            thumbnail_path=thumbnail_path,
+            input_image_path=input_image_path,
+            artifact_type=artifact_type,
+        )
+        return payload
+
+    def _write_manifest_file(
+        self,
+        *,
+        manifest_path: Path,
+        metadata: dict[str, Any],
+        prompt_optimizer_result: PromptOptimizationPairResult | None = None,
+        prompt_optimizer_config: PromptOptimizerConfig | None = None,
+    ) -> None:
+        manifest_path.parent.mkdir(exist_ok=True, parents=True)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        if prompt_optimizer_result is not None and prompt_optimizer_config is not None:
+            self._maybe_write_prompt_optimization_sidecar(
+                manifest_path=manifest_path,
+                result=prompt_optimizer_result,
+                config=prompt_optimizer_config,
+            )
+
     def _clean_metadata_payload(self, payload: Any) -> Any:
         """Remove large binary blobs (e.g., base64 images) from metadata payloads."""
         if not isinstance(payload, dict):
@@ -483,6 +528,20 @@ class Pipeline:
         if stage == "upscale" and image_name.startswith("upscaled_"):
             return image_name
         return f"{prefix}{image_name}"
+
+    def _default_stage_image_name(self, *, stage: str, input_image_path: Path | None = None) -> str:
+        if input_image_path is not None:
+            stem = re.sub(r"\s+", "_", Path(input_image_path).stem.strip()) or stage
+            stem = re.sub(r"[^A-Za-z0-9_-]", "_", stem)
+            return self._ensure_stage_prefix(stem, stage)
+        return stage
+
+    def _coerce_saved_path(self, actual_path: Path | bool | None, *, fallback: Path) -> Path | None:
+        if not actual_path:
+            return None
+        if isinstance(actual_path, Path):
+            return actual_path
+        return fallback
 
     def _merge_stage_negative(
         self, base_negative: str, apply_global: bool
@@ -811,6 +870,99 @@ class Pipeline:
             payload.update(extra)
         self._stage_events.append(payload)
 
+    def _classify_recovery_failure(
+        self,
+        *,
+        stage: str,
+        error: GenerateError | None = None,
+        diagnostics: dict[str, Any] | None = None,
+        reason_hint: str | None = None,
+    ) -> str | None:
+        if reason_hint:
+            return reason_hint
+        if error and error.details and error.details.get("recovery_classification"):
+            return str(error.details.get("recovery_classification"))
+        details = diagnostics or {}
+        summary = details.get("request_summary") or {}
+        error_message = str(details.get("error_message") or (error.message if error else "")).lower()
+        try:
+            status_code = int(summary.get("status"))
+        except (TypeError, ValueError):
+            status_code = None
+        if details.get("crash_suspected"):
+            return "request_connection_failure"
+        if details.get("webui_unavailable"):
+            if any(keyword in error_message for keyword in _RECOVERY_TIMEOUT_KEYWORDS):
+                return "request_timeout_escalated"
+            return "request_connection_failure"
+        if status_code == 500:
+            return "request_http_500"
+        if any(keyword in error_message for keyword in _RECOVERY_TIMEOUT_KEYWORDS):
+            return "request_timeout_escalated"
+        return None
+
+    def _should_attempt_stage_recovery(
+        self,
+        *,
+        stage: str,
+        error: GenerateError | None = None,
+        diagnostics: dict[str, Any] | None = None,
+        reason_hint: str | None = None,
+    ) -> tuple[bool, str | None]:
+        classification = self._classify_recovery_failure(
+            stage=stage,
+            error=error,
+            diagnostics=diagnostics,
+            reason_hint=reason_hint,
+        )
+        return classification in {
+            "true_ready_timeout",
+            "pre_stage_health_failed",
+            "request_connection_failure",
+            "request_http_500",
+            "request_timeout_escalated",
+        }, classification
+
+    def _attempt_webui_recovery(
+        self,
+        *,
+        stage: str,
+        reason: str,
+        max_attempts: int = 2,
+        base_delay: float = 1.0,
+        max_delay: float = 4.0,
+    ) -> bool:
+        manager = get_global_webui_process_manager()
+        if manager is None:
+            logger.warning(
+                "Executor recovery requested for %s but no WebUI process manager is available",
+                reason,
+            )
+            return False
+        logger.warning(
+            "Executor attempting WebUI recovery for stage=%s reason=%s",
+            stage,
+            reason,
+        )
+        try:
+            recovered = manager.restart_webui(
+                wait_ready=True,
+                max_attempts=max_attempts,
+                base_delay=base_delay,
+                max_delay=max_delay,
+            )
+        except Exception as exc:
+            logger.error(
+                "Executor WebUI recovery failed for stage=%s reason=%s: %s",
+                stage,
+                reason,
+                exc,
+            )
+            return False
+        if recovered:
+            self._true_ready_gated = False
+        return bool(recovered)
+
     def _ensure_webui_true_ready(self) -> None:
         """
         Defensive gate: ensure WebUI is truly ready (API + boot marker) before any generation.
@@ -822,27 +974,26 @@ class Pipeline:
             # Already gated in this pipeline run
             return
 
-        try:
-            from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
-            from src.api.webui_process_manager import get_global_webui_process_manager
+        from src.api.webui_api import WebUIAPI, WebUIReadinessTimeout
 
-            # Fast-path for normal runtime operation: if the API is already live,
-            # options are readable, and the backend is idle, generation can begin
-            # without re-checking a historical stdout boot marker.
-            if self._is_webui_generation_ready():
-                self._true_ready_gated = True
-                logger.info("Pipeline generation gate: WebUI live API readiness confirmed")
-                return
-
-            manager = get_global_webui_process_manager()
-            helper = WebUIAPI(client=self.client)
-
-            # Get the stdout tail callback from process manager if available
-            get_stdout_tail = None
-            if manager and hasattr(manager, "get_stdout_tail_text"):
-                get_stdout_tail = manager.get_stdout_tail_text
-
+        attempted_recovery = False
+        while True:
             try:
+                # Fast-path for normal runtime operation: if the API is already live,
+                # options are readable, and the backend is idle, generation can begin
+                # without re-checking a historical stdout boot marker.
+                if self._is_webui_generation_ready():
+                    self._true_ready_gated = True
+                    logger.info("Pipeline generation gate: WebUI live API readiness confirmed")
+                    return
+
+                manager = get_global_webui_process_manager()
+                helper = WebUIAPI(client=self.client)
+
+                get_stdout_tail = None
+                if manager and hasattr(manager, "get_stdout_tail_text"):
+                    get_stdout_tail = manager.get_stdout_tail_text
+
                 helper.wait_until_true_ready(
                     timeout_s=120.0,
                     poll_interval_s=2.0,
@@ -850,32 +1001,48 @@ class Pipeline:
                 )
                 self._true_ready_gated = True
                 logger.info("Pipeline generation gate: WebUI TRUE-READY confirmed")
-            except WebUIReadinessTimeout as e:
+                return
+            except WebUIReadinessTimeout as exc:
+                if not attempted_recovery and self._attempt_webui_recovery(
+                    stage="pre-generation-gate",
+                    reason="true_ready_timeout",
+                ):
+                    attempted_recovery = True
+                    continue
                 error = GenerateError(
                     code=GenerateErrorCode.PAYLOAD_VALIDATION,
-                    message=f"WebUI not truly ready within timeout: {e.checks_status}",
+                    message=f"WebUI not truly ready within timeout: {exc.checks_status}",
                     stage="pre-generation-gate",
                     details={
-                        "total_waited_s": e.total_waited,
-                        "checks": e.checks_status,
-                        "stdout_tail": e.stdout_tail[:1000],
+                        "total_waited_s": exc.total_waited,
+                        "checks": exc.checks_status,
+                        "stdout_tail": exc.stdout_tail[:1000],
+                        "recovery_classification": "true_ready_timeout",
+                        "recovery_attempted": attempted_recovery,
+                        "recovery_succeeded": False,
+                        "recovery_attempt_count": 1 if attempted_recovery else 0,
                     },
                 )
                 logger.error(
                     "Pipeline generation gate failed: WebUI not truly ready. Checks: %s",
-                    e.checks_status,
+                    exc.checks_status,
                 )
-                raise PipelineStageError(error) from e
-        except PipelineStageError:
-            raise
-        except Exception as exc:
-            logger.error("Unexpected error in true-readiness gate: %s", exc)
-            error = GenerateError(
-                code=GenerateErrorCode.UNKNOWN,
-                message=f"True-readiness gate check failed: {exc}",
-                stage="pre-generation-gate",
-            )
-            raise PipelineStageError(error) from exc
+                raise PipelineStageError(error) from exc
+            except PipelineStageError:
+                raise
+            except Exception as exc:
+                logger.error("Unexpected error in true-readiness gate: %s", exc)
+                error = GenerateError(
+                    code=GenerateErrorCode.UNKNOWN,
+                    message=f"True-readiness gate check failed: {exc}",
+                    stage="pre-generation-gate",
+                    details={
+                        "recovery_attempted": attempted_recovery,
+                        "recovery_succeeded": False,
+                        "recovery_attempt_count": 1 if attempted_recovery else 0,
+                    },
+                )
+                raise PipelineStageError(error) from exc
 
     def _is_webui_generation_ready(self) -> bool:
         """Return True when the WebUI API is already live and idle for generation."""
@@ -927,11 +1094,30 @@ class Pipeline:
         try:
             # Quick 5s check - just verify WebUI is responding
             if not self.client.check_connection(timeout=5.0):
+                recovered = self._attempt_webui_recovery(
+                    stage=stage,
+                    reason="pre_stage_health_failed",
+                )
+                if recovered:
+                    self._ensure_webui_true_ready()
+                    if self.client.check_connection(timeout=5.0):
+                        logger.info(
+                            "Recovered WebUI health before %s stage; continuing execution",
+                            stage,
+                        )
+                        return
                 error = GenerateError(
                     code=GenerateErrorCode.CONNECTION,
                     message=f"WebUI health check failed before {stage} stage",
                     stage=stage,
-                    details={"check_type": "pre-stage-health", "timeout": 5.0},
+                    details={
+                        "check_type": "pre-stage-health",
+                        "timeout": 5.0,
+                        "recovery_classification": "pre_stage_health_failed",
+                        "recovery_attempted": True,
+                        "recovery_succeeded": False,
+                        "recovery_attempt_count": 1,
+                    },
                 )
                 logger.error(
                     "PR-HARDEN-003: Pre-stage health check failed for %s - WebUI not responding",
@@ -1013,6 +1199,16 @@ class Pipeline:
 
     def _generate_images(self, stage: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Call the shared generate_images API for the requested stage."""
+        return self._generate_images_with_recovery(stage, payload, recovery_attempted=False)
+
+    def _generate_images_with_recovery(
+        self,
+        stage: str,
+        payload: dict[str, Any],
+        *,
+        recovery_attempted: bool,
+    ) -> dict[str, Any] | None:
+        """Call the shared generate_images API for the requested stage with bounded recovery."""
 
         # Defensive gate: ensure WebUI is truly ready before first generation call
         self._ensure_webui_true_ready()
@@ -1051,6 +1247,28 @@ class Pipeline:
                 message="Generation failed without details",
                 stage=stage,
             )
+            diag_details = (error.details or {}).get("diagnostics")
+            should_recover, recovery_reason = self._should_attempt_stage_recovery(
+                stage=stage,
+                error=error,
+                diagnostics=diag_details if isinstance(diag_details, dict) else None,
+            )
+            if should_recover and not recovery_attempted:
+                recovered = self._attempt_webui_recovery(
+                    stage=stage,
+                    reason=recovery_reason or "request_connection_failure",
+                )
+                if recovered:
+                    logger.warning(
+                        "Executor recovered WebUI for stage=%s reason=%s; retrying request once",
+                        stage,
+                        recovery_reason,
+                    )
+                    return self._generate_images_with_recovery(
+                        stage,
+                        payload,
+                        recovery_attempted=True,
+                    )
             logger.error(
                 "generate_images failed for %s (%s): %s",
                 stage,
@@ -1058,9 +1276,14 @@ class Pipeline:
                 error.message,
             )
             exc = PipelineStageError(error)
-            diag_details = (error.details or {}).get("diagnostics")
             request_summary = diag_details.get("request_summary") if diag_details else None
-            envelope_context: dict[str, Any] = {"error_code": error.code.value}
+            envelope_context: dict[str, Any] = {
+                "error_code": error.code.value,
+                "recovery_attempted": recovery_attempted or should_recover,
+                "recovery_reason": recovery_reason,
+                "recovery_succeeded": False,
+                "recovery_attempt_count": 1 if (recovery_attempted or should_recover) else 0,
+            }
             if diag_details:
                 envelope_context["diagnostics"] = diag_details
                 if request_summary:
@@ -1712,8 +1935,7 @@ class Pipeline:
             return None
 
         # Save cleaned image
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        image_name = f"img2img_{timestamp}"
+        image_name = self._default_stage_image_name(stage="img2img", input_image_path=input_image_path)
         image_path = run_dir / "img2img" / f"{image_name}.png"
 
         # Extract stage history from input image
@@ -1727,7 +1949,7 @@ class Pipeline:
         metadata = {
             "name": image_name,
             "stage": "img2img",
-            "timestamp": timestamp,
+            "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
             "prompt": prompt,
             "input_image": str(input_image_path),
             "config": self._clean_metadata_payload(payload),
@@ -1753,6 +1975,7 @@ class Pipeline:
         actual_path = save_image_from_base64(
             response["images"][0], image_path, metadata_builder=metadata_builder
         )
+        actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
         if actual_path:
             self.logger.save_manifest(run_dir, actual_path.stem, metadata)
             self._last_img2img_result = metadata
@@ -2037,8 +2260,10 @@ class Pipeline:
         if image_name:
             final_image_name = image_name
         else:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            final_image_name = f"adetailer_{timestamp}"
+            final_image_name = self._default_stage_image_name(
+                stage="adetailer",
+                input_image_path=input_image_path,
+            )
         image_path = run_dir / f"{final_image_name}.png"
         # PR-FILENAME-001: Apply collision failsafe
         from src.utils.file_io import get_unique_output_path
@@ -2089,20 +2314,26 @@ class Pipeline:
         actual_path = save_image_from_base64(
             response["images"][0], image_path, metadata_builder=metadata_builder
         )
+        actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
         if actual_path:
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
             manifest_dir = Path(run_dir) / "manifests"
             # Use actual image stem (includes _copy suffix if collision occurred)
             manifest_path = manifest_dir / f"{actual_path.stem}.json"
             try:
-                # Ensure parent directory exists before writing
-                manifest_path.parent.mkdir(exist_ok=True, parents=True)
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
-                self._maybe_write_prompt_optimization_sidecar(
+                metadata = self._attach_manifest_artifact(
+                    metadata=metadata,
+                    stage="adetailer",
+                    primary_path=actual_path,
                     manifest_path=manifest_path,
-                    result=prompt_optimizer_result,
-                    config=prompt_optimizer_config,
+                    output_paths=[str(actual_path)],
+                    input_image_path=input_image_path,
+                )
+                self._write_manifest_file(
+                    manifest_path=manifest_path,
+                    metadata=metadata,
+                    prompt_optimizer_result=prompt_optimizer_result,
+                    prompt_optimizer_config=prompt_optimizer_config,
                 )
             except Exception as e:
                 logger.error(f"Error writing manifest file {manifest_path}: {e}")
@@ -2164,8 +2395,7 @@ class Pipeline:
             logger.error("Upscale failed")
             return None
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        image_name = f"upscaled_{input_image_path.stem}_{timestamp}"
+        image_name = self._default_stage_image_name(stage="upscale", input_image_path=input_image_path)
         image_path = run_dir / "upscaled" / f"{image_name}.png"
 
         # Extract stage history from input image
@@ -2179,7 +2409,7 @@ class Pipeline:
         metadata = {
             "name": image_name,
             "stage": "upscale",
-            "timestamp": timestamp,
+            "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
             "input_image": str(input_image_path),
             "config": config,
             "path": str(image_path),
@@ -2206,6 +2436,7 @@ class Pipeline:
         actual_path = save_image_from_base64(
             response["image"], image_path, metadata_builder=metadata_builder
         )
+        actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
         if actual_path:
             self.logger.save_manifest(run_dir, actual_path.stem, metadata)
             logger.info("Upscale completed successfully")
@@ -2932,7 +3163,20 @@ class Pipeline:
 
             # Generate image
             self._apply_webui_defaults_once()
-            response = self._generate_images("txt2img", payload)
+            def on_txt2img_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
+                if self.progress_controller:
+                    eta_text = f"ETA: {int(eta)}s" if eta else "ETA: --"
+                    if current_step is not None and total_steps is not None:
+                        eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
+                    self.progress_controller.report_progress("txt2img", percent, eta_text)
+
+            response = self._generate_images_with_progress(
+                "txt2img",
+                payload,
+                poll_interval=0.5,
+                progress_callback=on_txt2img_progress,
+                stage_label="txt2img",
+            )
             if not response or "images" not in response or not response["images"]:
                 logger.error("txt2img failed - no images returned")
                 return None
@@ -2948,6 +3192,7 @@ class Pipeline:
             saved_paths = []
             batch_size = payload.get('batch_size', 1)
             n_iter = payload.get('n_iter', 1)
+            expected_image_count = max(1, int(batch_size) * int(n_iter))
             run_dir = self._resolve_run_dir(output_dir)
             base_metadata = {
                 "stage": "txt2img",
@@ -2972,6 +3217,7 @@ class Pipeline:
                 "vae": vae_name,
                 "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
             }
+            saved_variants: list[tuple[Path, dict[str, Any]]] = []
             
             for batch_idx in range(num_images_received):
                 # Multiple images: use suffix _batch0, _batch1, etc.
@@ -3009,22 +3255,10 @@ class Pipeline:
                     continue
                     
                 saved_paths.append(actual_path)
-                
-                # Save separate manifest for each variant using the batch_image_name
                 manifest_dir = output_dir / "manifests"
                 manifest_dir.mkdir(exist_ok=True, parents=True)
                 variant_manifest_path = manifest_dir / f"{actual_path.stem}.json"
-                try:
-                    with open(variant_manifest_path, "w", encoding="utf-8") as f:
-                        json.dump(image_metadata, f, indent=2, ensure_ascii=False)
-                    logger.debug(f"Saved variant manifest: {variant_manifest_path.name}")
-                    self._maybe_write_prompt_optimization_sidecar(
-                        manifest_path=variant_manifest_path,
-                        result=prompt_optimizer_result,
-                        config=prompt_optimizer_config,
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to save variant manifest {variant_manifest_path}: {e}")
+                saved_variants.append((variant_manifest_path, image_metadata))
             
             # Use the first image for metadata and return value (backward compatibility)
             if saved_paths:
@@ -3034,6 +3268,46 @@ class Pipeline:
             else:
                 logger.error("No images were saved successfully")
                 return None
+
+            saved_image_count = len(saved_paths)
+            partial_success = (
+                0 < saved_image_count < expected_image_count
+                or 0 < num_images_received < expected_image_count
+                or saved_image_count < num_images_received
+            )
+            if partial_success:
+                logger.warning(
+                    "txt2img partial success: expected=%s returned=%s saved=%s",
+                    expected_image_count,
+                    num_images_received,
+                    saved_image_count,
+                )
+
+            for variant_manifest_path, image_metadata in saved_variants:
+                image_metadata["expected_images"] = expected_image_count
+                image_metadata["returned_images"] = num_images_received
+                image_metadata["saved_images"] = saved_image_count
+                image_metadata["partial_success"] = partial_success
+                image_metadata["recovery_classification"] = (
+                    "partial_image_response" if partial_success else None
+                )
+                image_metadata = self._attach_manifest_artifact(
+                    metadata=image_metadata,
+                    stage="txt2img",
+                    primary_path=image_metadata.get("path") or image_metadata.get("output_path") or "",
+                    manifest_path=variant_manifest_path,
+                    output_paths=[image_metadata.get("path") or image_metadata.get("output_path") or ""],
+                )
+                try:
+                    self._write_manifest_file(
+                        manifest_path=variant_manifest_path,
+                        metadata=image_metadata,
+                        prompt_optimizer_result=prompt_optimizer_result,
+                        prompt_optimizer_config=prompt_optimizer_config,
+                    )
+                    logger.debug(f"Saved variant manifest: {variant_manifest_path.name}")
+                except Exception as e:
+                    logger.error(f"Failed to save variant manifest {variant_manifest_path}: {e}")
             
             if True:  # Keep original indentation for metadata block
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -3056,6 +3330,11 @@ class Pipeline:
                     "output_path": str(image_path),
                     "path": str(image_path),
                     "all_paths": [str(p) for p in saved_paths],  # All generated images for batch processing
+                    "expected_images": expected_image_count,
+                    "returned_images": num_images_received,
+                    "saved_images": saved_image_count,
+                    "partial_success": partial_success,
+                    "recovery_classification": "partial_image_response" if partial_success else None,
                     "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
                 }
 
@@ -3249,20 +3528,26 @@ class Pipeline:
             actual_path = save_image_from_base64(
                 response["images"][0], image_path, metadata_builder=metadata_builder
             )
+            actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
             if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
                 # Use actual stem from saved path (includes _copy suffix if collision)
                 manifest_path = manifest_dir / f"{actual_path.stem}.json"
                 try:
-                    # Ensure parent directory exists before writing
-                    manifest_path.parent.mkdir(exist_ok=True, parents=True)
-                    with open(manifest_path, "w", encoding="utf-8") as f:
-                        json.dump(metadata, f, indent=2, ensure_ascii=False)
-                    self._maybe_write_prompt_optimization_sidecar(
+                    metadata = self._attach_manifest_artifact(
+                        metadata=metadata,
+                        stage="img2img",
+                        primary_path=actual_path,
                         manifest_path=manifest_path,
-                        result=prompt_optimizer_result,
-                        config=prompt_optimizer_config,
+                        output_paths=[str(actual_path)],
+                        input_image_path=input_image_path,
+                    )
+                    self._write_manifest_file(
+                        manifest_path=manifest_path,
+                        metadata=metadata,
+                        prompt_optimizer_result=prompt_optimizer_result,
+                        prompt_optimizer_config=prompt_optimizer_config,
                     )
                 except Exception as e:
                     logger.error(f"Error writing manifest file {manifest_path}: {e}")
@@ -3430,8 +3715,18 @@ class Pipeline:
             manifest_dir = output_dir / "manifests"
             manifest_dir.mkdir(exist_ok=True, parents=True)
             manifest_path = manifest_dir / f"{video_path.stem}.json"
-            with open(manifest_path, "w", encoding="utf-8") as handle:
-                json.dump(metadata, handle, indent=2, ensure_ascii=False)
+            metadata["artifact"] = artifact_manifest_payload(
+                stage="animatediff",
+                image_or_output_path=video_path,
+                manifest_path=manifest_path,
+                output_paths=[str(video_path)],
+                input_image_path=input_image_path,
+                artifact_type="video",
+            )
+            self._write_manifest_file(
+                manifest_path=manifest_path,
+                metadata=metadata,
+            )
 
             self._record_stage_event(
                 "animatediff",
@@ -3535,6 +3830,15 @@ class Pipeline:
                     "was_cropped": result.preprocess.was_cropped,
                 },
             }
+            metadata["artifact"] = artifact_manifest_payload(
+                stage="svd_native",
+                image_or_output_path=primary_path or "",
+                manifest_path=metadata["manifest_path"],
+                output_paths=output_paths,
+                thumbnail_path=metadata["thumbnail_path"],
+                input_image_path=metadata["source_image_path"],
+                artifact_type="video",
+            )
             self._record_stage_event(
                 "svd_native",
                 "exit",
@@ -3851,16 +4155,25 @@ class Pipeline:
             actual_path = save_image_from_base64(
                 image_data, image_path, metadata_builder=metadata_builder
             )
+            actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
             if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
                 manifest_dir = Path(output_dir) / "manifests"
                 # Use actual stem from saved path (includes _copy suffix if collision)
                 manifest_path = manifest_dir / f"{actual_path.stem}.json"
                 try:
-                    # Ensure parent directory exists before writing
-                    manifest_path.parent.mkdir(exist_ok=True, parents=True)
-                    with open(manifest_path, "w", encoding="utf-8") as f:
-                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                    metadata = self._attach_manifest_artifact(
+                        metadata=metadata,
+                        stage="upscale",
+                        primary_path=actual_path,
+                        manifest_path=manifest_path,
+                        output_paths=[str(actual_path)],
+                        input_image_path=input_image_path,
+                    )
+                    self._write_manifest_file(
+                        manifest_path=manifest_path,
+                        metadata=metadata,
+                    )
                 except Exception as e:
                     logger.error(f"Error writing manifest file {manifest_path}: {e}")
 

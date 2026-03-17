@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.controller.app_controller import AppController
@@ -8,7 +9,16 @@ from src.controller.app_controller import AppController
 def _build_controller() -> AppController:
     with patch("src.controller.app_controller.AppController.__init__", return_value=None):
         controller = AppController.__new__(AppController)
-    controller.job_service = Mock()
+    enqueue_calls: list[tuple[list[object], object]] = []
+
+    def _enqueue_njrs(njrs, request):
+        enqueue_calls.append((list(njrs), request))
+        return [record.job_id for record in njrs]
+
+    controller.job_service = SimpleNamespace(
+        enqueue_njrs=Mock(side_effect=_enqueue_njrs),
+        _enqueue_calls=enqueue_calls,
+    )
     controller._append_log = Mock()
     controller._api_client = Mock()
     controller.cancel_token = None
@@ -50,8 +60,7 @@ def test_reprocess_with_prompt_delta_uses_metadata_baseline(tmp_path) -> None:
     )
 
     assert submitted == 1
-    job = controller.job_service.submit_queued.call_args[0][0]
-    njr = job._normalized_record
+    njr = controller.job_service._enqueue_calls[0][0][0]
     assert njr.positive_prompt == "portrait photo, bending forward"
     assert njr.negative_prompt == "blurry, extra hands"
     assert njr.base_model == "modelA.safetensors"
@@ -61,7 +70,8 @@ def test_reprocess_with_prompt_delta_uses_metadata_baseline(tmp_path) -> None:
     assert njr.config["adetailer"]["adetailer_negative_prompt"] == "blurry, extra hands"
     assert njr.config["vae"] == "vaeA"
     assert njr.config["txt2img"]["model"] == "modelA.safetensors"
-    assert job.source == "review_tab"
+    assert njr.extra_metadata["reprocess"]["source"] == "review_tab"
+    assert njr.extra_metadata["reprocess"]["source_items"][0]["metadata"]["baseline_source"] == "embedded_metadata"
 
 
 def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) -> None:
@@ -81,8 +91,7 @@ def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) 
     )
 
     assert submitted == 1
-    job = controller.job_service.submit_queued.call_args[0][0]
-    njr = job._normalized_record
+    njr = controller.job_service._enqueue_calls[0][0][0]
     assert njr.positive_prompt == "new prompt"
     assert njr.negative_prompt == ""
     assert njr.config["adetailer"]["adetailer_prompt"] == "new prompt"
@@ -115,8 +124,7 @@ def test_reprocess_with_prompt_modify_short_delta_preserves_baseline(tmp_path) -
     )
 
     assert submitted == 1
-    job = controller.job_service.submit_queued.call_args[0][0]
-    njr = job._normalized_record
+    njr = controller.job_service._enqueue_calls[0][0][0]
     assert njr.positive_prompt == "portrait photo, studio lighting, better teeth"
     assert njr.negative_prompt == "extra tongue"
     assert njr.config["adetailer"]["adetailer_prompt"] == "portrait photo, studio lighting, better teeth"
@@ -140,8 +148,8 @@ def test_reprocess_img2img_fallback_sets_stage_steps(tmp_path) -> None:
     )
 
     assert submitted == 1
-    job = controller.job_service.submit_queued.call_args[0][0]
-    stage = job._normalized_record.stage_chain[0]
+    njr = controller.job_service._enqueue_calls[0][0][0]
+    stage = njr.stage_chain[0]
     assert stage.stage_type == "img2img"
     assert stage.steps == 20
     assert stage.cfg_scale == 7.0
@@ -187,8 +195,8 @@ def test_reprocess_batch_size_groups_only_compatible_jobs(tmp_path) -> None:
     )
 
     assert submitted == 2
-    jobs = [call.args[0] for call in controller.job_service.submit_queued.call_args_list]
-    batch_sizes = sorted(len(job._normalized_record.input_image_paths) for job in jobs)
+    jobs = controller.job_service._enqueue_calls[0][0]
+    batch_sizes = sorted(len(job.input_image_paths) for job in jobs)
     assert batch_sizes == [1, 2]
 
 

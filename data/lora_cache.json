@@ -111,6 +111,14 @@
     "source": "none",
     "description": ""
   },
+  "epiCRealnessRC1": {
+    "name": "epiCRealnessRC1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\epiCRealnessRC1.safetensors",
+    "file_size": 228450300,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
   "finenude_v0_2a": {
     "name": "finenude_v0_2a",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\finenude_v0_2a.safetensors",

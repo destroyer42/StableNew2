@@ -85,7 +85,7 @@ class TestNJRPreferredExecution:
 
         result = mock_app_controller._execute_job(job)
 
-        assert result["success"] is False
+        assert result["success"] is None
         assert "NJR execution failed" in result["error"]
         assert result["metadata"]["execution_path"] == "njr"
         assert result["metadata"]["job_id"] == job.job_id
@@ -98,7 +98,7 @@ class TestNJRPreferredExecution:
 
         result = mock_app_controller._execute_job(job)
 
-        assert result["success"] is False
+        assert result["success"] is None
         assert "missing normalized_record" in (result.get("error") or "").lower()
         assert result["metadata"]["execution_path"] == "missing_njr"
         assert result["metadata"]["job_id"] == job.job_id
@@ -114,7 +114,7 @@ class TestNJRPreferredExecution:
 
         result = mock_app_controller._execute_job(job)
 
-        assert result["success"] is False
+        assert result["success"] is None
         assert result["metadata"]["execution_path"] == "missing_njr"
         mock_app_controller._run_pipeline_via_runner_only.assert_not_called()
 
@@ -125,7 +125,7 @@ class TestNJRPreferredExecution:
 
         result = mock_app_controller._execute_job(job)
 
-        assert result["success"] is False
+        assert result["success"] is None
         assert result["metadata"]["execution_path"] == "missing_njr"
         mock_app_controller.pipeline_controller._run_job.assert_not_called()
         mock_app_controller._run_pipeline_via_runner_only.assert_not_called()
@@ -137,7 +137,7 @@ class TestNJRPreferredExecution:
 
         result = mock_app_controller._execute_job(job)
 
-        assert result["success"] is False
+        assert result["success"] is None
         assert "missing normalized_record" in (result.get("error") or "").lower()
         assert result["metadata"]["execution_path"] == "missing_njr"
         mock_app_controller.pipeline_controller._run_job.assert_not_called()

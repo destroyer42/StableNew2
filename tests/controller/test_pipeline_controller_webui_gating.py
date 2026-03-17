@@ -9,29 +9,24 @@ def test_run_blocked_when_webui_not_ready(monkeypatch):
     controller = PipelineController()
     controller._webui_connection = mock.Mock()
     controller._webui_connection.ensure_connected.return_value = WebUIConnectionState.ERROR
-    controller._build_pipeline_config_from_state = mock.Mock()
+    controller.get_preview_jobs = mock.Mock()
 
     result = controller.start_pipeline()
 
     assert result is False
-    controller._build_pipeline_config_from_state.assert_not_called()
+    controller.get_preview_jobs.assert_not_called()
 
 
 def test_run_allowed_when_webui_ready(monkeypatch):
     controller = PipelineController()
     controller._webui_connection = mock.Mock()
     controller._webui_connection.ensure_connected.return_value = WebUIConnectionState.READY
-    controller._build_pipeline_config_from_state = mock.Mock(return_value=mock.Mock())
-    controller._run_pipeline_job = mock.Mock(return_value={})
+    controller._submit_preview_jobs_for_run = mock.Mock(return_value=True)
 
-    # run payload immediately instead of async submission
-    controller._job_controller.submit_pipeline_run = lambda fn: fn()
-
-    result = controller.start_pipeline()
+    result = controller.start_pipeline(run_config={"run_mode": "queue", "prompt_source": "manual"})
 
     assert result is True
-    controller._build_pipeline_config_from_state.assert_called_once()
-    controller._run_pipeline_job.assert_called_once()
+    controller._submit_preview_jobs_for_run.assert_called_once()
 
 
 def test_on_set_auto_run_updates_job_service_and_starts_when_queued():

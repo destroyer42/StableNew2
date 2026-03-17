@@ -10,6 +10,7 @@ from typing import Any
 from PIL import Image
 
 from src.history.history_record import HistoryRecord
+from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.pipeline.job_models_v2 import JobView
 from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import Job, JobStatus
@@ -416,7 +417,7 @@ class JobHistoryService:
         self, image_path: Path, run_dir: Path, run_metadata: dict[str, Any]
     ) -> dict[str, Any]:
         run_id = str(run_metadata.get("run_id") or run_dir.name)
-        return {
+        payload = {
             "job_id": "",
             "run_id": run_id,
             "stage": self._infer_stage(image_path),
@@ -434,6 +435,12 @@ class JobHistoryService:
                 "config_hash": "",
             },
         }
+        payload["artifact"] = artifact_manifest_payload(
+            stage=payload["stage"],
+            image_or_output_path=image_path,
+            manifest_path=self._find_manifest_path(image_path),
+        )
+        return payload
 
     def _read_json(self, path: Path) -> dict[str, Any] | None:
         try:

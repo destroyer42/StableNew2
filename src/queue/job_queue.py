@@ -3,9 +3,8 @@
 
 """In-memory job queue with simple priority + FIFO behavior.
 
-PR-CORE1-B2: For jobs created after v2.6, NormalizedJobRecord (NJR) is required
-for execution. The pipeline_config field is legacy-only and should not be relied
-upon for new queue jobs.
+PR-CORE1-060: queue runtime is NJR-only for active jobs. Queue items rely on
+`_normalized_record`, `config_snapshot`, and `snapshot`, not `pipeline_config`.
 """
 
 from __future__ import annotations
@@ -13,6 +12,7 @@ from __future__ import annotations
 import heapq
 from collections import deque
 from collections.abc import Callable, Iterable
+from datetime import datetime
 from threading import Lock
 from typing import TYPE_CHECKING
 
@@ -33,6 +33,7 @@ class JobQueue:
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = Lock()
+        self._paused = False
         self._history_store = history_store
         # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
         self._finalized_jobs_order: deque[str] = deque(maxlen=100)
@@ -50,12 +51,67 @@ class JobQueue:
 
     def get_next_job(self) -> Job | None:
         with self._lock:
+            if self._paused:
+                return None
             while self._queue:
                 _, _, job_id = heapq.heappop(self._queue)
                 job = self._jobs.get(job_id)
                 if job and job.status == JobStatus.QUEUED:
                     return job
             return None
+
+    def pause(self) -> None:
+        with self._lock:
+            self._paused = True
+        self._notify_state_listeners()
+
+    def resume(self) -> None:
+        with self._lock:
+            self._paused = False
+        self._notify_state_listeners()
+
+    def is_paused(self) -> bool:
+        with self._lock:
+            return bool(self._paused)
+
+    def pause_running_job(self) -> Job | None:
+        self.pause()
+        with self._lock:
+            return next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
+
+    def resume_running_job(self) -> Job | None:
+        self.resume()
+        with self._lock:
+            return next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
+
+    def cancel_running_job(self, *, return_to_queue: bool = False) -> Job | None:
+        with self._lock:
+            running = next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
+            if running is None:
+                return None
+            if return_to_queue:
+                self._counter += 1
+                running.status = JobStatus.QUEUED
+                running.updated_at = datetime.utcnow()
+                running.completed_at = None
+                running.started_at = None
+                running.error_message = None
+                running.result = None
+                running.progress = 0.0
+                running.eta_seconds = None
+                running.execution_metadata.last_control_action = "return_to_queue"
+                running.execution_metadata.return_to_queue_count += 1
+                self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != running.job_id]
+                heapq.heappush(self._queue, (-int(running.priority), self._counter, running.job_id))
+                heapq.heapify(self._queue)
+        if return_to_queue:
+            self._notify_status(running, JobStatus.QUEUED)
+            self._notify_state_listeners()
+        else:
+            cancelled = self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
+            if cancelled is not None:
+                cancelled.execution_metadata.last_control_action = "cancelled"
+        return running
 
     def mark_running(self, job_id: str) -> None:
         self._update_status(job_id, JobStatus.RUNNING)

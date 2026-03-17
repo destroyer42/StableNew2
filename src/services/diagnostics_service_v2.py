@@ -24,12 +24,16 @@ class DiagnosticsServiceV2:
         reason: str,
         context: dict | None = None,
         webui_tail: Mapping[str, Any] | None = None,
+        include_process_state: bool = False,
+        include_queue_state: bool = False,
     ) -> Path:
         return build_crash_bundle(
             output_dir=self.output_dir,
             reason=reason,
             context=context or {},
             webui_tail=webui_tail,
+            include_process_state=include_process_state,
+            include_queue_state=include_queue_state,
         )
 
     def build_async(
@@ -77,7 +81,13 @@ class DiagnosticsServiceV2:
 
             def _worker() -> None:
                 try:
-                    self.build(reason=reason, context=context_dict, webui_tail=webui_tail)
+                    self.build(
+                        reason=reason,
+                        context=context_dict,
+                        webui_tail=webui_tail,
+                        include_process_state=include_process_state,
+                        include_queue_state=include_queue_state,
+                    )
                 except Exception:
                     pass
 

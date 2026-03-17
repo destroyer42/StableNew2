@@ -43,7 +43,7 @@ class TestNIterFilenames:
         mock_generate.return_value = {
             "images": ["base64_img0", "base64_img1", "base64_img2"]
         }
-        mock_save.return_value = True
+        mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
             "txt2img": {
@@ -91,7 +91,7 @@ class TestNIterFilenames:
         mock_generate.return_value = {
             "images": ["base64_img0", "base64_img1", "base64_img2"]
         }
-        mock_save.return_value = True
+        mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
             "txt2img": {
@@ -137,7 +137,7 @@ class TestNIterFilenames:
         """Test that single image doesn't add _batch suffix."""
         # Setup: batch_size=1, n_iter=1 → WebUI returns 1 image
         mock_generate.return_value = {"images": ["base64_img0"]}
-        mock_save.return_value = True
+        mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
             "txt2img": {
@@ -179,7 +179,7 @@ class TestNIterFilenames:
         mock_generate.return_value = {
             "images": ["img0", "img1", "img2", "img3"]
         }
-        mock_save.return_value = True
+        mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
             "txt2img": {
@@ -243,7 +243,7 @@ class TestNIterRegression:
         mock_generate.return_value = {
             "images": ["iter0", "iter1", "iter2", "iter3", "iter4"]
         }
-        mock_save.return_value = True
+        mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
             "txt2img": {
@@ -289,3 +289,51 @@ class TestNIterRegression:
             "portrait_batch4.png",
         }
         assert set(saved_filenames) == expected_filenames
+
+
+@patch("src.pipeline.executor.save_image_from_base64")
+@patch.object(Pipeline, "_generate_images")
+@patch.object(Pipeline, "_ensure_webui_true_ready")
+@patch.object(Pipeline, "_apply_webui_defaults_once")
+def test_partial_image_response_marks_degraded_metadata(
+    mock_defaults,
+    mock_ready,
+    mock_generate,
+    mock_save,
+    tmp_path,
+):
+    client = SDWebUIClient(base_url="http://127.0.0.1:7860")
+    pipeline = Pipeline(client, StructuredLogger())
+
+    mock_generate.return_value = {
+        "images": ["base64_img0", "base64_img1"],
+        "info": {},
+    }
+    mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
+
+    config = {
+        "txt2img": {
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "width": 512,
+            "height": 512,
+            "n_iter": 1,
+            "batch_size": 3,
+        },
+        "batch_size": 3,
+    }
+
+    result = pipeline.run_txt2img_stage(
+        prompt="test prompt",
+        negative_prompt="test negative",
+        config=config,
+        output_dir=tmp_path / "txt2img",
+        image_name="partial_case",
+    )
+
+    assert result is not None
+    assert result["partial_success"] is True
+    assert result["expected_images"] == 3
+    assert result["returned_images"] == 2
+    assert result["saved_images"] == 2
+    assert result["recovery_classification"] == "partial_image_response"

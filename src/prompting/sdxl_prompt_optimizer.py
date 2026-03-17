@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import re
 
 from src.prompting.prompt_bucket_rules import PromptBucketRules
 from src.prompting.prompt_classifier import classify_chunk_rule_based, classify_chunk_score_based
@@ -19,6 +20,10 @@ from src.prompting.prompt_types import (
     PromptOptimizationPairResult,
     PromptOptimizationResult,
 )
+
+_EMBEDDING_TOKEN_RE = re.compile(r"<\s*embedding:[^>]+>", re.IGNORECASE)
+_EMBEDDING_ONLY_RE = re.compile(r"^(?:\s*<\s*embedding:[^>]+>\s*)+$", re.IGNORECASE)
+_LORA_TOKEN_RE = re.compile(r"<\s*lora\s*:[^>]+>", re.IGNORECASE)
 
 
 class SDXLPromptOptimizer:
@@ -61,8 +66,10 @@ class SDXLPromptOptimizer:
                 polarity="positive",
                 changed=False,
             )
-        prompt_chunks = self._build_prompt_chunks(chunks, "positive")
+        prompt_chunks, prefix_embeddings = self._build_prompt_chunks(chunks, "positive")
         buckets = self._bucketize(prompt_chunks, POSITIVE_BUCKET_ORDER)
+        if prefix_embeddings:
+            buckets["embedding_tokens"] = prefix_embeddings
         if self.config.allow_subject_anchor_boost and len(prompt_chunks) >= self.config.subject_anchor_boost_min_chunk_count:
             buckets = self._apply_subject_anchor_boost(buckets)
         dropped: list[str] = []
@@ -88,8 +95,10 @@ class SDXLPromptOptimizer:
                 polarity="negative",
                 changed=False,
             )
-        prompt_chunks = self._build_prompt_chunks(chunks, "negative")
+        prompt_chunks, prefix_embeddings = self._build_prompt_chunks(chunks, "negative")
         buckets = self._bucketize(prompt_chunks, NEGATIVE_BUCKET_ORDER)
+        if prefix_embeddings:
+            buckets["embedding_tokens"] = prefix_embeddings
         dropped: list[str] = []
         if self.config.dedupe_enabled:
             buckets, dropped = self._dedupe_bucket_map(buckets, NEGATIVE_BUCKET_ORDER)
@@ -103,24 +112,45 @@ class SDXLPromptOptimizer:
             changed=optimized != original,
         )
 
-    def _build_prompt_chunks(self, chunks: list[str], polarity: str) -> list[PromptChunk]:
+    def _build_prompt_chunks(self, chunks: list[str], polarity: str) -> tuple[list[PromptChunk], list[str]]:
         result: list[PromptChunk] = []
+        prefix_embeddings: list[str] = []
         for chunk in chunks:
             original = str(chunk or "").strip()
             if not original:
                 continue
+            if _is_embedding_only_chunk(original):
+                prefix_embeddings.append(original)
+                continue
+            working_chunk = original
+            if polarity == "positive":
+                working_chunk, lora_tokens = _extract_lora_tokens(original)
+                for token in lora_tokens:
+                    result.append(
+                        PromptChunk(
+                            original_text=token,
+                            normalized_text=normalize_for_match(token),
+                            dedupe_key=build_dedupe_key(token),
+                            polarity=polarity,  # type: ignore[arg-type]
+                            bucket="lora_tokens",
+                            weight_syntax_detected=detect_weight_syntax(token),
+                            lora_syntax_detected=True,
+                        )
+                    )
+            if not working_chunk:
+                continue
             result.append(
                 PromptChunk(
-                    original_text=original,
-                    normalized_text=normalize_for_match(original),
-                    dedupe_key=build_dedupe_key(original),
+                    original_text=working_chunk,
+                    normalized_text=normalize_for_match(working_chunk),
+                    dedupe_key=build_dedupe_key(working_chunk),
                     polarity=polarity,  # type: ignore[arg-type]
-                    bucket=self._classify(original, polarity),
-                    weight_syntax_detected=detect_weight_syntax(original),
-                    lora_syntax_detected=detect_lora_syntax(original),
+                    bucket=self._classify(working_chunk, polarity),
+                    weight_syntax_detected=detect_weight_syntax(working_chunk),
+                    lora_syntax_detected=detect_lora_syntax(working_chunk),
                 )
             )
-        return result
+        return result, prefix_embeddings
 
     def _bucketize(self, chunks: list[PromptChunk], ordered_buckets: tuple[str, ...]) -> dict[str, list[str]]:
         buckets: dict[str, list[str]] = OrderedDict((bucket, []) for bucket in ordered_buckets)
@@ -137,6 +167,13 @@ class SDXLPromptOptimizer:
         seen: set[str] = set()
         kept_map: dict[str, list[str]] = OrderedDict()
         dropped: list[str] = []
+        embedding_tokens = list(buckets.get("embedding_tokens") or [])
+        if embedding_tokens:
+            kept_map["embedding_tokens"] = dedupe_bucket_failsafe(embedding_tokens, dropped)
+            for item in kept_map["embedding_tokens"]:
+                dedupe_key = build_dedupe_key(item)
+                if dedupe_key:
+                    seen.add(dedupe_key)
         for bucket in ordered_buckets:
             items = list(buckets.get(bucket) or [])
             kept_bucket: list[str] = []
@@ -154,12 +191,17 @@ class SDXLPromptOptimizer:
 
     def _join_positive_buckets(self, buckets: dict[str, list[str]]) -> str:
         values: list[str] = []
+        values.extend(buckets.get("embedding_tokens", []))
         for bucket in POSITIVE_BUCKET_ORDER:
+            if bucket == "lora_tokens":
+                continue
             values.extend(buckets.get(bucket, []))
+        values.extend(buckets.get("lora_tokens", []))
         return ", ".join(values)
 
     def _join_negative_buckets(self, buckets: dict[str, list[str]]) -> str:
         values: list[str] = []
+        values.extend(buckets.get("embedding_tokens", []))
         for bucket in NEGATIVE_BUCKET_ORDER:
             values.extend(buckets.get(bucket, []))
         return ", ".join(values)
@@ -172,3 +214,16 @@ def dedupe_bucket_failsafe(kept_bucket: list[str], dropped: list[str]) -> list[s
     kept, dropped_bucket = dedupe_prompt_chunks(kept_bucket)
     dropped.extend(dropped_bucket)
     return kept
+
+
+def _extract_lora_tokens(chunk: str) -> tuple[str, list[str]]:
+    tokens = [match.group(0).strip() for match in _LORA_TOKEN_RE.finditer(chunk)]
+    if not tokens:
+        return chunk, []
+    text_without_loras = _LORA_TOKEN_RE.sub(" ", chunk)
+    cleaned = " ".join(text_without_loras.split()).strip(" ,")
+    return cleaned, tokens
+
+
+def _is_embedding_only_chunk(chunk: str) -> bool:
+    return bool(_EMBEDDING_ONLY_RE.fullmatch(str(chunk or "").strip()))

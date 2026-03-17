@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from src.config.app_config import get_jsonl_log_config
+from src.services.queue_store_v2 import get_queue_state_path
 from src.utils.logger import InMemoryLogHandler
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 from src.utils.system_info_v2 import collect_system_snapshot
@@ -77,6 +78,8 @@ def build_async(
                 webui_tail=webui_tail,
                 output_dir=output_dir,
                 image_roots=image_roots,
+                include_process_state=include_process_state,
+                include_queue_state=include_queue_state,
             )
         finally:
             with _BUNDLE_LOCK:
@@ -102,6 +105,8 @@ def build_crash_bundle(
     webui_tail: Mapping[str, Any] | None = None,
     image_roots: list[Path] | None = None,
     context: dict | None = None,
+    include_process_state: bool = False,
+    include_queue_state: bool = False,
 ) -> Path | None:
     """Create a diagnostics zip bundle for the given reason."""
 
@@ -123,6 +128,11 @@ def build_crash_bundle(
                 "reason": reason,
                 "timestamp": timestamp,
                 "system": collect_system_snapshot(),
+                "bundle_features": {
+                    "include_process_state": bool(include_process_state),
+                    "include_queue_state": bool(include_queue_state),
+                    "include_webui_tail": bool(webui_tail),
+                },
             }
             # Accept context from new argument (overrides extra_context if both given)
             if context is not None:
@@ -156,13 +166,20 @@ def build_crash_bundle(
                 
                 if entries:
                     zf.writestr("logs/gui_logs.json", json.dumps(_anonymize(entries), indent=2))
-                if inspector_lines:
+                if job_snapshot:
+                    zf.writestr(
+                        "runtime/job_snapshot.json",
+                        json.dumps(_anonymize(job_snapshot), indent=2),
+                    )
+                if inspector_lines and include_process_state:
                     zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
                 _include_jsonl_logs(zf)
                 _include_image_metadata(zf, image_roots)
+                if include_queue_state:
+                    _include_queue_state(zf)
                 if sanitized_tail:
                     zf.writestr(
-                        "artifacts/webui_tail.json",
+                        "runtime/webui_tail.json",
                         json.dumps(sanitized_tail, indent=2),
                     )
             logger.info("Crash bundle saved to %s", bundle_path)
@@ -230,6 +247,18 @@ def _include_image_metadata(zf: zipfile.ZipFile, image_roots: list[Path] | None)
                 )
         except Exception:
             logger.debug("Failed to include image metadata for %s", image_path)
+
+
+def _include_queue_state(zf: zipfile.ZipFile) -> None:
+    queue_state_path = get_queue_state_path()
+    if not queue_state_path.exists():
+        return
+    try:
+        payload = json.loads(queue_state_path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.debug("Failed to include queue state in diagnostics bundle", exc_info=True)
+        return
+    zf.writestr("runtime/queue_state.json", json.dumps(_anonymize(payload), indent=2))
 
 
 def _collect_image_paths(roots: list[Path], *, limit: int = 25) -> list[Path]:
