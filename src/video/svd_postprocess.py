@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+import gc
+import importlib.util
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -15,6 +19,8 @@ from PIL import Image
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.video_export import save_video_frames
+
+logger = logging.getLogger(__name__)
 
 _REQUIRED_FACELIB_FILES = (
     "detection_Resnet50_Final.pth",
@@ -48,6 +54,27 @@ def get_realesrgan_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str
     return issues
 
 
+def get_gfpgan_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
+    issues: list[str] = []
+    if importlib.util.find_spec("gfpgan") is None:
+        issues.append("gfpgan package")
+
+    weight_path = postprocess.face_restore.gfpgan_weight_path
+    if not weight_path or not Path(weight_path).exists():
+        issues.append("GFPGAN weight")
+
+    facelib_root = postprocess.face_restore.facelib_model_root
+    if not facelib_root or not Path(facelib_root).exists():
+        issues.append("facelib model root")
+        return issues
+
+    root = Path(facelib_root)
+    for filename in _REQUIRED_FACELIB_FILES:
+        if not (root / filename).exists():
+            issues.append(filename)
+    return issues
+
+
 def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None]:
     postprocess = config.postprocess
     if postprocess.face_restore.enabled:
@@ -57,7 +84,9 @@ def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None
             if issues:
                 return False, "CodeFormer is enabled but required runtime assets are missing: " + ", ".join(issues)
         elif method == "GFPGAN":
-            return False, "GFPGAN face cleanup is not available in the native SVD runtime yet. Use CodeFormer."
+            issues = get_gfpgan_runtime_issues(postprocess)
+            if issues:
+                return False, "GFPGAN is enabled but required runtime assets are missing: " + ", ".join(issues)
     if postprocess.upscale.enabled:
         issues = get_realesrgan_runtime_issues(postprocess)
         if issues:
@@ -96,8 +125,14 @@ def resolve_rife_executable(postprocess: SVDPostprocessConfig) -> Path | None:
 class SVDPostprocessRunner:
     """Runs optional frame enhancement stages after SVD frame generation."""
 
-    def __init__(self, *, repo_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        repo_root: str | Path | None = None,
+        status_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
         self._repo_root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[2]
+        self._status_callback = status_callback
 
     def process_frames(
         self,
@@ -121,14 +156,37 @@ class SVDPostprocessRunner:
         ):
             return frames, None
 
+        logger.info(
+            "[SVD][postprocess] start input_frames=%s face_restore=%s interpolation=%s upscale=%s",
+            len(frames),
+            postprocess.face_restore.enabled,
+            postprocess.interpolation.enabled,
+            postprocess.upscale.enabled,
+        )
         root = Path(work_dir)
-        current_frames = [frame.convert("RGB") for frame in frames]
+        current_frames = list(frames)
         metadata: dict[str, Any] = {
             "input_frame_count": len(frames),
             "applied": [],
         }
+        enabled_stage_names = [
+            stage_name
+            for stage_name, enabled in (
+                ("face_restore", postprocess.face_restore.enabled),
+                ("interpolation", postprocess.interpolation.enabled),
+                ("upscale", postprocess.upscale.enabled),
+            )
+            if enabled
+        ]
+        total_enabled_stages = len(enabled_stage_names)
 
         if postprocess.face_restore.enabled:
+            self._emit_status(
+                stage_detail="postprocess: face_restore",
+                progress=0.0 if total_enabled_stages == 0 else metadata["applied"].__len__() / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
             current_frames = self._run_worker_stage(
                 stage_name="face_restore",
                 action="face_restore",
@@ -138,8 +196,20 @@ class SVDPostprocessRunner:
             )
             metadata["applied"].append("face_restore")
             metadata["face_restore"] = postprocess.face_restore.to_dict()
+            self._emit_status(
+                stage_detail="postprocess: face_restore",
+                progress=len(metadata["applied"]) / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
 
         if postprocess.interpolation.enabled:
+            self._emit_status(
+                stage_detail="postprocess: interpolation",
+                progress=0.0 if total_enabled_stages == 0 else metadata["applied"].__len__() / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
             current_frames = self._run_rife_stage(
                 frames=current_frames,
                 postprocess=postprocess,
@@ -147,8 +217,20 @@ class SVDPostprocessRunner:
             )
             metadata["applied"].append("interpolation")
             metadata["interpolation"] = postprocess.interpolation.to_dict()
+            self._emit_status(
+                stage_detail="postprocess: interpolation",
+                progress=len(metadata["applied"]) / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
 
         if postprocess.upscale.enabled:
+            self._emit_status(
+                stage_detail="postprocess: upscale",
+                progress=0.0 if total_enabled_stages == 0 else metadata["applied"].__len__() / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
             current_frames = self._run_worker_stage(
                 stage_name="upscale",
                 action="upscale",
@@ -158,11 +240,24 @@ class SVDPostprocessRunner:
             )
             metadata["applied"].append("upscale")
             metadata["upscale"] = postprocess.upscale.to_dict()
+            self._emit_status(
+                stage_detail="postprocess: upscale",
+                progress=len(metadata["applied"]) / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
 
         metadata["output_frame_count"] = len(current_frames)
         if current_frames:
             metadata["output_width"] = current_frames[0].width
             metadata["output_height"] = current_frames[0].height
+        logger.info(
+            "[SVD][postprocess] complete output_frames=%s applied=%s size=%sx%s",
+            len(current_frames),
+            metadata["applied"],
+            metadata.get("output_width"),
+            metadata.get("output_height"),
+        )
         return current_frames, metadata
 
     def _run_worker_stage(
@@ -178,33 +273,48 @@ class SVDPostprocessRunner:
         output_dir = work_dir / f"{stage_name}_output"
         self._reset_dir(input_dir)
         self._reset_dir(output_dir)
-        save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
-        config_payload = {
-            "action": action,
-            "input_dir": str(input_dir.resolve()),
-            "output_dir": str(output_dir.resolve()),
-            "payload": payload,
-        }
-        cmd = [
-            sys.executable,
-            "-m",
-            "src.video.svd_postprocess_worker",
-            "--config-json",
-            json.dumps(config_payload),
-        ]
-        completed = subprocess.run(
-            cmd,
-            cwd=str(self._repo_root),
-            capture_output=True,
-            text=True,
-            check=False,
+        logger.info(
+            "[SVD][postprocess] stage=%s start input_frames=%s",
+            stage_name,
+            len(frames),
         )
-        if completed.returncode != 0:
-            message = completed.stderr.strip() or completed.stdout.strip() or "unknown worker error"
-            raise SVDPostprocessError(f"{stage_name} worker failed: {message}")
+        try:
+            save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
+            config_payload = {
+                "action": action,
+                "input_dir": str(input_dir.resolve()),
+                "output_dir": str(output_dir.resolve()),
+                "payload": payload,
+            }
+            cmd = [
+                sys.executable,
+                "-m",
+                "src.video.svd_postprocess_worker",
+                "--config-json",
+                json.dumps(config_payload),
+            ]
+            completed = subprocess.run(
+                cmd,
+                cwd=str(self._repo_root),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                message = completed.stderr.strip() or completed.stdout.strip() or "unknown worker error"
+                raise SVDPostprocessError(f"{stage_name} worker failed: {message}")
+        finally:
+            self._close_images(frames)
+            frames.clear()
+            self._release_runtime_memory()
         processed = self._load_frame_sequence(output_dir)
         if not processed:
             raise SVDPostprocessError(f"{stage_name} worker produced no output frames")
+        logger.info(
+            "[SVD][postprocess] stage=%s complete output_frames=%s",
+            stage_name,
+            len(processed),
+        )
         return processed
 
     def _run_rife_stage(
@@ -222,35 +332,51 @@ class SVDPostprocessRunner:
         output_dir = work_dir / "rife_output"
         self._reset_dir(input_dir)
         self._reset_dir(output_dir)
-        save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
-
-        # Inference from the official rife-ncnn-vulkan CLI: -n expects a target frame count.
         target_count = ((len(frames) - 1) * int(postprocess.interpolation.multiplier)) + 1
-        cmd = [
-            str(executable),
-            "-i",
-            str(input_dir.resolve()),
-            "-o",
-            str(output_dir.resolve()),
-            "-n",
-            str(target_count),
-        ]
-        model_dir = postprocess.interpolation.model_dir
-        if model_dir:
-            cmd.extend(["-m", str(model_dir)])
-        completed = subprocess.run(
-            cmd,
-            cwd=str(executable.parent),
-            capture_output=True,
-            text=True,
-            check=False,
+        logger.info(
+            "[SVD][postprocess] stage=interpolation start input_frames=%s multiplier=%s target_frames=%s exe=%s",
+            len(frames),
+            postprocess.interpolation.multiplier,
+            target_count,
+            executable.name,
         )
-        if completed.returncode != 0:
-            message = completed.stderr.strip() or completed.stdout.strip() or "unknown interpolation error"
-            raise SVDPostprocessError(f"RIFE interpolation failed: {message}")
+        try:
+            save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
+
+            # Inference from the official rife-ncnn-vulkan CLI: -n expects a target frame count.
+            cmd = [
+                str(executable),
+                "-i",
+                str(input_dir.resolve()),
+                "-o",
+                str(output_dir.resolve()),
+                "-n",
+                str(target_count),
+            ]
+            model_dir = postprocess.interpolation.model_dir
+            if model_dir:
+                cmd.extend(["-m", str(model_dir)])
+            completed = subprocess.run(
+                cmd,
+                cwd=str(executable.parent),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                message = completed.stderr.strip() or completed.stdout.strip() or "unknown interpolation error"
+                raise SVDPostprocessError(f"RIFE interpolation failed: {message}")
+        finally:
+            self._close_images(frames)
+            frames.clear()
+            self._release_runtime_memory()
         interpolated = self._load_frame_sequence(output_dir)
         if not interpolated:
             raise SVDPostprocessError("RIFE interpolation produced no output frames")
+        logger.info(
+            "[SVD][postprocess] stage=interpolation complete output_frames=%s",
+            len(interpolated),
+        )
         return interpolated
 
     @staticmethod
@@ -269,3 +395,41 @@ class SVDPostprocessRunner:
             with Image.open(frame_path) as image:
                 frames.append(image.convert("RGB"))
         return frames
+
+    @staticmethod
+    def _close_images(images: list[Image.Image]) -> None:
+        for image in images:
+            close = getattr(image, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+
+    @staticmethod
+    def _release_runtime_memory() -> None:
+        gc.collect()
+
+    def _emit_status(
+        self,
+        *,
+        stage_detail: str,
+        progress: float,
+        current_step: int = 0,
+        total_steps: int = 0,
+        eta_seconds: float | None = None,
+    ) -> None:
+        if self._status_callback is None:
+            return
+        try:
+            self._status_callback(
+                {
+                    "stage_detail": stage_detail,
+                    "progress": max(0.0, min(1.0, float(progress))),
+                    "current_step": int(current_step),
+                    "total_steps": int(total_steps),
+                    "eta_seconds": eta_seconds,
+                }
+            )
+        except Exception as exc:
+            logger.warning("[SVD][postprocess] status callback failed: %s", exc)

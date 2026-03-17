@@ -7,7 +7,7 @@ from pathlib import Path
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
-from src.video.svd_capabilities import get_svd_postprocess_capabilities
+from src.video.svd_capabilities import apply_recommended_svd_defaults, get_svd_postprocess_capabilities
 from src.video.svd_config import SVDConfig
 from src.video.svd_postprocess import validate_svd_postprocess_config
 from src.video.svd_preprocess import validate_svd_source_image
@@ -33,6 +33,41 @@ class SVDController:
 
     def build_svd_config(self, form_data: dict[str, object]) -> SVDConfig:
         return SVDConfig.from_dict(form_data)
+
+    def build_default_config(self) -> SVDConfig:
+        base_config = SVDConfig.from_dict(
+            {
+                "preprocess": {
+                    "resize_mode": "center_crop",
+                },
+                "inference": {
+                    "num_frames": 25,
+                    "fps": 7,
+                    "motion_bucket_id": 48,
+                    "noise_aug_strength": 0.01,
+                    "decode_chunk_size": 4,
+                    "num_inference_steps": 36,
+                },
+                "output": {
+                    "output_format": "mp4",
+                    "save_frames": False,
+                    "save_preview_image": True,
+                },
+                "postprocess": {
+                    "face_restore": {
+                        "method": "CodeFormer",
+                        "fidelity_weight": 0.6,
+                    },
+                    "interpolation": {
+                        "multiplier": 2,
+                    },
+                    "upscale": {
+                        "scale": 2.0,
+                    },
+                },
+            }
+        )
+        return apply_recommended_svd_defaults(base_config)
 
     def get_postprocess_capabilities(self, config: SVDConfig | None = None) -> dict[str, dict[str, object]]:
         return {

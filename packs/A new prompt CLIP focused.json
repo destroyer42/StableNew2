@@ -1,99 +1,44 @@
 {
   "pack_data": {
-    "name": "SDXL_beautiful_women_FantasyShort",
+    "name": "A single prompt for testing",
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\na dryad, gorgeous faced women, brown-haired fine-breasted athletic beautiful , wearing nothing in a forest, [[activity]], hands massage and plays with her clitoris and vulva, legs spread wide, knees bent, leaning back against a tree, bright daylight, full body shot, direct view, looking directly into camera with a lusty expression, detailed juicy pink vagina with viscous liquid and cum dribbling out, very wet vagina, incredible skin,  glistening, looking sultry",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, watermark, text",
+        "text": "(masterpiece, 8k, photorealistic) wide angle perspective, in the middle of the courtroom of a king's castle, the witcher Geralt with silver hair and two longswords over his right shoulder, in chainmail with a wolf medallion, leans against a wall watching the crowd, to include the king, queen, and beautiful buxom princess who are holding court. Warm light, cinematic, epic, fantasy. Natural facial proportions.",
+        "negative": "blurry, low resolution, bad anatomy, mishapen, extra limbs, weird angles, weird bodies, cgi, cartoon, anime, crossed eyes",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable_Yogis_General_Positives_V1",
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_PDXL_Positives2"
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
-            0.7
-          ],
-          [
-            "CinematicStyle_v1",
-            0.5
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "NSFWFilterXL_animagine",
-            0.8
-          ]
-        ]
-      },
-      {
-        "index": 2,
-        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere\na dryad, gorgeous faced women, brown-haired fine-breasted athletic beautiful , wearing nothing in a forest, both hands down in groin area, [[activity]], legs spread wide, knees bent, leaning back against a tree, bright daylight, full body shot, direct view, looking directly into camera with a lusty expression, detailed juicy pink vagina with viscous liquid and cum dribbling out, very wet vagina, incredible skin,  glistening, looking sultry",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, watermark, text",
-        "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1",
-          "Stable-Yogis-Makeup-Enhancer-XL"
-        ],
-        "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg",
-          "NEGATIVE_HANDS",
           "SDXLnegXL",
-          "bad_prompt",
-          "easynegative",
-          "ac_neg1"
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg"
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.7
+            0.2967032967032967
           ],
           [
             "CinematicStyle_v1",
-            0.5
-          ],
-          [
-            "DetailedEyes_V3",
             0.8
           ],
           [
-            "finenude_v0_2a",
-            0.6542553191489362
+            "WITCHERS_BY_STX",
+            0.2802197802197802
           ]
         ]
       }
     ],
     "matrix": {
-      "enabled": true,
+      "enabled": false,
       "mode": "random",
-      "limit": 2,
-      "slots": [
-        {
-          "name": "activity",
-          "values": [
-            "masturbating",
-            "orgasming",
-            "female masturbation",
-            "fingering pussy",
-            "fingering asshole",
-            "rubbing clitoris",
-            "masturbating clitoris",
-            "squirting"
-          ]
-        }
-      ]
+      "limit": 1,
+      "slots": []
     },
     "show_preview": true
   },

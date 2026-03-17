@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from src.controller.app_controller import AppController
+from src.video.svd_config import SVDConfig
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 from src.queue.job_history_store import JobHistoryEntry, JobStatus
 
@@ -52,6 +53,57 @@ def test_get_svd_postprocess_capabilities_returns_named_entries() -> None:
     assert "codeformer" in result
     controller._svd_controller.build_svd_config.assert_called_once()
     controller._svd_controller.get_postprocess_capabilities.assert_called_once_with("cfg")
+
+
+def test_build_svd_defaults_uses_controller_default_config() -> None:
+    controller = AppController.__new__(AppController)
+    controller._svd_controller = Mock()
+    controller._svd_controller.build_default_config.return_value = SVDConfig.from_dict(
+        {
+            "preprocess": {
+                "resize_mode": "center_crop",
+            },
+            "inference": {
+                "motion_bucket_id": 48,
+                "noise_aug_strength": 0.01,
+                "num_inference_steps": 36,
+                "decode_chunk_size": 4,
+            },
+            "postprocess": {
+                "face_restore": {"enabled": True},
+                "interpolation": {"enabled": True, "executable_path": "C:/tools/rife.exe"},
+                "upscale": {"enabled": True},
+            }
+        }
+    )
+
+    defaults = controller.build_svd_defaults()
+
+    assert defaults["preprocess"]["resize_mode"] == "center_crop"
+    assert defaults["inference"]["motion_bucket_id"] == 48
+    assert defaults["postprocess"]["face_restore"]["enabled"] is True
+    assert defaults["postprocess"]["interpolation"]["enabled"] is True
+    assert defaults["postprocess"]["upscale"]["enabled"] is True
+
+
+def test_runtime_status_callback_preserves_stage_detail() -> None:
+    captured = {}
+    controller = AppController.__new__(AppController)
+    controller.app_state = SimpleNamespace(set_runtime_status=lambda status: captured.setdefault("status", status))
+    controller._ui_dispatch = lambda fn: fn()
+
+    callback = controller._get_runtime_status_callback()
+    callback(
+        {
+            "job_id": "job-1",
+            "current_stage": "svd_native",
+            "stage_detail": "postprocess: interpolation",
+            "progress": 0.75,
+        }
+    )
+
+    assert captured["status"].current_stage == "svd_native"
+    assert captured["status"].stage_detail == "postprocess: interpolation"
 
 
 def test_on_webui_ready_triggers_deferred_autostart() -> None:
@@ -131,6 +183,13 @@ def test_get_recent_svd_history_extracts_variant_details(tmp_path) -> None:
                     "frame_count": 25,
                     "fps": 7,
                     "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",
+                    "postprocess": {
+                        "applied": ["interpolation", "upscale"],
+                        "input_frame_count": 25,
+                        "output_frame_count": 49,
+                        "output_width": 2048,
+                        "output_height": 1152,
+                    },
                 }
             ],
             "metadata": {
@@ -154,6 +213,9 @@ def test_get_recent_svd_history_extracts_variant_details(tmp_path) -> None:
     assert records[0]["source_image_path"] == str(source_path)
     assert records[0]["video_path"] == str(video_path)
     assert records[0]["model_id"] == "stabilityai/stable-video-diffusion-img2vid-xt"
+    assert records[0]["postprocess_applied"] == ["interpolation", "upscale"]
+    assert records[0]["postprocess_output_frame_count"] == 49
+    assert records[0]["postprocess_output_width"] == 2048
 
 
 def test_show_structured_error_modal_uses_tk_root_parent(monkeypatch) -> None:

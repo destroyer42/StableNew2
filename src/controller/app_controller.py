@@ -743,6 +743,7 @@ class AppController:
                 runtime_status = RuntimeJobStatus(
                     job_id=status_data.get("job_id", ""),
                     current_stage=status_data.get("current_stage", ""),
+                    stage_detail=status_data.get("stage_detail"),
                     stage_index=status_data.get("stage_index", 0),
                     total_stages=status_data.get("total_stages", 1),
                     progress=status_data.get("progress", 0.0),
@@ -5918,9 +5919,7 @@ class AppController:
         return supported
 
     def build_svd_defaults(self) -> dict[str, Any]:
-        from src.video.svd_config import SVDConfig
-
-        return SVDConfig().to_dict()
+        return self._get_svd_controller().build_default_config().to_dict()
 
     def validate_svd_source_image(self, path: str | Path) -> tuple[bool, str | None]:
         return self._get_svd_controller().validate_source_image(path)
@@ -6115,6 +6114,14 @@ class AppController:
             if isinstance(raw_variants, list):
                 variants = [item for item in raw_variants if isinstance(item, dict)]
         primary_variant = variants[0] if variants else {}
+        postprocess = primary_variant.get("postprocess")
+        if not isinstance(postprocess, dict):
+            postprocess = {}
+        applied = [str(item) for item in postprocess.get("applied", []) if item]
+        input_frame_count = postprocess.get("input_frame_count")
+        output_frame_count = postprocess.get("output_frame_count")
+        output_width = postprocess.get("output_width")
+        output_height = postprocess.get("output_height")
 
         video_paths = [str(item) for item in artifact.get("video_paths", []) if item]
         gif_paths = [str(item) for item in artifact.get("gif_paths", []) if item]
@@ -6160,6 +6167,13 @@ class AppController:
             "fps": primary_variant.get("fps"),
             "model_id": primary_variant.get("model_id"),
             "count": artifact.get("count"),
+            "postprocess": postprocess or None,
+            "postprocess_applied": applied,
+            "postprocess_stage_count": len(applied),
+            "postprocess_input_frame_count": input_frame_count,
+            "postprocess_output_frame_count": output_frame_count,
+            "postprocess_output_width": output_width,
+            "postprocess_output_height": output_height,
         }
 
 

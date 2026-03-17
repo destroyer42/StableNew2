@@ -438,10 +438,18 @@ class RuntimeJobStatus:
     actual_seed: int | None  # The actual seed used (may differ from config if random)
     current_step: int  # Current step within stage (for progress bar)
     total_steps: int  # Total steps for current stage
+    stage_detail: str | None = None  # Optional finer-grained phase within the current stage
     
     def get_stage_label(self) -> str:
         """Get formatted stage label like '2/3 img2img'."""
         return f"{self.stage_index + 1}/{self.total_stages} {self.current_stage}"
+
+    def get_stage_display(self) -> str:
+        """Get stage label including optional finer-grained runtime detail."""
+        label = self.get_stage_label()
+        if self.stage_detail:
+            return f"{label} - {self.stage_detail}"
+        return label
     
     def get_progress_percentage(self) -> int:
         """Get progress as integer percentage (0-100)."""

@@ -171,6 +171,7 @@ class JobExecutionController:
             runtime_status = RuntimeJobStatus(
                 job_id=status_data.get("job_id", ""),
                 current_stage=status_data.get("current_stage", ""),
+                stage_detail=status_data.get("stage_detail"),
                 stage_index=status_data.get("stage_index", 0),
                 total_stages=status_data.get("total_stages", 1),
                 progress=status_data.get("progress", 0.0),

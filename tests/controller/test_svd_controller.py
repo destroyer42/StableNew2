@@ -55,6 +55,37 @@ def test_get_postprocess_capabilities_exposes_runtime_status() -> None:
     assert "gfpgan" in result
 
 
+def test_build_default_config_enables_available_postprocess(monkeypatch) -> None:
+    app_controller = SimpleNamespace(output_dir="output", job_service=Mock())
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    captured = {}
+    default_config = SVDConfig.from_dict(
+        {
+            "postprocess": {
+                "face_restore": {"enabled": True},
+                "interpolation": {"enabled": True, "executable_path": "C:/tools/rife.exe"},
+                "upscale": {"enabled": True},
+            }
+        }
+    )
+    def _fake_apply(config: SVDConfig) -> SVDConfig:
+        captured["config"] = config
+        return default_config
+
+    monkeypatch.setattr("src.controller.svd_controller.apply_recommended_svd_defaults", _fake_apply)
+
+    result = controller.build_default_config()
+
+    base_config = captured["config"]
+    assert base_config.preprocess.resize_mode == "center_crop"
+    assert base_config.inference.motion_bucket_id == 48
+    assert base_config.inference.noise_aug_strength == 0.01
+    assert base_config.inference.num_inference_steps == 36
+    assert result.postprocess.face_restore.enabled is True
+    assert result.postprocess.interpolation.enabled is True
+    assert result.postprocess.upscale.enabled is True
+
+
 def test_submit_svd_job_rejects_missing_rife_runtime(tmp_path, monkeypatch) -> None:
     monkeypatch.delenv("STABLENEW_RIFE_EXE", raising=False)
     monkeypatch.setenv("PATH", "")

@@ -51,3 +51,21 @@ def test_run_job_callback_replay_exception_logs_and_raises(caplog) -> None:
     assert any(
         "JOB_EXEC_ERROR | NJR execution failed" in record.message for record in caplog.records
     )
+
+
+def test_handle_runtime_status_update_preserves_stage_detail() -> None:
+    captured = {}
+    controller = JobExecutionController(replay_runner=SimpleNamespace(run_njr=lambda record: {}))
+    controller.set_app_state(SimpleNamespace(set_runtime_status=lambda status: captured.setdefault("status", status)))
+
+    controller._handle_runtime_status_update(
+        {
+            "job_id": "job-1",
+            "current_stage": "svd_native",
+            "stage_detail": "inference",
+            "progress": 0.3,
+        }
+    )
+
+    assert captured["status"].current_stage == "svd_native"
+    assert captured["status"].stage_detail == "inference"

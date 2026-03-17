@@ -271,7 +271,7 @@ class RunningJobPanelV2(ttk.Frame):
             # Use RuntimeJobStatus if available, otherwise fall back to static stage chain
             if runtime:
                 # Runtime status available - show current execution state
-                stage_text = f"Stage: {runtime.get_stage_label()}"
+                stage_text = f"Stage: {runtime.get_stage_display()}"
                 self.stage_chain_label.configure(text=stage_text)
             else:
                 # No runtime status - show stage chain from job config

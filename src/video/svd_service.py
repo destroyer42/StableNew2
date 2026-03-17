@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import importlib
 from pathlib import Path
 from typing import Any
@@ -30,12 +31,17 @@ class SVDService:
         return True, None
 
     def clear_model_cache(self, model_id: str | None = None) -> None:
+        pipelines: list[Any] = []
         if model_id is None:
+            pipelines = list(self._pipeline_cache.values())
             self._pipeline_cache.clear()
-            return
-        for key in list(self._pipeline_cache.keys()):
-            if key[0] == model_id:
-                self._pipeline_cache.pop(key, None)
+        else:
+            for key in list(self._pipeline_cache.keys()):
+                if key[0] == model_id:
+                    pipeline = self._pipeline_cache.pop(key, None)
+                    if pipeline is not None:
+                        pipelines.append(pipeline)
+        self._release_pipelines(pipelines)
 
     def generate_frames(
         self,
@@ -52,16 +58,21 @@ class SVDService:
             raise SVDModelLoadError(reason or "Diffusers SVD runtime is unavailable")
 
         pipeline = self._get_pipeline(config)
-        try:
-            image = Image.open(path).convert("RGB")
-        except Exception as exc:
-            raise SVDInputError(f"Failed to open prepared SVD image: {exc}") from exc
 
         torch = importlib.import_module("torch")
         generator = None
         if config.seed is not None:
             generator = torch.Generator(device="cpu").manual_seed(int(config.seed))
 
+        image: Image.Image | None = None
+        try:
+            with Image.open(path) as loaded_image:
+                image = loaded_image.convert("RGB")
+        except Exception as exc:
+            raise SVDInputError(f"Failed to open prepared SVD image: {exc}") from exc
+
+        result: Any | None = None
+        raw_frames: list[Image.Image] = []
         try:
             result = pipeline(
                 image,
@@ -74,15 +85,27 @@ class SVDService:
                 max_guidance_scale=config.max_guidance_scale,
                 generator=generator,
             )
+            frames = getattr(result, "frames", result)
+            if isinstance(frames, list) and frames and isinstance(frames[0], list):
+                frames = frames[0]
+            if isinstance(frames, tuple):
+                frames = list(frames)
+            if not isinstance(frames, list) or not frames:
+                raise SVDInferenceError("SVD returned no frames")
+            raw_frames = frames
+            return [frame.convert("RGB") for frame in raw_frames]
         except Exception as exc:
             raise SVDInferenceError(f"SVD inference failed: {exc}") from exc
-
-        frames = getattr(result, "frames", result)
-        if isinstance(frames, list) and frames and isinstance(frames[0], list):
-            frames = frames[0]
-        if not isinstance(frames, list) or not frames:
-            raise SVDInferenceError("SVD returned no frames")
-        return [frame.convert("RGB") for frame in frames]
+        finally:
+            if image is not None:
+                try:
+                    image.close()
+                except Exception:
+                    pass
+            self._close_images(raw_frames)
+            result = None
+            generator = None
+            self._release_runtime_memory()
 
     def _get_pipeline(self, config: SVDInferenceConfig) -> Any:
         cache_key = (
@@ -140,6 +163,73 @@ class SVDService:
                     pass
 
         return pipeline
+
+    @classmethod
+    def _release_pipelines(cls, pipelines: list[Any]) -> None:
+        for pipeline in pipelines:
+            cls._release_pipeline(pipeline)
+        cls._release_runtime_memory()
+
+    @staticmethod
+    def _release_pipeline(pipeline: Any) -> None:
+        if pipeline is None:
+            return
+        maybe_free_hooks = getattr(pipeline, "maybe_free_model_hooks", None)
+        if callable(maybe_free_hooks):
+            try:
+                maybe_free_hooks()
+            except Exception:
+                pass
+        remove_all_hooks = getattr(pipeline, "remove_all_hooks", None)
+        if callable(remove_all_hooks):
+            try:
+                remove_all_hooks()
+            except Exception:
+                pass
+        move_to = getattr(pipeline, "to", None)
+        if callable(move_to):
+            try:
+                move_to("cpu")
+            except Exception:
+                pass
+
+    @staticmethod
+    def _close_images(images: list[Image.Image]) -> None:
+        for image in images:
+            close = getattr(image, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+
+    @staticmethod
+    def _release_runtime_memory() -> None:
+        gc.collect()
+        try:
+            torch = importlib.import_module("torch")
+        except Exception:
+            return
+        cuda = getattr(torch, "cuda", None)
+        if cuda is None:
+            return
+        try:
+            if not cuda.is_available():
+                return
+        except Exception:
+            return
+        empty_cache = getattr(cuda, "empty_cache", None)
+        if callable(empty_cache):
+            try:
+                empty_cache()
+            except Exception:
+                pass
+        ipc_collect = getattr(cuda, "ipc_collect", None)
+        if callable(ipc_collect):
+            try:
+                ipc_collect()
+            except Exception:
+                pass
 
     @staticmethod
     def _resolve_torch_dtype(torch_module: Any, torch_dtype: str) -> Any:

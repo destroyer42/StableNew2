@@ -448,6 +448,7 @@ class Pipeline:
             status_data: Dictionary containing status fields like:
                 - job_id: str
                 - current_stage: str (e.g., "txt2img", "img2img")
+                - stage_detail: str | None
                 - stage_index: int (0-based current stage)
                 - total_stages: int
                 - progress: float (0.0 to 1.0)
@@ -476,6 +477,7 @@ class Pipeline:
         status_data = {
             "job_id": self._current_job_id,
             "current_stage": stage_name,
+            "stage_detail": None,
             "stage_index": self._current_stage_index,
             "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
             "progress": 0.0,
@@ -486,6 +488,42 @@ class Pipeline:
             "total_steps": total_steps,
         }
         
+        self._emit_status_update(status_data)
+
+    def _emit_stage_detail_update(
+        self,
+        *,
+        progress: float,
+        stage_detail: str | None = None,
+        eta_seconds: float | None = None,
+        current_step: int = 0,
+        total_steps: int = 0,
+        stage_name: str | None = None,
+    ) -> None:
+        """Emit a runtime update for a finer-grained phase within the current stage."""
+        if not self._status_callback or not self._current_job_id:
+            return
+
+        resolved_stage = stage_name
+        if not resolved_stage:
+            if self._current_stage_chain and 0 <= self._current_stage_index < len(self._current_stage_chain):
+                resolved_stage = self._current_stage_chain[self._current_stage_index]
+            else:
+                resolved_stage = "pipeline"
+
+        status_data = {
+            "job_id": self._current_job_id,
+            "current_stage": resolved_stage,
+            "stage_detail": stage_detail,
+            "stage_index": self._current_stage_index,
+            "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
+            "progress": max(0.0, min(1.0, float(progress))),
+            "eta_seconds": eta_seconds,
+            "started_at": self._current_stage_start_time or datetime.utcnow(),
+            "actual_seed": self._current_actual_seed,
+            "current_step": int(current_step),
+            "total_steps": int(total_steps),
+        }
         self._emit_status_update(status_data)
 
     def _apply_webui_defaults_once(self) -> None:
@@ -1038,6 +1076,7 @@ class Pipeline:
                             status_data = {
                                 "job_id": self._current_job_id,
                                 "current_stage": stage_label,
+                                "stage_detail": None,
                                 "stage_index": self._current_stage_index,
                                 "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
                                 "progress": highest_progress,
@@ -4028,11 +4067,30 @@ class Pipeline:
             from src.video.svd_runner import SVDRunner
 
             config = SVDConfig.from_dict(stage_config)
-            runner = SVDRunner(output_root=output_dir)
+            self._emit_stage_start("svd_native", total_steps=4)
+
+            def _on_svd_status(status: dict[str, Any]) -> None:
+                self._emit_stage_detail_update(
+                    stage_name="svd_native",
+                    stage_detail=str(status.get("stage_detail") or "").strip() or None,
+                    progress=float(status.get("progress", 0.0) or 0.0),
+                    eta_seconds=status.get("eta_seconds"),
+                    current_step=int(status.get("current_step", 0) or 0),
+                    total_steps=int(status.get("total_steps", 0) or 0),
+                )
+
+            runner = SVDRunner(output_root=output_dir, status_callback=_on_svd_status)
             result = runner.run(
                 source_image_path=input_image_path,
                 config=config,
                 job_id=job_id,
+            )
+            self._emit_stage_detail_update(
+                stage_name="svd_native",
+                stage_detail="complete",
+                progress=1.0,
+                current_step=result.frame_count,
+                total_steps=result.frame_count,
             )
 
             output_paths = [str(path) for path in result.frame_paths]

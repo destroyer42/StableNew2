@@ -18,8 +18,11 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert hasattr(tab, "recent_tree")
         assert hasattr(tab, "capabilities_label")
         assert tab.output_format_var.get() == "mp4"
-        assert tab.preset_var.get() == "Quality 25f MP4"
+        assert tab.preset_var.get() == "Recommended Quality / Enhanced"
         assert tab.face_restore_method_var.get() == "CodeFormer"
+        assert tab.resize_mode_var.get() == "center_crop"
+        assert tab.motion_bucket_var.get() == 48
+        assert tab.noise_aug_var.get() == 0.01
     finally:
         tab.destroy()
 
@@ -127,6 +130,41 @@ def test_svd_tab_refreshes_capabilities_from_controller(tk_root: tk.Tk) -> None:
         tab.destroy()
 
 
+def test_svd_tab_applies_runtime_recommended_defaults(tk_root: tk.Tk) -> None:
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.build_svd_defaults.return_value = {
+        "postprocess": {
+            "face_restore": {
+                "enabled": True,
+                "method": "CodeFormer",
+                "fidelity_weight": 0.65,
+            },
+            "interpolation": {
+                "enabled": True,
+                "multiplier": 2,
+                "executable_path": "C:/tools/rife/rife-ncnn-vulkan.exe",
+            },
+            "upscale": {
+                "enabled": True,
+                "scale": 2.0,
+            },
+        }
+    }
+    controller.get_svd_postprocess_capabilities.return_value = {}
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        assert tab.face_restore_enabled_var.get() is True
+        assert tab.interpolation_enabled_var.get() is True
+        assert tab.frame_upscale_enabled_var.get() is True
+        assert tab.rife_executable_var.get() == "C:/tools/rife/rife-ncnn-vulkan.exe"
+    finally:
+        tab.destroy()
+
+
 def test_svd_tab_use_latest_output_uses_controller_value(tk_root: tk.Tk, tmp_path: Path) -> None:
     image_path = tmp_path / "latest.png"
     image_path.write_bytes(b"png")
@@ -187,6 +225,8 @@ def test_svd_tab_preset_applies_expected_values(tk_root: tk.Tk) -> None:
         assert tab.output_format_var.get() == "frames"
         assert tab.save_frames_var.get() is True
         assert tab.frames_var.get() == 25
+        assert tab.decode_chunk_size_var.get() == 4
+        assert "Memory:" in tab.summary_label.cget("text")
     finally:
         tab.destroy()
 
@@ -216,6 +256,11 @@ def test_svd_tab_recent_history_populates_and_reuses_source(tk_root: tk.Tk, tmp_
             "frame_count": 25,
             "fps": 7,
             "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",
+            "postprocess_applied": ["interpolation", "upscale"],
+            "postprocess_input_frame_count": 25,
+            "postprocess_output_frame_count": 49,
+            "postprocess_output_width": 2048,
+            "postprocess_output_height": 1152,
         }
     ]
 
@@ -229,5 +274,9 @@ def test_svd_tab_recent_history_populates_and_reuses_source(tk_root: tk.Tk, tmp_
         assert tab.source_image_var.get() == str(source_path)
         assert tab.recent_preview._open_path == str(output_path)
         assert str(tab.use_recent_btn.cget("state")) == "normal"
+        values = tab.recent_tree.item(children[0], "values")
+        assert values[3] == "interp+upscale"
+        assert "frames 25->49" in tab.recent_meta_label.cget("text")
+        assert "size 2048x1152" in tab.recent_meta_label.cget("text")
     finally:
         tab.destroy()

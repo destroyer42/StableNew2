@@ -26,16 +26,28 @@ _RESIZE_MODES = ("letterbox", "center_crop", "contain_then_crop")
 _OUTPUT_FORMATS = ("mp4", "gif", "frames")
 _FACE_RESTORE_METHODS = ("CodeFormer", "GFPGAN")
 _DEFAULT_TARGET_PRESET = "Landscape 1024x576"
-_DEFAULT_SVD_PRESET = "Quality 25f MP4"
+_DEFAULT_SVD_PRESET = "Recommended Quality / Enhanced"
 _SVD_OUTPUT_ROUTES = (OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING)
 _SVD_PRESETS: dict[str, dict[str, Any]] = {
+    "Recommended Quality / Enhanced": {
+        "frames": 25,
+        "fps": 7,
+        "output_format": "mp4",
+        "save_frames": False,
+        "num_inference_steps": 36,
+        "decode_chunk_size": 4,
+        "motion_bucket": 48,
+        "noise_aug": 0.01,
+        "resize_mode": "center_crop",
+        "target_preset": "Landscape 1024x576",
+    },
     "Quality 25f MP4": {
         "frames": 25,
         "fps": 7,
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 30,
-        "decode_chunk_size": 8,
+        "decode_chunk_size": 4,
         "motion_bucket": 72,
         "noise_aug": 0.02,
     },
@@ -45,7 +57,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 35,
-        "decode_chunk_size": 8,
+        "decode_chunk_size": 4,
         "motion_bucket": 48,
         "noise_aug": 0.01,
         "resize_mode": "center_crop",
@@ -56,7 +68,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 28,
-        "decode_chunk_size": 8,
+        "decode_chunk_size": 4,
         "motion_bucket": 64,
         "noise_aug": 0.02,
     },
@@ -86,7 +98,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "frames",
         "save_frames": True,
         "num_inference_steps": 30,
-        "decode_chunk_size": 8,
+        "decode_chunk_size": 4,
         "motion_bucket": 72,
         "noise_aug": 0.02,
     },
@@ -112,6 +124,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._capability_text = ""
         self._recent_runs_by_item: dict[str, dict[str, Any]] = {}
         self._recent_selected_item: str | None = None
+        self._applied_runtime_defaults = False
 
         model_options = self._get_model_options()
         preferred_model = get_default_svd_model_id()
@@ -155,6 +168,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._build_header()
         self._build_body(model_options)
         self._apply_preset(_DEFAULT_SVD_PRESET, update_status=False)
+        self._apply_runtime_defaults()
         self._refresh_capabilities()
         self._refresh_summary()
         self._refresh_recent_runs()
@@ -436,7 +450,7 @@ class SVDTabFrameV2(ttk.Frame):
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=1)
 
-        recent_columns = ("time", "model", "frames", "output")
+        recent_columns = ("time", "model", "frames", "post", "output")
         self.recent_tree = ttk.Treeview(
             tree_frame,
             columns=recent_columns,
@@ -446,11 +460,13 @@ class SVDTabFrameV2(ttk.Frame):
         self.recent_tree.heading("time", text="Completed")
         self.recent_tree.heading("model", text="Model")
         self.recent_tree.heading("frames", text="Frames")
+        self.recent_tree.heading("post", text="Post")
         self.recent_tree.heading("output", text="Output")
         self.recent_tree.column("time", width=150, stretch=False, anchor=tk.W)
-        self.recent_tree.column("model", width=240, stretch=True, anchor=tk.W)
+        self.recent_tree.column("model", width=180, stretch=True, anchor=tk.W)
         self.recent_tree.column("frames", width=70, stretch=False, anchor=tk.W)
-        self.recent_tree.column("output", width=260, stretch=True, anchor=tk.W)
+        self.recent_tree.column("post", width=150, stretch=False, anchor=tk.W)
+        self.recent_tree.column("output", width=180, stretch=True, anchor=tk.W)
         recent_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.recent_tree.yview)
         self.recent_tree.configure(yscrollcommand=recent_scroll.set)
         self.recent_tree.grid(row=0, column=0, sticky="nsew")
@@ -741,15 +757,87 @@ class SVDTabFrameV2(ttk.Frame):
         self._capability_text = "Capabilities: " + " | ".join(parts) if parts else ""
         self.capabilities_label.configure(text=self._capability_text)
 
+    def _apply_runtime_defaults(self) -> None:
+        if self._applied_runtime_defaults:
+            return
+        builder = getattr(self.app_controller, "build_svd_defaults", None)
+        if not callable(builder):
+            return
+        try:
+            defaults = builder()
+        except Exception:
+            logger.exception("Failed to load SVD defaults from controller")
+            return
+        if not isinstance(defaults, dict):
+            return
+        self._apply_default_config_settings(defaults)
+        self._applied_runtime_defaults = True
+
+    def _apply_default_config_settings(self, defaults: dict[str, Any]) -> None:
+        preprocess = defaults.get("preprocess")
+        if isinstance(preprocess, dict):
+            resize_mode = str(preprocess.get("resize_mode") or self.resize_mode_var.get())
+            if resize_mode in _RESIZE_MODES:
+                self.resize_mode_var.set(resize_mode)
+
+        inference = defaults.get("inference")
+        if isinstance(inference, dict):
+            self.frames_var.set(int(inference.get("num_frames", self.frames_var.get())))
+            self.fps_var.set(int(inference.get("fps", self.fps_var.get())))
+            self.motion_bucket_var.set(int(inference.get("motion_bucket_id", self.motion_bucket_var.get())))
+            self.noise_aug_var.set(float(inference.get("noise_aug_strength", self.noise_aug_var.get())))
+            self.inference_steps_var.set(int(inference.get("num_inference_steps", self.inference_steps_var.get())))
+            self.decode_chunk_size_var.set(int(inference.get("decode_chunk_size", self.decode_chunk_size_var.get())))
+
+        output = defaults.get("output")
+        if isinstance(output, dict):
+            output_format = str(output.get("output_format") or self.output_format_var.get())
+            if output_format in _OUTPUT_FORMATS:
+                self.output_format_var.set(output_format)
+            self.save_frames_var.set(bool(output.get("save_frames", self.save_frames_var.get())))
+
+        postprocess = defaults.get("postprocess")
+        if not isinstance(postprocess, dict):
+            return
+
+        face_restore = postprocess.get("face_restore")
+        if isinstance(face_restore, dict):
+            self.face_restore_enabled_var.set(bool(face_restore.get("enabled", self.face_restore_enabled_var.get())))
+            method = str(face_restore.get("method") or self.face_restore_method_var.get())
+            if method in _FACE_RESTORE_METHODS:
+                self.face_restore_method_var.set(method)
+            self.face_restore_fidelity_var.set(
+                float(face_restore.get("fidelity_weight", self.face_restore_fidelity_var.get()))
+            )
+
+        interpolation = postprocess.get("interpolation")
+        if isinstance(interpolation, dict):
+            self.interpolation_enabled_var.set(bool(interpolation.get("enabled", self.interpolation_enabled_var.get())))
+            self.interpolation_multiplier_var.set(
+                int(interpolation.get("multiplier", self.interpolation_multiplier_var.get()))
+            )
+            self.rife_executable_var.set(str(interpolation.get("executable_path") or self.rife_executable_var.get() or ""))
+
+        upscale = postprocess.get("upscale")
+        if isinstance(upscale, dict):
+            self.frame_upscale_enabled_var.set(bool(upscale.get("enabled", self.frame_upscale_enabled_var.get())))
+            self.frame_upscale_factor_var.set(float(upscale.get("scale", self.frame_upscale_factor_var.get())))
+
     def _refresh_summary(self, source: str | None = None) -> None:
         source_name = Path(source or self.source_image_var.get() or "").name or "No source image"
         cache_dir = self.cache_dir_var.get().strip() or "(default cache)"
+        decode_chunk = int(self.decode_chunk_size_var.get())
+        frames = int(self.frames_var.get())
+        memory_note = ""
+        if decode_chunk >= 6 or (decode_chunk >= 4 and frames >= 25):
+            memory_note = "\nMemory: high decode setting for this frame count; lower Decode chunk if the app stalls."
         self.summary_label.configure(
             text=(
                 f"Source: {source_name}\n"
                 f"Preset: {self.preset_var.get()} | Frames: {int(self.frames_var.get())} at {int(self.fps_var.get())} fps | Steps: {int(self.inference_steps_var.get())}\n"
-                f"Output: {self.output_format_var.get()} | Route: {self.output_route_var.get()} | Resize: {self.resize_mode_var.get()} | Cache: {cache_dir}\n"
+                f"Output: {self.output_format_var.get()} | Route: {self.output_route_var.get()} | Resize: {self.resize_mode_var.get()} | Decode chunk: {decode_chunk} | Cache: {cache_dir}\n"
                 f"Postprocess: face={bool(self.face_restore_enabled_var.get())} | rife={bool(self.interpolation_enabled_var.get())} | upscale={bool(self.frame_upscale_enabled_var.get())}"
+                f"{memory_note}"
             )
         )
 
@@ -858,6 +946,7 @@ class SVDTabFrameV2(ttk.Frame):
                     self._format_time(record.get("completed_at") or record.get("started_at") or record.get("created_at")),
                     self._shorten_model(record.get("model_id")),
                     record.get("frame_count") or record.get("count") or "-",
+                    self._format_postprocess_compact(record),
                     output_name or "-",
                 ),
             )
@@ -900,13 +989,15 @@ class SVDTabFrameV2(ttk.Frame):
             self.recent_preview.clear()
         output_name = Path(record.get("output_path") or "").name or "-"
         source_name = Path(record.get("source_image_path") or "").name or "(unknown source)"
+        postprocess_summary = self._format_postprocess_details(record)
         self.recent_meta_label.configure(
             text=(
                 f"Source: {source_name}\n"
                 f"Output: {output_name}\n"
                 f"Model: {record.get('model_id') or '-'}\n"
                 f"Frames: {record.get('frame_count') or record.get('count') or '-'} | "
-                f"FPS: {record.get('fps') or '-'}"
+                f"FPS: {record.get('fps') or '-'}\n"
+                f"Postprocess: {postprocess_summary}"
             )
         )
         self.use_recent_btn.configure(
@@ -923,6 +1014,32 @@ class SVDTabFrameV2(ttk.Frame):
         if self._recent_selected_item is None:
             return None
         return self._recent_runs_by_item.get(self._recent_selected_item)
+
+    @staticmethod
+    def _format_postprocess_compact(record: dict[str, Any]) -> str:
+        applied = [str(item) for item in record.get("postprocess_applied") or [] if item]
+        if not applied:
+            return "-"
+        return "+".join(
+            "interp" if item == "interpolation" else item.replace("_", "")
+            for item in applied
+        )
+
+    @classmethod
+    def _format_postprocess_details(cls, record: dict[str, Any]) -> str:
+        applied = [str(item) for item in record.get("postprocess_applied") or [] if item]
+        if not applied:
+            return "none"
+        parts = [", ".join(item.replace("_", " ") for item in applied)]
+        input_frames = record.get("postprocess_input_frame_count")
+        output_frames = record.get("postprocess_output_frame_count")
+        if input_frames and output_frames and input_frames != output_frames:
+            parts.append(f"frames {input_frames}->{output_frames}")
+        width = record.get("postprocess_output_width")
+        height = record.get("postprocess_output_height")
+        if width and height:
+            parts.append(f"size {width}x{height}")
+        return " | ".join(parts)
 
     def _on_recent_use_source(self, _event: tk.Event | None = None) -> None:
         record = self._current_recent_record()
@@ -991,6 +1108,7 @@ class SVDTabFrameV2(ttk.Frame):
         if not isinstance(payload, dict):
             return False
         try:
+            self._applied_runtime_defaults = True
             source_path = str(payload.get("source_image_path") or "")
             if source_path:
                 self.source_image_var.set(source_path)
