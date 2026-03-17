@@ -7,12 +7,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from src.utils.prompt_pack_utils import resolve_matrix_slot_value
+
 from src.pipeline.prompt_pack_parser import PackRow
 
 MAX_PREVIEW_PROMPT_LENGTH = 120
 
 
-MATRIX_TOKEN_RE = re.compile(r"\[\[([a-zA-Z0-9_]+)\]\]")
+MATRIX_TOKEN_RE = re.compile(r"\[\[([a-zA-Z0-9_\- ]+)\]\]")
 
 
 def _truncate(value: str, limit: int) -> str:
@@ -168,7 +170,8 @@ class UnifiedPromptResolver:
 
         def replace(match: re.Match[str]) -> str:
             name = match.group(1)
-            return slots.get(name, match.group(0))
+            resolved = resolve_matrix_slot_value(name, dict(slots))
+            return resolved if resolved is not None else match.group(0)
 
         return MATRIX_TOKEN_RE.sub(replace, template)
 

@@ -70,6 +70,7 @@ Thumbs.db
 # Snapshot helpers
 tools/last_change.diff
 snapshots/*.zip
+scripts/snapshots/
 
 # PR-CLEANUP-001: Better temporary file exclusion
 # Test outputs and temporary test files

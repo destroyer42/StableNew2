@@ -319,8 +319,16 @@ class PipelineRunner:
                 # Dispatch to the appropriate stage executor based on stage_name
                 if stage.stage_name == "txt2img":
                     # Build payload for txt2img
-                    batch_size_value = njr.images_per_prompt or 1
-                    logger.info("ðŸ”µ [BATCH_SIZE_DEBUG] pipeline_runner: njr.images_per_prompt=%s, using batch_size=%s", njr.images_per_prompt, batch_size_value)
+                    image_count = max(1, int(njr.images_per_prompt or 1))
+                    # Serialize txt2img API batches to reduce WebUI post-sampling finalize pressure.
+                    batch_size_value = 1
+                    n_iter_value = image_count
+                    logger.info(
+                        "ðŸ”µ [BATCH_SIZE_DEBUG] pipeline_runner: njr.images_per_prompt=%s, using batch_size=%s, n_iter=%s",
+                        njr.images_per_prompt,
+                        batch_size_value,
+                        n_iter_value,
+                    )
                     
                     # Get config from NJR - it's a flat dict, not nested under 'txt2img'
                     njr_config = njr.config or {}
@@ -340,6 +348,7 @@ class PipelineRunner:
                     payload["width"] = njr.width or 1024
                     payload["height"] = njr.height or 1024
                     payload["batch_size"] = batch_size_value
+                    payload["n_iter"] = n_iter_value
                     
                     # Add scheduler if present
                     if njr.scheduler:
@@ -390,7 +399,11 @@ class PipelineRunner:
                     if isinstance(njr_config, dict) and "pipeline" in njr_config:
                         payload["pipeline"] = njr_config["pipeline"]
                     
-                    logger.info("ðŸ”µ [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s", payload.get('batch_size'))
+                    logger.info(
+                        "ðŸ”µ [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s, payload['n_iter']=%s",
+                        payload.get('batch_size'),
+                        payload.get('n_iter'),
+                    )
                     # Include prompt pack row index in naming to prevent overwrites
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
                     

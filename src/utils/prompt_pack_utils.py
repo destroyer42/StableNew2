@@ -7,10 +7,13 @@ from .json pack files alongside .txt pack files.
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_SLOT_NAME_NORMALIZER = re.compile(r"[^a-z0-9]+")
 
 
 def load_pack_metadata(pack_path: Path | str) -> dict[str, Any]:
@@ -100,3 +103,37 @@ def get_matrix_config_summary(metadata: dict[str, Any]) -> dict[str, Any]:
         "slot_count": len(matrix_config.get("slots", [])),
         "slot_names": [s.get("name") for s in matrix_config.get("slots", []) if s.get("name")],
     }
+
+
+def normalize_matrix_slot_name(name: str | None) -> str:
+    """Normalize slot names so legacy token spellings still resolve.
+
+    Examples:
+    - hair-color -> haircolor
+    - hair_color -> haircolor
+    - Hair Color -> haircolor
+    """
+    text = str(name or "").strip().lower()
+    if not text:
+        return ""
+    return _SLOT_NAME_NORMALIZER.sub("", text)
+
+
+def resolve_matrix_slot_value(
+    token_name: str,
+    slots: dict[str, str] | None,
+) -> str | None:
+    """Resolve a matrix token name against exact and normalized aliases."""
+    if not slots:
+        return None
+    if token_name in slots:
+        return slots[token_name]
+
+    normalized_token = normalize_matrix_slot_name(token_name)
+    if not normalized_token:
+        return None
+
+    for slot_name, slot_value in slots.items():
+        if normalize_matrix_slot_name(slot_name) == normalized_token:
+            return slot_value
+    return None

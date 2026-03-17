@@ -26,3 +26,25 @@ def test_resolve_from_pack_row_substitutes_matrix_tokens() -> None:
     assert ("detail", 0.6) in result.lora_tags
     assert result.positive.endswith("<lora:detail:0.6>")
     assert result.negative.startswith("global hush, pack noise, <embedding:neg_hands>")
+
+
+def test_resolve_from_pack_row_accepts_hyphenated_slot_aliases() -> None:
+    row = PackRow(
+        embeddings=(),
+        quality_line="",
+        subject_template="athletic [[hair-color]] haired [[eye_color]] eyed subject",
+        lora_tags=(),
+        negative_embeddings=(),
+        negative_phrases=(),
+    )
+    resolver = UnifiedPromptResolver(max_preview_length=200)
+    result = resolver.resolve_from_pack(
+        pack_row=row,
+        matrix_slot_values={"haircolor": "auburn", "eyecolor": "green"},
+        pack_negative="",
+        global_negative="",
+    )
+
+    assert "[[" not in result.positive
+    assert "auburn haired" in result.positive
+    assert "green eyed" in result.positive

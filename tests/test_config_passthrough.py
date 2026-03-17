@@ -91,11 +91,14 @@ def test_txt2img_config_passes_through_canonical_runner_path(tmp_path: Path) -> 
     assert payload["cfg_scale"] == 6.0
     assert payload["width"] == 768
     assert payload["height"] == 960
-    assert payload["batch_size"] == 2
+    assert payload["batch_size"] == 1
+    assert payload["n_iter"] == 2
     assert payload["seed"] == 1234
     assert payload["enable_hr"] is True
     assert payload["hr_scale"] == 1.5
     assert payload["denoising_strength"] == 0.4
+    assert payload["do_not_save_samples"] is True
+    assert payload["do_not_save_grid"] is True
     assert payload["sd_model"] == "model-a.safetensors"
     assert payload["sd_vae"] == "vae-a.safetensors"
     assert payload["sampler_name"] == "DPM++ 2M"

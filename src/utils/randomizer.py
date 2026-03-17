@@ -15,6 +15,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from src.utils.prompt_pack_utils import resolve_matrix_slot_value
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_VARIANTS = 512
@@ -29,6 +31,7 @@ _UNRESOLVED_TOKEN_PATTERNS = (
     re.compile(r"\[\[[^\]]*\]\]?"),
     re.compile(r"__[^_]+__"),
 )
+MATRIX_TOKEN_RE = re.compile(r"\[\[([a-zA-Z0-9_\- ]+)\]\]")
 
 
 @dataclass
@@ -382,8 +385,12 @@ class PromptRandomizer:
         if not combo:
             return text
 
-        for slot_name, slot_value in combo.items():
-            token = f"[[{slot_name}]]"
+        for match in MATRIX_TOKEN_RE.finditer(text):
+            slot_name = match.group(1)
+            slot_value = resolve_matrix_slot_value(slot_name, combo)
+            if slot_value is None:
+                continue
+            token = match.group(0)
             if token in text:
                 text = text.replace(token, slot_value)
                 label_parts.append(f"[{slot_name}]={slot_value}")

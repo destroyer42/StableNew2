@@ -3071,8 +3071,8 @@ class Pipeline:
                 "n_iter": txt2img_config.get("n_iter", 1),
                 "restore_faces": txt2img_config.get("restore_faces", False),
                 "tiling": txt2img_config.get("tiling", False),
-                "do_not_save_samples": txt2img_config.get("do_not_save_samples", False),
-                "do_not_save_grid": txt2img_config.get("do_not_save_grid", False),
+                "do_not_save_samples": txt2img_config.get("do_not_save_samples", True),
+                "do_not_save_grid": txt2img_config.get("do_not_save_grid", True),
                 # Include model and VAE in payload so WebUI uses them for this specific generation
                 "sd_model": requested_model,
                 "sd_vae": requested_vae,
