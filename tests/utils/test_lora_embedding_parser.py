@@ -17,3 +17,14 @@ def test_parse_embeddings_multiple():
     assert len(refs) == 2
     assert refs[0].name == "styleA"
     assert refs[1].name == "styleB"
+
+
+def test_parse_embeddings_weighted():
+    """Weighted embedding syntax (<embedding:name>:weight) should parse name and weight."""
+    text = "(<embedding:styleX>:0.75) <embedding:styleY>"
+    refs = parse_embeddings(text)
+    assert len(refs) == 2
+    weighted = next(r for r in refs if r.name == "styleX")
+    assert weighted.weight == 0.75
+    plain = next(r for r in refs if r.name == "styleY")
+    assert plain.weight is None

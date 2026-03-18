@@ -20,6 +20,7 @@ from src.prompting.prompt_types import (
     PromptOptimizationPairResult,
     PromptOptimizationResult,
 )
+from src.utils.embedding_prompt_utils import strip_embedding_entries
 
 _EMBEDDING_TOKEN_RE = re.compile(r"<\s*embedding:[^>]+>", re.IGNORECASE)
 _EMBEDDING_ONLY_RE = re.compile(r"^(?:\s*<\s*embedding:[^>]+>\s*)+$", re.IGNORECASE)
@@ -226,4 +227,5 @@ def _extract_lora_tokens(chunk: str) -> tuple[str, list[str]]:
 
 
 def _is_embedding_only_chunk(chunk: str) -> bool:
-    return bool(_EMBEDDING_ONLY_RE.fullmatch(str(chunk or "").strip()))
+    stripped = strip_embedding_entries(str(chunk or "").strip())
+    return bool((chunk or "").strip()) and not stripped

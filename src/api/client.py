@@ -21,6 +21,7 @@ from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.api_failure_store_v2 import record_api_failure
 from src.utils.config import ConfigManager
 from src.utils.retry_policy_v2 import (
+    ADETAILER_RETRY_POLICY,
     IMG2IMG_RETRY_POLICY,
     STAGE_RETRY_POLICY,
     TXT2IMG_RETRY_POLICY,
@@ -68,6 +69,7 @@ OPTIONS_POST_MIN_INTERVAL = 6.0
 # PR-HARDEN-001: Reduced generation timeout for faster failure detection
 DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
 PROGRESS_STALL_THRESHOLD_SEC = 60.0  # If no progress update for this long, consider stalled
+STALL_INTERRUPT_THRESHOLD_SEC = 90.0  # After this long with no progress, interrupt WebUI generation
 
 
 class WebUIUnavailableError(Exception):
@@ -964,22 +966,24 @@ class SDWebUIClient:
         )
         return data
 
-    def img2img(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def img2img(self, payload: dict[str, Any], *, policy: RetryPolicy | None = None) -> dict[str, Any] | None:
         """
         Refine image using img2img.
 
         Args:
             payload: Request payload with generation parameters and init image
+            policy: Optional retry policy override (defaults to IMG2IMG_RETRY_POLICY)
 
         Returns:
             Response data including base64 encoded images
         """
+        effective_policy = policy if policy is not None else IMG2IMG_RETRY_POLICY
         with self._request_context(
             "post",
             "/sdapi/v1/img2img",
             json=payload,
             stage="img2img",
-            policy=IMG2IMG_RETRY_POLICY,
+            policy=effective_policy,
         ) as response:
             if response is None:
                 return None
@@ -1214,6 +1218,10 @@ class SDWebUIClient:
                 response = self.txt2img(payload)
             elif stage_normalized == "img2img":
                 response = self.img2img(payload)
+            elif stage_normalized == "adetailer":
+                # ADetailer uses the img2img endpoint but with a fail-fast retry policy:
+                # GPU OOM loops never recover without a restart, so retrying is wasteful.
+                response = self.img2img(payload, policy=ADETAILER_RETRY_POLICY)
             elif stage_normalized in {"upscale", "upscale_image"}:
                 response = self.upscale(payload)
             else:
@@ -1293,6 +1301,28 @@ class SDWebUIClient:
         except Exception as exc:
             logger.debug("Progress poll failed: %s", exc)
             return None
+
+    def interrupt(self) -> bool:
+        """
+        Send an interrupt request to WebUI to cancel the current generation.
+
+        Posts to /sdapi/v1/interrupt which causes WebUI to abort the active
+        generation and return a response to any pending img2img/txt2img call.
+
+        Returns:
+            True if the interrupt was accepted (HTTP 200), False otherwise.
+        """
+        try:
+            url = f"{self.base_url}/sdapi/v1/interrupt"
+            response = self._session.post(url, timeout=(DEFAULT_CONNECT_TIMEOUT, 5.0))
+            if response.status_code == 200:
+                logger.info("Generation interrupted via /sdapi/v1/interrupt")
+                return True
+            logger.warning("Interrupt request returned HTTP %s", response.status_code)
+            return False
+        except Exception as exc:
+            logger.warning("Failed to send interrupt to WebUI: %s", exc)
+            return False
 
     def get_models(self) -> list[dict[str, Any]]:
         """

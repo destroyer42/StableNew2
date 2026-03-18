@@ -24,6 +24,7 @@ from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 from src.utils.config import ConfigManager
+from src.utils.embedding_prompt_utils import render_embedding_reference
 from src.utils.prompt_pack_utils import get_matrix_slots_dict, load_pack_metadata
 
 _logger = logging.getLogger(__name__)
@@ -247,8 +248,14 @@ class PromptPackNormalizedJobBuilder:
             record.prompt_pack_version = pack_config.get("version")
             record.positive_prompt = prompt_resolution.positive
             record.negative_prompt = prompt_resolution.negative
-            record.positive_embeddings = list(prompt_resolution.positive_embeddings)
-            record.negative_embeddings = list(prompt_resolution.negative_embeddings)
+            record.positive_embeddings = [
+                render_embedding_reference(name, weight)
+                for name, weight in prompt_resolution.positive_embeddings
+            ]
+            record.negative_embeddings = [
+                render_embedding_reference(name, weight)
+                for name, weight in prompt_resolution.negative_embeddings
+            ]
             record.lora_tags = [
                 LoRATag(name=name, weight=weight) for name, weight in prompt_resolution.lora_tags
             ]

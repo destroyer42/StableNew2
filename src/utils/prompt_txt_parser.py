@@ -9,12 +9,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-LORA_TAG_RE = re.compile(r"<lora:([^:>]+):([^>]+)>")
 from src.utils.embedding_prompt_utils import (
     extract_embedding_entries,
     render_embedding_reference,
     strip_embedding_entries,
 )
+
+LORA_TAG_RE = re.compile(r"<lora:([^:>]+):([^>]+)>")
 
 
 @dataclass

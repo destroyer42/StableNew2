@@ -39,6 +39,17 @@ IMG2IMG_RETRY_POLICY = RetryPolicy(
     jitter_frac=0.4,
 )
 
+# ADetailer img2img inpainting: fail-fast, no retry.
+# A hung ADetailer call is due to GPU OOM — retrying without a WebUI restart
+# guarantees the same stall. The outer recovery path provides structural retry.
+ADETAILER_RETRY_POLICY = RetryPolicy(
+    max_attempts=1,
+    backoff_strategy="fixed",
+    base_delay_sec=0.0,
+    max_delay_sec=0.0,
+    jitter_frac=0.0,
+)
+
 UPSCALE_RETRY_POLICY = RetryPolicy(
     max_attempts=2,
     backoff_strategy="fixed",
@@ -50,6 +61,7 @@ UPSCALE_RETRY_POLICY = RetryPolicy(
 STAGE_RETRY_POLICY: dict[str, RetryPolicy] = {
     "txt2img": TXT2IMG_RETRY_POLICY,
     "img2img": IMG2IMG_RETRY_POLICY,
+    "adetailer": ADETAILER_RETRY_POLICY,
     "upscale": UPSCALE_RETRY_POLICY,
     "upscale_image": UPSCALE_RETRY_POLICY,
 }

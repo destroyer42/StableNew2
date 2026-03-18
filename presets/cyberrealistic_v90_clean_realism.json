@@ -1,0 +1,35 @@
+preset_name: cyberrealistic_v90_clean_realism
+checkpoint: cyberrealisticXL_v90-16fp
+resolution: 832x1216
+sampler: DPM++ 2M SDE
+scheduler: Karras
+steps: 28-32
+cfg: 5.0-5.6
+vae: baked/default
+clip_skip: 1
+positive_embeddings:
+  - Stable_Yogis_PDXL_Positives: 1.0
+  - Stable_Yogis_PDXL_Positives2: 0.80
+  - Stable_Yogis_Anatomy_Positives_V1: 0.85
+  - Stable_Yogis_Realism_Positives_V1: 0.45
+  - face_refiner: 0.35
+negative_embeddings:
+  - SDXLnegXL: 0.80
+  - Stable_Yogis_Anatomy_Negatives_V1-neg: 0.95
+  - NEGATIVE_HANDS: 0.90
+  - sdxl_cyberrealistic_simpleneg-neg: 0.50
+base_loras_sfw:
+  - anatomy_helper: 0.45
+  - add-detail-xl: 0.35
+  - epiCRealismHelper: 0.25
+base_loras_nsfw:
+  - anatomy_helper: 0.55
+  - fineNude_v0_2a: 0.50
+  - add-detail-xl: 0.30
+adetailer_face:
+  denoise: 0.20-0.24
+  steps: 14
+  cfg: 5.4
+final_upscale:
+  scale: 1.5x-2.0x
+  denoise: 0.10

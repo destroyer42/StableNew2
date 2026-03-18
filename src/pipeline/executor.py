@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
-from src.api.client import WebUIPayloadValidationError, PROGRESS_STALL_THRESHOLD_SEC
+from src.api.client import WebUIPayloadValidationError, PROGRESS_STALL_THRESHOLD_SEC, STALL_INTERRUPT_THRESHOLD_SEC
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
@@ -78,6 +78,11 @@ def _capture_webui_tail() -> dict[str, Any] | None:
 
 _MAX_IMAGE_DIMENSION = 4096
 _MAX_STAGE_STEPS = 150
+
+# PR-HARDEN-007: Post-recovery health probe uses a longer timeout to allow
+# model loading to complete (~12-20s on observed hardware) before declaring failure.
+POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC = 30.0
+POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
 _ALLOWED_TEXT_CONTROL_CODES = {9, 10}
 
 
@@ -201,6 +206,8 @@ class Pipeline:
         self._last_upscale_result: dict[str, Any] | None = None
         self._last_adetailer_result: dict[str, Any] | None = None
         self._stage_events: list[dict[str, Any]] = []
+        # PR-HARDEN-007: Track time of last successful recovery to extend post-recovery health probe
+        self._last_recovery_time: float | None = None
         # PR-PIPE-001: Track current job ID for manifest linkage
         self._current_job_id: str | None = None
         self._current_njr_sha256: str | None = None
@@ -961,6 +968,9 @@ class Pipeline:
             return False
         if recovered:
             self._true_ready_gated = False
+            # PR-HARDEN-007: Record recovery time so downstream health checks can use
+            # a longer probe timeout during the WebUI model-loading grace window.
+            self._last_recovery_time = time.monotonic()
         return bool(recovered)
 
     def _ensure_webui_true_ready(self) -> None:
@@ -1092,15 +1102,22 @@ class Pipeline:
             PipelineStageError: If WebUI is not responding
         """
         try:
-            # Quick 5s check - just verify WebUI is responding
-            if not self.client.check_connection(timeout=5.0):
+            # PR-HARDEN-007: Use a longer probe timeout within the post-recovery grace window
+            # to avoid triggering a second recovery while WebUI is still loading models.
+            _in_recovery_window = (
+                self._last_recovery_time is not None
+                and (time.monotonic() - self._last_recovery_time) < POST_RECOVERY_GRACE_WINDOW_SEC
+            )
+            _probe_timeout = POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC if _in_recovery_window else 5.0
+            if not self.client.check_connection(timeout=_probe_timeout):
                 recovered = self._attempt_webui_recovery(
                     stage=stage,
                     reason="pre_stage_health_failed",
                 )
                 if recovered:
                     self._ensure_webui_true_ready()
-                    if self.client.check_connection(timeout=5.0):
+                    # Post-recovery: always use extended timeout for the confirmation probe
+                    if self.client.check_connection(timeout=POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC):
                         logger.info(
                             "Recovered WebUI health before %s stage; continuing execution",
                             stage,
@@ -1112,7 +1129,7 @@ class Pipeline:
                     stage=stage,
                     details={
                         "check_type": "pre-stage-health",
-                        "timeout": 5.0,
+                        "timeout": _probe_timeout,
                         "recovery_classification": "pre_stage_health_failed",
                         "recovery_attempted": True,
                         "recovery_succeeded": False,
@@ -1358,19 +1375,40 @@ class Pipeline:
         Background thread that polls WebUI for progress.
         
         PR-HARDEN-004: Enhanced with stall detection - if no progress update
-        for PROGRESS_STALL_THRESHOLD_SEC, sets stall_detected_event.
+        for PROGRESS_STALL_THRESHOLD_SEC, sets stall_detected_event and logs
+        a warning (throttled to once per 30s). After STALL_INTERRUPT_THRESHOLD_SEC
+        with no progress, sends a single interrupt to WebUI to cancel the hung
+        generation so the blocking HTTP call can return.
         """
         highest_progress = 0.0
         last_progress_time = time.monotonic()
+        stall_first_detected_at: float | None = None
+        last_stall_log_time: float = 0.0
+        interrupt_sent: bool = False
         
         while not stop_event.is_set():
             try:
                 info = self.client.get_progress(skip_current_image=True)
-                
-                if info is not None:
+
+                if info is None:
+                    # WebUI is idle — either between jobs or restarted mid-call.
+                    # Reset stall tracking so a fresh generation starting from 0%
+                    # is not pre-judged as stalled by stale counters.
+                    if stall_first_detected_at is not None or interrupt_sent:
+                        logger.debug(
+                            "Poll loop: WebUI idle signal received for %s — resetting stall state",
+                            stage_label,
+                        )
+                        stall_first_detected_at = None
+                        interrupt_sent = False
+                        highest_progress = 0.0
+                        last_progress_time = time.monotonic()
+                else:
                     if info.progress > highest_progress:
                         highest_progress = info.progress
                         last_progress_time = time.monotonic()
+                        stall_first_detected_at = None  # Reset stall tracking on any progress
+                        interrupt_sent = False
                         
                         with self._progress_lock:
                             self._current_generation_progress = highest_progress
@@ -1420,14 +1458,33 @@ class Pipeline:
                         and highest_progress > 0
                         and highest_progress < 0.99
                     ):
-                        logger.warning(
-                            "PR-HARDEN-004: Generation stall detected for %s - no progress for %.1fs (stuck at %.1f%%)",
-                            stage_label,
-                            elapsed_since_progress,
-                            highest_progress * 100,
-                        )
+                        now = time.monotonic()
+                        if stall_first_detected_at is None:
+                            stall_first_detected_at = now
+
+                        # Throttle log to once per 30s instead of every poll interval
+                        if now - last_stall_log_time >= 30.0:
+                            logger.warning(
+                                "PR-HARDEN-004: Generation stall detected for %s - no progress for %.1fs (stuck at %.1f%%)",
+                                stage_label,
+                                elapsed_since_progress,
+                                highest_progress * 100,
+                            )
+                            last_stall_log_time = now
+
                         if stall_detected_event:
                             stall_detected_event.set()
+
+                        # After hard threshold, interrupt WebUI to unblock the HTTP call
+                        stall_duration = now - stall_first_detected_at
+                        if stall_duration >= STALL_INTERRUPT_THRESHOLD_SEC and not interrupt_sent:
+                            logger.error(
+                                "PR-HARDEN-004: Stall for %s exceeded %.0fs — sending interrupt to WebUI",
+                                stage_label,
+                                STALL_INTERRUPT_THRESHOLD_SEC,
+                            )
+                            self.client.interrupt()
+                            interrupt_sent = True
                         
             except Exception:
                 pass  # Ignore polling errors
@@ -2233,11 +2290,10 @@ class Pipeline:
                     eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
                 self.progress_controller.report_progress("adetailer", percent, eta_text)
 
-        # Track timing for this stage
+        # Call adetailer endpoint (internally routes to img2img with ADETAILER_RETRY_POLICY)
         stage_start = time.monotonic()
-        # Call img2img endpoint with ADetailer extension
         response = self._generate_images_with_progress(
-            "img2img",
+            "adetailer",
             payload,
             poll_interval=0.5,
             progress_callback=on_adetailer_progress,

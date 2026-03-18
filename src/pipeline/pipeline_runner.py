@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
@@ -45,6 +46,13 @@ def _merge_output_dir_into_metadata(data: Mapping[str, Any]) -> dict[str, Any]:
     if output_dir and "output_dir" not in metadata:
         metadata["output_dir"] = output_dir
     return metadata
+
+
+DEFAULT_JOB_TIMEOUT_SEC: float = 600.0
+
+
+class PipelineJobTimeoutError(Exception):
+    """Raised when a job exceeds the per-job wall-clock ceiling."""
 
 
 class PipelineRunner:
@@ -309,6 +317,20 @@ class PipelineRunner:
 
         return next_stage_paths
 
+    def _check_job_deadline(
+        self,
+        job_start_time: float,
+        stage_name: str,
+        timeout_sec: float = DEFAULT_JOB_TIMEOUT_SEC,
+    ) -> None:
+        """Raise PipelineJobTimeoutError if the job has exceeded its wall-clock ceiling."""
+        elapsed = time.monotonic() - job_start_time
+        if elapsed >= timeout_sec:
+            raise PipelineJobTimeoutError(
+                f"Job exceeded maximum duration of {timeout_sec:.0f}s "
+                f"(elapsed: {elapsed:.1f}s) before stage '{stage_name}'"
+            )
+
     def run_njr(
         self,
         njr: NormalizedJobRecord,
@@ -445,6 +467,8 @@ class PipelineRunner:
                 logger.warning("Failed to emit stage checkpoint for %s", stage_name, exc_info=True)
 
         try:
+            # PR-HARDEN-008: Record wall-clock start for per-job timeout ceiling
+            job_start_time: float = time.monotonic()
             # Execute stages sequentially, passing outputs forward
             # Track all image paths through the pipeline (supports batch processing)
             current_stage_paths: list[str] = []
@@ -484,6 +508,9 @@ class PipelineRunner:
                         # Don't increment stage_index when skipping
                         continue
                 
+                # PR-HARDEN-008: Enforce per-job wall-clock ceiling before each stage
+                self._check_job_deadline(job_start_time, stage.stage_name)
+
                 # Increment stage index for runtime status tracking
                 # (Will be reset to 0 at the start of next NJR execution)
                 
@@ -756,7 +783,6 @@ class PipelineRunner:
                                 if client and hasattr(client, "free_vram"):
                                     logger.info("ðŸ§¹ Freeing VRAM BEFORE adetailer image...")
                                     client.free_vram(unload_model=True)
-                                    import time
                                     time.sleep(1.0)  # Give WebUI time to stabilize
                             except Exception:
                                 pass  # Non-fatal
@@ -855,7 +881,6 @@ class PipelineRunner:
                                 if client and hasattr(client, "free_vram"):
                                     logger.info("ðŸ§¹ Freeing VRAM BEFORE upscale image...")
                                     client.free_vram(unload_model=True)
-                                    import time
                                     time.sleep(1.0)  # Give WebUI time to stabilize
                             except Exception:
                                 pass  # Non-fatal

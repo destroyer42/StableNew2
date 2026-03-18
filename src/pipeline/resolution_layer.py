@@ -10,6 +10,7 @@ from typing import Any
 from src.utils.prompt_pack_utils import resolve_matrix_slot_value
 
 from src.pipeline.prompt_pack_parser import PackRow
+from src.utils.embedding_prompt_utils import render_embedding_reference
 
 MAX_PREVIEW_PROMPT_LENGTH = 120
 
@@ -50,8 +51,8 @@ class PromptResolution:
     negative: str
     positive_preview: str
     negative_preview: str
-    positive_embeddings: tuple[str, ...]
-    negative_embeddings: tuple[str, ...]
+    positive_embeddings: tuple[tuple[str, float], ...]
+    negative_embeddings: tuple[tuple[str, float], ...]
     lora_tags: tuple[tuple[str, float], ...]
     global_negative_applied: bool
 
@@ -190,9 +191,9 @@ class UnifiedPromptResolver:
         
         lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in pack_row.lora_tags)
         positive_parts = []
-        # Fix: Wrap embeddings in <embedding:> syntax
+        # Render embeddings with weights
         if pack_row.embeddings:
-            positive_parts.extend(f"<embedding:{emb}>" for emb in pack_row.embeddings)
+            positive_parts.extend(render_embedding_reference(name, weight) for name, weight in pack_row.embeddings)
         if quality:  # Use substituted quality_line
             positive_parts.append(quality)
         if subject:
@@ -216,7 +217,7 @@ class UnifiedPromptResolver:
             negative_parts.append(pack_negative.strip())
         # Fix: Wrap negative embeddings in <embedding:> syntax
         if pack_row.negative_embeddings:
-            negative_parts.extend(f"<embedding:{tag}>" for tag in pack_row.negative_embeddings)
+            negative_parts.extend(render_embedding_reference(name, weight) for name, weight in pack_row.negative_embeddings)
         negative_parts.extend(phrase for phrase in pack_row.negative_phrases if phrase)
         if self._safety_negative:
             negative_parts.append(self._safety_negative)
