@@ -1,6 +1,15 @@
 {
   "selected_list": "CharactersList",
-  "selected_packs": [],
+  "selected_packs": [
+    "A new prompt CLIP focused",
+    "A single prompt for testing",
+    "A test_Dreamshaper_model",
+    "A_Single_Test_LoRA_matrix",
+    "An Extra Test",
+    "Beautiful_matrix_test",
+    "Beautiful_people_fullbody_PhotoMomentum_v26",
+    "Beautiful_people_fullbody_Variant"
+  ],
   "prompt_text": "A futuristic city with flying vehicles",
   "schema_version": "2.6"
 }

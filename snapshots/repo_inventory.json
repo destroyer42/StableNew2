@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2026-03-17T23:41:18",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260317-234102.zip",
+  "created_at": "2026-03-18T17:50:25",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260318-175010.zip",
   "file_count": 2137,
-  "total_size_bytes": 20659925,
+  "total_size_bytes": 20662839,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -4732,7 +4732,7 @@
     {
       "path": "outdir/manifests/out.json",
       "size_bytes": 1247,
-      "mtime_iso": "2026-03-17T23:21:54"
+      "mtime_iso": "2026-03-18T08:06:43"
     },
     {
       "path": "packs/A new prompt CLIP focused.json",
@@ -5307,12 +5307,12 @@
     {
       "path": "presets/global_negative.txt",
       "size_bytes": 0,
-      "mtime_iso": "2025-12-31T08:14:29"
+      "mtime_iso": "2026-03-17T23:44:59"
     },
     {
       "path": "presets/global_positive.txt",
       "size_bytes": 8,
-      "mtime_iso": "2026-03-17T06:51:34"
+      "mtime_iso": "2026-03-17T23:45:01"
     },
     {
       "path": "presets/Group_Scene_Juggernaut_SDXL.json",
@@ -7141,8 +7141,8 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 201248,
-      "mtime_iso": "2026-03-17T22:27:31"
+      "size_bytes": 201915,
+      "mtime_iso": "2026-03-18T08:07:17"
     },
     {
       "path": "src/pipeline/job_builder_v2.py",
@@ -9791,8 +9791,8 @@
     },
     {
       "path": "tests/pipeline/test_executor_progress_polling.py",
-      "size_bytes": 20510,
-      "mtime_iso": "2026-03-17T22:27:31"
+      "size_bytes": 22757,
+      "mtime_iso": "2026-03-18T08:07:17"
     },
     {
       "path": "tests/pipeline/test_executor_prompt_optimizer.py",

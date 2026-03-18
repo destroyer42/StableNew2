@@ -83,6 +83,13 @@ _MAX_STAGE_STEPS = 150
 # model loading to complete (~12-20s on observed hardware) before declaring failure.
 POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC = 30.0
 POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
+
+# Per-stage stall interrupt overrides.  ADetailer has a short expected runtime
+# (14 steps, ~5-30s on typical hardware) so we can interrupt much sooner than
+# the default STALL_INTERRUPT_THRESHOLD_SEC used for txt2img / img2img.
+STALL_INTERRUPT_THRESHOLD_BY_STAGE: dict[str, float] = {
+    "adetailer": 45.0,
+}
 _ALLOWED_TEXT_CONTROL_CODES = {9, 10}
 
 
@@ -1475,13 +1482,18 @@ class Pipeline:
                         if stall_detected_event:
                             stall_detected_event.set()
 
-                        # After hard threshold, interrupt WebUI to unblock the HTTP call
+                        # After hard threshold, interrupt WebUI to unblock the HTTP call.
+                        # Use a per-stage override if present (e.g. shorter for adetailer),
+                        # falling back to the global STALL_INTERRUPT_THRESHOLD_SEC.
+                        _interrupt_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
+                            stage_label, STALL_INTERRUPT_THRESHOLD_SEC
+                        )
                         stall_duration = now - stall_first_detected_at
-                        if stall_duration >= STALL_INTERRUPT_THRESHOLD_SEC and not interrupt_sent:
+                        if stall_duration >= _interrupt_threshold and not interrupt_sent:
                             logger.error(
                                 "PR-HARDEN-004: Stall for %s exceeded %.0fs — sending interrupt to WebUI",
                                 stage_label,
-                                STALL_INTERRUPT_THRESHOLD_SEC,
+                                _interrupt_threshold,
                             )
                             self.client.interrupt()
                             interrupt_sent = True

@@ -5,7 +5,7 @@
       {
         "index": 0,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nsmiling tavern owner welcoming guests, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -42,7 +42,7 @@
       {
         "index": 1,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\npriestess raising chalice in temple,  [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -79,7 +79,7 @@
       {
         "index": 2,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nroyal advisor gazing through stained glass, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -116,7 +116,7 @@
       {
         "index": 3,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nregal lady leaning against balcony, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -153,7 +153,7 @@
       {
         "index": 4,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nscholar-mage reading tome by window facing [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -190,7 +190,7 @@
       {
         "index": 5,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nwarrior princess resting on throne overlooking [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cross eyed, glowing eyes,",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -227,7 +227,7 @@
       {
         "index": 6,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nmysterious traveler adjusting cloak within [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -264,7 +264,7 @@
       {
         "index": 7,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nmasked dancer performing under lanterns in [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -301,7 +301,7 @@
       {
         "index": 8,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nwandering minstrel reclining beside fountain in [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -338,7 +338,7 @@
       {
         "index": 9,
         "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\n[[hair]]-haired noblewoman in intricate gown walking through [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"

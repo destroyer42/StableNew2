@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from src.api.client import ProgressInfo, SDWebUIClient
-from src.pipeline.executor import Pipeline
+from src.api.client import ProgressInfo, SDWebUIClient, STALL_INTERRUPT_THRESHOLD_SEC
+from src.pipeline.executor import Pipeline, STALL_INTERRUPT_THRESHOLD_BY_STAGE
 from src.utils import StructuredLogger
 
 
@@ -367,6 +367,7 @@ class TestStallInterrupt(unittest.TestCase):
         with (
             patch("src.pipeline.executor.PROGRESS_STALL_THRESHOLD_SEC", 0.0),
             patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_SEC", 0.0),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
         ):
             # First call returns progress 0.5 (sets highest_progress), subsequent keep it frozen
             self.client.get_progress.return_value = self._make_frozen_progress(0.5)
@@ -419,6 +420,7 @@ class TestStallInterrupt(unittest.TestCase):
         with (
             patch("src.pipeline.executor.PROGRESS_STALL_THRESHOLD_SEC", 0.0),
             patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_SEC", 0.0),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
         ):
             self.client.get_progress.return_value = self._make_frozen_progress(0.5)
             stop_event = threading.Event()
@@ -537,6 +539,51 @@ class TestStallStateReset(unittest.TestCase):
         self._run_loop(responses, poll_interval=0.05)
         # Even though we polled many times past the threshold, interrupt fires once
         assert self.client.interrupt.call_count <= 1
+
+
+class TestPerStageInterruptThreshold(unittest.TestCase):
+    """Per-stage stall interrupt threshold overrides."""
+
+    def test_adetailer_threshold_lower_than_default(self) -> None:
+        """ADetailer interrupt threshold must be shorter than the global default."""
+        adetailer_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE["adetailer"]
+        assert adetailer_threshold < STALL_INTERRUPT_THRESHOLD_SEC
+        assert adetailer_threshold == 45.0
+
+    def test_txt2img_uses_global_default(self) -> None:
+        """txt2img (and unlisted stages) must fall back to the global threshold."""
+        assert "txt2img" not in STALL_INTERRUPT_THRESHOLD_BY_STAGE
+        assert STALL_INTERRUPT_THRESHOLD_SEC == 90.0
+
+    @patch("src.pipeline.executor.PROGRESS_STALL_THRESHOLD_SEC", 0.01)
+    @patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {"adetailer": 0.02})
+    @patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_SEC", 9999.0)
+    def test_adetailer_stage_label_uses_override(self) -> None:
+        """Loop uses override threshold for stage_label='adetailer', not global."""
+        client = Mock(spec=SDWebUIClient)
+        logger = Mock(spec=StructuredLogger)
+        pipeline = Pipeline(client, logger)
+
+        stuck_frame = ProgressInfo(0.5, 5.0, 10, 20, None, {})
+        call_iter = iter([stuck_frame] * 20)
+        stop_event = threading.Event()
+
+        def _side_effect(**_kwargs):
+            try:
+                return next(call_iter)
+            except StopIteration:
+                stop_event.set()
+                return None
+
+        client.get_progress.side_effect = _side_effect
+        thread = threading.Thread(
+            target=pipeline._poll_progress_loop,
+            args=(stop_event, 0.05, None, "adetailer"),
+        )
+        thread.start()
+        thread.join(timeout=3.0)
+        # Override is 0.02s, global is 9999s — interrupt must fire (uses override)
+        assert client.interrupt.call_count == 1
 
 
 if __name__ == "__main__":
