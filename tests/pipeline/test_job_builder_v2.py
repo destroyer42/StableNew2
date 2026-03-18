@@ -64,3 +64,44 @@ def test_build_from_run_request_limits_max_njr_count() -> None:
 
     jobs = builder.build_from_run_request(request)
     assert len(jobs) == 2
+
+
+def test_build_from_run_request_normalizes_alias_config_snapshot() -> None:
+    builder = JobBuilderV2(id_fn=lambda: "job-alias", time_fn=lambda: 123.0)
+    entry = PackJobEntry(
+        pack_id="pack-alias",
+        pack_name="Alias Pack",
+        config_snapshot={
+            "prompt": "alias prompt",
+            "negative_prompt": "alias negative",
+            "model_name": "alias-model",
+            "sampler": "DPM++ 2M",
+            "scheduler_name": "Karras",
+            "steps": 32,
+            "cfg_scale": 6.2,
+            "width": 960,
+            "height": 640,
+        },
+        prompt_text="alias prompt",
+        negative_prompt_text="alias negative",
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+    request = PipelineRunRequest(
+        prompt_pack_id=entry.pack_id,
+        selected_row_ids=["0"],
+        config_snapshot_id="cfg-alias",
+        run_mode=PipelineRunMode.QUEUE,
+        source=PipelineRunSource.ADD_TO_QUEUE,
+        pack_entries=[entry],
+    )
+
+    jobs = builder.build_from_run_request(request)
+
+    assert len(jobs) == 1
+    record = jobs[0]
+    assert record.config["txt2img"]["model"] == "alias-model"
+    assert record.config["txt2img"]["sampler_name"] == "DPM++ 2M"
+    assert record.config["txt2img"]["scheduler"] == "Karras"
+    assert record.stage_chain[0].model == "alias-model"
+    assert record.stage_chain[0].sampler_name == "DPM++ 2M"

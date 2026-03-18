@@ -7,6 +7,7 @@ import pytest
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome
 from src.pipeline.executor import Pipeline, PipelineStageError
 from src.utils import StructuredLogger
+from unittest.mock import patch
 
 
 class DummyClient:
@@ -26,7 +27,11 @@ def test_generate_outcome_error_raises_pipeline_stage_error():
     client = DummyClient(outcome)
     pipeline = Pipeline(client, StructuredLogger())
 
-    with pytest.raises(PipelineStageError) as excinfo:
+    with (
+        patch.object(pipeline, "_ensure_webui_true_ready", return_value=None),
+        patch.object(pipeline, "_check_webui_health_before_stage", return_value=None),
+        pytest.raises(PipelineStageError) as excinfo,
+    ):
         pipeline._generate_images("txt2img", {})
 
     assert excinfo.value.error.code == GenerateErrorCode.INVALID_MODEL

@@ -239,6 +239,31 @@ class TestThreadRegistry:
         
         assert stats["orphaned"] >= 1
         assert thread.is_alive()  # Daemon still running
+
+    def test_shutdown_all_ignores_suppressed_daemon_warnings(self):
+        """Intentional daemon threads should not be reported as orphaned noise."""
+        registry = get_thread_registry()
+        registry._threads.clear()
+        registry._shutdown_requested = False
+        worker_started = threading.Event()
+
+        def worker():
+            worker_started.set()
+            time.sleep(10.0)
+
+        thread = registry.spawn(
+            target=worker,
+            name="SuppressedDaemonWorker",
+            daemon=True,
+            suppress_daemon_warning=True,
+        )
+
+        worker_started.wait(timeout=1.0)
+
+        stats = registry.shutdown_all(timeout=0.5)
+
+        assert stats["orphaned"] == 0
+        assert thread.is_alive()
     
     def test_is_shutdown_requested_flag(self):
         """is_shutdown_requested() should return shutdown state."""

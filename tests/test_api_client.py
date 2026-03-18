@@ -105,16 +105,19 @@ class TestSDWebUIClient:
         """Ensure upscale defaults call POST /options exactly once."""
         client = SDWebUIClient()
         client.set_options_write_enabled(True)
-        client._perform_request = MagicMock(return_value=object())
+        context = MagicMock()
+        context.__enter__.return_value = object()
+        context.__exit__.return_value = None
+        client._request_context = MagicMock(return_value=context)
 
         client.apply_upscale_performance_defaults()
 
-        client._perform_request.assert_called_once()
-        args, kwargs = client._perform_request.call_args
+        client._request_context.assert_called_once()
+        args, kwargs = client._request_context.call_args
         assert args[0] == "post"
         assert args[1] == "/sdapi/v1/options"
         payload = kwargs["json"]
-        assert payload["img_max_size_mp"] == 16
+        assert payload["img_max_size_mp"] == 8.0
         assert "ESRGAN_tile" in payload
         assert "DAT_tile" in payload
 
@@ -166,6 +169,35 @@ class TestSDWebUIClient:
             client.ensure_safe_upscale_defaults(max_img_mp=8.0, max_tile=768, max_overlap=128)
 
             assert post_mock.called is False
+
+    def test_free_vram_skips_refresh_checkpoints_by_default(self):
+        """Default VRAM cleanup must not block on refresh-checkpoints."""
+        client = SDWebUIClient()
+        client._request_context = MagicMock()
+
+        assert client.free_vram(unload_model=False, force_gc=False) is False
+        client._request_context.assert_not_called()
+
+    def test_free_vram_refresh_checkpoints_is_explicit_and_single_attempt(self):
+        """Aggressive checkpoint refresh should be opt-in and bounded."""
+        client = SDWebUIClient()
+        context = MagicMock()
+        context.__enter__.return_value = object()
+        context.__exit__.return_value = None
+        client._request_context = MagicMock(return_value=context)
+
+        assert client.free_vram(
+            unload_model=False,
+            force_gc=False,
+            refresh_checkpoints=True,
+        ) is True
+
+        client._request_context.assert_called_once_with(
+            "post",
+            "/sdapi/v1/refresh-checkpoints",
+            timeout=5.0,
+            max_retries=1,
+        )
 
 
 def test_generate_images_surfaces_crash_diagnostics_context():

@@ -20,7 +20,66 @@ except ImportError:
 from src.api.webui_process_manager import (
     WebUIProcessConfig,
     WebUIProcessManager,
+    _get_webui_python_match_reasons,
+    _get_webui_shell_match_reasons,
 )
+
+
+class TestWebUIProcessMatchers:
+    """Unit tests for conservative WebUI process matching."""
+
+    def test_python_match_requires_webui_workdir_or_launch_path(self):
+        reasons = _get_webui_python_match_reasons(
+            process_name="python.exe",
+            cmdline=["python.exe", "worker.py"],
+            cwd=r"C:\Users\rob\projects\StableNew",
+            working_dir=r"C:\Users\rob\stable-diffusion-webui",
+        )
+        assert reasons == []
+
+    def test_python_match_accepts_webui_launch_script(self):
+        reasons = _get_webui_python_match_reasons(
+            process_name="python.exe",
+            cmdline=[
+                r"C:\Users\rob\stable-diffusion-webui\venv\Scripts\python.exe",
+                r"C:\Users\rob\stable-diffusion-webui\launch.py",
+                "--api",
+            ],
+            cwd=r"C:\Users\rob\stable-diffusion-webui",
+            working_dir=r"C:\Users\rob\stable-diffusion-webui",
+        )
+        assert reasons
+
+    def test_python_match_accepts_exact_webui_cwd(self):
+        reasons = _get_webui_python_match_reasons(
+            process_name="python.exe",
+            cmdline=[r"C:\Users\rob\stable-diffusion-webui\venv\Scripts\python.exe"],
+            cwd=r"C:\Users\rob\stable-diffusion-webui",
+            working_dir=r"C:\Users\rob\stable-diffusion-webui",
+        )
+        assert "cwd matches webui_dir" in reasons
+
+    def test_shell_match_requires_launch_target(self):
+        reasons = _get_webui_shell_match_reasons(
+            process_name="cmd.exe",
+            cmdline=["cmd.exe", "/c", "echo hello"],
+            cwd=r"C:\Users\rob\stable-diffusion-webui",
+            working_dir=r"C:\Users\rob\stable-diffusion-webui",
+        )
+        assert reasons == []
+
+    def test_shell_match_accepts_webui_launcher(self):
+        reasons = _get_webui_shell_match_reasons(
+            process_name="cmd.exe",
+            cmdline=[
+                "cmd.exe",
+                "/c",
+                r"C:\Users\rob\stable-diffusion-webui\webui-user.bat",
+            ],
+            cwd=r"C:\Users\rob\stable-diffusion-webui",
+            working_dir=r"C:\Users\rob\stable-diffusion-webui",
+        )
+        assert reasons
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows-specific test")

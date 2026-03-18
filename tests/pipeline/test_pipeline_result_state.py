@@ -39,6 +39,7 @@ class TestPipelineRunResultState:
         assert isinstance(result_dict["variants"], list)
         assert len(result_dict["variants"]) == 2
         assert result_dict["variants"][0]["path"] == "/path/to/image1.png"
+        assert result_dict["variants"][0]["artifact"]["primary_path"] == "/path/to/image1.png"
     
     def test_pipeline_result_error_sets_success_false(self):
         """PipelineRunResult with error should have success=False."""
@@ -87,7 +88,8 @@ class TestPipelineRunResultState:
         
         assert result_dict["run_id"] == "test123"
         assert result_dict["success"] is True
-        assert result_dict["variants"] == [{"path": "/test.png"}]
+        assert result_dict["variants"][0]["path"] == "/test.png"
+        assert result_dict["variants"][0]["artifact"]["primary_path"] == "/test.png"
         assert result_dict["randomizer_mode"] == "sweep"
         assert result_dict["randomizer_plan_size"] == 5
     

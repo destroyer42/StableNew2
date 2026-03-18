@@ -21,6 +21,24 @@ def test_matrix_tokens_removed_after_expansion():
     assert all("[[" not in text for text in results)
 
 
+def test_matrix_tokens_removed_after_expansion_with_slot_aliases():
+    config = {
+        "enabled": True,
+        "matrix": {
+            "enabled": True,
+            "mode": "fanout",
+            "slots": [
+                {"name": "haircolor", "values": ["black"]},
+                {"name": "eye_color", "values": ["amber"]},
+            ],
+        },
+    }
+    prompt = "[[hair-color]] haired [[eyecolor]] eyed portrait"
+    results = sanitize_prompt(prompt, config, seed=99)
+
+    assert results == ["black haired amber eyed portrait"]
+
+
 def test_wildcards_removed_after_expansion():
     config = {
         "enabled": True,

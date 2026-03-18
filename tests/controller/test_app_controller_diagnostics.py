@@ -31,6 +31,11 @@ class DummyJobService:
         return {"jobs": []}
 
 
+class DummyWebUIProcessManager:
+    def get_recent_output_tail(self) -> dict[str, object]:
+        return {"stdout_tail": "boot ok", "stderr_tail": ""}
+
+
 def test_manual_diagnostics_bundle_triggers_builder(monkeypatch, tmp_path: Path) -> None:
     recorded: list[dict[str, object]] = []
 
@@ -44,10 +49,14 @@ def test_manual_diagnostics_bundle_triggers_builder(monkeypatch, tmp_path: Path)
     controller = AppController(
         None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
     )
+    controller.webui_process_manager = DummyWebUIProcessManager()
     controller.generate_diagnostics_bundle_manual()
 
     assert recorded
     assert recorded[0]["reason"] == "manual_request"
+    assert recorded[0]["include_process_state"] is True
+    assert recorded[0]["include_queue_state"] is True
+    assert recorded[0]["webui_tail"]["stdout_tail"] == "boot ok"
 
 
 def test_watchdog_violation_generates_bundle(monkeypatch, tmp_path: Path) -> None:
@@ -63,6 +72,7 @@ def test_watchdog_violation_generates_bundle(monkeypatch, tmp_path: Path) -> Non
     controller = AppController(
         None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
     )
+    controller.webui_process_manager = DummyWebUIProcessManager()
     exc = WatchdogViolationError("Watchdog MEMORY")
     envelope = wrap_exception(
         exc,

@@ -107,6 +107,8 @@ class LearningState:
         self.plan: list[LearningVariant] = []
         self.selected_variant: LearningVariant | None = None
         self.selected_image_index: int = 0
+        # PR-GUI-LEARN-041: Discovered-review inbox state
+        self.selected_discovered_group_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         selected_variant_index = -1

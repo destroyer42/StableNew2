@@ -367,20 +367,40 @@ class TestJobServiceIntegration:
 
 
 class TestPromptPackRequirement:
-    """Verify that pipeline runs require a prompt pack."""
+    """Verify that pipeline runs support pack and manual provenance."""
 
-    def test_start_pipeline_without_pack_returns_false(
+    def test_start_pipeline_without_pack_submits_manual_jobs(
         self, fake_job_service: FakeJobService
     ) -> None:
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         controller = _prepare_controller(fake_builder, fake_job_service)
-        errors: list[Exception] = []
 
         result = controller.start_pipeline_v2(
             run_mode="queue",
-            on_error=lambda exc: errors.append(exc),
         )
 
-        assert result is False
-        assert errors and isinstance(errors[0], ValueError)
+        assert result is True
+        job, mode = fake_job_service.submitted_jobs[0]
+        assert mode == "queue"
+        assert job.prompt_pack_id is None
+
+
+class TestCanonicalStartPipeline:
+    """Verify the public start_pipeline entrypoint uses the canonical NJR path."""
+
+    def test_start_pipeline_submits_preview_jobs(self) -> None:
+        record = make_normalized_job()
+        fake_builder = FakeJobBuilder(jobs_to_return=[record])
+        fake_service = FakeJobService()
+
+        controller = _prepare_controller(fake_builder, fake_service)
+
+        result = controller.start_pipeline(
+            run_config={"run_mode": "direct", "prompt_source": "manual"}
+        )
+
+        assert result is True
+        job, mode = fake_service.submitted_jobs[0]
+        assert job.run_mode == "direct"
+        assert mode == "direct"

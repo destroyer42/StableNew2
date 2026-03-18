@@ -1,13 +1,11 @@
-# Pipeline Folder Instructions
+﻿---
+applyTo: "src/pipeline/**/*.py"
+---
 
-## Responsibilities
-- Implement txt2img, img2img, upscale, and sequential pipeline execution.
-- Keep logic pure; no Tk imports.
-- Provide clear data models for stage configs.
+# Pipeline Instructions
 
-## Rules
-- Do not access GUI or read files directly that GUI should provide.
-- Keep side effects minimal and confined to I/O functions in controlled modules.
-
-## Testing
-- Mirror all pipeline updates in `tests/pipeline/`.
+- Preserve the builder pipeline and NJR-only execution contract.
+- Do not import GUI modules.
+- Do not introduce dict-based or PipelineConfig-based execution payloads for new work.
+- Keep builders deterministic and runtime contracts typed.
+- Mirror behavior changes in `tests/pipeline/` and relevant integration coverage.

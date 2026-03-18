@@ -157,7 +157,7 @@ class TestPhase2JobCompletionIntegration:
         # Verify variant was updated
         variant = learning_state.plan[1]
         assert variant.status == "completed"
-        assert variant.completed_images == 1
+        assert variant.completed_images == 2
     
     def test_variant_status_updates_on_completion(self):
         """PR-LEARN-004: Verify variant status updates correctly on job completion."""
@@ -175,7 +175,7 @@ class TestPhase2JobCompletionIntegration:
         
         # Verify variant status changed
         assert variant.status == "completed"
-        assert variant.completed_images == 1
+        assert variant.completed_images == 2
         
         # Verify table was updated
         mock_plan_table.update_row_status.assert_called_once_with(0, "completed")

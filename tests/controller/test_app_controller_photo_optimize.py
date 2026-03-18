@@ -19,7 +19,16 @@ def _write_image(path: Path, color: tuple[int, int, int] = (30, 60, 90)) -> None
 def _build_controller() -> AppController:
     with patch("src.controller.app_controller.AppController.__init__", return_value=None):
         controller = AppController.__new__(AppController)
-    controller.job_service = Mock()
+    enqueue_calls: list[tuple[list[object], object]] = []
+
+    def _enqueue_njrs(njrs, request):
+        enqueue_calls.append((list(njrs), request))
+        return [record.job_id for record in njrs]
+
+    controller.job_service = SimpleNamespace(
+        enqueue_njrs=Mock(side_effect=_enqueue_njrs),
+        _enqueue_calls=enqueue_calls,
+    )
     controller._append_log = Mock()
     controller._api_client = Mock()
     controller.cancel_token = None
@@ -99,11 +108,11 @@ def test_on_optimize_photo_assets_groups_by_compatible_baseline(tmp_path: Path) 
         )
 
     assert submitted == 2
-    jobs = [call.args[0] for call in controller.job_service.submit_queued.call_args_list]
-    batch_sizes = sorted(len(job._normalized_record.input_image_paths) for job in jobs)
+    jobs = controller.job_service._enqueue_calls[0][0]
+    batch_sizes = sorted(len(job.input_image_paths) for job in jobs)
     assert batch_sizes == [1, 2]
     for job in jobs:
-        photo_meta = job._normalized_record.extra_metadata["photo_optimize"]
+        photo_meta = job.extra_metadata["photo_optimize"]
         assert photo_meta["source"] == "photo_optimize_tab"
 
 
@@ -127,7 +136,18 @@ def test_photo_optimize_completion_records_asset_history_and_refreshes_ui(tmp_pa
     job = SimpleNamespace(
         job_id="job_123",
         status=JobStatus.COMPLETED,
-        result={"variants": [{"path": str(output)}]},
+        result={
+            "variants": [
+                {
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "artifact_type": "image",
+                        "primary_path": str(output),
+                        "output_paths": [str(output)],
+                    }
+                }
+            ]
+        },
         _normalized_record=SimpleNamespace(
             output_paths=[],
             input_image_paths=[asset.managed_original_path],

@@ -1,10 +1,9 @@
-# Tools Folder Instructions
+﻿---
+applyTo: "tools/**/*"
+---
 
-This directory contains scripts for repo maintenance (inventory, audits).
+# Tools Instructions
 
-## Rules
-- Do not alter inventory scripts unless explicitly instructed.
-- Do not relocate tool outputs.
-- Avoid introducing app logic here.
-
-Tools should produce deterministic outputs to keep inventory/cleaning consistent.
+- Keep repo-maintenance tools deterministic.
+- Do not move application logic into `tools/`.
+- Preserve stable output locations and CLI behavior unless the approved scope explicitly changes them.

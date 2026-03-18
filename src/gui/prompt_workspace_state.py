@@ -131,7 +131,7 @@ class PromptWorkspaceState:
         self.dirty = True
 
     def set_slot_embeddings(
-        self, index: int, positive: list[str], negative: list[str]
+        self, index: int, positive: list[tuple[str, float]], negative: list[tuple[str, float]]
     ) -> None:
         """Set embeddings for slot at index."""
         if not self.current_pack:

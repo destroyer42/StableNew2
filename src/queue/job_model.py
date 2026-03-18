@@ -39,11 +39,22 @@ class RetryAttempt:
 
 
 @dataclass
+class StageCheckpoint:
+    stage_name: str
+    completed_at: float = field(default_factory=time.time)
+    output_paths: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class JobExecutionMetadata:
     """Metadata used to track external processes spawned for a job."""
 
     external_pids: list[int] = field(default_factory=list)
     retry_attempts: list[RetryAttempt] = field(default_factory=list)
+    stage_checkpoints: list[StageCheckpoint] = field(default_factory=list)
+    last_control_action: str | None = None
+    return_to_queue_count: int = 0
 
 
 def _utcnow() -> datetime:
@@ -53,8 +64,6 @@ def _utcnow() -> datetime:
 @dataclass
 class Job:
     job_id: str
-    # Backwards-compatible positional arg: allow Job(job_id, pipeline_config)
-    pipeline_config: dict[str, Any] | None = None
     priority: JobPriority = JobPriority.NORMAL
     status: JobStatus = JobStatus.QUEUED
     created_at: datetime = field(default_factory=_utcnow)
@@ -83,8 +92,6 @@ class Job:
     # Runtime tracking attributes for GUI (not persisted)
     progress: float = 0.0
     eta_seconds: float | None = None
-    # Note: `pipeline_config` is a compat field and is excluded from `to_dict`.
-
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
         self.status = status
         self.updated_at = _utcnow()
@@ -96,7 +103,6 @@ class Job:
             self.error_message = error_message
 
     def to_dict(self) -> dict[str, Any]:
-        # pipeline_config is intentionally excluded for v2.6+ compatibility
         return {
             "job_id": self.job_id,
             "priority": int(self.priority),
@@ -120,25 +126,6 @@ class Job:
             "snapshot": self.snapshot,
             "error_envelope": serialize_envelope(self.error_envelope),
         }
-
-    @property
-    def pipeline_config(self) -> dict[str, Any] | None:  # noqa: F811
-        """Compatibility property for legacy code expecting `job.pipeline_config`.
-
-        Returns the legacy pipeline config if present and no normalized record
-        is attached. If a normalized record (`_normalized_record`) exists,
-        this returns None to emphasize NJR-first execution semantics.
-        """
-        if getattr(self, "_normalized_record", None) is not None:
-            return None
-        # Prefer explicit `pipeline_config` init value if set, else fall back to config_snapshot
-        pc = self.__dict__.get("pipeline_config", None)
-        return pc if pc is not None else self.config_snapshot
-
-    @pipeline_config.setter
-    def pipeline_config(self, value: dict[str, Any] | None) -> None:  # noqa: F811
-        # Store compat payload without affecting NJR execution paths.
-        self.__dict__["pipeline_config"] = value
 
     def summary(self) -> str:
         snapshot = self.snapshot or {}

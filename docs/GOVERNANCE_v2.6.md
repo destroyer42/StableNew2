@@ -42,35 +42,35 @@ Changes must follow this priority order:
 
 1.1 Top-Level Canonical Documents (unchallengeable)
 
-ARCHITECTURE_v2.6.md
+docs/ARCHITECTURE_v2.6.md
 
-Roadmap_v2.6.md
+docs/StableNew Roadmap v2.6.md
 
-Governance_v2.6.md
+docs/GOVERNANCE_v2.6.md
 
-PromptPack_Lifecycle_v2.6.md
+docs/PROMPT_PACK_LIFECYCLE_v2.6.md
 
-Builder Pipeline Deep-Dive_v2.6.md
+docs/Builder Pipeline Deep-Dive (v2.6).md
 
-DebugHub_v2.6.md
+docs/DEBUG HUB v2.6.md
 
-StableNew_Coding_and_Testing_v2.6.md
+docs/StableNew_Coding_and_Testing_v2.6.md
 
-PR_TEMPLATE_v2.6.md
+docs/PR_TEMPLATE_v2.6.md
 
-Agents_v2.6.md
+AGENTS.md
 
-Copilot-Instructions_v2.6.md
+.github/copilot-instructions.md
 
 If any PR or generated code contradicts these → it must be rejected or rewritten.
 
 1.2 Secondary Canonical References
 
-Randomizer_Spec_v2.6
+docs/Learning_System_Spec_v2.6.md
 
-Learning_System_Spec_v2.6
+docs/Randomizer_Spec_v2.5.md (retained; no v2.6 replacement exists yet)
 
-Cluster Compute Spec v2.6
+docs/Cluster_Compute_Spec_v2.5.md (retained; no v2.6 replacement exists yet)
 
 All PR-CORE specs
 

@@ -58,6 +58,12 @@ class SystemWatchdogV2:
         if self._thread and self._thread.is_alive():
             # PR-WATCHDOG-001: Increased timeout for reliable shutdown
             self._thread.join(timeout=10.0)
+        wait_for_idle = getattr(self.diagnostics, "wait_for_idle", None)
+        if callable(wait_for_idle):
+            try:
+                wait_for_idle(timeout_s=5.0)
+            except Exception:
+                pass
 
     def _loop(self) -> None:
         """Main watchdog loop - monitors system health.
@@ -134,20 +140,25 @@ class SystemWatchdogV2:
             with self._lock:
                 self._in_flight[reason] = False
 
+        diagnostics = getattr(self, "diagnostics", None)
+        if diagnostics is None:
+            _done_callback()
+            return
+
         # Prefer async build (don't block watchdog loop)
         try:
             # If your diagnostics_service has build_async, use it.
-            if hasattr(self.diagnostics, "build_async"):
+            if hasattr(diagnostics, "build_async"):
                 # Call with on_done if supported; fall back if not accepted by signature.
                 try:
-                    self.diagnostics.build_async(
+                    diagnostics.build_async(
                         reason=reason, context=context, on_done=_done_callback
                     )  # type: ignore[arg-type]
                 except TypeError:
                     # Older API: call without on_done and clear in-flight in a spawned thread
                     def _fallback_worker():
                         try:
-                            self.diagnostics.build(reason=reason, context=context)
+                            diagnostics.build(reason=reason, context=context)
                         finally:
                             _done_callback()
 
@@ -164,7 +175,7 @@ class SystemWatchdogV2:
                 # Fall back to spawning a thread here.
                 def _worker():
                     try:
-                        self.diagnostics.build(reason=reason, context=context)
+                        diagnostics.build(reason=reason, context=context)
                     finally:
                         _done_callback()
 

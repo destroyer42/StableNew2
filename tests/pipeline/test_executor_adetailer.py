@@ -94,3 +94,30 @@ def test_adetailer_inherits_txt2img_negative():
         assert result["global_negative_applied"] is False
         assert result["original_negative_prompt"] == ""
         assert result["final_negative_prompt"] == "inherited negative"
+
+
+def test_adetailer_fallback_name_uses_input_stem():
+    """Fallback naming should be deterministic when image_name is omitted."""
+    pipeline = Pipeline(Mock(), Mock())
+
+    with patch.object(pipeline, '_load_image_base64', return_value="fake_b64"), \
+         patch.object(pipeline, '_generate_images', return_value={"images": ["result_b64"]}), \
+         patch('src.pipeline.executor.save_image_from_base64', return_value=True), \
+         patch('builtins.open', MagicMock()):
+
+        config = {
+            "adetailer_enabled": True,
+            "adetailer_model": "face_yolov8n.pt",
+            "adetailer_steps": 28,
+        }
+
+        result = pipeline.run_adetailer(
+            input_image_path=Path("input portrait.png"),
+            prompt="test prompt",
+            negative_prompt="test negative",
+            config=config,
+            run_dir=Path("output"),
+        )
+
+        assert result is not None
+        assert result["name"] == "adetailer_input_portrait"

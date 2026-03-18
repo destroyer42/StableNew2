@@ -1,157 +1,114 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
-import pytest
-
-from src.gui.state import CancellationError
-from src.pipeline.executor import Pipeline
+from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.logger import StructuredLogger
 
 
-class DummyClient:
-    def set_model(self, *_args, **_kwargs):
-        return None
-
-    def set_vae(self, *_args, **_kwargs):
-        return None
+def _make_runner(tmp_path: Path) -> PipelineRunner:
+    return PipelineRunner(Mock(), StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs"))
 
 
-class ToggleToken:
-    def __init__(self):
-        self._cancelled = False
-
-    def cancel(self) -> None:
-        self._cancelled = True
-
-    def is_cancelled(self) -> bool:
-        return self._cancelled
+def _seed_image(path: Path) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("image")
+    return str(path)
 
 
-def _make_pipeline(tmp_path: Path) -> Pipeline:
-    return Pipeline(DummyClient(), StructuredLogger(output_dir=tmp_path / "logs"))
+def test_runner_processes_upscale_stage_serially_for_each_input_image(tmp_path: Path) -> None:
+    runner = _make_runner(tmp_path)
+    calls: list[str] = []
 
+    class _FakePipeline:
+        def __init__(self):
+            self._current_job_id = None
+            self._current_njr_sha256 = None
+            self._current_stage_chain = []
+            self._current_stage_index = 0
 
-def _seed_images(tmp_path: Path, count: int) -> list[Path]:
-    images = []
-    for idx in range(count):
-        path = tmp_path / f"img_{idx}.png"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("stub-image")
-        images.append(path)
-    return images
+        def _begin_run_metrics(self):
+            return None
 
+        def get_run_efficiency_metrics(self, _images_processed):
+            return {}
 
-def test_multi_image_run_upscale_is_serial_and_honors_cancel(tmp_path, monkeypatch):
-    pipeline = _make_pipeline(tmp_path)
-    image_paths = _seed_images(tmp_path / "src", 3)
-    stage_events: list[tuple[str, str, int, int, bool]] = []
+        def run_upscale_stage(self, input_image_path, config, output_dir, image_name, cancel_token=None):
+            calls.append(str(input_image_path))
+            output_path = Path(output_dir) / f"{image_name}.png"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text("upscaled")
+            return {"path": str(output_path), "stage": "upscale"}
 
-    def fake_stage_event(self, stage, phase, image_index, total_images, cancelled):
-        stage_events.append((stage, phase, image_index, total_images, cancelled))
-
-    monkeypatch.setattr(Pipeline, "_record_stage_event", fake_stage_event, raising=False)
-
-    def fake_run_txt2img(self, prompt, cfg, run_dir, batch_size, cancel_token):
-        return [
-            {
-                "name": f"img-{idx}",
-                "timestamp": "now",
-                "path": str(image_paths[idx]),
-            }
-            for idx in range(len(image_paths))
-        ]
-
-    def fake_run_img2img(self, *_args, **_kwargs):
-        return None
-
-    cancel_token = ToggleToken()
-    upscale_counter = {"value": 0}
-
-    def fake_run_upscale_impl(self, input_image_path, config, run_dir, cancel_token=None):
-        upscale_counter["value"] += 1
-        if upscale_counter["value"] == 1:
-            cancel_token.cancel()
-        output_path = run_dir / f"up_{upscale_counter['value']}.png"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("upscaled")
-        return {
-            "name": f"upscaled-{upscale_counter['value']}",
-            "path": str(output_path),
-        }
-
-    pipeline.run_txt2img = fake_run_txt2img.__get__(pipeline, Pipeline)
-    pipeline.run_img2img = fake_run_img2img.__get__(pipeline, Pipeline)
-    pipeline._run_upscale_impl = fake_run_upscale_impl.__get__(pipeline, Pipeline)  # type: ignore[attr-defined]
-
-    cfg = {
-        "pipeline": {"img2img_enabled": False, "upscale_enabled": True, "upscale_only_last": False},
-        "txt2img": {},
-        "upscale": {},
-    }
-
-    with pytest.raises(CancellationError):
-        pipeline.run_full_pipeline("prompt", cfg, batch_size=1, cancel_token=cancel_token)
-
-    assert ("upscale", "enter", 1, len(image_paths), False) in stage_events
-    assert ("upscale", "exit", 1, len(image_paths), False) in stage_events
-    cancel_events = [evt for evt in stage_events if evt[:2] == ("upscale", "cancelled")]
-    assert cancel_events, "expected a cancelled event for second image"
-    assert cancel_events[-1][2] == 2
-
-
-def test_upscale_stage_logs_stage_and_image_progress(tmp_path, monkeypatch):
-    pipeline = _make_pipeline(tmp_path)
-    image_paths = _seed_images(tmp_path / "src", 2)
-    stage_events: list[tuple[str, str, int, int, bool]] = []
-
-    def fake_stage_event(self, stage, phase, image_index, total_images, cancelled):
-        stage_events.append((stage, phase, image_index, total_images, cancelled))
-
-    monkeypatch.setattr(Pipeline, "_record_stage_event", fake_stage_event, raising=False)
-
-    def fake_run_txt2img(self, prompt, cfg, run_dir, batch_size, cancel_token):
-        return [
-            {
-                "name": f"img-{idx}",
-                "timestamp": "now",
-                "path": str(image_paths[idx]),
-            }
-            for idx in range(len(image_paths))
-        ]
-
-    def fake_run_img2img(self, *_args, **_kwargs):
-        return None
-
-    def fake_run_upscale_impl(self, input_image_path, config, run_dir, cancel_token=None):
-        idx = len(stage_events) // 2 + 1
-        output_path = run_dir / f"up_{idx}.png"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("upscaled")
-        return {
-            "name": f"upscaled-{idx}",
-            "path": str(output_path),
-        }
-
-    pipeline.run_txt2img = fake_run_txt2img.__get__(pipeline, Pipeline)
-    pipeline.run_img2img = fake_run_img2img.__get__(pipeline, Pipeline)
-    pipeline._run_upscale_impl = fake_run_upscale_impl.__get__(pipeline, Pipeline)  # type: ignore[attr-defined]
-
-    cfg = {
-        "pipeline": {"img2img_enabled": False, "upscale_enabled": True, "upscale_only_last": False},
-        "txt2img": {},
-        "upscale": {},
-    }
-
-    pipeline.run_full_pipeline("prompt", cfg, batch_size=1)
-
-    enter_events = [evt for evt in stage_events if evt[:2] == ("upscale", "enter")]
-    exit_events = [evt for evt in stage_events if evt[:2] == ("upscale", "exit")]
-    assert len(enter_events) == len(image_paths)
-    assert len(exit_events) == len(image_paths)
-    assert enter_events == [
-        ("upscale", "enter", idx + 1, len(image_paths), False) for idx in range(len(image_paths))
+    runner._pipeline = _FakePipeline()
+    inputs = [
+        _seed_image(tmp_path / "src" / "img_0.png"),
+        _seed_image(tmp_path / "src" / "img_1.png"),
+        _seed_image(tmp_path / "src" / "img_2.png"),
     ]
-    assert exit_events == [
-        ("upscale", "exit", idx + 1, len(image_paths), False) for idx in range(len(image_paths))
+    record = NormalizedJobRecord(
+        job_id="upscale-serial",
+        config={},
+        path_output_dir=str(tmp_path / "runs"),
+        filename_template="{seed}",
+        stage_chain=[StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})],
+        input_image_paths=inputs,
+        start_stage="upscale",
+    )
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert calls == inputs
+    assert len(record.output_paths) == 3
+
+
+def test_runner_skips_missing_upscale_outputs_without_failing_prior_inputs(tmp_path: Path) -> None:
+    runner = _make_runner(tmp_path)
+    calls: list[str] = []
+
+    class _FakePipeline:
+        def __init__(self):
+            self._current_job_id = None
+            self._current_njr_sha256 = None
+            self._current_stage_chain = []
+            self._current_stage_index = 0
+
+        def _begin_run_metrics(self):
+            return None
+
+        def get_run_efficiency_metrics(self, _images_processed):
+            return {}
+
+        def run_upscale_stage(self, input_image_path, config, output_dir, image_name, cancel_token=None):
+            calls.append(Path(input_image_path).name)
+            if Path(input_image_path).name == "img_1.png":
+                return None
+            output_path = Path(output_dir) / f"{image_name}.png"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text("upscaled")
+            return {"path": str(output_path), "stage": "upscale"}
+
+    runner._pipeline = _FakePipeline()
+    inputs = [
+        _seed_image(tmp_path / "src" / "img_0.png"),
+        _seed_image(tmp_path / "src" / "img_1.png"),
+        _seed_image(tmp_path / "src" / "img_2.png"),
     ]
+    record = NormalizedJobRecord(
+        job_id="upscale-partial",
+        config={},
+        path_output_dir=str(tmp_path / "runs"),
+        filename_template="{seed}",
+        stage_chain=[StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})],
+        input_image_paths=inputs,
+        start_stage="upscale",
+    )
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert calls == ["img_0.png", "img_1.png", "img_2.png"]
+    assert len(record.output_paths) == 2

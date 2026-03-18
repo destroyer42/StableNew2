@@ -130,7 +130,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
                 extra_fields["last_error_endpoint"] = last_error_endpoint
             log_with_ctx(
                 logger,
-                logging.DEBUG,
+                logging.INFO,
                 f"WebUI API reachable but models/options not ready yet: {progress_url}",
                 ctx=ctx,
                 extra_fields=extra_fields,

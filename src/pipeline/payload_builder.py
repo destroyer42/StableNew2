@@ -11,6 +11,12 @@ Key responsibilities:
 - Merge base stage config with refiner/hires/upscaler metadata
 - Handle input image chaining via last_image_meta
 - Produce payloads directly consumable by ApiClient.generate_images
+
+Preferred still-image flow:
+    txt2img -> optional img2img -> optional adetailer -> optional final upscale
+
+Refiner and hires remain advanced txt2img metadata. Canonical stage plans should
+not leak those fields into later preferred-flow stages implicitly.
 """
 
 from __future__ import annotations
@@ -18,6 +24,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from src.pipeline.config_normalizer import normalize_stage_payload_config
+from src.prompting.prompt_optimizer_service import optimize_with_config
 from src.pipeline.stage_models import StageType
 
 
@@ -55,7 +63,7 @@ def build_sdxl_payload(
     """
     # Extract stage type and config
     stage_type = _normalize_stage_type(stage.stage_type)
-    config = _extract_config(stage)
+    config = _extract_config(stage, stage_type)
 
     # Build base payload
     payload = _build_base_payload(config)
@@ -74,6 +82,7 @@ def build_sdxl_payload(
     if stage_type == StageType.ADETAILER:
         _apply_adetailer_fields(payload, config, last_image_meta)
 
+    _apply_prompt_optimizer(payload, config, stage_type)
     return payload
 
 
@@ -84,15 +93,15 @@ def _normalize_stage_type(stage_type: str | StageType) -> StageType:
     return StageType(stage_type)
 
 
-def _extract_config(stage: StageExecutionLike) -> dict[str, Any]:
+def _extract_config(stage: StageExecutionLike, stage_type: StageType) -> dict[str, Any]:
     """Extract the config dict from a stage, handling various formats."""
     # Handle stage_sequencer.StageExecution which has config.payload
     if hasattr(stage, "config") and hasattr(stage.config, "payload"):
-        return dict(stage.config.payload or {})
+        return normalize_stage_payload_config(dict(stage.config.payload or {}), stage_type=stage_type.value)
     # Handle stage_models.StageExecution which has config as a Mapping
     if hasattr(stage, "config") and isinstance(stage.config, Mapping):
-        return dict(stage.config)
-    return {}
+        return normalize_stage_payload_config(dict(stage.config), stage_type=stage_type.value)
+    return normalize_stage_payload_config({}, stage_type=stage_type.value)
 
 
 def _build_base_payload(config: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +129,23 @@ def _build_base_payload(config: dict[str, Any]) -> dict[str, Any]:
         # clip skip
         "clip_skip": config.get("clip_skip", 2),
     }
+
+
+def _apply_prompt_optimizer(
+    payload: dict[str, Any],
+    config: dict[str, Any],
+    stage_type: StageType,
+) -> None:
+    if "prompt" not in payload and "negative_prompt" not in payload:
+        return
+    result = optimize_with_config(
+        payload.get("prompt", ""),
+        payload.get("negative_prompt", ""),
+        config_payload=config.get("prompt_optimizer"),
+        pipeline_name=stage_type.value if isinstance(stage_type, StageType) else str(stage_type),
+    )
+    payload["prompt"] = result.positive.optimized_prompt
+    payload["negative_prompt"] = result.negative.optimized_prompt
 
 
 def _apply_refiner_fields(payload: dict[str, Any], stage: StageExecutionLike) -> None:

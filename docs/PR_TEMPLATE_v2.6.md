@@ -367,6 +367,7 @@ Before submitting PR for approval:
 - [ ] Risks identified with mitigations
 - [ ] Tech debt impact analyzed
 - [ ] Architecture alignment verified
+- [ ] No contradictions introduced with Tier 1–2 canonical docs (see Canonical_Document_Ownership_v2.6.md §5)
 
 After implementation:
 - [ ] Implementation Summary added

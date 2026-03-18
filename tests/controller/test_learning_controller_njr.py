@@ -110,12 +110,9 @@ class TestLearningControllerNJR:
         
         # Mock job service
         job_service = Mock()
-        job_service.submit_job_with_run_mode = Mock()
+        job_service.enqueue_njrs = Mock(return_value=["learning-job-1"])
+        job_service.register_callback = Mock()
         pipeline_controller._job_service = job_service
-        
-        # Mock runner
-        pipeline_controller._run_job = Mock(return_value={"status": "completed"})
-        
         return pipeline_controller
 
     @pytest.fixture
@@ -150,6 +147,10 @@ class TestLearningControllerNJR:
         
         # Verify CFG override was applied
         assert record.cfg_scale == 8.5  # variant value, not baseline 7.0
+        assert record.config["txt2img"]["cfg_scale"] == 8.5
+        assert record.prompt_pack_name == "TestExperiment"
+        assert record.extra_metadata["submission_source"] == "learning"
+        assert record.extra_metadata["learning"]["config"]["txt2img"]["cfg_scale"] == 8.5
         
         # Verify prompt (NO DUPLICATION)
         assert record.positive_prompt == "a beautiful landscape"
@@ -160,6 +161,16 @@ class TestLearningControllerNJR:
         assert record.extra_metadata["learning_enabled"] is True
         assert record.extra_metadata["learning_variable"] == "CFG Scale"
         assert record.extra_metadata["learning_variant_value"] == 8.5
+
+    def test_build_variant_njr_carries_images_per_value_to_images_per_prompt(
+        self, controller, learning_state
+    ):
+        learning_state.current_experiment.images_per_value = 3
+        variant = LearningVariant(param_value=8.5, planned_images=3)
+
+        record = controller._build_variant_njr(variant, learning_state.current_experiment)
+
+        assert record.images_per_prompt == 3
 
     def test_njr_prompt_not_duplicated(self, controller, learning_state):
         """Test 2: Verify single prompt occurrence in NJR."""
@@ -200,9 +211,20 @@ class TestLearningControllerNJR:
         assert record.stage_chain[0].denoising_strength == 0.45
         assert record.input_image_paths == [str(input_image), str(input_image)]
         assert record.extra_metadata["learning_stage"] == "img2img"
+        assert record.extra_metadata["submission_source"] == "learning"
+
+    def test_build_variant_njr_uses_plan_variant_index(self, controller, learning_state):
+        variant_a = LearningVariant(param_value=7.0, planned_images=1)
+        variant_b = LearningVariant(param_value=8.5, planned_images=1)
+        learning_state.plan.extend([variant_a, variant_b])
+
+        record = controller._build_variant_njr(variant_b, learning_state.current_experiment)
+
+        assert record.learning_context is not None
+        assert record.learning_context.variant_index == 1
 
     def test_submit_variant_job_uses_job_service(self, controller, learning_state, mock_pipeline_controller):
-        """Test 3: Job submission via JobService, not PackJobEntry."""
+        """Test 3: Job submission uses canonical enqueue_njrs path."""
         variant = LearningVariant(param_value=7.0, planned_images=1)
         learning_state.plan.append(variant)
         
@@ -211,20 +233,17 @@ class TestLearningControllerNJR:
         
         # Verify JobService was called
         job_service = mock_pipeline_controller._job_service
-        assert job_service.submit_job_with_run_mode.called
-        
-        # Verify job was submitted
-        call_args = job_service.submit_job_with_run_mode.call_args
-        submitted_job = call_args[0][0]
-        
-        # Verify job has NJR attached
-        assert hasattr(submitted_job, "_normalized_record")
-        record = submitted_job._normalized_record
+        assert job_service.enqueue_njrs.called
+        submitted_records, run_request = job_service.enqueue_njrs.call_args[0]
+        assert len(submitted_records) == 1
+        record = submitted_records[0]
         assert isinstance(record, NormalizedJobRecord)
         
         # Verify config propagation
         assert record.base_model == "test_model.safetensors"
         assert record.vae == "test_vae.safetensors"
+        assert run_request.prompt_pack_id == record.prompt_pack_id
+        assert "learning" in run_request.tags
         
         # Verify variant status updated
         assert variant.status == "queued"
@@ -238,8 +257,8 @@ class TestLearningControllerNJR:
         controller._submit_variant_job(variant)
         
         job_service = mock_pipeline_controller._job_service
-        submitted_job = job_service.submit_job_with_run_mode.call_args[0][0]
-        record = submitted_job._normalized_record
+        submitted_records, _run_request = job_service.enqueue_njrs.call_args[0]
+        record = submitted_records[0]
         
         # Verify complete config chain
         assert record.base_model == "test_model.safetensors"
@@ -250,52 +269,10 @@ class TestLearningControllerNJR:
         assert record.steps == 20
         assert record.width == 512
         assert record.height == 512
+        assert record.config["txt2img"]["cfg_scale"] == 9.0
         
-        # Verify job config_snapshot matches NJR
-        assert submitted_job.config_snapshot["model"] == "test_model.safetensors"
-        assert submitted_job.config_snapshot["vae"] == "test_vae.safetensors"
-        assert submitted_job.config_snapshot["sampler"] == "Euler a"
-        assert submitted_job.config_snapshot["cfg_scale"] == 9.0
-
-    def test_execute_learning_job(self, controller, mock_pipeline_controller):
-        """Test 5: Job execution via pipeline runner."""
-        # Create mock job with NJR
-        from src.queue.job_model import Job, JobPriority
-        
-        record = NormalizedJobRecord(
-            job_id="test-job",
-            positive_prompt="test prompt",
-            base_model="model.safetensors",
-            vae="vae.safetensors",
-            sampler_name="Euler a",
-            scheduler="normal",
-            steps=20,
-            cfg_scale=7.0,
-            width=512,
-            height=512,
-            seed=-1,
-            config={},
-            path_output_dir="",
-            filename_template="",
-        )
-        
-        job = Job(
-            job_id="test-job",
-            priority=JobPriority.NORMAL,
-            run_mode="queue",
-            source="learning",
-        )
-        job._normalized_record = record
-        
-        # Execute
-        result = controller._execute_learning_job(job)
-        
-        # Verify runner was called
-        assert mock_pipeline_controller._run_job.called
-        assert result["status"] == "completed"
-
     def test_no_packjobentry_imports(self, controller):
-        """Test 6: Verify no PackJobEntry imports or usage."""
+        """Test 5: Verify no PackJobEntry or manual queue job shims remain."""
         import inspect
         source = inspect.getsource(controller._submit_variant_job)
         
@@ -306,11 +283,12 @@ class TestLearningControllerNJR:
         assert "from src.gui.app_state_v2 import PackJobEntry" not in source_code
         assert "job_draft.packs" not in source_code
         assert "on_add_job_to_queue_v2" not in source_code
+        assert "submit_job_with_run_mode" not in source_code
         
         # Verify NJR usage
         assert "_build_variant_njr" in source
-        assert "_njr_to_queue_job" in source
-        assert "job_service" in source or "JobService" in source
+        assert "submit_variant_job" in source
+        assert "_njr_to_queue_job" not in source
 
 
 if __name__ == "__main__":

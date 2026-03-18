@@ -13,6 +13,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui import theme_v2 as theme_mod
+from src.pipeline.artifact_contract import extract_artifact_paths
 from src.queue.job_history_store import JobHistoryEntry
 
 
@@ -60,6 +61,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         self.replay_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.svd_btn = ttk.Button(
+            action_bar,
+            text="Animate with SVD",
+            command=self._on_send_to_svd,
+            state=tk.DISABLED,
+        )
+        self.svd_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
@@ -127,6 +135,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.bind("<Motion>", self._on_tree_motion)
         self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
+        self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self.history_tree.bind("<Button-3>", self._on_context_menu)
 
@@ -165,6 +174,9 @@ class JobHistoryPanelV2(ttk.Frame):
             self._item_to_job[item_id] = entry.job_id
         self._selected_job_id = None
         self.open_btn.configure(state=tk.DISABLED)
+        self.replay_btn.configure(state=tk.DISABLED)
+        self.svd_btn.configure(state=tk.DISABLED)
+        self.explain_btn.configure(state=tk.DISABLED)
 
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
@@ -199,6 +211,7 @@ class JobHistoryPanelV2(ttk.Frame):
             self._selected_job_id = None
             self.open_btn.configure(state=tk.DISABLED)
             self.replay_btn.configure(state=tk.DISABLED)
+            self.svd_btn.configure(state=tk.DISABLED)
             return
         item_id = selection[0]
         job_id = self._item_to_job.get(item_id)
@@ -208,11 +221,10 @@ class JobHistoryPanelV2(ttk.Frame):
             self._selected_job_id = None
             self.open_btn.configure(state=tk.DISABLED)
             self.replay_btn.configure(state=tk.DISABLED)
+            self.svd_btn.configure(state=tk.DISABLED)
             self.explain_btn.configure(state=tk.DISABLED)
             return
-        self.open_btn.configure(state=tk.NORMAL)
-        self.replay_btn.configure(state=tk.NORMAL)
-        self.explain_btn.configure(state=tk.NORMAL)
+        self._update_action_buttons(entry)
 
     def _on_open_folder(self) -> None:
         if not self._selected_job_id:
@@ -249,6 +261,16 @@ class JobHistoryPanelV2(ttk.Frame):
             except Exception:
                 pass
 
+    def _on_send_to_svd(self) -> None:
+        if not self._selected_job_id or not self.controller:
+            return
+        handler = getattr(self.controller, "send_history_job_image_to_svd", None)
+        if callable(handler):
+            try:
+                handler(self._selected_job_id)
+            except Exception:
+                pass
+
     def _on_context_menu(self, event: tk.Event) -> None:
         item = self.history_tree.identify_row(event.y)
         if not item:
@@ -259,8 +281,34 @@ class JobHistoryPanelV2(ttk.Frame):
         if not job_id:
             return
         self._selected_job_id = job_id
-        self.explain_btn.configure(state=tk.NORMAL)
+        entry = self._entries.get(job_id)
+        if entry:
+            self._update_action_buttons(entry)
         self._history_menu.tk_popup(event.x_root, event.y_root)
+
+    def _update_action_buttons(self, entry: JobHistoryEntry | None) -> None:
+        if not entry:
+            self.open_btn.configure(state=tk.DISABLED)
+            self.replay_btn.configure(state=tk.DISABLED)
+            self.svd_btn.configure(state=tk.DISABLED)
+            self.explain_btn.configure(state=tk.DISABLED)
+            self._history_menu.entryconfigure("Animate with SVD", state=tk.DISABLED)
+            self._history_menu.entryconfigure("Explain This Job", state=tk.DISABLED)
+            return
+        self.open_btn.configure(state=tk.NORMAL)
+        self.replay_btn.configure(state=tk.NORMAL)
+        self.explain_btn.configure(state=tk.NORMAL)
+        svd_state = tk.NORMAL if self._entry_supports_svd(entry) else tk.DISABLED
+        self.svd_btn.configure(state=svd_state)
+        self._history_menu.entryconfigure("Animate with SVD", state=svd_state)
+        self._history_menu.entryconfigure("Explain This Job", state=tk.NORMAL)
+
+    def _entry_supports_svd(self, entry: JobHistoryEntry) -> bool:
+        artifact = self._extract_primary_artifact(entry)
+        artifact_type = str(artifact.get("artifact_type") or "").strip().lower()
+        if artifact_type == "video":
+            return False
+        return True
 
     def _get_display_status(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Determine status: Success, Failed, or Cancelled."""
@@ -346,6 +394,8 @@ class JobHistoryPanelV2(ttk.Frame):
                 return Path(str(model)).stem
         metadata = self._extract_result_metadata(entry)
         model = metadata.get("model") or metadata.get("sd_model_checkpoint")
+        if not model and entry.result and isinstance(entry.result, dict):
+            model = entry.result.get("model") or entry.result.get("sd_model_checkpoint")
         if model:
             return Path(str(model)).stem
         return "-"
@@ -364,6 +414,14 @@ class JobHistoryPanelV2(ttk.Frame):
         seed = metadata.get("actual_seed") or metadata.get("final_seed")
         if seed is not None and seed != -1:
             return str(seed)
+        if seed == -1:
+            return "Random"
+        if entry.result and isinstance(entry.result, dict):
+            seed = entry.result.get("actual_seed") or entry.result.get("final_seed")
+            if seed is not None and seed != -1:
+                return str(seed)
+            if seed == -1:
+                return "Random"
         
         # Try NJR snapshot
         if entry.snapshot:
@@ -373,6 +431,8 @@ class JobHistoryPanelV2(ttk.Frame):
                 return str(seed)
             # Last resort: show requested seed even if -1
             seed = njr.get("seed")
+            if seed == -1:
+                return "Random"
             if seed is not None and seed != -1:
                 return str(seed)
         
@@ -417,9 +477,62 @@ class JobHistoryPanelV2(ttk.Frame):
                 if isinstance(item, dict):
                     return item
         return {}
+
+    def _extract_primary_artifact(self, entry: JobHistoryEntry) -> dict[str, Any]:
+        """Extract the best available canonical artifact record from a history result."""
+        if not entry.result or not isinstance(entry.result, dict):
+            return {}
+
+        direct_artifact = entry.result.get("artifact")
+        if isinstance(direct_artifact, dict):
+            return dict(direct_artifact)
+
+        metadata = self._extract_result_metadata(entry)
+        for key in ("svd_native_artifact", "animatediff_artifact"):
+            aggregate = metadata.get(key)
+            if not isinstance(aggregate, dict):
+                continue
+            artifacts = aggregate.get("artifacts")
+            if isinstance(artifacts, list):
+                for artifact in artifacts:
+                    if isinstance(artifact, dict):
+                        return dict(artifact)
+            primary_path = aggregate.get("primary_path")
+            output_paths = aggregate.get("output_paths") or aggregate.get("video_paths")
+            manifest_paths = aggregate.get("manifest_paths")
+            manifest_path = manifest_paths[0] if isinstance(manifest_paths, list) and manifest_paths else None
+            if primary_path or output_paths:
+                return {
+                    "artifact_type": "video",
+                    "primary_path": primary_path,
+                    "output_paths": list(output_paths or []),
+                    "manifest_path": manifest_path,
+                }
+
+        variants = entry.result.get("variants")
+        if isinstance(variants, list):
+            for variant in variants:
+                if not isinstance(variant, dict):
+                    continue
+                artifact = variant.get("artifact")
+                if isinstance(artifact, dict):
+                    return dict(artifact)
+
+        return {}
     
     def _extract_image_count(self, entry: JobHistoryEntry) -> str:
         """Extract image count from result or NJR snapshot."""
+        artifact = self._extract_primary_artifact(entry)
+        if artifact:
+            output_paths = extract_artifact_paths({"artifact": artifact})
+            if output_paths:
+                return str(len(output_paths))
+        metadata = self._extract_result_metadata(entry)
+        for key in ("svd_native_artifact", "animatediff_artifact"):
+            aggregate = metadata.get(key)
+            if isinstance(aggregate, dict) and aggregate.get("count") is not None:
+                return str(aggregate["count"])
+
         # Try result first
         if entry.result and isinstance(entry.result, dict):
             count = entry.result.get("image_count") or entry.result.get("images_generated")
@@ -439,6 +552,11 @@ class JobHistoryPanelV2(ttk.Frame):
     
     def _extract_output_folder(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Extract actual output folder name (20251226_HHMMSS_PackName)."""
+        artifact = self._extract_primary_artifact(entry)
+        primary_paths = extract_artifact_paths({"artifact": artifact}) if artifact else []
+        if primary_paths:
+            return Path(primary_paths[0]).parent.name or "-"
+
         # Try result first for actual output path
         if entry.result and isinstance(entry.result, dict):
             output_dir = entry.result.get("output_dir") or entry.result.get("output_folder")
@@ -459,6 +577,13 @@ class JobHistoryPanelV2(ttk.Frame):
     
     def _derive_output_folder(self, entry: JobHistoryEntry) -> str:
         """PR-GUI-FUNC-003: Derive actual output folder path from job entry."""
+        artifact = self._extract_primary_artifact(entry)
+        primary_paths = extract_artifact_paths({"artifact": artifact}) if artifact else []
+        if primary_paths:
+            output_path = Path(primary_paths[0]).parent
+            if output_path.exists():
+                return str(output_path)
+
         # Try to get output_dir from result first (most accurate)
         if entry.result and isinstance(entry.result, dict):
             output_dir = entry.result.get("output_dir") or entry.result.get("output_folder")

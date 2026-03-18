@@ -93,7 +93,7 @@ class TestStageSequencerBuildPlan:
         assert plan.stages[0].produces_output_image is True
 
     def test_full_chain_txt2img_upscale_adetailer(self):
-        """Full chain: txt2img + upscale + ADetailer."""
+        """Full chain: txt2img + ADetailer + upscale."""
         sequencer = StageSequencer()
         config = _base_config()
         config["upscale"]["enabled"] = True
@@ -104,16 +104,16 @@ class TestStageSequencerBuildPlan:
         plan = sequencer.build_plan(config)
 
         assert len(plan.stages) == 3
-        assert [s.stage_type for s in plan.stages] == ["txt2img", "upscale", "adetailer"]
+        assert [s.stage_type for s in plan.stages] == ["txt2img", "adetailer", "upscale"]
         # Verify ordering
         assert plan.stages[0].order_index == 0
         assert plan.stages[1].order_index == 1
         assert plan.stages[2].order_index == 2
-        # ADetailer should be last
-        assert plan.stages[-1].stage_type == "adetailer"
+        # Upscale should be last still-image stage
+        assert plan.stages[-1].stage_type == "upscale"
 
     def test_txt2img_img2img_upscale_adetailer(self):
-        """Full 4-stage chain: txt2img + img2img + upscale + ADetailer."""
+        """Full 4-stage chain: txt2img + img2img + ADetailer + upscale."""
         sequencer = StageSequencer()
         config = _base_config()
         config["img2img"]["enabled"] = True
@@ -129,8 +129,8 @@ class TestStageSequencerBuildPlan:
         assert [s.stage_type for s in plan.stages] == [
             "txt2img",
             "img2img",
-            "upscale",
             "adetailer",
+            "upscale",
         ]
 
     def test_img2img_with_upscale_no_txt2img(self):
@@ -209,6 +209,44 @@ class TestStageSequencerBuildPlan:
         assert metadata.hires_upscale_factor == 1.5
         assert metadata.hires_denoise == 0.4
         assert metadata.hires_steps == 10
+
+    def test_preferred_flow_keeps_txt2img_metadata_off_later_stages(self):
+        """Refiner/hires metadata should not bleed into img2img/adetailer/upscale stages."""
+        sequencer = StageSequencer()
+        config = _base_config()
+        config["img2img"]["enabled"] = True
+        config["pipeline"]["img2img_enabled"] = True
+        config["adetailer"]["enabled"] = True
+        config["pipeline"]["adetailer_enabled"] = True
+        config["upscale"]["enabled"] = True
+        config["pipeline"]["upscale_enabled"] = True
+        config["txt2img"]["refiner_enabled"] = True
+        config["txt2img"]["refiner_model_name"] = "sd_xl_refiner_1.0"
+        config["txt2img"]["refiner_switch_at"] = 0.8
+        config["hires_fix"] = {
+            "enabled": True,
+            "upscale_factor": 1.5,
+            "denoise_strength": 0.4,
+            "steps": 10,
+        }
+
+        plan = sequencer.build_plan(config)
+
+        assert [stage.stage_type for stage in plan.stages] == [
+            "txt2img",
+            "img2img",
+            "adetailer",
+            "upscale",
+        ]
+        for stage in plan.stages[1:]:
+            metadata = stage.config.metadata
+            assert metadata.refiner_enabled is False
+            assert metadata.refiner_model_name is None
+            assert metadata.refiner_switch_at is None
+            assert metadata.hires_enabled is False
+            assert metadata.hires_upscale_factor is None
+            assert metadata.hires_denoise is None
+            assert metadata.hires_steps is None
 
     def test_has_generation_stage(self):
         """has_generation_stage() should return True when txt2img/img2img present."""
@@ -318,9 +356,18 @@ class StubPipeline:
         self.calls.append(("upscale", {"input": str(input_image), **payload}))
         return {"images": ["upscale_output"], "path": str(run_dir / "upscale.png")}
 
-    def run_adetailer_stage(self, input_image, payload: dict, run_dir, **kwargs) -> dict[str, Any]:
-        self.calls.append(("adetailer", {"input": str(input_image), **payload}))
-        return {"images": ["adetailer_output"], "path": str(run_dir / "adetailer.png")}
+    def run_adetailer_stage(
+        self,
+        input_image=None,
+        payload: dict | None = None,
+        run_dir=None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        actual_input = kwargs.get("input_image_path", input_image)
+        actual_payload = kwargs.get("config", payload) or {}
+        actual_run_dir = kwargs.get("output_dir", run_dir)
+        self.calls.append(("adetailer", {"input": str(actual_input), **actual_payload}))
+        return {"images": ["adetailer_output"], "path": str(actual_run_dir / "adetailer.png")}
 
     def _load_image_base64(self, path) -> str:
         return "base64_encoded_image"
@@ -367,7 +414,7 @@ class TestPipelineRunnerWithPlan:
 
         assert stub_pipeline.calls[0][0] == "txt2img"
         assert result.stage_plan is not None
-        assert result.stage_plan.enabled_stages == ["txt2img", "upscale", "adetailer"]
+        assert result.stage_plan.enabled_stages == ["txt2img", "adetailer", "upscale"]
 
     def test_runner_with_sequencer_injection(self, mock_api_client, mock_logger, tmp_path):
         """Runner should use injected StageSequencer."""

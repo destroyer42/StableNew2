@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.controller.app_controller import AppController
@@ -8,7 +9,16 @@ from src.controller.app_controller import AppController
 def _build_controller() -> AppController:
     with patch("src.controller.app_controller.AppController.__init__", return_value=None):
         controller = AppController.__new__(AppController)
-    controller.job_service = Mock()
+    enqueue_calls: list[tuple[list[object], object]] = []
+
+    def _enqueue_njrs(njrs, request):
+        enqueue_calls.append((list(njrs), request))
+        return [record.job_id for record in njrs]
+
+    controller.job_service = SimpleNamespace(
+        enqueue_njrs=Mock(side_effect=_enqueue_njrs),
+        _enqueue_calls=enqueue_calls,
+    )
     controller._append_log = Mock()
     controller._api_client = Mock()
     controller.cancel_token = None
@@ -50,16 +60,18 @@ def test_reprocess_with_prompt_delta_uses_metadata_baseline(tmp_path) -> None:
     )
 
     assert submitted == 1
-    job = controller.job_service.submit_queued.call_args[0][0]
-    njr = job._normalized_record
+    njr = controller.job_service._enqueue_calls[0][0][0]
     assert njr.positive_prompt == "portrait photo, bending forward"
     assert njr.negative_prompt == "blurry, extra hands"
     assert njr.base_model == "modelA.safetensors"
     assert njr.config["steps"] == 32
     assert njr.config["img2img"]["denoising_strength"] == 0.42
+    assert njr.config["adetailer"]["adetailer_prompt"] == "portrait photo, bending forward"
+    assert njr.config["adetailer"]["adetailer_negative_prompt"] == "blurry, extra hands"
     assert njr.config["vae"] == "vaeA"
     assert njr.config["txt2img"]["model"] == "modelA.safetensors"
-    assert job.source == "review_tab"
+    assert njr.extra_metadata["reprocess"]["source"] == "review_tab"
+    assert njr.extra_metadata["reprocess"]["source_items"][0]["metadata"]["baseline_source"] == "embedded_metadata"
 
 
 def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) -> None:
@@ -79,11 +91,44 @@ def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) 
     )
 
     assert submitted == 1
-    job = controller.job_service.submit_queued.call_args[0][0]
-    njr = job._normalized_record
+    njr = controller.job_service._enqueue_calls[0][0][0]
     assert njr.positive_prompt == "new prompt"
     assert njr.negative_prompt == ""
+    assert njr.config["adetailer"]["adetailer_prompt"] == "new prompt"
+    assert njr.config["adetailer"]["adetailer_negative_prompt"] == ""
     assert njr.config["steps"] == 20
+
+
+def test_reprocess_with_prompt_modify_short_delta_preserves_baseline(tmp_path) -> None:
+    controller = _build_controller()
+    image = tmp_path / "img_modify.png"
+    image.write_bytes(b"")
+
+    controller._extract_reprocess_baseline_from_image = Mock(
+        return_value={
+            "prompt": "portrait photo, studio lighting",
+            "negative_prompt": "blurry",
+            "model": "modelA.safetensors",
+            "vae": "vaeA",
+            "config": {},
+        }
+    )
+
+    submitted = controller.on_reprocess_images_with_prompt_delta(
+        image_paths=[str(image)],
+        stages=["adetailer"],
+        prompt_delta="better teeth",
+        negative_prompt_delta="-blurry, extra tongue",
+        prompt_mode="modify",
+        negative_prompt_mode="modify",
+    )
+
+    assert submitted == 1
+    njr = controller.job_service._enqueue_calls[0][0][0]
+    assert njr.positive_prompt == "portrait photo, studio lighting, better teeth"
+    assert njr.negative_prompt == "extra tongue"
+    assert njr.config["adetailer"]["adetailer_prompt"] == "portrait photo, studio lighting, better teeth"
+    assert njr.config["adetailer"]["adetailer_negative_prompt"] == "extra tongue"
 
 
 def test_reprocess_img2img_fallback_sets_stage_steps(tmp_path) -> None:
@@ -103,8 +148,8 @@ def test_reprocess_img2img_fallback_sets_stage_steps(tmp_path) -> None:
     )
 
     assert submitted == 1
-    job = controller.job_service.submit_queued.call_args[0][0]
-    stage = job._normalized_record.stage_chain[0]
+    njr = controller.job_service._enqueue_calls[0][0][0]
+    stage = njr.stage_chain[0]
     assert stage.stage_type == "img2img"
     assert stage.steps == 20
     assert stage.cfg_scale == 7.0
@@ -150,8 +195,8 @@ def test_reprocess_batch_size_groups_only_compatible_jobs(tmp_path) -> None:
     )
 
     assert submitted == 2
-    jobs = [call.args[0] for call in controller.job_service.submit_queued.call_args_list]
-    batch_sizes = sorted(len(job._normalized_record.input_image_paths) for job in jobs)
+    jobs = controller.job_service._enqueue_calls[0][0]
+    batch_sizes = sorted(len(job.input_image_paths) for job in jobs)
     assert batch_sizes == [1, 2]
 
 
@@ -183,3 +228,39 @@ def test_extract_reprocess_baseline_uses_prompt_resolution_fallbacks(tmp_path) -
     assert baseline["negative_prompt"] == "config negative"
     assert baseline["model"] == "modelA.safetensors"
     assert baseline["vae"] == "vaeA"
+
+
+def test_submit_image_edits_builds_masked_img2img_jobs(tmp_path) -> None:
+    controller = _build_controller()
+    image = tmp_path / "img_edit.png"
+    mask = tmp_path / "img_edit_mask.png"
+    image.write_bytes(b"")
+    mask.write_bytes(b"")
+
+    controller._extract_reprocess_baseline_from_image = Mock(
+        return_value={
+            "prompt": "portrait photo",
+            "negative_prompt": "blurry",
+            "model": "modelA.safetensors",
+            "vae": "vaeA",
+            "config": {"img2img": {"denoising_strength": 0.41}},
+        }
+    )
+
+    submitted = controller.on_submit_image_edits(
+        image_paths=[str(image)],
+        mask_paths=[str(mask)],
+        prompt_delta="fix eyes",
+        negative_prompt_delta="extra iris",
+        prompt_mode="append",
+        negative_prompt_mode="append",
+    )
+
+    assert submitted == 1
+    njr = controller.job_service._enqueue_calls[0][0][0]
+    assert njr.stage_chain[0].stage_type == "img2img"
+    assert njr.stage_chain[0].extra["mask_image_path"] == str(mask)
+    assert njr.positive_prompt == "portrait photo, fix eyes"
+    assert njr.negative_prompt == "blurry, extra iris"
+    assert njr.extra_metadata["image_edit"]["schema"] == "stablenew.image_edit.v2.6"
+    assert njr.extra_metadata["reprocess"]["source_items"][0]["image_edit"]["mask_image_path"] == str(mask)

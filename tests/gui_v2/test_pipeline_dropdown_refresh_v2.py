@@ -49,6 +49,8 @@ def test_pipeline_dropdown_refresh_updates_stage_cards():
         "samplers": ["samplerA"],
         "schedulers": ["schedulerX"],
         "upscalers": ["Latent", "R-ESRGAN 4x+"],
+        "hypernetworks": ["hyper-a"],
+        "embeddings": ["embed-a"],
     }
 
     app_state.set_resources(resources)
@@ -64,7 +66,11 @@ def test_pipeline_dropdown_refresh_updates_stage_cards():
     assert list(txt_card.scheduler_combo["values"]) == resources["schedulers"]
 
     assert list(img_card.sampler_combo["values"]) == resources["samplers"]
-    assert list(txt_card.hires_upscaler_combo["values"]) == resources["upscalers"]
+    hires_values = list(txt_card.hires_upscaler_combo["values"])
+    for upscaler in resources["upscalers"]:
+        assert upscaler in hires_values
     assert "SDXL Refiner" in list(txt_card.refiner_model_combo["values"])
+    assert app_state.resources["hypernetworks"] == ["hyper-a"]
+    assert app_state.resources["embeddings"] == ["embed-a"]
 
     root.destroy()

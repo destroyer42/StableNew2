@@ -44,6 +44,11 @@ def test_presets_roundtrip_refiner_and_hires_defaults(config_manager: ConfigMana
 
 def test_config_defaults_always_include_refiner_hires(config_manager: ConfigManager):
     config = config_manager._merge_config_with_defaults({})
+    pipeline = config["pipeline"]
+    assert pipeline["txt2img_enabled"] is True
+    assert pipeline["img2img_enabled"] is False
+    assert pipeline["adetailer_enabled"] is False
+    assert pipeline["upscale_enabled"] is False
     assert config["txt2img"]["refiner_enabled"] is False
     assert config["txt2img"]["refiner_model_name"] == ""
     assert abs(config["txt2img"]["refiner_switch_at"] - 0.8) < 1e-6

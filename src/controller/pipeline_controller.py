@@ -1,10 +1,10 @@
 """Compatibility wrapper that exposes the GUI pipeline controller at src.controller.
 
-PipelineController – V2 Run Path (summary)
+PipelineController canonical run path:
 
-GUI Run buttons → AppController._start_run_v2 → PipelineController.start_pipeline
-→ JobService / SingleNodeJobRunner → PipelineController._run_pipeline_job
-→ run_pipeline (PipelineRunner-backed) → Executor/API → images in output_dir.
+GUI Run buttons -> AppController._start_run_v2 -> PipelineController.start_pipeline
+-> preview NJR build -> JobService submit_job_with_run_mode
+-> PipelineController._run_job -> PipelineRunner.run_njr.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from src.controller.archive.pipeline_config_assembler import (
@@ -61,9 +61,6 @@ from src.pipeline.job_models_v2 import (
     UnifiedJobSummary,
 )
 
-# PR-CORE1-12: Legacy adapter still used by deprecated run_pipeline() method
-# Will be removed when run_pipeline() is fully retired
-from src.pipeline.legacy_njr_adapter import build_njr_from_legacy_pipeline_config
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.pipeline.run_plan import RunPlan
 from src.queue.job_history_store import JobHistoryEntry
@@ -403,24 +400,7 @@ class PipelineController(_GUIPipelineController):
         on_complete: Callable[[dict[Any, Any]], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
     ) -> bool:
-        """Start pipeline using V2 job building via JobBuilderV2.
-
-        This is the new V2 run entrypoint that:
-        1. Builds normalized jobs via JobBuilderV2
-        2. Converts them to queue Jobs
-        3. Submits via JobService respecting run_mode
-
-        Args:
-            run_mode: Force "direct" or "queue". If None, uses state.
-            source: Job source for provenance (e.g., "gui", "api").
-            prompt_source: Prompt source type (e.g., "manual", "pack").
-            prompt_pack_id: Optional prompt pack ID if using packs.
-            on_complete: Callback on successful completion.
-            on_error: Callback on error.
-
-        Returns:
-            True if jobs were submitted, False otherwise.
-        """
+        """Start pipeline using preview-built NJRs and JobService submission."""
         if not self.gui_can_run():
             return False
         self._sync_auto_run_setting()
@@ -446,27 +426,42 @@ class PipelineController(_GUIPipelineController):
             except Exception:
                 run_mode = "queue"
 
-        # Build normalized jobs
+        return self._submit_preview_jobs_for_run(
+            run_mode=run_mode,
+            source=source,
+            prompt_source=prompt_source,
+            prompt_pack_id=prompt_pack_id,
+            on_complete=on_complete,
+            on_error=on_error,
+        )
+
+    def _submit_preview_jobs_for_run(
+        self,
+        *,
+        run_mode: str,
+        source: str,
+        prompt_source: str,
+        prompt_pack_id: str | None,
+        on_complete: Callable[[dict[Any, Any]], None] | None = None,
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> bool:
         try:
-            normalized_jobs = self._build_normalized_jobs_from_state()
+            normalized_jobs = self.get_preview_jobs()
         except Exception as exc:
-            _logger.error("Failed to build normalized jobs: %s", exc)
+            _logger.error("Failed to build preview jobs: %s", exc)
             if on_error:
                 on_error(exc)
             return False
 
-        prompt_pack_id = self._last_run_config and self._last_run_config.get("prompt_pack_id")
-        if not prompt_pack_id:
-            exc = ValueError("start_pipeline_v2 requires prompt_pack_id for provenance")
-            if on_error:
-                on_error(exc)
-            return False
+        effective_prompt_pack_id = prompt_pack_id
+        if not effective_prompt_pack_id:
+            last_run_config = getattr(self, "_last_run_config", None) or {}
+            effective_prompt_pack_id = last_run_config.get("prompt_pack_id")
 
         if not normalized_jobs:
-            _logger.warning("No jobs to submit")
+            _logger.warning("No preview jobs available to submit")
             return False
 
-        # Convert and submit each job
         submitted_count = 0
         for record in normalized_jobs:
             try:
@@ -475,11 +470,10 @@ class PipelineController(_GUIPipelineController):
                     run_mode=run_mode,
                     source=source,
                     prompt_source=prompt_source,
-                    prompt_pack_id=prompt_pack_id,
+                    prompt_pack_id=effective_prompt_pack_id,
+                    run_config=getattr(self, "_last_run_config", None),
                 )
-                # Attach payload for execution
                 job.payload = lambda j=job: self._run_job(j)
-
                 self._job_service.submit_job_with_run_mode(job)
                 submitted_count += 1
             except Exception as exc:
@@ -487,31 +481,14 @@ class PipelineController(_GUIPipelineController):
                 if on_error:
                     on_error(exc)
 
-        if submitted_count > 0:
-            self._safe_gui_transition(GUIState.RUNNING)
-            _logger.info("Submitted %d jobs via V2 pipeline", submitted_count)
-            return True
+        if submitted_count <= 0:
+            return False
 
-        return False
-
-    def _build_pipeline_config_from_state(self) -> PipelineConfig:
-        """Minimal pipeline_config builder for legacy/direct run pathways."""
-        prompt = "StableNew GUI Run"
-        try:
-            app_state = getattr(self, "_app_state", None)
-            if app_state and hasattr(app_state, "prompt"):
-                prompt = app_state.prompt or prompt
-        except Exception:
-            prompt = "StableNew GUI Run"
-        return PipelineConfig(
-            prompt=prompt,
-            model="model",
-            sampler="sampler",
-            width=512,
-            height=512,
-            steps=20,
-            cfg_scale=7.0,
-        )
+        self._safe_gui_transition(GUIState.RUNNING)
+        _logger.info("Submitted %d preview job(s) via canonical controller path", submitted_count)
+        if on_complete:
+            on_complete({"submitted_jobs": submitted_count, "run_mode": run_mode})
+        return True
 
     def build_pipeline_config_with_profiles(
         self,
@@ -614,7 +591,10 @@ class PipelineController(_GUIPipelineController):
         self._last_stage_events: list[dict[Any, Any]] | None = None
         self._learning_enabled: bool = False
         self._learning_queue_cap: int = 3
-        self._job_controller = JobExecutionController(execute_job=self._execute_job)
+        self._job_controller = JobExecutionController(
+            execute_job=self._execute_job,
+            replay_runner=self,
+        )
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
         self._gui_defaults_resolver = (
@@ -666,9 +646,16 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         if forced_value is None:
-            if self._app_state is None:
-                return
-            enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+            if self._app_state is not None:
+                enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+            else:
+                enabled = bool(
+                    getattr(
+                        self._job_controller,
+                        "auto_run_enabled",
+                        getattr(self._job_service, "auto_run_enabled", False),
+                    )
+                )
         else:
             enabled = bool(forced_value)
         self._job_service.auto_run_enabled = enabled
@@ -903,7 +890,7 @@ class PipelineController(_GUIPipelineController):
         on_error: Callable[[Exception], None] | None = None,
         run_config: dict[str, Any] | None = None,
     ) -> bool:
-        """Submit a pipeline job using assembler-enforced config."""
+        """Submit preview-built NJRs using the canonical controller path."""
         if not self.gui_can_run():
             return False
         self._sync_auto_run_setting()
@@ -936,85 +923,23 @@ class PipelineController(_GUIPipelineController):
             requested_mode = (run_config.get("run_mode") or "").strip().lower()
             if requested_mode in {"direct", "queue"}:
                 run_mode = requested_mode
+        if pipeline_func is not None:
+            _logger.debug("Ignoring deprecated pipeline_func bridge in start_pipeline()")
 
-        try:
-            config = self._build_pipeline_config_from_state()
-        except Exception as exc:  # noqa: BLE001
-            if on_error:
-                on_error(exc)
-            raise
+        prompt_source = "manual"
+        prompt_pack_id = None
+        if run_config is not None:
+            prompt_source = str(run_config.get("prompt_source") or prompt_source)
+            prompt_pack_id = run_config.get("prompt_pack_id")
 
-        def _payload() -> dict[Any, Any]:
-            try:
-                result: dict[str, Any] = {"config": config}
-                run_result = self._run_pipeline_job(config, pipeline_func=pipeline_func)
-                if isinstance(run_result, dict):
-                    result.update(run_result)
-                if on_complete:
-                    on_complete(result)
-                return result
-            except Exception as exc:  # noqa: BLE001
-                if on_error:
-                    on_error(exc)
-                raise
-
-        try:
-            self._active_job_id = self._job_controller.submit_pipeline_run(
-                _payload, run_mode=run_mode
-            )
-        except TypeError:
-            self._active_job_id = self._job_controller.submit_pipeline_run(_payload)
-        self._safe_gui_transition(GUIState.RUNNING)
-        return True
-
-    def _run_pipeline_job(
-        self,
-        config: PipelineConfig,
-        *,
-        pipeline_func: Callable[[], dict[Any, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """Run a pipeline job using the assembled config or a compatibility callable.
-
-        Priority:
-        1. Legacy `run_full_pipeline` hook (if provided).
-        2. Explicit `pipeline_func` callable (tests/compat).
-        3. Default: use this controller's `run_pipeline` (PipelineRunner-backed).
-        """
-
-        # 1) Legacy compatibility hook (used by older harnesses/tests)
-        runner = getattr(self, "run_full_pipeline", None)
-        if callable(runner):
-            maybe_result = runner(config)
-            if isinstance(maybe_result, dict):
-                return maybe_result
-
-        # 2) Explicit pipeline callable (primarily for tests)
-        if pipeline_func:
-            maybe_result = pipeline_func()
-            if isinstance(maybe_result, dict):
-                return maybe_result
-
-        # 3) Default path: run via PipelineRunner through this controller
-        try:
-            run_result = self.run_pipeline(config)
-        except Exception as exc:  # noqa: BLE001
-            envelope = get_attached_envelope(exc)
-            if envelope is None:
-                envelope = wrap_exception(
-                    exc,
-                    subsystem="pipeline_controller",
-                )
-            return {
-                "error": str(exc),
-                "error_envelope": serialize_envelope(envelope),
-            }
-
-        # Normalize result into a dict payload for JobQueue/history.
-        if hasattr(run_result, "to_dict"):
-            return {"result": run_result.to_dict()}
-        if isinstance(run_result, dict):
-            return run_result
-        return {"result": run_result}
+        return self._submit_preview_jobs_for_run(
+            run_mode=run_mode,
+            source="gui",
+            prompt_source=prompt_source,
+            prompt_pack_id=prompt_pack_id,
+            on_complete=on_complete,
+            on_error=on_error,
+        )
 
     def stop_pipeline(self) -> bool:
         """Cancel the active job."""
@@ -1132,6 +1057,12 @@ class PipelineController(_GUIPipelineController):
             if njr:
                 try:
                     summary = UnifiedJobSummary.from_normalized_record(njr)
+                    status_value = getattr(job, "status", None)
+                    status_text = (
+                        status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                    ).strip()
+                    if status_text:
+                        summary = replace(summary, status=status_text.upper())
                     queue_jobs.append(summary)
                     summaries.append(summary.positive_prompt_preview or job.job_id)
                 except Exception as exc:
@@ -1167,6 +1098,11 @@ class PipelineController(_GUIPipelineController):
 
     def _list_service_jobs(self) -> list[Job]:
         queue = getattr(self._job_service, "queue", None)
+        if queue and hasattr(queue, "list_active_jobs_ordered"):
+            try:
+                return list(queue.list_active_jobs_ordered())
+            except Exception:
+                return []
         if queue and hasattr(queue, "list_jobs"):
             try:
                 return list(queue.list_jobs())
@@ -1179,12 +1115,20 @@ class PipelineController(_GUIPipelineController):
             return
         if job is None:
             self._app_state.set_running_job(None)
+            if hasattr(self._app_state, "set_runtime_status"):
+                self._app_state.set_runtime_status(None)
             return
         # Convert Job to UnifiedJobSummary via NJR
         njr = getattr(job, "_normalized_record", None)
         if njr:
             try:
                 summary = UnifiedJobSummary.from_normalized_record(njr)
+                status_value = getattr(job, "status", None)
+                status_text = (
+                    status_value.value if hasattr(status_value, "value") else str(status_value or "")
+                ).strip()
+                if status_text:
+                    summary = replace(summary, status=status_text.upper())
                 self._app_state.set_running_job(summary)
             except Exception as exc:
                 _logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
@@ -1258,13 +1202,17 @@ class PipelineController(_GUIPipelineController):
                 _logger.exception("on_queue_move_down_v2 failed", exc_info=True)
         return False
 
-    def on_queue_remove_job_v2(self, job_id: str) -> None:
+    def on_queue_remove_job_v2(self, job_id: str) -> bool:
         queue = getattr(self._job_service, "job_queue", None)
         if queue and hasattr(queue, "remove"):
             try:
-                queue.remove(job_id)
+                removed = queue.remove(job_id)
+                if removed is not None and self._app_state:
+                    self._refresh_app_state_queue()
+                return removed is not None
             except Exception:
                 _logger.exception("on_queue_remove_job_v2 failed", exc_info=True)
+        return False
 
     def on_queue_clear_v2(self) -> None:
         queue = getattr(self._job_service, "job_queue", None)
@@ -1277,6 +1225,11 @@ class PipelineController(_GUIPipelineController):
     def on_set_auto_run_v2(self, enabled: bool) -> None:
         if self._app_state:
             self._app_state.set_auto_run_queue(bool(enabled))
+        if self._job_controller and hasattr(self._job_controller, "set_auto_run_enabled"):
+            try:
+                self._job_controller.set_auto_run_enabled(bool(enabled))
+            except Exception:
+                _logger.exception("Failed to sync auto-run to JobExecutionController", exc_info=True)
         self._sync_auto_run_setting(bool(enabled))
         if not enabled or not self._job_service:
             return
@@ -1296,6 +1249,11 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         self._job_service.pause()
+        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+            try:
+                self._job_controller.set_queue_paused(True)
+            except Exception:
+                _logger.exception("Failed to sync pause state to JobExecutionController", exc_info=True)
         if self._app_state:
             self._app_state.set_is_queue_paused(True)
 
@@ -1303,6 +1261,11 @@ class PipelineController(_GUIPipelineController):
         if not self._job_service:
             return
         self._job_service.resume()
+        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+            try:
+                self._job_controller.set_queue_paused(False)
+            except Exception:
+                _logger.exception("Failed to sync pause state to JobExecutionController", exc_info=True)
         if self._app_state:
             self._app_state.set_is_queue_paused(False)
 
@@ -1325,11 +1288,7 @@ class PipelineController(_GUIPipelineController):
     def on_cancel_job_and_return_v2(self) -> None:
         if not self._job_service:
             return
-        job = self._job_service.cancel_current()
-        if job:
-            job.status = JobStatus.QUEUED
-            job.error_message = None
-            self._job_service.enqueue(job)
+        self._job_service.cancel_current(return_to_queue=True)
 
     def _refresh_preview_jobs_from_state(self) -> None:
         """Refresh preview jobs so GUI panels display the latest normalized records."""
@@ -1444,20 +1403,8 @@ class PipelineController(_GUIPipelineController):
         """
         record = getattr(job, "_normalized_record", None)
         if record is not None:
-            api_client = SDWebUIClient(
-                base_url="http://127.0.0.1:7860",
-            )
-            structured_logger = StructuredLogger()
-            
-            # Get status callback from app_controller if available
-            status_callback = None
-            app_controller = getattr(self, "app_controller", None)
-            if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
-                status_callback = app_controller._get_runtime_status_callback()
-            
-            runner = PipelineRunner(api_client, structured_logger, status_callback=status_callback)
             try:
-                result = runner.run_njr(record, self.cancel_token)
+                result = self.run_njr(record)
                 return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
             except Exception as exc:  # noqa: BLE001
                 envelope = get_attached_envelope(exc)
@@ -1472,6 +1419,41 @@ class PipelineController(_GUIPipelineController):
                 }
         error_msg = "Job missing _normalized_record; NJR-only execution requires NormalizedJobRecord snapshots."
         return {"error": error_msg, "job_id": job.job_id}
+
+    def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None] | None:
+        app_controller = getattr(self, "app_controller", None)
+        if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
+            return app_controller._get_runtime_status_callback()
+        return None
+
+    def _create_runtime_pipeline_runner(self) -> PipelineRunner:
+        if self._pipeline_runner is not None:
+            return self._pipeline_runner
+        return PipelineRunner(
+            SDWebUIClient(base_url="http://127.0.0.1:7860"),
+            StructuredLogger(),
+            status_callback=self._get_runtime_status_callback(),
+        )
+
+    def run_njr(
+        self,
+        record: NormalizedJobRecord,
+        cancel_token: Any | None = None,
+        run_plan: Any | None = None,
+        log_fn: Callable[[str], None] | None = None,
+        checkpoint_callback: Callable[[str, list[str], dict[str, Any] | None], None] | None = None,
+    ) -> PipelineRunResult:
+        """Execute an NJR through the controller-owned canonical runner path."""
+        runner = self._create_runtime_pipeline_runner()
+        result = runner.run_njr(
+            record,
+            cancel_token=cancel_token if cancel_token is not None else self.cancel_token,
+            run_plan=run_plan,
+            log_fn=log_fn,
+            checkpoint_callback=checkpoint_callback,
+        )
+        self.record_run_result(result)
+        return result
 
     def _infer_job_stage(self, job: Job) -> str | None:
         record = getattr(job, "_normalized_record", None)
@@ -1773,32 +1755,6 @@ class PipelineController(_GUIPipelineController):
         except Exception:
             return None
 
-    def run_pipeline(self, config: PipelineConfig) -> PipelineRunResult:
-        """DEPRECATED (PR-CORE1-12): Legacy synchronous pipeline execution.
-
-        This method converts pipeline_config to NJR using legacy adapter, then
-        executes via run_njr(). Used only by deprecated app_controller paths.
-
-        PREFER: start_pipeline_v2() which builds NJR + enqueues for async execution.
-
-        Args:
-            config: Legacy PipelineConfig (converted internally to NJR)
-
-        Returns:
-            PipelineRunResult
-        """
-        if self._pipeline_runner is not None:
-            record = build_njr_from_legacy_pipeline_config(config)
-            result = self._pipeline_runner.run_njr(record, self.cancel_token)
-        else:
-            api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-            structured_logger = StructuredLogger()
-            runner = PipelineRunner(api_client, structured_logger)
-            record = build_njr_from_legacy_pipeline_config(config)
-            result = runner.run_njr(record, self.cancel_token)
-        self.record_run_result(result)
-        return result
-
     def get_job_history_service(self) -> JobHistoryService | None:
         """Return a JobHistoryService bound to this controller's queue/history."""
 
@@ -1812,6 +1768,14 @@ class PipelineController(_GUIPipelineController):
             except Exception:
                 pass
         return self._job_history_service
+
+    def get_job_execution_controller(self) -> JobExecutionController:
+        """Return the queue execution controller backing this pipeline controller."""
+        return self._job_controller
+
+    def get_job_service(self) -> JobService | None:
+        """Return the queue service used by pipeline-facing GUI actions."""
+        return self._job_service
 
     # -------------------------------------------------------------------------
     def get_diagnostics_snapshot(self) -> dict[str, Any]:

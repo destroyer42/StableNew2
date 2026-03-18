@@ -19,7 +19,12 @@ import pytest
 
 from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.stage_models import StageType
-from src.pipeline.stage_sequencer import StageConfig, StageExecution, StageMetadata
+from src.pipeline.stage_sequencer import (
+    StageConfig,
+    StageExecution,
+    StageMetadata,
+    build_stage_execution_plan,
+)
 
 # -----------------------------------------------------------------------------
 # Test Helpers
@@ -243,6 +248,68 @@ def test_build_sdxl_payload_adetailer_includes_detector_config():
     assert payload["input_images"] == ["face_image_base64"]
 
 
+def test_build_sdxl_payload_preferred_flow_later_stages_do_not_inherit_txt2img_metadata():
+    config = {
+        "txt2img": {
+            "enabled": True,
+            "prompt": "test prompt",
+            "negative_prompt": "",
+            "model": "sdxl_base",
+            "sampler_name": "Euler a",
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "width": 1024,
+            "height": 1024,
+            "refiner_enabled": True,
+            "refiner_model_name": "sdxl_refiner",
+            "refiner_switch_at": 10,
+        },
+        "img2img": {
+            "enabled": True,
+            "prompt": "test prompt",
+            "negative_prompt": "",
+            "model": "sdxl_base",
+            "sampler_name": "Euler a",
+            "steps": 15,
+            "cfg_scale": 7.0,
+        },
+        "adetailer": {"enabled": True},
+        "upscale": {"enabled": True, "upscaler": "R-ESRGAN 4x+"},
+        "pipeline": {
+            "txt2img_enabled": True,
+            "img2img_enabled": True,
+            "adetailer_enabled": True,
+            "upscale_enabled": True,
+        },
+        "hires_fix": {
+            "enabled": True,
+            "upscale_factor": 1.5,
+            "upscaler_name": "Latent",
+            "denoise": 0.35,
+            "steps": 8,
+        },
+    }
+    plan = build_stage_execution_plan(config)
+
+    txt2img_payload = build_sdxl_payload(plan.stages[0], None)
+    img2img_payload = build_sdxl_payload(plan.stages[1], {"images": ["seed_img"]})
+    adetailer_payload = build_sdxl_payload(plan.stages[2], {"images": ["img2img_out"]})
+    upscale_payload = build_sdxl_payload(plan.stages[3], {"images": ["adetailer_out"]})
+
+    assert txt2img_payload["refiner_enabled"] is True
+    assert txt2img_payload["hires_fix"] is True
+    assert img2img_payload["refiner_enabled"] is False
+    assert img2img_payload["hires_fix"] is False
+    assert img2img_payload["enable_hr"] is False
+    assert "refiner_model_name" not in img2img_payload
+    assert adetailer_payload["task"] == "adetailer"
+    assert "refiner_enabled" not in adetailer_payload
+    assert "hires_fix" not in adetailer_payload
+    assert upscale_payload["task"] == "upscale"
+    assert "refiner_enabled" not in upscale_payload
+    assert "hires_fix" not in upscale_payload
+
+
 # -----------------------------------------------------------------------------
 # Test: DIRECT vs QUEUE produce identical payloads
 # -----------------------------------------------------------------------------
@@ -291,6 +358,53 @@ def test_build_sdxl_payload_hires_calculates_target_resolution():
     # 1024 * 1.5 = 1536, 768 * 1.5 = 1152
     assert payload["hr_resize_x"] == 1536
     assert payload["hr_resize_y"] == 1152
+
+
+def test_build_sdxl_payload_normalizes_alias_config_fields():
+    stage = make_stage(
+        StageType.TXT2IMG,
+        config_overrides={
+            "model": "",
+            "sampler_name": "",
+            "scheduler": "",
+            "model_name": "alias-model",
+            "sampler": "DPM++ 2M",
+            "scheduler_name": "Karras",
+            "enable_hr": True,
+            "hr_scale": 1.8,
+            "hr_upscaler": "Latent",
+            "denoising_strength": 0.33,
+            "hr_second_pass_steps": 12,
+        },
+    )
+
+    payload = build_sdxl_payload(stage, last_image_meta=None)
+
+    assert payload["sd_model"] == "alias-model"
+    assert payload["sampler_name"] == "DPM++ 2M"
+    assert payload["scheduler"] == "Karras"
+    assert payload["enable_hr"] is True
+    assert payload["hr_scale"] == pytest.approx(1.8)
+    assert payload["hr_upscaler"] == "Latent"
+    assert payload["denoising_strength"] == pytest.approx(0.33)
+    assert payload["hr_second_pass_steps"] == 12
+
+
+def test_build_sdxl_payload_upscale_accepts_upscaler_aliases():
+    stage = make_stage(
+        StageType.UPSCALE,
+        config_overrides={
+            "upscaler_name": "4x-UltraSharp",
+            "scale": 2.5,
+            "iterations": 2,
+        },
+    )
+
+    payload = build_sdxl_payload(stage, {"images": ["upscale_me"]})
+
+    assert payload["upscaler_name"] == "4x-UltraSharp"
+    assert payload["scale"] == pytest.approx(2.5)
+    assert payload["iterations"] == 2
 
 
 # -----------------------------------------------------------------------------

@@ -19,7 +19,7 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import normalize_run_result
 from src.pipeline.replay_engine import ReplayEngine
 from src.queue.job_history_store import JobHistoryStore, JSONLJobHistoryStore
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import Job, JobPriority, JobStatus, RetryAttempt, StageCheckpoint
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.queue_store_v2 import (
@@ -30,6 +30,7 @@ from src.services.queue_store_v2 import (
     save_queue_snapshot,
 )
 from src.utils import LogContext, log_with_ctx
+from src.utils.error_envelope_v2 import attach_envelope, get_attached_envelope
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 logger = logging.getLogger(__name__)
@@ -171,6 +172,7 @@ class JobExecutionController:
             runtime_status = RuntimeJobStatus(
                 job_id=status_data.get("job_id", ""),
                 current_stage=status_data.get("current_stage", ""),
+                stage_detail=status_data.get("stage_detail"),
                 stage_index=status_data.get("stage_index", 0),
                 total_stages=status_data.get("total_stages", 1),
                 progress=status_data.get("progress", 0.0),
@@ -313,7 +315,7 @@ class JobExecutionController:
                     "JOB_EXEC_REPLAY | Executing NJR via replay engine",
                     ctx=ctx,
                 )
-                result = self._replay_engine.replay_njr(record)
+                result = self._replay_engine.replay_njr(record, job=job)
             except Exception as exc:  # noqa: BLE001
                 error_message = f"NJR execution failed: {exc}"
                 log_with_ctx(
@@ -323,7 +325,14 @@ class JobExecutionController:
                     ctx=ctx,
                     extra_fields={"error": error_message},
                 )
-                raise RuntimeError(error_message) from exc
+                wrapped = RuntimeError(error_message)
+                diagnostics = getattr(exc, "diagnostics_context", None)
+                if isinstance(diagnostics, dict):
+                    wrapped.diagnostics_context = diagnostics
+                envelope = get_attached_envelope(exc)
+                if envelope is not None:
+                    attach_envelope(wrapped, envelope)
+                raise wrapped from exc
         elif callable(payload):
             if os.environ.get("PYTEST_CURRENT_TEST"):
                 log_with_ctx(
@@ -369,6 +378,10 @@ class JobExecutionController:
             self._ensure_worker_started()
         self._persist_queue_state()
 
+    def persist_queue_state(self) -> None:
+        """Persist the current queue snapshot through the controller-owned store."""
+        self._persist_queue_state()
+
     @property
     def is_queue_paused(self) -> bool:
         return self._queue_paused
@@ -394,7 +407,13 @@ class JobExecutionController:
             return
 
         self._auto_run_enabled = bool(snapshot.auto_run_enabled)
-        self._queue_paused = bool(snapshot.paused)
+        restored_paused = bool(snapshot.paused)
+        if restored_paused:
+            logger.info(
+                "[STARTUP-PERF] Ignoring persisted paused queue state on restore; "
+                "only queued jobs are persisted across restart"
+            )
+        self._queue_paused = False
 
         restored_jobs: list[Job] = []
         for entry in snapshot.jobs:
@@ -457,6 +476,14 @@ class JobExecutionController:
             "prompt_source": job.prompt_source,
             "prompt_pack_id": job.prompt_pack_id,
         }
+        execution_metadata = getattr(job, "execution_metadata", None)
+        if execution_metadata is not None:
+            metadata_fields["execution_metadata"] = {
+                "retry_attempts": [asdict(attempt) for attempt in execution_metadata.retry_attempts],
+                "stage_checkpoints": [asdict(checkpoint) for checkpoint in execution_metadata.stage_checkpoints],
+                "last_control_action": execution_metadata.last_control_action,
+                "return_to_queue_count": execution_metadata.return_to_queue_count,
+            }
         for key, value in metadata_fields.items():
             if value is not None:
                 metadata[key] = value
@@ -479,7 +506,7 @@ class JobExecutionController:
         if not isinstance(entry, Mapping):
             return None
         status_value = str(entry.get("status") or JobStatus.QUEUED.value).lower()
-        if status_value not in {JobStatus.QUEUED.value, JobStatus.RUNNING.value}:
+        if status_value != JobStatus.QUEUED.value:
             return None
         snapshot = entry.get("njr_snapshot") or {}
         record = _njr_from_snapshot(snapshot)
@@ -502,6 +529,40 @@ class JobExecutionController:
         job.updated_at = created
         job.status = JobStatus.QUEUED
         job.payload = None
+        execution_metadata = metadata.get("execution_metadata") or {}
+        if isinstance(execution_metadata, Mapping):
+            retry_attempts = execution_metadata.get("retry_attempts") or []
+            stage_checkpoints = execution_metadata.get("stage_checkpoints") or []
+            for attempt in retry_attempts:
+                if isinstance(attempt, Mapping):
+                    job.execution_metadata.retry_attempts.append(
+                        RetryAttempt(
+                            stage=str(attempt.get("stage") or "pipeline"),
+                            attempt_index=int(attempt.get("attempt_index") or 0),
+                            max_attempts=int(attempt.get("max_attempts") or 0),
+                            reason=str(attempt.get("reason") or ""),
+                            timestamp=float(attempt.get("timestamp") or 0.0),
+                        )
+                    )
+            for checkpoint in stage_checkpoints:
+                if isinstance(checkpoint, Mapping):
+                    job.execution_metadata.stage_checkpoints.append(
+                        StageCheckpoint(
+                            stage_name=str(checkpoint.get("stage_name") or ""),
+                            completed_at=float(checkpoint.get("completed_at") or 0.0),
+                            output_paths=[str(path) for path in checkpoint.get("output_paths") or [] if path],
+                            metadata=dict(checkpoint.get("metadata") or {}),
+                        )
+                    )
+            action = execution_metadata.get("last_control_action")
+            if action:
+                job.execution_metadata.last_control_action = str(action)
+            try:
+                job.execution_metadata.return_to_queue_count = int(
+                    execution_metadata.get("return_to_queue_count") or 0
+                )
+            except Exception:
+                job.execution_metadata.return_to_queue_count = 0
         return job
 
     def replay(self, record: HistoryRecord | NormalizedJobRecord | Mapping[str, Any]) -> Any:

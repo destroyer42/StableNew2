@@ -18,10 +18,12 @@ from src.gui.log_trace_panel_v2 import LogTracePanelV2
 from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
+from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
+from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
 from src.gui.zone_map_v2 import get_root_zone_config
 from src.services.ui_state_store import get_ui_state_store
 from src.utils import InMemoryLogHandler
@@ -232,6 +234,26 @@ class MainWindowV2:
         self.photo_optimize_tab = self.add_tab("photo_optimize", "Photo Optomize", _make_photo_optimize)
         self._restore_photo_optimize_tab_state()
 
+        def _make_movie_clips(parent):
+            return MovieClipsTabFrameV2(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.movie_clips_tab = self.add_tab("movie_clips", "Movie Clips", _make_movie_clips)
+        self._restore_movie_clips_tab_state()
+
+        def _make_svd(parent):
+            return SVDTabFrameV2(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.svd_tab = self.add_tab("svd", "SVD Img2Vid", _make_svd)
+        self._restore_svd_tab_state()
+
         # PR-PERSIST-001: Restore selected tab
         self._restore_tab_selection()
 
@@ -313,6 +335,11 @@ class MainWindowV2:
         """Trigger deferred queue autostart after GUI is fully rendered."""
         logger.info("[STARTUP-PERF] Attempting to trigger deferred queue autostart...")
         try:
+            webui_ctrl = getattr(getattr(self, "app_controller", None), "webui_connection_controller", None)
+            is_ready = getattr(webui_ctrl, "is_webui_ready_strict", None)
+            if callable(is_ready) and not is_ready():
+                logger.info("[STARTUP-PERF] WebUI not strictly ready yet; deferring queue autostart until READY callback")
+                return
             # Access JobExecutionController via pipeline_controller
             if not self.pipeline_controller:
                 logger.warning("[STARTUP-PERF] No pipeline_controller available")
@@ -751,7 +778,8 @@ class MainWindowV2:
             pass
 
         try:
-            if self.webui_process_manager:
+            controller_owns_shutdown = bool(getattr(self, "app_controller", None))
+            if self.webui_process_manager and not controller_owns_shutdown:
                 stop = getattr(self.webui_process_manager, "shutdown", None) or getattr(
                     self.webui_process_manager, "stop", None
                 )
@@ -954,7 +982,31 @@ class MainWindowV2:
             except Exception:
                 if "photo_optimize" not in state:
                     state["photo_optimize"] = {}
-            
+            try:
+                clips_tab = getattr(self, "movie_clips_tab", None)
+                clips_getter = getattr(clips_tab, "get_movie_clips_state", None)
+                if callable(clips_getter):
+                    clips_state = clips_getter()
+                    if isinstance(clips_state, dict):
+                        state["movie_clips"] = clips_state
+                    elif "movie_clips" not in state:
+                        state["movie_clips"] = {}
+            except Exception:
+                if "movie_clips" not in state:
+                    state["movie_clips"] = {}
+            try:
+                svd_tab = getattr(self, "svd_tab", None)
+                svd_getter = getattr(svd_tab, "get_svd_state", None)
+                if callable(svd_getter):
+                    svd_state = svd_getter()
+                    if isinstance(svd_state, dict):
+                        state["svd"] = svd_state
+                    elif "svd" not in state:
+                        state["svd"] = {}
+            except Exception:
+                if "svd" not in state:
+                    state["svd"] = {}
+
             ui_store.save_state(state)
             logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
         except Exception as e:
@@ -1003,6 +1055,32 @@ class MainWindowV2:
                 restore(photo_state)
         except Exception as e:
             logger.warning(f"Failed to restore Photo Optomize tab state: {e}")
+
+    def _restore_movie_clips_tab_state(self) -> None:
+        """Restore persisted Movie Clips tab state."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            clips_state = state.get("movie_clips")
+            tab = getattr(self, "movie_clips_tab", None)
+            restore = getattr(tab, "restore_movie_clips_state", None)
+            if callable(restore):
+                restore(clips_state)
+        except Exception as e:
+            logger.warning(f"Failed to restore Movie Clips tab state: {e}")
+
+    def _restore_svd_tab_state(self) -> None:
+        """Restore persisted SVD tab state."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            svd_state = state.get("svd")
+            tab = getattr(self, "svd_tab", None)
+            restore = getattr(tab, "restore_svd_state", None)
+            if callable(restore):
+                restore(svd_state)
+        except Exception as e:
+            logger.warning(f"Failed to restore SVD tab state: {e}")
 
 
 def run_app(

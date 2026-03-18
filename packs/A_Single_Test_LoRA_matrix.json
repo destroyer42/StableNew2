@@ -28,6 +28,10 @@
           [
             "DetailedEyes_V3",
             0.8
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -65,10 +69,6 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7252747252747253
-          ],
-          [
             "finenude_v0_2a",
             0.6542553191489362
           ]
@@ -78,7 +78,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 4,
+      "limit": 2,
       "slots": [
         {
           "name": "activity",

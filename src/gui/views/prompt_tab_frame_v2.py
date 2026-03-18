@@ -15,6 +15,7 @@ import tkinter as tk
 import tkinter.simpledialog
 from tkinter import filedialog, messagebox, ttk
 
+from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.config.app_config import STABLENEW_WEBUI_ROOT
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.prompt_workspace_state import PromptWorkspaceState
@@ -30,6 +31,10 @@ from src.gui.view_contracts.prompt_editor_contract import (
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
+from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
+from src.prompting.prompt_optimizer_service import PromptOptimizerService
+from src.utils.config import ConfigManager
+from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.prompt_txt_parser import parse_prompt_txt_to_components, parse_multi_slot_txt
 
 
@@ -63,6 +68,8 @@ class PromptTabFrame(ttk.Frame):
                 pass
         self.workspace_state.set_current_slot_index(0)
         self._suppress_editor_change = False
+        self._prompt_optimizer_guard = False
+        self._prompt_optimizer_vars = self._build_prompt_optimizer_vars()
         
         # Autocomplete for [[slot]] insertion
         self._autocomplete_list: tk.Listbox | None = None
@@ -322,6 +329,10 @@ class PromptTabFrame(ttk.Frame):
         )
         self.summary_label.pack(anchor="w", pady=(0, 6))
 
+        optimizer_frame = ttk.LabelFrame(self.right_frame, text="Prompt Optimizer", padding=6)
+        optimizer_frame.pack(fill="x", pady=(0, 6))
+        self._build_prompt_optimizer_panel(optimizer_frame)
+
         self.meta_text = tk.Text(
             self.right_frame, 
             height=12, 
@@ -334,6 +345,111 @@ class PromptTabFrame(ttk.Frame):
             relief="solid"
         )
         self.meta_text.pack(fill="both", expand=True)
+
+    def _build_prompt_optimizer_vars(self) -> dict[str, tk.Variable]:
+        defaults = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
+        try:
+            settings = ConfigManager().load_settings()
+            persisted = settings.get("prompt_optimizer") or {}
+            if isinstance(persisted, dict):
+                defaults.update({k: v for k, v in persisted.items() if k in defaults})
+        except Exception:
+            pass
+        return {
+            "enabled": tk.BooleanVar(value=bool(defaults["enabled"])),
+            "optimize_positive": tk.BooleanVar(value=bool(defaults["optimize_positive"])),
+            "optimize_negative": tk.BooleanVar(value=bool(defaults["optimize_negative"])),
+            "dedupe_enabled": tk.BooleanVar(value=bool(defaults["dedupe_enabled"])),
+            "preserve_lora_relative_order": tk.BooleanVar(value=bool(defaults["preserve_lora_relative_order"])),
+            "preserve_unknown_order": tk.BooleanVar(value=bool(defaults["preserve_unknown_order"])),
+            "enable_score_based_classification": tk.BooleanVar(value=bool(defaults["enable_score_based_classification"])),
+            "allow_subject_anchor_boost": tk.BooleanVar(value=bool(defaults["allow_subject_anchor_boost"])),
+            "log_before_after": tk.BooleanVar(value=bool(defaults["log_before_after"])),
+            "log_bucket_assignments": tk.BooleanVar(value=bool(defaults["log_bucket_assignments"])),
+            "large_chunk_warning_threshold": tk.IntVar(value=int(defaults["large_chunk_warning_threshold"])),
+            "subject_anchor_boost_min_chunk_count": tk.IntVar(value=int(defaults["subject_anchor_boost_min_chunk_count"])),
+        }
+
+    def _build_prompt_optimizer_panel(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+        checkbox_specs = [
+            ("enabled", "Enable"),
+            ("optimize_positive", "Positive"),
+            ("optimize_negative", "Negative"),
+            ("dedupe_enabled", "Dedupe"),
+            ("preserve_lora_relative_order", "Preserve LoRAs"),
+            ("preserve_unknown_order", "Preserve Unknown"),
+            ("enable_score_based_classification", "Score-Based"),
+            ("allow_subject_anchor_boost", "Anchor Boost"),
+            ("log_before_after", "Log Before/After"),
+            ("log_bucket_assignments", "Log Buckets"),
+        ]
+        for index, (key, label) in enumerate(checkbox_specs):
+            row = index // 2
+            column = index % 2
+            ttk.Checkbutton(
+                parent,
+                text=label,
+                variable=self._prompt_optimizer_vars[key],
+                style="Dark.TCheckbutton",
+                command=self._on_prompt_optimizer_config_changed,
+            ).grid(row=row, column=column, sticky="w", padx=2, pady=2)
+
+        threshold_row = (len(checkbox_specs) + 1) // 2
+        ttk.Label(parent, text="Chunk Warn").grid(row=threshold_row, column=0, sticky="w", pady=(4, 2))
+        ttk.Spinbox(
+            parent,
+            from_=1,
+            to=64,
+            textvariable=self._prompt_optimizer_vars["large_chunk_warning_threshold"],
+            width=8,
+            command=self._on_prompt_optimizer_config_changed,
+        ).grid(row=threshold_row, column=1, sticky="ew", pady=(4, 2))
+        ttk.Label(parent, text="Anchor Min").grid(row=threshold_row + 1, column=0, sticky="w", pady=(2, 0))
+        ttk.Spinbox(
+            parent,
+            from_=1,
+            to=64,
+            textvariable=self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"],
+            width=8,
+            command=self._on_prompt_optimizer_config_changed,
+        ).grid(row=threshold_row + 1, column=1, sticky="ew", pady=(2, 0))
+
+    def get_prompt_optimizer_config(self) -> dict[str, object]:
+        return {
+            "enabled": bool(self._prompt_optimizer_vars["enabled"].get()),
+            "optimize_positive": bool(self._prompt_optimizer_vars["optimize_positive"].get()),
+            "optimize_negative": bool(self._prompt_optimizer_vars["optimize_negative"].get()),
+            "dedupe_enabled": bool(self._prompt_optimizer_vars["dedupe_enabled"].get()),
+            "preserve_lora_relative_order": bool(self._prompt_optimizer_vars["preserve_lora_relative_order"].get()),
+            "preserve_unknown_order": bool(self._prompt_optimizer_vars["preserve_unknown_order"].get()),
+            "log_before_after": bool(self._prompt_optimizer_vars["log_before_after"].get()),
+            "log_bucket_assignments": bool(self._prompt_optimizer_vars["log_bucket_assignments"].get()),
+            "warn_on_large_chunk_count": True,
+            "large_chunk_warning_threshold": int(self._prompt_optimizer_vars["large_chunk_warning_threshold"].get()),
+            "enable_score_based_classification": bool(self._prompt_optimizer_vars["enable_score_based_classification"].get()),
+            "allow_subject_anchor_boost": bool(self._prompt_optimizer_vars["allow_subject_anchor_boost"].get()),
+            "subject_anchor_boost_min_chunk_count": int(self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"].get()),
+            "opt_out_pipeline_names": [],
+        }
+
+    def apply_prompt_optimizer_config(self, config: dict[str, object] | None) -> None:
+        merged = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
+        merged.update(dict(config or {}))
+        self._prompt_optimizer_guard = True
+        try:
+            for key, variable in self._prompt_optimizer_vars.items():
+                if key in merged:
+                    variable.set(merged[key])
+        finally:
+            self._prompt_optimizer_guard = False
+        self._refresh_metadata()
+
+    def _on_prompt_optimizer_config_changed(self) -> None:
+        if self._prompt_optimizer_guard:
+            return
+        self._refresh_metadata()
 
     # Event handlers / helpers ------------------------------------------
     def _on_new_pack(self) -> None:
@@ -562,8 +678,8 @@ class PromptTabFrame(ttk.Frame):
         
         # Positive embeddings
         if current_slot.positive_embeddings:
-            for emb_name in current_slot.positive_embeddings:
-                preview_lines.append(f"<embedding:{emb_name}>")
+            for emb_name, emb_weight in normalize_embedding_entries(current_slot.positive_embeddings):
+                preview_lines.append(render_embedding_reference(emb_name, emb_weight))
         
         # Positive prompt
         positive_text = current_slot.text.strip()
@@ -583,8 +699,8 @@ class PromptTabFrame(ttk.Frame):
         
         # Negative embeddings
         if current_slot.negative_embeddings:
-            for emb_name in current_slot.negative_embeddings:
-                preview_lines.append(f"neg: <embedding:{emb_name}>")
+            for emb_name, emb_weight in normalize_embedding_entries(current_slot.negative_embeddings):
+                preview_lines.append(f"neg: {render_embedding_reference(emb_name, emb_weight)}")
         
         # Negative prompt
         negative_text = current_slot.negative.strip()
@@ -621,10 +737,43 @@ class PromptTabFrame(ttk.Frame):
                     total_combinations *= len(slot.values)
                 preview_lines.append(f"Matrix Combinations: {total_combinations}")
 
+        preview_lines.extend(self._build_prompt_optimizer_preview(positive_text, negative_text))
+
         self.meta_text.config(state="normal")
         self.meta_text.delete("1.0", "end")
         self.meta_text.insert("1.0", "\n".join(preview_lines))
         self.meta_text.config(state="disabled")
+
+    def _build_prompt_optimizer_preview(self, positive_text: str, negative_text: str) -> list[str]:
+        lines = ["", "━━━ PROMPT OPTIMIZER ━━━"]
+        try:
+            config = PromptOptimizerConfig.from_dict(self.get_prompt_optimizer_config())
+            service = PromptOptimizerService(config)
+            result = service.optimize_prompts(positive_text, negative_text, pipeline_name="txt2img")
+        except Exception as exc:
+            return lines + [f"Optimizer preview unavailable: {exc}"]
+
+        lines.append(f"Changed: pos={result.positive.changed} neg={result.negative.changed}")
+        lines.append("Original Positive:")
+        lines.append(result.positive.original_prompt or "(empty)")
+        lines.append("Optimized Positive:")
+        lines.append(result.positive.optimized_prompt or "(empty)")
+        lines.append("Original Negative:")
+        lines.append(result.negative.original_prompt or "(empty)")
+        lines.append("Optimized Negative:")
+        lines.append(result.negative.optimized_prompt or "(empty)")
+        if result.positive.buckets:
+            lines.append("Positive Buckets:")
+            for bucket, values in result.positive.buckets.items():
+                lines.append(f"  {bucket}: {', '.join(values)}")
+        if result.negative.buckets:
+            lines.append("Negative Buckets:")
+            for bucket, values in result.negative.buckets.items():
+                lines.append(f"  {bucket}: {', '.join(values)}")
+        dropped = result.positive.dropped_duplicates + result.negative.dropped_duplicates
+        if dropped:
+            lines.append(f"Dropped Duplicates: {', '.join(dropped)}")
+        return lines
 
     def _open_matrix_helper(self) -> None:
         dialog = MatrixHelperDialog(self, on_apply=self._insert_matrix_expression)

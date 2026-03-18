@@ -35,12 +35,12 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         
         assert "model" in columns
         assert "seed" in columns
-        assert len(columns) == 8  # time, status, model, packs, duration, seed, images, output
+        assert len(columns) == 11  # time, status, model, pack, row, v, b, duration, seed, images, output
         
         # Verify correct order
         column_list = list(columns)
         assert column_list[2] == "model"
-        assert column_list[5] == "seed"
+        assert column_list[8] == "seed"
 
     def test_extract_model_from_snapshot(self) -> None:
         """Test extracting model from NJR snapshot."""
@@ -178,7 +178,7 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         assert duration == "-"
 
     def test_entry_values_returns_all_columns(self) -> None:
-        """Test _entry_values returns tuple with all 8 columns."""
+        """Test _entry_values returns tuple with all visible columns."""
         entry = JobHistoryEntry(
             job_id="test-123",
             created_at=datetime.now(),
@@ -194,7 +194,7 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         
         values = self.panel._entry_values(entry)
         
-        assert len(values) == 8
+        assert len(values) == 11
         assert isinstance(values, tuple)
         # Verify all fields are strings
         assert all(isinstance(v, str) for v in values)
@@ -211,11 +211,11 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         
         values = self.panel._entry_values(entry)
         
-        # Should not raise error and return 8 values
-        assert len(values) == 8
+        # Should not raise error and return all visible columns
+        assert len(values) == 11
         # Model and seed should show '-'
         assert values[2] == "-"  # model
-        assert values[5] == "-"  # seed
+        assert values[8] == "-"  # seed
 
     def test_extract_full_model_for_tooltip(self) -> None:
         """Test extracting full model name for tooltip."""
@@ -283,7 +283,61 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         
         # Verify first entry has correct number of columns
         values = self.panel.history_tree.item(children[0])["values"]
-        assert len(values) == 8
+        assert len(values) == 11
+
+    def test_extract_image_count_prefers_canonical_video_artifact_count(self) -> None:
+        """Canonical video artifact count should drive the Images column."""
+        entry = JobHistoryEntry(
+            job_id="video-job",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            result={
+                "metadata": {
+                    "animatediff_artifact": {
+                        "count": 1,
+                        "primary_path": "output/run-1/clip.mp4",
+                        "output_paths": ["output/run-1/clip.mp4"],
+                        "artifacts": [
+                            {
+                                "schema": "stablenew.artifact.v2.6",
+                                "artifact_type": "video",
+                                "primary_path": "output/run-1/clip.mp4",
+                                "output_paths": ["output/run-1/clip.mp4"],
+                            }
+                        ],
+                    }
+                }
+            },
+        )
+
+        assert self.panel._extract_image_count(entry) == "1"
+
+    def test_extract_output_folder_prefers_canonical_artifact_path(self) -> None:
+        """Output folder display should derive from the canonical primary artifact path."""
+        entry = JobHistoryEntry(
+            job_id="video-job",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            result={
+                "metadata": {
+                    "animatediff_artifact": {
+                        "count": 1,
+                        "primary_path": "output/run-2/clip.mp4",
+                        "output_paths": ["output/run-2/clip.mp4"],
+                        "artifacts": [
+                            {
+                                "schema": "stablenew.artifact.v2.6",
+                                "artifact_type": "video",
+                                "primary_path": "output/run-2/clip.mp4",
+                                "output_paths": ["output/run-2/clip.mp4"],
+                            }
+                        ],
+                    }
+                }
+            },
+        )
+
+        assert self.panel._extract_output_folder(entry) == "run-2"
 
 
 if __name__ == "__main__":

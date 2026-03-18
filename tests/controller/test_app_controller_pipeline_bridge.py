@@ -5,16 +5,20 @@ from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class DummyPipelineController:
-    def __init__(self):
+    def __init__(self, *, should_raise: bool = False):
         self.start_calls = 0
+        self.should_raise = should_raise
+        self.last_run_config = None
 
     def start_pipeline(self, *args, **kwargs):
         self.start_calls += 1
+        self.last_run_config = kwargs.get("run_config")
+        if self.should_raise:
+            raise RuntimeError("bridge failed")
         return True
 
 
 def _build_controller(**kwargs) -> AppController:
-    # PR-0114C-Ty: Default to stubbed job_service to prevent real execution
     if "job_service" not in kwargs:
         kwargs["job_service"] = make_stubbed_job_service()
     controller = AppController(
@@ -32,46 +36,26 @@ def _build_controller(**kwargs) -> AppController:
     return controller
 
 
-def test_run_pipeline_v2_bridge_invokes_pipeline_controller():
+def test_start_run_v2_invokes_pipeline_controller() -> None:
     dummy = DummyPipelineController()
     controller = _build_controller(pipeline_controller=dummy)
-
-    assert controller.run_pipeline_v2_bridge() is True
-    assert dummy.start_calls == 1
-
-
-def test_run_pipeline_v2_bridge_without_pipeline_controller():
-    controller = _build_controller()
-    controller.pipeline_controller = None
-
-    assert controller.run_pipeline_v2_bridge() is False
-
-
-def test_start_run_v2_uses_bridge_and_skips_legacy(monkeypatch):
-    dummy = DummyPipelineController()
-    controller = _build_controller(pipeline_controller=dummy)
-    legacy_called = {"count": 0}
-
-    def fake_start_run(self):
-        legacy_called["count"] += 1
-        return "legacy"
-
-    monkeypatch.setattr(AppController, "start_run", fake_start_run, raising=True)
 
     assert controller.start_run_v2() is True
     assert dummy.start_calls == 1
-    assert legacy_called["count"] == 0
+    assert dummy.last_run_config["run_mode"] == "direct"
+    assert dummy.last_run_config["source"] == "run"
 
 
-def test_start_run_v2_falls_back_to_legacy(monkeypatch):
+def test_start_run_v2_returns_false_without_pipeline_controller() -> None:
     controller = _build_controller()
-    legacy_called = {"count": 0}
+    controller.pipeline_controller = None
 
-    def fake_start_run(self):
-        legacy_called["count"] += 1
-        return "legacy"
+    assert controller.start_run_v2() is False
 
-    monkeypatch.setattr(AppController, "start_run", fake_start_run, raising=True)
 
-    assert controller.start_run_v2() == "legacy"
-    assert legacy_called["count"] == 1
+def test_start_run_v2_returns_false_on_bridge_error() -> None:
+    dummy = DummyPipelineController(should_raise=True)
+    controller = _build_controller(pipeline_controller=dummy)
+
+    assert controller.start_run_v2() is False
+    assert dummy.start_calls == 1

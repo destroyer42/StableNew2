@@ -1,49 +1,51 @@
+﻿# Summary
+Describe the problem, the change, and why the change is required.
 
-# Summary
-Describe what this PR changes and why.
+# Canonical References
+- `AGENTS.md`
+- `docs/ARCHITECTURE_v2.6.md`
+- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+- `docs/PR_TEMPLATE_v2.6.md`
 
-# Layers & Boundaries
-- Layers touched (per docs/architecture/ARCHITECTURE_v2.md): GUI / Controller / Pipeline / Integration.
-- Forbidden boundary check: confirm no direct calls across layers (e.g., GUI -> pipeline internals) and flag any scope creep early.
+# Goals
+- List the concrete outcomes this PR delivers.
 
-# Linked Issues
-- Closes # (list the issues this PR addresses)
+# Non-Goals
+- List what this PR does not do.
 
-# Type of change
-- [ ] Feature
-- [ ] Bugfix
-- [ ] Refactor
-- [ ] Docs / CI
-- [ ] Tests
+# Allowed Files
+- List every file created.
+- List every file modified.
+- List every file deleted.
 
-# Validation
-- [ ] I ran `pre-commit run --all-files` and fixed findings.
-- [ ] I ran `pytest -q` and **0 failures** locally.
-- [ ] New/changed behavior has tests (unit and/or GUI headless where applicable).
-- [ ] No main-thread blocking (Tk); heavy work is in threads/subprocesses with queue callbacks.
-- [ ] Cooperative cancel is honored in new/changed paths.
+# Forbidden Files
+- List files or directories that must not be touched.
 
-## Test Plan (write failing tests first)
-- Enumerate deterministic failing tests to add under `tests/<domain>/` following docs/Testing_Strategy_v2.md.
-- Note any mocks/stubs needed to avoid flakiness or forbidden dependencies (e.g., network/UI threads).
+# Implementation Plan
+1. Describe the ordered implementation steps.
+2. Keep steps specific and verifiable.
 
-## Test commands used
-```
+# Tests
+- List unit, integration, and journey coverage required.
+- Include exact commands used.
+
+```bash
+python -m compileall src
 pytest -q
-pytest tests/gui -q
-pytest tests/editor -q
 ```
 
-# Screenshots / GIF (if UI changes)
-(attach images)
+# Acceptance Criteria
+- List the conditions that must be true for merge.
 
 # Docs
-- [ ] README/ARCHITECTURE updated where relevant.
-- [ ] In-app Help updated (pulled from README sections).
+- Note which canonical docs or operator guides changed.
+- Confirm `docs/DOCS_INDEX_v2.6.md` was updated if the active doc map changed.
 
-# Risk & Rollback
-- Risk level: Low / Medium / High
-- Rollback plan: Revert this PR; archived unused files unchanged; config backward compatible.
+# Risk And Rollback
+- State the main risks.
+- State the rollback approach.
 
----
-Created: 2025-11-03 23:41:49
+# Architecture Check
+- Confirm PromptPack-only sourcing remains intact.
+- Confirm NJR-only execution remains intact.
+- Confirm no duplicate runtime path was introduced.

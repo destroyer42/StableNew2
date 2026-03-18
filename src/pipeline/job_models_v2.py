@@ -22,6 +22,8 @@ _STAGE_DISPLAY_MAP: dict[str, str] = {
     "img2img": "img2img",
     "upscale": "upscale",
     "adetailer": "ADetailer",
+    "animatediff": "AnimateDiff",
+    "svd_native": "SVD Img2Vid",
 }
 
 
@@ -161,7 +163,7 @@ class JobStatusV2(str, Enum):
     FAILED = "failed"
 
 
-StageType = Literal["txt2img", "img2img", "adetailer", "upscale"]
+StageType = Literal["txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native"]
 
 
 # ---------------------------------------------------------------------------
@@ -436,10 +438,18 @@ class RuntimeJobStatus:
     actual_seed: int | None  # The actual seed used (may differ from config if random)
     current_step: int  # Current step within stage (for progress bar)
     total_steps: int  # Total steps for current stage
+    stage_detail: str | None = None  # Optional finer-grained phase within the current stage
     
     def get_stage_label(self) -> str:
         """Get formatted stage label like '2/3 img2img'."""
         return f"{self.stage_index + 1}/{self.total_stages} {self.current_stage}"
+
+    def get_stage_display(self) -> str:
+        """Get stage label including optional finer-grained runtime detail."""
+        label = self.get_stage_label()
+        if self.stage_detail:
+            return f"{label} - {self.stage_detail}"
+        return label
     
     def get_progress_percentage(self) -> int:
         """Get progress as integer percentage (0-100)."""
@@ -638,7 +648,7 @@ class NormalizedJobRecord:
     # Reprocessing support: provide input images to skip txt2img
     input_image_paths: list[str] = field(default_factory=list)
     # Start stage for reprocessing: skip stages before this one
-    # Options: "txt2img", "img2img", "adetailer", "upscale"
+    # Options: "txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native"
     start_stage: str | None = None
     # PR-LEARN-003: Learning experiment context for completion routing
     learning_context: LearningJobContext | None = None
@@ -680,7 +690,7 @@ class NormalizedJobRecord:
         if isinstance(stages, list):
             return [str(stage) for stage in stages if stage]
         flags = []
-        for stage in ("txt2img", "img2img", "upscale", "adetailer"):
+        for stage in ("txt2img", "img2img", "upscale", "adetailer", "animatediff", "svd_native"):
             enabled = self._config_value(f"stage_{stage}_enabled", stage)
             if enabled or (isinstance(enabled, bool) and enabled):
                 flags.append(stage)
@@ -954,16 +964,20 @@ class JobView:
         prompt_text = (
             record.positive_prompt
             or (record.txt2img_prompt_info and record.txt2img_prompt_info.final_prompt)
-            or ""
+            or record._extract_prompt_field("final_prompt", "prompt", "positive_prompt")
         )
         negative_text = (
             record.negative_prompt
             or (record.txt2img_prompt_info and record.txt2img_prompt_info.final_negative_prompt)
+            or record._extract_prompt_field("final_negative_prompt", "negative_prompt")
             or None
         )
         positive_preview = _truncate_display_text(prompt_text, 120)
         negative_preview = _truncate_display_text(negative_text, 120) if negative_text else None
-        stage_names = [stage.stage_type for stage in record.stage_chain if stage.stage_type]
+        if record.stage_chain:
+            stage_names = record.stage_chain_labels
+        else:
+            stage_names = record._extract_stage_names()
         stages_display = _format_stage_display(stage_names)
         variant_label = _format_variant_label(record.variant_index, record.variant_total)
         batch_label = _format_batch_label(record.batch_index, record.batch_total)

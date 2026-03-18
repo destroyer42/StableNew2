@@ -92,8 +92,8 @@ def _canonical_run_result(
     ).to_dict()
 
 
-def test_app_controller_builds_job_service_with_execute_callable(tmp_path: Path) -> None:
-    """JobService gets constructed through the runner factory using _execute_job."""
+def test_app_controller_adopts_pipeline_controller_queue_stack(tmp_path: Path) -> None:
+    """AppController should use the PipelineController-owned queue/job-service stack."""
 
     controller = RecordingAppController(
         main_window=None,
@@ -101,10 +101,12 @@ def test_app_controller_builds_job_service_with_execute_callable(tmp_path: Path)
         tmp_history=tmp_path / "job_history.json",
     )
 
-    assert controller.recorded_callables, "runner factory was not invoked"
-    recorded = controller.recorded_callables[0]
-    assert getattr(recorded, "__self__", None) is controller
-    assert getattr(recorded, "__func__", recorded) is controller._execute_job.__func__
+    job_service = controller.pipeline_controller.get_job_service()
+    job_exec = controller.pipeline_controller.get_job_execution_controller()
+
+    assert controller.job_service is job_service
+    assert job_service is not None
+    assert job_service.queue is job_exec.get_queue()
 
 
 def test_pipeline_controller_routes_jobs_through_job_service(

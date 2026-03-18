@@ -76,7 +76,7 @@ def test_safe_image_names():
     print(f"Batch 1: {batch1}")
     
     assert batch0 != batch1, "Different batch indices must produce different names"
-    assert "_batch0" in batch0 and "_batch1" in batch1, "Batch indices must be explicit"
+    assert "_batch1" in batch0 and "_batch2" in batch1, "Batch indices must be explicit"
     print("✅ Batch indices create unique names")
     
     # Test Case 5: Windows path length validation

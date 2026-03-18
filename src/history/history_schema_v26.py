@@ -19,7 +19,6 @@ OPTIONAL_FIELDS: dict[str, type] = {
     "ui_summary": dict,  # display-friendly snapshot extracted from NJR
     "metadata": dict,  # run metadata, safe for GUI/history and lineage
     "result": dict,  # canonical run result DTO
-    "history_version": str,  # transitional compatibility; ignored on write
 }
 
 DEPRECATED_FIELDS: set[str] = {

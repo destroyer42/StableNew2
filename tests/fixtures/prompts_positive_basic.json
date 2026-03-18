@@ -1,0 +1,15 @@
+[
+  {
+    "input": "masterpiece, best quality, cinematic lighting, beautiful woman, japanese garden, autumn maple trees, standing, looking toward camera, 85mm lens, natural skin texture, photorealistic",
+    "expected_buckets": {
+      "subject": ["beautiful woman"],
+      "environment": ["japanese garden", "autumn maple trees"],
+      "pose_action": ["standing", "looking toward camera"],
+      "lighting_atmosphere": ["cinematic lighting"],
+      "camera_lens": ["85mm lens"],
+      "material_surface_detail": ["natural skin texture"],
+      "style_medium": ["photorealistic"],
+      "quality_tokens": ["masterpiece", "best quality"]
+    }
+  }
+]

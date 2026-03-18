@@ -12,22 +12,12 @@ def _write_jsonl(path: Path, entries: list[dict]) -> None:
 
 def test_roundtrip_save_load_is_deterministic(tmp_path) -> None:
     history_path = tmp_path / "history.jsonl"
-    legacy_entries = [
+    entries = [
         {
-            "job_id": "legacy-001",
-            "pipeline_config": {
-                "prompt": "ancient job",
-                "model": "v1",
-                "sampler": "Euler a",
-                "width": 512,
-                "height": 512,
-                "steps": 10,
-                "cfg_scale": 6.0,
-            },
-        },
-        {
-            "job_id": "snapshot-002",
+            "id": "snapshot-002",
             "status": "completed",
+            "timestamp": "2026-03-16T00:00:00Z",
+            "history_schema": "2.6",
             "snapshot": {
                 "normalized_job": {
                     "job_id": "snapshot-002",
@@ -64,9 +54,12 @@ def test_roundtrip_save_load_is_deterministic(tmp_path) -> None:
                     "status": "completed",
                 }
             },
+            "ui_summary": {},
+            "metadata": {},
+            "runtime": {},
         },
     ]
-    _write_jsonl(history_path, legacy_entries)
+    _write_jsonl(history_path, entries)
 
     store = JobHistoryStore(history_path)
     first = store.load()
@@ -74,7 +67,6 @@ def test_roundtrip_save_load_is_deterministic(tmp_path) -> None:
     second = store.load()
 
     assert [r.to_dict() for r in first] == [r.to_dict() for r in second]
-    assert all(rec.history_version == "2.6" for rec in second)
     assert all("pipeline_config" not in rec.njr_snapshot for rec in second)
     assert all("result" in rec.to_dict() for rec in second)
     assert all(rec.result is not None for rec in second)

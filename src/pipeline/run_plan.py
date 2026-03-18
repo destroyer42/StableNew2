@@ -4,6 +4,15 @@ from dataclasses import dataclass, field
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 
+_CANONICAL_STAGE_ORDER = {
+    "txt2img": 0,
+    "img2img": 1,
+    "adetailer": 2,
+    "upscale": 3,
+    "animatediff": 4,
+    "svd_native": 5,
+}
+
 
 @dataclass
 class PlannedJob:
@@ -33,6 +42,14 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
     This is the canonical path for both live runs and replays.
     """
     stage_chain: list[StageConfig] = list(getattr(njr, "stage_chain", []) or [])
+    indexed_stage_chain = list(enumerate(stage_chain))
+    indexed_stage_chain.sort(
+        key=lambda item: (
+            _CANONICAL_STAGE_ORDER.get(getattr(item[1], "stage_type", "") or "", 99),
+            item[0],
+        )
+    )
+    stage_chain = [stage for _, stage in indexed_stage_chain]
     
     # Build a PlannedJob for EACH **ENABLED** stage in the chain
     jobs = []

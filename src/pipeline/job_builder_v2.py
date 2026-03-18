@@ -21,6 +21,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
+from src.pipeline.config_normalizer import normalize_pipeline_config
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
     BatchSettings,
@@ -167,7 +168,7 @@ class JobBuilderV2:
         output_dir = run_request.explicit_output_dir or "output"
         filename_template = "{seed}"
         for _index, entry in enumerate(entries[: run_request.max_njr_count]):
-            config = entry.config_snapshot or {}
+            config = normalize_pipeline_config(entry.config_snapshot or {})
             txt2img_config = config.get("txt2img", {})
             seed = self._extract_config_value(config, "seed") or txt2img_config.get("seed")
             seed_val = int(seed) if seed is not None else None

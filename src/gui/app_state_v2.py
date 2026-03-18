@@ -13,6 +13,7 @@ from src.pipeline.job_models_v2 import (
     UnifiedJobSummary,
 )
 from src.queue.job_history_store import JobHistoryEntry
+from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
 from src.utils.config import LoraRuntimeConfig
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -127,15 +128,7 @@ class AppStateV2:
     webui_state: str = "disconnected"
     learning_enabled: bool = True
     prompt_workspace_state: PromptWorkspaceState | None = None
-    resources: dict[str, list[Any]] = field(
-        default_factory=lambda: {
-            "models": [],
-            "vaes": [],
-            "samplers": [],
-            "schedulers": [],
-            "upscalers": [],
-        }
-    )
+    resources: dict[str, list[Any]] = field(default_factory=build_empty_resource_map)
     queue_items: list[str] = field(default_factory=list)
     queue_jobs: list[UnifiedJobSummary] = field(default_factory=list)
     running_job: UnifiedJobSummary | None = None
@@ -304,15 +297,7 @@ class AppStateV2:
     def set_resources(self, value: dict[str, list[Any]] | None) -> None:
         if value is None:
             return
-        normalized = {
-            "models": list(value.get("models") or []),
-            "vaes": list(value.get("vaes") or []),
-            "samplers": list(value.get("samplers") or []),
-            "schedulers": list(value.get("schedulers") or []),
-            "upscalers": list(value.get("upscalers") or []),
-            "adetailer_models": list(value.get("adetailer_models") or []),
-            "adetailer_detectors": list(value.get("adetailer_detectors") or []),
-        }
+        normalized = normalize_resource_map(value)
         if self.resources != normalized:
             self.resources = normalized
             self._notify("resources")

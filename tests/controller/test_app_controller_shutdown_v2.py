@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from unittest.mock import patch
 
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
@@ -73,3 +74,24 @@ def test_shutdown_app_handles_errors(controller: AppController) -> None:
     controller.shutdown_app("error")
     assert "cancel" in called
     assert controller.webui_process_manager.stop_calls == 1
+
+
+def test_shutdown_app_uses_daemon_watchdog_thread(controller: AppController) -> None:
+    controller._shutdown_watchdog = lambda: None  # type: ignore[method-assign]
+
+    controller.shutdown_app("watchdog-test")
+
+    watchdog = controller._shutdown_watchdog_thread
+    assert watchdog is not None
+    assert watchdog.daemon is True
+
+
+def test_shutdown_webui_uses_global_manager_fallback(controller: AppController) -> None:
+    fallback = FakeWebUIManager()
+    controller.webui_process_manager = None
+
+    with patch("src.controller.app_controller.get_global_webui_process_manager", return_value=fallback):
+        controller._shutdown_webui()
+
+    assert controller.webui_process_manager is fallback
+    assert fallback.stop_calls == 1

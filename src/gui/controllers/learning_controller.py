@@ -14,9 +14,13 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.stage_capabilities import get_stage_capability
+from src.learning.learning_controller_services.experiment_persistence import (
+    build_resume_payload,
+    validate_resume_payload,
+    extract_workflow_state,
+)
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
-from src.queue.job_model import Job, JobPriority
 
 
 class LearningController:
@@ -39,17 +43,9 @@ class LearningController:
         self.prompt_workspace_state = prompt_workspace_state
         self.pipeline_state = pipeline_state
         
-        # PR-LEARN-012: Validate required dependencies
-        # Compatibility: allow execution-controller-only construction in tests/integration.
-        if not pipeline_controller and execution_controller is None:
-            raise RuntimeError(
-                "LearningController requires pipeline_controller. "
-                "Ensure MainWindow passes pipeline_controller to LearningTabFrame."
-            )
-        
         self.pipeline_controller = pipeline_controller
         self.app_controller = app_controller  # Store app_controller for stage card access
-        self.execution_controller = execution_controller  # PR-LEARN-002: Backend controller
+        self.execution_controller = execution_controller or self._build_execution_controller()  # PR-LEARN-073
         self._plan_table = plan_table
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
@@ -72,6 +68,35 @@ class LearningController:
         if self.execution_controller:
             self.execution_controller.set_completion_callback(self._on_variant_job_completed)
             self.execution_controller.set_failure_callback(self._on_variant_job_failed)
+
+    def _build_execution_controller(self) -> Any | None:
+        """Create the canonical learning execution controller when JobService is available."""
+        job_service = None
+        if self.pipeline_controller is not None:
+            controller_dict = getattr(self.pipeline_controller, "__dict__", {})
+            get_job_service = (
+                getattr(self.pipeline_controller, "get_job_service", None)
+                if "get_job_service" in controller_dict
+                else None
+            )
+            if callable(get_job_service):
+                try:
+                    job_service = get_job_service()
+                except Exception:
+                    job_service = None
+            if job_service is None:
+                job_service = (
+                    getattr(self.pipeline_controller, "_job_service", None)
+                    if "_job_service" in controller_dict
+                    else None
+                )
+        if job_service is None:
+            return None
+        from src.learning.execution_controller import LearningExecutionController
+        return LearningExecutionController(
+            learning_state=self.learning_state,
+            job_service=job_service,
+        )
 
     def update_experiment_design(self, experiment_data: dict[str, Any]) -> None:
         """Update the current experiment design from form data.
@@ -512,37 +537,14 @@ class LearningController:
             record = self._build_variant_njr(variant, experiment)
             logger.info(f"[LearningController] Built NJR for variant: {variant.param_value}")
             
-            # Preferred path: delegate to LearningExecutionController
-            success = False
-            if self.execution_controller:
-                success = self.execution_controller.submit_variant_job(
-                    record=record,
-                    variant=variant,
-                    experiment_name=experiment.name,
-                    variable_under_test=experiment.variable_under_test,
-                )
-            else:
-                # Compatibility fallback path for older integration tests:
-                # submit via queue_controller if present, else via _job_service.
-                controller_dict = getattr(self.pipeline_controller, "__dict__", {})
-                queue_controller = (
-                    getattr(self.pipeline_controller, "queue_controller", None)
-                    if "queue_controller" in controller_dict
-                    else None
-                )
-                job_service = (
-                    getattr(self.pipeline_controller, "_job_service", None)
-                    if "_job_service" in controller_dict
-                    else None
-                )
-
-                if queue_controller and hasattr(queue_controller, "submit_pack_job"):
-                    queue_controller.submit_pack_job(record)
-                    success = True
-                elif job_service and hasattr(job_service, "submit_job_with_run_mode"):
-                    job = self._njr_to_queue_job(record)
-                    job_service.submit_job_with_run_mode(job)
-                    success = True
+            if not self.execution_controller:
+                raise RuntimeError("Learning execution controller unavailable")
+            success = self.execution_controller.submit_variant_job(
+                record=record,
+                variant=variant,
+                experiment_name=experiment.name,
+                variable_under_test=experiment.variable_under_test,
+            )
             
             if success:
                 # PR-LEARN-011: Log successful submission
@@ -566,38 +568,6 @@ class LearningController:
             variant_index = self._get_variant_index(variant)
             if variant_index >= 0:
                 self._update_variant_status(variant_index, "failed")
-
-    def _njr_to_queue_job(self, record: NormalizedJobRecord) -> Job:
-        """Convert a learning NJR to queue Job for compatibility paths."""
-        job = Job(
-            job_id=record.job_id,
-            priority=JobPriority.NORMAL,
-            run_mode="queue",
-            source="learning",
-            prompt_source="manual",
-            prompt_pack_id=record.prompt_pack_id,
-            config_snapshot={
-                "prompt": record.positive_prompt,
-                "model": record.base_model,
-                "vae": record.vae,
-                "sampler": record.sampler_name,
-                "scheduler": record.scheduler,
-                "steps": record.steps,
-                "cfg_scale": record.cfg_scale,
-            },
-            learning_enabled=True,
-        )
-        job._normalized_record = record  # type: ignore[attr-defined]
-        return job
-
-    def _execute_learning_job(self, job: Job) -> dict[str, Any]:
-        """Execute a learning job through pipeline controller."""
-        if self.pipeline_controller and hasattr(self.pipeline_controller, "_run_job"):
-            result = self.pipeline_controller._run_job(job)
-            if isinstance(result, dict):
-                return result
-            return {"status": "completed", "result": result}
-        return {"status": "failed", "error": "pipeline_controller unavailable"}
 
     def _build_variant_njr(
         self, variant: LearningVariant, experiment: LearningExperiment
@@ -631,6 +601,10 @@ class LearningController:
         final_config["learning_variant_value"] = variant.param_value
         final_config["learning_variable"] = experiment.variable_under_test
         stage_name = str(experiment.stage or "txt2img").strip().lower() or "txt2img"
+        output_dir = self._resolve_learning_output_dir(final_config)
+        filename_template = self._resolve_learning_filename_template(final_config)
+        variant_index = max(0, self._get_variant_index(variant))
+        variant_total = max(1, len(self.learning_state.plan) or len(experiment.values) or 1)
 
         txt2img_final = final_config.get("txt2img", {})
         
@@ -704,9 +678,15 @@ class LearningController:
         learning_ctx = LearningJobContext(
             experiment_id=experiment.name,
             experiment_name=experiment.name,
-            variant_index=0,  # Not used for single variant jobs
+            variant_index=variant_index,
             variable_under_test=experiment.variable_under_test,
             variant_value=variant.param_value,
+        )
+        learning_metadata = self._build_learning_metadata(
+            experiment=experiment,
+            variant=variant,
+            stage_name=stage_name,
+            final_config=final_config,
         )
 
         if stage_name != "txt2img":
@@ -730,25 +710,24 @@ class LearningController:
                 negative_prompt=negative_prompt,
                 model=str(stage_section.get("model") or model or ""),
                 pack_name=f"learning_{experiment.name}",
+                source="learning",
+                extra_metadata=learning_metadata,
             )
             record.prompt_pack_id = f"learning_{experiment.name}"
             record.prompt_pack_name = experiment.name
+            record.variant_index = variant_index
+            record.variant_total = variant_total
             record.learning_context = learning_ctx
-            record.extra_metadata = dict(record.extra_metadata or {})
-            record.extra_metadata.update(
-                {
-                    "learning_enabled": True,
-                    "learning_experiment": experiment.name,
-                    "learning_variable": experiment.variable_under_test,
-                    "learning_variant_value": variant.param_value,
-                    "learning_stage": stage_name,
-                }
-            )
             return record
 
         # Build NormalizedJobRecord
         record = NormalizedJobRecord(
             job_id=job_id,
+            config=final_config,
+            path_output_dir=output_dir,
+            filename_template=filename_template,
+            variant_index=variant_index,
+            variant_total=variant_total,
             positive_prompt=prompt,
             negative_prompt=negative_prompt,
             base_model=model,
@@ -762,22 +741,21 @@ class LearningController:
             seed=seed,
             clip_skip=clip_skip,
             prompt_pack_id=f"learning_{experiment.name}",
+            prompt_pack_name=experiment.name,
             stage_chain=[txt2img_stage],  # Required: at least one stage
+            images_per_prompt=max(1, int(experiment.images_per_value or 1)),
+            run_mode="QUEUE",
+            queue_source="ADD_TO_QUEUE",
             learning_context=learning_ctx,  # For metadata and tracking
             extra_metadata={
-                "learning_enabled": True,
-                "learning_experiment": experiment.name,
-                "learning_variable": experiment.variable_under_test,
-                "learning_variant_value": variant.param_value,
+                **learning_metadata,
                 "subseed": subseed,
                 "subseed_strength": subseed_strength,
                 "seed_resize_from_h": seed_resize_from_h,
                 "seed_resize_from_w": seed_resize_from_w,
             },
-            config={},  # Empty config dict
-            path_output_dir="",  # Will be set by runner
-            filename_template="",  # Will be set by runner
         )
+        record.prompt_source = "manual"  # type: ignore[attr-defined]
         
         # PR-LEARN-022: Apply LoRA override if present
         lora_override = final_config.get("lora_override")
@@ -803,9 +781,45 @@ class LearningController:
         
         return record
 
-    # PR-LEARN-013: Removed _njr_to_queue_job() and _execute_learning_job()
-    # These are now handled by LearningExecutionController.submit_variant_job()
-    # which properly tracks jobs in the _job_to_variant mapping for callbacks.
+    def _resolve_learning_output_dir(self, config: dict[str, Any]) -> str:
+        pipeline_cfg = config.get("pipeline", {})
+        if not isinstance(pipeline_cfg, dict):
+            return ""
+        output_dir = pipeline_cfg.get("path_output_dir") or pipeline_cfg.get("output_dir") or ""
+        return str(output_dir or "")
+
+    def _resolve_learning_filename_template(self, config: dict[str, Any]) -> str:
+        pipeline_cfg = config.get("pipeline", {})
+        if not isinstance(pipeline_cfg, dict):
+            return "{seed}"
+        template = pipeline_cfg.get("filename_template") or "{seed}"
+        return str(template or "{seed}")
+
+    def _build_learning_metadata(
+        self,
+        *,
+        experiment: LearningExperiment,
+        variant: LearningVariant,
+        stage_name: str,
+        final_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "submission_source": "learning",
+            "learning_enabled": True,
+            "learning_experiment": experiment.name,
+            "learning_variable": experiment.variable_under_test,
+            "learning_variant_value": variant.param_value,
+            "learning_stage": stage_name,
+            "learning": {
+                "schema": "stablenew.learning.v2.6",
+                "experiment_name": experiment.name,
+                "variable_under_test": experiment.variable_under_test,
+                "variant_value": variant.param_value,
+                "stage": stage_name,
+                "images_per_value": max(1, int(experiment.images_per_value or 1)),
+                "config": final_config,
+            },
+        }
 
     def _validate_baseline_config(self, config: dict[str, Any]) -> tuple[bool, str]:
         """Validate baseline config structure and required fields.
@@ -1304,16 +1318,16 @@ class LearningController:
             return None
         if self._is_review_complete():
             return None
-        payload = self.learning_state.to_dict()
-        payload["workflow_state"] = self._workflow_state
-        payload["learning_enabled"] = bool(self._learning_enabled)
-        payload["resume_schema_version"] = 1
-        payload["saved_at"] = datetime.utcnow().isoformat() + "Z"
-        return payload
+        # Delegate serialisation to experiment_persistence (PR-047).
+        return build_resume_payload(
+            state_dict=self.learning_state.to_dict(),
+            workflow_state=self._workflow_state,
+            learning_enabled=bool(self._learning_enabled),
+        )
 
     def restore_resume_state(self, payload: dict[str, Any] | None) -> bool:
         """Restore learning session from persisted payload."""
-        if not isinstance(payload, dict):
+        if not validate_resume_payload(payload):
             return False
         try:
             restored = LearningState.from_dict(payload)
@@ -1327,7 +1341,8 @@ class LearningController:
         self.load_existing_ratings()
         self._update_plan_table()
 
-        desired_state = str(payload.get("workflow_state", "") or "").strip().lower()
+        # Delegate workflow-state extraction to experiment_persistence (PR-047).
+        desired_state = extract_workflow_state(payload)
         if desired_state:
             self._set_workflow_state(desired_state)
         else:
@@ -1476,6 +1491,9 @@ class LearningController:
                 "rating_schema_version": 2,
                 "rating_context": context_flags,
                 "rating_details": subscores,
+                # PR-046: mirror subscores under the canonical key used by review_tab records
+                # so both record shapes normalize identically via extract_rating_detail()
+                "subscores": subscores,
                 "learning_context": {
                     "experiment_id": experiment.name,
                     "variant_id": target_variant.id
@@ -1867,27 +1885,39 @@ class LearningController:
     
     def apply_recommendations_to_pipeline(self, recommendations: Any) -> bool:
         """Apply recommendations to the pipeline stage cards.
-        
+
+        PR-044: Blocks automation when evidence tier is not experiment_strong.
+
         Returns True if successful, False otherwise.
         """
         if self._automation_mode == "suggest_only":
             return False
         if not self.pipeline_controller:
             return False
-        
+
+        # PR-044/055: manual-only evidence tiers must still support explicit
+        # apply-with-confirm. Only the fully automatic path is gated on
+        # automation_eligible.
+        if (
+            self._automation_mode == "auto_micro_experiment"
+            and hasattr(recommendations, "automation_eligible")
+            and not recommendations.automation_eligible
+        ):
+            return False
+
         # Get stage cards panel
         stage_cards = getattr(self.pipeline_controller, "stage_cards_panel", None)
         if not stage_cards:
             # Try via app_state or other paths
             stage_cards = self._find_stage_cards_panel()
-        
+
         if not stage_cards:
             return False
-        
+
         # Extract recommendations
         rec_list = self._extract_rec_list(recommendations)
         self._automation_snapshot = {}
-        
+
         applied = 0
         for rec in rec_list:
             if hasattr(rec, "parameter_name"):
@@ -2101,3 +2131,127 @@ class LearningController:
 
         analytics = LearningAnalytics(self._learning_record_writer)
         analytics.export_to_csv(Path(file_path))
+
+    # ------------------------------------------------------------------
+    # PR-GUI-LEARN-041: Discovered-review orchestration
+    # ------------------------------------------------------------------
+
+    def _get_discovered_store(self):
+        """Return a DiscoveredReviewStore instance, creating it lazily."""
+        from src.learning.discovered_review_store import DiscoveredReviewStore
+        from src.learning.learning_paths import get_discovered_experiments_root
+
+        if not hasattr(self, "_discovered_review_store"):
+            self._discovered_review_store = DiscoveredReviewStore(
+                get_discovered_experiments_root(create=True)
+            )
+        return self._discovered_review_store
+
+    def refresh_discovered_inbox(self, status: str | None = None) -> list:
+        """Return current handles from the discovered-review store.
+
+        Parameters
+        ----------
+        status:
+            If provided, filter by this status string.  Pass None for all.
+
+        Returns
+        -------
+        list[DiscoveredReviewHandle]
+        """
+        from src.learning.discovered_review_models import (
+            STATUS_IN_REVIEW,
+            STATUS_WAITING_REVIEW,
+        )
+
+        store = self._get_discovered_store()
+        if status == "active":
+            return store.list_handles_by_status(
+                {STATUS_WAITING_REVIEW, STATUS_IN_REVIEW}
+            )
+        return store.list_handles(status=status)
+
+    def load_discovered_group(self, group_id: str):
+        """Load and return a full DiscoveredReviewExperiment by ID.
+
+        Also updates selected_discovered_group_id in LearningState.
+        """
+        store = self._get_discovered_store()
+        experiment = store.load_group(group_id)
+        if experiment is not None:
+            self.learning_state.selected_discovered_group_id = group_id
+        return experiment
+
+    def save_discovered_item_rating(
+        self, group_id: str, item_id: str, rating: int, notes: str = ""
+    ) -> None:
+        """Persist a per-item rating into the discovered-review store."""
+        store = self._get_discovered_store()
+        store.save_item_rating(group_id, item_id, rating, notes)
+
+    def close_discovered_group(self, group_id: str) -> None:
+        """Transition a discovered group to 'closed' status."""
+        store = self._get_discovered_store()
+        store.close_group(group_id)
+
+    def ignore_discovered_group(self, group_id: str) -> None:
+        """Transition a discovered group to 'ignored' status."""
+        store = self._get_discovered_store()
+        store.ignore_group(group_id)
+
+    def reopen_discovered_group(self, group_id: str) -> None:
+        """Reopen a closed/ignored discovered group back to waiting_review."""
+        store = self._get_discovered_store()
+        store.reopen_group(group_id)
+
+    def trigger_background_scan(
+        self, output_root: str, on_complete: "Any | None" = None
+    ) -> None:
+        """Run an incremental output scan in a background thread.
+
+        Parameters
+        ----------
+        output_root:
+            Root directory to scan for image artifacts.
+        on_complete:
+            Optional callback(new_count: int) invoked on the main thread when
+            the scan completes.  Uses ``after(0, ...)`` via the stored after_fn
+            if available, otherwise calls directly.
+        """
+        import threading
+        from pathlib import Path
+
+        from src.learning.discovered_grouping import GroupingEngine
+        from src.learning.output_scanner import OutputScanner
+
+        def _run() -> None:
+            try:
+                store = self._get_discovered_store()
+                scan_index = store.load_scan_index()
+                scanner = OutputScanner(Path(output_root), scan_index=scan_index)
+                records = scanner.scan_incremental()
+                store.save_scan_index(scanner.scan_index)
+
+                existing_ids = {h.group_id for h in store.list_handles()}
+                engine = GroupingEngine()
+                candidates = engine.build_candidates(records, existing_group_ids=existing_ids)
+
+                for candidate in candidates:
+                    store.save_group(candidate)
+
+                new_count = len(candidates)
+            except Exception:
+                new_count = 0
+
+            if callable(on_complete):
+                after_fn = getattr(self, "_after_fn", None)
+                if callable(after_fn):
+                    after_fn(0, lambda: on_complete(new_count))
+                else:
+                    try:
+                        on_complete(new_count)
+                    except Exception:
+                        pass
+
+        thread = threading.Thread(target=_run, daemon=True, name="discovered-scan")
+        thread.start()

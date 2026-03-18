@@ -30,6 +30,8 @@ from src.gui.theme_v2 import (
 from src.gui.utils.display_helpers import extract_seed_from_job, format_seed_display
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
+from src.controller.ports.runtime_ports import NJRSummaryPort, NJRUISummaryPort
+from src.state.output_routing import get_output_root, iter_output_run_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -232,8 +234,8 @@ class PreviewPanelV2(ttk.Frame):
         self.set_job_summaries(summary_entries)
 
     def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
-        unified = job.to_unified_summary() if hasattr(job, "to_unified_summary") else None
-        ui_summary = job.to_ui_summary() if hasattr(job, "to_ui_summary") else None
+        unified = job.to_unified_summary() if isinstance(job, NJRSummaryPort) else None
+        ui_summary = job.to_ui_summary() if isinstance(job, NJRUISummaryPort) else None
 
         positive_preview = ""
         negative_preview = ""
@@ -913,7 +915,7 @@ class PreviewPanelV2(ttk.Frame):
         from pathlib import Path
 
         # Try to get output directory from job config
-        output_dir = Path("output")
+        output_dir = get_output_root("output", create=False)
         if not output_dir.exists():
             return None
 
@@ -934,11 +936,7 @@ class PreviewPanelV2(ttk.Frame):
         # Look for recent outputs with matching pack/model
         try:
             # List recent run directories
-            run_dirs = sorted(
-                [p for p in output_dir.iterdir() if p.is_dir()],
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )[:10]  # Check last 10 runs
+            run_dirs = iter_output_run_dirs(output_dir)[:10]
 
             for run_dir in run_dirs:
                 matches_pack = bool(pack_name and pack_name.lower() in run_dir.name.lower())
@@ -1007,10 +1005,10 @@ class PreviewPanelV2(ttk.Frame):
 
         # If the summary has a job_id, look for a run folder named with it
         job_id = getattr(summary, "job_id", None)
-        output_dir = Path("output")
+        output_dir = get_output_root("output", create=False)
         if job_id and output_dir.exists():
             job_dirs = sorted(
-                [p for p in output_dir.iterdir() if job_id in p.name],
+                [p for p in iter_output_run_dirs(output_dir) if job_id in p.name],
                 key=lambda p: p.stat().st_mtime,
                 reverse=True,
             )

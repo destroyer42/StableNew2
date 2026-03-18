@@ -304,3 +304,67 @@ class TestPipelineBatchProcessing:
 
         # Verify success
         assert result.success is True
+
+    def test_downstream_image_stages_default_to_njr_base_model(
+        self, pipeline_runner, temp_output_dir
+    ):
+        """Verify img2img/adetailer/upscale inherit the NJR base model by default."""
+        njr = NormalizedJobRecord(
+            job_id="test_stage_model_pinning",
+            config={},
+            path_output_dir=str(temp_output_dir),
+            filename_template="image_{index:04d}",
+            positive_prompt="A portrait",
+            negative_prompt="bad quality",
+            base_model="base-model.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=768,
+            height=768,
+            images_per_prompt=1,
+            stage_chain=[
+                StageConfig(stage_type="txt2img", enabled=True),
+                StageConfig(stage_type="img2img", enabled=True),
+                StageConfig(stage_type="adetailer", enabled=True, extra={"adetailer_model": "face_yolov8n.pt"}),
+                StageConfig(stage_type="upscale", enabled=True, extra={"upscaler_name": "R-ESRGAN 4x+"}),
+            ],
+        )
+
+        txt2img_base_path = temp_output_dir / "run_id" / "txt2img_00.png"
+        pipeline_runner._pipeline.run_txt2img_stage = MagicMock(
+            return_value={
+                "path": str(txt2img_base_path),
+                "all_paths": [str(txt2img_base_path)],
+                "name": "txt2img_00",
+                "stage": "txt2img",
+            }
+        )
+        pipeline_runner._pipeline.run_img2img_stage = MagicMock(
+            return_value={
+                "path": str(temp_output_dir / "img2img_00.png"),
+                "name": "img2img_00",
+                "stage": "img2img",
+            }
+        )
+        pipeline_runner._pipeline.run_adetailer_stage = MagicMock(
+            return_value={
+                "path": str(temp_output_dir / "adetailer_00.png"),
+                "name": "adetailer_00",
+                "stage": "adetailer",
+            }
+        )
+        pipeline_runner._pipeline.run_upscale_stage = MagicMock(
+            return_value={
+                "path": str(temp_output_dir / "upscale_00.png"),
+                "name": "upscale_00",
+                "stage": "upscale",
+            }
+        )
+
+        result = pipeline_runner.run_njr(njr)
+
+        assert result.success is True
+        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
+        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
+        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"

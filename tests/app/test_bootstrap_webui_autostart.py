@@ -33,3 +33,20 @@ def test_bootstrap_checks_health_when_disabled(monkeypatch):
     main.bootstrap_webui(config)
 
     checker.assert_called_once()
+
+
+def test_async_bootstrap_uses_daemon_thread(monkeypatch):
+    recorded = {}
+
+    class _FakeRegistry:
+        def spawn(self, **kwargs):
+            recorded.update(kwargs)
+            return mock.Mock()
+
+    monkeypatch.setattr("src.utils.thread_registry.get_thread_registry", lambda: _FakeRegistry())
+
+    main._async_bootstrap_webui(mock.Mock(), mock.Mock(), mock.Mock())
+
+    assert recorded["name"] == "WebUI-Bootstrap"
+    assert recorded["daemon"] is True
+    assert recorded["suppress_daemon_warning"] is True

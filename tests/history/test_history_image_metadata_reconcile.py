@@ -72,3 +72,4 @@ def test_reconcile_metadata_falls_back_to_manifest(tmp_path: Path) -> None:
     assert resolved["payload"]["job_id"] == "job-1"
     # PR-METADATA-001: Verify run_id is present in manifest
     assert resolved["payload"].get("run_id") == "run-1"
+    assert resolved["payload"]["artifact"]["primary_path"].endswith("txt2img\\sample.png")

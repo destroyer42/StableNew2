@@ -4,11 +4,12 @@
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality, grabbing crotch) portrait, detailed skin, natural light, high fantasy, magical atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]], is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina dripping cum, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          "stable_yogis_realism_positives_v1",
+          "Stable_Yogis_Anatomy_Positives_V1"
         ],
         "negative_embeddings": [
           "negative_hands",
@@ -33,8 +34,8 @@
       },
       {
         "index": 0,
-        "text": "(masterpiece, best quality, massaging groin) portrait, [[perspective]],detailed skin, natural light, high fantasy, magical atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing only [[clothes]],is [[activity]], in [[time]], detailed shaved aroused wet vagina",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina dripping cum, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1"
@@ -70,8 +71,39 @@
       },
       {
         "index": 2,
-        "text": "(masterpiece, best quality, touching clitoris) portrait, detailed skin, natural light, high fantasy, magical atmosphere a brown-haired perky-large-breasted athletic beautiful green-eyed sun-kissed tan woman, in a bedroom, wearing only nothing, stretching languidly, is grabbing herself in the warm light, detailed shaved aroused wet vagina, incredible skin, slight perspiration, glistening, looking sultry",
-        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes,  straps, shoulder straps, bra straps",
+        "text": "(masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, romantic atmosphere, a\n[[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed woman, in [[environment]], wearing nothing, is [[activity]] [[narrative]] in the [[time]], detailed shaved aroused wet vagina dripping cum, incredible skin, perspective is [[perspective]]",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable_Yogis_General_Positives_V1"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "ac_neg1",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "bad_prompt"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7
+          ],
+          [
+            "CinematicStyle_v1",
+            0.4945054945054945
+          ],
+          [
+            "DetailedEyes_V3",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 2,
+        "text": "(masterpiece, best quality, photorealistic) portrait, detailed skin, natural light, romantic atmosphere a blonde-haired perky-large-breasted athletic beautiful blue-eyed sun-kissed tan woman lies atop another gorgeous woman with opposite orientations, each one with their head aligned with the groin of the other, as  they slowly caress and kiss each other's vaginas, in a bedroom, wearing  nothing, legs spread, detailed shaved aroused wet vagina dripping cum, incredible skin, slight perspiration, glistening, looking sultry",
+        "negative": "deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1",
@@ -119,10 +151,6 @@
         {
           "name": "clothes",
           "values": [
-            "nothing",
-            "only a tight shirt with underboob",
-            "nothing",
-            "only an open jacket",
             "nothing"
           ]
         },
@@ -130,21 +158,19 @@
           "name": "hair",
           "values": [
             "brown",
-            "red",
-            "blonde",
-            "silver",
-            "black",
             "auburn",
-            "strawberry-blonde",
-            "fiery"
+            "blonde",
+            "black"
           ]
         },
         {
           "name": "activity",
           "values": [
-            "aggressively grabbing her own genitalia",
-            "furiously massaging her clitoris",
-            "fingering her pussy rapidly"
+            "crouched over another gorgeous woman in a 69 position",
+            "licking the vagina of another woman who is lying down",
+            "is licking the vagina of another woman who is kneeling down",
+            "fingering the butthole of another woman",
+            "sucking the pussy of another woman"
           ]
         },
         {
@@ -160,13 +186,7 @@
         {
           "name": "environment",
           "values": [
-            "ancient stone ruins",
-            "windswept mountain pass",
-            "burning battlefield",
-            "frozen forest clearing",
-            "deserted city street",
-            "torch-lit hall",
-            "stormy shoreline"
+            "a bedroom"
           ]
         },
         {
@@ -189,14 +209,14 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "juggernautXL_ragnarokBy",
-      "model_name": "juggernautXL_ragnarokBy",
+      "model": "realismFromHadesXL_2ndAnniversary",
+      "model_name": "realismFromHadesXL_2ndAnniversary",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
-      "steps": 20,
-      "cfg_scale": 4.000000000000004,
+      "steps": 30,
+      "cfg_scale": 6.43,
       "width": 768,
       "height": 1280,
       "clip_skip": 2,
@@ -210,7 +230,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
+      "hr_checkpoint_name": "realismFromHadesXL_2ndAnniversary.safetensors [897626cbf4]"
     },
     "img2img": {
       "model": "",
@@ -238,44 +258,44 @@
     "adetailer": {
       "adetailer_model": "mediapipe_face_full",
       "ad_model": "mediapipe_face_full",
-      "adetailer_confidence": 0.39,
-      "ad_confidence": 0.39,
+      "adetailer_confidence": 0.29,
+      "ad_confidence": 0.29,
       "max_detections": 3,
-      "mask_blur": 4,
-      "ad_mask_blur": 4,
+      "mask_blur": 5,
+      "ad_mask_blur": 5,
       "mask_merge_mode": "keep",
-      "adetailer_steps": 8,
-      "ad_steps": 8,
+      "adetailer_steps": 10,
+      "ad_steps": 10,
       "adetailer_cfg": 4.0,
       "ad_cfg_scale": 4.0,
       "adetailer_sampler": "DPM++ 2M",
       "ad_sampler": "DPM++ 2M",
-      "adetailer_denoise": 0.16,
-      "ad_denoising_strength": 0.16,
+      "adetailer_denoise": 0.21,
+      "ad_denoising_strength": 0.21,
       "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
       "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
       "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
       "ad_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
-      "ad_inpaint_only_masked": true,
+      "ad_inpaint_only_masked": false,
       "ad_inpaint_only_masked_padding": 32,
-      "ad_use_inpaint_width_height": false,
+      "ad_use_inpaint_width_height": true,
       "enable_face_pass": true,
       "face_model": "mediapipe_face_full",
-      "face_padding": 32,
+      "face_padding": 48,
       "enable_hands_pass": true,
       "hands_model": "hand_yolov8s.pt",
       "hands_padding": 32,
       "mask_filter_method": "all",
-      "mask_k_largest": 2,
-      "ad_mask_k_largest": 2,
+      "mask_k_largest": 3,
+      "ad_mask_k_largest": 3,
       "mask_min_ratio": 0.01,
       "ad_mask_min_ratio": 0.01,
       "mask_max_ratio": 1.0,
       "ad_mask_max_ratio": 1.0,
-      "mask_dilate_erode": 4,
-      "ad_dilate_erode": 4,
-      "mask_feather": 6,
-      "ad_mask_feather": 6,
+      "mask_dilate_erode": 6,
+      "ad_dilate_erode": 6,
+      "mask_feather": 8,
+      "ad_mask_feather": 8,
       "scheduler": "Karras",
       "ad_scheduler": "Karras",
       "ad_mask_filter_method": "Area",
@@ -283,7 +303,7 @@
       "adetailer_enabled": true
     },
     "pipeline": {
-      "images_per_prompt": 1,
+      "images_per_prompt": 2,
       "n_iter": 1,
       "output_dir": "output",
       "filename_pattern": "{seed}",

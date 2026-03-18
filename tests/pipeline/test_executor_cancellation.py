@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 
-import src.pipeline.executor as executor_module
-from src.api.types import GenerateResult
 from src.gui.state import CancellationError
 from src.pipeline.executor import Pipeline
+from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.logger import StructuredLogger
 
 
@@ -23,8 +26,15 @@ class ToggleToken:
 
 class DummyClient:
     def generate_images(self, *, stage, payload, **kwargs):
-        result = GenerateResult(images=["fake-image-1", "fake-image-2"], info={}, stage=stage)
-        return SimpleNamespace(ok=True, result=result)
+        return SimpleNamespace(
+            ok=True,
+            result=SimpleNamespace(
+                images=["fake-image-1", "fake-image-2"],
+                info={},
+                stage=stage,
+                timings={},
+            ),
+        )
 
     def set_model(self, *_args, **_kwargs):
         return None
@@ -32,67 +42,94 @@ class DummyClient:
     def set_vae(self, *_args, **_kwargs):
         return None
 
+    def get_current_model(self):
+        return "model-a"
+
+    def get_current_vae(self):
+        return "Automatic"
+
+    def check_connection(self, **_kwargs):
+        return True
+
 
 def _fake_structured_logger(tmp_path: Path) -> StructuredLogger:
     return StructuredLogger(output_dir=tmp_path / "logs")
 
 
-def test_run_txt2img_raises_when_cancelled_during_save(tmp_path, monkeypatch):
+def test_run_txt2img_stage_raises_when_cancelled_before_start(tmp_path):
     token = ToggleToken()
+    token.cancel()
     pipeline = Pipeline(DummyClient(), _fake_structured_logger(tmp_path))
 
-    save_calls = {"count": 0}
-
-    def fake_saver(_image_data, output_path):
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("placeholder")
-        save_calls["count"] += 1
-        if save_calls["count"] == 1:
-            token.cancel()
-        return True
-
-    monkeypatch.setattr(executor_module, "save_image_from_base64", fake_saver)
-
-    with pytest.raises(CancellationError):
-        pipeline.run_txt2img(
+    with (
+        patch.object(pipeline, "_ensure_webui_true_ready", return_value=None),
+        pytest.raises(CancellationError),
+    ):
+        pipeline.run_txt2img_stage(
             prompt="test prompt",
-            config={"negative_prompt": "", "steps": 1},
-            run_dir=tmp_path,
-            batch_size=1,
+            negative_prompt="",
+            config={"steps": 1, "batch_size": 2},
+            output_dir=tmp_path,
+            image_name="txt2img_test",
             cancel_token=token,
         )
 
-    assert save_calls["count"] == 1
 
-
-def test_run_full_pipeline_bails_after_txt2img_when_cancelled(tmp_path):
+def test_runner_honors_cancellation_between_stages(tmp_path):
     token = ToggleToken()
-    pipeline = Pipeline(DummyClient(), _fake_structured_logger(tmp_path))
+    runner = PipelineRunner(Mock(), _fake_structured_logger(tmp_path), runs_base_dir=str(tmp_path / "runs"))
 
-    generated_path = tmp_path / "generated.png"
-    generated_path.parent.mkdir(parents=True, exist_ok=True)
-    generated_path.write_text("img")
+    class _FakePipeline:
+        def __init__(self):
+            self.upscale_saw_cancelled_token = False
+            self._current_job_id = None
+            self._current_njr_sha256 = None
+            self._current_stage_chain = []
+            self._current_stage_index = 0
 
-    def fake_run_txt2img(prompt, cfg, run_dir, batch_size, cancel_token):
-        token.cancel()
-        return [
-            {
-                "name": "img0",
-                "timestamp": "now",
-                "path": str(generated_path),
-            }
-        ]
+        def _begin_run_metrics(self):
+            return None
 
-    pipeline.run_txt2img = fake_run_txt2img  # type: ignore[assignment]
+        def get_run_efficiency_metrics(self, _images_processed):
+            return {}
 
-    with pytest.raises(CancellationError):
-        pipeline.run_full_pipeline(
-            prompt="test prompt",
-            config={
-                "txt2img": {"negative_prompt": ""},
-                "pipeline": {"img2img_enabled": False, "upscale_enabled": False},
-            },
-            batch_size=1,
-            cancel_token=token,
-        )
+        def run_txt2img_stage(self, prompt, negative_prompt, config, run_dir, image_name, cancel_token=None):
+            cancel_token.cancel()
+            output_path = Path(run_dir) / f"{image_name}.png"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text("image")
+            return {"path": str(output_path), "all_paths": [str(output_path)], "stage": "txt2img"}
+
+        def run_upscale_stage(self, *args, **kwargs):
+            cancel_token = kwargs.get("cancel_token")
+            self.upscale_saw_cancelled_token = bool(cancel_token and cancel_token.is_cancelled())
+            return None
+
+    fake_pipeline = _FakePipeline()
+    runner._pipeline = fake_pipeline
+
+    record = NormalizedJobRecord(
+        job_id="cancelled-runner-job",
+        config={"steps": 20, "cfg_scale": 7.0, "width": 512, "height": 512},
+        path_output_dir=str(tmp_path / "runs"),
+        filename_template="{seed}",
+        seed=123,
+        positive_prompt="cancel me",
+        negative_prompt="",
+        steps=20,
+        cfg_scale=7.0,
+        width=512,
+        height=512,
+        sampler_name="Euler a",
+        base_model="model-a",
+        stage_chain=[
+            StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.0),
+            StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"}),
+        ],
+    )
+
+    result = runner.run_njr(record, cancel_token=token)
+
+    assert result.success is False
+    assert result.error == "No images were generated successfully"
+    assert fake_pipeline.upscale_saw_cancelled_token is True

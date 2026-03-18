@@ -1,407 +1,131 @@
-DOCS_INDEX_v2.6.md
-Canonical Documentation Map & Navigation Guide
+﻿DOCS_INDEX_v2.6.md
+Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2025-12-09**
+Updated: 2026-03-16
 
 0. Purpose
 
-This index defines the canonical document set that describes StableNew v2.6.
-It establishes:
+This index defines the active document set for StableNew v2.6 and identifies which files are canonical, operational, or archived.
 
-Document hierarchy
+1. Canonical Document Hierarchy
 
-Official supersession of older documents
+1.1 Tier 1 - System Constitution
 
-Pointers to all core design artifacts
+- `docs/ARCHITECTURE_v2.6.md`
+- `docs/GOVERNANCE_v2.6.md`
+- `docs/StableNew Roadmap v2.6.md`
 
-Required reading order
+1.2 Tier 2 - Canonical Specification Layer
 
-Integration of PR-CORE documents into architecture
+- `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
+- `docs/Builder Pipeline Deep-Dive (v2.6).md`
+- `docs/DEBUG HUB v2.6.md`
+- `docs/StableNew_Coding_and_Testing_v2.6.md`
+- `docs/PR_TEMPLATE_v2.6.md`
+- `AGENTS.md`
+- `.github/copilot-instructions.md`
+- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
 
-Archival rules for obsolete materials
+1.2a Tier 2 Meta Documents
 
-This file is the root of truth for all project documentation.
+- `docs/Canonical_Document_Ownership_v2.6.md` — ownership table, precedence, archive rules, and contradiction checklist
 
-1. Canonical Document Hierarchy (Highest → Lowest Authority)
+1.3 Tier 3 - Subsystem Specifications
 
-StableNew v2.6 uses a strict ordering.
-If two documents conflict, the one higher in this list wins.
+- `docs/Learning_System_Spec_v2.6.md` — active v2.6 learning subsystem spec
+- `docs/Randomizer_Spec_v2.5.md` — retained v2.5; no v2.6 replacement exists yet (see Canonical_Document_Ownership_v2.6.md §6)
+- `docs/Cluster_Compute_Spec_v2.5.md` — retained v2.5; no v2.6 replacement exists yet (see Canonical_Document_Ownership_v2.6.md §6)
+- `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/Movie_Clips_Workflow_v2.6.md` — Movie Clips MVP tab and service boundary
+- `docs/GUI_Ownership_Map_v2.6.md` — file-placement rules for `src/gui/` vs `src/gui_v2/`; migration boundary
 
-1.1 Tier 1 — System Constitution (Unchallengeable)
+1.4 Tier 4 - Implementation And PR Specs
 
-These documents define the fundamental design and governance of the system.
+- `docs/OpenSpec/`
+- `docs/pr_templates/`
+- `docs/PR_MAR26/`
+- `docs/D-VIDEO-004-AnimateDiff-Current-State-Discovery.md` — current AnimateDiff Phase 1 discovery baseline
+- `docs/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md` — current approval-target PR spec for AnimateDiff runtime work
+- `docs/D-VIDEO-005-SVD-Native-Tab-Discovery.md` — current discovery baseline for native SVD img2vid tab work
+- `docs/OpenSpec/PR-CORE-VIDEO-005-SVD-Phase-1-Native-Tab.md` — current approval-target PR spec for SVD Phase 1 native tab work
 
-Architecture_v2.6.md
+These documents implement or sequence canonical work but do not outrank Tiers 1-2.
 
-Governance_v2.6.md
+1.5 Tier 5 - Testing Infrastructure
 
-Roadmap_v2.6.md
+- `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
+- `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
+- `docs/PR-CI-JOURNEY-001.md`
+- `docs/TEST-SUITE-ANALYSIS-2026-01-01.md`
 
-1.2 Tier 2 — Canonical Specification Layer
+1.6 Tier 6 - Operator And Reference Guides
 
-These describe all required subsystem behaviors.
+- `README.md` - top-level project entrypoint; must align with v2.6 canonical docs
+- `docs/agentic/USAGE_GUIDE.md`
+- `.github/PULL_REQUEST_TEMPLATE.md`
+- `.github/workflows/copilot-setup-steps.yml`
 
-PromptPack_Lifecycle_v2.6.md
+These support development but do not override canonical docs.
 
-Builder Pipeline Deep-Dive_v2.6.md
+2. Active Agent Instruction Surface
 
-DebugHub_v2.6.md
+Active machine-facing guidance is catalogued in `.github/INSTRUCTION_SURFACE.md`.
+That manifest is the single source of truth for what is active, what is archived,
+and what the precedence order is. The files themselves live at:
 
-StableNew_Coding_and_Testing_v2.6.md
+- `AGENTS.md`
+- `.github/copilot-instructions.md`
+- `.github/agents/`
+- `.github/instructions/`
 
-PR_TEMPLATE_v2.6.md
+Archived agent or SOP files under `docs/archive/` are reference-only.
 
-Agents_v2.6.md
+3. Required Reading Order
 
-Copilot-Instructions_v2.6.md
+3.1 Foundations
 
-All subsystem design and implementation must align with these documents.
+- `README.md`
+- `docs/ARCHITECTURE_v2.6.md`
+- `docs/GOVERNANCE_v2.6.md`
+- `docs/StableNew Roadmap v2.6.md`
 
-1.3 Tier 3 — Subsystem Specifications (Foundational but Replaceable)
+3.2 Execution Path
 
-These detail specific behaviors within parts of the system.
+- `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
+- `docs/Builder Pipeline Deep-Dive (v2.6).md`
+- `docs/DEBUG HUB v2.6.md`
+- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
 
-Randomizer_Spec_v2.6.md
+3.3 Coding And PR Workflow
 
-Learning_System_Spec_v2.6.md
+- `docs/StableNew_Coding_and_Testing_v2.6.md` — includes §8 Runtime Artifact Policy (PR-CLEANUP-LEARN-045): `data/learning/experiments/`, `data/photo_optimize/assets/`, `state/` are gitignored runtime artifacts; `tests/fixtures/` is for committed static fixtures only
+- `docs/PR_TEMPLATE_v2.6.md`
+- `AGENTS.md`
+- `.github/copilot-instructions.md`
 
-Cluster_Compute_Spec_v2.6.md
+3.4 Operational Usage
 
-Queue_and_Runner_Lifecycle_Spec_v2.6.md (implicit in CORE-C; may be explicitized)
+- `docs/agentic/USAGE_GUIDE.md`
+- `.github/PULL_REQUEST_TEMPLATE.md`
 
-History_and_Restore_Spec_v2.6.md (if applicable)
+4. Archival Rules
 
-Image_Metadata_Contract_v2.6.md
+The following must be archived rather than left active:
 
-These documents may evolve as long as they do not contradict Tiers 1–2.
+- duplicate `AGENTS.md` copies outside the chosen active source of truth
+- stale Copilot/Codex SOP files
+- duplicate or one-off custom agent profiles
+- docs that reference retired architecture, retired file paths, or missing canonical docs
 
-1.4 Tier 4 — PR-CORE Documents (Implementation-Level Governance)
+Archive location for the 2026 agentic refresh:
 
-PR-CORE-A — Unified Job Path (NJR-Only)
+- `docs/archive/agents/2026-agentic-refresh/`
 
-PR-CORE-B — Deterministic Builder Pipeline
+5. Maintenance Rules
 
-PR-CORE-C — Queue/Runner Unified Lifecycle
-
-PR-CORE-D — GUI V2 Alignment & Preview System
-
-PR-CORE-E — Global Negative, Sweeps, and Overrides
-
-These documents do not define new architecture;
-they implement and enforce the architecture.
-
-1.5 Tier 5 — Testing Infrastructure
-
-E2E_Golden_Path_Test_Matrix_v2.6.md
-
-KNOWN_PITFALLS_QUEUE_TESTING.md
-
-PR-CI-JOURNEY-001.md ← NEW: CI Journey Tests with WebUI Mocks
-
-Test_Fixtures_Guide_v2.6.md (if present in repo)
-
-These ensure fidelity to the architectural guarantees.
-
-**1.5.5 Technical Debt Discovery Documents**
-
-D-TECH-DEBT-001-Duplicate-Txt2Img-Paths.md ← NEW: Documents duplicate txt2img execution paths
-
-These documents track known architectural issues requiring consolidation.
-
-1.6 Tier 6 — Reference & Ancillary Docs
-
-Developer_Onboarding_v2.6.md (future recommended doc)
-
-Model_Profiles_Guide_v2.6.md (optional)
-
-UI/UX Style Guide v2.6
-
-Any auto-generated documentation
-
-These support development but are not canonical.
-
-2. Documents Superseded by v2.6
-
-The following MUST be archived:
-
-Any v2.5 versions of architecture, roadmap, governance
-
-Any PromptPack descriptions prior to v2.6
-
-Any Builder Deep Dive, DebugHub, Randomizer, Learning specs prior to v2.6
-
-Any documentation referencing:
-
-DraftBundle
-
-legacy RunPayload
-
-manual prompt mode
-
-GUI-driven prompt entry
-
-V1 or V1.5 pipeline
-
-multi-path job creation
-
-legacy prompt-resolver paths
-
-These should be moved to:
-
-docs/archive/v2.0–v2.5/
-
-Any template or design doc describing the legacy pipeline configuration era is archived under `docs/older/pr_templates_pipeline_config/README.md` and must not be used for v2.6+ work.
-
-3. Required Document Reading Order
-
-New contributors and agents must follow this exact order:
-
-3.1 Phase 1 — System Foundations
-
-Architecture_v2.6
-
-Governance_v2.6
-
-Roadmap_v2.6
-
-3.2 Phase 2 — Execution Path
-
-PromptPack_Lifecycle_v2.6
-
-Builder Pipeline Deep-Dive_v2.6
-
-DebugHub_v2.6
-
-3.3 Phase 3 — Coding Standards & PR Workflow
-
-StableNew_Coding_and_Testing_v2.6
-
-PR_TEMPLATE_v2.6
-
-Agents_v2.6
-
-Copilot-Instructions_v2.6
-
-3.4 Phase 4 — Subsystem Specifics
-
-Randomizer_Spec_v2.6
-
-Learning_System_Spec_v2.6
-
-Cluster_Compute_Spec_v2.6
-
-3.5 Phase 5 — Testing Infrastructure
-
-E2E_Golden_Path_Test_Matrix_v2.6
-
-Test Fixtures Guide
-
-Queue Testing Pitfalls
-
-4. Canonical Repository Structure
-
-Documentation must follow:
-
-docs/
-  ARCHITECTURE_v2.6.md
-  Roadmap_v2.6.md
-  Governance_v2.6.md
-  PromptPack_Lifecycle_v2.6.md
-  Builder_Pipeline_Deep_Dive_v2.6.md
-  DebugHub_v2.6.md
-  Image_Metadata_Contract_v2.6.md
-  StableNew_Coding_and_Testing_v2.6.md
-  PR_TEMPLATE_v2.6.md
-  Agents_v2.6.md
-  Copilot-Instructions_v2.6.md
-
-  specs/
-    Randomizer_Spec_v2.6.md
-    Learning_System_Spec_v2.6.md
-    Cluster_Compute_Spec_v2.6.md
-    Queue_and_Runner_Lifecycle_Spec_v2.6.md
-    History_and_Restore_Spec_v2.6.md
-
-  tests/
-    E2E_Golden_Path_Test_Matrix_v2.6.md
-    KNOWN_PITFALLS_QUEUE_TESTING.md
-    Test_Fixtures_Guide_v2.6.md
-
-  archive/
-    (all documents v2.0–v2.5)
-
-
-This prevents confusion and avoids drift.
-
-5. How Documents Must Be Maintained
-5.1 Every PR Must Update Affected Documents
-
-If a PR modifies:
-
-builder
-
-config logic
-
-randomizer paths
-
-DebugHub
-
-GUI state flow
-
-queue lifecycle
-
-NJR format
-
-…then the PR must also update the corresponding document(s).
-
-If a PR modifies architecture:
-→ It must be labeled PR-ARCHITECTURE-X, extremely rare.
-
-6. PySide6 Migration Program Documents (PR-MAR26)
-
-The following migration planning/spec docs are tracked under:
-
-`docs/PR_MAR26/`
-
-- `PR-MAR26-UI-REFRESH-PYSIDE6-MIGRATION-CRITIQUE-AND-PLAN.md`
-- `PR-GUI-PS6-001-PySide6-Governance-and-Gates.md`
-- `PR-GUI-PS6-002-View-Contract-Extraction.md`
-- `PR-GUI-PS6-003-UI-Dispatcher-Abstraction.md`
-- `PR-GUI-PS6-004-PySide6-App-Spine.md`
-- `PR-GUI-PS6-005-Prompt-Pipeline-Port.md`
-- `PR-GUI-PS6-006-Review-Learning-Port.md`
-- `PR-GUI-PS6-007-Runtime-Panels-Port.md`
-- `PR-GUI-PS6-008-Dialogs-Settings-Shutdown.md`
-- `PR-GUI-PS6-009-Cutover.md`
-- `PR-GUI-PS6-010-Packaging-CI.md`
-
-These are implementation-level migration documents and must not override Tier 1/Tier 2 canonical architecture rules.
-
-If a PR modifies Roadmap or Governance:
-→ It must be labeled PR-GOVERNANCE-X, even rarer.
-
-5.2 Documentation Must Lead the Code
-
-The order is:
-
-Document the desired change
-
-Publish the PR spec
-
-Update tests
-
-Codex implements the change
-
-Validate behavior
-
-Merge
-
-Code never precedes documentation.
-
-5.3 Conflicts Between Documentation and Code
-
-If conflicts exist:
-
-Documentation is assumed correct
-
-Code must be updated
-
-Tests updated accordingly
-
-Codex must not refuse based on old code
-
-If documentation is wrong (rare), then:
-
-submit PR to update documentation
-
-get explicit architectural approval
-
-merge updated doc before implementation
-
-6. Document Versioning Rules
-6.1 Version Tags
-
-Every file adheres to:
-
-v2.6
-v2.7 (future)
-v3.0 (future)
-
-
-Old versions moved to archive.
-
-6.2 Change Logs
-
-Each canonical file should include:
-
-Updated: YYYY-MM-DD
-Change Summary:
-- …
-
-6.3 No Hidden or Implicit Behavior
-
-All behavior must be documented.
-
-7. Agent Interaction With Documentation
-7.1 ChatGPT (Planner)
-
-Must cite canonical documents when reasoning
-
-Must check documents before proposing solutions
-
-Must reject user requests that violate governance
-
-7.2 Codex (Executor)
-
-Must follow PR specs exactly
-
-Must implement documentation faithfully
-
-Must not create undocumented behavior
-
-7.3 Human Contributors
-
-Must read Tier 1–3 documents before contributing
-
-Must follow the PR template
-
-Must update documentation when changing behavior
-
-8. How Canonical Sets Evolve (Governance-Locked)
-
-All architectural evolution proceeds through:
-
-A Planner-generated architectural proposal
-
-A PR-ARCHITECTURE-X document update
-
-Human validation
-
-Codex implementation
-
-Updated tests
-
-Merge into canonical docs index
-
-This ensures documentation remains the first-order artifact.
-
-9. Summary
-
-DOCS_INDEX_v2.6 ensures:
-
-All contributors know where canonical truth lives
-
-All documentation is coherent and authoritative
-
-No legacy documents mislead development
-
-Every subsystem behaves consistently
-
-PRs always update their corresponding documents
-
-Architecture remains unified and stable
-
-All future changes must update this index as part of the documentation governance workflow.
-
-END — DOCS_INDEX_v2.6 (Canonical Edition)
+- If active agent file locations change, update this index in the same PR.
+- If canonical governance changes, update `AGENTS.md` and the executor brief together.
+- If the top-level runtime story changes, update `README.md` in the same PR as the
+  canonical docs it summarizes.
+- If a document is only historical, move it to `docs/archive/` rather than leaving it active.

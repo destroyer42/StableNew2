@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -21,6 +21,7 @@ from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.api_failure_store_v2 import record_api_failure
 from src.utils.config import ConfigManager
 from src.utils.retry_policy_v2 import (
+    ADETAILER_RETRY_POLICY,
     IMG2IMG_RETRY_POLICY,
     STAGE_RETRY_POLICY,
     TXT2IMG_RETRY_POLICY,
@@ -29,6 +30,9 @@ from src.utils.retry_policy_v2 import (
 )
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from src.pipeline.animatediff_models import AnimateDiffCapability
 
 
 @dataclass
@@ -65,6 +69,7 @@ OPTIONS_POST_MIN_INTERVAL = 6.0
 # PR-HARDEN-001: Reduced generation timeout for faster failure detection
 DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
 PROGRESS_STALL_THRESHOLD_SEC = 60.0  # If no progress update for this long, consider stalled
+STALL_INTERRUPT_THRESHOLD_SEC = 90.0  # After this long with no progress, interrupt WebUI generation
 
 
 class WebUIUnavailableError(Exception):
@@ -149,14 +154,7 @@ class SDWebUIClient:
         self.samplers: list[dict[str, Any]] = []
         self.upscalers: list[dict[str, Any]] = []
         self._retry_callback = retry_callback
-        self._session = requests.Session()
-        adapter = HTTPAdapter(
-            pool_connections=POOL_CONNECTIONS,
-            pool_maxsize=POOL_MAXSIZE,
-            pool_block=POOL_BLOCK,
-        )
-        self._session.mount("http://", adapter)
-        self._session.mount("https://", adapter)
+        self._session = self._build_http_session()
         self._options_lock = threading.Lock()
         self._last_options_post_ts = 0.0
         self._options_min_interval_seconds = OPTIONS_POST_MIN_INTERVAL
@@ -173,6 +171,27 @@ class SDWebUIClient:
         )
         self._session_id = id(self._session)
         self._last_http_500_summary: dict[str, Any] | None = None
+
+    def _build_http_session(self) -> requests.Session:
+        session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=POOL_CONNECTIONS,
+            pool_maxsize=POOL_MAXSIZE,
+            pool_block=POOL_BLOCK,
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
+
+    def _reset_http_session(self) -> None:
+        old_session = getattr(self, "_session", None)
+        self._session = self._build_http_session()
+        self._session_id = id(self._session)
+        if old_session is not None:
+            try:
+                old_session.close()
+            except Exception as exc:
+                logger.debug("Failed to close stale WebUI HTTP session: %s", exc)
 
     def close(self) -> None:
         """Close the shared HTTP session if still open."""
@@ -451,6 +470,7 @@ class SDWebUIClient:
                 if response is not None:
                     response.close()
                 last_exception = exc
+                failed_session_id = self._session_id
                 existing_context = getattr(exc, "diagnostics_context", None)
                 if existing_context and existing_context.get("request_summary"):
                     summary = existing_context["request_summary"]
@@ -483,6 +503,11 @@ class SDWebUIClient:
                 if crash_suspected:
                     self._last_http_500_summary = None
                 attempt_index = attempt + 1
+                will_retry = attempt < retries - 1
+                session_recycled = False
+                if will_retry and isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+                    self._reset_http_session()
+                    session_recycled = True
                 log_with_ctx(
                     logger,
                     logging.WARNING,
@@ -494,8 +519,9 @@ class SDWebUIClient:
                         "attempt": attempt_index,
                         "max_attempts": retries,
                         "timeout": timeout_value,
-                        "session_id": self._session_id,
-                        "reuse_session": True,
+                        "session_id": failed_session_id,
+                        "reuse_session": not session_recycled,
+                        "replacement_session_id": self._session_id if session_recycled else None,
                     },
                 )
                 _log_api_failure(
@@ -786,7 +812,12 @@ class SDWebUIClient:
         except Exception as exc:  # noqa: BLE001 - log and continue
             logger.warning("Failed to apply WebUI upscale defaults: %s", exc)
 
-    def free_vram(self, unload_model: bool = False, force_gc: bool = True) -> bool:
+    def free_vram(
+        self,
+        unload_model: bool = False,
+        force_gc: bool = True,
+        refresh_checkpoints: bool = False,
+    ) -> bool:
         """
         Free VRAM by unloading cached data.
         
@@ -794,7 +825,9 @@ class SDWebUIClient:
         
         Args:
             unload_model: If True, also unload the SD model (slower but frees more memory)
-            force_gc: If True, also run Python garbage collection
+            force_gc: If True, also run Python garbage collection in the StableNew process
+            refresh_checkpoints: If True, call WebUI's refresh-checkpoints endpoint.
+                This is an aggressive maintenance operation and should not run on every job.
             
         Returns:
             True if successful, False otherwise
@@ -813,21 +846,24 @@ class SDWebUIClient:
                         logger.info("Unloaded SD model to free VRAM")
                         freed = True
             
-            # Alternative: POST to /sdapi/v1/refresh-checkpoints which clears caches
-            with self._request_context(
-                "post",
-                "/sdapi/v1/refresh-checkpoints",
-                timeout=30,
-            ) as response:
-                if response is not None:
-                    logger.info("Refreshed checkpoints to free VRAM caches")
-                    freed = True
+            if refresh_checkpoints:
+                # refresh-checkpoints can hang under memory pressure; keep it opt-in and bounded.
+                with self._request_context(
+                    "post",
+                    "/sdapi/v1/refresh-checkpoints",
+                    timeout=5.0,
+                    max_retries=1,
+                ) as response:
+                    if response is not None:
+                        logger.info("Refreshed checkpoints to free VRAM caches")
+                        freed = True
             
             # Optional: Force Python garbage collection
             if force_gc:
                 try:
                     import gc
                     collected = gc.collect()
+                    freed = True
                     if collected > 100:  # Only log if significant
                         logger.debug("Python GC freed %d objects", collected)
                 except Exception:
@@ -930,22 +966,24 @@ class SDWebUIClient:
         )
         return data
 
-    def img2img(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def img2img(self, payload: dict[str, Any], *, policy: RetryPolicy | None = None) -> dict[str, Any] | None:
         """
         Refine image using img2img.
 
         Args:
             payload: Request payload with generation parameters and init image
+            policy: Optional retry policy override (defaults to IMG2IMG_RETRY_POLICY)
 
         Returns:
             Response data including base64 encoded images
         """
+        effective_policy = policy if policy is not None else IMG2IMG_RETRY_POLICY
         with self._request_context(
             "post",
             "/sdapi/v1/img2img",
             json=payload,
             stage="img2img",
-            policy=IMG2IMG_RETRY_POLICY,
+            policy=effective_policy,
         ) as response:
             if response is None:
                 return None
@@ -1180,6 +1218,10 @@ class SDWebUIClient:
                 response = self.txt2img(payload)
             elif stage_normalized == "img2img":
                 response = self.img2img(payload)
+            elif stage_normalized == "adetailer":
+                # ADetailer uses the img2img endpoint but with a fail-fast retry policy:
+                # GPU OOM loops never recover without a restart, so retrying is wasteful.
+                response = self.img2img(payload, policy=ADETAILER_RETRY_POLICY)
             elif stage_normalized in {"upscale", "upscale_image"}:
                 response = self.upscale(payload)
             else:
@@ -1191,6 +1233,20 @@ class SDWebUIClient:
                     stage_normalized, "WebUI returned no data", GenerateErrorCode.UNKNOWN
                 )
             return GenerateOutcome(result=result)
+        except WebUIUnavailableError as exc:
+            diag = None
+            original = getattr(exc, "original_exception", None)
+            if original is not None:
+                diag = getattr(original, "diagnostics_context", None)
+            if diag is None:
+                diag = getattr(exc, "diagnostics_context", None)
+            details = {"diagnostics": diag} if diag else None
+            return self._generate_error_outcome(
+                stage_normalized,
+                str(exc),
+                GenerateErrorCode.CONNECTION,
+                details=details,
+            )
         except requests.RequestException as exc:
             diag = getattr(exc, "diagnostics_context", None)
             details = {"diagnostics": diag} if diag else None
@@ -1245,6 +1301,28 @@ class SDWebUIClient:
         except Exception as exc:
             logger.debug("Progress poll failed: %s", exc)
             return None
+
+    def interrupt(self) -> bool:
+        """
+        Send an interrupt request to WebUI to cancel the current generation.
+
+        Posts to /sdapi/v1/interrupt which causes WebUI to abort the active
+        generation and return a response to any pending img2img/txt2img call.
+
+        Returns:
+            True if the interrupt was accepted (HTTP 200), False otherwise.
+        """
+        try:
+            url = f"{self.base_url}/sdapi/v1/interrupt"
+            response = self._session.post(url, timeout=(DEFAULT_CONNECT_TIMEOUT, 5.0))
+            if response.status_code == 200:
+                logger.info("Generation interrupted via /sdapi/v1/interrupt")
+                return True
+            logger.warning("Interrupt request returned HTTP %s", response.status_code)
+            return False
+        except Exception as exc:
+            logger.warning("Failed to send interrupt to WebUI: %s", exc)
+            return False
 
     def get_models(self) -> list[dict[str, Any]]:
         """
@@ -1397,6 +1475,41 @@ class SDWebUIClient:
         logger.debug("Retrieved %s schedulers", len(schedulers))
         return schedulers
 
+    def get_scripts(self) -> dict[str, Any]:
+        """Return the WebUI scripts catalog, or an empty payload on failure."""
+
+        with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
+            if response is None:
+                logger.warning("Failed to get scripts from API")
+                return {}
+
+            try:
+                data = response.json()
+            except ValueError as exc:
+                logger.warning("Failed to parse scripts response: %s", exc)
+                return {}
+
+        if isinstance(data, dict):
+            return data
+        logger.warning("Unexpected scripts payload type: %s", type(data).__name__)
+        return {}
+
+    def get_animatediff_capability(self) -> "AnimateDiffCapability":
+        """Detect AnimateDiff support from the WebUI scripts contract."""
+
+        from src.pipeline.animatediff_models import (
+            AnimateDiffCapability,
+            parse_animatediff_capability,
+        )
+
+        scripts_payload = self.get_scripts()
+        if not scripts_payload:
+            return AnimateDiffCapability(
+                available=False,
+                reason="Could not retrieve WebUI scripts catalog",
+            )
+        return parse_animatediff_capability(scripts_payload)
+
     def get_adetailer_models(self) -> list[str]:
         """
         Get list of available ADetailer models.
@@ -1405,42 +1518,39 @@ class SDWebUIClient:
             List of ADetailer model names (detection models including yolo and mediapipe)
         """
         # Try to get from scripts API
-        with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
-            if response is None:
-                logger.warning("Failed to get scripts from API; using ADetailer defaults")
-                return self._get_default_adetailer_models()
-            
-            try:
-                data = response.json()
-                # Look for ADetailer in txt2img scripts
-                txt2img_scripts = data.get("txt2img", [])
-                for script in txt2img_scripts:
-                    if isinstance(script, dict) and "adetailer" in script.get("name", "").lower():
-                        # Try to extract model list from args
-                        # ADetailer typically has args with 'ad_model' or similar
-                        args = script.get("args", [])
-                        if not args:
-                            continue
-                            
-                        # The first arg in ADetailer is usually the model selector
-                        # It may be a dict with 'choices' or 'value' field
-                        for i, arg in enumerate(args):
-                            if isinstance(arg, dict):
-                                # Check for choices field (dropdown options)
-                                if "choices" in arg:
-                                    choices = arg.get("choices", [])
-                                    if choices and len(choices) > 3:  # Sanity check
-                                        logger.debug("Retrieved %s ADetailer models from scripts API (arg %s)", len(choices), i)
-                                        return choices
-                                # Also check label for model-related args
-                                label = arg.get("label", "").lower()
-                                if "model" in label and "choices" in arg:
-                                    choices = arg.get("choices", [])
-                                    if choices:
-                                        logger.debug("Retrieved %s ADetailer models from scripts API (via label)", len(choices))
-                                        return choices
-            except Exception as exc:
-                logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
+        data = self.get_scripts()
+        if not data:
+            logger.warning("Failed to get scripts from API; using ADetailer defaults")
+            return self._get_default_adetailer_models()
+        try:
+            txt2img_scripts = data.get("txt2img", [])
+            for script in txt2img_scripts:
+                if isinstance(script, dict) and "adetailer" in script.get("name", "").lower():
+                    args = script.get("args", [])
+                    if not args:
+                        continue
+                    for i, arg in enumerate(args):
+                        if isinstance(arg, dict):
+                            if "choices" in arg:
+                                choices = arg.get("choices", [])
+                                if choices and len(choices) > 3:
+                                    logger.debug(
+                                        "Retrieved %s ADetailer models from scripts API (arg %s)",
+                                        len(choices),
+                                        i,
+                                    )
+                                    return choices
+                            label = arg.get("label", "").lower()
+                            if "model" in label and "choices" in arg:
+                                choices = arg.get("choices", [])
+                                if choices:
+                                    logger.debug(
+                                        "Retrieved %s ADetailer models from scripts API (via label)",
+                                        len(choices),
+                                    )
+                                    return choices
+        except Exception as exc:
+            logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
         
         # Fallback defaults
         defaults = self._get_default_adetailer_models()

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, PngImagePlugin
+from src.pipeline.artifact_contract import artifact_manifest_payload
 
 logger = logging.getLogger(__name__)
 
@@ -528,6 +529,14 @@ def build_payload_from_manifest(
         # Include full stage history chain for complete pipeline tracking
         "stage_history": manifest.get("stage_history", []),
     }
+    payload["artifact"] = artifact_manifest_payload(
+        stage=stage,
+        image_or_output_path=image_path,
+        manifest_path=manifest.get("artifact", {}).get("manifest_path") if isinstance(manifest.get("artifact"), dict) else None,
+        output_paths=manifest.get("artifact", {}).get("output_paths") if isinstance(manifest.get("artifact"), dict) else manifest.get("all_paths"),
+        thumbnail_path=manifest.get("artifact", {}).get("thumbnail_path") if isinstance(manifest.get("artifact"), dict) else None,
+        input_image_path=manifest.get("input_image") or manifest.get("input_image_path") or manifest.get("source_image_path"),
+    )
     
     # Add refiner info if present (PR-GUI-DATA-001)
     if "refiner" in manifest:

@@ -12,6 +12,8 @@ from src.gui.learning_state import LearningState
 from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.status_banner_contract import update_status_banner
+from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
+from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
@@ -180,15 +182,20 @@ class LearningTabFrame(ttk.Frame):
         self._on_learning_toggle()
         self._schedule_summary_refresh()
 
-        # Body with three columns
-        self.body_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
-        self.body_frame.grid(row=1, column=0, sticky="nsew", padx=4, pady=(2, 4))
+        # Body: mode notebook (Designed Experiments | Discovered Review Inbox)
+        self._mode_notebook = ttk.Notebook(self)
+        self._mode_notebook.grid(row=1, column=0, sticky="nsew", padx=4, pady=(2, 4))
+
+        # ---- Tab 1: Designed Experiments (existing 3-column layout) ----
+        self.body_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
+        self._mode_notebook.add(self.body_frame, text="Designed Experiments")
 
         # Configure body layout
         self.body_frame.columnconfigure(0, weight=1, uniform="learning_col")
-        self.body_frame.columnconfigure(1, weight=2, uniform="learning_col")
-        self.body_frame.columnconfigure(2, weight=1, uniform="learning_col")
+        self.body_frame.columnconfigure(1, weight=3, uniform="learning_col")
+        self.body_frame.columnconfigure(2, weight=2, uniform="learning_col")
         self.body_frame.rowconfigure(0, weight=1)
+        self.body_frame.rowconfigure(1, weight=3)
 
         # Left panel: Experiment Design
         self.experiment_panel = ExperimentDesignPanel(
@@ -199,11 +206,11 @@ class LearningTabFrame(ttk.Frame):
             else None,
             style=CARD_FRAME_STYLE,
         )
-        self.experiment_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
+        self.experiment_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 2), pady=4)
 
         # Center panel: Learning Plan Table
         self.plan_table = LearningPlanTable(self.body_frame, style=CARD_FRAME_STYLE)
-        self.plan_table.grid(row=0, column=1, sticky="nsew", padx=2, pady=4)
+        self.plan_table.grid(row=0, column=1, columnspan=2, sticky="nsew", padx=2, pady=(4, 2))
 
         # Connect controller to plan table
         self.learning_controller._plan_table = self.plan_table
@@ -211,11 +218,36 @@ class LearningTabFrame(ttk.Frame):
 
         # Right panel: Learning Review
         self.review_panel = LearningReviewPanel(self.body_frame, style=CARD_FRAME_STYLE)
-        self.review_panel.grid(row=0, column=2, sticky="nsew", padx=(2, 0), pady=4)
+        self.review_panel.grid(row=1, column=1, columnspan=2, sticky="nsew", padx=2, pady=(2, 4))
 
         # Connect controller to review panel (bidirectional)
         self.learning_controller._review_panel = self.review_panel
         self.review_panel.learning_controller = self.learning_controller  # PR-LEARN-014: Fix rating submission
+
+        # ---- Tab 2: Discovered Review Inbox ----
+        self._discovered_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
+        self._mode_notebook.add(self._discovered_tab_frame, text="Discovered Review Inbox")
+        self._discovered_tab_frame.columnconfigure(0, weight=1)
+        self._discovered_tab_frame.columnconfigure(1, weight=2)
+        self._discovered_tab_frame.rowconfigure(0, weight=1)
+
+        self.discovered_inbox_panel = DiscoveredReviewInboxPanel(
+            self._discovered_tab_frame,
+            on_open_group=self._on_discovered_open_group,
+            on_close_group=self._on_discovered_close_group,
+            on_ignore_group=self._on_discovered_ignore_group,
+            on_rescan=self._on_discovered_rescan,
+        )
+        self.discovered_inbox_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
+
+        self.discovered_review_table = DiscoveredReviewTable(
+            self._discovered_tab_frame,
+            on_rate_item=self._on_discovered_rate_item,
+        )
+        self.discovered_review_table.grid(row=0, column=1, sticky="nsew", padx=(2, 0), pady=4)
+
+        # Refresh inbox when its tab is activated
+        self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
 
     def _on_learning_toggle(self) -> None:
         """Handle the learning mode toggle button."""
@@ -480,6 +512,61 @@ class LearningTabFrame(ttk.Frame):
         except Exception:
             pass
         return False
+
+    # ------------------------------------------------------------------
+    # PR-GUI-LEARN-041: Discovered-review event handlers
+    # ------------------------------------------------------------------
+
+    def _on_notebook_tab_changed(self, _event: Any = None) -> None:
+        """Refresh the discovered inbox whenever its tab is activated."""
+        try:
+            selected = self._mode_notebook.index(self._mode_notebook.select())
+            # Tab 1 is Discovered Review Inbox
+            if selected == 1:
+                self._refresh_discovered_inbox()
+        except Exception:
+            pass
+
+    def _refresh_discovered_inbox(self) -> None:
+        handles = self.learning_controller.refresh_discovered_inbox()
+        self.discovered_inbox_panel.load_handles(handles)
+
+    def _on_discovered_open_group(self, group_id: str) -> None:
+        experiment = self.learning_controller.load_discovered_group(group_id)
+        if experiment is None:
+            return
+        self.discovered_review_table.load_items(
+            experiment.items,
+            varying_fields=list(experiment.varying_fields or []),
+            group_display_name=experiment.display_name or group_id,
+        )
+
+    def _on_discovered_close_group(self, group_id: str) -> None:
+        self.learning_controller.close_discovered_group(group_id)
+        self._refresh_discovered_inbox()
+
+    def _on_discovered_ignore_group(self, group_id: str) -> None:
+        self.learning_controller.ignore_discovered_group(group_id)
+        self._refresh_discovered_inbox()
+
+    def _on_discovered_rescan(self) -> None:
+        self.discovered_inbox_panel.set_scanning(True)
+        output_root = str(getattr(self.app_state, "output_dir", "output") or "output")
+        self.learning_controller.trigger_background_scan(
+            output_root=output_root,
+            on_complete=self._on_discovered_scan_complete,
+        )
+
+    def _on_discovered_scan_complete(self, new_count: int) -> None:
+        self.discovered_inbox_panel.set_scanning(False)
+        self._refresh_discovered_inbox()
+
+    def _on_discovered_rate_item(self, item_id: str, rating: int) -> None:
+        group_id = self.learning_controller.learning_state.selected_discovered_group_id
+        if not group_id:
+            return
+        self.learning_controller.save_discovered_item_rating(group_id, item_id, rating)
+        self.discovered_review_table.refresh_item_rating(item_id, rating)
 
 
 LearningTabFrame = LearningTabFrame

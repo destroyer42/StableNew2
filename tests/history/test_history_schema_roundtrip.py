@@ -13,18 +13,25 @@ def _write_jsonl(path: Path, entries: list[dict]) -> None:
 
 def test_roundtrip_normalizes_and_preserves_entries(tmp_path) -> None:
     history_path = tmp_path / "history.jsonl"
-    legacy_entries = [
-        {
-            "job_id": "legacy-001",
-            "pipeline_config": {"prompt": "ancient job", "model": "v1", "sampler": "Euler a"},
-        },
+    entries = [
         {
             "id": "snapshot-002",
             "status": "completed",
-            "snapshot": {"normalized_job": {"job_id": "snapshot-002", "positive_prompt": "sky"}},
+            "timestamp": "2026-03-16T00:00:00Z",
+            "history_schema": HISTORY_SCHEMA_VERSION,
+            "snapshot": {
+                "normalized_job": {
+                    "job_id": "snapshot-002",
+                    "positive_prompt": "sky",
+                    "config": {"prompt": "sky"},
+                }
+            },
+            "ui_summary": {},
+            "metadata": {},
+            "runtime": {},
         },
     ]
-    _write_jsonl(history_path, legacy_entries)
+    _write_jsonl(history_path, entries)
 
     store = JobHistoryStore(history_path)
     first = store.load()

@@ -16,6 +16,9 @@ class FakeClient:
     def get_schedulers(self):
         return ["Normal"]
 
+    def get_hypernetworks(self):
+        return [{"name": "hyper-1"}]
+
     def get_adetailer_models(self):
         return ["face_yolov8n.pt", "face_yolov8m.pt"]
 
@@ -23,10 +26,16 @@ class FakeClient:
         return ["face", "hand"]
 
 
-def test_refresh_all_includes_adetailer_lists():
+def test_refresh_all_includes_canonical_resource_lists(tmp_path):
+    emb_dir = tmp_path / "embeddings"
+    emb_dir.mkdir(parents=True)
+    (emb_dir / "embedding-a.pt").write_text("")
+
     client = FakeClient()
-    service = WebUIResourceService(client=client)
+    service = WebUIResourceService(client=client, webui_root=str(tmp_path))
     resources = service.refresh_all()
 
+    assert resources.get("hypernetworks")
+    assert resources.get("embeddings")
     assert resources.get("adetailer_models") == ["face_yolov8n.pt", "face_yolov8m.pt"]
     assert resources.get("adetailer_detectors") == ["face", "hand"]

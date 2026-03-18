@@ -35,7 +35,7 @@ from src.utils.process_container_v2 import (
     ProcessContainerConfig,
     build_process_container,
 )
-from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+from src.utils.snapshot_builder_v2 import build_job_snapshot, normalized_job_from_snapshot
 from src.utils.watchdog_v2 import WATCHDOG_LOG_PREFIX, JobWatchdog, WatchdogConfig
 
 try:
@@ -117,7 +117,7 @@ class RunnerProtocol(Protocol):
     def stop(self) -> None: ...
     def is_running(self) -> bool: ...
     def run_once(self, job: Job) -> dict | None: ...
-    def cancel_current(self) -> None: ...
+    def cancel_current(self, *, return_to_queue: bool = False) -> None: ...
 
 
 # Type alias for runner factory callable
@@ -363,18 +363,37 @@ class JobService:
         priority: JobPriority = JobPriority.NORMAL,
     ) -> Job:
         # PR-CORE1-B3/C2: NJR-backed jobs are purely NJR-only and don't store pipeline_config.
+        extra_metadata = getattr(record, "extra_metadata", None)
+        source_override = None
+        if isinstance(extra_metadata, dict):
+            source_override = extra_metadata.get("submission_source")
+            if source_override is None:
+                reprocess_meta = extra_metadata.get("reprocess")
+                if isinstance(reprocess_meta, dict):
+                    source_override = reprocess_meta.get("source")
+        prompt_source = str(getattr(record, "prompt_source", "") or "").lower()
+        if not prompt_source:
+            prompt_source = "pack" if (record.prompt_pack_id or "") else "manual"
         job = Job(
             job_id=record.job_id,
             priority=priority,
             run_mode=run_request.run_mode.value,
-            source=run_request.source.value,
-            prompt_source="pack",
+            source=str(source_override or run_request.source.value),
+            prompt_source=prompt_source,
             prompt_pack_id=record.prompt_pack_id or run_request.prompt_pack_id,
             randomizer_metadata=record.randomizer_summary,
             variant_index=record.variant_index,
             variant_total=record.variant_total,
         )
-        job.snapshot = asdict(record)
+        job.snapshot = build_job_snapshot(
+            job,
+            record,
+            run_config={
+                "run_mode": job.run_mode,
+                "source": job.source,
+                "prompt_source": job.prompt_source,
+            },
+        )
         job._normalized_record = record  # type: ignore[attr-defined]
         return job
 
@@ -574,21 +593,38 @@ class JobService:
             self.submit_job_with_run_mode(job)
 
     def pause(self) -> None:
+        pause_queue = getattr(self.job_queue, "pause", None)
+        if callable(pause_queue):
+            pause_queue()
         self._stop_runner()
         self._set_queue_status("paused")
 
     def resume(self) -> None:
+        resume_queue = getattr(self.job_queue, "resume", None)
+        if callable(resume_queue):
+            resume_queue()
         self._ensure_runner_started()
         self._set_queue_status("running")
 
-    def cancel_current(self) -> Job | None:
+    def cancel_current(self, *, return_to_queue: bool = False) -> Job | None:
         """Cancel the currently running job and return it if one was active."""
         running = self._find_running_job()
         if running is None and getattr(self.runner, "current_job", None) is not None:
             running = self.runner.current_job
-        if running:
+        if running and not return_to_queue:
             self.cancel_job(running.job_id, reason="cancel_requested")
-        self.runner.cancel_current()
+        if running and return_to_queue:
+            running.execution_metadata.last_control_action = "return_to_queue_requested"
+        elif running:
+            running.execution_metadata.last_control_action = "cancel_requested"
+        try:
+            self.runner.cancel_current(return_to_queue=return_to_queue)
+        except TypeError:
+            self.runner.cancel_current()
+            if running and return_to_queue:
+                cancel_running = getattr(self.job_queue, "cancel_running_job", None)
+                if callable(cancel_running):
+                    cancel_running(return_to_queue=True)
         # Don't force queue to "idle" - let runner continue processing if auto-run enabled
         # The runner will naturally pick up the next job or go idle when queue is empty
         return running
@@ -757,6 +793,19 @@ class JobService:
 
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         """Return diagnostics data surfaced to GUI/diagnostic tooling."""
+        def _result_summary(result: dict[str, Any] | None) -> dict[str, Any]:
+            if not isinstance(result, dict):
+                return {}
+            metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+            return {
+                "success": result.get("success"),
+                "error": result.get("error"),
+                "duration_ms": metadata.get("duration_ms"),
+                "recovery_classification": metadata.get("recovery_classification"),
+                "output_count": len(result.get("variants") or []),
+                "stage_event_count": len(result.get("stage_events") or []),
+            }
+
         jobs = []
         for job in self.job_queue.list_jobs():
             record = getattr(job, "_normalized_record", None)
@@ -782,9 +831,17 @@ class JobService:
                     "retry_attempts": [
                         asdict(attempt) for attempt in job.execution_metadata.retry_attempts
                     ],
+                    "stage_checkpoints": [
+                        asdict(checkpoint) for checkpoint in job.execution_metadata.stage_checkpoints
+                    ],
+                    "last_control_action": job.execution_metadata.last_control_action,
+                    "return_to_queue_count": job.execution_metadata.return_to_queue_count,
                     "started_at": job.started_at.isoformat() if job.started_at else None,
                     "completed_at": job.completed_at.isoformat() if job.completed_at else None,
                     "error_envelope": serialize_envelope(job.error_envelope),
+                    "result_summary": _result_summary(
+                        job.result if isinstance(job.result, dict) else None
+                    ),
                 }
             )
         metadata_cache = {
@@ -795,8 +852,20 @@ class JobService:
         containers = {
             job_id: container.inspect() for job_id, container in self._process_containers.items()
         }
+        current_job = getattr(self.runner, "current_job", None)
+        paused_getter = getattr(self.job_queue, "is_paused", None)
+        queue_paused = bool(paused_getter()) if callable(paused_getter) else False
+        queued_jobs = self.job_queue.list_jobs(status_filter=JobStatus.QUEUED)
         return {
             "jobs": jobs,
+            "queue": {
+                "auto_run_enabled": bool(self.auto_run_enabled),
+                "paused": queue_paused,
+                "runner_running": bool(self.runner.is_running()),
+                "current_job_id": getattr(current_job, "job_id", None),
+                "queued_job_ids": [job.job_id for job in queued_jobs],
+                "job_count": len(jobs),
+            },
             "cached_metadata": metadata_cache,
             "containers": containers,
             "active_watchdogs": list(self._active_watchdogs.keys()),

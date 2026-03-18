@@ -7,6 +7,8 @@ This prevents HTTP 500 errors and process crashes from calling /txt2img during b
 
 from __future__ import annotations
 
+from unittest.mock import Mock, patch
+
 from src.api.webui_api import WebUIReadinessTimeout
 from src.pipeline.executor import Pipeline, PipelineStageError
 from src.utils import StructuredLogger
@@ -118,3 +120,58 @@ class TestTrueReadyGateBlocks:
         assert exception_raised_2
         # Gate may be called again or memoized depending on implementation
         assert len(gate_calls) >= 1
+
+
+def test_true_ready_gate_accepts_live_idle_api_without_boot_marker():
+    client = Mock()
+    client.check_api_ready.return_value = True
+    client.base_url = "http://127.0.0.1:7860"
+    client._session = Mock()
+
+    options_response = Mock(status_code=200)
+    progress_response = Mock(status_code=200)
+    progress_response.json.return_value = {
+        "progress": 0.0,
+        "state": {"job": "", "job_count": 0},
+    }
+    client._session.get.side_effect = [options_response, progress_response]
+
+    pipeline = Pipeline(client, StructuredLogger())
+    pipeline._ensure_webui_true_ready()
+
+    assert pipeline._true_ready_gated is True
+
+
+def test_true_ready_gate_retries_once_after_timeout_and_recovery():
+    client = Mock()
+    client.base_url = "http://127.0.0.1:7860"
+    client._session = Mock()
+
+    pipeline = Pipeline(client, StructuredLogger())
+    manager_stub = Mock()
+
+    with (
+        patch.object(pipeline, "_is_webui_generation_ready", return_value=False),
+        patch.object(pipeline, "_attempt_webui_recovery", return_value=True) as mock_recovery,
+        patch("src.pipeline.executor.get_global_webui_process_manager", return_value=manager_stub),
+        patch("src.api.webui_api.WebUIAPI.wait_until_true_ready") as mock_wait,
+    ):
+        mock_wait.side_effect = [
+            WebUIReadinessTimeout(
+                message="Timeout",
+                total_waited=120,
+                stdout_tail="",
+                stderr_tail="",
+                checks_status={"models_endpoint": False},
+            ),
+            True,
+        ]
+
+        pipeline._ensure_webui_true_ready()
+
+    assert pipeline._true_ready_gated is True
+    mock_recovery.assert_called_once_with(
+        stage="pre-generation-gate",
+        reason="true_ready_timeout",
+    )
+    assert mock_wait.call_count == 2

@@ -1,27 +1,8 @@
-"""PR-044: Test Job variant metadata fields (LEGACY).
-
-Tests Job variant metadata using legacy PipelineConfig.
-"""
+"""PR-044: Test Job variant metadata fields on the active Job model."""
 
 from __future__ import annotations
 
-import pytest
-
-from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.queue.job_model import Job, JobStatus
-
-
-def _make_pipeline_config() -> PipelineConfig:
-    """Create a minimal PipelineConfig."""
-    return PipelineConfig(
-        prompt="test prompt",
-        model="test_model",
-        sampler="Euler",
-        width=512,
-        height=512,
-        steps=20,
-        cfg_scale=7.0,
-    )
 
 
 def _make_job(**kwargs) -> Job:
@@ -29,13 +10,11 @@ def _make_job(**kwargs) -> Job:
     defaults = {
         "job_id": "test-default",
         "status": JobStatus.QUEUED,
-        "pipeline_config": _make_pipeline_config(),
     }
     defaults.update(kwargs)
     return Job(**defaults)
 
 
-@pytest.mark.legacy
 class TestJobVariantMetadata:
     """Test that Job model carries variant_index and variant_total."""
 

@@ -24,7 +24,9 @@ class _DummyVar:
 def _build_reprocess_controller() -> AppController:
     with patch("src.controller.app_controller.AppController.__init__", return_value=None):
         controller = AppController.__new__(AppController)
-    controller.job_service = Mock()
+    controller.job_service = SimpleNamespace(
+        enqueue_njrs=Mock(side_effect=lambda njrs, _request: [record.job_id for record in njrs])
+    )
     controller._append_log = Mock()
     controller._api_client = Mock()
     controller.cancel_token = None

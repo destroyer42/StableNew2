@@ -11,12 +11,16 @@ class DummyController:
     def __init__(self) -> None:
         self.refresh_calls = 0
         self.replay_calls = 0
+        self.svd_calls: list[str] = []
 
     def refresh_job_history(self) -> None:
         self.refresh_calls += 1
 
     def on_replay_history_job_v2(self, job_id: str) -> None:
         self.replay_calls += 1
+
+    def send_history_job_image_to_svd(self, job_id: str) -> None:
+        self.svd_calls.append(job_id)
 
 
 def _make_entry(job_id: str) -> JobHistoryEntry:
@@ -58,10 +62,12 @@ def test_job_history_panel_updates_and_opens_folder(tk_root, tmp_path, monkeypat
     panel.history_tree.event_generate("<<TreeviewSelect>>")
     panel.open_btn.invoke()
     panel.replay_btn.invoke()
+    panel.svd_btn.invoke()
 
     assert open_calls, "Open folder should be invoked for selected job"
     assert controller.refresh_calls == 0
     assert controller.replay_calls == 1
+    assert controller.svd_calls == ["job123"]
     panel.refresh_btn.invoke()
     assert controller.refresh_calls == 1
 
@@ -85,3 +91,40 @@ def test_job_history_panel_efficiency_tooltip_summary(tk_root) -> None:
     assert "elapsed=12.5s" in text
     assert "img/min=9.6" in text
     assert "model_sw=1" in text
+
+
+@pytest.mark.gui
+def test_job_history_panel_disables_svd_for_video_artifacts(tk_root, tmp_path) -> None:
+    controller = DummyController()
+    app_state = AppStateV2()
+    panel = JobHistoryPanelV2(tk_root, controller=controller, app_state=app_state)
+
+    video_path = tmp_path / "run-001" / "clip.mp4"
+    video_path.parent.mkdir(parents=True)
+    video_path.write_bytes(b"video")
+    entry = _make_entry("job-video")
+    entry.result = {
+        "metadata": {
+            "animatediff_artifact": {
+                "primary_path": str(video_path),
+                "output_paths": [str(video_path)],
+                "count": 1,
+                "artifacts": [
+                    {
+                        "schema": "stablenew.artifact.v2.6",
+                        "artifact_type": "video",
+                        "primary_path": str(video_path),
+                        "output_paths": [str(video_path)],
+                    }
+                ],
+            }
+        }
+    }
+
+    app_state.set_history_items([entry])
+    tk_root.update_idletasks()
+    children = panel.history_tree.get_children()
+    panel.history_tree.selection_set(children[0])
+    panel.history_tree.event_generate("<<TreeviewSelect>>")
+
+    assert panel.svd_btn.instate(["disabled"])

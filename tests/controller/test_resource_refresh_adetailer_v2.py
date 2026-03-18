@@ -26,6 +26,9 @@ class FakeResourceService:
             "vaes": [],
             "samplers": [],
             "schedulers": [],
+            "upscalers": [],
+            "hypernetworks": ["hyper-a"],
+            "embeddings": ["embed-a"],
             "adetailer_models": ["face_yolov8n.pt"],
             "adetailer_detectors": ["face", "hand"],
         }
@@ -44,6 +47,10 @@ def test_controller_refreshes_adetailer_resources(monkeypatch) -> None:
 
     assert controller.app_state.adetailer_models == ["face_yolov8n.pt"]
     assert controller.app_state.adetailer_detectors == ["face", "hand"]
+    assert controller.app_state.resources["hypernetworks"] == ["hyper-a"]
+    assert controller.app_state.resources["embeddings"] == ["embed-a"]
     assert fake_panel.last_resources is not None
+    assert fake_panel.last_resources.get("hypernetworks") == ["hyper-a"]
+    assert fake_panel.last_resources.get("embeddings") == ["embed-a"]
     assert fake_panel.last_resources.get("adetailer_models") == ["face_yolov8n.pt"]
     assert fake_panel.last_resources.get("adetailer_detectors") == ["face", "hand"]

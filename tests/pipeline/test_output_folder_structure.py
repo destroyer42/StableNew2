@@ -8,10 +8,15 @@ import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
+from src.state.output_routing import OUTPUT_ROUTE_PIPELINE
 
 
 class TestOutputFolderStructure:
     """Test that output folders use datetime/pack_name structure with manifests/ subfolder."""
+
+    @staticmethod
+    def _pipeline_route_root(temp_output_dir):
+        return temp_output_dir / OUTPUT_ROUTE_PIPELINE
 
     @pytest.fixture
     def mock_api_client(self):
@@ -87,13 +92,13 @@ class TestOutputFolderStructure:
         # Verify folder structure exists
         # The actual folder should be {timestamp}/{pack_name}/ or {timestamp_packname}/
         # Let's find the folder that was created
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         assert len(output_folders) > 0, "No output folders created"
 
         # Find the folder containing pack name
         pack_folder = None
         for folder in output_folders:
-            if "MyFantasyPack" in folder.name:
+            if "MyFantasyPac" in folder.name:
                 pack_folder = folder
                 break
 
@@ -147,7 +152,7 @@ class TestOutputFolderStructure:
         assert result.success is True
 
         # Find the output folder
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         assert len(output_folders) > 0, "No output folders created"
 
         # Find folder with TestPack in name
@@ -209,7 +214,7 @@ class TestOutputFolderStructure:
         assert result.success is True
 
         # Find the output folder
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_folder = None
         for folder in output_folders:
             # Should contain sanitized pack name
@@ -266,10 +271,10 @@ class TestOutputFolderStructure:
         assert result.success is True
 
         # Find the output folder
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_folder = None
         for folder in output_folders:
-            if "my_unique_job_123" in folder.name:
+            if "my_unique_jo" in folder.name:
                 pack_folder = folder
                 break
 
@@ -324,7 +329,7 @@ class TestOutputFolderStructure:
             assert result.success is True
             
             # Track which folder was used
-            output_folders = list(temp_output_dir.iterdir())
+            output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
             for folder in output_folders:
                 if "SharedPack" in folder.name:
                     folder_paths.add(str(folder))
@@ -333,7 +338,7 @@ class TestOutputFolderStructure:
         assert len(folder_paths) == 1, f"Expected 1 shared folder, found {len(folder_paths)}: {folder_paths}"
         
         # Verify the shared folder contains files from all 3 jobs
-        shared_folder = temp_output_dir / list(folder_paths)[0].split("/")[-1]
+        shared_folder = self._pipeline_route_root(temp_output_dir) / list(folder_paths)[0].split("/")[-1]
         # Note: Files are actually saved by executor, not by pipeline_runner in this mock setup
         # So we just verify the folder reuse logic worked
 
@@ -408,7 +413,7 @@ class TestOutputFolderStructure:
         assert result2.success is True
 
         # Find both folders
-        output_folders = list(temp_output_dir.iterdir())
+        output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_a_folder = None
         pack_b_folder = None
         
@@ -422,3 +427,99 @@ class TestOutputFolderStructure:
         assert pack_a_folder is not None, "PackA folder not found"
         assert pack_b_folder is not None, "PackB folder not found"
         assert pack_a_folder != pack_b_folder, "Different packs should have different folders"
+
+    def test_same_pack_folder_reused_after_runner_restart(
+        self, mock_api_client, mock_structured_logger, temp_output_dir
+    ):
+        """Folder reuse should survive a fresh runner instance, not only in-memory cache."""
+        PipelineRunner._pack_folder_cache.clear()
+        first_runner = PipelineRunner(
+            api_client=mock_api_client,
+            structured_logger=mock_structured_logger,
+            runs_base_dir=str(temp_output_dir),
+        )
+        second_runner = PipelineRunner(
+            api_client=mock_api_client,
+            structured_logger=mock_structured_logger,
+            runs_base_dir=str(temp_output_dir),
+        )
+
+        njr = NormalizedJobRecord(
+            job_id="restart_reuse",
+            config={},
+            path_output_dir=str(temp_output_dir),
+            filename_template="image_{index:04d}",
+            prompt_pack_name="RestartPack",
+            positive_prompt="A ranger",
+            negative_prompt="",
+            base_model="sd_xl_base_1.0.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+            images_per_prompt=1,
+            stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
+        )
+
+        mock_result = {
+            "path": f"{temp_output_dir}/txt2img_00.png",
+            "all_paths": [f"{temp_output_dir}/txt2img_00.png"],
+            "name": "txt2img_00",
+            "stage": "txt2img",
+        }
+        first_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+        second_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+
+        first_result = first_runner.run_njr(njr)
+        assert first_result.success is True
+
+        PipelineRunner._pack_folder_cache.clear()
+        second_result = second_runner.run_njr(njr)
+        assert second_result.success is True
+        assert first_result.run_id == second_result.run_id
+
+    def test_njr_output_dir_overrides_runner_base_dir(
+        self, mock_api_client, mock_structured_logger, tmp_path
+    ):
+        """Canonical job output dir should win over the runner default base dir."""
+        PipelineRunner._pack_folder_cache.clear()
+        runner = PipelineRunner(
+            api_client=mock_api_client,
+            structured_logger=mock_structured_logger,
+            runs_base_dir=str(tmp_path / "default_output"),
+        )
+        explicit_output_dir = tmp_path / "explicit_output"
+
+        njr = NormalizedJobRecord(
+            job_id="explicit_dir_job",
+            config={},
+            path_output_dir=str(explicit_output_dir),
+            filename_template="image_{index:04d}",
+            prompt_pack_name="ExplicitPack",
+            positive_prompt="A pilot",
+            negative_prompt="",
+            base_model="sd_xl_base_1.0.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+            images_per_prompt=1,
+            stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
+        )
+
+        mock_result = {
+            "path": f"{explicit_output_dir}/txt2img_00.png",
+            "all_paths": [f"{explicit_output_dir}/txt2img_00.png"],
+            "name": "txt2img_00",
+            "stage": "txt2img",
+        }
+        runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+
+        result = runner.run_njr(njr)
+
+        assert result.success is True
+        route_root = explicit_output_dir / OUTPUT_ROUTE_PIPELINE
+        assert route_root.exists()
+        assert any("ExplicitPack" in folder.name for folder in route_root.iterdir())

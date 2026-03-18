@@ -161,9 +161,6 @@ class JobHistoryStore:
             "result",
         ]
         data = {k: entry[k] for k in ordered_keys if k in entry}
-        # Preserve transitional history_version if present for compatibility
-        if "history_version" in entry:
-            data["history_version"] = entry["history_version"]
         # Drop unknown keys defensively
         for key in list(data.keys()):
             if key not in ALLOWED_FIELDS:

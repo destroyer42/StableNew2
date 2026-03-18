@@ -1,0 +1,6 @@
+[
+  {
+    "input": "<lora:foo:0.8>, beautiful woman, <lora:bar:1.0>",
+    "chunks": ["<lora:foo:0.8>", "beautiful woman", "<lora:bar:1.0>"]
+  }
+]

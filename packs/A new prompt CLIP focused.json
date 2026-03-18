@@ -1,0 +1,907 @@
+{
+  "pack_data": {
+    "name": "A single prompt for testing",
+    "slots": [
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a gorgeous naked busty athletic [[haircolor]] haired [[eyecolor]] eyed woman, naturally [[pose]] sultrily [[setting]], [[activity]], highly detailed skin, highly detailed genitalia, sharp focus, natural anatomy, photorealistic, [[angle]] full body shot, cinematic lighting",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.906593
+          ],
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.795
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.895161
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.80303
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.510638
+          ],
+          [
+            "face_refiner",
+            0.90411
+          ],
+          "Stable_Yogis_PDXL_Positives"
+        ],
+        "negative_embeddings": [
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.897727
+          ],
+          [
+            "NEGATIVE_HANDS",
+            1.0967
+          ],
+          [
+            "easynegative",
+            0.703704
+          ],
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.4959677419354839
+          ],
+          [
+            "finenude_v0_2a",
+            0.6954545454545454
+          ],
+          [
+            "anatomy_helper",
+            0.6084905660377359
+          ],
+          [
+            "epiCRealismHelper",
+            0.6098901098901099
+          ],
+          [
+            "PerfectEyesXL",
+            0.39406779661016955
+          ]
+        ]
+      }
+    ],
+    "matrix": {
+      "enabled": true,
+      "mode": "random",
+      "limit": 3,
+      "slots": [
+        {
+          "name": "haircolor",
+          "values": [
+            "brown",
+            "black",
+            "auburn",
+            "red",
+            "blonde",
+            "white"
+          ]
+        },
+        {
+          "name": "eyecolor",
+          "values": [
+            "blue",
+            "green",
+            "turquoise",
+            "brown",
+            "golden"
+          ]
+        },
+        {
+          "name": "pose",
+          "values": [
+            "kneeling with wide knees",
+            "lying back knees spread",
+            "on all fours spread eagled facing away looking over shoulder",
+            "spreading legs wide",
+            "bent over with arched back looking back at camera"
+          ]
+        },
+        {
+          "name": "activity",
+          "values": [
+            "caressing her own vagina with her right hand",
+            "pulling apart her legs with her hands",
+            "spreading legs super wide leaning back",
+            "sucking on a dildo",
+            "squatting onto a dildo",
+            "squatting onto a man's penis",
+            "sucking on a man's penis",
+            "being penetrated by an off screen man's penis"
+          ]
+        },
+        {
+          "name": "angle",
+          "values": [
+            "low",
+            "wide",
+            "high",
+            "bird's eye",
+            "long"
+          ]
+        },
+        {
+          "name": "setting",
+          "values": [
+            "overlooking a balcony",
+            "on her bed",
+            "at a female orgy",
+            "on a beach",
+            "by a poolside",
+            "in a river",
+            "on a mountain path",
+            "in a meadow"
+          ]
+        }
+      ]
+    },
+    "show_preview": true
+  },
+  "preset_data": {
+    "txt2img": {
+      "model": "cyberrealisticXL_v90-16fp",
+      "model_name": "cyberrealisticXL_v90-16fp",
+      "vae": "",
+      "vae_name": "",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 30,
+      "cfg_scale": 6.43,
+      "width": 768,
+      "height": 1280,
+      "clip_skip": 2,
+      "seed": -1,
+      "subseed": -1,
+      "subseed_strength": 0.5,
+      "use_refiner": false,
+      "enable_hr": false,
+      "hr_upscaler": "Latent",
+      "hr_scale": 1.5,
+      "hr_second_pass_steps": 12,
+      "denoising_strength": 0.19782608695652174,
+      "hires_use_base_model": true,
+      "hr_checkpoint_name": "cyberrealisticXL_v90-16fp.safetensors"
+    },
+    "img2img": {
+      "model": "",
+      "model_name": "",
+      "vae": "",
+      "vae_name": "",
+      "sampler_name": "Euler a",
+      "steps": 15,
+      "cfg_scale": 7.0,
+      "denoising_strength": 0.3,
+      "mask_mode": "none"
+    },
+    "upscale": {
+      "upscaler": "4xUltrasharp_4xUltrasharpV10",
+      "upscale_mode": "single",
+      "steps": 15,
+      "denoising_strength": 0.15,
+      "upscaling_resize": 2.0,
+      "tile_size": 0,
+      "face_restore": false,
+      "face_restore_method": "CodeFormer",
+      "sampler_name": "DPM++ 2M Karras",
+      "scheduler": "karras"
+    },
+    "adetailer": {
+      "adetailer_model": "mediapipe_face_full",
+      "ad_model": "mediapipe_face_full",
+      "adetailer_confidence": 0.29,
+      "ad_confidence": 0.29,
+      "max_detections": 3,
+      "mask_blur": 5,
+      "ad_mask_blur": 5,
+      "mask_merge_mode": "keep",
+      "adetailer_steps": 10,
+      "ad_steps": 10,
+      "adetailer_cfg": 4.0,
+      "ad_cfg_scale": 4.0,
+      "adetailer_sampler": "DPM++ 2M",
+      "ad_sampler": "DPM++ 2M",
+      "adetailer_denoise": 0.21,
+      "ad_denoising_strength": 0.21,
+      "adetailer_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+      "ad_prompt": "<stable_yogis_pdxl_positives>,\n<stable_yogis_realism_positives_v1>, <Stable-Yogis-Makeup-Enhancer-XL>,\nnatural facial detail,\nsubtle skin texture,\nfine skin pores,\nrealistic eye reflections,\nstable eye alignment,\nrelaxed eyelids,\nnatural facial micro-expression,\npreserve original expression,\npreserve original lighting,\npreserve original facial structure\n",
+      "adetailer_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
+      "ad_negative_prompt": "<stable_yogis_pdxl_negatives2-neg>,\n<stable_yogis_anatomy_negatives_v1-neg>,\n<sdxl_cyberrealistic_simpleneg-neg>,\n<negative_hands>,\nwarped eyes,\nmisaligned pupils,\ncrossed eyes,\nextra eyes,\nduplicated pupils,\ncollapsed eyelids,\nmelted facial features,\nplastic skin,\nwaxy skin,\nover-smoothed skin,\nover-sharpened skin,\nuncanny valley,\nface redesign,\nface re-sculpting\n, glowing eyes",
+      "ad_inpaint_only_masked": false,
+      "ad_inpaint_only_masked_padding": 32,
+      "ad_use_inpaint_width_height": true,
+      "enable_face_pass": true,
+      "face_model": "mediapipe_face_full",
+      "face_padding": 48,
+      "enable_hands_pass": true,
+      "hands_model": "hand_yolov8s.pt",
+      "hands_padding": 32,
+      "mask_filter_method": "all",
+      "mask_k_largest": 3,
+      "ad_mask_k_largest": 3,
+      "mask_min_ratio": 0.01,
+      "ad_mask_min_ratio": 0.01,
+      "mask_max_ratio": 1.0,
+      "ad_mask_max_ratio": 1.0,
+      "mask_dilate_erode": 6,
+      "ad_dilate_erode": 6,
+      "mask_feather": 8,
+      "ad_mask_feather": 8,
+      "scheduler": "Karras",
+      "ad_scheduler": "Karras",
+      "ad_mask_filter_method": "Area",
+      "ad_mask_merge_invert": "None",
+      "adetailer_enabled": true
+    },
+    "prompt_optimizer": {
+      "enabled": true,
+      "optimize_positive": true,
+      "optimize_negative": true,
+      "dedupe_enabled": true,
+      "preserve_lora_relative_order": true,
+      "preserve_unknown_order": true,
+      "log_before_after": true,
+      "log_bucket_assignments": false,
+      "warn_on_large_chunk_count": true,
+      "large_chunk_warning_threshold": 18,
+      "enable_score_based_classification": false,
+      "allow_subject_anchor_boost": false,
+      "subject_anchor_boost_min_chunk_count": 8,
+      "opt_out_pipeline_names": []
+    },
+    "pipeline": {
+      "images_per_prompt": 1,
+      "n_iter": 1,
+      "output_dir": "output",
+      "filename_pattern": "{seed}",
+      "image_format": "png",
+      "seed_mode": "fixed",
+      "output_route": "Auto",
+      "txt2img_enabled": true,
+      "img2img_enabled": false,
+      "adetailer_enabled": true,
+      "upscale_enabled": true
+    }
+  }
+}

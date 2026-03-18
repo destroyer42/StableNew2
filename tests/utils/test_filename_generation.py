@@ -38,11 +38,10 @@ def test_pack_name_truncation():
         base_prefix="txt2img_p01_v01",
         pack_name="VeryLongPromptPackName_v2.5"
     )
-    # Should be truncated to ~10 chars
+    # Pack-only names may not need an extra hash segment
     parts = name.split("_")
-    # Format: txt2img_p01_v01_<PACK>
     assert len(parts) >= 4, f"Expected at least 4 parts in {name}"
-    pack_part = parts[3]  # txt2img_p01_v01_<PACK>
+    pack_part = parts[3]
     assert len(pack_part) <= 10, f"Pack name '{pack_part}' should be <= 10 chars"
 
 
@@ -126,7 +125,7 @@ def test_matrix_values_in_hash():
 
 
 def test_pack_name_preferred_over_hash():
-    """Verify pack name used instead of hash when available."""
+    """Verify pack name is preserved when available."""
     name = build_safe_image_name(
         base_prefix="txt2img_p01_v01",
         pack_name="MyPack",
@@ -134,12 +133,24 @@ def test_pack_name_preferred_over_hash():
         matrix_values={"test": "value"}
     )
     assert "MyPack" in name, f"Expected 'MyPack' in {name}"
-    # Should NOT contain an 8-char hex hash
     parts = name.split("_")
-    pack_part = parts[3]
-    # MyPack should be there, not a hex hash
-    assert not all(c in "0123456789abcdef" for c in pack_part.lower()), \
-        f"Should use pack name, not hash in {name}"
+    assert parts[3] == "MyPack", f"Expected pack name segment in {name}"
+    assert len(parts[4]) == 8, f"Expected deterministic hash segment in {name}"
+
+
+def test_pack_name_and_seed_produce_distinct_names():
+    """Verify different seeds stay distinct even when pack name is present."""
+    name1 = build_safe_image_name(
+        base_prefix="txt2img_p01_v01",
+        pack_name="MyPack",
+        seed=12345,
+    )
+    name2 = build_safe_image_name(
+        base_prefix="txt2img_p01_v01",
+        pack_name="MyPack",
+        seed=67890,
+    )
+    assert name1 != name2, "Different seeds should not collide under the same pack name"
 
 
 def test_max_length_enforcement():

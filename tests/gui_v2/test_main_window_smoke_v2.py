@@ -17,5 +17,6 @@ def test_main_window_v2_smoke(tk_root: tk.Tk) -> None:
         assert "Pipeline" in tab_texts
         assert "Learning" in tab_texts
         assert "Photo Optomize" in tab_texts
+        assert "SVD Img2Vid" in tab_texts
     finally:
         harness.cleanup()

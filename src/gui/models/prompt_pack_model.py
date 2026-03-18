@@ -4,14 +4,20 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.utils.embedding_prompt_utils import (
+    normalize_embedding_entries,
+    render_embedding_reference,
+    serialize_embedding_entries,
+)
+
 
 @dataclass
 class PromptSlot:
     index: int
     text: str = ""  # Pure prompt text (no LoRA/embedding syntax)
     negative: str = ""  # Pure negative text
-    positive_embeddings: list[str] = field(default_factory=list)
-    negative_embeddings: list[str] = field(default_factory=list)
+    positive_embeddings: list[tuple[str, float] | str] = field(default_factory=list)
+    negative_embeddings: list[tuple[str, float] | str] = field(default_factory=list)
     loras: list[tuple[str, float]] = field(default_factory=list)  # [(name, strength), ...]
 
 
@@ -95,8 +101,8 @@ class PromptPackModel:
                     index=int(slot.get("index", idx)),
                     text=str(slot.get("text", "")),
                     negative=str(slot.get("negative", "")),
-                    positive_embeddings=list(slot.get("positive_embeddings", [])),
-                    negative_embeddings=list(slot.get("negative_embeddings", [])),
+                    positive_embeddings=normalize_embedding_entries(slot.get("positive_embeddings", [])),
+                    negative_embeddings=normalize_embedding_entries(slot.get("negative_embeddings", [])),
                     loras=loras
                 )
             )
@@ -142,8 +148,8 @@ class PromptPackModel:
                     "index": slot.index,
                     "text": slot.text,
                     "negative": getattr(slot, "negative", ""),
-                    "positive_embeddings": getattr(slot, "positive_embeddings", []),
-                    "negative_embeddings": getattr(slot, "negative_embeddings", []),
+                    "positive_embeddings": serialize_embedding_entries(getattr(slot, "positive_embeddings", [])),
+                    "negative_embeddings": serialize_embedding_entries(getattr(slot, "negative_embeddings", [])),
                     "loras": [[name, weight] for name, weight in getattr(slot, "loras", [])]
                 }
                 for slot in non_empty_slots
@@ -188,9 +194,9 @@ class PromptPackModel:
             slot_lines = []
             
             # Positive embeddings
-            positive_embeds = getattr(slot, "positive_embeddings", [])
+            positive_embeds = normalize_embedding_entries(getattr(slot, "positive_embeddings", []))
             if positive_embeds:
-                embed_line = ' '.join(f'<embedding:{e}>' for e in positive_embeds)
+                embed_line = " ".join(render_embedding_reference(name, weight) for name, weight in positive_embeds)
                 slot_lines.append(embed_line)
             
             # Positive text (with [[tokens]] preserved)
@@ -204,9 +210,11 @@ class PromptPackModel:
                 slot_lines.append(lora_line)
             
             # Negative embeddings
-            negative_embeds = getattr(slot, "negative_embeddings", [])
+            negative_embeds = normalize_embedding_entries(getattr(slot, "negative_embeddings", []))
             if negative_embeds:
-                neg_embed_line = 'neg: ' + ' '.join(f'<embedding:{e}>' for e in negative_embeds)
+                neg_embed_line = "neg: " + " ".join(
+                    render_embedding_reference(name, weight) for name, weight in negative_embeds
+                )
                 slot_lines.append(neg_embed_line)
             
             # Negative text
