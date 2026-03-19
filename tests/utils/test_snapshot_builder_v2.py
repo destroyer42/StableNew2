@@ -19,6 +19,7 @@ def test_build_job_snapshot_includes_expected_fields():
         batch_total=1,
         created_ts=123.0,
         randomizer_summary={"enabled": False},
+        intent_config={"run_mode": "queue", "source": "run"},
     )
     job = Job(
         job_id="snapshot-job",
@@ -31,6 +32,8 @@ def test_build_job_snapshot_includes_expected_fields():
     assert snapshot["schema_version"] == "1.0"
     assert snapshot["job_id"] == job.job_id
     assert snapshot["run_config"]["run_mode"] == "queue"
+    assert snapshot["config_layers"]["intent_config"]["source"] == "run"
+    assert snapshot["normalized_job"]["intent_config"]["source"] == "run"
     assert "normalized_job" in snapshot
     assert snapshot["effective_prompts"]["positive"] == "sunset"
     assert snapshot["stage_metadata"]["stages"] == []
@@ -40,6 +43,7 @@ def test_build_job_snapshot_includes_expected_fields():
     assert reconstructed is not None
     assert reconstructed.job_id == record.job_id
     assert reconstructed.seed == record.seed
+    assert reconstructed.intent_config["source"] == "run"
 
 
 def test_build_job_snapshot_repairs_pack_metadata():

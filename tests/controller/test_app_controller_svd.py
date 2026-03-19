@@ -353,6 +353,96 @@ def test_get_recent_svd_history_uses_frames_only_outputs(tmp_path) -> None:
     assert records[0]["count"] == 2
 
 
+def test_get_recent_svd_history_prefers_generic_video_artifact_metadata(tmp_path) -> None:
+    source_path = tmp_path / "source.png"
+    video_path = tmp_path / "clip.mp4"
+    manifest_path = tmp_path / "manifest.json"
+    preview_path = tmp_path / "preview.png"
+    for path, content in (
+        (source_path, b"png"),
+        (video_path, b"mp4"),
+        (manifest_path, b"{}"),
+        (preview_path, b"png"),
+    ):
+        path.write_bytes(content)
+
+    entry = JobHistoryEntry(
+        job_id="job-svd-generic",
+        created_at=datetime.utcnow(),
+        completed_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        result={
+            "variants": [
+                {
+                    "source_image_path": str(source_path),
+                    "video_path": str(video_path),
+                    "manifest_path": str(manifest_path),
+                    "thumbnail_path": str(preview_path),
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "svd_native",
+                        "artifact_type": "video",
+                        "primary_path": str(video_path),
+                        "output_paths": [str(video_path)],
+                        "manifest_path": str(manifest_path),
+                        "thumbnail_path": str(preview_path),
+                        "input_image_path": str(source_path),
+                    },
+                }
+            ],
+            "metadata": {
+                "video_artifacts": {
+                    "svd_native": {
+                        "stage": "svd_native",
+                        "backend_id": "svd_native",
+                        "artifact_type": "video",
+                        "primary_path": str(video_path),
+                        "output_paths": [str(video_path)],
+                        "video_paths": [str(video_path)],
+                        "manifest_paths": [str(manifest_path)],
+                        "thumbnail_path": str(preview_path),
+                        "count": 1,
+                        "artifacts": [
+                            {
+                                "schema": "stablenew.artifact.v2.6",
+                                "stage": "svd_native",
+                                "artifact_type": "video",
+                                "primary_path": str(video_path),
+                                "output_paths": [str(video_path)],
+                                "manifest_path": str(manifest_path),
+                                "thumbnail_path": str(preview_path),
+                                "input_image_path": str(source_path),
+                            }
+                        ],
+                    }
+                },
+                "video_primary_artifact": {
+                    "stage": "svd_native",
+                    "backend_id": "svd_native",
+                    "artifact_type": "video",
+                    "primary_path": str(video_path),
+                    "output_paths": [str(video_path)],
+                    "video_paths": [str(video_path)],
+                    "manifest_paths": [str(manifest_path)],
+                    "thumbnail_path": str(preview_path),
+                    "count": 1,
+                },
+            },
+        },
+    )
+
+    controller = AppController.__new__(AppController)
+    controller.app_state = SimpleNamespace(history_items=[entry])
+
+    records = controller.get_recent_svd_history()
+
+    assert len(records) == 1
+    assert records[0]["video_path"] == str(video_path)
+    assert records[0]["thumbnail_path"] == str(preview_path)
+    assert records[0]["manifest_path"] == str(manifest_path)
+    assert records[0]["count"] == 1
+
+
 def test_show_structured_error_modal_uses_tk_root_parent(monkeypatch) -> None:
     created = {}
 

@@ -7,11 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = ROOT / "src"
 
-ALLOWED_ARCHIVE_IMPORT_PATHS = {
-    Path("src/controller/app_controller.py"),
-    Path("src/controller/pipeline_controller.py"),
-    Path("src/pipeline/legacy_njr_adapter.py"),
-}
+ALLOWED_ARCHIVE_IMPORT_PATHS: set[Path] = set()
 
 ARCHIVE_IMPORT_PATTERNS = (
     re.compile(r"\bfrom\s+src\.controller\.archive\.pipeline_config_types\s+import\b"),
@@ -96,8 +92,6 @@ def test_source_does_not_reference_legacy_njr_adapter_outside_legacy_module() ->
     violations: list[str] = []
     for path in source_files:
         rel = path.relative_to(ROOT)
-        if rel == Path("src/pipeline/legacy_njr_adapter.py"):
-            continue
         text = path.read_text(encoding="utf-8")
         for pattern in LEGACY_ADAPTER_PATTERNS:
             if pattern.search(text):
@@ -108,3 +102,7 @@ def test_source_does_not_reference_legacy_njr_adapter_outside_legacy_module() ->
         "Legacy NJR adapter must remain isolated to its own module:\n"
         + "\n".join(sorted(violations))
     )
+
+
+def test_legacy_njr_adapter_module_is_deleted() -> None:
+    assert not (ROOT / "src" / "pipeline" / "legacy_njr_adapter.py").exists()

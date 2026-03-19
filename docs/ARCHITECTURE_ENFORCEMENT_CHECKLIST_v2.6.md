@@ -20,7 +20,7 @@ subsystem boundaries
 
 long-term maintainability
 
-the PromptPack-only rule
+the canonical intent-source rule
 
 the NJR-only runtime rule
 
@@ -33,9 +33,9 @@ test coverage
 removal of tech debt
 
 SECTION 1 — Prompt & Config Source of Truth
-1.1 PromptPack-only prompt sourcing
+1.1 StableNew-owned prompt sourcing
 
- Does all prompt text come exclusively from a PromptPack (.txt + .json)?
+ Does prompt text come from StableNew-owned intent surfaces, with PromptPack remaining the primary image authoring surface?
 
  Is there no GUI prompt textbox, legacy prompt field, or controller-created prompt?
 

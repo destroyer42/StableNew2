@@ -46,6 +46,9 @@ def test_build_from_run_request_produces_normalized_job() -> None:
     assert record.prompt_pack_id == entry.pack_id
     assert record.positive_prompt == entry.prompt_text
     assert record.negative_prompt == entry.negative_prompt_text
+    assert record.intent_config["run_mode"] == "queue"
+    assert record.intent_config["source"] == "add_to_queue"
+    assert record.intent_config["prompt_pack_id"] == entry.pack_id
     assert record.stage_chain and record.stage_chain[0].stage_type == "txt2img"
 
 

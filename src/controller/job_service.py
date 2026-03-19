@@ -294,14 +294,16 @@ class JobService:
         self._on_runner_activity = on_runner_activity
         # Note: auto_run_enabled should be set separately via app_state restoration or explicit control
 
-    def enqueue(self, job: Job) -> None:
+    def enqueue(self, job: Job, *, emit_queue_updated: bool = True) -> None:
         self.job_queue.submit(job)
         # PR-CORE1-D21B: Activity hook for queue
         if hasattr(self, "_on_queue_activity") and self._on_queue_activity:
             self._on_queue_activity()
-        self._emit_queue_updated()
+        if emit_queue_updated:
+            self._emit_queue_updated()
 
     def run_now(self, job: Job) -> None:
+        job.run_mode = PipelineRunMode.QUEUE.value
         self.enqueue(job)
         try:
             self.run_next_now()
@@ -310,9 +312,19 @@ class JobService:
         if not self.runner.is_running():
             self.runner.start()
 
-    def submit_job_with_run_mode(self, job: Job) -> None:
+    def submit_job_with_run_mode(self, job: Job, *, emit_queue_updated: bool = True) -> None:
         """Submit a job respecting its configured run_mode."""
         mode = (job.run_mode or "queue").lower()
+        if mode != PipelineRunMode.QUEUE.value:
+            log_with_ctx(
+                logger,
+                logging.INFO,
+                "Coercing legacy run_mode to queue-only execution",
+                ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                extra_fields={"requested_run_mode": mode, "normalized_run_mode": "queue"},
+            )
+            mode = PipelineRunMode.QUEUE.value
+            job.run_mode = mode
         log_with_ctx(
             logger,
             logging.INFO,
@@ -325,13 +337,11 @@ class JobService:
             # Record the failed submission without attempting execution
             self.job_queue.submit(job)
             self._notify_job_submitted(job)
-            self._emit_queue_updated()
+            if emit_queue_updated:
+                self._emit_queue_updated()
             self._handle_job_status_change(job, JobStatus.FAILED)
             return
-        if mode == "direct":
-            self.submit_direct(job)
-        else:
-            self.submit_queued(job)
+        self.submit_queued(job, emit_queue_updated=emit_queue_updated)
 
     def _prepare_job_for_submission(self, job: Job) -> NormalizedJobRecord | None:
         """Ensure normalized metadata is present and log previews as needed."""
@@ -411,41 +421,33 @@ class JobService:
     def run_njrs_direct(
         self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest
     ) -> list[str]:
-        """Run NJRs immediately (Run Now semantics)."""
+        """Queue NJRs immediately and kick the runner (queue-only Run Now semantics)."""
         job_ids: list[str] = []
         for record in njrs[: run_request.max_njr_count]:
             job = self._job_from_njr(record, run_request)
-            job.run_mode = PipelineRunMode.DIRECT.value
-            self.submit_job_with_run_mode(job)
+            job.run_mode = PipelineRunMode.QUEUE.value
+            self.run_now(job)
             job_ids.append(job.job_id)
         return job_ids
 
     def submit_direct(self, job: Job) -> dict | None:
-        """Execute a job synchronously (bypasses queue for 'Run Now' semantics).
-
-        PR-106: Explicit API for direct execution path.
-        Ensures returned result envelope includes job_id at the top level.
-        """
+        """Legacy compatibility shim: normalize to ordinary queue submission."""
         log_with_ctx(
             logger,
             logging.INFO,
-            f"Direct execution of job {job.job_id}",
+            f"Legacy submit_direct normalized to queue submission for job {job.job_id}",
             ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
         )
-        self.job_queue.submit(job)
-        self._notify_job_submitted(job)
-        self._emit_queue_updated()
-        try:
-            result = self.runner.run_once(job)
-            # Ensure job_id is present at the top level of the result envelope
-            if isinstance(result, dict):
-                if "job_id" not in result:
-                    result = {**result, "job_id": job.job_id}
-            return result
-        except Exception:
-            raise
+        job.run_mode = PipelineRunMode.QUEUE.value
+        self.submit_queued(job)
+        return {
+            "job_id": job.job_id,
+            "success": True,
+            "queued": True,
+            "run_mode": PipelineRunMode.QUEUE.value,
+        }
 
-    def submit_queued(self, job: Job) -> None:
+    def submit_queued(self, job: Job, *, emit_queue_updated: bool = True) -> None:
         """Submit a job to the queue for background execution.
 
         PR-106: Explicit API for queued execution path.
@@ -456,7 +458,7 @@ class JobService:
             f"Queuing job {job.job_id} for background execution",
             ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
         )
-        self.enqueue(job)
+        self.enqueue(job, emit_queue_updated=emit_queue_updated)
         self._notify_job_submitted(job)
         
         # Start runner if auto-run is enabled and runner isn't running
@@ -591,6 +593,23 @@ class JobService:
         """
         for job in jobs:
             self.submit_job_with_run_mode(job)
+
+    def submit_jobs_with_run_mode(
+        self,
+        jobs: list[Job],
+        *,
+        batch_queue_update: bool = True,
+    ) -> None:
+        """Submit multiple jobs while optionally coalescing queue-updated emission."""
+        if not jobs:
+            return
+        if not batch_queue_update:
+            for job in jobs:
+                self.submit_job_with_run_mode(job)
+            return
+        for job in jobs:
+            self.submit_job_with_run_mode(job, emit_queue_updated=False)
+        self._emit_queue_updated()
 
     def pause(self) -> None:
         pause_queue = getattr(self.job_queue, "pause", None)

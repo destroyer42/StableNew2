@@ -33,18 +33,18 @@ def controller(tk_root):
     return controller
 
 
-def test_start_run_delegates_to_run_pipeline(controller, monkeypatch):
+def test_start_run_delegates_to_queue_backed_start_run_v2(controller, monkeypatch):
     called: list[Any] = []
 
-    def fake_run_pipeline():
-        called.append("run")
+    def fake_start_run_v2():
+        called.append("start_run_v2")
         return {"status": "ok"}
 
-    monkeypatch.setattr(controller, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(controller, "start_run_v2", fake_start_run_v2)
 
     result = controller.start_run()
 
-    assert called == ["run"]
+    assert called == ["start_run_v2"]
     assert result == {"status": "ok"}
     assert controller.state.lifecycle == LifecycleState.IDLE
 
@@ -52,7 +52,7 @@ def test_start_run_delegates_to_run_pipeline(controller, monkeypatch):
 def test_start_run_refuses_when_already_running(controller, monkeypatch):
     controller.state.lifecycle = LifecycleState.RUNNING
     called = []
-    monkeypatch.setattr(controller, "run_pipeline", lambda: called.append("run"))
+    monkeypatch.setattr(controller, "start_run_v2", lambda: called.append("start_run_v2"))
 
     result = controller.start_run()
 

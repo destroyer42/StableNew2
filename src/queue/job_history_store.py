@@ -169,6 +169,9 @@ class JSONLJobHistoryStore(JobHistoryStore):
         # Performance optimization: Cache loaded entries to avoid re-reading file on every list_jobs()
         self._cached_entries: dict[str, JobHistoryEntry] | None = None
         self._cache_mtime: float | None = None
+        # Async persistence means newly appended entries may not be on disk yet.
+        # Keep an in-memory overlay so reads remain consistent before the worker flushes.
+        self._pending_entries: dict[str, JobHistoryEntry] = {}
 
     def record_job_submission(self, job: Job) -> None:
         entry = JobHistoryEntry(
@@ -192,8 +195,8 @@ class JSONLJobHistoryStore(JobHistoryStore):
     ) -> None:
         current = self.get_job(job_id)
         created_at = current.created_at if current else ts
-        started_at = current.started_at
-        completed_at = current.completed_at
+        started_at = current.started_at if current else None
+        completed_at = current.completed_at if current else None
         if status == JobStatus.RUNNING:
             started_at = started_at or ts
         if status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
@@ -273,6 +276,10 @@ class JSONLJobHistoryStore(JobHistoryStore):
         # The cache will automatically invalidate when the file's mtime changes
         # after the async write completes. Invalidating now causes a race condition
         # where GUI tries to load before write finishes, resulting in stale/empty data.
+        with self._lock:
+            self._pending_entries[entry.job_id] = entry
+            if self._cached_entries is not None:
+                self._cached_entries[entry.job_id] = entry
         
         # Always emit callback immediately (don't wait for write to complete)
         # This allows GUI to update immediately even though file write is async
@@ -295,9 +302,9 @@ class JSONLJobHistoryStore(JobHistoryStore):
         """Load history entries with file mtime-based caching for performance."""
         with self._lock:
             if not self._path.exists():
-                self._cached_entries = {}
+                self._cached_entries = dict(self._pending_entries)
                 self._cache_mtime = None
-                return {}
+                return dict(self._cached_entries)
             
             try:
                 # Check if file has been modified since last cache
@@ -305,7 +312,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 
                 if self._cached_entries is not None and self._cache_mtime == current_mtime:
                     # Cache is valid, return it
-                    return self._cached_entries
+                    return dict(self._cached_entries)
                 
                 # Cache miss or stale - reload from disk
                 lines = self._path.read_text(encoding="utf-8").splitlines()
@@ -316,17 +323,18 @@ class JSONLJobHistoryStore(JobHistoryStore):
                         latest[entry.job_id] = entry
                     except Exception:
                         continue
+                latest.update(self._pending_entries)
                 
                 # Update cache
                 self._cached_entries = latest
                 self._cache_mtime = current_mtime
-                return latest
+                return dict(latest)
                 
             except Exception:
                 # On error, invalidate cache and return empty
-                self._cached_entries = {}
+                self._cached_entries = dict(self._pending_entries)
                 self._cache_mtime = None
-                return {}
+                return dict(self._cached_entries)
 
     def _summarize_job(self, job: Job) -> str:
         result = getattr(job, "result", None) or {}

@@ -34,11 +34,11 @@ def _attach_pipeline_state(controller, run_mode=None):
     return state
 
 
-def test_run_defaults_to_direct():
+def test_run_defaults_to_queue():
     controller = _build_controller()
     _attach_pipeline_state(controller)
     controller.start_run_v2()
-    assert controller.app_state.pipeline_state.run_mode == "direct"
+    assert controller.app_state.pipeline_state.run_mode == "queue"
 
 
 def test_run_now_defaults_to_queue():
@@ -56,4 +56,4 @@ def test_respects_existing_run_mode():
     assert controller.app_state.pipeline_state.run_mode == "queue"
     state.pipeline_state.run_mode = "direct"
     controller.on_run_job_now_v2()
-    assert controller.app_state.pipeline_state.run_mode == "direct"
+    assert controller.app_state.pipeline_state.run_mode == "queue"

@@ -138,6 +138,17 @@ def test_enqueue_emits_queue_update(service: JobService) -> None:
     assert received[-1][0].endswith("job1")
 
 
+def test_submit_jobs_with_run_mode_batches_queue_update(service: JobService) -> None:
+    received: list[list[str]] = []
+
+    service.register_callback(JobService.EVENT_QUEUE_UPDATED, lambda items: received.append(items))
+
+    service.submit_jobs_with_run_mode([make_job("job-a"), make_job("job-b")], batch_queue_update=True)
+
+    assert len(received) == 1
+    assert len(received[0]) == 2
+
+
 def test_run_now_starts_runner(service: JobService) -> None:
     runner = service.runner
     job = make_job("run-now")

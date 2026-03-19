@@ -128,3 +128,55 @@ def test_job_history_panel_disables_svd_for_video_artifacts(tk_root, tmp_path) -
     panel.history_tree.event_generate("<<TreeviewSelect>>")
 
     assert panel.svd_btn.instate(["disabled"])
+
+
+@pytest.mark.gui
+def test_job_history_panel_uses_generic_video_artifact_metadata(tk_root, tmp_path) -> None:
+    controller = DummyController()
+    app_state = AppStateV2()
+    panel = JobHistoryPanelV2(tk_root, controller=controller, app_state=app_state)
+
+    video_path = tmp_path / "run-generic" / "clip.mp4"
+    video_path.parent.mkdir(parents=True)
+    video_path.write_bytes(b"video")
+    entry = _make_entry("job-generic-video")
+    entry.result = {
+        "metadata": {
+            "video_artifacts": {
+                "animatediff": {
+                    "stage": "animatediff",
+                    "backend_id": "animatediff",
+                    "artifact_type": "video",
+                    "primary_path": str(video_path),
+                    "output_paths": [str(video_path)],
+                    "count": 1,
+                    "artifacts": [
+                        {
+                            "schema": "stablenew.artifact.v2.6",
+                            "artifact_type": "video",
+                            "primary_path": str(video_path),
+                            "output_paths": [str(video_path)],
+                        }
+                    ],
+                }
+            },
+            "video_primary_artifact": {
+                "stage": "animatediff",
+                "backend_id": "animatediff",
+                "artifact_type": "video",
+                "primary_path": str(video_path),
+                "output_paths": [str(video_path)],
+                "count": 1,
+            },
+        }
+    }
+
+    app_state.set_history_items([entry])
+    tk_root.update_idletasks()
+    children = panel.history_tree.get_children()
+    panel.history_tree.selection_set(children[0])
+    panel.history_tree.event_generate("<<TreeviewSelect>>")
+
+    assert panel._extract_image_count(entry) == "1"
+    assert panel._extract_output_folder(entry) == "run-generic"
+    assert panel.svd_btn.instate(["disabled"])

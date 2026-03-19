@@ -282,17 +282,18 @@ class PipelineRunner:
             if frame_paths and not video_path and not gif_path:
                 frame_path_count += len(frame_paths)
 
-        if stage_name == "animatediff" and next_stage_paths:
-            metadata["animatediff_artifact"] = {
-                "video_paths": list(next_stage_paths),
-                "output_paths": list(next_stage_paths),
-                "manifest_paths": manifest_paths,
-                "primary_path": next_stage_paths[0],
-                "count": len(next_stage_paths),
-                "artifacts": artifact_records,
-            }
-        elif stage_name == "svd_native" and (next_stage_paths or manifest_paths):
-            metadata["svd_native_artifact"] = {
+        output_count = (
+            len(next_stage_paths)
+            or len(video_paths)
+            or len(gif_paths)
+            or frame_path_count
+            or len(artifact_records)
+        )
+        if next_stage_paths or manifest_paths or artifact_records or thumbnail_path:
+            aggregate = {
+                "stage": stage_name,
+                "backend_id": backend.backend_id,
+                "artifact_type": "video",
                 "output_paths": list(next_stage_paths),
                 "video_paths": video_paths,
                 "gif_paths": gif_paths,
@@ -300,14 +301,25 @@ class PipelineRunner:
                 "manifest_paths": manifest_paths,
                 "thumbnail_path": thumbnail_path,
                 "primary_path": next_stage_paths[0] if next_stage_paths else None,
-                "count": len(next_stage_paths),
+                "count": output_count,
                 "artifacts": artifact_records,
             }
+            metadata.setdefault("video_artifacts", {})[stage_name] = dict(aggregate)
+            metadata["video_primary_artifact"] = dict(aggregate)
+            metadata["video_primary_backend_id"] = backend.backend_id
+            metadata["video_primary_stage"] = stage_name
+
+            if stage_name == "animatediff":
+                metadata["animatediff_artifact"] = dict(aggregate)
+            elif stage_name == "svd_native":
+                metadata["svd_native_artifact"] = dict(aggregate)
 
         if backend_results:
             video_backend_results = metadata.setdefault("video_backend_results", {})
             video_backend_results[stage_name] = {
                 "backend_id": backend.backend_id,
+                "stage": stage_name,
+                "artifact_type": "video",
                 "count": len(backend_results),
                 "output_paths": list(next_stage_paths),
                 "manifest_paths": manifest_paths,
@@ -1017,7 +1029,8 @@ class PipelineRunner:
         try:
             njr.output_paths = list(current_stage_paths or [])
             artifact_thumbnail = (
-                (metadata.get("svd_native_artifact") or {}).get("thumbnail_path")
+                (metadata.get("video_primary_artifact") or {}).get("thumbnail_path")
+                or (metadata.get("svd_native_artifact") or {}).get("thumbnail_path")
                 or (metadata.get("animatediff_artifact") or {}).get("thumbnail_path")
             )
             njr.thumbnail_path = artifact_thumbnail or (njr.output_paths[-1] if njr.output_paths else None)

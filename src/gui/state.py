@@ -241,7 +241,7 @@ class LoraRuntimeSettings:
 class PipelineState:
     """Lightweight in-memory pipeline configuration."""
 
-    run_mode: str = "direct"  # or "queue"
+    run_mode: str = "queue"
     run_scope: str = "full"  # selected | from_selected | full
     batch_runs: int = 1
     stage_txt2img_enabled: bool = True

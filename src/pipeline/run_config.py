@@ -27,7 +27,7 @@ class RunConfig:
         prompt_pack_id: ID of the prompt pack if source is PACK.
         prompt_keys: Which prompts within the pack were selected.
         prompt_payload: Minimal prompt info for history/learning display.
-        run_mode: "direct" or "queue" execution mode.
+        run_mode: Queue-backed execution mode. Fresh execution is queue-only.
         source: Additional source context (e.g., "gui", "api").
     """
 
@@ -35,7 +35,7 @@ class RunConfig:
     prompt_pack_id: str | None = None
     prompt_keys: Sequence[str] = field(default_factory=list)
     prompt_payload: Mapping[str, Any] = field(default_factory=dict)
-    run_mode: str = "direct"
+    run_mode: str = "queue"
     source: str = "gui"
 
 

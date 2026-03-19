@@ -478,6 +478,33 @@ class JobHistoryPanelV2(ttk.Frame):
                     return item
         return {}
 
+    @staticmethod
+    def _iter_video_artifact_aggregates(metadata: dict[str, Any]) -> list[dict[str, Any]]:
+        aggregates: list[dict[str, Any]] = []
+
+        primary_artifact = metadata.get("video_primary_artifact")
+        if isinstance(primary_artifact, dict):
+            aggregates.append(dict(primary_artifact))
+
+        video_artifacts = metadata.get("video_artifacts")
+        if isinstance(video_artifacts, dict):
+            for aggregate in video_artifacts.values():
+                if isinstance(aggregate, dict):
+                    aggregates.append(dict(aggregate))
+
+        video_backend_results = metadata.get("video_backend_results")
+        if isinstance(video_backend_results, dict):
+            for aggregate in video_backend_results.values():
+                if isinstance(aggregate, dict):
+                    aggregates.append(dict(aggregate))
+
+        for key in ("svd_native_artifact", "animatediff_artifact"):
+            aggregate = metadata.get(key)
+            if isinstance(aggregate, dict):
+                aggregates.append(dict(aggregate))
+
+        return aggregates
+
     def _extract_primary_artifact(self, entry: JobHistoryEntry) -> dict[str, Any]:
         """Extract the best available canonical artifact record from a history result."""
         if not entry.result or not isinstance(entry.result, dict):
@@ -488,10 +515,7 @@ class JobHistoryPanelV2(ttk.Frame):
             return dict(direct_artifact)
 
         metadata = self._extract_result_metadata(entry)
-        for key in ("svd_native_artifact", "animatediff_artifact"):
-            aggregate = metadata.get(key)
-            if not isinstance(aggregate, dict):
-                continue
+        for aggregate in self._iter_video_artifact_aggregates(metadata):
             artifacts = aggregate.get("artifacts")
             if isinstance(artifacts, list):
                 for artifact in artifacts:
@@ -528,9 +552,8 @@ class JobHistoryPanelV2(ttk.Frame):
             if output_paths:
                 return str(len(output_paths))
         metadata = self._extract_result_metadata(entry)
-        for key in ("svd_native_artifact", "animatediff_artifact"):
-            aggregate = metadata.get(key)
-            if isinstance(aggregate, dict) and aggregate.get("count") is not None:
+        for aggregate in self._iter_video_artifact_aggregates(metadata):
+            if aggregate.get("count") is not None:
                 return str(aggregate["count"])
 
         # Try result first

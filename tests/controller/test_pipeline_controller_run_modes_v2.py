@@ -1,14 +1,7 @@
 # Subsystem: Controller
 # Role: Tests for run mode handling in V2 pipeline (PR-204C).
 
-"""Tests for run mode handling in PipelineController V2.
-
-These tests verify:
-1. Direct mode jobs are submitted with run_mode="direct"
-2. Queue mode jobs are submitted with run_mode="queue"
-3. Run mode is correctly derived from pipeline state
-4. JobService.submit_job_with_run_mode is used consistently
-"""
+"""Tests for queue-only run mode handling in PipelineController V2."""
 
 from __future__ import annotations
 
@@ -66,10 +59,6 @@ class FakeJobService:
 
     def submit_job_with_run_mode(self, job: Job) -> None:
         self.submitted_jobs.append((job, job.run_mode))
-
-    def submit_direct(self, job: Job) -> dict | None:
-        self.submitted_jobs.append((job, "direct"))
-        return {}
 
     def submit_queued(self, job: Job) -> None:
         self.submitted_jobs.append((job, "queue"))
@@ -205,8 +194,8 @@ def fake_job_service() -> FakeJobService:
 class TestRunModeEnforcement:
     """Test that run mode is correctly applied to jobs."""
 
-    def test_explicit_direct_mode(self) -> None:
-        """Explicit run_mode='direct' is respected."""
+    def test_explicit_direct_mode_is_coerced_to_queue(self) -> None:
+        """Explicit run_mode='direct' is normalized to queue."""
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
@@ -217,8 +206,8 @@ class TestRunModeEnforcement:
 
         assert result is True
         job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "direct"
-        assert mode == "direct"
+        assert job.run_mode == "queue"
+        assert mode == "queue"
 
     def test_explicit_queue_mode(self) -> None:
         """Explicit run_mode='queue' is respected."""
@@ -236,7 +225,7 @@ class TestRunModeEnforcement:
         assert mode == "queue"
 
     def test_default_uses_state_run_mode(self) -> None:
-        """When run_mode is None, uses pipeline_state.run_mode."""
+        """When run_mode is None, state is normalized to queue."""
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
@@ -249,7 +238,8 @@ class TestRunModeEnforcement:
 
         assert result is True
         job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "direct"
+        assert job.run_mode == "queue"
+        assert state.run_mode == "queue"
 
     def test_default_queue_when_no_state(self) -> None:
         """Defaults to queue mode when pipeline_state is not available."""
@@ -275,8 +265,8 @@ class TestRunModeEnforcement:
 class TestMultipleJobsSameRunMode:
     """Test that all jobs in a batch get the same run mode."""
 
-    def test_all_jobs_get_direct_mode(self) -> None:
-        """All jobs get direct mode when specified."""
+    def test_all_jobs_get_queue_mode_when_direct_requested(self) -> None:
+        """All jobs are normalized to queue even when direct is requested."""
         records = [
             make_normalized_job(job_id="j1"),
             make_normalized_job(job_id="j2"),
@@ -291,8 +281,8 @@ class TestMultipleJobsSameRunMode:
 
         assert len(fake_service.submitted_jobs) == 3
         for job, mode in fake_service.submitted_jobs:
-            assert job.run_mode == "direct"
-            assert mode == "direct"
+            assert job.run_mode == "queue"
+            assert mode == "queue"
 
     def test_all_jobs_get_queue_mode(self) -> None:
         """All jobs get queue mode when specified."""
@@ -402,5 +392,5 @@ class TestCanonicalStartPipeline:
 
         assert result is True
         job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "direct"
-        assert mode == "direct"
+        assert job.run_mode == "queue"
+        assert mode == "queue"

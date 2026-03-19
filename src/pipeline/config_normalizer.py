@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
+from src.pipeline.config_contract_v26 import extract_execution_config
+
 
 _COMMON_TOP_LEVEL_KEYS = {
     "prompt",
@@ -203,7 +205,8 @@ def normalize_stage_payload_config(
 def normalize_pipeline_config(config: Mapping[str, Any] | None) -> dict[str, Any]:
     """Normalize a pipeline config dict into the canonical nested stage shape."""
 
-    raw = _mapping_dict(config)
+    execution_config = extract_execution_config(config)
+    raw = _mapping_dict(execution_config or config)
     normalized = deepcopy(raw)
 
     def _merge_stage(section: str, extra_top_level_keys: set[str] | None = None) -> dict[str, Any]:
