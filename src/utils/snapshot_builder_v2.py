@@ -16,6 +16,7 @@ from src.pipeline.job_models_v2 import (
     NormalizedJobRecord,
     StageConfig,
 )
+from src.pipeline.config_contract_v26 import build_config_layers
 from src.queue.job_model import Job
 
 SCHEMA_VERSION = "1.0"
@@ -231,6 +232,8 @@ def _serialize_normalized_job(record: NormalizedJobRecord) -> dict[str, Any]:
         "aesthetic_text": record.aesthetic_text,
         "aesthetic_embedding": record.aesthetic_embedding,
         "extra_metadata": dict(record.extra_metadata or {}),
+        "intent_config": dict(record.intent_config or {}),
+        "backend_options": dict(record.backend_options or {}),
         "output_paths": list(record.output_paths),
         "thumbnail_path": record.thumbnail_path,
         "status": status_value,
@@ -308,6 +311,8 @@ def _deserialize_normalized_job(data: Mapping[str, Any]) -> NormalizedJobRecord 
         aesthetic_text=data.get("aesthetic_text"),
         aesthetic_embedding=data.get("aesthetic_embedding"),
         extra_metadata=dict(data.get("extra_metadata") or {}),
+        intent_config=dict(data.get("intent_config") or {}),
+        backend_options=dict(data.get("backend_options") or {}),
         output_paths=list(data.get("output_paths") or []),
         thumbnail_path=data.get("thumbnail_path"),
         completed_at=completed_at,
@@ -345,6 +350,11 @@ def build_job_snapshot(
         "recorded_at": timestamp,
         "job_id": job.job_id,
         "run_config": _normalize_run_config(run_config),
+        "config_layers": build_config_layers(
+            intent_config={**dict(normalized_job.intent_config or {}), **_normalize_run_config(run_config)},
+            execution_config=config,
+            backend_options=normalized_job.backend_options,
+        ).to_dict(),
         "normalized_job": _serialize_normalized_job(normalized_job),
         "effective_prompts": _extract_effective_prompts(config),
         "seed_info": {

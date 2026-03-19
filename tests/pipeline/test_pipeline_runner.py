@@ -136,6 +136,9 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
     assert result.metadata["animatediff_artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
     assert result.metadata["animatediff_artifact"]["manifest_paths"] == [str(tmp_path / "clip.json")]
     assert result.metadata["animatediff_artifact"]["artifacts"][0]["schema"] == "stablenew.artifact.v2.6"
+    assert result.metadata["video_artifacts"]["animatediff"]["backend_id"] == "animatediff"
+    assert result.metadata["video_primary_artifact"]["stage"] == "animatediff"
+    assert result.metadata["video_primary_artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
     assert result.metadata["video_backend_results"]["animatediff"]["backend_id"] == "animatediff"
     assert result.variants[0]["video_backend_id"] == "animatediff"
 
@@ -191,6 +194,9 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
     assert result.metadata["svd_native_artifact"]["count"] == 1
     assert result.metadata["svd_native_artifact"]["primary_path"] == str(output_video)
     assert result.metadata["svd_native_artifact"]["artifacts"][0]["schema"] == "stablenew.artifact.v2.6"
+    assert result.metadata["video_artifacts"]["svd_native"]["backend_id"] == "svd_native"
+    assert result.metadata["video_primary_artifact"]["stage"] == "svd_native"
+    assert result.metadata["video_primary_artifact"]["primary_path"] == str(output_video)
     assert result.metadata["video_backend_results"]["svd_native"]["backend_id"] == "svd_native"
     assert result.variants[0]["video_backend_id"] == "svd_native"
     assert record.thumbnail_path == str(preview)

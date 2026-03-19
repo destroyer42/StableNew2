@@ -46,7 +46,7 @@ def test_build_cli_njr_creates_canonical_stage_chain() -> None:
 
     assert record.job_id == "cli-run"
     assert record.images_per_prompt == 3
-    assert record.run_mode == "DIRECT"
+    assert record.run_mode == "QUEUE"
     assert record.queue_source == "RUN_NOW"
     assert [stage.stage_type for stage in record.stage_chain] == [
         "txt2img",

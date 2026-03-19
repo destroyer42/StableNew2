@@ -1,34 +1,48 @@
-"""Fake pipeline runner for journey tests (LEGACY).
-
-This fake uses legacy PipelineConfig for backward compatibility testing.
-Consider migrating to NJR-based fakes for new tests.
-"""
+"""Queue/NJR-aware fake pipeline runner for journey tests."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.controller.archive.pipeline_config_types import PipelineConfig
-
 
 @dataclass
 class RunCall:
-    config: PipelineConfig
+    record: Any
     options: dict[str, Any]
 
 
 @dataclass
 class FakePipelineRunner:
-    """Synchronous fake runner that records pipeline configs."""
+    """Synchronous fake runner that records NJR executions."""
 
     should_raise: bool = False
     run_calls: list[RunCall] = field(default_factory=list)
 
-    def run(self, config: PipelineConfig, cancel_token=None, log_fn=None) -> None:  # noqa: D401
-        """Record the call and optionally raise."""
+    def run_njr(self, record, cancel_token=None, run_plan=None, log_fn=None, checkpoint_callback=None):
         self.run_calls.append(
-            RunCall(config=config, options={"cancel_token": cancel_token, "log_fn": log_fn})
+            RunCall(
+                record=record,
+                options={
+                    "cancel_token": cancel_token,
+                    "run_plan": run_plan,
+                    "log_fn": log_fn,
+                    "checkpoint_callback": checkpoint_callback,
+                },
+            )
         )
         if self.should_raise:
             raise RuntimeError("Fake pipeline failure")
+
+        class _Result:
+            def to_dict(self_inner):
+                return {
+                    "success": True,
+                    "run_id": getattr(record, "job_id", "fake-run"),
+                    "variants": [],
+                    "learning_records": [],
+                    "metadata": {},
+                    "error": None,
+                }
+
+        return _Result()

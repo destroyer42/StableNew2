@@ -13,6 +13,7 @@ from src.pipeline.resolution_layer import (
     ResolvedPipelineConfig,
     ResolvedPrompt,
 )
+from src.pipeline.config_contract_v26 import build_config_layers
 
 if TYPE_CHECKING:
     from src.queue.job_model import Job
@@ -640,6 +641,8 @@ class NormalizedJobRecord:
     aesthetic_text: str | None = None
     aesthetic_embedding: str | None = None
     extra_metadata: dict[str, Any] = field(default_factory=dict)
+    intent_config: dict[str, Any] = field(default_factory=dict)
+    backend_options: dict[str, Any] = field(default_factory=dict)
     output_paths: list[str] = field(default_factory=list)
     thumbnail_path: str | None = None
     completed_at: datetime | None = None
@@ -908,6 +911,13 @@ class NormalizedJobRecord:
         snapshot["status"] = (
             self.status.value if hasattr(self.status, "value") else str(self.status)
         )
+        snapshot["intent_config"] = dict(self.intent_config or {})
+        snapshot["backend_options"] = dict(self.backend_options or {})
+        snapshot["config_layers"] = build_config_layers(
+            intent_config=self.intent_config,
+            execution_config=self.config,
+            backend_options=self.backend_options,
+        ).to_dict()
 
         if self.txt2img_prompt_info:
             snapshot["txt2img_prompt_info"] = asdict(self.txt2img_prompt_info)

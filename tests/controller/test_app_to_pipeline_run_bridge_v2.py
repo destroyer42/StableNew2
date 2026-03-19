@@ -62,12 +62,12 @@ def assert_last_run_config(
     return run_config
 
 
-def test_start_run_v2_passes_direct_mode_and_run_source():
+def test_start_run_v2_passes_queue_mode_and_run_source():
     controller = DummyAppController(FakePipelineController())
     controller.start_run_v2()
-    assert_last_run_config(controller, RunMode.DIRECT.value, RunSource.RUN_BUTTON.value)
-    assert controller.app_state.pipeline_state.run_mode == RunMode.DIRECT.value
-    assert controller.pipeline_controller._last_run_config["run_mode"] == RunMode.DIRECT.value
+    assert_last_run_config(controller, RunMode.QUEUE.value, RunSource.RUN_BUTTON.value)
+    assert controller.app_state.pipeline_state.run_mode == RunMode.QUEUE.value
+    assert controller.pipeline_controller._last_run_config["run_mode"] == RunMode.QUEUE.value
 
 
 def test_on_run_job_now_v2_passes_queue_mode_and_run_now_source():
@@ -97,7 +97,7 @@ def test_run_config_reports_prompt_pack_when_present():
     controller.app_state.job_draft.pack_id = "pack-xyz"
     controller.start_run_v2()
     run_config = assert_last_run_config(
-        controller, RunMode.DIRECT.value, RunSource.RUN_BUTTON.value
+        controller, RunMode.QUEUE.value, RunSource.RUN_BUTTON.value
     )
     assert run_config["prompt_source"] == "pack"
     assert run_config["prompt_pack_id"] == "pack-xyz"

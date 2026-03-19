@@ -474,7 +474,7 @@ AppController._execute_job MUST check for `_normalized_record` FIRST. If present
 
 All jobs created via `PipelineController._to_queue_job` MUST have `_normalized_record` attached.
 
-Legacy configuration fields no longer exist on Job objects created via JobBuilderV2; new jobs rely solely on NJR snapshots (PR-CORE1-C2). Historical configuration blobs live only in history entries and are rehydrated through `legacy_njr_adapter` when migrating old data.
+Legacy configuration fields no longer exist on Job objects created via JobBuilderV2; new jobs rely solely on NJR snapshots (PR-CORE1-C2). Historical configuration blobs are migration-only inputs and must be upgraded to canonical NJR-backed records before normal runtime use.
 
 **PR-CORE1-B4:** `PipelineRunner.run(config)` no longer exists. Tests (both unit and integration) must exercise `run_njr()` exclusively and may rely on the legacy adapter only when replaying archival configuration-only data.
 
@@ -540,7 +540,7 @@ trigger controller actions only
 - **Compatibility Suite Requirements:** Every schema change must ship with versioned fixtures under `tests/data/history_compat_v2/` and/or `tests/data/queue_compat_v2/`, and each fixture must be consumed by the compatibility suites (`tests/compat/test_history_compat_v2.py`, `tests/compat/test_queue_compat_v2.py`, `tests/compat/test_replay_compat_v2.py`). These tests prove that:
   - History entries from V2.0–V2.6 hydrate into valid `HistoryRecord` objects paired with canonical `NormalizedJobRecord` snapshots.
   - Queue snapshots from transitional versions round-trip through `QueueMigrationEngine` and always expose `queue_schema="2.6"`, `njr_snapshot`, and valid `job_id`s.
-  - Replay requests for old entries go through `legacy_njr_adapter`/`HistoryMigrationEngine` before hitting the unified runner path, preventing regressions in `PipelineController.replay_job_from_history`.
+  - Replay requests for old entries must pass through the sanctioned migration path before hitting the unified runner path, preventing regressions in `PipelineController.replay_job_from_history`.
 
 7. DebugHub Integration Requirements
 
@@ -654,7 +654,7 @@ If any fail → PR rejected.
 10. Example: Valid PR Checklist
 [X] All builder logic passes unit tests
 [X] New sweep parameters validated
-[X] Prompt resolves through PromptPack-only path
+[X] Prompt resolves through the canonical StableNew-owned intent path
 [X] Preview jobs refresh when PromptPack entries exist and their NormalizedJobRecord fields (prompt/model) match the pack data
 [X] NJRs created via JobBuilderV2
 [X] No GUI prompt code added

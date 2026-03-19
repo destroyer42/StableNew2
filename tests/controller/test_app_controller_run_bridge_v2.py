@@ -40,13 +40,15 @@ def controller() -> AppController:
     return DummyController()
 
 
-def test_start_run_v2_sets_direct_mode_and_source(controller: AppController) -> None:
+def test_start_run_v2_sets_queue_mode_and_source(controller: AppController) -> None:
     controller.start_run_v2()
 
     run_config = getattr(controller, "_last_run_config", {})
-    assert run_config.get("run_mode") == RunMode.DIRECT.value
+    assert run_config.get("run_mode") == RunMode.QUEUE.value
     assert run_config.get("source") == RunSource.RUN_BUTTON.value
-    assert controller.app_state.pipeline_state.run_mode == RunMode.DIRECT.value
+    assert run_config["config_layers"]["intent_config"]["run_mode"] == RunMode.QUEUE.value
+    assert run_config["config_layers"]["intent_config"]["source"] == RunSource.RUN_BUTTON.value
+    assert controller.app_state.pipeline_state.run_mode == RunMode.QUEUE.value
 
 
 def test_on_run_job_now_v2_sets_queue_mode(controller: AppController) -> None:
@@ -75,3 +77,5 @@ def test_run_config_detects_prompt_pack(controller: AppController) -> None:
     run_config = getattr(controller, "_last_run_config", {})
     assert run_config.get("prompt_source") == "pack"
     assert run_config.get("prompt_pack_id") == "pack-123"
+    assert run_config["config_layers"]["intent_config"]["prompt_source"] == "pack"
+    assert run_config["config_layers"]["intent_config"]["prompt_pack_id"] == "pack-123"

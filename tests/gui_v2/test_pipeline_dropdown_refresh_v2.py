@@ -29,7 +29,7 @@ class DummyPipelineController:
         return []
 
     def get_current_config(self):
-        return {"run_mode": "direct"}
+        return {"run_mode": "queue"}
 
 
 @pytest.mark.gui

@@ -155,7 +155,7 @@ class SidebarPanelV2(ttk.Frame):
             "adetailer": tk.BooleanVar(value=adetailer_default),
             "upscale": tk.BooleanVar(value=False),  # Fixed: was True, should be False
         }
-        self.run_mode_var = tk.StringVar(value="direct")
+        self.run_mode_var = tk.StringVar(value="queue")
         self.run_scope_var = tk.StringVar(value="full")
 
         self.columnconfigure(0, weight=1)
@@ -1029,24 +1029,13 @@ class SidebarPanelV2(ttk.Frame):
 
     def _build_run_mode_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
-        rb1 = ttk.Radiobutton(
+        self.run_mode_var.set("queue")
+        label = ttk.Label(
             frame,
-            text="Direct",
-            value="direct",
-            variable=self.run_mode_var,
-            command=self._on_run_mode_change,
-            style="Dark.TRadiobutton",
+            text="Queue-only execution",
+            style="Dark.TLabel",
         )
-        rb1.grid(row=0, column=0, sticky="w", pady=2)
-        rb2 = ttk.Radiobutton(
-            frame,
-            text="Queue",
-            value="queue",
-            variable=self.run_mode_var,
-            command=self._on_run_mode_change,
-            style="Dark.TRadiobutton",
-        )
-        rb2.grid(row=1, column=0, sticky="w", pady=2)
+        label.grid(row=0, column=0, sticky="w", pady=(0, 2))
         return frame
 
     def _build_run_scope_section(self, parent: ttk.Frame) -> ttk.Frame:

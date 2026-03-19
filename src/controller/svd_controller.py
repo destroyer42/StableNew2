@@ -124,7 +124,6 @@ class SVDController:
             requested_job_label="SVD Img2Vid",
             explicit_output_dir=str(output_dir),
             tags=["svd_native"],
-            allow_legacy_fallback=False,
         )
         job_ids = job_service.enqueue_njrs([njr], request)
         if not job_ids:

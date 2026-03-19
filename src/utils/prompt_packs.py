@@ -71,7 +71,7 @@ def build_run_config_from_prompt_pack(
         prompt_pack_id=base_config.prompt_pack_id if base_config else None,
         prompt_keys=list(base_config.prompt_keys) if base_config else [],
         prompt_payload=dict(base_config.prompt_payload) if base_config else {},
-        run_mode=base_config.run_mode if base_config else "direct",
+        run_mode=base_config.run_mode if base_config else "queue",
         source=base_config.source if base_config else "gui",
     )
 
@@ -108,7 +108,7 @@ def build_run_config_for_manual_prompt(
         prompt_pack_id=base_config.prompt_pack_id if base_config else None,
         prompt_keys=list(base_config.prompt_keys) if base_config else [],
         prompt_payload=dict(base_config.prompt_payload) if base_config else {},
-        run_mode=base_config.run_mode if base_config else "direct",
+        run_mode=base_config.run_mode if base_config else "queue",
         source=base_config.source if base_config else "gui",
     )
 

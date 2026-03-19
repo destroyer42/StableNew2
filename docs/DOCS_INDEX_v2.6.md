@@ -1,12 +1,13 @@
-﻿DOCS_INDEX_v2.6.md
+DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-16
+Updated: 2026-03-18
 
 0. Purpose
 
-This index defines the active document set for StableNew v2.6 and identifies which files are canonical, operational, or archived.
+This index defines the active document set for StableNew v2.6 and identifies
+which files are canonical, operational, backlog-driving, or archived.
 
 1. Canonical Document Hierarchy
 
@@ -16,41 +17,36 @@ This index defines the active document set for StableNew v2.6 and identifies whi
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
 
-1.2 Tier 2 - Canonical Specification Layer
+1.2 Tier 2 - Canonical Execution, Testing, And Workflow Specs
 
 - `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
 - `docs/Builder Pipeline Deep-Dive (v2.6).md`
 - `docs/DEBUG HUB v2.6.md`
+- `docs/ARCHITECTURE_ENFORCEMENT_CHECKLIST_v2.6.md`
 - `docs/StableNew_Coding_and_Testing_v2.6.md`
 - `docs/PR_TEMPLATE_v2.6.md`
+- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+- `docs/Canonical_Document_Ownership_v2.6.md`
 - `AGENTS.md`
 - `.github/copilot-instructions.md`
-- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
 
-1.2a Tier 2 Meta Documents
+1.3 Tier 3 - Active Migration And Expansion Backlogs
 
-- `docs/Canonical_Document_Ownership_v2.6.md` — ownership table, precedence, archive rules, and contradiction checklist
+- `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
+- `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 
-1.3 Tier 3 - Subsystem Specifications
+These documents sequence active work but do not outrank Tier 1 or Tier 2.
 
-- `docs/Learning_System_Spec_v2.6.md` — active v2.6 learning subsystem spec
-- `docs/Randomizer_Spec_v2.5.md` — retained v2.5; no v2.6 replacement exists yet (see Canonical_Document_Ownership_v2.6.md §6)
-- `docs/Cluster_Compute_Spec_v2.5.md` — retained v2.5; no v2.6 replacement exists yet (see Canonical_Document_Ownership_v2.6.md §6)
+1.4 Tier 4 - Subsystem Specifications
+
+- `docs/Learning_System_Spec_v2.6.md`
 - `docs/Image_Metadata_Contract_v2.6.md`
-- `docs/Movie_Clips_Workflow_v2.6.md` — Movie Clips MVP tab and service boundary
-- `docs/GUI_Ownership_Map_v2.6.md` — file-placement rules for `src/gui/` vs `src/gui_v2/`; migration boundary
+- `docs/Movie_Clips_Workflow_v2.6.md`
+- `docs/GUI_Ownership_Map_v2.6.md`
+- `docs/Randomizer_Spec_v2.5.md`
+- `docs/Cluster_Compute_Spec_v2.5.md`
 
-1.4 Tier 4 - Implementation And PR Specs
-
-- `docs/OpenSpec/`
-- `docs/pr_templates/`
-- `docs/PR_MAR26/`
-- `docs/D-VIDEO-004-AnimateDiff-Current-State-Discovery.md` — current AnimateDiff Phase 1 discovery baseline
-- `docs/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md` — current approval-target PR spec for AnimateDiff runtime work
-- `docs/D-VIDEO-005-SVD-Native-Tab-Discovery.md` — current discovery baseline for native SVD img2vid tab work
-- `docs/OpenSpec/PR-CORE-VIDEO-005-SVD-Phase-1-Native-Tab.md` — current approval-target PR spec for SVD Phase 1 native tab work
-
-These documents implement or sequence canonical work but do not outrank Tiers 1-2.
+The retained v2.5 docs above remain reference specs only until replaced.
 
 1.5 Tier 5 - Testing Infrastructure
 
@@ -61,71 +57,55 @@ These documents implement or sequence canonical work but do not outrank Tiers 1-
 
 1.6 Tier 6 - Operator And Reference Guides
 
-- `README.md` - top-level project entrypoint; must align with v2.6 canonical docs
+- `README.md`
 - `docs/agentic/USAGE_GUIDE.md`
 - `.github/PULL_REQUEST_TEMPLATE.md`
-- `.github/workflows/copilot-setup-steps.yml`
 
-These support development but do not override canonical docs.
+These support development and operations but do not override the canonical
+documents above.
 
-2. Active Agent Instruction Surface
+2. Canonical Reading Order
+
+Read in this order:
+
+1. `README.md`
+2. `docs/ARCHITECTURE_v2.6.md`
+3. `docs/GOVERNANCE_v2.6.md`
+4. `docs/StableNew Roadmap v2.6.md`
+5. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+6. `docs/StableNew_Coding_and_Testing_v2.6.md`
+7. `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
+8. `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
+
+3. Duplicate And Redirect Rules
+
+- `docs/archive/superseded/StableNew_Architecture_v2.6.md` is not an active
+  architecture source.
+- The only canonical architecture document is `docs/ARCHITECTURE_v2.6.md`.
+- Any duplicate architecture summary must be archived or reduced to a redirect note.
+
+4. Root Folder Rule
+
+- `docs/` root is reserved for canonical active docs only.
+- Backlogs and draft PR materials belong under `docs/PR_Backlog/`.
+- Completed PR records belong under `docs/CompletedPR/`.
+- Historical, superseded, discovery, and reference-only materials belong under
+  `docs/archive/`.
+
+5. Active Agent Instruction Surface
 
 Active machine-facing guidance is catalogued in `.github/INSTRUCTION_SURFACE.md`.
-That manifest is the single source of truth for what is active, what is archived,
-and what the precedence order is. The files themselves live at:
+That manifest is the single source of truth for what is active, what is
+archived, and what precedence order applies.
 
-- `AGENTS.md`
-- `.github/copilot-instructions.md`
-- `.github/agents/`
-- `.github/instructions/`
+6. Maintenance Rules
 
-Archived agent or SOP files under `docs/archive/` are reference-only.
-
-3. Required Reading Order
-
-3.1 Foundations
-
-- `README.md`
-- `docs/ARCHITECTURE_v2.6.md`
-- `docs/GOVERNANCE_v2.6.md`
-- `docs/StableNew Roadmap v2.6.md`
-
-3.2 Execution Path
-
-- `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
-- `docs/Builder Pipeline Deep-Dive (v2.6).md`
-- `docs/DEBUG HUB v2.6.md`
-- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
-
-3.3 Coding And PR Workflow
-
-- `docs/StableNew_Coding_and_Testing_v2.6.md` — includes §8 Runtime Artifact Policy (PR-CLEANUP-LEARN-045): `data/learning/experiments/`, `data/photo_optimize/assets/`, `state/` are gitignored runtime artifacts; `tests/fixtures/` is for committed static fixtures only
-- `docs/PR_TEMPLATE_v2.6.md`
-- `AGENTS.md`
-- `.github/copilot-instructions.md`
-
-3.4 Operational Usage
-
-- `docs/agentic/USAGE_GUIDE.md`
-- `.github/PULL_REQUEST_TEMPLATE.md`
-
-4. Archival Rules
-
-The following must be archived rather than left active:
-
-- duplicate `AGENTS.md` copies outside the chosen active source of truth
-- stale Copilot/Codex SOP files
-- duplicate or one-off custom agent profiles
-- docs that reference retired architecture, retired file paths, or missing canonical docs
-
-Archive location for the 2026 agentic refresh:
-
-- `docs/archive/agents/2026-agentic-refresh/`
-
-5. Maintenance Rules
-
-- If active agent file locations change, update this index in the same PR.
-- If canonical governance changes, update `AGENTS.md` and the executor brief together.
-- If the top-level runtime story changes, update `README.md` in the same PR as the
-  canonical docs it summarizes.
-- If a document is only historical, move it to `docs/archive/` rather than leaving it active.
+- If the runtime story changes, update `README.md` in the same PR.
+- If canonical architecture or roadmap truth changes, update Tier 1 docs in the
+  same PR.
+- If migration order changes, update
+  `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md` in the same
+  PR.
+- If Comfy/video sequencing changes, update
+  `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md` in the same PR.
+- Historical documents should be archived, not left active.

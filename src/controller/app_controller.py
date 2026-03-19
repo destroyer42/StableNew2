@@ -33,7 +33,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import Any, TypedDict
 
 from src.api.client import SDWebUIClient
 from src.api.webui_api import WebUIAPI
@@ -73,9 +73,9 @@ from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
 )
-
-if TYPE_CHECKING:  # pragma: no cover - type-only import
-    from src.controller.archive.pipeline_config_types import PipelineConfig
+from src.controller.app_controller_services.run_submission_service import (
+    QueueRunSubmissionService,
+)
 import logging
 import uuid
 
@@ -132,7 +132,6 @@ class LifecycleState(Enum):
 
 
 class RunMode(str, Enum):
-    DIRECT = "direct"
     QUEUE = "queue"
 
 
@@ -183,6 +182,28 @@ class RunConfig:
     hires_use_base_model_for_hires: bool = True
     # Future fields:
     # matrix_config, adetailer_config, video_config, etc.
+
+
+@dataclass(frozen=True)
+class DeprecatedPipelineConfigSnapshot:
+    """Deprecated config snapshot retained only for non-runtime helpers/tests."""
+
+    prompt: str
+    negative_prompt: str
+    model: str
+    sampler: str
+    width: int
+    height: int
+    steps: int
+    cfg_scale: float
+    pack_name: str | None = None
+    preset_name: str | None = None
+    lora_settings: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    refiner_enabled: bool = False
+    refiner_model_name: str = ""
+    refiner_switch_at: float = 0.8
+    hires_fix: dict[str, Any] | None = None
 
 
 @dataclass
@@ -343,6 +364,7 @@ class AppController:
         self._ui_history_dirty = False
         self._ui_debounce_pending = False
         self._ui_debounce_delay_ms = 150  # Coalesce updates within 150ms window
+        self._preview_refresh_request_id = 0
         
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
@@ -696,7 +718,7 @@ class AppController:
             if self._ui_preview_dirty:
                 self._ui_preview_dirty = False
                 try:
-                    self._refresh_preview_from_state()
+                    self._refresh_preview_from_state_async()
                 except Exception as exc:
                     logger.exception(f"[AppController] Error refreshing preview: {exc}")
             
@@ -929,50 +951,18 @@ class AppController:
         """
         Preferred entrypoint for the canonical controller pipeline path.
         """
-        self._ensure_run_mode_default("run")
-        return self._start_run_v2(RunMode.DIRECT, RunSource.RUN_BUTTON)
+        self._get_run_submission_service().ensure_queue_run_mode(self.app_state, "run")
+        return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_BUTTON)
 
     def _ensure_run_mode_default(self, button_source: str) -> None:
-        pipeline_state = getattr(self.app_state, "pipeline_state", None)
-        if pipeline_state is None or not hasattr(pipeline_state, "run_mode"):
-            return
-        current = (getattr(pipeline_state, "run_mode", None) or "").strip().lower()
-        if current in {"direct", "queue"}:
-            return
-        if button_source == "run":
-            pipeline_state.run_mode = "direct"
-            self._append_log("[controller] Defaulting run_mode to 'direct' for Run button.")
-        elif button_source == "run_now":
-            pipeline_state.run_mode = "queue"
-            self._append_log("[controller] Defaulting run_mode to 'queue' for Run Now button.")
-        elif button_source == "add_to_queue":
-            pipeline_state.run_mode = "queue"
-            self._append_log("[controller] Defaulting run_mode to 'queue' for Add to Queue button.")
+        self._get_run_submission_service().ensure_queue_run_mode(self.app_state, button_source)
 
     def _build_run_config(self, mode: RunMode, source: RunSource) -> RunConfigDict:
-        cfg: RunConfigDict = {"run_mode": mode.value, "source": source.value}
-        prompt_source = "manual"
-        prompt_pack_id = ""
-        job_draft = getattr(self.app_state, "job_draft", None)
-        if job_draft is not None:
-            pack_id = getattr(job_draft, "pack_id", "") or ""
-            if pack_id:
-                prompt_source = "pack"
-                prompt_pack_id = pack_id
-        cfg["prompt_source"] = prompt_source
-        if prompt_pack_id:
-            cfg["prompt_pack_id"] = prompt_pack_id
-        pipeline_state = getattr(self.app_state, "pipeline_state", None)
-        if pipeline_state is not None:
-            snapshot = {
-                "run_mode": getattr(pipeline_state, "run_mode", None),
-                "stage_txt2img_enabled": getattr(pipeline_state, "stage_txt2img_enabled", None),
-                "stage_img2img_enabled": getattr(pipeline_state, "stage_img2img_enabled", None),
-                "stage_upscale_enabled": getattr(pipeline_state, "stage_upscale_enabled", None),
-                "stage_adetailer_enabled": getattr(pipeline_state, "stage_adetailer_enabled", None),
-            }
-            cfg["pipeline_state_snapshot"] = snapshot
-        return cfg
+        return self._get_run_submission_service().build_run_config(
+            self.app_state,
+            mode=mode.value,
+            source=source.value,
+        )
 
     def on_run_now(self) -> Any:
         """Explicit event API: run pipeline now via the controller."""
@@ -1184,35 +1174,20 @@ class AppController:
         return first.get("positive", "").strip(), first.get("negative", "").strip()
 
     def _start_run_v2(self, mode: RunMode, source: RunSource) -> Any:
-        pipeline_state = getattr(self.app_state, "pipeline_state", None)
-        if pipeline_state is not None:
-            try:
-                current_mode = getattr(pipeline_state, "run_mode", None)
-                if not current_mode:
-                    pipeline_state.run_mode = mode.value
-            except Exception:
-                pass
-        run_config = self._build_run_config(mode, source)
-        self._last_run_config = dict(run_config)
-        controller = getattr(self, "pipeline_controller", None)
-        if controller is None:
-            self._append_log("[controller] _start_run_v2 aborted: pipeline_controller is unavailable.")
-            return False
-        try:
-            pytest_flag = os.environ.get("PYTEST_CURRENT_TEST")
-            if not pytest_flag:
-                os.environ.pop("PYTEST_CURRENT_TEST", None)
-            else:
-                self._invoke_mock_generate_for_tests()
-            self._capture_stage_plan_for_tests(controller)
-            self._append_log(
-                f"[controller] _start_run_v2 via PipelineController.start_pipeline "
-                f"(mode={mode.value}, source={source.value})"
-            )
-            return controller.start_pipeline(run_config=run_config)
-        except Exception as exc:  # noqa: BLE001
-            self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
-            return False
+        return self._get_run_submission_service().start_run(
+            app_state=self.app_state,
+            pipeline_controller=getattr(self, "pipeline_controller", None),
+            mode=mode.value,
+            source=source.value,
+            set_last_run_config=lambda cfg: setattr(self, "_last_run_config", cfg),
+        )
+
+    def _get_run_submission_service(self) -> QueueRunSubmissionService:
+        return QueueRunSubmissionService(
+            append_log=self._append_log,
+            capture_stage_plan_for_tests=self._capture_stage_plan_for_tests,
+            invoke_mock_generate_for_tests=self._invoke_mock_generate_for_tests,
+        )
 
     def on_run_job_now_v2(self) -> Any:
         """
@@ -3173,14 +3148,7 @@ class AppController:
     # ------------------------------------------------------------------
 
     def run_pipeline(self) -> Any:
-        """Public, synchronous pipeline entrypoint used by journeys and tests.
-
-        This method:
-        - Validates the current pipeline config.
-        - Builds the PipelineConfig.
-        - Delegates to PipelineController for execution.
-        - Updates lifecycle state and returns the result.
-        """
+        """Deprecated public entrypoint that now resolves to queue-backed run flow."""
         if self.state.lifecycle == LifecycleState.RUNNING:
             self._append_log(
                 "[controller] run_pipeline requested, but pipeline is already running."
@@ -3188,9 +3156,9 @@ class AppController:
             return None
 
         self._append_log(
-            "[controller] run_pipeline is deprecated; use pipeline_controller.start_pipeline_v2."
+            "[controller] run_pipeline is deprecated; normalizing to the queue-backed start_run_v2 flow."
         )
-        return None
+        return self.start_run_v2()
 
     def _run_via_pipeline_controller(self) -> Any:
         """Delegate pipeline execution to PipelineController for modern V2 stack."""
@@ -3199,7 +3167,7 @@ class AppController:
 
         raise RuntimeError("run_pipeline is disabled in NJR-only mode")
 
-    def _execute_pipeline_via_runner(self, pipeline_config: PipelineConfig) -> Any:
+    def _execute_pipeline_via_runner(self, pipeline_config: Any) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy pipeline_config execution removed.
 
         Execute pipeline using the traditional PipelineRunner approach.
@@ -3212,7 +3180,7 @@ class AppController:
         """
         raise RuntimeError("Legacy runner path is disabled in NJR-only mode")
 
-    def _run_pipeline_from_tab(self, pipeline_tab: Any, pipeline_config: PipelineConfig) -> Any:
+    def _run_pipeline_from_tab(self, pipeline_tab: Any, pipeline_config: Any) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy tab-based pipeline_config execution.
 
         This method routed execution based on pipeline_tab flags. No longer used
@@ -3315,7 +3283,7 @@ class AppController:
             "upscaled": upscaled_results,
         }
 
-    def _run_pipeline_via_runner_only(self, pipeline_config: PipelineConfig) -> Any:
+    def _run_pipeline_via_runner_only(self, pipeline_config: Any) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy fallback execution - NO LONGER USED.
 
         As of PR-CORE1-B2, all jobs execute via NJR-only path. This method existed
@@ -3382,20 +3350,9 @@ class AppController:
     def on_run_clicked(self) -> None:
         """
         Called when the user presses RUN.
-
-        In threaded mode:
-        - Spawns a worker thread to run the pipeline with a CancelToken.
-
-        In synchronous mode (threaded=False, useful for tests):
-        - Runs the pipeline stub synchronously.
         """
         if self.state.lifecycle == LifecycleState.RUNNING:
             self._append_log("[controller] Run requested, but pipeline is already running.")
-            return
-
-        # If there was a previous worker, ensure it is not still alive (best-effort)
-        if self._worker_thread is not None and self._worker_thread.is_alive():
-            self._append_log("[controller] Previous worker still running; refusing new run.")
             return
 
         self._append_log("[controller] Run clicked - gathering config.")
@@ -3404,30 +3361,16 @@ class AppController:
         if not is_valid:
             self._append_log(f"[controller] Pipeline validation failed: {message}")
             return
-
-        self._cancel_token = CancelToken()
-        self._set_lifecycle(LifecycleState.RUNNING)
-
-        if self.threaded:
-            # PR-THREAD-001: Use ThreadRegistry for pipeline worker
-            self._worker_thread = self._spawn_tracked_thread(
-                target=self._run_pipeline_thread,
-                args=(self._cancel_token,),
-                name="Pipeline-Worker",
-                daemon=False,
-                purpose="Run pipeline execution in background thread"
-            )
-        else:
-            # Synchronous run (for tests and journeys) via worker routine directly
-            self._run_pipeline_thread(self._cancel_token)
+        self._ensure_run_mode_default("run")
+        self.start_run_v2()
 
     def start_run(self) -> Any:
         """Legacy-friendly entrypoint used by older harnesses."""
         if self.state.lifecycle == LifecycleState.RUNNING:
             self._append_log("[controller] start_run requested while already running.")
             return None
-        self._append_log("[controller] start_run invoking run_pipeline.")
-        return self.run_pipeline()
+        self._append_log("[controller] start_run normalizing to queue-backed start_run_v2.")
+        return self.start_run_v2()
 
     def on_launch_webui_clicked(self) -> None:
         if not self.webui_process_manager:
@@ -3445,42 +3388,16 @@ class AppController:
         self._update_webui_state("connected" if healthy else "error")
 
     def _run_pipeline_thread(self, cancel_token: CancelToken) -> None:
-        """Execute pipeline with proper cleanup.
-        
-        PR-MEMORY-001: Clears cancel token after completion to prevent memory leaks.
-        """
-        try:
-            pipeline_config = self.build_pipeline_config_v2()
-            self._append_log_threadsafe("[controller] Starting pipeline execution.")
-            executor_config = None
-            if hasattr(self.pipeline_runner, "_build_executor_config"):
-                executor_config = self.pipeline_runner._build_executor_config(pipeline_config)
-                self._cache_last_run_payload(executor_config, pipeline_config)
-            self.pipeline_runner.run(pipeline_config, cancel_token, self._append_log_threadsafe)
-
-            if cancel_token.is_cancelled():
-                self._append_log_threadsafe("[controller] Pipeline ended due to cancel (stub).")
-            else:
-                self._append_log_threadsafe("[controller] Pipeline completed successfully.")
-
-            if cancel_token.needs_stop_to_finish() and not cancel_token.is_cancelled():
-                self._append_log_threadsafe(
-                    "[controller] Pipeline awaiting explicit stop to finish (stub)."
-                )
-                return
-
-            cancel_token.clear_stop_requirement()
-            self._set_lifecycle_threadsafe(LifecycleState.IDLE)
-        except Exception as exc:  # noqa: BLE001
-            self._append_log_threadsafe(f"[controller] Pipeline error: {exc!r}")
-            self._set_lifecycle_threadsafe(LifecycleState.ERROR, error=str(exc))
-            cancel_token.clear_stop_requirement()
-        finally:
-            # PR-MEMORY-001: Clear cancel token reference to prevent memory leaks
-            self._cancel_token = None
+        """Retired legacy helper kept only to fail loudly if called."""
+        cancel_token.cancel()
+        cancel_token.clear_stop_requirement()
+        self._cancel_token = None
+        raise RuntimeError(
+            "Legacy pipeline thread path is disabled; use the queue-backed start_run_v2 flow."
+        )
 
     def _cache_last_run_payload(
-        self, executor_config: dict[str, Any], pipeline_config: PipelineConfig
+        self, executor_config: dict[str, Any], pipeline_config: DeprecatedPipelineConfigSnapshot
     ) -> None:
         """DEPRECATED (PR-CORE1-12): Legacy payload caching for pipeline_config.
 
@@ -4312,39 +4229,22 @@ class AppController:
             "batch_size": 1,
         }
 
-    def build_pipeline_config_v2(self) -> PipelineConfig:
+    def build_pipeline_config_v2(self) -> DeprecatedPipelineConfigSnapshot:
         """DEPRECATED (PR-CORE1-12): Legacy pipeline_config builder.
 
         Build the pipeline configuration structure that drives the runner.
 
-        NOTE: This is still called internally by PipelineController during NJR
-        construction, but MUST NOT be used for execution payloads. Will be
-        refactored in future cleanup to remove PipelineConfig dependency.
+        NOTE: Retained only for deprecated helper/test surfaces. Execution no
+        longer routes through this shape.
         """
         return self._build_pipeline_config()
 
-    def _build_pipeline_config(self) -> PipelineConfig:
+    def _build_pipeline_config(self) -> DeprecatedPipelineConfigSnapshot:
         """DEPRECATED (PR-CORE1-12): Internal pipeline_config builder.
 
         NOTE: Retained only for deprecated config/profile helpers and tests.
-        Controller execution no longer routes through PipelineConfig.
-
-        DO NOT use this for execution payloads.
+        Controller execution no longer routes through this shape.
         """
-        # Compat import: PipelineConfig was moved to archive types in PR-CORE1-D22D.
-        # Import at runtime only to avoid breaking app startup in environments
-        # where the archive module may be unavailable. If the symbol is missing
-        # this method will raise a clear error when called (tests expect it).
-        try:
-            from src.controller.archive.pipeline_config_types import PipelineConfig  # type: ignore
-        except Exception:
-            PipelineConfig = None  # type: ignore
-
-        if PipelineConfig is None:
-            raise NameError(
-                "PipelineConfig is not available at runtime. This method is deprecated; "
-                "ensure src.controller.archive.pipeline_config_types.PipelineConfig is present for tests."
-            )
         if (not getattr(self, "packs", None)) and getattr(self, "_packs_dir", None):
             try:
                 self.packs = discover_packs(self._packs_dir)
@@ -4375,7 +4275,7 @@ class AppController:
             metadata["adetailer_enabled"] = bool(self.app_state.adetailer_enabled)
             metadata["adetailer"] = dict(self.app_state.adetailer_config or {})
 
-        return PipelineConfig(
+        return DeprecatedPipelineConfigSnapshot(
             prompt=prompt,
             negative_prompt=str(current.get("negative_prompt", "")),
             model=str(current["model"]),
@@ -5560,7 +5460,7 @@ class AppController:
         negative = (getattr(self.app_state, "negative_prompt", "") or "").strip()
         self.app_state.add_job_draft_part(prompt, negative, estimated_images=1)
         self._append_log("[controller] Added current prompt pair to job draft")
-        self._refresh_preview_from_state()
+        self._mark_ui_dirty(preview=True)
 
     def _refresh_preview_from_state(self) -> None:
         """Refresh preview records using the current AppState/job draft."""
@@ -5586,9 +5486,11 @@ class AppController:
         controller = getattr(self, "pipeline_controller", None)
         if controller is None:
             return
-        refresh_fn = getattr(controller, "refresh_preview_from_state", None)
-        if not callable(refresh_fn):
+        getter = getattr(controller, "get_preview_jobs", None)
+        if not callable(getter):
             return
+        self._preview_refresh_request_id += 1
+        request_id = self._preview_refresh_request_id
 
         # PR-HB-002: Set operation label for diagnostics
         self.current_operation_label = "Refreshing preview from state"
@@ -5596,21 +5498,26 @@ class AppController:
 
         def _worker():
             try:
-                # Heavy work happens here (off UI thread)
-                refresh_fn()
+                records = list(getter() or [])
             except Exception as exc:
                 logger.exception(f"[AppController] Error in _refresh_preview_from_state_async: {exc}")
                 self._append_log(f"[controller] Refresh preview error: {exc!r}")
+                records = None
             finally:
-                # Clear operation label
-                def _clear_label():
+                def _apply():
+                    if request_id != self._preview_refresh_request_id:
+                        return
+                    if records is not None and self.app_state is not None:
+                        setter = getattr(self.app_state, "set_preview_jobs", None)
+                        if callable(setter):
+                            setter(records)
                     self.current_operation_label = None
                     self.last_ui_action = None
 
                 if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
-                    self.main_window.run_in_main_thread(_clear_label)
+                    self.main_window.run_in_main_thread(_apply)
                 else:
-                    _clear_label()
+                    _apply()
 
         # PR-HB-002: Use tracked thread for clean shutdown
         self._spawn_tracked_thread(
@@ -6090,14 +5997,60 @@ class AppController:
                 return payload
         return {}
 
+    @staticmethod
+    def _extract_video_artifact_summary(
+        metadata: dict[str, Any],
+        result: dict[str, Any] | None,
+        *,
+        preferred_stage: str | None = None,
+    ) -> dict[str, Any] | None:
+        preferred = str(preferred_stage or "").strip()
+
+        video_artifacts = metadata.get("video_artifacts")
+        if isinstance(video_artifacts, dict):
+            if preferred and isinstance(video_artifacts.get(preferred), dict):
+                return dict(video_artifacts[preferred])
+            for aggregate in video_artifacts.values():
+                if isinstance(aggregate, dict):
+                    return dict(aggregate)
+
+        primary_artifact = metadata.get("video_primary_artifact")
+        if isinstance(primary_artifact, dict):
+            if not preferred or str(primary_artifact.get("stage") or "").strip() == preferred:
+                return dict(primary_artifact)
+
+        video_backend_results = metadata.get("video_backend_results")
+        if isinstance(video_backend_results, dict):
+            if preferred and isinstance(video_backend_results.get(preferred), dict):
+                return dict(video_backend_results[preferred])
+            for aggregate in video_backend_results.values():
+                if isinstance(aggregate, dict):
+                    return dict(aggregate)
+
+        legacy_keys: list[str] = []
+        if preferred:
+            legacy_keys.append(f"{preferred}_artifact")
+        legacy_keys.extend(["svd_native_artifact", "animatediff_artifact"])
+        seen: set[str] = set()
+        for key in legacy_keys:
+            if key in seen:
+                continue
+            seen.add(key)
+            aggregate = metadata.get(key)
+            if isinstance(aggregate, dict):
+                return dict(aggregate)
+            if isinstance(result, dict) and isinstance(result.get(key), dict):
+                return dict(result[key])
+        return None
+
     def _build_svd_history_record(self, entry: Any) -> dict[str, Any] | None:
         metadata = self._extract_history_result_metadata(entry)
         result = getattr(entry, "result", None)
-        artifact = None
-        if isinstance(metadata.get("svd_native_artifact"), dict):
-            artifact = metadata["svd_native_artifact"]
-        elif isinstance(result, dict) and isinstance(result.get("svd_native_artifact"), dict):
-            artifact = result["svd_native_artifact"]
+        artifact = self._extract_video_artifact_summary(
+            metadata,
+            result if isinstance(result, dict) else None,
+            preferred_stage="svd_native",
+        )
 
         variants = []
         if isinstance(result, dict):

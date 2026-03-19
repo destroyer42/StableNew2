@@ -617,7 +617,6 @@ class ReprocessJobBuilder:
             tags=["reprocess", str(source or "reprocess")],
             requested_job_label=requested_job_label or "Reprocess",
             max_njr_count=max(1, len(njrs)),
-            allow_legacy_fallback=False,
         )
 
 

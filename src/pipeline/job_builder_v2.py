@@ -22,6 +22,7 @@ from copy import deepcopy
 from typing import Any
 
 from src.pipeline.config_normalizer import normalize_pipeline_config
+from src.pipeline.config_contract_v26 import canonicalize_intent_config, derive_backend_options
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
     BatchSettings,
@@ -246,6 +247,19 @@ class JobBuilderV2:
                     "selected_row_ids": list(run_request.selected_row_ids),
                     "requested_job_label": run_request.requested_job_label,
                 },
+                intent_config=canonicalize_intent_config(
+                    {
+                        "run_mode": run_request.run_mode.value,
+                        "source": run_request.source.value,
+                        "prompt_source": "pack",
+                        "prompt_pack_id": run_request.prompt_pack_id,
+                        "config_snapshot_id": run_request.config_snapshot_id,
+                        "requested_job_label": run_request.requested_job_label,
+                        "selected_row_ids": list(run_request.selected_row_ids),
+                        "tags": list(run_request.tags),
+                    }
+                ),
+                backend_options=derive_backend_options(config),
                 status=JobStatusV2.QUEUED,
             )
             jobs.append(record)

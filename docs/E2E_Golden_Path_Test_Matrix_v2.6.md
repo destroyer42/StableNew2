@@ -3,8 +3,8 @@ E2E_Golden_Path_Test_Matrix_v2.6.md
 End-to-End Validation Suite for StableNew v2.6 (CORE A–E)
 
 Status: Canonical
-Updated: 2025-12-08
-Covers: PromptPack-Only Architecture • Deterministic Builder • Queue/Runner Lifecycle • UI Panels • Learning • Debug Hub • Config Sweeps • Global Negative Layering • Multi-Stage Pipelines
+Updated: 2026-03-18
+Covers: NJR-first intent surfaces • Deterministic Builder • Queue/Runner Lifecycle • UI Panels • Learning • Debug Hub • Config Sweeps • Global Negative Layering • Multi-Stage Pipelines
 
 1. Overview
 
@@ -15,7 +15,7 @@ The Golden Path validates the full canonical execution path:
 
 Advanced Prompt Builder
 → PromptPack TXT + JSON
-→ Pipeline Tab (PromptPack-only)
+→ Pipeline Tab / intent surface
 → Controller
 → ConfigMergerV2
 → RandomizationPlanV2
@@ -57,7 +57,9 @@ ADetailer
 
 Global negative application
 
-Respect PromptPack-only invariant: NO free-text prompting outside the Pack Editor
+Respect the canonical intent rule: image-generation prompt text must originate
+from StableNew-owned intent surfaces, with PromptPack remaining the primary
+image authoring surface and no free-text runner/controller prompting.
 
 2. High-Level Test Matrix (Updated for v2.6)
 
@@ -76,21 +78,21 @@ E — CORE-E: Config sweeps + global negative integration
 Updated matrix:
 
 ID	Scenario Name	Mode	Randomizer	Sweeps	Stages	CORE Coverage
-GP1	Single Simple Run (No Randomizer)	Run Now	Off	Off	txt2img	A, B, C, D
+GP1	Single Simple Run (No Randomizer)	Run Now (Queue)	Off	Off	txt2img	A, B, C, D
 GP2	Queue-Only Run (Multiple Jobs, FIFO)	Queue	Off	Off	txt2img	A, B, C, D
-GP3	Batch Expansion (N>1)	Run Now	Off	Off	txt2img	B, C, D
-GP4	Randomizer Variant Sweep (No Batch)	Run Now	On	Off	txt2img	B, C, D
+GP3	Batch Expansion (N>1)	Run Now (Queue)	Off	Off	txt2img	B, C, D
+GP4	Randomizer Variant Sweep (No Batch)	Run Now (Queue)	On	Off	txt2img	B, C, D
 GP5	Randomizer × Batch Cross Product	Queue	On	Off	txt2img	B, C, D
-GP6	Multi-Stage SDXL (Refiner + Hires + Upscale)	Run Now	Off	Off	txt2img → refiner → hires → upscale	B, C, D
+GP6	Multi-Stage SDXL (Refiner + Hires + Upscale)	Run Now (Queue)	Off	Off	txt2img → refiner → hires → upscale	B, C, D
 GP7	ADetailer + Multi-Stage Combination	Queue	Off	Off	txt2img → adetailer → refiner → hires	B, C, D
-GP8	Stage Enable/Disable Integrity	Run Now	Off	Off	Any stage combination	B, C, D
-GP9	Failure Path (Runner Error)	Run Now	Off	Off	txt2img	A, C, D
+GP8	Stage Enable/Disable Integrity	Run Now (Queue)	Off	Off	Any stage combination	B, C, D
+GP9	Failure Path (Runner Error)	Run Now (Queue)	Off	Off	txt2img	A, C, D
 GP10	Learning Integration	Queue	Off/On	Off	typical multi-stage	C, D
 GP11	Mixed Queue (Randomized + Non-Randomized)	Queue	Mixed	Off	txt2img / multi-stage	A, B, C, D
-GP12	Restore from History → Re-Run	Run Now	Off/On	Off	any	A, B, C, D
-GP13	Config Sweep (PR-CORE-E)	Run Now	Off	On	txt2img	A, B, C, D, E
+GP12	Restore from History → Re-Run	Run Now (Queue)	Off/On	Off	any	A, B, C, D
+GP13	Config Sweep (PR-CORE-E)	Run Now (Queue)	Off	On	txt2img	A, B, C, D, E
 GP14	Config Sweep × Randomizer Matrix	Queue	On	On	txt2img	B, C, D, E
-GP15	Global Negative Application Integrity	Run Now	Off/On	Off	any	B, C, D, E
+GP15	Global Negative Application Integrity	Run Now (Queue)	Off/On	Off	any	B, C, D, E
 
 GP13–GP15 are new for v2.6 and validate PR-CORE-E.
 
@@ -120,7 +122,7 @@ Randomizer disabled.
 
 All optional stages disabled.
 
-RunMode: DIRECT.
+Execution mode: queue submit with immediate auto-start (`Run Now` semantics).
 
 Steps
 
@@ -499,7 +501,8 @@ Keep E2E tests small in count but large in coverage
 
 Use matrix expansion rather than dozens of individual tests.
 
-Always use PromptPack-only inputs
+Always use StableNew-owned intent inputs; for image-generation golden paths,
+PromptPack remains the primary authored input surface.
 
 No free-text prompts in Pipeline Tab.
 All prompts come from PromptPack TXT.

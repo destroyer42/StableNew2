@@ -60,3 +60,37 @@ def test_submit_preview_jobs_to_queue_returns_zero_when_no_jobs():
 
     assert submitted == 0
     assert not controller._job_service.submitted
+
+
+def test_enqueue_draft_jobs_reuses_cached_preview_jobs():
+    class DummyAppState:
+        def __init__(self) -> None:
+            self.preview_jobs: list[NormalizedJobRecord] = []
+            self.cleared = 0
+            self.preview_updates: list[list[NormalizedJobRecord]] = []
+
+        def clear_job_draft(self) -> None:
+            self.cleared += 1
+
+        def set_preview_jobs(self, jobs):
+            self.preview_updates.append(list(jobs))
+            self.preview_jobs = list(jobs)
+
+    controller = object.__new__(DummyPipelineController)
+    controller._app_state = DummyAppState()
+    record = NormalizedJobRecord(
+        job_id="job-cached",
+        config={"model": "md", "prompt": "p", "seed": 42},
+        path_output_dir="out",
+        filename_template="{seed}",
+        seed=42,
+    )
+    controller._app_state.preview_jobs = [record]
+    controller.submit_preview_jobs_to_queue = lambda **kwargs: 1
+    controller.get_preview_jobs = lambda: (_ for _ in ()).throw(AssertionError("should not rebuild preview"))
+
+    submitted = controller.enqueue_draft_jobs(run_config={"run_mode": "queue"})
+
+    assert submitted == 1
+    assert controller._app_state.cleared == 1
+    assert controller._app_state.preview_updates[-1] == []

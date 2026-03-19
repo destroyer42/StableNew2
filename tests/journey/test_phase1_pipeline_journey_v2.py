@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import tkinter as tk
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from src.controller.app_controller import AppController
-from src.gui.app_state_v2 import AppStateV2
+from src.gui.app_state_v2 import PackJobEntry
 from src.gui.main_window_v2 import MainWindowV2
-from tests.journeys.fakes.fake_pipeline_runner import FakePipelineRunner
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service_with_queue
 
 
 class FakeResourceService:
@@ -34,10 +35,25 @@ class FakeResourceService:
 
 @pytest.mark.gui
 def test_phase1_pipeline_journey_v2(tk_root: tk.Tk) -> None:
-    runner = FakePipelineRunner()
-    controller = AppController(None, threaded=False, pipeline_runner=runner)
-    controller.app_state = AppStateV2()
+    job_service, job_queue, _ = make_stubbed_job_service_with_queue()
+    controller = AppController(None, threaded=False, pipeline_runner=None, job_service=job_service)
     controller.resource_service = FakeResourceService()
+    controller.app_state.add_packs_to_job_draft(
+        [
+            PackJobEntry(
+                pack_id="learning_phase1_pack",
+                pack_name="learning_phase1_pack",
+                config_snapshot={
+                    "prompt": "phase1 journey prompt",
+                    "model": "model_a",
+                    "sampler": "Sampler A",
+                    "steps": 20,
+                    "width": 512,
+                    "height": 512,
+                },
+            )
+        ]
+    )
 
     window = MainWindowV2(
         tk_root,
@@ -69,9 +85,15 @@ def test_phase1_pipeline_journey_v2(tk_root: tk.Tk) -> None:
         controller.state.current_config.cfg_scale = 7.0
 
         controller.on_run_clicked()
-        assert len(runner.run_calls) == 1
-        config = runner.run_calls[0].config
-        assert config.model == "model_a"
-        assert config.sampler == "Sampler A"
+        deadline = time.time() + 1.0
+        while len(job_queue.list_jobs()) < 1 and time.time() < deadline:
+            tk_root.update()
+            time.sleep(0.01)
+
+        jobs = job_queue.list_jobs()
+        assert len(jobs) == 1
+        submitted_job = jobs[0]
+        assert submitted_job.run_mode == "queue"
+        assert submitted_job.prompt_pack_id == "learning_phase1_pack"
     finally:
         window.cleanup()

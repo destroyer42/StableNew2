@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import itertools
+import json
 import logging
 import random
 from collections.abc import Iterable
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from src.gui.app_state_v2 import PackJobEntry
+from src.pipeline.config_contract_v26 import canonicalize_intent_config, derive_backend_options
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
     BatchSettings,
@@ -47,6 +49,10 @@ class PromptPackNormalizedJobBuilder:
         self._prompt_resolver = prompt_resolver or UnifiedPromptResolver()
         self._config_resolver = config_resolver or UnifiedConfigResolver()
         self._packs_dir = Path(packs_dir)
+        self._pack_rows_cache: dict[tuple[Any, ...], list[PackRow]] = {}
+        self._pack_metadata_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
+        self._pack_config_cache: dict[tuple[Any, ...], dict[str, Any] | None] = {}
+        self._resolved_config_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
 
     def build_jobs(self, entries: Iterable[PackJobEntry]) -> list[NormalizedJobRecord]:
         # Convert to list to avoid consuming iterator and to enable length check
@@ -133,7 +139,7 @@ class PromptPackNormalizedJobBuilder:
             return [entry]
         
         # Load pack JSON metadata
-        metadata = load_pack_metadata(pack_path)
+        metadata = self._load_pack_metadata_cached(pack_path)
         if not metadata:
             _logger.debug(f"[Matrix Expansion] No JSON metadata for {entry.pack_id}, skipping expansion")
             return [entry]
@@ -204,11 +210,20 @@ class PromptPackNormalizedJobBuilder:
                 return []
 
         runtime_params = dict(entry.config_snapshot or {})
-        merged_config = copy.deepcopy(
-            self._config_manager.resolve_config(
-                pack_overrides=pack_config, runtime_params=runtime_params
-            )
+        resolved_cache_key = (
+            entry.pack_id,
+            self._pack_source_fingerprint(entry.pack_id),
+            self._runtime_params_cache_key(runtime_params),
         )
+        cached_resolved = self._resolved_config_cache.get(resolved_cache_key)
+        if cached_resolved is None:
+            cached_resolved = copy.deepcopy(
+                self._config_manager.resolve_config(
+                    pack_overrides=pack_config, runtime_params=runtime_params
+                )
+            )
+            self._resolved_config_cache[resolved_cache_key] = copy.deepcopy(cached_resolved)
+        merged_config = copy.deepcopy(cached_resolved)
         stage_flags = self._normalize_stage_flags(
             merged_config.get("pipeline", {}), entry.stage_flags or {}
         )
@@ -286,6 +301,18 @@ class PromptPackNormalizedJobBuilder:
             record.aesthetic_text = aesthetic_section.get("text")
             record.aesthetic_embedding = aesthetic_section.get("embedding")
             record.extra_metadata = dict(merged_config.get("metadata") or {})
+            record.intent_config = canonicalize_intent_config(
+                {
+                    "run_mode": record.run_mode.lower(),
+                    "source": str(entry.learning_metadata.get("submission_source"))
+                    if isinstance(entry.learning_metadata, dict)
+                    and entry.learning_metadata.get("submission_source")
+                    else "add_to_queue",
+                    "prompt_source": "pack",
+                    "prompt_pack_id": entry.pack_id,
+                }
+            )
+            record.backend_options = derive_backend_options(record.config)
             record.pack_usage = [
                 PackUsageInfo(
                     pack_name=record.prompt_pack_name,
@@ -543,23 +570,69 @@ class PromptPackNormalizedJobBuilder:
                 return path
         return None
 
+    @staticmethod
+    def _path_fingerprint(path: Path | None) -> tuple[Any, ...]:
+        if path is None:
+            return ("missing",)
+        try:
+            stat = path.stat()
+            return (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+        except Exception:
+            return (str(path), "missing")
+
+    def _pack_source_fingerprint(self, pack_id: str) -> tuple[Any, ...]:
+        text_path = self._resolve_pack_text_path(pack_id)
+        json_path = text_path.with_suffix(".json") if text_path is not None else None
+        return (self._path_fingerprint(text_path), self._path_fingerprint(json_path))
+
+    @staticmethod
+    def _runtime_params_cache_key(runtime_params: dict[str, Any]) -> str:
+        try:
+            return json.dumps(runtime_params, sort_keys=True, default=str)
+        except Exception:
+            return repr(runtime_params)
+
+    def _load_pack_metadata_cached(self, pack_path: Path) -> dict[str, Any]:
+        json_path = pack_path.with_suffix(".json")
+        cache_key = (self._path_fingerprint(json_path),)
+        cached = self._pack_metadata_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+        metadata = load_pack_metadata(pack_path)
+        self._pack_metadata_cache[cache_key] = copy.deepcopy(metadata)
+        return metadata
+
     def _load_pack_rows(self, pack_id: str) -> list[PackRow]:
         """Load and parse pack rows from the pack file."""
         path = self._resolve_pack_text_path(pack_id)
         if not path:
             _logger.warning("Pack file not found for '%s'", pack_id)
             return []
+        cache_key = (self._path_fingerprint(path),)
+        cached = self._pack_rows_cache.get(cache_key)
+        if cached is not None:
+            return list(cached)
         try:
             with open(path, encoding="utf-8") as f:
                 content = f.read()
         except Exception as exc:
             _logger.warning("Failed to read prompt pack '%s': %s", pack_id, exc)
             return []
-        return parse_prompt_pack_text(content)
+        rows = parse_prompt_pack_text(content)
+        self._pack_rows_cache[cache_key] = list(rows)
+        return rows
 
     def _load_pack_config(self, pack_id: str) -> dict[str, Any] | None:
+        config_path_getter = getattr(self._config_manager, "_pack_config_path", None)
+        config_path = config_path_getter(pack_id) if callable(config_path_getter) else None
+        cache_key = (pack_id, self._path_fingerprint(config_path))
+        if cache_key in self._pack_config_cache:
+            cached = self._pack_config_cache[cache_key]
+            return copy.deepcopy(cached) if isinstance(cached, dict) else cached
         try:
-            return self._config_manager.load_pack_config(pack_id)
+            loaded = self._config_manager.load_pack_config(pack_id)
+            self._pack_config_cache[cache_key] = copy.deepcopy(loaded)
+            return loaded
         except Exception as exc:
             _logger.error("Failed to load pack config for '%s': %s", pack_id, exc)
             return None

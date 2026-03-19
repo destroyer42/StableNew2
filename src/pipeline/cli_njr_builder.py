@@ -90,7 +90,7 @@ def build_cli_njr(
         vae=str(txt2img.get("vae", "") or "") or None,
         stage_chain=stage_chain,
         images_per_prompt=max(1, int(batch_size or 1)),
-        run_mode="DIRECT",
+        run_mode="QUEUE",
         queue_source="RUN_NOW",
         extra_metadata={
             "execution_source": "cli",

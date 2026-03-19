@@ -1,741 +1,353 @@
 ARCHITECTURE_v2.6.md
- (Canonical)
+(Canonical)
 
-StableNew – Core Architecture Specification (v2.6)
-Last Updated: 2025-12-09
-Status: Canonical, Binding**
+StableNew Core Architecture Specification (v2.6)
+Last Updated: 2026-03-18
+Status: Canonical, Binding
 
 0. Purpose
 
-This document defines the only valid architecture for StableNew’s execution pipeline, UI → backend flows, state ownership, and model boundaries.
+This document defines the only valid target architecture for StableNew's
+runtime, submission path, ownership boundaries, and backend model.
 
-v2.6 replaces all earlier architectures and renders all legacy pathways invalid, including:
+It replaces contradictory or narrower descriptions that treated StableNew as:
 
-V1 pipeline paths
+- PromptPack-only
+- image-only
+- dual-path (`QUEUE` plus `DIRECT`) at runtime
+- controller-assembled around legacy `pipeline_config` DTOs
+- backend-driven rather than StableNew-orchestrated
 
-GUI prompt-entry–based jobs
+This document is the constitutional source of truth. Migration debt that still
+exists in source or tests is not architecture; it is tracked debt to remove.
 
-Legacy JobBundle-based flows (retired; AppStateV2.job_draft is the canonical draft state, and JobBuilderV2 produces all NJRs)
+1. Non-Negotiable Invariants
 
-Legacy StateManager usage
+1.1 Single outer execution contract
 
-Legacy Job.payload–based execution
+`NormalizedJobRecord` (NJR) is the only executable outer job contract.
 
-Jobs built from legacy pipeline configuration objects
+Fresh execution, replay, reprocess, learning submissions, CLI submissions,
+image edits, and video submissions must all converge to NJR before execution.
 
-Direct runner invocation from UI/controllers
+1.2 Queue-only fresh execution
 
-Any partial migration layers
+Fresh production execution is queue-only.
 
-Every subsystem in StableNew must comply with this document.
+`Run Now` is defined as:
 
-1. System Overview
+- submit to `JobService`
+- enqueue NJR-backed work
+- auto-start processing immediately when allowed
 
-StableNew is composed of five primary layers:
+UI code may synchronously watch the queued job, but that is not a second
+execution path.
 
-GUI Layer (Tkinter V2)
+1.3 Single production runner entrypoint
 
-Controller Layer
+`PipelineRunner.run_njr(...)` is the only production runner entrypoint.
 
-Application State (AppStateV2)
+No controller, GUI component, compatibility DTO, or backend may define a second
+production execution route.
 
-Builder Pipeline Layer
+1.4 StableNew is the orchestrator
 
-Execution Layer (Queue + Runner + Outputs)
+StableNew owns:
 
-Post-Execution Layer (History, Learning, DebugHub)
+- intent intake
+- builder/compiler logic
+- queue and lifecycle policy
+- runner orchestration
+- artifacts and manifests
+- history and replay
+- learning and diagnostics
 
-Only one unified path exists for job creation and execution:
+Backends execute only.
 
-Advanced Prompt Builder →
-PromptPack (TXT + JSON) →
-Pipeline Tab →
-Config + Overrides + Sweeps →
-Builder Pipeline →
-NormalizedJobRecord[] →
-JobService Queue →
-Runner →
-Outputs + History →
-Learning System
+1.5 No live legacy execution model
 
+The final runtime must not rely on:
 
-There are no exception paths, no alternate flows, and no legacy compatibility routes.
+- `pipeline_config` execution
+- archive DTO imports as active runtime dependencies
+- `legacy_njr_adapter` as a live runtime bridge
+- raw backend workflow JSON as a public contract
 
-2. PromptPack-Only Input Model
-2.1 PromptPack is the sole source of prompt text
+Old persisted queue/history data is handled by one-time migration tooling, not
+by indefinite live runtime compatibility.
 
-All generation begins with a Prompt Pack:
+2. Canonical Runtime Topology
 
-{pack_name}.txt — contains prompt rows
+The canonical runtime is:
 
-{pack_name}.json — contains metadata:
+`Intent Surface -> Builder/Compiler -> NJR -> JobService Queue -> PipelineRunner -> Stage/Backend Execution -> Canonical Artifacts -> History/Learning/Diagnostics`
 
-matrix slots
+Each layer has one role:
 
-allowed randomization values
+- intent surfaces collect user or system intent
+- builders/compilers normalize that intent
+- NJR freezes executable state
+- `JobService` owns submission and queue policy
+- `PipelineRunner` owns run orchestration
+- stage executors and video backends perform execution
+- artifacts/manifests persist outputs
+- history, replay, learning, and diagnostics consume canonical results
 
-tags, style metadata
+There is no second runtime story for image versus video.
 
-default config block (optional)
+3. Intent Surfaces And Builders/Compilers
 
-There are no GUI text fields for prompts, no “manual mode,” no fallback prompt sources.
+StableNew supports multiple intent surfaces. They are all valid, but they do
+not get separate execution architectures.
 
-This invariant is enforced across:
+Supported surfaces:
 
-GUI
+- PromptPack image generation
+- reprocess
+- image edit / masked edit
+- history replay / restore
+- learning-generated submissions
+- video workflow submissions
+- CLI submissions
 
-Controllers
+PromptPack remains the primary image authoring surface. It is not the sole
+source of valid intent across the whole system.
 
-Builder pipeline
+Every intent surface must end at a builder or compiler that emits canonical
+NJR-backed work. Intent surfaces do not own queue, runner, artifact, or
+backend logic.
 
-Job construction
+4. NJR Contract And Lifecycle
 
-Testing
+NJR is the only outer executable job envelope.
 
-Documentation
+An NJR is responsible for carrying:
 
-2.2 Prompt Pack Lifecycle (Summary)
+- normalized prompts or prompt provenance
+- immutable execution config for enabled stages
+- stage ordering and execution metadata
+- source/provenance information
+- run labeling and output-routing intent
+- replayable context sufficient for canonical execution
 
-Prompt Packs are created/edited only in the Advanced Prompt Builder.
-Pipeline Tab cannot modify packs.
+Queue entries, history entries, reprocess jobs, replay jobs, and learning jobs
+must all rely on NJR snapshots or NJR-derived records rather than raw
+`pipeline_config` payloads.
 
-Editing a PromptPack means:
+Image and video jobs are both NJR-driven. Video-specific execution details may
+be compiled into internal video requests, but that does not create a second
+outer job model.
 
-Editing the TXT (prompt rows)
+5. Queue-Only Submission Model
 
-Editing the JSON (matrix / defaults)
+5.1 Fresh submission
 
-Packs are immutable at runtime during job execution.
+All fresh submission flows must enter through `JobService` and the queue.
 
-3. Application State Architecture (AppStateV2)
-3.1 AppStateV2 is the only runtime state container
+The final `PipelineRunRequest` contract is queue-only for fresh execution.
 
-AppStateV2 contains:
+5.2 Run Now semantics
 
-Loaded Prompt Packs
+`Run Now` remains a UX affordance, not a distinct runtime mode. It means:
 
-Selected PromptPack + selected row index
+- build NJR-backed work
+- submit to queue
+- request immediate processing
+- optionally wait for completion at the UI/service layer
 
-Pipeline overrides & sweep configurations
+5.3 Replay and recovery
 
-Global negative
+Replay and resume remain canonical queue/runner consumers. They do not rebuild
+legacy config objects or bypass NJR hydration.
 
-UI panel state
+6. Runner Ownership And Stage Orchestration
 
-JobDraft (a description of the pipeline run being assembled)
+`PipelineRunner` owns:
 
-3.2 Controllers must never store draft state
+- run-plan construction from NJR
+- stage sequencing
+- output layout selection
+- stage-level metadata and checkpoints
+- backend dispatch for video stages
+- recovery coordination and canonical result assembly
 
-PipelineController must not contain _draft_bundle
+Preferred still-image chain:
 
-No controller may mutate or own job state
+`txt2img -> optional img2img -> optional adetailer -> optional final upscale`
 
-All draft manipulation flows through:
+Refiner and hires remain supported as advanced `txt2img` metadata, not as a
+parallel job architecture.
 
-app_state.job_draft
+Model and option changes are expected at NJR boundaries or explicit stage
+configuration boundaries. Unintentional intra-job model churn is forbidden.
 
-3.3 StateManager and legacy V1 state systems are forbidden
+7. Image/Video Backend Model
 
-All usage must be removed.
+7.1 Image execution
 
-3.4 Controller Event API (PR-CORE1-C4A)
+Image stages execute through StableNew-owned stage orchestration and executor
+logic. External image runtimes do not own queue, history, or artifacts.
 
-Controllers expose a fixed set of entrypoints that the GUI binds to. AppController now implements `on_run_now`, `on_add_to_queue`, `on_clear_draft`, `on_add_to_job`, and `on_update_preview`; PipelineController exposes `start_pipeline`, `enqueue_draft_jobs`, `build_preview_summary`, `add_packs_to_draft`, `remove_pack_from_draft`, and `clear_draft`. These methods call into AppStateV2 and PipelineController without guessing handler names or using reflection (`getattr`, `_invoke_controller`, etc.). Any new controller requirements must be wired through this explicit API, not via string-based dispatch or dynamically injected attributes.
-GUI components must call these typed controller entrypoints directly; string-based dispatch has been retired in PR-CORE1-C4B and will not be reintroduced.
+7.2 Video execution
 
-4. Builder Pipeline Architecture (Canonical)
+Video execution uses the `src/video/` backend seam. `VideoExecutionRequest` and
+`VideoExecutionResult` are internal runner-to-backend contracts, not public job
+models.
 
-The builder pipeline is the single source of truth for constructing jobs.
+7.3 Backend ownership boundary
 
-There is one, and only one, allowed sequence:
+Backends may own:
 
-4.1 ConfigMergerV2
-4.2 RandomizerEngineV2
-4.3 UnifiedPromptResolver
-4.4 UnifiedConfigResolver
-4.5 JobBuilderV2
-→ N NormalizedJobRecord objects
+- backend-local request translation
+- backend-local health/dependency checks
+- backend-local execution polling and result normalization
 
+Backends may not own:
 
-Each step is pure, stateless, deterministic, and validated.
+- queue semantics
+- controller contracts
+- GUI state
+- history schemas
+- artifact governance
+- replay architecture
 
-4.1 ConfigMergerV2
+7.4 Comfy-specific rule
 
-Inputs:
+Comfy workflow JSON is backend-internal. It must not become a GUI/controller or
+top-level runtime contract.
 
-Pack-level defaults
+8. Canonical Config Layering
 
-AppStateV2 pipeline settings
+StableNew uses three config layers:
 
-Global Negative flag
+8.1 Intent config
 
-Sweep/Variant plan
+User-facing or system-facing intent from PromptPacks, reprocess, learning,
+video workflow surfaces, CLI flags, or history replay inputs.
 
-Outputs:
+In the live runtime, this is carried as `intent_config` metadata on NJR-backed
+records and in queue/history snapshots.
 
-A single MergedBaseConfig
+8.2 Normalized execution config
 
-A ConfigVariantPlanV2 describing sweep expansions
+Immutable, stage-ready config persisted on the NJR and consumed by runner and
+stage execution. This is the only executable config layer.
 
-Rules:
+In the live runtime, this is `NormalizedJobRecord.config`.
 
-Never reads prompts
+8.3 Backend-local options
 
-Never reads GUI text fields
+Executor-specific options that live under backend-owned metadata or compiled
+request payloads. These may influence execution but do not replace NJR as the
+outer contract.
 
-Must not mutate PromptPack JSON
+In the live runtime, backend-local options are carried separately from the
+executable config and may be derived into `NormalizedJobRecord.backend_options`
+or compiled backend request payloads.
 
-4.2 RandomizerEngineV2
+Presets, UI state, PromptPack JSON defaults, and backend JSON are not
+executable by themselves.
 
-Works only with:
+9. Artifacts, History, Learning, And Diagnostics
 
-Matrix slots from PromptPack JSON
+9.1 Canonical artifacts
 
-Randomization settings configured in Pipeline Tab
+Image and video outputs must conform to one canonical artifact model. Stage
+manifests enrich this contract; they do not replace it.
 
-Output:
+9.2 History
 
-RandomizationPlanV2 describing variant expansions of matrix slots
+History stores NJR-backed snapshots and canonical result summaries. It must not
+depend on raw `pipeline_config` execution payloads.
 
-Rules:
+9.3 Replay
 
-Expansion is deterministic
+Replay hydrates NJR-backed records and re-enters the same queue/runner
+architecture. There is no special-case replay executor path.
 
-Variants are applied to prompt templates in UnifiedPromptResolver
+9.4 Learning
 
-4.3 UnifiedPromptResolver
+Learning consumes canonical outputs, canonical history, and NJR provenance. It
+must not depend on controller-local or legacy result shapes.
 
-Inputs:
+9.5 Diagnostics
 
-PromptPack TXT row
+Diagnostics bundles, crash bundles, watchdog bundles, and runtime snapshots
+must describe the same queue/runner/artifact truth for both image and video
+workloads.
 
-RandomizationPlanV2
+10. Migration Boundary
 
-Global negative (from settings)
+The current repo may still contain migration seams. They are debt, not canon.
 
-Outputs:
+Examples of tracked debt:
 
-ResolvedPositivePrompt
+- archive `PipelineConfig` imports
+- `legacy_njr_adapter`
+- `DIRECT`-labeled request and test paths
+- large controller ownership surfaces
+- compatibility-only tests that still define old behavior
 
-ResolvedNegativePrompt
+The only sanctioned compatibility bridge for old persisted data is one-time
+migration tooling with backup, dry-run, validation, and rollback guidance.
 
-Rules:
+Live runtime compatibility branches are not the end-state.
 
-All substitutions happen here
+11. Controller And Service Ownership
 
-Matrix values must be applied exactly once
+11.1 AppController
 
-Global negative merges into negative prompt only
+AppController owns application composition, UI binding, and high-level
+orchestration. It must not remain the long-term owner of legacy config
+assembly, direct execution semantics, or archive DTO bridging.
 
-No mutation of PromptPack or config occurs here
+11.2 PipelineController
 
-4.4 UnifiedConfigResolver
+PipelineController owns preview/build/submit coordination. It must not remain a
+long-term bridge for archive config DTOs or mixed execution paths.
 
-Inputs:
+11.3 Queue/execution services
 
-MergedBaseConfig
+`JobService`, job execution control, queue persistence, replay, and history
+services own lifecycle behavior and canonical runtime data exchange.
 
-ConfigVariantPlanV2
+11.4 Video services
 
-Stage toggles
+Video backend registry, workflow registry/compiler, runtime adapters, and
+dependency probes belong under `src/video/`.
 
-Pack defaults
+Controller decomposition must follow this ownership map, not ad hoc file
+splitting.
 
-Outputs:
+12. Forbidden Patterns And Architecture Enforcement
 
-Fully resolved stage-by-stage config:
+Forbidden patterns:
 
-txt2img
+- fresh execution outside queue
+- live `DIRECT` runtime path
+- live `pipeline_config` execution
+- archive DTO imports as long-term runtime dependencies
+- GUI or controllers importing backend internals
+- GUI invoking runner entrypoints directly
+- second video job model parallel to NJR
+- backend-owned history or artifact contracts
+- controller-local replay shortcuts
+- duplicate active architecture documents
 
-refiner
+Architecture enforcement tests must tighten over time until the remaining
+migration seams reach zero.
 
-hires
+13. Summary
 
-upscale
+StableNew is the orchestrator.
 
-adetailer (if enabled)
+NJR is the only outer executable job contract.
 
-Rules:
+Queue is the only fresh submission path.
 
-Must output a complete, immutable config tree
+Runner is the only production execution path.
 
-Builder pipeline does not permit missing fields
+Backends execute only.
 
-4.5 JobBuilderV2
-
-This is the final expansion stage.
-
-Inputs:
-
-Resolved prompts
-
-Resolved config
-
-Randomization variants
-
-Config variants
-
-Batch size
-
-Seeds
-
-Output:
-
-List[NormalizedJobRecord] (immutable)
-
-Rules:
-
-No mutation downstream
-
-Job IDs assigned here
-
-Stage chain stored in final NJR
-
-5. NormalizedJobRecord (NJR)
-
-The NJR is the only valid job representation for execution.
-
-It contains:
-
-PromptPack metadata
-
-Source prompt row
-
-Resolved prompts
-
-Resolved config + all stages
-
-Randomization slot values
-
-Config sweep values
-
-Batch index
-
-Variant index
-
-Seeds
-
-Execution metadata
-
-5.1 NJRs are immutable
-
-Controllers, queue, runner, and history may not modify them.
-
-6. Execution Layer
-
-The execution layer consists of:
-
-JobService (Queue Manager)
-
-Queue
-
-Runner
-
-There is no alternate path.
-
-6.1 JobService
-
-Responsibilities:
-
-Accept lists of NJRs
-
-Enqueue NJRs (FIFO)
-
-Track lifecycle states:
-
-SUBMITTED
-
-QUEUED
-
-RUNNING
-
-COMPLETED
-
-FAILED
-
-JobService performs no job mutation.
-
-6.2 Queue
-
-Pure FIFO.
-
-Only NJRs may enter
-
-No legacy job types
-
-No “payload jobs”
-
-No legacy configuration jobs
-
-No reconstruction inside queue
-
-6.3 Runner
-
-Runner:
-
-Consumes NJRs
-
-Does not interpret or modify config
-
-Calls API/WebUI exactly as described by NJR
-
-Emits:
-
-Output images
-
-Logs
-
-Timing data
-
-Errors
-
-### 6.4 **CORE1 Execution State** (Updated PR-CORE1-B2, December 2025)
-
-**Current Reality:**
-
-StableNew execution model in v2.6:
-
-**Build & Display Path (NJR-only):**
-- PromptPack → GUI state → JobBuilderV2 → **NormalizedJobRecord[]**
-- Preview/Queue/History panels display jobs via **NJR-driven DTOs**:
-- UnifiedJobSummary
-- JobQueueItemDTO
-- JobHistoryItemDTO
-- GUI updates triggered by queue/hist status events must be marshaled through `AppController._run_in_gui_thread` (or an equivalent dispatcher); background threads may never call panel APIs directly.
-- Queue submissions feed a dedicated background worker thread (managed by `JobService`/`JobExecutionController`) that dequeues NJR-backed jobs, so `submit_queue_jobs` never executes jobs inline or blocks the GUI.
-- Queue execution now includes diagnostics and hung-job guardrails: `JobService`/`JobExecutionController` log `JOB_EXEC_START`, `JOB_EXEC_REPLAY`, and error events, `SingleNodeJobRunner` emits `QUEUE_JOB_START`, `QUEUE_JOB_DONE`, `QUEUE_JOB_WARNING`, and `QUEUE_JOB_ERROR` with `duration_ms`, and history entries persist those diagnostics so stuck NJR runs surface in logs/history without blocking Tk panels.
-- All display data comes from NJR snapshots; legacy config blobs are ignored by display DTOs
-
-**Execution Path after B2 (NJR-only for new jobs):**
-
-**For new queue jobs (v2.6+):**
-```
-Job (with normalized_record) →
-AppController._execute_job
-  → PipelineController._run_job → PipelineRunner.run_njr
-  → on failure → return error status (no alternate path)
-```
-Jobs do not expose or rely on legacy configuration payloads; `_normalized_record` is the sole execution payload carried between subsystems. Configuration-based execution branches were removed in PR-CORE1-12 and remain only as archived history notes.
-
-**Controller Chain (PR-CORE1-C5):**
-- PipelineController → JobExecutionController → JobQueue / SingleNodeJobRunner is the single queue execution path now.
-- QueueExecutionController has been removed; PipelineController calls JobExecutionController directly for submission, status observation, and cancellation.
-
-**PR-CORE1-B2 Changes:**
-
-- **NJR is the SOLE execution payload for all new jobs created in v2.6**
-- If a job has `_normalized_record`, execution uses NJR path ONLY
-- If NJR execution fails, the job is marked as failed (no fallback path)
-- The queue `Job` model no longer includes legacy config fields; new jobs never expose or persist them (PR-CORE1-C2).
-- Any historical legacy config payloads are treated as archived, view-only artifacts (see docs/older); canonical execution ignores them.
-
-**Queue Persistence (CORE1-D5):**
-
-- The queue snapshot file (`state/queue_state_v2.json`) now records `queue_schema`, `queue_id`, `njr_snapshot`, `priority`, `status`, `created_at`, and lightweight metadata such as `source`/`prompt_source`. Every entry derives directly from the NJR snapshot and drops deprecated keys (legacy pipeline configuration blobs, bundle summaries, draft blobs) before serialization so that the file always reflects canonical NJR data.
-- History remains in `data/job_history.jsonl`, but the NJR payload carried by both queue and history entries is now identical. D5 keeps them aligned, and D6 will share a JSONL codec/reader so queue persistence can move to the same format with minimal additional work.
-
-### 6.5 Multi-Version Compatibility Suite (CORE1-D8)
-
-StableNew v2.6 guarantees that every known queue/history snapshot can still be loaded and replayed via today's unified NJR path. The compatibility contract spans:
-
-| Version | History Format | Queue Format | Notes |
-| --- | --- | --- | --- |
-| V2.0 Pre-NJR | JSONL entries containing legacy blobs | Legacy JSON queues with legacy keys | Normalized via migration engines; treated as archived formats |
-| V2.4 Hybrid | JSONL with mixed `snapshot`/`njr_snapshot` fields and inconsistent metadata | Transitional queue state carrying both NJR fragments and legacy keys | Loaders hydrate NJRs, strip deprecated keys, and enforce schema v2.6 |
-| V2.6 Pre-CORE1 | JSONL that already contains `njr_snapshot` but misses some invariant metadata | `state/queue_state_v2.json` entries with `_normalized_record` leftovers | Schema validator enforces canonical fields (`queue_schema=2.6`, `njr_snapshot`, `queue_id`, `priority`, `status`, `created_at`) while keeping RunResult data intact |
-| V2.6 CORE1+ | Canonical NJR snapshot + `PipelineRunResult` `result` subtree | NJR-only queue snapshot (schema 2.6) | Target format; compatibility tests guard it from regressions |
-
-Key guards:
-
-1. `HistoryMigrationEngine` and `QueueMigrationEngine` run before any record is hydrated or replayed, so deprecated fields are stripped in a single place and NJRs are guaranteed.
-2. The shared JSONL codec (`JSONLCodec`) keeps persistence reads/writes deterministic, warns on corrupt lines, and logs validation errors without crashing the app.
-3. Legacy config formats are archived and not part of the live execution path; NJR hydration is required before replay.
-4. Regression fixtures under `tests/data/history_compat_v2/` and `tests/data/queue_compat_v2/` feed `tests/compat/test_history_compat_v2.py`, `tests/compat/test_queue_compat_v2.py`, and `tests/compat/test_replay_compat_v2.py`. Any future schema change must introduce a new fixture and extend these suites before it merges.
-
-**PR-CORE1-B3 Changes:**
-
-- The queue `Job` model no longer exposes any legacy configuration fields; `PipelineController._to_queue_job()` instantiates NJR-only jobs.
-- Queue/JobService/History treat any historical legacy configuration data as non-executable metadata (archived only).
-- **PR-CORE1-B4 Changes:**
-- PipelineRunner no longer offers a public `run(config)` entrypoint; `run_njr(record, cancel_token)` is the sole execution API.
-
-**Invariants (PR-CORE1-B2):**
-
-- ✅ NJR is canonical for preview/queue/history display (PR-CORE1-A3)
-- ✅ JobBuilderV2 is the only job builder
-- ✅ Display DTOs never introspect legacy configuration blobs (use NJR snapshots)
-- ?o. NJR is the ONLY execution path for new jobs (PR-CORE1-B2)
-- ?o. Jobs created via queue pipeline have `_normalized_record` attached
-- ?o. NJR execution failures return error status (no silent fallback)
-- ??O Legacy configuration fields are removed from queue `Job` instances (PR-CORE1-C2); NJR snapshots are the only executable payloads.
-- ??O History load path is NJR hydration only; legacy history entries are auto-migrated to NJR snapshots before replay.
-
-**Legacy Support (retired in CORE1-D1):**
-
-Legacy history formats are migrated in-memory to NJR snapshots via `HistoryMigrationEngine`. Replay paths no longer accept legacy config blobs or draft-bundle structures; hydration is NJR-only.
-
-7. Post-Execution Layer
-7.1 History
-
-Stores immutable job execution summaries:
-
-NJR snapshot
-
-Execution metadata
-
-Output paths
-
-Duration
-
-Error data
-
-History → Restore replays job by reconstructing NJR from snapshot. History load is NJR hydration only; any legacy fields (legacy configuration blobs, draft bundles) are stripped and normalized on load.
-**History Schema v2.6 (CORE1-D2):** History load = pure NJR hydration + schema normalization. Every persisted entry MUST contain: `id`, `timestamp`, `status`, `history_schema`, `njr_snapshot`, `ui_summary`, `metadata`, `runtime`. Deprecated fields (legacy configuration blobs, draft/draft_bundle/job_bundle, legacy_* blobs) are forbidden and removed during migration. All entries are written in deterministic order; `history_schema` is always `2.6`.
-
-**Queue Schema v2.6 (CORE1-D5):** `state/queue_state_v2.json` mirrors History Schema v2.6 by storing `njr_snapshot` plus scheduling metadata (`queue_id`, `status`, `priority`, `created_at`, `queue_schema == "2.6"`, optional `metadata`, auto-run/paused flags). Deprecated fields such as `_normalized_record`, legacy configuration blobs, `draft_bundle_summary`, `legacy_config_blob`, and any other duplicated execution data are stripped on load/save so queue snapshots never duplicate NJR state. Tests (`tests/queue/test_job_history_store.py`, `tests/pipeline/test_job_queue_persistence_v2.py`) now assert queue persistence only yields NJR-backed entries and that normalization remains idempotent.
-
-Queue replay, persistence, and controller summaries therefore derive from the same NJR-led invariant as history, even though the queue file stays as the JSON dump it has always been until D6 delivers the shared JSONL codec and format that will let queue persistence join history without altering these schema semantics yet.
-
-**Unified JSONL Codec (CORE1-D6):** History, queue, diagnostics, and any future JSONL-based persistence must go through `src.utils.jsonl_codec.JSONLCodec`. This codec enforces deterministic serialization (`sort_keys=True`, `separators=(",", ":")`, trailing newline), pluggable schema validation, and a consistent strategy for skipping corrupt or invalid lines while logging the reason. History uses `validate_entry` per record, queue state writes the latest snapshot (with jobs normalized via `QueueMigrationEngine`) and still persists to `state/queue_state_v2.json`, and diagnostics layers may reuse the same helper once implemented. No subsystem may introduce ad-hoc JSONL parsing or writing outside of this codec to keep persistence behavior uniform across the pipeline.
-
-**Unified Replay Path (CORE1-D3):** Replay starts from a validated v2.6 HistoryRecord → hydrate NJR snapshot → build RunPlan via `build_run_plan_from_njr` → execute `PipelineRunner.run_njr(run_plan)` → return RunResult. No legacy replay branches, no legacy configuration rebuilds, no controller-local shortcuts. Fresh runs and replays share the exact NJR → RunPlan → Runner chain.
-
-**Run Result Unification (CORE1-D7):** `PipelineRunner.run_njr()` now returns the strongly typed `PipelineRunResult`, and every execution path stores `PipelineRunResult.to_dict()` in `Job.result` plus the new `HistoryRecord.result` field. `AppController._execute_job` and `JobExecutionController` both call `normalize_run_result`, annotate `metadata.execution_path`/`metadata.job_id`, and persist the canonical dict through the queue history (`JSONLJobHistoryStore` use) and history JSONL codec. `JobHistoryService` and `JobView` read the unified `result` subtree so UI summaries, diagnostics snapshots, and replay records all agree on the same shape. Tests (`tests/pipeline/test_pipeline_runner.py`, `tests/controller/test_core_run_path_v2.py`, `tests/history/test_history_replay_integration.py`, `tests/queue/test_job_history_store.py`) lock this contract and ensure the reconciliation is deterministic.
-
-7.2 Learning System
-
-Consumes History entries:
-
-Prompts
-
-Config snapshot
-
-Rating metadata
-
-Outcome scoring
-
-Learning system never alters NJRs.
-
-7.3 DebugHub
-
-Receives:
-
-Builder pipeline trace
-
-Resolved config trees
-
-Resolved prompts
-
-Randomizer + sweep expansions
-
-Runner logs
-
-Error traces
-
-DebugHub is read-only.
-
-8. GUI Architecture
-
-### 8.0 Source Directory Ownership
-
-There are two active GUI source directories:
-
-- **`src/gui/`** — the canonical active Tk runtime.  All new Tk widgets, panels,
-  dialogs, and view wiring go here.
-- **`src/gui_v2/`** — toolkit-agnostic adapter scaffolding only (adapters and
-  validation helpers that contain no Tk imports).  This is NOT a second rendering
-  layer.  No new Tk widgets belong here.
-
-File-placement rules are fully documented in
-`docs/GUI_Ownership_Map_v2.6.md`.
-
-8.1 Pipeline Tab
-
-Pipeline Tab is responsible for:
-
-Selecting PromptPack + row
-
-Configuring sweeps and variants
-
-Configuring stage toggles
-
-Previewing resolved job summaries (UnifiedJobSummary)
-
-Pipeline Tab does NOT:
-
-Hold draft job objects
-
-Construct jobs
-
-Read/write prompt text
-
-Store builder logic
-
-It only manipulates AppStateV2.job_draft.
-
-8.2 Advanced Prompt Builder
-
-This is the only place where:
-
-Prompt text is edited
-
-Matrix slots added/removed
-
-Pack-level defaults edited
-
-PromptPack TXT and JSON are updated
-
-Pipeline Tab merely consumes these packs.
-
-8.3 Queue / History / Learning UIs
-
-Must present:
-
-UnifiedJobSummary
-
-Job lifecycle data
-
-Execution metadata
-
-Ratings (Learning Tab)
-
-Must not reconstruct or mutate NJRs.
-
-9. Forbidden Systems and Code Paths
-
-The following MUST NOT exist in repo code:
-
-GUI prompt text fields
-
-Any job created outside the builder pipeline
-
-legacy pipeline configuration or union models
-
-Legacy draft-bundle flow (enqueue_draft_bundle_legacy, controller-owned draft bundles) has been retired; AppStateV2.job_draft is now the only draft state, and JobBuilderV2 builds the NJRs that flow through the queue.
-
-Controller-managed draft bundles no longer exist; AppState job_draft plus pipeline controller refreshes drive previews and queue submissions.
-
-PromptPack-driven previews are now built via `PromptPackNormalizedJobBuilder` inside `PipelineController.get_preview_jobs()`: AppStateV2.job_draft.packs flow through the same NJR builder that execution uses, and the resulting records are stored in AppStateV2.preview_jobs so the GUI preview panel always renders prompt-pack-derived positive prompts/models without exposing legacy configuration blobs or drafts.
-
-StateManager usage is restricted to the GUI layer and must not bleed into controllers or shared subsystems.
-
-DTOs representing job summaries outside NJR/UJS
-
-Direct runner calls bypassing JobService
-
-Shims bridging v1→v2 pipeline behavior
-
-Any such code must be removed during PRs.
-
-10. Versioning & Architectural Change Protocol
-10.1 Architecture versioning
-
-This document is v2.6.
-Any architectural modification requires:
-
-Planner agent issues Architecture Change Proposal
-
-Update to:
-
-ARCHITECTURE_v2.X.md
-
-PROMPT_PACK_LIFECYCLE_v2.X.md
-
-Builder Deep-Dive
-
-Roadmap
-
-Codex receives explicit authorization to modify architecture
-
-Codex must never modify architecture without Planner-delivered updates.
-
-11. Golden Path (Execution Guarantee)
-
-Every PR and every change must preserve:
-
-1. User selects PromptPack
-2. User selects row
-3. Pipeline Tab configures overrides/sweeps
-4. Builder pipeline constructs NJRs
-5. JobService enqueues NJRs
-6. Runner executes NJRs
-7. Outputs + History are written
-8. Learning consumes History
-9. DebugHub provides traces and introspection
-
-
-If this path breaks, a PR must fix it immediately.
-
-12. Summary of Architectural Invariants
-12.1 All jobs come from Prompt Packs
-
-No alternate prompt source exists.
-
-12.2 There is one builder pipeline
-
-All jobs must pass through it.
-
-12.3 NJRs are the only execution units
-
-Queue + Runner only consume NJRs.
-
-12.4 No mutation past JobBuilder
-
-NJR is final.
-
-12.5 AppStateV2 is the only mutable runtime state
-
-Controllers do not own draft state.
-
-12.6 No legacy systems may remain
-
-Shims, parallel codepaths, V1 state, V1 job models → delete them.
-
-12.7 Documentation must match implementation
-
-No drift allowed.
-
-12.8 Single Job Model Rule (CORE1-D4)
-
-- NormalizedJobRecord is the single source of truth for every job displayed, queued, replayed, or persisted.
-- Controllers and diagnostics now project `JobView` instances derived directly from NJR snapshots; no controller-level DTO parses pipeline config.
-- History records carry only `njr_snapshot` + metadata/runtime/ui_summary, so the Replay path rehydrates the canonical record before building UI views.
-- Legacy summary DTOs and bundle helpers neither appear nor drive new controller/test code; every job summary is either the NJR itself or the thin `JobView`.
-
-## CORE1-D10 Addendum (PromptPack NJR Invariants)
-
-- PromptPack-sourced jobs must set `prompt_source=pack` and provide a non-empty `prompt_pack_id` before queue submission.
-- NJR snapshots remain the single source of truth for PromptPack provenance (pack id/name) across queue, runner, and history.
-- JobService validation rejects missing pack identifiers gracefully and emits diagnostics rather than raising uncaught exceptions.
-- Tests and helpers construct Jobs from NJRs only; legacy configuration job construction is removed from new paths.
-
-## UI Host Abstraction Boundary Addendum (PR-MAR26-UI-REFRESH-001)
-
-- `src/gui/ui_tokens.py` is the semantic style source-of-truth for GUI host layers.
-- `src/gui/view_contracts/*` defines toolkit-agnostic interaction contracts that must not import Tk types.
-- `src/gui/views/*` remains render and event wiring only; non-render decisions belong in controllers/adapters.
-- Migration target is host swap (Tk -> Qt/PySide6) without changing contract semantics.
-
-Current contract mappings:
-
-- Status banner display behavior -> `status_banner_contract`.
-- Form mode/edit synchronization -> `form_section_contract`.
-- Selection handling semantics -> `selection_list_contract`.
-- Review feedback action states -> `feedback_panel_contract`.
-
-## PySide6 Migration Governance Addendum (PR-GUI-PS6-001)
-
-- GUI toolkit migration must preserve the canonical runtime path exactly:
-  PromptPack -> Builder -> NJR -> Queue -> Runner -> History -> Learning.
-- During migration phases, host-specific UI code must be separated from toolkit-agnostic contracts/adapters.
-- Mainline runtime may not execute mixed Tk + Qt host paths for the same app session.
-- Cutover to a Qt host is allowed only after parity gates pass:
-  1. Contract/controller parity tests for migrated surfaces.
-  2. Startup/shutdown lifecycle parity checks.
-  3. Golden Path integration suite pass with no new regressions.
-- Rollback trigger policy for cutover PRs:
-  1. Any GP regression.
-  2. Deterministic startup failure in clean environment.
-  3. New shutdown instability causing process lifecycle leaks.
-
-END OF ARCHITECTURE_v2.6.md (Canonical Edition)
+Artifacts, history, learning, replay, and diagnostics all consume the same
+canonical runtime truth.

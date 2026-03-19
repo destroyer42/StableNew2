@@ -16,7 +16,6 @@ class PipelineRunSource(Enum):
 
 
 class PipelineRunMode(Enum):
-    DIRECT = "direct"
     QUEUE = "queue"
 
 
@@ -40,7 +39,6 @@ class PipelineRunRequest:
     tags: list[str] = field(default_factory=list)
     requested_job_label: str | None = None
     max_njr_count: int = 256
-    allow_legacy_fallback: bool = False
     pack_entries: list[PackJobEntry] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -52,8 +50,6 @@ class PipelineRunRequest:
             raise ValueError("PipelineRunRequest requires config_snapshot_id")
         if self.max_njr_count <= 0:
             raise ValueError("max_njr_count must be positive")
-        if self.run_mode == PipelineRunMode.DIRECT and self.max_njr_count > 32:
-            raise ValueError("DIRECT runs may not exceed 32 NJRs in a single request")
         for value in self.tags:
             if not value:
                 raise ValueError("PipelineRunRequest tags must be non-empty strings")
@@ -75,12 +71,12 @@ class PipelineRunRequest:
             "tags": list(self.tags),
             "requested_job_label": self.requested_job_label,
             "max_njr_count": self.max_njr_count,
-            "allow_legacy_fallback": self.allow_legacy_fallback,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PipelineRunRequest:
-        run_mode = PipelineRunMode(data.get("run_mode", PipelineRunMode.QUEUE.value))
+        raw_run_mode = str(data.get("run_mode", PipelineRunMode.QUEUE.value) or "").lower()
+        run_mode = PipelineRunMode(raw_run_mode or PipelineRunMode.QUEUE.value)
         source = PipelineRunSource(data.get("source", PipelineRunSource.ADD_TO_QUEUE.value))
         return cls(
             prompt_pack_id=str(data.get("prompt_pack_id", "")),
@@ -94,5 +90,4 @@ class PipelineRunRequest:
             tags=list(data.get("tags") or []),
             requested_job_label=data.get("requested_job_label"),
             max_njr_count=int(data.get("max_njr_count", 256)),
-            allow_legacy_fallback=bool(data.get("allow_legacy_fallback", False)),
         )

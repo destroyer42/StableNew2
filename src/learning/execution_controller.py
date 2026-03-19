@@ -225,7 +225,6 @@ class LearningExecutionController:
             tags=["learning", stage_name],
             requested_job_label=f"Learning: {experiment_name}",
             max_njr_count=1,
-            allow_legacy_fallback=False,
         )
     
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:

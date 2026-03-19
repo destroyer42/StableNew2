@@ -1,107 +1,91 @@
 # StableNew
 
-StableNew is a local SDXL orchestration system with a Tkinter GUI, canonical
-job-building pipeline, queue execution, history, and learning-oriented metadata.
+StableNew is a local image and video orchestration system built around a single
+job contract, a queue-first runtime, canonical artifacts, history, replay, and
+learning-oriented metadata.
 
 Version: v2.6  
-Status: active development  
+Status: active migration closure and platform unification  
 Canonical docs entrypoint: `docs/DOCS_INDEX_v2.6.md`
 
 ## Canonical Runtime
 
-StableNew's canonical execution path is:
+StableNew's canonical runtime is:
 
-`PromptPack/Run Config -> Builder Pipeline -> NormalizedJobRecord -> Queue or DIRECT run -> PipelineRunner -> History/Learning`
+`Intent Surface -> Builder/Compiler -> NormalizedJobRecord -> JobService Queue -> PipelineRunner -> Stage/Backend Execution -> Canonical Artifacts -> History/Learning/Diagnostics`
 
-Fresh execution is NJR-first. New runtime code should not introduce alternate
-job formats or legacy `pipeline_config` execution paths.
+Non-negotiable runtime rules:
 
-Preferred still-image flow:
+- Fresh execution is queue-only.
+- `Run Now` means queue submit + immediate auto-start, not a second executor.
+- NJR is the outer execution contract for image generation, video generation,
+  replay, reprocess, learning, CLI, and image edit.
+- StableNew owns orchestration, queueing, artifacts, history, replay, and
+  diagnostics. Image and video backends execute only.
+
+Preferred still-image stage chain:
 
 `txt2img -> optional img2img -> optional adetailer -> optional final upscale`
 
-Refiner and hires remain supported, but as advanced `txt2img` metadata rather
-than separate preferred-flow stages.
+## Intent Surfaces
 
-## Current State
+StableNew currently supports or is standardizing these intent surfaces:
 
-- Canonical txt2img execution is consolidated on the stage-based NJR path.
-- Queue/history runtime paths are NJR-first.
-- Controller bridge cleanup, boundary config normalization, preferred-flow stage
-  contract tightening, and architecture guard tests are in place.
-- Prompt auto-optimizer support exists as a deterministic backend service wired
-  at final prompt submission time.
-- Native SVD work is active, including runtime logging, postprocess progress,
-  and capability-aware defaults.
+- PromptPack-driven image generation
+- Reprocess and image-edit submissions
+- History replay and restore
+- Learning-generated submissions
+- Video workflow submissions
+- CLI-driven submissions
 
-## Repository Layout
+PromptPack remains the primary image authoring surface, but it is not the only
+valid source of user intent in the modern architecture.
 
-High-level structure:
+## Current Repo Reality
 
-```text
-StableNew/
-|- docs/
-|- src/
-|  |- api/
-|  |- controller/
-|  |- gui/
-|  |- learning/
-|  |- pipeline/
-|  |- prompting/
-|  |- queue/
-|  |- randomizer/
-|  `- video/
-|- tests/
-`- README.md
-```
+The repo already has the backbone required for the end-state:
+
+- NJR-first queue/runner execution
+- canonical artifact and manifest contracts
+- replay and reprocess substrate
+- a real `src/video/` backend seam for video execution
+
+There is still migration debt to remove:
+
+- archive `PipelineConfig` imports in live source and tests
+- `legacy_njr_adapter` still present in runtime code
+- `DIRECT` terminology and behavior still present in code/tests
+- oversized controller ownership in `app_controller.py` and `pipeline_controller.py`
+
+Current migration closure and PR sequencing are tracked in:
+
+- `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
+- `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 
 ## Start Here
 
-Read these in order:
+Read these first:
 
 1. `docs/DOCS_INDEX_v2.6.md`
 2. `docs/ARCHITECTURE_v2.6.md`
 3. `docs/GOVERNANCE_v2.6.md`
-4. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
-5. `docs/StableNew_Coding_and_Testing_v2.6.md`
+4. `docs/StableNew Roadmap v2.6.md`
+5. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
 
 Useful subsystem docs:
 
 - `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
 - `docs/Builder Pipeline Deep-Dive (v2.6).md`
 - `docs/DEBUG HUB v2.6.md`
-- `docs/StableNew Roadmap v2.6.md`
-
-Current PR execution records:
-
-- `docs/PR_MAR26/`
-
-## Development Workflow
-
-StableNew uses a discovery -> scoped PR -> approval -> implementation workflow.
-
-Typical sequence:
-
-1. Discovery or subsystem review
-2. PR spec with allowed/forbidden files and test plan
-3. Human approval
-4. Implementation
-5. Verification
-6. Documentation harmonization
-
-The authoritative workflow and agent boundaries are in:
-
-- `AGENTS.md`
-- `docs/GOVERNANCE_v2.6.md`
-- `docs/PR_TEMPLATE_v2.6.md`
+- `docs/StableNew_Coding_and_Testing_v2.6.md`
 
 ## Running StableNew
 
 Prerequisites:
 
 - Python 3.10+
-- Local or reachable Stable Diffusion WebUI
-- Required models and external tools installed for the workflows you use
+- Local or reachable Stable Diffusion WebUI for image stages
+- Required local models and external tools for the workflows you use
 
 Start the app:
 
@@ -118,14 +102,25 @@ pytest --collect-only -q
 pytest tests/pipeline -q
 pytest tests/controller -q
 pytest tests/gui_v2 -q
+pytest tests/video -q
 ```
 
-Use targeted test runs for the subsystem you change. Runtime, queue, and
-controller changes should also keep collection green.
+Testing policy:
+
+- canonical runtime suites come first
+- compat-migration suites are temporary and must shrink over time
+- quarantine suites must be explicit and not silently define architecture
+
+Current collection baseline used by the documentation reset:
+
+- `pytest --collect-only -q` -> `2348 collected / 1 skipped`
 
 ## Notes
 
 - `docs/archive/` is reference-only.
-- Legacy compatibility surfaces may still exist for archival import or test
-  support, but they are not the preferred path for new runtime work.
-- If README and a canonical v2.6 doc disagree, the canonical doc wins.
+- `docs/CompletedPR/` stores completed PR records.
+- `docs/PR_Backlog/` stores active and historical backlog-driving PR materials.
+- `docs/archive/superseded/StableNew_Architecture_v2.6.md` is not an active
+  architecture source; `docs/ARCHITECTURE_v2.6.md` is the canonical
+  architecture document.
+- If `README.md` and a canonical v2.6 doc disagree, the canonical doc wins.

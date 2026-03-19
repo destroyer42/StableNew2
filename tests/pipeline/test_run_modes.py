@@ -1,7 +1,7 @@
 # Subsystem: Pipeline/Queue
 # Role: Tests for PR-106 RunMode enforcement in PipelineController
 
-"""Tests for run_mode (direct vs queue) enforcement and Job metadata population."""
+"""Tests for queue-only run mode enforcement and Job metadata population."""
 
 from __future__ import annotations
 
@@ -93,16 +93,17 @@ class TestRunModeEnforcement:
     def job_service(self, job_queue, mock_runner):
         return JobService(job_queue, mock_runner)
 
-    def test_submit_direct_executes_synchronously(self, job_service):
-        """submit_direct should execute job immediately and return result."""
+    def test_submit_direct_normalizes_to_queue_run_now(self, job_service):
+        """Legacy submit_direct should normalize to queue-backed Run Now semantics."""
         job = Job(
             job_id=str(uuid.uuid4()),
             run_mode="direct",
         )
         result = job_service.submit_direct(job)
         assert result["job_id"] == job.job_id
-        assert "success" in result
-        assert job.status == JobStatus.COMPLETED
+        assert result["queued"] is True
+        assert result["run_mode"] == "queue"
+        assert job.run_mode == "queue"
 
     def test_submit_queued_adds_to_queue(self, job_service, job_queue):
         """submit_queued should add job to queue without blocking."""
@@ -116,15 +117,16 @@ class TestRunModeEnforcement:
         assert len(jobs) == 1
         assert jobs[0].job_id == job.job_id
 
-    def test_submit_job_with_run_mode_routes_direct(self, job_service):
-        """submit_job_with_run_mode should call submit_direct for 'direct' mode."""
+    def test_submit_job_with_run_mode_coerces_direct_to_queue(self, job_service):
+        """submit_job_with_run_mode should normalize legacy direct mode to queue."""
         job = Job(
             job_id=str(uuid.uuid4()),
             run_mode="direct",
         )
-        with patch.object(job_service, "submit_direct") as mock_direct:
+        with patch.object(job_service, "submit_queued") as mock_queued:
             job_service.submit_job_with_run_mode(job)
-            mock_direct.assert_called_once_with(job)
+            mock_queued.assert_called_once_with(job, emit_queue_updated=True)
+        assert job.run_mode == "queue"
 
     def test_submit_job_with_run_mode_routes_queue(self, job_service):
         """submit_job_with_run_mode should call submit_queued for 'queue' mode."""
@@ -134,7 +136,7 @@ class TestRunModeEnforcement:
         )
         with patch.object(job_service, "submit_queued") as mock_queued:
             job_service.submit_job_with_run_mode(job)
-            mock_queued.assert_called_once_with(job)
+            mock_queued.assert_called_once_with(job, emit_queue_updated=True)
 
     def test_submit_job_with_run_mode_defaults_to_queue(self, job_service):
         """submit_job_with_run_mode should default to queue if run_mode is empty."""
@@ -144,7 +146,7 @@ class TestRunModeEnforcement:
         )
         with patch.object(job_service, "submit_queued") as mock_queued:
             job_service.submit_job_with_run_mode(job)
-            mock_queued.assert_called_once_with(job)
+            mock_queued.assert_called_once_with(job, emit_queue_updated=True)
 
 
 class TestPipelineControllerBuildJob:
@@ -158,36 +160,34 @@ class TestPipelineControllerBuildJob:
 
         job = controller._build_job(
             config=None,
-            run_mode="direct",
+            run_mode="queue",
             source="gui",
             prompt_source="pack",
             prompt_pack_id="test-pack-1",
         )
 
-        assert job.run_mode == "direct"
+        assert job.run_mode == "queue"
         assert job.source == "gui"
         assert job.prompt_source == "pack"
         assert job.prompt_pack_id == "test-pack-1"
         assert job.priority == JobPriority.NORMAL
         assert job.job_id is not None
 
-    @pytest.mark.legacy
     def test_build_job_creates_config_snapshot(self):
-        """_build_job should create config_snapshot from PipelineConfig (LEGACY)."""
-        from src.controller.archive.pipeline_config_types import PipelineConfig
+        """_build_job should create config_snapshot from a config-like object."""
         from src.controller.pipeline_controller import PipelineController
 
         controller = PipelineController(app_state=AppStateV2())
 
-        config = PipelineConfig(
-            prompt="a beautiful sunset",
-            model="sd_xl_base_1.0",
-            sampler="Euler a",
-            steps=25,
-            cfg_scale=7.5,
-            width=1024,
-            height=1024,
-        )
+        config = {
+            "prompt": "a beautiful sunset",
+            "model": "sd_xl_base_1.0",
+            "sampler": "Euler a",
+            "steps": 25,
+            "cfg_scale": 7.5,
+            "width": 1024,
+            "height": 1024,
+        }
 
         job = controller._build_job(config=config, source="test")
 
