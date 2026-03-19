@@ -4,371 +4,751 @@
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nsmiling tavern owner welcoming guests, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful, [[eyes]]-eyed women, smiling tavern owner welcoming guests, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.3305084745762712
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.8716216216216215
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.24375000000000002
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            0.8
           ]
         ]
       },
       {
-        "index": 1,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\npriestess raising chalice in temple,  [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed priestess, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.24576271186440676
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            1.1047297297297298
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.25312500000000004
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
       {
-        "index": 2,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nroyal advisor gazing through stained glass, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed princess, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.2288135593220339
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            1.0337837837837838
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.34687500000000004
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "NsfwPovAllInOneLoraSdxl-000009",
+            0.8
           ]
         ]
       },
       {
-        "index": 3,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nregal lady leaning against balcony, [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed female warrior, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.2542372881355932
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.8817567567567568
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.31875
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "Photoshoot_Realism",
+            0.8
           ]
         ]
       },
       {
-        "index": 4,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nscholar-mage reading tome by window facing [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed scholar mage practicing magic, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.24576271186440676
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.9324324324324325
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.26249999999999996
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "Realism_Lora_By_Stable_yogi_SDXL8.1",
+            0.8
           ]
         ]
       },
       {
-        "index": 5,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nwarrior princess resting on throne overlooking [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed sorceress, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.2966101694915254
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.7905405405405405
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.21562499999999998
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "finenude_v0_2a",
+            0.8
           ]
         ]
       },
       {
-        "index": 6,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nmysterious traveler adjusting cloak within [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed female assassin, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.3135593220338983
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.8918918918918919
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.30937499999999996
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "sdxl1.0_realastic_female_lora",
+            0.8
           ]
         ]
       },
       {
-        "index": 7,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nmasked dancer performing under lanterns in [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed stripper, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.23728813559322037
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.9932432432432432
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.25312500000000004
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "stvmccrr",
+            0.8
           ]
         ]
       },
       {
-        "index": 8,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\nwandering minstrel reclining beside fountain in [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed minstrel, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.24576271186440676
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.7804054054054055
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.30937499999999996
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "xl_yamer_style-3.0",
+            0.8
           ]
         ]
       },
       {
-        "index": 9,
-        "text": "(masterpiece, best quality, gorgeous face) portrait, detailed skin, natural light, high fantasy, magical atmosphere\n[[hair]]-haired noblewoman in intricate gown walking through [[environment]], [[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed women, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame",
+        "index": 0,
+        "text": "[[number]] [[hair]]-haired perky-large-breasted athletic beautiful [[eyes]]-eyed female blacksmith, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]]  in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
-          "stable_yogis_pdxl_positives",
-          "stable_yogis_realism_positives_v1"
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
+          ]
         ],
         "negative_embeddings": [
-          "negative_hands",
-          "stable_yogis_anatomy_negatives_v1-neg",
-          "sdxl_cyberrealistic_simpleneg-neg",
-          "stable_yogis_pdxl_negatives2-neg"
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.2711864406779661
+            0.8
           ],
           [
-            "CinematicStyle_v1",
-            0.7601351351351352
+            "epiCRealismHelper",
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.31875
+            0.8
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
+            "anatomy_helper",
+            0.8
           ],
           [
-            "DreamyStyle_xl",
-            0.75
+            "DTStyle",
+            0.8
           ]
         ]
       }
@@ -376,7 +756,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 2,
+      "limit": 8,
       "slots": [
         {
           "name": "time",
@@ -385,7 +765,7 @@
             "natural light",
             "soft volumetric light rays",
             "bright full moonlight breaking through clouds",
-            "diffused overcast lighting"
+            "cinematic lighting"
           ]
         },
         {
@@ -397,8 +777,7 @@
             "silver",
             "black",
             "auburn",
-            "strawberry red",
-            "fiery orange"
+            "fiery red"
           ]
         },
         {
@@ -422,11 +801,11 @@
         {
           "name": "eyes",
           "values": [
-            "blue",
+            "sky blue",
             "green",
             "brown",
             "amber",
-            "sapphire"
+            "blue-green"
           ]
         },
         {
@@ -445,8 +824,7 @@
             "only a open jacket with underboob",
             "nothing",
             "see-throuh lingerie",
-            "nothing",
-            "micro-kini"
+            "nothing"
           ]
         },
         {
@@ -463,10 +841,9 @@
           "name": "activity",
           "values": [
             "female masturbation",
-            "stripping",
-            "masturbating",
-            "massaging clitoris",
-            "kissing vagina"
+            "massaging groin",
+            "holding breasts",
+            "massaging clitoris"
           ]
         }
       ]
@@ -568,13 +945,30 @@
       "ad_mask_merge_invert": "None",
       "adetailer_enabled": true
     },
+    "prompt_optimizer": {
+      "enabled": true,
+      "optimize_positive": true,
+      "optimize_negative": true,
+      "dedupe_enabled": true,
+      "preserve_lora_relative_order": true,
+      "preserve_unknown_order": true,
+      "log_before_after": true,
+      "log_bucket_assignments": false,
+      "warn_on_large_chunk_count": true,
+      "large_chunk_warning_threshold": 18,
+      "enable_score_based_classification": false,
+      "allow_subject_anchor_boost": false,
+      "subject_anchor_boost_min_chunk_count": 8,
+      "opt_out_pipeline_names": []
+    },
     "pipeline": {
-      "images_per_prompt": 2,
+      "images_per_prompt": 1,
       "n_iter": 1,
       "output_dir": "output",
       "filename_pattern": "{seed}",
       "image_format": "png",
       "seed_mode": "fixed",
+      "output_route": "Auto",
       "txt2img_enabled": true,
       "img2img_enabled": false,
       "adetailer_enabled": true,
