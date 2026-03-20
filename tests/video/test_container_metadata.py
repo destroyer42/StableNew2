@@ -56,7 +56,11 @@ def test_write_video_container_metadata_uses_standard_ffmpeg_tags(
     assert any(item.startswith("title=clip") for item in metadata_args)
     assert any(item.startswith("software=StableNew") for item in metadata_args)
     assert any(item.startswith("comment=video_workflow | comfy") for item in metadata_args)
-    description = next(item[len("description=") :] for item in metadata_args if item.startswith("description="))
+    description = next(
+        (item[len("description=") :] for item in metadata_args if item.startswith("description=")),
+        None,
+    )
+    assert description is not None, "Expected description metadata in ffmpeg arguments"
     description_payload = json.loads(description)
     assert description_payload["schema"] == container_metadata.VIDEO_CONTAINER_METADATA_SCHEMA
     assert description_payload["workflow_id"] == "ltx_multiframe_anchor_v1"
