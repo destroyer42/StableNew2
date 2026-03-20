@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
@@ -56,6 +57,17 @@ def test_job_history_panel_updates_and_opens_folder(tk_root, tmp_path, monkeypat
     )
 
     entry = _make_entry("job123")
+    image_path = tmp_path / "job123" / "image.png"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"png")
+    entry.result = {
+        "artifact": {
+            "schema": "stablenew.artifact.v2.6",
+            "artifact_type": "image",
+            "primary_path": str(image_path),
+            "output_paths": [str(image_path)],
+        }
+    }
     app_state.set_history_items([entry])
     tk_root.update_idletasks()
 
@@ -134,8 +146,8 @@ def test_job_history_panel_disables_image_handoff_for_video_artifacts(tk_root, t
     panel.history_tree.event_generate("<<TreeviewSelect>>")
 
     assert panel.svd_btn.instate(["disabled"])
-    # PR-VIDEO-215: Video Workflow stays ENABLED for video outputs (thumbnail/frame handoff)
-    assert panel.video_workflow_btn.instate(["!disabled"])
+    # Video Workflow stays disabled unless the video result exposes a thumbnail/source frame.
+    assert panel.video_workflow_btn.instate(["disabled"])
 
 
 @pytest.mark.gui
@@ -188,8 +200,8 @@ def test_job_history_panel_uses_generic_video_artifact_metadata(tk_root, tmp_pat
     assert panel._extract_image_count(entry) == "1"
     assert panel._extract_output_folder(entry) == "run-generic"
     assert panel.svd_btn.instate(["disabled"])
-    # PR-VIDEO-215: Video Workflow is enabled for video outputs (thumbnail handoff)
-    assert panel.video_workflow_btn.instate(["!disabled"])
+    # Without thumbnail/source frame metadata, the workflow handoff must stay disabled.
+    assert panel.video_workflow_btn.instate(["disabled"])
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +317,19 @@ def test_entry_supports_video_workflow_handoff_for_video_bundle() -> None:
         }
     }
     assert panel._entry_supports_video_workflow_handoff(entry) is True
+
+
+def test_entry_supports_video_workflow_handoff_false_without_usable_output() -> None:
+    """History entries with no image source or video thumbnail/frame should be disabled."""
+    panel = JobHistoryPanelV2.__new__(JobHistoryPanelV2)
+    entry = _make_entry("job-empty")
+    entry.result = {
+        "video_bundle": {
+            "primary_path": "/out/clip.mp4",
+            "output_paths": ["/out/clip.mp4"],
+        }
+    }
+    assert panel._entry_supports_video_workflow_handoff(entry) is False
 
 
 def test_entry_supports_image_handoff_false_for_video() -> None:

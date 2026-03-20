@@ -48,7 +48,7 @@ _INTENT_TOP_LEVEL_KEYS = (
     "pipeline_state_snapshot",
 )
 
-_KNOWN_VIDEO_BACKEND_STAGES = ("animatediff", "svd_native")
+_KNOWN_VIDEO_BACKEND_STAGES = ("animatediff", "svd_native", "video_workflow")
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:

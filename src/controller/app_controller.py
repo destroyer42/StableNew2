@@ -5896,10 +5896,39 @@ class AppController:
         entry = self._get_history_entry_by_job_id(job_id)
         if entry is None:
             raise ValueError(f"History job not found: {job_id}")
+        bundle = self._get_history_video_bundle(entry)
+        if bundle:
+            main_window = getattr(self, "main_window", None)
+            if main_window is None:
+                raise RuntimeError("Main window is not available")
+            workflow_tab = getattr(main_window, "video_workflow_tab", None)
+            if workflow_tab is None:
+                raise RuntimeError("Video Workflow tab is not available")
+            notebook = getattr(main_window, "center_notebook", None)
+            if notebook is not None:
+                try:
+                    notebook.select(workflow_tab)
+                except Exception:
+                    pass
+            bundle_setter = getattr(workflow_tab, "set_source_bundle", None)
+            if callable(bundle_setter):
+                from src.video.video_artifact_helpers import extract_source_image_for_handoff
+
+                bundle_setter(
+                    dict(bundle),
+                    status_message="Loaded video output into Video Workflow tab.",
+                )
+                best_path = extract_source_image_for_handoff(bundle)
+                if best_path:
+                    self._append_log(
+                        f"[video_workflow] Routed video history output to Video Workflow tab: {Path(best_path).name}"
+                    )
+                    return str(best_path)
+
         image_path = self._get_history_image_path(entry)
         if image_path is None:
             raise ValueError(
-                f"History job {job_id} has no image output available for Video Workflow"
+                f"History job {job_id} has no usable image or video output available for Video Workflow"
             )
         return self.send_image_to_video_workflow(image_path)
 
@@ -5989,6 +6018,36 @@ class AppController:
             if path.suffix.lower() in _IMAGE_OUTPUT_EXTENSIONS and path.exists():
                 return str(path)
         return None
+
+    def _get_history_video_bundle(self, entry: Any) -> dict[str, Any] | None:
+        result = getattr(entry, "result", None)
+        if not isinstance(result, dict):
+            return None
+        bundle = result.get("video_bundle")
+        if isinstance(bundle, dict):
+            return dict(bundle)
+        metadata = self._extract_history_result_metadata(entry)
+        artifact = self._extract_video_artifact_summary(
+            metadata,
+            result,
+            preferred_stage=None,
+        )
+        if not isinstance(artifact, dict):
+            return None
+        return {
+            "primary_path": artifact.get("primary_path"),
+            "stage": artifact.get("stage"),
+            "backend_id": artifact.get("backend_id"),
+            "artifact_type": "video",
+            "thumbnail_path": artifact.get("thumbnail_path"),
+            "manifest_paths": list(artifact.get("manifest_paths") or []),
+            "output_paths": list(artifact.get("output_paths") or []),
+            "video_paths": list(artifact.get("video_paths") or []),
+            "gif_paths": list(artifact.get("gif_paths") or []),
+            "frame_paths": list(artifact.get("frame_paths") or []),
+            "source_image_path": artifact.get("source_image_path"),
+            "count": artifact.get("count"),
+        }
 
     def _extract_history_result_metadata(self, entry: Any) -> dict[str, Any]:
         result = getattr(entry, "result", None)

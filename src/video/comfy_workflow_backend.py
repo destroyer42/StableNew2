@@ -232,6 +232,32 @@ class ComfyWorkflowVideoBackend:
             },
         )
 
+    def execute_segment(
+        self,
+        pipeline: Any,
+        request: VideoExecutionRequest,
+        *,
+        segment_index: int,
+        segment_id: str,
+        carry_forward_policy: str,
+    ) -> VideoExecutionResult | None:
+        """Execute one segment of a multi-segment sequence.
+
+        Delegates to ``execute`` and stamps segment provenance into the
+        result's ``raw_result`` and ``backend_metadata`` dicts so that
+        callers can identify which segment produced each artifact.
+        """
+        result = self.execute(pipeline, request)
+        if result is None:
+            return None
+        result.raw_result["segment_index"] = segment_index
+        result.raw_result["segment_id"] = segment_id
+        result.raw_result["carry_forward_policy"] = carry_forward_policy
+        result.backend_metadata["segment_index"] = segment_index
+        result.backend_metadata["segment_id"] = segment_id
+        result.backend_metadata["carry_forward_policy"] = carry_forward_policy
+        return result
+
     def _ensure_runtime_ready(self) -> str:
         manager = (
             self._process_manager

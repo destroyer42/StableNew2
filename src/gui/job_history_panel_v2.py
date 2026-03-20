@@ -15,6 +15,7 @@ from typing import Any
 from src.gui import theme_v2 as theme_mod
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.queue.job_history_store import JobHistoryEntry
+from src.video.video_artifact_helpers import extract_source_image_for_handoff
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -337,12 +338,23 @@ class JobHistoryPanelV2(ttk.Frame):
         return True
 
     def _entry_supports_video_workflow_handoff(self, entry: JobHistoryEntry) -> bool:
-        """Returns True for any selected history entry.
+        """Return True only when the entry has a usable still-image handoff source."""
+        result = entry.result if isinstance(entry.result, dict) else {}
+        bundle = result.get("video_bundle")
+        if isinstance(bundle, dict):
+            if extract_source_image_for_handoff(bundle):
+                return True
 
-        Unlike SVD, Video Workflow can accept both still-image and video outputs
-        (via thumbnail or source frame), so any completed job can be routed here.
-        """
-        return True
+        metadata = self._extract_result_metadata(entry)
+        for aggregate in self._iter_video_artifact_aggregates(metadata):
+            if extract_source_image_for_handoff(aggregate):
+                return True
+
+        if self._entry_supports_image_handoff(entry):
+            artifact = self._extract_primary_artifact(entry)
+            return bool(extract_artifact_paths({"artifact": artifact}))
+
+        return False
 
     def _get_display_status(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Determine status: Success, Failed, or Cancelled."""

@@ -182,6 +182,43 @@ def test_send_history_job_image_to_video_workflow_selects_workflow_tab(tmp_path)
     workflow_tab.set_source_image_path.assert_called_once()
 
 
+def test_send_history_video_bundle_to_video_workflow_uses_bundle_handoff(tmp_path) -> None:
+    preview_path = tmp_path / "preview.png"
+    source_path = tmp_path / "source.png"
+    preview_path.write_bytes(b"png")
+    source_path.write_bytes(b"png")
+
+    workflow_tab = Mock()
+    notebook = Mock()
+    controller = AppController.__new__(AppController)
+    controller.app_state = SimpleNamespace(
+        history_items=[
+            JobHistoryEntry(
+                job_id="job-vid-456",
+                created_at=datetime.utcnow(),
+                status=JobStatus.COMPLETED,
+                result={
+                    "video_bundle": {
+                        "primary_path": str(tmp_path / "clip.mp4"),
+                        "thumbnail_path": str(preview_path),
+                        "source_image_path": str(source_path),
+                        "frame_paths": [str(preview_path)],
+                    }
+                },
+            )
+        ]
+    )
+    controller.main_window = SimpleNamespace(video_workflow_tab=workflow_tab, center_notebook=notebook)
+    controller._append_log = lambda *_args, **_kwargs: None
+
+    routed = controller.send_history_job_image_to_video_workflow("job-vid-456")
+
+    assert routed == str(preview_path)
+    notebook.select.assert_called_once_with(workflow_tab)
+    workflow_tab.set_source_bundle.assert_called_once()
+    workflow_tab.set_source_image_path.assert_not_called()
+
+
 def test_get_recent_svd_history_extracts_variant_details(tmp_path) -> None:
     source_path = tmp_path / "source.png"
     video_path = tmp_path / "clip.mp4"

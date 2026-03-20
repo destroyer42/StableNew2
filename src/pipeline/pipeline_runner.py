@@ -221,8 +221,10 @@ class PipelineRunner:
 
         video_paths: list[str] = []
         gif_paths: list[str] = []
+        collected_frame_paths: list[str] = []
         thumbnail_path: str | None = None
         frame_path_count = 0
+        source_image_path: str | None = None
 
         for img_idx, input_path in enumerate(current_stage_paths):
             image_name = None
@@ -289,6 +291,12 @@ class PipelineRunner:
                 manifest_paths.append(str(execution_result.manifest_path))
             if execution_result.thumbnail_path:
                 thumbnail_path = thumbnail_path or str(execution_result.thumbnail_path)
+            if not source_image_path:
+                raw_source_image = variant_payload.get("source_image_path")
+                if raw_source_image:
+                    source_image_path = str(raw_source_image)
+                elif request.input_image_path:
+                    source_image_path = str(request.input_image_path)
             if execution_result.output_paths:
                 next_stage_paths.extend(str(item) for item in execution_result.output_paths if item)
             elif execution_result.primary_path:
@@ -296,13 +304,15 @@ class PipelineRunner:
 
             video_path = variant_payload.get("video_path")
             gif_path = variant_payload.get("gif_path")
-            frame_paths = [str(item) for item in variant_payload.get("frame_paths") or [] if item]
+            variant_frame_paths = [str(item) for item in variant_payload.get("frame_paths") or [] if item]
             if video_path:
                 video_paths.append(str(video_path))
             if gif_path:
                 gif_paths.append(str(gif_path))
-            if frame_paths and not video_path and not gif_path:
-                frame_path_count += len(frame_paths)
+            if variant_frame_paths:
+                collected_frame_paths.extend(item for item in variant_frame_paths if item)
+            if variant_frame_paths and not video_path and not gif_path:
+                frame_path_count += len(variant_frame_paths)
 
         output_count = (
             len(next_stage_paths)
@@ -319,9 +329,11 @@ class PipelineRunner:
                 "output_paths": list(next_stage_paths),
                 "video_paths": video_paths,
                 "gif_paths": gif_paths,
+                "frame_paths": collected_frame_paths,
                 "frame_path_count": frame_path_count,
                 "manifest_paths": manifest_paths,
                 "thumbnail_path": thumbnail_path,
+                "source_image_path": source_image_path,
                 "primary_path": next_stage_paths[0] if next_stage_paths else None,
                 "count": output_count,
                 "artifacts": artifact_records,
@@ -347,11 +359,135 @@ class PipelineRunner:
                 "count": len(backend_results),
                 "output_paths": list(next_stage_paths),
                 "manifest_paths": manifest_paths,
+                "frame_paths": list(collected_frame_paths),
+                "source_image_path": source_image_path,
                 "primary_path": next_stage_paths[0] if next_stage_paths else None,
                 "artifacts": artifact_records,
             }
 
         return next_stage_paths
+
+    def _execute_sequence(
+        self,
+        *,
+        stage_name: str,
+        njr: NormalizedJobRecord,
+        current_stage_paths: list[str],
+        sequence_config: dict[str, Any],
+        run_dir: Path,
+        cancel_token: Any,
+        variants: list[dict[str, Any]],
+        metadata: dict[str, Any],
+    ) -> list[str]:
+        """Execute a multi-segment video_workflow sequence.
+
+        Builds a VideoSequenceJob from the stage config, runs
+        VideoSequencePlanner to produce deterministic per-segment plans, then
+        executes each segment via _execute_video_stage, carrying the last frame
+        forward as needed. Writes a sequence manifest and stamps
+        ``metadata["sequence_artifact"]``.
+        """
+        from src.video.sequence_manifest import write_sequence_manifest
+        from src.video.sequence_models import (
+            SegmentProvenanceRecord,
+            VideoSequenceJob,
+            VideoSequenceResult,
+        )
+        from src.video.sequence_planner import VideoSequencePlanner
+
+        config_dict = self._stage_config_dict_for_video(njr, stage_name)
+
+        seq_job = VideoSequenceJob(
+            sequence_id=str(sequence_config.get("sequence_id") or njr.job_id),
+            job_id=str(njr.job_id),
+            workflow_id=str(config_dict.get("workflow_id") or ""),
+            total_segments=int(sequence_config.get("total_segments", 1)),
+            segment_length_frames=int(sequence_config.get("segment_length_frames", 0)),
+            overlap_frames=int(sequence_config.get("overlap_frames", 0)),
+            carry_forward_policy=sequence_config.get("carry_forward_policy", "none"),
+            base_source_image_path=(current_stage_paths[0] if current_stage_paths else None),
+            base_prompt=str(getattr(njr, "prompt", "") or ""),
+            base_negative_prompt=str(getattr(njr, "negative_prompt", "") or ""),
+            per_segment_overrides=list(sequence_config.get("per_segment_overrides") or []),
+        )
+
+        planner = VideoSequencePlanner()
+        segment_plans = planner.plan(seq_job)
+
+        seq_result = VideoSequenceResult(
+            sequence_id=seq_job.sequence_id,
+            job_id=seq_job.job_id,
+            total_segments=seq_job.total_segments,
+        )
+
+        prior_output_path: str | None = current_stage_paths[0] if current_stage_paths else None
+        all_output_paths: list[str] = []
+
+        for seg_plan in segment_plans:
+            resolved_plan = planner.apply_carry_forward(
+                seg_plan, prior_output_path=prior_output_path or ""
+            )
+            seg_input_paths = (
+                [resolved_plan.source_image_path]
+                if resolved_plan.source_image_path
+                else list(current_stage_paths)
+            )
+
+            seg_output_paths = self._execute_video_stage(
+                stage_name=stage_name,
+                njr=njr,
+                current_stage_paths=seg_input_paths,
+                prompt=resolved_plan.prompt,
+                negative_prompt=resolved_plan.negative_prompt,
+                run_dir=run_dir,
+                cancel_token=cancel_token,
+                variants=variants,
+                metadata=metadata,
+            )
+
+            primary_output = seg_output_paths[0] if seg_output_paths else None
+            provenance = SegmentProvenanceRecord(
+                sequence_id=seq_job.sequence_id,
+                job_id=seq_job.job_id,
+                segment_index=resolved_plan.segment_index,
+                segment_id=resolved_plan.segment_id,
+                source_image_path=resolved_plan.source_image_path,
+                primary_output_path=primary_output,
+                manifest_path=None,
+                output_paths=list(seg_output_paths),
+                carry_forward_policy=resolved_plan.carry_forward_policy,
+            )
+            seq_result.segment_provenance.append(provenance)
+            seq_result.completed_segments += 1
+            seq_result.all_output_paths.extend(seg_output_paths)
+            all_output_paths.extend(seg_output_paths)
+
+            if primary_output:
+                prior_output_path = primary_output
+
+            logger.info(
+                "[SEQUENCE] segment %d/%d complete — %d output(s)",
+                resolved_plan.segment_index + 1,
+                seq_job.total_segments,
+                len(seg_output_paths),
+            )
+
+        manifest_path = write_sequence_manifest(
+            seq_result,
+            run_dir,
+            sequence_job_dict=seq_job.to_dict(),
+        )
+        seq_result.sequence_manifest_path = str(manifest_path)
+
+        metadata["sequence_artifact"] = seq_result.to_dict()
+        logger.info(
+            "[SEQUENCE] sequence %s complete — %d total outputs, manifest: %s",
+            seq_job.sequence_id,
+            len(all_output_paths),
+            manifest_path,
+        )
+
+        return all_output_paths
 
     def _check_job_deadline(
         self,
@@ -959,17 +1095,36 @@ class PipelineRunner:
                         logger.warning("%s stage skipped: no input images from previous stage", stage.stage_name)
                         continue
 
-                    current_stage_paths = self._execute_video_stage(
-                        stage_name=stage.stage_name,
-                        njr=njr,
-                        current_stage_paths=current_stage_paths,
-                        prompt=prompt,
-                        negative_prompt=negative_prompt,
-                        run_dir=run_dir,
-                        cancel_token=cancel_token,
-                        variants=variants,
-                        metadata=metadata,
-                    )
+                    # Check for multi-segment sequence intent on video_workflow stages.
+                    stage_cfg = self._stage_config_dict_for_video(njr, stage.stage_name)
+                    sequence_config = stage_cfg.get("sequence_metadata") or {}
+                    if (
+                        stage.stage_name == "video_workflow"
+                        and isinstance(sequence_config, dict)
+                        and int(sequence_config.get("total_segments", 1)) > 1
+                    ):
+                        current_stage_paths = self._execute_sequence(
+                            stage_name=stage.stage_name,
+                            njr=njr,
+                            current_stage_paths=current_stage_paths,
+                            sequence_config=sequence_config,
+                            run_dir=run_dir,
+                            cancel_token=cancel_token,
+                            variants=variants,
+                            metadata=metadata,
+                        )
+                    else:
+                        current_stage_paths = self._execute_video_stage(
+                            stage_name=stage.stage_name,
+                            njr=njr,
+                            current_stage_paths=current_stage_paths,
+                            prompt=prompt,
+                            negative_prompt=negative_prompt,
+                            run_dir=run_dir,
+                            cancel_token=cancel_token,
+                            variants=variants,
+                            metadata=metadata,
+                        )
                     logger.info(
                         "[BATCH_PIPELINE] %s completed %d output artifact(s)",
                         stage.stage_name,

@@ -256,16 +256,47 @@ class JobHistoryService:
         video_primary = metadata.get("video_primary_artifact")
         if not isinstance(video_primary, dict):
             return result
+        supplemental_bundle: dict[str, Any] = {}
+        variants = result.get("variants")
+        if isinstance(variants, list):
+            for variant in variants:
+                if not isinstance(variant, dict):
+                    continue
+                handoff_bundle = variant.get("handoff_bundle")
+                if isinstance(handoff_bundle, dict):
+                    supplemental_bundle = dict(handoff_bundle)
+                    break
+        if not supplemental_bundle:
+            top_level_bundle = result.get("handoff_bundle")
+            if isinstance(top_level_bundle, dict):
+                supplemental_bundle = dict(top_level_bundle)
         normalized = dict(result)
         normalized["video_bundle"] = {
-            "primary_path": video_primary.get("primary_path"),
-            "stage": video_primary.get("stage"),
-            "backend_id": video_primary.get("backend_id"),
+            "primary_path": supplemental_bundle.get("primary_path") or video_primary.get("primary_path"),
+            "stage": supplemental_bundle.get("stage") or video_primary.get("stage"),
+            "backend_id": supplemental_bundle.get("backend_id") or video_primary.get("backend_id"),
             "artifact_type": "video",
-            "thumbnail_path": video_primary.get("thumbnail_path"),
-            "manifest_paths": list(video_primary.get("manifest_paths") or []),
-            "output_paths": list(video_primary.get("output_paths") or []),
-            "count": video_primary.get("count"),
+            "thumbnail_path": supplemental_bundle.get("thumbnail_path") or video_primary.get("thumbnail_path"),
+            "manifest_path": supplemental_bundle.get("manifest_path"),
+            "manifest_paths": list(
+                supplemental_bundle.get("manifest_paths")
+                or video_primary.get("manifest_paths")
+                or []
+            ),
+            "output_paths": list(
+                supplemental_bundle.get("output_paths")
+                or video_primary.get("output_paths")
+                or []
+            ),
+            "video_paths": list(supplemental_bundle.get("video_paths") or video_primary.get("video_paths") or []),
+            "gif_paths": list(supplemental_bundle.get("gif_paths") or video_primary.get("gif_paths") or []),
+            "frame_paths": list(
+                supplemental_bundle.get("frame_paths")
+                or video_primary.get("frame_paths")
+                or []
+            ),
+            "source_image_path": supplemental_bundle.get("source_image_path") or video_primary.get("source_image_path"),
+            "count": supplemental_bundle.get("count") or video_primary.get("count"),
         }
         return normalized
 

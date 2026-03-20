@@ -656,6 +656,9 @@ class NormalizedJobRecord:
     start_stage: str | None = None
     # PR-LEARN-003: Learning experiment context for completion routing
     learning_context: LearningJobContext | None = None
+    # PR-VIDEO-216: Sequence intent for multi-segment video_workflow jobs.
+    # Serialized VideoSequenceJob dict when the runner detects sequence execution.
+    sequence_intent: dict[str, Any] | None = None
 
     @property
     def created_at(self) -> datetime:

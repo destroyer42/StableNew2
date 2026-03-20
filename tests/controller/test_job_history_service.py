@@ -101,9 +101,19 @@ def test_normalize_result_video_bundle_stamps_video_bundle():
                 "thumbnail_path": "/out/frame_001.png",
                 "manifest_paths": ["/out/manifests/clip.json"],
                 "output_paths": ["/out/clip.mp4"],
+                "frame_paths": ["/out/frame_001.png"],
+                "source_image_path": "/out/source.png",
                 "count": 1,
             }
         },
+        "variants": [
+            {
+                "handoff_bundle": {
+                    "frame_paths": ["/out/frame_001.png"],
+                    "source_image_path": "/out/source.png",
+                }
+            }
+        ],
     }
     normalized = JobHistoryService._normalize_result_video_bundle(result)
     assert normalized is not result  # new dict, not mutated
@@ -114,6 +124,8 @@ def test_normalize_result_video_bundle_stamps_video_bundle():
     assert bundle["primary_path"] == "/out/clip.mp4"
     assert bundle["thumbnail_path"] == "/out/frame_001.png"
     assert bundle["artifact_type"] == "video"
+    assert bundle["frame_paths"] == ["/out/frame_001.png"]
+    assert bundle["source_image_path"] == "/out/source.png"
 
 
 def test_normalize_result_video_bundle_no_op_without_video():
@@ -155,9 +167,19 @@ def test_build_entry_stamps_video_bundle_for_video_job(tmp_path):
                 "thumbnail_path": "/out/frame_001.png",
                 "manifest_paths": ["/out/manifests/clip.json"],
                 "output_paths": ["/out/clip.mp4"],
+                "frame_paths": ["/out/frame_001.png"],
+                "source_image_path": "/out/source.png",
                 "count": 1,
             }
         },
+        "variants": [
+            {
+                "handoff_bundle": {
+                    "frame_paths": ["/out/frame_001.png"],
+                    "source_image_path": "/out/source.png",
+                }
+            }
+        ],
     }
     service.record(job, result=video_result)
 
@@ -167,3 +189,5 @@ def test_build_entry_stamps_video_bundle_for_video_job(tmp_path):
     assert isinstance(history_entry.result, dict)
     assert "video_bundle" in history_entry.result
     assert history_entry.result["video_bundle"]["stage"] == "video_workflow"
+    assert history_entry.result["video_bundle"]["frame_paths"] == ["/out/frame_001.png"]
+    assert history_entry.result["video_bundle"]["source_image_path"] == "/out/source.png"

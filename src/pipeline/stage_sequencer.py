@@ -233,6 +233,11 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
                 "Video workflow requires a preceding image-producing stage."
             )
         payload = _stage_payload(config, "video_workflow")
+        # workflow_id may live at top level or inside sequence_metadata (sequence jobs).
+        if not payload.get("workflow_id"):
+            seq_meta = payload.get("sequence_metadata") or {}
+            if isinstance(seq_meta, dict) and seq_meta.get("workflow_id"):
+                payload["workflow_id"] = seq_meta["workflow_id"]
         _require_fields(payload, ["workflow_id"], "video_workflow")
         metadata = _build_stage_metadata(config, payload, stage="video_workflow")
         stage = StageExecution(

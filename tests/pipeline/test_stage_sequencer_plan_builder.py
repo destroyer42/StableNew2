@@ -223,6 +223,62 @@ def test_plan_builder_txt2img_and_animatediff():
     assert plan.stages[-1].requires_input_image is True
 
 
+def test_plan_builder_video_workflow_without_prior_stage_raises():
+    cfg = _base_config()
+    cfg["txt2img"]["enabled"] = False
+    cfg["pipeline"]["txt2img_enabled"] = False
+    cfg["video_workflow"]["enabled"] = True
+    cfg["pipeline"]["video_workflow_enabled"] = True
+    with pytest.raises(Exception):
+        build_stage_execution_plan(cfg)
+
+
+def test_plan_builder_video_workflow_with_sequence_metadata():
+    """PR-VIDEO-216: video_workflow stage accepts sequence_metadata in payload."""
+    cfg = _base_config()
+    cfg["video_workflow"] = {
+        "enabled": True,
+        "workflow_id": "ltx_multiframe_anchor_v1",
+        "sequence_metadata": {
+            "sequence_id": "seq-plan-001",
+            "total_segments": 3,
+            "carry_forward_policy": "last_frame",
+            "segment_length_frames": 25,
+            "overlap_frames": 0,
+        },
+    }
+    cfg["pipeline"]["video_workflow_enabled"] = True
+    plan = build_stage_execution_plan(cfg)
+    vw_stage = next(s for s in plan.stages if s.stage_type == "video_workflow")
+    assert vw_stage is not None
+    # sequence_metadata stored in extra (via payload) must be preserved.
+    raw_payload = vw_stage.config.payload or {}
+    assert raw_payload.get("sequence_metadata", {}).get("total_segments") == 3
+
+
+def test_plan_builder_video_workflow_sequence_metadata_workflow_id_fallback():
+    """PR-VIDEO-216: workflow_id inside sequence_metadata is a valid fallback."""
+    cfg = _base_config()
+    cfg["video_workflow"] = {
+        "enabled": True,
+        # No top-level workflow_id — it lives inside sequence_metadata.
+        "sequence_metadata": {
+            "workflow_id": "ltx_multiframe_anchor_v1",
+            "sequence_id": "seq-fallback-001",
+            "total_segments": 2,
+            "carry_forward_policy": "none",
+            "segment_length_frames": 25,
+            "overlap_frames": 0,
+        },
+    }
+    cfg["pipeline"]["video_workflow_enabled"] = True
+    # Must not raise — workflow_id is found inside sequence_metadata.
+    plan = build_stage_execution_plan(cfg)
+    vw_stage = next(s for s in plan.stages if s.stage_type == "video_workflow")
+    # workflow_id promoted to top-level payload.
+    assert vw_stage.config.payload.get("workflow_id") == "ltx_multiframe_anchor_v1"
+
+
 def test_plan_builder_animatediff_without_prior_stage_raises():
     cfg = _base_config()
     cfg["txt2img"]["enabled"] = False

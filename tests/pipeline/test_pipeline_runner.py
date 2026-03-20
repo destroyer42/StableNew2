@@ -211,8 +211,10 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     input_path = tmp_path / "seed.png"
     end_path = tmp_path / "end.png"
+    preview_frame = tmp_path / "frame_001.png"
     input_path.write_bytes(b"seed")
     end_path.write_bytes(b"end")
+    preview_frame.write_bytes(b"png")
     output_video = tmp_path / "workflow.mp4"
     manifest = tmp_path / "workflow.json"
     output_video.write_bytes(b"mp4")
@@ -240,6 +242,9 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
                     "video_path": str(output_video),
                     "output_paths": [str(output_video)],
                     "manifest_path": str(manifest),
+                    "thumbnail_path": str(preview_frame),
+                    "frame_paths": [str(preview_frame)],
+                    "source_image_path": str(input_path),
                     "workflow_id": request.workflow_id,
                     "artifact": {
                         "schema": "stablenew.artifact.v2.6",
@@ -304,6 +309,8 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     assert result.metadata["video_workflow_artifact"]["stage"] == "video_workflow"
     assert result.metadata["video_workflow_artifact"]["backend_id"] == "comfy"
     assert result.metadata["video_workflow_artifact"]["primary_path"] == str(output_video)
+    assert result.metadata["video_workflow_artifact"]["frame_paths"] == [str(preview_frame)]
+    assert result.metadata["video_workflow_artifact"]["source_image_path"] == str(input_path)
 
 
 def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Path) -> None:
@@ -333,3 +340,109 @@ def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Pa
 
     assert result.success is False
     assert result.error == "No images were generated successfully"
+
+
+def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path) -> None:
+    """PR-VIDEO-216: runner detects multi-segment sequence intent and calls
+    _execute_sequence, which iterates segments and stamps sequence_artifact."""
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    input_path.write_bytes(b"seed")
+
+    seg0_video = tmp_path / "seg0.mp4"
+    seg1_video = tmp_path / "seg1.mp4"
+    seg0_video.write_bytes(b"mp4-0")
+    seg1_video.write_bytes(b"mp4-1")
+
+    _call_count = [0]
+
+    class _WorkflowBackend:
+        backend_id = "comfy"
+        capabilities = VideoBackendCapabilities(
+            backend_id="comfy",
+            stage_types=("video_workflow",),
+            requires_input_image=True,
+            supports_prompt_text=True,
+            supports_negative_prompt=True,
+            supports_multiple_anchors=True,
+        )
+
+        def execute(self, pipeline, request):
+            idx = _call_count[0]
+            _call_count[0] += 1
+            out = [seg0_video, seg1_video][idx] if idx < 2 else seg1_video
+            return VideoExecutionResult.from_stage_result(
+                backend_id="comfy",
+                stage_name="video_workflow",
+                result={
+                    "path": str(out),
+                    "video_path": str(out),
+                    "output_paths": [str(out)],
+                    "manifest_path": None,
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "video_workflow",
+                        "artifact_type": "video",
+                        "primary_path": str(out),
+                        "output_paths": [str(out)],
+                        "manifest_path": None,
+                        "input_image_path": str(input_path),
+                    },
+                },
+                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
+                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+            )
+
+    registry = VideoBackendRegistry()
+    registry.register(_WorkflowBackend())
+    runner._video_backends = registry
+
+    record = NormalizedJobRecord(
+        job_id="runner-video-sequence",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[
+            StageConfig(
+                stage_type="video_workflow",
+                enabled=True,
+                extra={
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "sequence_metadata": {
+                        "sequence_id": "seq-test-216",
+                        "total_segments": 2,
+                        "carry_forward_policy": "last_frame",
+                        "segment_length_frames": 25,
+                        "overlap_frames": 0,
+                    },
+                },
+            )
+        ],
+        input_image_paths=[str(input_path)],
+        start_stage="video_workflow",
+    )
+
+    pipeline = Mock()
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    # The backend must have been called once per segment.
+    assert _call_count[0] == 2
+    # sequence_artifact must be stamped in metadata.
+    assert "sequence_artifact" in result.metadata
+    seq = result.metadata["sequence_artifact"]
+    assert seq["sequence_id"] == "seq-test-216"
+    assert seq["completed_segments"] == 2
+    assert seq["total_segments"] == 2
+    assert seq["is_complete"] is True
+    assert len(seq["segment_provenance"]) == 2
+    assert len(seq["all_output_paths"]) == 2

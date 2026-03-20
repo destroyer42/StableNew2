@@ -121,3 +121,90 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
         assert "ltx_model" in str(exc)
     else:
         raise AssertionError("Expected missing workflow dependencies to fail execution")
+
+
+def test_comfy_workflow_backend_execute_segment_stamps_provenance(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """PR-VIDEO-216: execute_segment() delegates to execute() and stamps
+    segment provenance into raw_result and backend_metadata."""
+    start_anchor = tmp_path / "start.png"
+    end_anchor = tmp_path / "end.png"
+    output_video = tmp_path / "seg1.mp4"
+    preview_frame = tmp_path / "preview.png"
+    for path, payload in (
+        (start_anchor, b"png"),
+        (end_anchor, b"png"),
+        (output_video, b"mp4"),
+        (preview_frame, b"png"),
+    ):
+        path.write_bytes(payload)
+
+    client = Mock()
+    client.get_object_info.return_value = {
+        "ComfyUI-LTXVideo": {"nodes": ["LTXLoader"]},
+        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "ltx_video": True,
+    }
+    client.queue_prompt.return_value = {"prompt_id": "seg-prompt-001"}
+    client.get_history.side_effect = [
+        {},
+        {
+            "seg-prompt-001": {
+                "outputs": {
+                    "4": {
+                        "videos": [{"filename": str(output_video)}],
+                        "images": [{"filename": str(preview_frame)}],
+                    }
+                },
+                "status": {"completed": True},
+            }
+        },
+    ]
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.wait_for_comfy_ready",
+        lambda *_args, **_kwargs: True,
+    )
+
+    backend = ComfyWorkflowVideoBackend(
+        client=client, history_poll_interval=0.01, history_timeout=1.0
+    )
+
+    result = backend.execute_segment(
+        pipeline=Mock(),
+        request=VideoExecutionRequest(
+            backend_id="comfy",
+            stage_name="video_workflow",
+            stage_config={
+                "enabled": True,
+                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_version": "1.0.0",
+            },
+            output_dir=tmp_path,
+            input_image_path=start_anchor,
+            end_anchor_path=end_anchor,
+            image_name="seg1",
+            prompt="a stormy sea",
+            negative_prompt="blurry",
+            motion_profile="gentle",
+            job_id="job-seg-test",
+        ),
+        segment_index=1,
+        segment_id="abc123def456",
+        carry_forward_policy="last_frame",
+    )
+
+    assert result is not None
+    # Segment provenance stamped into raw_result.
+    assert result.raw_result["segment_index"] == 1
+    assert result.raw_result["segment_id"] == "abc123def456"
+    assert result.raw_result["carry_forward_policy"] == "last_frame"
+    # Segment provenance stamped into backend_metadata.
+    assert result.backend_metadata["segment_index"] == 1
+    assert result.backend_metadata["segment_id"] == "abc123def456"
+    assert result.backend_metadata["carry_forward_policy"] == "last_frame"
+    # Core execute fields still present.
+    assert result.primary_path == str(output_video)
+    assert result.backend_metadata["workflow_id"] == "ltx_multiframe_anchor_v1"
+
