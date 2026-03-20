@@ -34,6 +34,8 @@ _EXECUTION_HINT_KEYS = {
     "randomization",
     "aesthetic",
     "metadata",
+    "continuity",
+    "continuity_link",
 }
 
 _INTENT_TOP_LEVEL_KEYS = (
@@ -114,6 +116,41 @@ def derive_backend_options(execution_config: Mapping[str, Any] | None) -> dict[s
     return {}
 
 
+def extract_continuity_linkage(value: Any) -> dict[str, Any]:
+    layers = _config_layers_mapping(value)
+    candidates: list[Any] = []
+    if layers:
+        intent_config = _mapping_dict(layers.get("intent_config"))
+        execution_config = _mapping_dict(layers.get("execution_config"))
+        candidates.extend(
+            [
+                intent_config.get("continuity_link"),
+                intent_config.get("continuity"),
+                execution_config.get("continuity_link"),
+                execution_config.get("continuity"),
+            ]
+        )
+        metadata = execution_config.get("metadata")
+        if isinstance(metadata, Mapping):
+            candidates.append(metadata.get("continuity"))
+    else:
+        data = _mapping_dict(value)
+        candidates.extend(
+            [
+                data.get("continuity_link"),
+                data.get("continuity"),
+            ]
+        )
+        metadata = data.get("metadata")
+        if isinstance(metadata, Mapping):
+            candidates.append(metadata.get("continuity"))
+
+    for candidate in candidates:
+        if isinstance(candidate, Mapping) and candidate:
+            return _mapping_dict(candidate)
+    return {}
+
+
 def canonicalize_backend_options(
     value: Any,
     *,
@@ -191,6 +228,7 @@ __all__ = [
     "canonicalize_backend_options",
     "canonicalize_intent_config",
     "derive_backend_options",
+    "extract_continuity_linkage",
     "extract_execution_config",
     "is_layered_config",
 ]

@@ -184,6 +184,39 @@ class PipelineRunner:
             config_dict.update(config_dict.pop("extra"))
         return config_dict
 
+    @staticmethod
+    def _resolve_continuity_link(
+        njr: NormalizedJobRecord,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+        sequence_config: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        from src.video.continuity_models import normalize_continuity_link
+
+        candidates: list[Any] = [getattr(njr, "continuity_link", None)]
+
+        extra_metadata = getattr(njr, "extra_metadata", None)
+        if isinstance(extra_metadata, Mapping):
+            candidates.append(extra_metadata.get("continuity"))
+
+        config = getattr(njr, "config", None)
+        if isinstance(config, Mapping):
+            config_metadata = config.get("metadata")
+            if isinstance(config_metadata, Mapping):
+                candidates.append(config_metadata.get("continuity"))
+
+        if isinstance(metadata, Mapping):
+            candidates.append(metadata.get("continuity"))
+
+        if isinstance(sequence_config, Mapping):
+            candidates.append(sequence_config.get("continuity"))
+
+        for candidate in candidates:
+            link = normalize_continuity_link(candidate)
+            if link:
+                return link
+        return None
+
     def _execute_video_stage(
         self,
         *,
@@ -209,6 +242,9 @@ class PipelineRunner:
         artifact_records: list[dict[str, Any]] = []
         backend_results: list[VideoExecutionResult] = []
         prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+        continuity_link = self._resolve_continuity_link(njr, metadata=metadata)
+        if continuity_link:
+            metadata["continuity"] = dict(continuity_link)
 
         from pathlib import Path as PathLib
         from src.utils.file_io import build_safe_image_name
@@ -338,6 +374,8 @@ class PipelineRunner:
                 "count": output_count,
                 "artifacts": artifact_records,
             }
+            if continuity_link:
+                aggregate["continuity"] = dict(continuity_link)
             metadata.setdefault("video_artifacts", {})[stage_name] = dict(aggregate)
             metadata["video_primary_artifact"] = dict(aggregate)
             metadata["video_primary_backend_id"] = backend.backend_id
@@ -364,6 +402,8 @@ class PipelineRunner:
                 "primary_path": next_stage_paths[0] if next_stage_paths else None,
                 "artifacts": artifact_records,
             }
+            if continuity_link:
+                video_backend_results[stage_name]["continuity"] = dict(continuity_link)
 
         return next_stage_paths
 
@@ -396,6 +436,13 @@ class PipelineRunner:
         from src.video.sequence_planner import VideoSequencePlanner
 
         config_dict = self._stage_config_dict_for_video(njr, stage_name)
+        continuity_link = self._resolve_continuity_link(
+            njr,
+            metadata=metadata,
+            sequence_config=sequence_config,
+        )
+        if continuity_link:
+            metadata["continuity"] = dict(continuity_link)
 
         seq_job = VideoSequenceJob(
             sequence_id=str(sequence_config.get("sequence_id") or njr.job_id),
@@ -409,6 +456,7 @@ class PipelineRunner:
             base_prompt=str(getattr(njr, "prompt", "") or ""),
             base_negative_prompt=str(getattr(njr, "negative_prompt", "") or ""),
             per_segment_overrides=list(sequence_config.get("per_segment_overrides") or []),
+            continuity_link=dict(continuity_link) if continuity_link else None,
         )
 
         planner = VideoSequencePlanner()
@@ -418,6 +466,7 @@ class PipelineRunner:
             sequence_id=seq_job.sequence_id,
             job_id=seq_job.job_id,
             total_segments=seq_job.total_segments,
+            continuity_link=dict(continuity_link) if continuity_link else None,
         )
 
         prior_output_path: str | None = current_stage_paths[0] if current_stage_paths else None

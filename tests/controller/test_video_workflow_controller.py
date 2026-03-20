@@ -37,6 +37,13 @@ def test_submit_video_workflow_job_builds_queue_backed_reprocess_njr(tmp_path: P
             "negative_prompt": "negative text",
             "motion_profile": "balanced",
             "output_route": "Testing",
+            "continuity_pack_id": "cont-001",
+            "continuity_pack_name": "Hero Pack",
+            "continuity_pack_summary": {
+                "pack_id": "cont-001",
+                "display_name": "Hero Pack",
+                "character_count": 1,
+            },
         },
     )
 
@@ -52,5 +59,8 @@ def test_submit_video_workflow_job_builds_queue_backed_reprocess_njr(tmp_path: P
     assert njr.config["video_workflow"]["mid_anchor_paths"] == [str(mid)]
     assert njr.config["video_workflow"]["motion_profile"] == "balanced"
     assert njr.config["pipeline"]["output_route"] == "Testing"
+    assert njr.config["metadata"]["continuity"]["pack_id"] == "cont-001"
+    assert njr.extra_metadata["continuity"]["pack_id"] == "cont-001"
+    assert njr.continuity_link["pack_id"] == "cont-001"
     assert request.prompt_pack_id == "video_workflow"
     assert "video_workflow" in request.tags

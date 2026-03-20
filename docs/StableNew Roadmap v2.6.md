@@ -64,11 +64,11 @@ unification work:
 - `PR-VIDEO-081` completed via the workflow compiler
 - `PR-VIDEO-082` completed via the first pinned LTX workflow
 - `PR-VIDEO-083` is substantially complete via the dedicated `Video Workflow` GUI tab, but still needs richer workflow/video UX convergence
-- `PR-VIDEO-084` is still missing: sequence orchestration and segment planning
-- `PR-VIDEO-085` is still missing: stitch/interpolation/clip-assembly unification
+- `PR-VIDEO-084` completed in substance via `PR-VIDEO-216` sequence orchestration and segment planning
+- `PR-VIDEO-085` completed in substance via `PR-VIDEO-217` stitch/interpolation/clip-assembly unification
 - `PR-VIDEO-086` is substantially covered by `PR-OBS-212`; future improvements are now follow-on polish, not a blocked foundation item
-- `PR-VIDEO-087` is still missing: continuity packs
-- `PR-VIDEO-088` is still missing: story/shot planning
+- `PR-VIDEO-087` completed in substance via `PR-VIDEO-218` continuity pack foundation
+- `PR-VIDEO-088` is still missing, now formalized as `PR-VIDEO-219`
 
 ## 4. Revised Post-Unification PR Queue
 
@@ -76,7 +76,10 @@ This is the real queue from current repo state, not from an older idealized snap
 
 ### 1. `PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence`
 
-Close the remaining gap between `video_workflow`, history, manifests, and output routing.
+Status: Completed 2026-03-19
+
+Closed the remaining gap between `video_workflow`, history, manifests, and
+output routing.
 
 Primary outcomes:
 
@@ -85,13 +88,19 @@ Primary outcomes:
 - cleaner handoff between `Video Workflow`, SVD, and Movie Clips surfaces
 - removal of any remaining stage-specific video UI assumptions that should now be generic
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 
 ### 2. `PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning`
 
-Implement the first-class long-form video planning layer.
+Status: Completed 2026-03-19
+
+Implemented the first-class long-form video planning layer.
 
 Primary outcomes:
 
@@ -101,13 +110,20 @@ Primary outcomes:
 - overlap metadata
 - per-segment provenance in canonical artifacts/manifests
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
 
 ### 3. `PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification`
 
-Turn post-video assembly into a StableNew-owned artifact path instead of disconnected utilities.
+Status: Completed 2026-03-19
+
+Turned post-video assembly into a StableNew-owned artifact path instead of
+disconnected utilities.
 
 Primary outcomes:
 
@@ -116,13 +132,19 @@ Primary outcomes:
 - sequence-aware clip/export integration
 - explicit bridge between sequence outputs and Movie Clips
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
 
 ### 4. `PR-VIDEO-218-Continuity-Pack-Foundation`
 
-Add continuity containers that can survive across jobs and sequences.
+Status: Completed 2026-03-20
+
+Added continuity containers that can survive across jobs and sequences.
 
 Primary outcomes:
 
@@ -130,6 +152,10 @@ Primary outcomes:
 - anchor-set linkage
 - character/wardrobe/scene references
 - manifest/history linkage for continuity-aware runs
+
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-218-Continuity-Pack-Foundation.md`
 
 Detailed execution spec:
 
@@ -184,10 +210,7 @@ Detailed execution spec:
 
 These are the important missing capabilities that are not just “nice to have”:
 
-- workflow-video output routing is not yet as mature as still-image output routing
-- there is no first-class long-form sequence job model yet
-- post-video stitching and interpolation are not yet unified under one canonical artifact/result path
-- continuity and planning layers do not yet exist above individual jobs
+- story and shot planning does not yet exist above sequence jobs and continuity packs
 - the current GUI has dedicated video surfaces, but not yet a fully coherent end-to-end video workspace
 
 ## 6. Done Definition for the Next Stage

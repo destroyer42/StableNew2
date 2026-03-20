@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
@@ -10,6 +11,7 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_TESTING,
 )
+from src.video.continuity_models import normalize_continuity_link
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 _DEFAULT_OUTPUT_ROUTES = (
@@ -60,7 +62,46 @@ class VideoWorkflowController:
             "negative_prompt": "",
             "motion_profile": "gentle",
             "output_route": OUTPUT_ROUTE_REPROCESS,
+            "continuity_pack_id": "",
+            "continuity_pack_name": "",
+            "continuity_pack_summary": None,
         }
+
+    @staticmethod
+    def _continuity_form_supplied(form_data: Mapping[str, Any]) -> bool:
+        for key in (
+            "continuity_link",
+            "continuity_pack",
+            "continuity_pack_id",
+            "continuity_pack_name",
+            "continuity_pack_summary",
+        ):
+            value = form_data.get(key)
+            if value not in (None, "", [], {}):
+                return True
+        return False
+
+    @staticmethod
+    def _build_continuity_link(form_data: Mapping[str, Any]) -> dict[str, Any] | None:
+        for key in ("continuity_link", "continuity_pack"):
+            link = normalize_continuity_link(form_data.get(key))
+            if link:
+                return link
+
+        pack_id = str(form_data.get("continuity_pack_id") or "").strip()
+        pack_name = str(form_data.get("continuity_pack_name") or "").strip()
+        raw_summary = form_data.get("continuity_pack_summary")
+        summary = dict(raw_summary) if isinstance(raw_summary, Mapping) else {}
+        if pack_name and "display_name" not in summary:
+            summary["display_name"] = pack_name
+        candidate_pack_id = pack_id or str(summary.get("pack_id") or "").strip()
+        if not candidate_pack_id:
+            return None
+        payload: dict[str, Any] = {"pack_id": candidate_pack_id}
+        if summary:
+            summary.setdefault("pack_id", candidate_pack_id)
+            payload["pack_summary"] = summary
+        return normalize_continuity_link(payload)
 
     def validate_source_image(self, path: str | Path) -> tuple[bool, str | None]:
         source = Path(path)
@@ -89,6 +130,8 @@ class VideoWorkflowController:
             path = Path(str(candidate or "").strip())
             if not path.exists() or not path.is_file():
                 return False, f"Mid anchor image does not exist: {path}"
+        if self._continuity_form_supplied(form_data) and self._build_continuity_link(form_data) is None:
+            return False, "Continuity pack metadata is missing a stable pack id."
         return True, None
 
     def submit_video_workflow_job(
@@ -123,43 +166,54 @@ class VideoWorkflowController:
         negative_prompt = str(form_data.get("negative_prompt") or "").strip()
         motion_profile = str(form_data.get("motion_profile") or "").strip()
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
+        continuity_link = self._build_continuity_link(form_data)
+
+        config: dict[str, Any] = {
+            "video_workflow": {
+                "enabled": True,
+                "workflow_id": workflow_id,
+                "workflow_version": spec.workflow_version,
+                "backend_id": spec.backend_id,
+                "end_anchor_path": end_anchor_path,
+                "mid_anchor_paths": mid_anchor_paths,
+                "motion_profile": motion_profile,
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+            },
+            "pipeline": {
+                "output_route": output_route,
+                "video_workflow_enabled": True,
+            },
+        }
+        if continuity_link:
+            config["metadata"] = {"continuity": dict(continuity_link)}
+
+        extra_metadata = {
+            "video_workflow": {
+                "workflow_id": workflow_id,
+                "workflow_version": spec.workflow_version,
+                "display_name": spec.display_name,
+                "backend_id": spec.backend_id,
+                "output_route": output_route,
+            }
+        }
+        if continuity_link:
+            extra_metadata["continuity"] = dict(continuity_link)
 
         builder = ReprocessJobBuilder()
         njr = builder.build_reprocess_job(
             input_image_paths=[str(Path(source_image_path).expanduser())],
             stages=["video_workflow"],
-            config={
-                "video_workflow": {
-                    "enabled": True,
-                    "workflow_id": workflow_id,
-                    "workflow_version": spec.workflow_version,
-                    "backend_id": spec.backend_id,
-                    "end_anchor_path": end_anchor_path,
-                    "mid_anchor_paths": mid_anchor_paths,
-                    "motion_profile": motion_profile,
-                    "prompt": prompt,
-                    "negative_prompt": negative_prompt,
-                },
-                "pipeline": {
-                    "output_route": output_route,
-                    "video_workflow_enabled": True,
-                },
-            },
+            config=config,
             output_dir=str(output_dir),
             prompt=prompt,
             negative_prompt=negative_prompt,
             pack_name="Video Workflow",
             source="video_workflow",
-            extra_metadata={
-                "video_workflow": {
-                    "workflow_id": workflow_id,
-                    "workflow_version": spec.workflow_version,
-                    "display_name": spec.display_name,
-                    "backend_id": spec.backend_id,
-                    "output_route": output_route,
-                }
-            },
+            extra_metadata=extra_metadata,
         )
+        if continuity_link:
+            njr.continuity_link = dict(continuity_link)
 
         job_service = getattr(self._app_controller, "job_service", None)
         if job_service is None:

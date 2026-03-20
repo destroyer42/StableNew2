@@ -4,6 +4,7 @@ from src.pipeline.config_contract_v26 import (
     CONFIG_CONTRACT_SCHEMA_V26,
     attach_config_layers,
     build_config_layers,
+    extract_continuity_linkage,
     extract_execution_config,
 )
 
@@ -78,3 +79,26 @@ def test_extract_execution_config_reads_layered_payloads() -> None:
 
     assert execution["txt2img"]["model"] == "model-a"
     assert execution["pipeline"]["txt2img_enabled"] is True
+
+
+def test_extract_continuity_linkage_reads_metadata_block() -> None:
+    layered = {
+        "config_layers": {
+            "schema": CONFIG_CONTRACT_SCHEMA_V26,
+            "intent_config": {"run_mode": "queue"},
+            "execution_config": {
+                "metadata": {
+                    "continuity": {
+                        "pack_id": "cont-001",
+                        "pack_summary": {"pack_id": "cont-001", "display_name": "Hero Pack"},
+                    }
+                }
+            },
+            "backend_options": {},
+        }
+    }
+
+    continuity = extract_continuity_linkage(layered)
+
+    assert continuity["pack_id"] == "cont-001"
+    assert continuity["pack_summary"]["display_name"] == "Hero Pack"

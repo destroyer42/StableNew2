@@ -659,6 +659,8 @@ class NormalizedJobRecord:
     # PR-VIDEO-216: Sequence intent for multi-segment video_workflow jobs.
     # Serialized VideoSequenceJob dict when the runner detects sequence execution.
     sequence_intent: dict[str, Any] | None = None
+    # PR-VIDEO-218: Optional continuity-pack linkage for continuity-aware jobs.
+    continuity_link: dict[str, Any] | None = None
 
     @property
     def created_at(self) -> datetime:
@@ -688,7 +690,7 @@ class NormalizedJobRecord:
         if self.txt2img_prompt_info:
             info_value = getattr(self.txt2img_prompt_info, attr_name, None)
             if info_value:
-                return info_value
+                return str(info_value)
         fallback = self._config_value(*fallback_keys)
         return str(fallback) if fallback is not None else ""
 
@@ -922,6 +924,8 @@ class NormalizedJobRecord:
             execution_config=self.config,
             backend_options=self.backend_options,
         ).to_dict()
+        if self.continuity_link:
+            snapshot["continuity_link"] = dict(self.continuity_link)
 
         if self.txt2img_prompt_info:
             snapshot["txt2img_prompt_info"] = asdict(self.txt2img_prompt_info)

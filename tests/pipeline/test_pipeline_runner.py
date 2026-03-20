@@ -289,6 +289,13 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
         input_image_paths=[str(input_path)],
         start_stage="video_workflow",
     )
+    record.continuity_link = {
+        "pack_id": "cont-001",
+        "pack_summary": {
+            "pack_id": "cont-001",
+            "display_name": "Hero Pack",
+        },
+    }
     pipeline = Mock()
     runner._pipeline = pipeline
 
@@ -312,6 +319,9 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     assert result.metadata["video_workflow_artifact"]["primary_path"] == str(output_video)
     assert result.metadata["video_workflow_artifact"]["frame_paths"] == [str(preview_frame)]
     assert result.metadata["video_workflow_artifact"]["source_image_path"] == str(input_path)
+    assert result.metadata["continuity"]["pack_id"] == "cont-001"
+    assert result.metadata["video_workflow_artifact"]["continuity"]["pack_id"] == "cont-001"
+    assert result.metadata["video_backend_results"]["video_workflow"]["continuity"]["pack_id"] == "cont-001"
 
 
 def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Path) -> None:
@@ -429,6 +439,13 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
         input_image_paths=[str(input_path)],
         start_stage="video_workflow",
     )
+    record.continuity_link = {
+        "pack_id": "cont-seq-001",
+        "pack_summary": {
+            "pack_id": "cont-seq-001",
+            "display_name": "Sequence Pack",
+        },
+    }
 
     pipeline = Mock()
     runner._pipeline = pipeline
@@ -447,6 +464,8 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
     assert seq["is_complete"] is True
     assert len(seq["segment_provenance"]) == 2
     assert len(seq["all_output_paths"]) == 2
+    assert seq["continuity_link"]["pack_id"] == "cont-seq-001"
+    assert result.metadata["continuity"]["pack_id"] == "cont-seq-001"
 
 
 def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(

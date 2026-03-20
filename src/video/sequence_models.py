@@ -38,7 +38,7 @@ class VideoSegmentPlan:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "VideoSegmentPlan":
+    def from_dict(cls, data: dict[str, Any]) -> VideoSegmentPlan:
         return cls(
             segment_index=int(data.get("segment_index", 0)),
             segment_id=str(data.get("segment_id", "")),
@@ -72,12 +72,13 @@ class VideoSequenceJob:
     base_prompt: str
     base_negative_prompt: str
     per_segment_overrides: list[dict[str, Any]] = field(default_factory=list)
+    continuity_link: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "VideoSequenceJob":
+    def from_dict(cls, data: dict[str, Any]) -> VideoSequenceJob:
         return cls(
             sequence_id=str(data.get("sequence_id", "")),
             job_id=str(data.get("job_id", "")),
@@ -90,6 +91,7 @@ class VideoSequenceJob:
             base_prompt=str(data.get("base_prompt", "")),
             base_negative_prompt=str(data.get("base_negative_prompt", "")),
             per_segment_overrides=list(data.get("per_segment_overrides") or []),
+            continuity_link=dict(data.get("continuity_link") or {}) or None,
         )
 
 
@@ -127,6 +129,7 @@ class VideoSequenceResult:
     sequence_manifest_path: str | None = None
     all_output_paths: list[str] = field(default_factory=list)
     all_frame_paths: list[str] = field(default_factory=list)
+    continuity_link: dict[str, Any] | None = None
 
     @property
     def is_complete(self) -> bool:
@@ -142,5 +145,6 @@ class VideoSequenceResult:
             "sequence_manifest_path": self.sequence_manifest_path,
             "all_output_paths": list(self.all_output_paths),
             "all_frame_paths": list(self.all_frame_paths),
+            "continuity_link": dict(self.continuity_link or {}) or None,
             "is_complete": self.is_complete,
         }
