@@ -14,6 +14,7 @@ class DummyController:
         self.replay_calls = 0
         self.svd_calls: list[str] = []
         self.video_workflow_calls: list[str] = []
+        self.movie_clips_calls: list[str] = []
 
     def refresh_job_history(self) -> None:
         self.refresh_calls += 1
@@ -26,6 +27,9 @@ class DummyController:
 
     def send_history_job_image_to_video_workflow(self, job_id: str) -> None:
         self.video_workflow_calls.append(job_id)
+
+    def send_history_job_to_movie_clips(self, job_id: str) -> None:
+        self.movie_clips_calls.append(job_id)
 
 
 def _make_entry(job_id: str) -> JobHistoryEntry:
@@ -80,12 +84,14 @@ def test_job_history_panel_updates_and_opens_folder(tk_root, tmp_path, monkeypat
     panel.replay_btn.invoke()
     panel.svd_btn.invoke()
     panel.video_workflow_btn.invoke()
+    panel.movie_clips_btn.invoke()
 
     assert open_calls, "Open folder should be invoked for selected job"
     assert controller.refresh_calls == 0
     assert controller.replay_calls == 1
     assert controller.svd_calls == ["job123"]
     assert controller.video_workflow_calls == ["job123"]
+    assert controller.movie_clips_calls == ["job123"]
     panel.refresh_btn.invoke()
     assert controller.refresh_calls == 1
 
@@ -148,6 +154,7 @@ def test_job_history_panel_disables_image_handoff_for_video_artifacts(tk_root, t
     assert panel.svd_btn.instate(["disabled"])
     # Video Workflow stays disabled unless the video result exposes a thumbnail/source frame.
     assert panel.video_workflow_btn.instate(["disabled"])
+    assert panel.movie_clips_btn.instate(["!disabled"])
 
 
 @pytest.mark.gui
@@ -202,6 +209,7 @@ def test_job_history_panel_uses_generic_video_artifact_metadata(tk_root, tmp_pat
     assert panel.svd_btn.instate(["disabled"])
     # Without thumbnail/source frame metadata, the workflow handoff must stay disabled.
     assert panel.video_workflow_btn.instate(["disabled"])
+    assert panel.movie_clips_btn.instate(["!disabled"])
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +283,7 @@ def test_panel_video_workflow_artifact_enables_video_workflow_button(tk_root, tm
     assert panel.svd_btn.instate(["disabled"]), "SVD must be disabled for video outputs"
     # Video Workflow should be enabled — we can route the thumbnail as a new input
     assert panel.video_workflow_btn.instate(["!disabled"]), "Video Workflow must be enabled for video outputs"
+    assert panel.movie_clips_btn.instate(["!disabled"]), "Movie Clips must be enabled for video outputs"
 
 
 @pytest.mark.gui
@@ -330,6 +339,18 @@ def test_entry_supports_video_workflow_handoff_false_without_usable_output() -> 
         }
     }
     assert panel._entry_supports_video_workflow_handoff(entry) is False
+
+
+def test_entry_supports_movie_clips_handoff_for_video_bundle_outputs() -> None:
+    panel = JobHistoryPanelV2.__new__(JobHistoryPanelV2)
+    entry = _make_entry("job-movie")
+    entry.result = {
+        "video_bundle": {
+            "primary_path": "/out/clip.mp4",
+            "output_paths": ["/out/clip.mp4"],
+        }
+    }
+    assert panel._entry_supports_movie_clips_handoff(entry) is True
 
 
 def test_entry_supports_image_handoff_false_for_video() -> None:

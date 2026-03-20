@@ -59,6 +59,9 @@ The remaining follow-on product debt is now narrower:
 - GUI-facing config state still exposes a dict projection, although
   `AppStateV2` now mirrors canonical `intent_config`, `execution_config`, and
   `backend_options`
+- the Tk workspace now has cross-surface handoff and source-summary polish
+  across History, Video Workflow, and Movie Clips, but it still needs the
+  dedicated GUI config adapter/final controller shrink pass
 - longer-form video sequencing, stitching, continuity, and story-planning
   layers are still future work
 
@@ -119,7 +122,7 @@ Testing policy:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2377 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2534 collected / 0 skipped`
 
 ## Notes
 

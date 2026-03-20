@@ -81,6 +81,8 @@ def test_video_workflow_tab_handoff_and_state_roundtrip(tk_root) -> None:
     assert restored["output_route"] == "Testing"
     assert restored["prompt"] == "new prompt"
     assert restored["negative_prompt"] == "new negative"
+    assert "End anchor" in tab.source_summary_var.get()
+    assert "LTX Multi-Frame Anchor v1" in tab.workflow_detail_var.get()
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +103,7 @@ def test_video_workflow_tab_set_source_bundle_uses_thumbnail(tk_root) -> None:
     }
     tab.set_source_bundle(bundle)
     assert tab.source_image_var.get() == "C:/tmp/frame_001.png"
+    assert "frame_001.png" in tab.source_summary_var.get()
 
 
 @pytest.mark.gui
@@ -115,6 +118,7 @@ def test_video_workflow_tab_set_source_bundle_falls_back_to_source_image(tk_root
     }
     tab.set_source_bundle(bundle)
     assert tab.source_image_var.get() == "C:/tmp/start.png"
+    assert "start.png" in tab.source_summary_var.get()
 
 
 @pytest.mark.gui
@@ -134,3 +138,4 @@ def test_video_workflow_tab_set_source_bundle_empty_bundle_no_crash(tk_root) -> 
     controller = _ControllerStub()
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=controller)
     tab.set_source_bundle({})  # should not raise
+    assert tab.source_summary_var.get()

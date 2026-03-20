@@ -10,6 +10,10 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_TESTING,
 )
+from src.gui.view_contracts.video_workspace_contract import (
+    format_workflow_capability_label,
+    summarize_video_workflow_source,
+)
 
 _IMAGE_FILETYPES = [
     ("PNG files", "*.png"),
@@ -36,6 +40,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.app_state = app_state
         self._workflow_map: dict[str, dict[str, Any]] = {}
         self._last_folder = ""
+        self._source_bundle: dict[str, Any] | None = None
 
         defaults = self._load_defaults()
         self.workflow_var = tk.StringVar(value=str(defaults.get("workflow_id") or ""))
@@ -45,6 +50,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.motion_profile_var = tk.StringVar(value=str(defaults.get("motion_profile") or "gentle"))
         self.output_route_var = tk.StringVar(value=str(defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS))
         self.status_var = tk.StringVar(value="Ready to queue a workflow-driven video job.")
+        self.workflow_detail_var = tk.StringVar(value="No workflow selected.")
+        self.source_summary_var = tk.StringVar(value="Source: none selected")
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -54,6 +61,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._refresh_workflow_choices()
         self._set_text_value(self.prompt_text, str(defaults.get("prompt") or ""))
         self._set_text_value(self.negative_prompt_text, str(defaults.get("negative_prompt") or ""))
+        for variable in (
+            self.workflow_var,
+            self.source_image_var,
+            self.end_anchor_var,
+            self.mid_anchors_var,
+            self.output_route_var,
+        ):
+            variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
+        self._refresh_workspace_summary()
 
     def _load_defaults(self) -> dict[str, Any]:
         controller = getattr(self, "app_controller", None)
@@ -98,6 +114,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ttk.Label(header, textvariable=self.status_var, style="Dark.TLabel").grid(
             row=1, column=0, columnspan=4, sticky="w", pady=(6, 0)
         )
+        ttk.Label(header, textvariable=self.source_summary_var, style="Muted.TLabel").grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        )
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame", padding=8)
@@ -111,6 +130,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "Workflow",
             combo=True,
             variable=self.workflow_var,
+        )
+        ttk.Label(body, textvariable=self.workflow_detail_var, style="Muted.TLabel", wraplength=640, justify="left").grid(
+            row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
         )
         self._add_labeled_entry(body, 1, "End Anchor", variable=self.end_anchor_var)
         ttk.Button(body, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor).grid(
@@ -232,11 +254,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.workflow_combo.configure(values=values)
         if not self.workflow_var.get() and values:
             self.workflow_var.set(values[0])
+        self._refresh_workspace_summary()
 
     def set_source_image_path(self, image_path: str, *, status_message: str | None = None) -> None:
         self.source_image_var.set(str(image_path))
+        self._source_bundle = None
         if status_message:
             self.status_var.set(status_message)
+        self._refresh_workspace_summary()
 
     def set_source_bundle(
         self,
@@ -253,11 +278,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         best_path = extract_source_image_for_handoff(bundle) if isinstance(bundle, dict) else None
         if best_path:
+            self._source_bundle = dict(bundle)
             self.source_image_var.set(str(best_path))
             self.status_var.set(
                 status_message
                 or f"Loaded from video output: {best_path.rsplit('/', 1)[-1].rsplit(chr(92), 1)[-1]}"
             )
+            self._refresh_workspace_summary()
 
     def get_video_workflow_state(self) -> dict[str, Any]:
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
@@ -292,6 +319,24 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.output_route_var.set(str(state.get("output_route") or self.output_route_var.get()))
         self._set_text_value(self.prompt_text, str(state.get("prompt") or ""))
         self._set_text_value(self.negative_prompt_text, str(state.get("negative_prompt") or ""))
+        self._source_bundle = None
+        self._refresh_workspace_summary()
+
+    def _refresh_workspace_summary(self) -> None:
+        workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
+        self.workflow_detail_var.set(format_workflow_capability_label(workflow_meta))
+        summary = summarize_video_workflow_source(
+            source_image_path=self.source_image_var.get().strip(),
+            workflow_spec=workflow_meta,
+            end_anchor_path=self.end_anchor_var.get().strip(),
+            mid_anchor_paths=self.mid_anchors_var.get(),
+            bundle=self._source_bundle,
+        )
+        detail = summary.detail.strip()
+        if detail:
+            self.source_summary_var.set(f"{summary.headline} | {detail}")
+        else:
+            self.source_summary_var.set(summary.headline or summary.empty_state)
 
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")
@@ -332,8 +377,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         getter = getattr(controller, "get_latest_output_image_path", None)
         latest = getter() if callable(getter) else None
         if latest:
+            self._source_bundle = None
             self.source_image_var.set(str(latest))
             self.status_var.set(f"Loaded latest output: {Path(str(latest)).name}")
+            self._refresh_workspace_summary()
         else:
             self.status_var.set("No recent image output available to route into Video Workflow.")
 

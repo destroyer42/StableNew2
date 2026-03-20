@@ -13,6 +13,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui import theme_v2 as theme_mod
+from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.queue.job_history_store import JobHistoryEntry
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
@@ -76,6 +77,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         self.video_workflow_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.movie_clips_btn = ttk.Button(
+            action_bar,
+            text="Movie Clips",
+            command=self._on_send_to_movie_clips,
+            state=tk.DISABLED,
+        )
+        self.movie_clips_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
@@ -145,8 +153,13 @@ class JobHistoryPanelV2(ttk.Frame):
         self._history_menu = tk.Menu(self, tearoff=0)
         self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
         self._history_menu.add_command(label="Send to Video Workflow", command=self._on_send_to_video_workflow)
+        self._history_menu.add_command(label="Send to Movie Clips", command=self._on_send_to_movie_clips)
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self.history_tree.bind("<Button-3>", self._on_context_menu)
+        self.empty_state_var = tk.StringVar(value="No recent jobs yet. Queue an image or video job to populate history.")
+        ttk.Label(self, textvariable=self.empty_state_var, style=theme_mod.MUTED_LABEL_STYLE).pack(
+            anchor=tk.W, pady=(4, 0)
+        )
 
         if app_state and hasattr(app_state, "subscribe"):
             app_state.subscribe("history_items", self._on_history_items_changed)
@@ -186,7 +199,13 @@ class JobHistoryPanelV2(ttk.Frame):
         self.replay_btn.configure(state=tk.DISABLED)
         self.svd_btn.configure(state=tk.DISABLED)
         self.video_workflow_btn.configure(state=tk.DISABLED)
+        self.movie_clips_btn.configure(state=tk.DISABLED)
         self.explain_btn.configure(state=tk.DISABLED)
+        self.empty_state_var.set(
+            "No recent jobs yet. Queue an image or video job to populate history."
+            if not entries
+            else ""
+        )
 
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
@@ -233,6 +252,7 @@ class JobHistoryPanelV2(ttk.Frame):
             self.replay_btn.configure(state=tk.DISABLED)
             self.svd_btn.configure(state=tk.DISABLED)
             self.video_workflow_btn.configure(state=tk.DISABLED)
+            self.movie_clips_btn.configure(state=tk.DISABLED)
             self.explain_btn.configure(state=tk.DISABLED)
             return
         self._update_action_buttons(entry)
@@ -292,6 +312,16 @@ class JobHistoryPanelV2(ttk.Frame):
             except Exception:
                 pass
 
+    def _on_send_to_movie_clips(self) -> None:
+        if not self._selected_job_id or not self.controller:
+            return
+        handler = getattr(self.controller, "send_history_job_to_movie_clips", None)
+        if callable(handler):
+            try:
+                handler(self._selected_job_id)
+            except Exception:
+                pass
+
     def _on_context_menu(self, event: tk.Event) -> None:
         item = self.history_tree.identify_row(event.y)
         if not item:
@@ -313,9 +343,11 @@ class JobHistoryPanelV2(ttk.Frame):
             self.replay_btn.configure(state=tk.DISABLED)
             self.svd_btn.configure(state=tk.DISABLED)
             self.video_workflow_btn.configure(state=tk.DISABLED)
+            self.movie_clips_btn.configure(state=tk.DISABLED)
             self.explain_btn.configure(state=tk.DISABLED)
             self._history_menu.entryconfigure("Animate with SVD", state=tk.DISABLED)
             self._history_menu.entryconfigure("Send to Video Workflow", state=tk.DISABLED)
+            self._history_menu.entryconfigure("Send to Movie Clips", state=tk.DISABLED)
             self._history_menu.entryconfigure("Explain This Job", state=tk.DISABLED)
             return
         self.open_btn.configure(state=tk.NORMAL)
@@ -323,10 +355,13 @@ class JobHistoryPanelV2(ttk.Frame):
         self.explain_btn.configure(state=tk.NORMAL)
         svd_state = tk.NORMAL if self._entry_supports_image_handoff(entry) else tk.DISABLED
         vw_state = tk.NORMAL if self._entry_supports_video_workflow_handoff(entry) else tk.DISABLED
+        movie_clips_state = tk.NORMAL if self._entry_supports_movie_clips_handoff(entry) else tk.DISABLED
         self.svd_btn.configure(state=svd_state)
         self.video_workflow_btn.configure(state=vw_state)
+        self.movie_clips_btn.configure(state=movie_clips_state)
         self._history_menu.entryconfigure("Animate with SVD", state=svd_state)
         self._history_menu.entryconfigure("Send to Video Workflow", state=vw_state)
+        self._history_menu.entryconfigure("Send to Movie Clips", state=movie_clips_state)
         self._history_menu.entryconfigure("Explain This Job", state=tk.NORMAL)
 
     def _entry_supports_image_handoff(self, entry: JobHistoryEntry) -> bool:
@@ -355,6 +390,27 @@ class JobHistoryPanelV2(ttk.Frame):
             return bool(extract_artifact_paths({"artifact": artifact}))
 
         return False
+
+    def _entry_supports_movie_clips_handoff(self, entry: JobHistoryEntry) -> bool:
+        result = entry.result if isinstance(entry.result, dict) else {}
+        bundle = result.get("video_bundle")
+        if isinstance(bundle, dict) and extract_source_paths_from_bundle(bundle):
+            return True
+
+        metadata = self._extract_result_metadata(entry)
+        for aggregate in self._iter_video_artifact_aggregates(metadata):
+            aggregate_bundle = {
+                "stage": aggregate.get("stage"),
+                "segment_provenance": aggregate.get("segment_provenance"),
+                "export_output": aggregate.get("export_output"),
+                "frame_paths": list(aggregate.get("frame_paths") or []),
+                "output_paths": list(aggregate.get("output_paths") or aggregate.get("video_paths") or []),
+                "primary_path": aggregate.get("primary_path"),
+            }
+            if extract_source_paths_from_bundle(aggregate_bundle):
+                return True
+
+        return self._entry_supports_image_handoff(entry)
 
     def _get_display_status(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Determine status: Success, Failed, or Cancelled."""

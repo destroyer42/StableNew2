@@ -40,12 +40,16 @@ class QueueRunSubmissionService:
         cfg: dict[str, Any] = {"run_mode": mode, "source": source}
         prompt_source = "manual"
         prompt_pack_id = ""
-        job_draft = getattr(app_state, "job_draft", None)
-        if job_draft is not None:
-            pack_id = getattr(job_draft, "pack_id", "") or ""
-            if pack_id:
-                prompt_source = "pack"
-                prompt_pack_id = pack_id
+        adapter = getattr(app_state, "config_adapter", None)
+        if adapter is not None and hasattr(adapter, "resolve_prompt_pack_context"):
+            prompt_source, prompt_pack_id = adapter.resolve_prompt_pack_context()
+        else:
+            job_draft = getattr(app_state, "job_draft", None)
+            if job_draft is not None:
+                pack_id = getattr(job_draft, "pack_id", "") or ""
+                if pack_id:
+                    prompt_source = "pack"
+                    prompt_pack_id = pack_id
         cfg["prompt_source"] = prompt_source
         if prompt_pack_id:
             cfg["prompt_pack_id"] = prompt_pack_id
