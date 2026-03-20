@@ -269,3 +269,50 @@ def test_prompt_pack_job_builder_caches_pack_rows_metadata_and_resolved_config(
     assert metadata_calls["count"] == 1
     assert load_config_calls["count"] == 1
     assert resolve_calls["count"] == 1
+
+
+def test_prompt_pack_job_builder_omits_inactive_txt2img_hires_fields_from_execution_config(
+    tmp_path: Path,
+) -> None:
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=StubConfigManager(tmp_path),
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+    )
+    entry = PackJobEntry(
+        pack_id="hires-disabled-pack",
+        pack_name="Hires Disabled Pack",
+        prompt_text="A portrait",
+        config_snapshot={
+            "txt2img": {
+                "enable_hr": False,
+                "hr_scale": 1.8,
+                "hr_upscaler": "Latent",
+                "denoising_strength": 0.42,
+                "hr_second_pass_steps": 12,
+            },
+            "hires_fix": {
+                "enabled": False,
+                "upscale_factor": 1.8,
+                "upscaler_name": "Latent",
+                "denoise": 0.42,
+                "steps": 12,
+            },
+        },
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    record = records[0]
+    assert record.config["enable_hr"] is False
+    assert "hr_scale" not in record.config
+    assert "hr_upscaler" not in record.config
+    assert "denoising_strength" not in record.config
+    assert "hr_second_pass_steps" not in record.config
+    assert record.config["hires_fix"]["denoise"] == 0.42
+    assert record.stage_chain[0].denoising_strength is None
+    assert "hires_steps" not in record.stage_chain[0].extra

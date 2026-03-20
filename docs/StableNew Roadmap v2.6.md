@@ -68,7 +68,7 @@ unification work:
 - `PR-VIDEO-085` completed in substance via `PR-VIDEO-217` stitch/interpolation/clip-assembly unification
 - `PR-VIDEO-086` is substantially covered by `PR-OBS-212`; future improvements are now follow-on polish, not a blocked foundation item
 - `PR-VIDEO-087` completed in substance via `PR-VIDEO-218` continuity pack foundation
-- `PR-VIDEO-088` is still missing, now formalized as `PR-VIDEO-219`
+- `PR-VIDEO-088` completed in substance via `PR-VIDEO-219` story and shot planning foundation
 
 ## 4. Revised Post-Unification PR Queue
 
@@ -163,7 +163,9 @@ Detailed execution spec:
 
 ### 5. `PR-VIDEO-219-Story-and-Shot-Planning-Foundation`
 
-Add manual planning structures above sequence jobs.
+Status: Completed 2026-03-20
+
+Added manual planning structures above sequence jobs.
 
 Primary outcomes:
 
@@ -172,6 +174,10 @@ Primary outcomes:
 - `ShotPlan`
 - `AnchorPlan`
 - deterministic compilation from plan -> sequence jobs
+
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
 
 Detailed execution spec:
 
@@ -210,7 +216,6 @@ Detailed execution spec:
 
 These are the important missing capabilities that are not just “nice to have”:
 
-- story and shot planning does not yet exist above sequence jobs and continuity packs
 - the current GUI has dedicated video surfaces, but not yet a fully coherent end-to-end video workspace
 
 ## 6. Done Definition for the Next Stage

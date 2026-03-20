@@ -25,6 +25,11 @@ def _write_png(path: Path, size: tuple[int, int] = (8, 8)) -> None:
     image.save(path)
 
 
+def _write_jpg(path: Path, size: tuple[int, int] = (8, 8)) -> None:
+    image = Image.new("RGB", size, color=(10, 20, 30))
+    image.save(path, format="JPEG")
+
+
 def test_png_roundtrip_metadata_contract(tmp_path: Path) -> None:
     image_path = tmp_path / "sample.png"
     _write_png(image_path)
@@ -49,6 +54,10 @@ def test_png_roundtrip_metadata_contract(tmp_path: Path) -> None:
     decoded = decode_payload(stored)
     assert decoded.status == "ok"
     assert decoded.payload == payload
+    assert "txt2img" in stored[ImageMetadataContractV26.PUBLIC_KEY_COMMENT]
+    assert "StableNew" == stored[ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE]
+    assert "\"media_type\": \"image\"" in stored[ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION]
+    assert "Steps:" not in stored[ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS]
 
 
 def test_png_metadata_uses_compression_when_over_soft_limit(tmp_path: Path) -> None:
@@ -64,6 +73,42 @@ def test_png_metadata_uses_compression_when_over_soft_limit(tmp_path: Path) -> N
     decoded = decode_payload(stored)
     assert decoded.status == "ok"
     assert decoded.payload == payload
+
+
+def test_jpg_roundtrip_preserves_stablenew_and_public_metadata(tmp_path: Path) -> None:
+    image_path = tmp_path / "sample.jpg"
+    _write_jpg(image_path)
+    payload = {
+        "job_id": "job-jpg-1",
+        "run_id": "run-jpg-1",
+        "stage": "upscale",
+        "image": {"path": "sample.jpg", "width": 8, "height": 8, "format": "jpg"},
+        "generation": {
+            "prompt": "cinematic portrait",
+            "negative_prompt": "blurry",
+            "steps": 15,
+            "cfg_scale": 6.5,
+            "width": 8,
+            "height": 8,
+            "sampler_name": "DPM++ 2M",
+            "scheduler": "Karras",
+            "model": "model-x",
+            "vae": "Automatic",
+        },
+        "seeds": {"requested_seed": 111, "actual_seed": 222},
+        "stage_manifest": {"name": "sample", "timestamp": "t", "config_hash": "h", "config": {"steps": 15}},
+    }
+    kv = build_contract_kv(payload, job_id="job-jpg-1", run_id="run-jpg-1", stage="upscale")
+    assert write_image_metadata(image_path, kv) is True
+    stored = read_image_metadata(image_path)
+    decoded = extract_embedded_metadata(image_path)
+
+    assert decoded.status == "ok"
+    assert decoded.payload == payload
+    assert stored[ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE] == "StableNew"
+    assert "cinematic portrait" in stored[ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION]
+    assert "Sampler: DPM++ 2M" in stored[ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS]
+    assert "Stage: upscale" in stored[ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS]
 
 
 def test_png_metadata_omits_payload_when_over_hard_limit(tmp_path: Path) -> None:

@@ -73,6 +73,7 @@ class VideoSequenceJob:
     base_negative_prompt: str
     per_segment_overrides: list[dict[str, Any]] = field(default_factory=list)
     continuity_link: dict[str, Any] | None = None
+    plan_origin: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -92,6 +93,7 @@ class VideoSequenceJob:
             base_negative_prompt=str(data.get("base_negative_prompt", "")),
             per_segment_overrides=list(data.get("per_segment_overrides") or []),
             continuity_link=dict(data.get("continuity_link") or {}) or None,
+            plan_origin=dict(data.get("plan_origin") or {}) or None,
         )
 
 
@@ -130,6 +132,7 @@ class VideoSequenceResult:
     all_output_paths: list[str] = field(default_factory=list)
     all_frame_paths: list[str] = field(default_factory=list)
     continuity_link: dict[str, Any] | None = None
+    plan_origin: dict[str, Any] | None = None
 
     @property
     def is_complete(self) -> bool:
@@ -146,5 +149,6 @@ class VideoSequenceResult:
             "all_output_paths": list(self.all_output_paths),
             "all_frame_paths": list(self.all_frame_paths),
             "continuity_link": dict(self.continuity_link or {}) or None,
+            "plan_origin": dict(self.plan_origin or {}) or None,
             "is_complete": self.is_complete,
         }

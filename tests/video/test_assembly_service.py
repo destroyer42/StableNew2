@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 from src.video.assembly_models import AssemblyRequest
 from src.video.assembly_service import AssemblyService
@@ -20,7 +21,9 @@ def test_assembly_service_exports_manual_frames(tmp_path: Path) -> None:
         output_path.write_bytes(b"mp4")
         return output_path
 
+    write_container_metadata = Mock(return_value=True)
     service = AssemblyService(image_exporter=_fake_image_exporter)
+    service._write_video_container_metadata = write_container_metadata  # type: ignore[attr-defined]
     source = service.build_source_from_paths([frame0, frame1])
 
     result = service.assemble(
@@ -38,6 +41,7 @@ def test_assembly_service_exports_manual_frames(tmp_path: Path) -> None:
     assert result.export_output.primary_path == str(tmp_path / "out" / "manual_clip.mp4")
     assert Path(result.manifest_path).exists()
     assert calls["image_paths"] == [frame0, frame1]
+    write_container_metadata.assert_called_once()
 
 
 def test_assembly_service_stitches_sequence_segments(tmp_path: Path) -> None:
@@ -52,7 +56,9 @@ def test_assembly_service_stitches_sequence_segments(tmp_path: Path) -> None:
         assert segment_paths == [seg0, seg1]
         return stitched
 
+    write_container_metadata = Mock(return_value=True)
     service = AssemblyService(segment_stitcher=_fake_stitcher)
+    service._write_video_container_metadata = write_container_metadata  # type: ignore[attr-defined]
     source = service.build_source_from_bundle(
         {
             "sequence_id": "seq-217",
@@ -78,6 +84,7 @@ def test_assembly_service_stitches_sequence_segments(tmp_path: Path) -> None:
     assert result.stitched_output.source_segment_paths == [str(seg0), str(seg1)]
     assert result.export_output.primary_path == str(tmp_path / "out" / "stitched_seq.mp4")
     assert Path(result.manifest_path).exists()
+    write_container_metadata.assert_called_once()
 
 
 def test_assembly_service_invokes_interpolation_provider(tmp_path: Path) -> None:

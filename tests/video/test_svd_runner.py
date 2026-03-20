@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from PIL import Image
@@ -45,6 +46,11 @@ def test_svd_runner_logs_run_summary(tmp_path: Path, monkeypatch, caplog) -> Non
         "src.video.svd_runner.write_svd_run_manifest",
         lambda **_kwargs: manifest_path,
     )
+    write_container_metadata = Mock(return_value=True)
+    monkeypatch.setattr(
+        "src.video.svd_runner.write_video_container_metadata",
+        write_container_metadata,
+    )
 
     class _FakeService:
         def generate_frames(self, **_kwargs):
@@ -64,6 +70,8 @@ def test_svd_runner_logs_run_summary(tmp_path: Path, monkeypatch, caplog) -> Non
     assert "[SVD] inference completed frame_count=1" in caplog.text
     assert "[SVD] postprocess completed frame_count=1 applied=['interpolation']" in caplog.text
     assert "[SVD] complete video=svd_source.mp4" in caplog.text
+    write_container_metadata.assert_called_once()
+    assert write_container_metadata.call_args.args[0] == output_video
 
 
 def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch) -> None:
@@ -92,6 +100,10 @@ def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch)
     monkeypatch.setattr(
         "src.video.svd_runner.write_svd_run_manifest",
         lambda **_kwargs: tmp_path / "svd_source.json",
+    )
+    monkeypatch.setattr(
+        "src.video.svd_runner.write_video_container_metadata",
+        lambda *_args, **_kwargs: True,
     )
 
     def _fake_process_frames(self, **kwargs):

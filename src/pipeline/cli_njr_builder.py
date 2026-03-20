@@ -6,19 +6,35 @@ from uuid import uuid4
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 
+_TXT2IMG_INACTIVE_HIRES_KEYS = (
+    "hr_scale",
+    "hr_upscaler",
+    "denoising_strength",
+    "hr_second_pass_steps",
+    "hr_resize_x",
+    "hr_resize_y",
+)
+
+
+def _txt2img_hires_enabled(data: dict[str, object]) -> bool:
+    return bool(data.get("enable_hr") or data.get("hires_enabled"))
+
 
 def _stage_config_from_section(stage_type: str, section: dict[str, object] | None) -> StageConfig:
     data = dict(section or {})
+    denoising_strength = (
+        float(data.get("denoising_strength", 0.0) or 0.0) or None
+        if "denoising_strength" in data
+        else None
+    )
+    if stage_type == "txt2img" and not _txt2img_hires_enabled(data):
+        denoising_strength = None
     return StageConfig(
         stage_type=stage_type,
         enabled=True,
         steps=int(data.get("steps", 0) or 0) or None,
         cfg_scale=float(data.get("cfg_scale", 0.0) or 0.0) or None,
-        denoising_strength=(
-            float(data.get("denoising_strength", 0.0) or 0.0) or None
-            if "denoising_strength" in data
-            else None
-        ),
+        denoising_strength=denoising_strength,
         sampler_name=str(data.get("sampler_name", "") or "") or None,
         scheduler=str(data.get("scheduler", "") or "") or None,
         model=str(data.get("model", "") or data.get("sd_model_checkpoint", "") or "") or None,
@@ -30,10 +46,16 @@ def _stage_config_from_section(stage_type: str, section: dict[str, object] | Non
 def _flatten_txt2img_config(config: dict[str, object]) -> dict[str, object]:
     txt2img = dict(config.get("txt2img", {}) or {})
     flattened = dict(txt2img)
+    if not _txt2img_hires_enabled(txt2img):
+        for key in _TXT2IMG_INACTIVE_HIRES_KEYS:
+            flattened.pop(key, None)
     for key in ("pipeline", "aesthetic"):
         value = config.get(key)
         if isinstance(value, dict):
             flattened[key] = deepcopy(value)
+    hires_fix = config.get("hires_fix")
+    if isinstance(hires_fix, dict):
+        flattened["hires_fix"] = deepcopy(hires_fix)
     return flattened
 
 

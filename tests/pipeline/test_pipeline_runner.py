@@ -600,3 +600,95 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
     assert result.metadata["video_artifacts"]["assembled_video"]["primary_path"] == str(assembled_video)
     assert result.metadata["assembled_video_result"]["success"] is True
     assert result.metadata["sequence_artifact"]["assembled_video"]["clip_name"] == "assembled_sequence"
+
+
+def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    input_path.write_bytes(b"seed")
+
+    output_video = tmp_path / "shot.mp4"
+    output_video.write_bytes(b"mp4")
+
+    class _WorkflowBackend:
+        backend_id = "comfy"
+        capabilities = VideoBackendCapabilities(
+            backend_id="comfy",
+            stage_types=("video_workflow",),
+            requires_input_image=True,
+            supports_prompt_text=True,
+            supports_negative_prompt=True,
+            supports_multiple_anchors=True,
+        )
+
+        def execute(self, pipeline, request):
+            return VideoExecutionResult.from_stage_result(
+                backend_id="comfy",
+                stage_name="video_workflow",
+                result={
+                    "path": str(output_video),
+                    "video_path": str(output_video),
+                    "output_paths": [str(output_video)],
+                    "manifest_path": None,
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "video_workflow",
+                        "artifact_type": "video",
+                        "primary_path": str(output_video),
+                        "output_paths": [str(output_video)],
+                        "manifest_path": None,
+                        "input_image_path": str(input_path),
+                    },
+                },
+                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
+                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+            )
+
+    registry = VideoBackendRegistry()
+    registry.register(_WorkflowBackend())
+    runner._video_backends = registry
+
+    record = NormalizedJobRecord(
+        job_id="runner-video-plan-origin",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[
+            StageConfig(
+                stage_type="video_workflow",
+                enabled=True,
+                extra={
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "sequence_metadata": {
+                        "sequence_id": "seq-plan-219",
+                        "total_segments": 2,
+                        "carry_forward_policy": "last_frame",
+                        "segment_length_frames": 24,
+                        "overlap_frames": 0,
+                        "plan_origin": {
+                            "plan_id": "story-001",
+                            "scene_id": "scene-001",
+                            "shot_id": "shot-001",
+                        },
+                    },
+                },
+            )
+        ],
+        input_image_paths=[str(input_path)],
+        start_stage="video_workflow",
+    )
+
+    runner._pipeline = Mock()
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert result.metadata["plan_origin"]["plan_id"] == "story-001"
+    assert result.metadata["sequence_artifact"]["plan_origin"]["shot_id"] == "shot-001"

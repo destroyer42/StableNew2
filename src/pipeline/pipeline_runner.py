@@ -217,6 +217,36 @@ class PipelineRunner:
                 return link
         return None
 
+    @staticmethod
+    def _resolve_plan_origin(
+        njr: NormalizedJobRecord,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+        sequence_config: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        candidates: list[Any] = []
+
+        extra_metadata = getattr(njr, "extra_metadata", None)
+        if isinstance(extra_metadata, Mapping):
+            candidates.append(extra_metadata.get("plan_origin"))
+
+        config = getattr(njr, "config", None)
+        if isinstance(config, Mapping):
+            config_metadata = config.get("metadata")
+            if isinstance(config_metadata, Mapping):
+                candidates.append(config_metadata.get("plan_origin"))
+
+        if isinstance(metadata, Mapping):
+            candidates.append(metadata.get("plan_origin"))
+
+        if isinstance(sequence_config, Mapping):
+            candidates.append(sequence_config.get("plan_origin"))
+
+        for candidate in candidates:
+            if isinstance(candidate, Mapping) and candidate:
+                return dict(candidate)
+        return None
+
     def _execute_video_stage(
         self,
         *,
@@ -441,8 +471,15 @@ class PipelineRunner:
             metadata=metadata,
             sequence_config=sequence_config,
         )
+        plan_origin = self._resolve_plan_origin(
+            njr,
+            metadata=metadata,
+            sequence_config=sequence_config,
+        )
         if continuity_link:
             metadata["continuity"] = dict(continuity_link)
+        if plan_origin:
+            metadata["plan_origin"] = dict(plan_origin)
 
         seq_job = VideoSequenceJob(
             sequence_id=str(sequence_config.get("sequence_id") or njr.job_id),
@@ -457,6 +494,7 @@ class PipelineRunner:
             base_negative_prompt=str(getattr(njr, "negative_prompt", "") or ""),
             per_segment_overrides=list(sequence_config.get("per_segment_overrides") or []),
             continuity_link=dict(continuity_link) if continuity_link else None,
+            plan_origin=dict(plan_origin) if plan_origin else None,
         )
 
         planner = VideoSequencePlanner()
@@ -467,6 +505,7 @@ class PipelineRunner:
             job_id=seq_job.job_id,
             total_segments=seq_job.total_segments,
             continuity_link=dict(continuity_link) if continuity_link else None,
+            plan_origin=dict(plan_origin) if plan_origin else None,
         )
 
         prior_output_path: str | None = current_stage_paths[0] if current_stage_paths else None

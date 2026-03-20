@@ -47,6 +47,11 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
         "src.video.comfy_workflow_backend.wait_for_comfy_ready",
         lambda *_args, **_kwargs: True,
     )
+    write_video_container_metadata = Mock(return_value=True)
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.write_video_container_metadata",
+        write_video_container_metadata,
+    )
 
     backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
 
@@ -84,6 +89,8 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
     assert variant_payload["video_backend_id"] == "comfy"
     assert variant_payload["manifest_path"] == result.manifest_path
     assert variant_payload["artifact"]["primary_path"] == str(output_video)
+    write_video_container_metadata.assert_called_once()
+    assert write_video_container_metadata.call_args.args[0] == str(output_video)
 
 
 def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
@@ -99,6 +106,10 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
     client.get_object_info.return_value = {"models": {"checkpoints": []}}
     monkeypatch.setattr(
         "src.video.comfy_workflow_backend.wait_for_comfy_ready",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.write_video_container_metadata",
         lambda *_args, **_kwargs: True,
     )
 
@@ -164,6 +175,10 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
     ]
     monkeypatch.setattr(
         "src.video.comfy_workflow_backend.wait_for_comfy_ready",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.write_video_container_metadata",
         lambda *_args, **_kwargs: True,
     )
 

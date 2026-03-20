@@ -36,6 +36,8 @@ _EXECUTION_HINT_KEYS = {
     "metadata",
     "continuity",
     "continuity_link",
+    "plan_origin",
+    "story_plan",
 }
 
 _INTENT_TOP_LEVEL_KEYS = (
@@ -151,6 +153,36 @@ def extract_continuity_linkage(value: Any) -> dict[str, Any]:
     return {}
 
 
+def extract_plan_origin_linkage(value: Any) -> dict[str, Any]:
+    layers = _config_layers_mapping(value)
+    candidates: list[Any] = []
+    if layers:
+        intent_config = _mapping_dict(layers.get("intent_config"))
+        execution_config = _mapping_dict(layers.get("execution_config"))
+        candidates.extend(
+            [
+                intent_config.get("plan_origin"),
+                intent_config.get("story_plan"),
+                execution_config.get("plan_origin"),
+                execution_config.get("story_plan"),
+            ]
+        )
+        metadata = execution_config.get("metadata")
+        if isinstance(metadata, Mapping):
+            candidates.append(metadata.get("plan_origin"))
+    else:
+        data = _mapping_dict(value)
+        candidates.extend([data.get("plan_origin"), data.get("story_plan")])
+        metadata = data.get("metadata")
+        if isinstance(metadata, Mapping):
+            candidates.append(metadata.get("plan_origin"))
+
+    for candidate in candidates:
+        if isinstance(candidate, Mapping) and candidate:
+            return _mapping_dict(candidate)
+    return {}
+
+
 def canonicalize_backend_options(
     value: Any,
     *,
@@ -229,6 +261,7 @@ __all__ = [
     "canonicalize_intent_config",
     "derive_backend_options",
     "extract_continuity_linkage",
+    "extract_plan_origin_linkage",
     "extract_execution_config",
     "is_layered_config",
 ]
