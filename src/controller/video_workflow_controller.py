@@ -131,7 +131,10 @@ class VideoWorkflowController:
             if not path.exists() or not path.is_file():
                 return False, f"Mid anchor image does not exist: {path}"
         if self._continuity_form_supplied(form_data) and self._build_continuity_link(form_data) is None:
-            return False, "Continuity pack metadata is missing a stable pack id."
+            return False, (
+                "Continuity pack metadata requires a valid pack_id. Please provide continuity_pack_id or "
+                "ensure continuity_pack_summary contains a pack_id."
+            )
         return True, None
 
     def submit_video_workflow_job(
