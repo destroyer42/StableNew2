@@ -51,7 +51,10 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
 - `tests/compat/` still preserves temporary migration behavior that should continue shrinking
 - `AppStateV2.run_config` still exists as a GUI-facing dict projection, even though
   canonical config layers are now mirrored alongside it
-- higher-level video sequence, stitch, continuity, and planning layers are not yet implemented
+- image generation still lacks a runner-owned adaptive refinement layer for
+  small-subject, distant-face, and difficult-pose recovery
+- manifests, replay, and learning do not yet carry a canonical adaptive
+  refinement decision provenance
 
 ## 3. Status of the Older Revised Video Queue
 
@@ -233,10 +236,117 @@ Detailed execution spec:
 
 - `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
 
+### 8. `PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation`
+
+Status: Planned
+
+Establish the canonical adaptive refinement contract before any behavior change.
+
+Primary outcomes:
+
+- one nested `intent_config["adaptive_refinement"]` contract
+- a StableNew-owned `src/refinement/` package boundary
+- builder and NJR persistence without new job models
+- import-boundary guard tests and a schema document
+
+Guiding roadmap:
+
+- `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
+
+### 9. `PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture`
+
+Status: Planned
+
+Add the deterministic observation layer before any output-changing behavior.
+
+Primary outcomes:
+
+- prompt-intent analysis reusing the current prompt subsystem
+- observation-only decision bundles in runner metadata
+- null-detector fallback and no stage mutation
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
+
+### 10. `PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment`
+
+Status: Planned
+
+Add the first real subject-assessment path without making OpenCV mandatory.
+
+Primary outcomes:
+
+- optional OpenCV detector support
+- threshold versioning for scale-band assessment
+- richer observation bundles with deterministic fallback behavior
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
+
+### 11. `PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application`
+
+Status: Planned
+
+Roll out the first controlled runtime actuation, limited to ADetailer.
+
+Primary outcomes:
+
+- per-image ADetailer-safe overrides
+- explicit rollout modes and rollback path
+- manifest-facing provenance for applied overrides
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
+
+### 12. `PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration`
+
+Status: Planned
+
+Complete the runtime portion of adaptive refinement with bounded prompt and
+upscale integration.
+
+Primary outcomes:
+
+- stage-scoped prompt patches with deterministic merge order
+- bounded upscale policy application
+- original-prompt and final-prompt provenance for replay
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
+
+### 13. `PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback`
+
+Status: Planned
+
+Close the loop by making refinement decisions visible to the local learning
+system without weakening evidence-tier safeguards.
+
+Primary outcomes:
+
+- scalar refinement metrics in learning records
+- refinement-aware recommendation context
+- conservative, evidence-tier-respecting feedback for future tuning
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
+
 ## 5. Missing Common Functionality to Fold Into the Queue
 
 These are the important missing capabilities that are not just "nice to have":
 
+- adaptive refinement for small, distant, or profile faces is still missing from
+  the image pipeline
+- manifests, replay, and learning still need a canonical refinement-decision
+  provenance path
 - continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
 - further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
 
@@ -245,9 +355,12 @@ These are the important missing capabilities that are not just "nice to have":
 StableNew's next stage is successful when:
 
 - image and short-form video are both solid under the current queue-first architecture
+- image generation can apply runner-owned adaptive refinement under explicit
+  rollout modes without creating a second execution model
 - long-form video has a first-class planning/orchestration path
 - post-video outputs are canonical artifacts, not side utilities
 - continuity and shot-planning data can persist through manifests/history
+- manifests and learning records can preserve adaptive refinement provenance
 - the GUI feels intentionally designed around the current workflow set
 
 ## 7. Guiding Principle

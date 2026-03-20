@@ -2,7 +2,7 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-19
+Updated: 2026-03-20
 
 ## 0. Purpose
 
@@ -43,6 +43,7 @@ which files are canonical, operational, backlog-driving, or archived.
 
 - `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
+- `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 - `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
 - `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
@@ -50,6 +51,12 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
 - `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 - `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
+- `docs/PR_Backlog/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
+- `docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
+- `docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
+- `docs/PR_Backlog/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
+- `docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
+- `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
 
 ### 1.5 Reference and history
 
