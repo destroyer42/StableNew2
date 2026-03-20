@@ -55,6 +55,63 @@ def test_run_njr_delegates_to_executor() -> None:
     assert result.metadata["diagnostics_descriptor"]["output_count"] == 1
 
 
+def test_run_njr_emits_observation_only_adaptive_refinement_metadata() -> None:
+    runner = PipelineRunner(Mock(), Mock())
+    record = _minimal_normalized_record()
+    record.positive_prompt = "full body portrait, profile, woman, detailed face"
+    record.negative_prompt = "bad anatomy"
+    record.prompt_pack_id = "pack-001"
+    record.prompt_pack_name = "Pack 001"
+    record.intent_config = {
+        "adaptive_refinement": {
+            "schema": "stablenew.adaptive-refinement.v1",
+            "enabled": True,
+            "mode": "observe",
+            "profile_id": "auto_v1",
+            "detector_preference": "null",
+            "record_decisions": True,
+            "algorithm_version": "v1",
+        }
+    }
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert "adaptive_refinement" in result.metadata
+    refinement = result.metadata["adaptive_refinement"]
+    assert refinement["intent"]["mode"] == "observe"
+    assert refinement["prompt_intent"]["requested_pose"] == "profile"
+    assert refinement["decision_bundle"]["mode"] == "observe"
+    assert refinement["decision_bundle"]["policy_id"] == "observe_only_v1"
+    assert refinement["decision_bundle"]["applied_overrides"] == {}
+    pipeline.run_txt2img_stage.assert_called_once()
+
+
+def test_run_njr_does_not_emit_adaptive_refinement_metadata_when_disabled() -> None:
+    runner = PipelineRunner(Mock(), Mock())
+    record = _minimal_normalized_record()
+    record.intent_config = {
+        "adaptive_refinement": {
+            "schema": "stablenew.adaptive-refinement.v1",
+            "enabled": False,
+            "mode": "observe",
+        }
+    }
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert "adaptive_refinement" not in result.metadata
+
+
 def test_pipeline_run_result_to_dict_and_back() -> None:
     result = PipelineRunResult(
         run_id="roundtrip-001",

@@ -21,9 +21,11 @@ class NoOpRefinementPolicyRegistry:
         mode: str,
         observation: dict[str, Any] | None = None,
     ) -> RefinementDecisionBundle:
+        normalized_mode = mode if mode in {"disabled", "observe", "adetailer", "full"} else "disabled"
         return RefinementDecisionBundle(
             algorithm_version=self.algorithm_version,
-            mode=mode if mode in {"disabled", "observe", "adetailer", "full"} else "disabled",
+            mode=normalized_mode,
+            policy_id="observe_only_v1" if normalized_mode == "observe" else None,
             detector_id="null",
             observation=dict(observation or {}),
         )

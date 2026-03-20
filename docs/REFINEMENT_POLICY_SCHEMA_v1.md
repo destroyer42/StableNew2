@@ -78,6 +78,68 @@ The initial decision bundle shape is:
 }
 ```
 
+Observation-mode runner metadata in `PR-HARDEN-225` is emitted as:
+
+```json
+{
+  "adaptive_refinement": {
+    "intent": {
+      "schema": "stablenew.adaptive-refinement.v1",
+      "enabled": true,
+      "mode": "observe",
+      "profile_id": "auto_v1",
+      "detector_preference": "null",
+      "record_decisions": true,
+      "algorithm_version": "v1"
+    },
+    "prompt_intent": {
+      "intent_band": "portrait",
+      "requested_pose": "unknown",
+      "wants_face_detail": false,
+      "wants_full_body": false,
+      "wants_profile": false,
+      "wants_portrait": false,
+      "has_people_tokens": false,
+      "has_lora_tokens": false,
+      "positive_embedding_count": 0,
+      "positive_chunks": [],
+      "negative_chunks": [],
+      "conflicts": [],
+      "context": {}
+    },
+    "decision_bundle": {
+      "schema": "stablenew.refinement-decision.v1",
+      "algorithm_version": "v1",
+      "mode": "observe",
+      "policy_id": "observe_only_v1",
+      "detector_id": "null",
+      "observation": {
+        "prompt_intent": {},
+        "subject_assessment": {
+          "detector_id": "null",
+          "image_path": null,
+          "detection_count": 0,
+          "primary_detection_index": null,
+          "scale_band": "no_face",
+          "pose_band": "unknown",
+          "notes": ["assessment_unavailable", "no_face_detected"]
+        }
+      },
+      "applied_overrides": {},
+      "prompt_patch": {},
+      "notes": []
+    }
+  }
+}
+```
+
+In `PR-HARDEN-225`, this block is metadata-only:
+
+- no manifest mutation
+- no embedded-image-metadata mutation
+- no executor payload mutation
+- no stage-config mutation
+
 ## Series Constraints
 
 - `PR-HARDEN-224`: contract only, no runtime behavior change

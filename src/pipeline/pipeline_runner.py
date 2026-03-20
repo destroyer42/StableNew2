@@ -17,6 +17,7 @@ from src.gui.state import CancellationError
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
+from src.pipeline.config_contract_v26 import extract_adaptive_refinement_intent
 from src.pipeline.artifact_contract import canonicalize_variant_entries
 from src.pipeline.executor import Pipeline
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -32,6 +33,8 @@ from src.pipeline.stage_sequencer import (
     StageSequencer,
     StageTypeEnum,
 )
+from src.refinement.prompt_intent_analyzer import PromptIntentAnalyzer
+from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 from src.state.output_routing import classify_njr_output_route, get_output_route_root
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
@@ -786,6 +789,34 @@ class PipelineRunner:
             last_result = None
             prompt = getattr(njr, "positive_prompt", "") or ""
             negative_prompt = getattr(njr, "negative_prompt", "") or ""
+            adaptive_refinement_intent = extract_adaptive_refinement_intent(
+                getattr(njr, "intent_config", None) or {}
+            )
+            if adaptive_refinement_intent.get("enabled") and adaptive_refinement_intent.get("mode") == "observe":
+                prompt_intent = self._prompt_intent_analyzer.infer(
+                    positive=prompt,
+                    negative=negative_prompt,
+                    context={
+                        "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
+                        "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
+                        "variant_index": getattr(njr, "variant_index", 0),
+                        "batch_index": getattr(njr, "batch_index", 0),
+                    },
+                )
+                decision_bundle = self._refinement_policy_service.build_bundle(
+                    mode="observe",
+                    prompt_intent=prompt_intent,
+                    image_path=None,
+                    extra_observation={
+                        "stage_chain": [planned_stage.stage_name for planned_stage in plan.jobs],
+                        "enabled_stage_count": len(plan.jobs),
+                    },
+                )
+                metadata["adaptive_refinement"] = {
+                    "intent": dict(adaptive_refinement_intent),
+                    "prompt_intent": dict(prompt_intent),
+                    "decision_bundle": dict(decision_bundle),
+                }
             
             # REPROCESSING SUPPORT: Check if this is a reprocessing job
             # If input_image_paths are provided, use them as starting images
@@ -1463,6 +1494,8 @@ class PipelineRunner:
         self._learning_enabled = bool(learning_enabled)
         self._sequencer = sequencer or StageSequencer()
         self._video_backends = video_backend_registry or build_default_video_backend_registry()
+        self._prompt_intent_analyzer = PromptIntentAnalyzer()
+        self._refinement_policy_service = SubjectScalePolicyService()
 
     def _ensure_not_cancelled(self, cancel_token: CancelToken | None, context: str) -> None:
         if (
