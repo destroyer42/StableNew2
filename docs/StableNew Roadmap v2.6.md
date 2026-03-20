@@ -225,6 +225,10 @@ Delivered outcomes:
 - history replay/hydration logic moved behind a bounded pipeline-controller
   handoff service instead of living directly in the top-level controller
 
+Completion record:
+
+- `docs/CompletedPR/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
