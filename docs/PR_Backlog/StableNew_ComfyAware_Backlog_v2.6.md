@@ -49,13 +49,12 @@ The earlier `PR-VIDEO-078` through `PR-VIDEO-088` plan maps to current repo stat
 - `PR-VIDEO-085` completed in substance via `PR-VIDEO-217` stitch/interpolation/clip-assembly unification
 - `PR-VIDEO-086` substantially covered by `PR-OBS-212`; future improvements are now incremental polish
 - `PR-VIDEO-087` completed in substance via `PR-VIDEO-218` continuity pack foundation
-- `PR-VIDEO-088` still missing, now formalized as `PR-VIDEO-219`
+- `PR-VIDEO-088` completed in substance via `PR-VIDEO-219` story and shot planning foundation
 
 ## Common Missing Functionality
 
 Beyond the old numbered plan, the current repo still lacks a few important product layers:
 
-- story and shot planning does not yet exist above sequence jobs and continuity packs
 - Movie Clips and Video Workflow still need further workspace-level UX convergence
 
 ## Revised Video/Product Queue
@@ -145,7 +144,9 @@ Execution spec:
 
 ### `PR-VIDEO-219-Story-and-Shot-Planning-Foundation`
 
-Add the first manual planning layer above raw sequence jobs.
+Status: Completed 2026-03-20
+
+Added the first manual planning layer above raw sequence jobs.
 
 Required outputs:
 
@@ -154,6 +155,10 @@ Required outputs:
 - `ShotPlan`
 - `AnchorPlan`
 - deterministic plan-to-sequence compilation
+
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
 
 Execution spec:
 

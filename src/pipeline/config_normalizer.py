@@ -61,6 +61,22 @@ _UPSCALE_TOP_LEVEL_KEYS = {
     "iterations",
 }
 
+_TXT2IMG_HIRES_KEYS = {
+    "enable_hr",
+    "hires_enabled",
+    "hr_scale",
+    "hires_scale_factor",
+    "hr_upscaler",
+    "hires_upscaler_name",
+    "denoising_strength",
+    "hires_denoise",
+    "hires_denoise_strength",
+    "hr_second_pass_steps",
+    "hires_steps",
+    "hr_resize_x",
+    "hr_resize_y",
+}
+
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
@@ -166,6 +182,21 @@ def normalize_stage_payload_config(
         normalized["hires_steps"] = int(hires_steps)
         normalized["hr_second_pass_steps"] = int(hires_steps)
 
+    if stage_type == "txt2img" and not hires_enabled:
+        for key in (
+            "hires_scale_factor",
+            "hr_scale",
+            "hires_upscaler_name",
+            "hr_upscaler",
+            "hires_denoise",
+            "denoising_strength",
+            "hires_steps",
+            "hr_second_pass_steps",
+            "hr_resize_x",
+            "hr_resize_y",
+        ):
+            normalized.pop(key, None)
+
     refiner_enabled = bool(_first_value(normalized, "refiner_enabled", "use_refiner") or False)
     if (
         "refiner_enabled" in normalized
@@ -253,28 +284,59 @@ def normalize_pipeline_config(config: Mapping[str, Any] | None) -> dict[str, Any
     normalized["pipeline"] = pipeline
 
     hires_fix = _mapping_dict(raw.get("hires_fix"))
-    if normalized["txt2img"].get("hires_enabled") or hires_fix:
+    raw_txt2img = _mapping_dict(raw.get("txt2img"))
+    txt2img_hires_present = bool(
+        _TXT2IMG_HIRES_KEYS.intersection(raw.keys())
+        or _TXT2IMG_HIRES_KEYS.intersection(raw_txt2img.keys())
+    )
+    if normalized["txt2img"].get("hires_enabled") or hires_fix or txt2img_hires_present:
         hires_fix["enabled"] = bool(
             hires_fix.get("enabled", normalized["txt2img"].get("hires_enabled", False))
         )
         scale = _first_value(hires_fix, "upscale_factor", "scale")
         if not _has_value(scale):
-            scale = normalized["txt2img"].get("hires_scale_factor")
+            scale = _first_value(
+                raw_txt2img,
+                "hires_scale_factor",
+                "hr_scale",
+            )
+        if not _has_value(scale):
+            scale = _first_value(raw, "hires_scale_factor", "hr_scale")
         if _has_value(scale):
             hires_fix["upscale_factor"] = float(scale)
         upscaler = _first_value(hires_fix, "upscaler_name", "hr_upscaler")
         if not _has_value(upscaler):
-            upscaler = normalized["txt2img"].get("hires_upscaler_name")
+            upscaler = _first_value(
+                raw_txt2img,
+                "hires_upscaler_name",
+                "hr_upscaler",
+            )
+        if not _has_value(upscaler):
+            upscaler = _first_value(raw, "hires_upscaler_name", "hr_upscaler")
         if _has_value(upscaler):
             hires_fix["upscaler_name"] = upscaler
         denoise = _first_value(hires_fix, "denoise", "denoise_strength")
         if not _has_value(denoise):
-            denoise = normalized["txt2img"].get("hires_denoise")
+            denoise = _first_value(
+                raw_txt2img,
+                "hires_denoise",
+                "hires_denoise_strength",
+                "denoising_strength",
+            )
+        if not _has_value(denoise):
+            denoise = _first_value(
+                raw,
+                "hires_denoise",
+                "hires_denoise_strength",
+                "denoising_strength",
+            )
         if _has_value(denoise):
             hires_fix["denoise"] = float(denoise)
         steps = _first_value(hires_fix, "steps")
         if not _has_value(steps):
-            steps = normalized["txt2img"].get("hires_steps")
+            steps = _first_value(raw_txt2img, "hires_steps", "hr_second_pass_steps")
+        if not _has_value(steps):
+            steps = _first_value(raw, "hires_steps", "hr_second_pass_steps")
         if _has_value(steps):
             hires_fix["steps"] = int(steps)
     normalized["hires_fix"] = hires_fix

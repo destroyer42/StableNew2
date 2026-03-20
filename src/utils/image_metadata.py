@@ -36,6 +36,11 @@ class ImageMetadataContractV26:
 
     SOFT_LIMIT_BYTES = 32 * 1024
     HARD_LIMIT_BYTES = 256 * 1024
+    PUBLIC_SCHEMA = "stablenew.public-image-metadata.v2.6"
+    PUBLIC_KEY_DESCRIPTION = "Description"
+    PUBLIC_KEY_COMMENT = "Comment"
+    PUBLIC_KEY_PARAMETERS = "parameters"
+    PUBLIC_KEY_SOFTWARE = "Software"
 
 
 @dataclass(frozen=True)
@@ -136,6 +141,9 @@ def build_contract_kv(
             kv[ImageMetadataContractV26.KEY_HISTORY_REF] = history_ref
         else:
             kv[ImageMetadataContractV26.KEY_HISTORY_REF] = canonical_json_bytes(history_ref).decode("utf-8")
+    for key, value in build_public_metadata_kv(payload).items():
+        if value:
+            kv.setdefault(key, value)
     return kv
 
 
@@ -207,6 +215,16 @@ def write_jpg_metadata(path: Path, kv: dict[str, str]) -> bool:
         with Image.open(path) as img:
             exif = img.getexif()
             exif[37510] = comment
+            description = str(
+                kv.get(ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS)
+                or kv.get(ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION)
+                or ""
+            ).strip()
+            software = str(kv.get(ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE) or "StableNew").strip()
+            if description:
+                exif[270] = description
+            if software:
+                exif[305] = software
             temp_path = path.with_name(f"{path.stem}.tmp{path.suffix}")
             img.save(temp_path, exif=exif)
         temp_path.replace(path)
@@ -220,21 +238,30 @@ def read_jpg_metadata(path: Path) -> dict[str, str]:
     try:
         with Image.open(path) as img:
             exif = img.getexif()
+            info: dict[str, str] = {}
+            description = exif.get(270)
+            if description:
+                info[ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION] = str(description)
+                info.setdefault(ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS, str(description))
+            software = exif.get(305)
+            if software:
+                info[ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE] = str(software)
             comment = exif.get(37510)
             if not comment:
-                return {}
+                return info
             if isinstance(comment, bytes):
                 data = comment
             else:
                 data = str(comment).encode("ascii", errors="ignore")
             if not data.startswith(b"SNMETA:"):
-                return {}
+                return info
             encoded = data[len(b"SNMETA:") :].decode("ascii", errors="ignore")
             raw = base64.b64decode(encoded)
             payload = json.loads(raw.decode("utf-8"))
             if isinstance(payload, dict):
-                return {str(k): str(v) for k, v in payload.items()}
-            return {}
+                info.update({str(k): str(v) for k, v in payload.items()})
+                return info
+            return info
     except Exception:
         return {}
 
@@ -274,6 +301,78 @@ def extract_embedded_metadata(image_path: Path) -> ReadPayloadResult:
     if kv.get(ImageMetadataContractV26.KEY_SCHEMA) != ImageMetadataContractV26.SCHEMA:
         return ReadPayloadResult(None, "missing")
     return decode_payload(kv)
+
+
+def build_public_metadata_payload(metadata_payload: dict[str, Any] | None) -> dict[str, Any]:
+    payload = metadata_payload if isinstance(metadata_payload, dict) else {}
+    generation = _dict_or_empty(payload.get("generation"))
+    stage_manifest = _dict_or_empty(payload.get("stage_manifest"))
+    image = _dict_or_empty(payload.get("image"))
+    public_payload: dict[str, Any] = {
+        "schema": ImageMetadataContractV26.PUBLIC_SCHEMA,
+        "media_type": "image",
+        "job_id": _first_non_empty_string(payload.get("job_id")),
+        "run_id": _first_non_empty_string(payload.get("run_id")),
+        "stage": _first_non_empty_string(payload.get("stage"), stage_manifest.get("stage")),
+        "image": {k: v for k, v in image.items() if v not in (None, "", [], {})},
+        "generation": {k: v for k, v in generation.items() if v not in (None, "", [], {})},
+        "seeds": _dict_or_empty(payload.get("seeds")),
+        "config": _dict_or_empty(stage_manifest.get("config")),
+        "artifact": _dict_or_empty(payload.get("artifact")),
+    }
+    if "refiner" in payload and isinstance(payload.get("refiner"), dict):
+        public_payload["refiner"] = payload["refiner"]
+    return {k: v for k, v in public_payload.items() if v not in (None, "", [], {})}
+
+
+def build_public_parameters_text(metadata_payload: dict[str, Any] | None) -> str:
+    payload = metadata_payload if isinstance(metadata_payload, dict) else {}
+    public_payload = build_public_metadata_payload(payload)
+    generation = _dict_or_empty(public_payload.get("generation"))
+    seeds = _dict_or_empty(public_payload.get("seeds"))
+    prompt = str(generation.get("prompt") or "").strip()
+    negative_prompt = str(generation.get("negative_prompt") or "").strip()
+    width = generation.get("width")
+    height = generation.get("height")
+    parameter_bits = [
+        f"Steps: {generation.get('steps')}" if generation.get("steps") is not None else "",
+        f"Sampler: {generation.get('sampler_name')}" if generation.get("sampler_name") else "",
+        f"Scheduler: {generation.get('scheduler')}" if generation.get("scheduler") else "",
+        f"CFG scale: {generation.get('cfg_scale')}" if generation.get("cfg_scale") is not None else "",
+        f"Seed: {seeds.get('actual_seed') or seeds.get('requested_seed')}" if (seeds.get("actual_seed") is not None or seeds.get("requested_seed") is not None) else "",
+        f"Size: {width}x{height}" if width and height else "",
+        f"Model: {generation.get('model')}" if generation.get("model") else "",
+        f"VAE: {generation.get('vae')}" if generation.get("vae") else "",
+        f"Clip skip: {generation.get('clip_skip')}" if generation.get("clip_skip") is not None else "",
+        f"Denoising strength: {generation.get('denoising_strength')}" if generation.get("denoising_strength") is not None else "",
+        f"Stage: {public_payload.get('stage')}" if public_payload.get("stage") else "",
+    ]
+    lines = [prompt]
+    if negative_prompt:
+        lines.append(f"Negative prompt: {negative_prompt}")
+    parameter_line = ", ".join([item for item in parameter_bits if item])
+    if parameter_line:
+        lines.append(parameter_line)
+    return "\n".join([line for line in lines if line]).strip()
+
+
+def build_public_metadata_kv(metadata_payload: dict[str, Any] | None) -> dict[str, str]:
+    public_payload = build_public_metadata_payload(metadata_payload)
+    comment = _first_non_empty_string(
+        public_payload.get("stage"),
+        public_payload.get("generation", {}).get("model") if isinstance(public_payload.get("generation"), dict) else "",
+    )
+    prompt = ""
+    if isinstance(public_payload.get("generation"), dict):
+        prompt = str(public_payload["generation"].get("prompt") or "").strip()
+    if prompt:
+        comment = f"{comment} | {prompt}" if comment else prompt
+    return {
+        ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION: json.dumps(public_payload, ensure_ascii=False, sort_keys=True),
+        ImageMetadataContractV26.PUBLIC_KEY_COMMENT: comment.strip() or "StableNew image export",
+        ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS: build_public_parameters_text(metadata_payload),
+        ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE: "StableNew",
+    }
 
 
 def _first_non_empty_string(*values: Any) -> str:

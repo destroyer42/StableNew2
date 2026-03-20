@@ -28,6 +28,7 @@ from src.video.interpolation_contracts import (
     InterpolationProvider,
     NoOpInterpolationProvider,
 )
+from src.video.container_metadata import write_video_container_metadata
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_export import export_image_sequence_video, stitch_video_segments
 
@@ -50,6 +51,7 @@ class AssemblyService:
         self._image_exporter = image_exporter or export_image_sequence_video
         self._segment_stitcher = segment_stitcher or stitch_video_segments
         self._interpolation_provider = interpolation_provider or NoOpInterpolationProvider()
+        self._write_video_container_metadata = write_video_container_metadata
 
     def build_source_from_bundle(self, source_bundle: dict[str, Any]) -> AssembledSequenceInput:
         if not isinstance(source_bundle, dict):
@@ -224,6 +226,22 @@ class AssemblyService:
                     output_paths=list(result.export_output.output_paths),
                     manifest_path=str(manifest_path),
                     artifact_bundle=export_bundle,
+                )
+                self._write_video_container_metadata(
+                    result.export_output.primary_path,
+                    {
+                        "stage": "assembled_video",
+                        "backend_id": "stablenew",
+                        "run_id": output_dir.name,
+                        "title": clip_name,
+                        "source_image_path": source.source_image_path(),
+                        "manifest_path": str(manifest_path),
+                        "primary_path": result.export_output.primary_path,
+                        "output_paths": list(result.export_output.output_paths),
+                        "frame_path_count": len(source.resolved_frame_paths()),
+                        "config": dict(export_settings),
+                        "artifact": dict(export_bundle),
+                    },
                 )
             return result
         except Exception as exc:

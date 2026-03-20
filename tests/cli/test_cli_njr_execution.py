@@ -59,6 +59,41 @@ def test_build_cli_njr_creates_canonical_stage_chain() -> None:
     assert record.config["aesthetic"]["enabled"] is True
 
 
+def test_build_cli_njr_omits_inactive_txt2img_hires_fields() -> None:
+    config = _base_config()
+    config["txt2img"].update(
+        {
+            "enable_hr": False,
+            "hr_scale": 1.5,
+            "hr_upscaler": "Latent",
+            "denoising_strength": 0.4,
+            "hr_second_pass_steps": 8,
+        }
+    )
+    config["hires_fix"] = {
+        "enabled": False,
+        "upscale_factor": 1.5,
+        "upscaler_name": "Latent",
+        "denoise": 0.4,
+        "steps": 8,
+    }
+
+    record = build_cli_njr(
+        prompt="test prompt",
+        config=config,
+        batch_size=1,
+        run_name="cli-run",
+    )
+
+    assert record.config["enable_hr"] is False
+    assert "hr_scale" not in record.config
+    assert "hr_upscaler" not in record.config
+    assert "denoising_strength" not in record.config
+    assert "hr_second_pass_steps" not in record.config
+    assert record.config["hires_fix"]["denoise"] == 0.4
+    assert record.stage_chain[0].denoising_strength is None
+
+
 class _FakeConfigManager:
     def __init__(self) -> None:
         self._config = _base_config()

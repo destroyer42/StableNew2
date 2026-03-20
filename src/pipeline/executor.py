@@ -38,6 +38,7 @@ from src.pipeline.animatediff_models import (
     resolve_animatediff_motion_module,
 )
 from src.pipeline.video import VideoCreator, write_video_frames
+from src.video.container_metadata import write_video_container_metadata
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 
 from ..api import SDWebUIClient
@@ -3146,18 +3147,21 @@ class Pipeline:
                 "sd_vae": requested_vae,
             }
 
-            # Always include hires.fix parameters (will be ignored if enable_hr is False)
-            payload.update(
-                {
-                    "enable_hr": txt2img_config.get("enable_hr", False),
-                    "hr_scale": txt2img_config.get("hr_scale", 2.0),
-                    "hr_upscaler": txt2img_config.get("hr_upscaler", "Latent"),
-                    "hr_second_pass_steps": txt2img_config.get("hr_second_pass_steps", 0),
-                    "hr_resize_x": txt2img_config.get("hr_resize_x", 0),
-                    "hr_resize_y": txt2img_config.get("hr_resize_y", 0),
-                    "denoising_strength": txt2img_config.get("denoising_strength", 0.7),
-                }
-            )
+            enable_hr = bool(txt2img_config.get("enable_hr", False))
+            payload["enable_hr"] = enable_hr
+            if enable_hr:
+                payload.update(
+                    {
+                        "hr_scale": txt2img_config.get("hr_scale", 2.0),
+                        "hr_upscaler": txt2img_config.get("hr_upscaler", "Latent"),
+                        "hr_second_pass_steps": txt2img_config.get("hr_second_pass_steps", 0),
+                        "hr_resize_x": txt2img_config.get("hr_resize_x", 0),
+                        "hr_resize_y": txt2img_config.get("hr_resize_y", 0),
+                    }
+                )
+                denoising_strength = txt2img_config.get("denoising_strength")
+                if denoising_strength is not None:
+                    payload["denoising_strength"] = denoising_strength
             # Optional separate sampler for hires second pass
             try:
                 hr_sampler_name = txt2img_config.get("hr_sampler_name")
@@ -3816,6 +3820,28 @@ class Pipeline:
             self._write_manifest_file(
                 manifest_path=manifest_path,
                 metadata=metadata,
+            )
+            write_video_container_metadata(
+                video_path,
+                {
+                    "stage": "animatediff",
+                    "backend_id": "animatediff",
+                    "job_id": getattr(self, "_current_job_id", None),
+                    "run_id": output_dir.name,
+                    "title": image_name,
+                    "prompt": prompt,
+                    "negative_prompt": negative_prompt,
+                    "source_image_path": str(input_image_path) if input_image_path else None,
+                    "manifest_path": str(manifest_path),
+                    "video_path": str(video_path),
+                    "video_paths": [str(video_path)],
+                    "frame_path_count": len(frame_paths),
+                    "fps": animatediff_cfg.fps,
+                    "seed": gen_info.get("seed"),
+                    "thumbnail_path": str(frame_paths[0]) if frame_paths else None,
+                    "config": self._clean_metadata_payload(payload),
+                    "artifact": metadata["artifact"],
+                },
             )
 
             self._record_stage_event(

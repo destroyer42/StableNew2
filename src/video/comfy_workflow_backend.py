@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.video.video_artifact_helpers import build_video_artifact_bundle
+from src.video.container_metadata import write_video_container_metadata
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.comfy_healthcheck import wait_for_comfy_ready
@@ -157,6 +158,48 @@ class ComfyWorkflowVideoBackend:
             history_entry=history_entry,
             resolved_outputs=resolved_outputs,
         )
+        metadata_payload = {
+            "stage": request.stage_name,
+            "backend_id": self.backend_id,
+            "job_id": request.job_id,
+            "run_id": Path(request.output_dir).name,
+            "title": request.image_name or Path(str(resolved_outputs["primary_path"] or "video")).stem,
+            "prompt": request.prompt,
+            "negative_prompt": request.negative_prompt,
+            "source_image_path": str(request.input_image_path) if request.input_image_path else None,
+            "end_anchor_path": str(request.end_anchor_path) if request.end_anchor_path else None,
+            "mid_anchor_paths": [str(path) for path in request.mid_anchor_paths or []],
+            "motion_profile": request.motion_profile,
+            "workflow_id": spec.workflow_id,
+            "workflow_version": spec.workflow_version,
+            "manifest_path": str(manifest_path),
+            "output_paths": list(resolved_outputs["output_paths"]),
+            "video_paths": list(resolved_outputs["video_paths"]),
+            "gif_paths": list(resolved_outputs["gif_paths"]),
+            "frame_path_count": len(resolved_outputs["frame_paths"]),
+            "thumbnail_path": resolved_outputs["thumbnail_path"],
+            "compiled_inputs": dict(compiled.compiled_inputs),
+            "config": {
+                "stage_config": stage_config,
+                "compiled_inputs": dict(compiled.compiled_inputs),
+                "compiled_outputs": dict(compiled.compiled_outputs),
+                "compiler_metadata": dict(compiled.compiler_metadata),
+            },
+            "artifact": artifact_manifest_payload(
+                stage=request.stage_name,
+                image_or_output_path=primary_path,
+                manifest_path=manifest_path,
+                output_paths=output_paths,
+                thumbnail_path=resolved_outputs["thumbnail_path"],
+                input_image_path=request.input_image_path,
+                artifact_type="video",
+            ),
+        }
+        for candidate_path in [
+            *resolved_outputs["video_paths"],
+            *resolved_outputs["gif_paths"],
+        ]:
+            write_video_container_metadata(candidate_path, metadata_payload)
         raw_result = {
             "path": primary_path,
             "output_path": primary_path,

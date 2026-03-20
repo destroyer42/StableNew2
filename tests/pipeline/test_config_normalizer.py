@@ -47,3 +47,28 @@ def test_normalize_stage_payload_config_handles_hires_and_upscale_aliases() -> N
     assert normalized["upscaler"] == "4x-UltraSharp"
     assert normalized["upscale_factor"] == 2.0
     assert normalized["upscale_iterations"] == 3
+
+
+def test_normalize_pipeline_config_moves_disabled_txt2img_hires_settings_to_hires_fix() -> None:
+    config = {
+        "txt2img": {
+            "enable_hr": False,
+            "hr_scale": 1.8,
+            "hr_upscaler": "Latent",
+            "denoising_strength": 0.35,
+            "hr_second_pass_steps": 12,
+        }
+    }
+
+    normalized = normalize_pipeline_config(config)
+
+    assert normalized["txt2img"]["enable_hr"] is False
+    assert "hr_scale" not in normalized["txt2img"]
+    assert "hr_upscaler" not in normalized["txt2img"]
+    assert "denoising_strength" not in normalized["txt2img"]
+    assert "hr_second_pass_steps" not in normalized["txt2img"]
+    assert normalized["hires_fix"]["enabled"] is False
+    assert normalized["hires_fix"]["upscale_factor"] == 1.8
+    assert normalized["hires_fix"]["upscaler_name"] == "Latent"
+    assert normalized["hires_fix"]["denoise"] == 0.35
+    assert normalized["hires_fix"]["steps"] == 12

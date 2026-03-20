@@ -105,6 +105,61 @@ def test_txt2img_config_passes_through_canonical_runner_path(tmp_path: Path) -> 
     assert payload["scheduler"] == "Karras"
 
 
+def test_txt2img_disabled_hires_does_not_emit_synthetic_denoise(tmp_path: Path) -> None:
+    client = _CapturingClient()
+    runner = PipelineRunner(client, StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs"))
+    config = {
+        "txt2img": {
+            "steps": 28,
+            "cfg_scale": 6.0,
+            "width": 768,
+            "height": 960,
+            "sampler_name": "DPM++ 2M",
+            "scheduler": "Karras",
+            "negative_prompt": "ugly",
+            "seed": 1234,
+            "clip_skip": 2,
+            "model": "model-a.safetensors",
+            "vae": "vae-a.safetensors",
+            "enable_hr": False,
+            "hr_scale": 1.5,
+            "hr_upscaler": "Latent",
+            "denoising_strength": 0.4,
+            "hr_second_pass_steps": 8,
+        },
+        "hires_fix": {
+            "enabled": False,
+            "upscale_factor": 1.5,
+            "upscaler_name": "Latent",
+            "denoise": 0.4,
+            "steps": 8,
+        },
+        "pipeline": {"txt2img_enabled": True},
+        "aesthetic": {"enabled": False},
+    }
+    record = build_cli_njr(prompt="validation prompt", config=config, batch_size=1, run_name="cfg-check")
+
+    def _fake_save(_image_data, output_path, metadata_builder=None):
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("image")
+        return output_path
+
+    with (
+        patch("src.pipeline.executor.save_image_from_base64", side_effect=_fake_save),
+        patch.object(runner._pipeline, "_ensure_webui_true_ready", return_value=None),
+    ):
+        result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    payload = client.calls[0]["payload"]
+    assert payload["enable_hr"] is False
+    assert "denoising_strength" not in payload
+    assert "hr_scale" not in payload
+    assert "hr_upscaler" not in payload
+    assert "hr_second_pass_steps" not in payload
+
+
 def test_sampler_scheduler_payload_with_explicit_scheduler():
     payload = build_sampler_scheduler_payload("DPM++ 2M", "Karras")
     assert payload["sampler_name"] == "DPM++ 2M Karras"

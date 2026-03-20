@@ -385,6 +385,14 @@ def normalize_continuity_link(value: Any) -> dict[str, Any] | None:
     return ContinuityPackLink(pack_id=pack_id, pack_summary=summary).to_dict()
 
 
+def prefer_continuity_link(*values: Any) -> dict[str, Any] | None:
+    for value in values:
+        link = normalize_continuity_link(value)
+        if link:
+            return link
+    return None
+
+
 __all__ = [
     "CONTINUITY_PACK_SCHEMA_V26",
     "ContinuityAnchorReference",
@@ -396,4 +404,5 @@ __all__ = [
     "ContinuitySceneReference",
     "ContinuityWardrobeReference",
     "normalize_continuity_link",
+    "prefer_continuity_link",
 ]

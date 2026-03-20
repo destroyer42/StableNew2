@@ -44,6 +44,11 @@ def test_run_animatediff_stage_saves_frames_and_video(tmp_path: Path, monkeypatc
         "src.pipeline.executor.VideoCreator.create_video_from_images",
         _fake_create_video,
     )
+    write_video_container_metadata = Mock(return_value=True)
+    monkeypatch.setattr(
+        "src.pipeline.executor.write_video_container_metadata",
+        write_video_container_metadata,
+    )
 
     result = pipeline.run_animatediff_stage(
         input_image_path=tmp_path / "seed.png",
@@ -68,6 +73,8 @@ def test_run_animatediff_stage_saves_frames_and_video(tmp_path: Path, monkeypatc
     assert result["artifact"]["schema"] == "stablenew.artifact.v2.6"
     assert result["artifact"]["manifest_path"] == str(manifest_path)
     assert result["artifact"]["primary_path"] == result["video_path"]
+    write_video_container_metadata.assert_called_once()
+    assert write_video_container_metadata.call_args.args[0] == Path(result["video_path"])
 
 
 def test_run_animatediff_stage_returns_none_when_capability_missing(tmp_path: Path) -> None:
@@ -124,6 +131,10 @@ def test_run_animatediff_stage_auto_selects_sdxl_motion_module(tmp_path: Path, m
         "src.pipeline.executor.VideoCreator.create_video_from_images",
         _fake_create_video,
     )
+    monkeypatch.setattr(
+        "src.pipeline.executor.write_video_container_metadata",
+        lambda *_args, **_kwargs: True,
+    )
 
     result = pipeline.run_animatediff_stage(
         input_image_path=None,
@@ -171,6 +182,10 @@ def test_run_animatediff_stage_defaults_img2img_denoising_strength(tmp_path: Pat
     monkeypatch.setattr(
         "src.pipeline.executor.VideoCreator.create_video_from_images",
         _fake_create_video,
+    )
+    monkeypatch.setattr(
+        "src.pipeline.executor.write_video_container_metadata",
+        lambda *_args, **_kwargs: True,
     )
 
     result = pipeline.run_animatediff_stage(

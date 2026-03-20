@@ -14,6 +14,7 @@ from src.video.svd_postprocess import SVDPostprocessRunner, validate_svd_postpro
 from src.video.svd_preprocess import prepare_svd_input, validate_svd_source_image
 from src.video.svd_registry import write_svd_run_manifest
 from src.video.svd_service import SVDService
+from src.video.container_metadata import write_video_container_metadata
 from src.video.video_export import export_video_gif, export_video_mp4, save_video_frames
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,30 @@ class SVDRunner:
                 postprocess=postprocess_metadata,
             )
             manifest_path = write_svd_run_manifest(run_dir=self._output_root, config=config, result=result)
+            metadata_payload = {
+                "stage": "svd_native",
+                "backend_id": "svd_native",
+                "job_id": job_id,
+                "run_id": self._output_root.name,
+                "title": stem,
+                "source_image_path": str(source_path),
+                "video_path": str(video_path) if video_path else None,
+                "video_paths": [str(video_path)] if video_path else [],
+                "gif_path": str(gif_path) if gif_path else None,
+                "gif_paths": [str(gif_path)] if gif_path else [],
+                "frame_path_count": len(frame_paths),
+                "thumbnail_path": str(thumbnail_path) if thumbnail_path else None,
+                "fps": config.inference.fps,
+                "frame_count": len(frames),
+                "seed": config.inference.seed,
+                "model_id": config.inference.model_id,
+                "manifest_path": str(manifest_path),
+                "config": config.to_dict(),
+            }
+            if video_path is not None:
+                write_video_container_metadata(video_path, metadata_payload)
+            if gif_path is not None:
+                write_video_container_metadata(gif_path, metadata_payload)
             logger.info(
                 "[SVD] complete video=%s gif=%s frame_files=%s preview=%s manifest=%s",
                 result.video_path.name if result.video_path else None,

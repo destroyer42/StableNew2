@@ -31,6 +31,28 @@ from src.utils.prompt_pack_utils import get_matrix_slots_dict, load_pack_metadat
 
 _logger = logging.getLogger(__name__)
 
+_TXT2IMG_INACTIVE_HIRES_KEYS = (
+    "hr_scale",
+    "hr_upscaler",
+    "denoising_strength",
+    "hr_second_pass_steps",
+    "hires_steps",
+    "hr_resize_x",
+    "hr_resize_y",
+)
+
+
+def _txt2img_hires_enabled(config: dict[str, Any]) -> bool:
+    return bool(config.get("enable_hr") or config.get("hires_enabled"))
+
+
+def _effective_txt2img_stage_config(config: dict[str, Any]) -> dict[str, Any]:
+    effective = dict(config or {})
+    if not _txt2img_hires_enabled(effective):
+        for key in _TXT2IMG_INACTIVE_HIRES_KEYS:
+            effective.pop(key, None)
+    return effective
+
 
 class PromptPackNormalizedJobBuilder:
     """Orchestrates prompt pack → job construction pipeline."""
@@ -364,7 +386,7 @@ class PromptPackNormalizedJobBuilder:
         prompt_resolution: Any,
         stage_chain: list[StageConfig],
     ) -> dict[str, Any]:
-        txt2img = merged_config.get("txt2img", {})
+        txt2img = _effective_txt2img_stage_config(merged_config.get("txt2img", {}))
         pipeline_section = merged_config.get("pipeline", {})
         payload: dict[str, Any] = {
             "prompt": prompt_resolution.positive,
@@ -424,6 +446,9 @@ class PromptPackNormalizedJobBuilder:
         payload["prompt_pack_id"] = entry.pack_id
         payload["prompt_pack_row_index"] = entry.pack_row_index or 0
         payload["matrix_slot_values"] = dict(entry.matrix_slot_values or {})
+        if not _txt2img_hires_enabled(merged_config.get("txt2img", {})):
+            for key in _TXT2IMG_INACTIVE_HIRES_KEYS:
+                payload.pop(key, None)
         return payload
 
     def _build_stage_chain(
@@ -443,6 +468,7 @@ class PromptPackNormalizedJobBuilder:
             enabled = bool(stage_flags.get(stage, stage == "txt2img"))
             extra: dict[str, Any] = {}
             if stage == "txt2img":
+                data = _effective_txt2img_stage_config(data)
                 extra.update(
                     {
                         "clip_skip": data.get("clip_skip"),
