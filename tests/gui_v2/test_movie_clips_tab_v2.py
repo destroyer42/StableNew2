@@ -19,6 +19,8 @@ from src.gui.view_contracts.movie_clips_contract import (
     SOURCE_MODE_FOLDER,
     SOURCE_MODE_MANUAL,
     build_clip_settings_summary,
+    extract_source_paths_from_bundle,
+    format_canonical_source_summary,
     format_image_list_summary,
     format_source_mode_label,
     sort_image_names,
@@ -73,6 +75,36 @@ def test_build_clip_settings_summary_clamps_fps():
 def test_build_clip_settings_summary_defaults_codec():
     summary = build_clip_settings_summary(24, "", "medium", "sequence")
     assert summary.codec == "libx264"
+
+
+def test_extract_source_paths_from_sequence_bundle() -> None:
+    bundle = {
+        "segment_provenance": [
+            {"primary_output_path": "C:/tmp/seg0.mp4"},
+            {"output_paths": ["C:/tmp/seg1.mp4"]},
+        ]
+    }
+    assert extract_source_paths_from_bundle(bundle) == [
+        "C:/tmp/seg0.mp4",
+        "C:/tmp/seg1.mp4",
+    ]
+
+
+def test_extract_source_paths_from_assembled_bundle() -> None:
+    bundle = {
+        "export_output": {
+            "artifact_bundle": {
+                "primary_path": "C:/tmp/assembled.mp4",
+                "output_paths": ["C:/tmp/assembled.mp4"],
+            }
+        }
+    }
+    assert extract_source_paths_from_bundle(bundle) == ["C:/tmp/assembled.mp4"]
+
+
+def test_format_canonical_source_summary_sequence() -> None:
+    bundle = {"segment_provenance": [{"primary_output_path": "C:/tmp/seg0.mp4"}]}
+    assert "sequence segment" in format_canonical_source_summary(bundle)
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +357,57 @@ def test_set_source_frame_paths_accepts_custom_status_message(tk_root: tk.Tk, tm
         tab.set_source_frame_paths([str(frame1)], status_message="Loaded from workflow")
 
         assert tab.status_label.cget("text") == "Loaded from workflow"
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
+def test_set_source_bundle_loads_sequence_segments(tk_root: tk.Tk, tmp_path: Path) -> None:
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        seg0 = tmp_path / "seg0.mp4"
+        seg1 = tmp_path / "seg1.mp4"
+        seg0.write_bytes(b"mp4-0")
+        seg1.write_bytes(b"mp4-1")
+
+        tab.set_source_bundle(
+            {
+                "segment_provenance": [
+                    {"primary_output_path": str(seg0)},
+                    {"primary_output_path": str(seg1)},
+                ]
+            }
+        )
+
+        assert tab.source_mode_var.get() == SOURCE_MODE_MANUAL
+        assert len(tab._image_paths) == 2
+        assert seg0 in tab._image_paths
+        assert seg1 in tab._image_paths
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
+def test_set_source_bundle_prefers_frame_paths_for_video_bundle(tk_root: tk.Tk, tmp_path: Path) -> None:
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        frame0 = tmp_path / "frame_000.png"
+        frame1 = tmp_path / "frame_001.png"
+        clip = tmp_path / "clip.mp4"
+        frame0.write_bytes(b"png")
+        frame1.write_bytes(b"png")
+        clip.write_bytes(b"mp4")
+
+        tab.set_source_bundle(
+            {
+                "stage": "video_workflow",
+                "frame_paths": [str(frame0), str(frame1)],
+                "output_paths": [str(clip)],
+            }
+        )
+
+        assert tab._image_paths == [frame0, frame1]
+        assert "source item" in tab.status_label.cget("text") or tab.status_label.cget("text")
     finally:
         tab.destroy()
 

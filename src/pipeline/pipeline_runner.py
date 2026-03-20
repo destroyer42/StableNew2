@@ -479,7 +479,58 @@ class PipelineRunner:
         )
         seq_result.sequence_manifest_path = str(manifest_path)
 
-        metadata["sequence_artifact"] = seq_result.to_dict()
+        sequence_artifact = seq_result.to_dict()
+        metadata["sequence_artifact"] = sequence_artifact
+
+        assembly_config = sequence_config.get("assembly") or {}
+        if isinstance(assembly_config, dict) and assembly_config.get("enabled"):
+            from src.video.assembly_models import AssembledSequenceInput, AssemblyRequest
+            from src.video.assembly_service import AssemblyService
+
+            assembly_service = AssemblyService()
+            assembly_result = assembly_service.assemble(
+                AssemblyRequest(
+                    source=AssembledSequenceInput.from_sequence_artifact(sequence_artifact),
+                    output_dir=run_dir,
+                    clip_name=str(
+                        assembly_config.get("clip_name")
+                        or f"{seq_job.sequence_id}_assembled"
+                    ),
+                    fps=int(assembly_config.get("fps", 24)),
+                    codec=str(assembly_config.get("codec") or "libx264"),
+                    quality=str(assembly_config.get("quality") or "medium"),
+                    mode=str(assembly_config.get("mode") or "sequence"),
+                    interpolation_enabled=bool(
+                        assembly_config.get("interpolation_enabled", False)
+                    ),
+                    interpolation_factor=int(
+                        assembly_config.get("interpolation_factor", 2)
+                    ),
+                )
+            )
+            metadata["assembled_video_result"] = assembly_result.to_dict()
+            sequence_artifact["assembled_video"] = assembly_result.to_dict()
+            if assembly_result.success and assembly_result.export_output:
+                artifact_bundle = dict(assembly_result.export_output.artifact_bundle)
+                metadata["assembled_video_artifact"] = artifact_bundle
+                metadata.setdefault("video_artifacts", {})["assembled_video"] = dict(
+                    artifact_bundle
+                )
+                assembled_paths = list(assembly_result.export_output.output_paths)
+                if not assembled_paths and assembly_result.export_output.primary_path:
+                    assembled_paths = [str(assembly_result.export_output.primary_path)]
+                if assembled_paths:
+                    all_output_paths = assembled_paths
+                logger.info(
+                    "[SEQUENCE] assembled video emitted primary=%s",
+                    assembly_result.primary_path,
+                )
+            else:
+                logger.warning(
+                    "[SEQUENCE] assembled video requested but failed: %s",
+                    assembly_result.error,
+                )
+
         logger.info(
             "[SEQUENCE] sequence %s complete — %d total outputs, manifest: %s",
             seq_job.sequence_id,

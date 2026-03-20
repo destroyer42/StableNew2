@@ -24,6 +24,8 @@ from src.gui.view_contracts.movie_clips_contract import (
     SOURCE_MODE_FOLDER,
     SOURCE_MODE_MANUAL,
     build_clip_settings_summary,
+    extract_source_paths_from_bundle,
+    format_canonical_source_summary,
     format_image_list_summary,
     format_source_mode_label,
     sort_image_names,
@@ -58,6 +60,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._source_mode: str = SOURCE_MODE_FOLDER
         self._last_folder: str = ""
         self._image_paths: list[Path] = []
+        self._source_bundle: dict[str, Any] | None = None
         self._build_status: str = ""
 
         # Tk variables
@@ -332,6 +335,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         if not images:
             self._set_status("No images found in folder.")
             return
+        self._source_bundle = None
         self._set_image_list(images)
         self._set_status(f"Loaded {len(images)} images from folder.")
 
@@ -350,6 +354,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         existing_resolved = {p.resolve() for p in self._image_paths}
         added = [p for p in new_paths if p.resolve() not in existing_resolved]
         if added:
+            self._source_bundle = None
             self._set_image_list(
                 sorted(self._image_paths + added, key=lambda p: p.name)
             )
@@ -365,11 +370,13 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._image_paths = [
             p for i, p in enumerate(self._image_paths) if i not in selected_set
         ]
+        self._source_bundle = None
         self._refresh_list_widget()
         self._update_summary()
 
     def _on_clear_all(self) -> None:
         self._image_paths = []
+        self._source_bundle = None
         self._refresh_list_widget()
         self._update_summary()
         self._set_status("")
@@ -462,6 +469,9 @@ class MovieClipsTabFrameV2(ttk.Frame):
         return {
             "source_mode": self.source_mode_var.get(),
             "last_folder": self._last_folder,
+            "source_bundle_kind": (
+                self._source_bundle.get("stage") if isinstance(self._source_bundle, dict) else ""
+            ),
             "fps": self.fps_var.get(),
             "codec": self.codec_var.get(),
             "quality": self.quality_var.get(),
@@ -484,11 +494,34 @@ class MovieClipsTabFrameV2(ttk.Frame):
         if not valid:
             self._set_status(status_message or "No valid frame images in bundle.")
             return
+        self._source_bundle = None
         self.source_mode_var.set(SOURCE_MODE_MANUAL)
         self._set_image_list(valid)
         self._set_status(
             status_message or f"Loaded {len(valid)} frame(s) from video output."
         )
+
+    def set_source_bundle(
+        self,
+        bundle: dict[str, Any],
+        *,
+        status_message: str | None = None,
+    ) -> None:
+        """Accept a canonical sequence or assembled-video bundle.
+
+        This keeps Movie Clips on the existing controller callback path: the tab
+        resolves the bundle into concrete source paths and passes those paths to
+        the controller when the user builds the clip.
+        """
+        source_paths = [Path(item) for item in extract_source_paths_from_bundle(bundle)]
+        if not source_paths:
+            self._source_bundle = None
+            self._set_status(status_message or format_canonical_source_summary(bundle))
+            return
+        self._source_bundle = dict(bundle)
+        self.source_mode_var.set(SOURCE_MODE_MANUAL)
+        self._set_image_list(source_paths)
+        self._set_status(status_message or format_canonical_source_summary(bundle))
 
     def restore_movie_clips_state(self, payload: dict[str, Any] | None) -> bool:
         """Restore persisted state. Returns True if anything was applied."""

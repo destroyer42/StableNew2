@@ -18,6 +18,7 @@ from src.video.movie_clip_models import (
     ClipSettings,
 )
 from src.video.movie_clip_service import MovieClipService, _normalize_image_order
+from src.video.assembly_service import AssemblyService
 
 
 # ---------------------------------------------------------------------------
@@ -287,3 +288,75 @@ def test_service_build_clip_creator_raises_exception(tmp_path: Path):
     result = svc.build_clip(request)
     assert result.success is False
     assert "crash" in result.error
+
+
+def test_service_build_clip_from_source_bundle_sequence(tmp_path: Path) -> None:
+    seg0 = tmp_path / "seg0.mp4"
+    seg1 = tmp_path / "seg1.mp4"
+    seg0.write_bytes(b"mp4-0")
+    seg1.write_bytes(b"mp4-1")
+
+    def _fake_stitcher(*, segment_paths, output_path):
+        stitched = Path(output_path)
+        stitched.write_bytes(b"stitched")
+        assert segment_paths == [seg0, seg1]
+        return stitched
+
+    creator = MagicMock()
+    creator.ffmpeg_available = True
+    svc = MovieClipService(
+        video_creator=creator,
+        assembly_service=AssemblyService(segment_stitcher=_fake_stitcher),
+    )
+
+    result = svc.build_clip_from_source_bundle(
+        {
+            "sequence_id": "seq-217",
+            "job_id": "job-217",
+            "segment_provenance": [
+                {"segment_index": 0, "segment_id": "seg0", "primary_output_path": str(seg0)},
+                {"segment_index": 1, "segment_id": "seg1", "primary_output_path": str(seg1)},
+            ],
+        },
+        tmp_path / "out",
+        clip_name="assembled_seq",
+    )
+
+    assert result.success is True
+    assert result.output_path == tmp_path / "out" / "assembled_seq.mp4"
+    assert result.manifest_path is not None
+    assert result.manifest_path.exists()
+    assert result.artifact_bundle["stage"] == "assembled_video"
+    assert result.source_bundle["sequence_id"] == "seq-217"
+
+
+def test_service_build_clip_accepts_video_segment_paths(tmp_path: Path) -> None:
+    seg0 = tmp_path / "clip_0.mp4"
+    seg1 = tmp_path / "clip_1.mp4"
+    seg0.write_bytes(b"mp4-0")
+    seg1.write_bytes(b"mp4-1")
+
+    def _fake_stitcher(*, segment_paths, output_path):
+        stitched = Path(output_path)
+        stitched.write_bytes(b"stitched")
+        return stitched
+
+    creator = MagicMock()
+    creator.ffmpeg_available = True
+    svc = MovieClipService(
+        video_creator=creator,
+        assembly_service=AssemblyService(segment_stitcher=_fake_stitcher),
+    )
+
+    result = svc.build_clip(
+        ClipRequest(
+            image_paths=[seg1, seg0],
+            output_dir=tmp_path / "out",
+            clip_name="stitched_segments",
+        )
+    )
+
+    assert result.success is True
+    assert result.output_path == tmp_path / "out" / "stitched_segments.mp4"
+    assert result.frame_count == 2
+    assert result.duration_seconds == 0.0

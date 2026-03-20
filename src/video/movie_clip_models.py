@@ -50,11 +50,12 @@ class ClipRequest:
     output_dir: Path
     settings: ClipSettings = field(default_factory=ClipSettings)
     clip_name: str = ""
+    source_bundle: dict[str, Any] | None = None
 
     def validate(self) -> list[str]:
         """Return a list of validation error strings (empty if valid)."""
         errors: list[str] = []
-        if not self.image_paths:
+        if not self.image_paths and not self.source_bundle:
             errors.append("image_paths must not be empty")
         missing = [str(p) for p in self.image_paths if not p.exists()]
         if missing:
@@ -80,6 +81,9 @@ class ClipResult:
     error: str = ""
     frame_count: int = 0
     duration_seconds: float = 0.0
+    artifact_bundle: dict[str, Any] = field(default_factory=dict)
+    source_bundle: dict[str, Any] = field(default_factory=dict)
+    assembly_result: dict[str, Any] | None = None
 
     @classmethod
     def failure(cls, reason: str) -> ClipResult:
@@ -101,6 +105,11 @@ class ClipManifest:
     settings: dict[str, Any]
     frame_count: int
     duration_seconds: float
+    source_paths: list[str] = field(default_factory=list)
+    source_kind: str = "manual_frames"
+    source_bundle: dict[str, Any] = field(default_factory=dict)
+    assembly_result: dict[str, Any] | None = None
+    artifact_bundle: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -112,6 +121,11 @@ class ClipManifest:
             "clip_name": self.clip_name,
             "output_path": self.output_path,
             "source_images": self.source_images,
+            "source_paths": self.source_paths or list(self.source_images),
+            "source_kind": self.source_kind,
+            "source_bundle": dict(self.source_bundle),
+            "assembly_result": self.assembly_result,
+            "artifact_bundle": dict(self.artifact_bundle),
             "settings": self.settings,
             "frame_count": self.frame_count,
             "duration_seconds": self.duration_seconds,
@@ -124,13 +138,19 @@ class ClipManifest:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ClipManifest:
+        source_images = list(data.get("source_images", []))
         return cls(
             clip_name=data.get("clip_name", ""),
             output_path=data.get("output_path", ""),
-            source_images=list(data.get("source_images", [])),
+            source_images=source_images,
             settings=dict(data.get("settings", {})),
             frame_count=int(data.get("frame_count", 0)),
             duration_seconds=float(data.get("duration_seconds", 0.0)),
+            source_paths=list(data.get("source_paths", source_images)),
+            source_kind=str(data.get("source_kind", "manual_frames")),
+            source_bundle=dict(data.get("source_bundle") or {}),
+            assembly_result=data.get("assembly_result"),
+            artifact_bundle=dict(data.get("artifact_bundle") or {}),
             created_at=data.get("created_at", ""),
             schema_version=data.get("schema_version", "1.0"),
         )

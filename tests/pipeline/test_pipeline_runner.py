@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
+from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
 
 
@@ -446,3 +447,137 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
     assert seq["is_complete"] is True
     assert len(seq["segment_provenance"]) == 2
     assert len(seq["all_output_paths"]) == 2
+
+
+def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    input_path.write_bytes(b"seed")
+
+    seg0_video = tmp_path / "seg0.mp4"
+    seg1_video = tmp_path / "seg1.mp4"
+    assembled_video = tmp_path / "assembled.mp4"
+    assembled_manifest = tmp_path / "assembled_manifest.json"
+    seg0_video.write_bytes(b"mp4-0")
+    seg1_video.write_bytes(b"mp4-1")
+    assembled_video.write_bytes(b"assembled")
+    assembled_manifest.write_text("{}", encoding="utf-8")
+
+    call_count = [0]
+
+    class _WorkflowBackend:
+        backend_id = "comfy"
+        capabilities = VideoBackendCapabilities(
+            backend_id="comfy",
+            stage_types=("video_workflow",),
+            requires_input_image=True,
+            supports_prompt_text=True,
+            supports_negative_prompt=True,
+            supports_multiple_anchors=True,
+        )
+
+        def execute(self, pipeline, request):
+            idx = call_count[0]
+            call_count[0] += 1
+            out = [seg0_video, seg1_video][idx] if idx < 2 else seg1_video
+            return VideoExecutionResult.from_stage_result(
+                backend_id="comfy",
+                stage_name="video_workflow",
+                result={
+                    "path": str(out),
+                    "video_path": str(out),
+                    "output_paths": [str(out)],
+                    "manifest_path": None,
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "video_workflow",
+                        "artifact_type": "video",
+                        "primary_path": str(out),
+                        "output_paths": [str(out)],
+                        "manifest_path": None,
+                        "input_image_path": str(input_path),
+                    },
+                },
+                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
+                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+            )
+
+    def _fake_assemble(self, request):
+        return AssembledVideoResult(
+            success=True,
+            source=request.source,
+            export_settings=request.export_settings_dict(),
+            export_output=ExportReadyOutputBundle(
+                primary_path=str(assembled_video),
+                output_paths=[str(assembled_video)],
+                manifest_path=str(assembled_manifest),
+                artifact_bundle={
+                    "stage": "assembled_video",
+                    "backend_id": "stablenew",
+                    "artifact_type": "video",
+                    "primary_path": str(assembled_video),
+                    "output_paths": [str(assembled_video)],
+                    "manifest_path": str(assembled_manifest),
+                    "count": 1,
+                },
+            ),
+            manifest_path=str(assembled_manifest),
+            clip_name=request.clip_name,
+        )
+
+    monkeypatch.setattr("src.video.assembly_service.AssemblyService.assemble", _fake_assemble)
+
+    registry = VideoBackendRegistry()
+    registry.register(_WorkflowBackend())
+    runner._video_backends = registry
+
+    record = NormalizedJobRecord(
+        job_id="runner-video-sequence-assembly",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[
+            StageConfig(
+                stage_type="video_workflow",
+                enabled=True,
+                extra={
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "sequence_metadata": {
+                        "sequence_id": "seq-test-217",
+                        "total_segments": 2,
+                        "carry_forward_policy": "last_frame",
+                        "segment_length_frames": 25,
+                        "overlap_frames": 0,
+                        "assembly": {
+                            "enabled": True,
+                            "clip_name": "assembled_sequence",
+                        },
+                    },
+                },
+            )
+        ],
+        input_image_paths=[str(input_path)],
+        start_stage="video_workflow",
+    )
+
+    pipeline = Mock()
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert call_count[0] == 2
+    assert result.metadata["assembled_video_artifact"]["primary_path"] == str(assembled_video)
+    assert result.metadata["video_artifacts"]["assembled_video"]["primary_path"] == str(assembled_video)
+    assert result.metadata["assembled_video_result"]["success"] is True
+    assert result.metadata["sequence_artifact"]["assembled_video"]["clip_name"] == "assembled_sequence"

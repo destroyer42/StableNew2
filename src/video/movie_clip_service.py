@@ -1,23 +1,26 @@
-"""Movie Clip service: wraps VideoCreator with app-facing semantics.
+"""Movie Clip service: post-video assembly/export orchestration.
 
-PR-CORE-VIDEO-002: Validates inputs, normalises ordering, manages output
-folder, calls VideoCreator, and writes a durable manifest JSON.
+PR-CORE-VIDEO-002 started Movie Clips as an image-sequence wrapper around
+VideoCreator. PR-VIDEO-217 keeps the same app-facing entrypoints, but routes
+the work through StableNew-owned assembly contracts so image clips, stitched
+sequence exports, and future interpolated outputs share one provenance path.
 """
 
 from __future__ import annotations
 
 import logging
-import shutil
 from pathlib import Path
 from typing import Any
 
 from src.pipeline.video import VideoCreator
+from src.video.assembly_models import AssemblyRequest
+from src.video.assembly_service import AssemblyService
 from src.video.movie_clip_models import (
-    ClipManifest,
     ClipRequest,
     ClipResult,
     ClipSettings,
 )
+from src.video.video_export import export_image_sequence_video
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +41,25 @@ def _ffmpeg_available() -> bool:
 
 
 class MovieClipService:
-    """App-facing service that orchestrates clip assembly via VideoCreator.
+    """App-facing service that orchestrates clip assembly via AssemblyService.
 
     Responsibilities:
     - Validate the clip request.
-    - Normalise image ordering.
+    - Normalise source ordering.
     - Create a managed output directory.
-    - Invoke VideoCreator in the correct mode.
-    - Write a durable manifest JSON on success.
+    - Route image or video-segment sources into canonical assembly contracts.
     - Return a typed ClipResult (no exceptions propagate to callers).
     """
 
-    def __init__(self, video_creator: VideoCreator | None = None) -> None:
+    def __init__(
+        self,
+        video_creator: VideoCreator | None = None,
+        assembly_service: AssemblyService | None = None,
+    ) -> None:
         self._creator = video_creator or VideoCreator()
+        self._assembly_service = assembly_service or AssemblyService(
+            image_exporter=self._export_image_sequence,
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -75,83 +84,52 @@ class MovieClipService:
         if not self._creator.ffmpeg_available:
             return ClipResult.failure("FFmpeg is not available or could not be resolved")
 
-        # 2. Normalise ordering
-        ordered_images = _normalize_image_order(request.image_paths)
+        ordered_paths = _normalize_image_order(request.image_paths)
 
-        # 3. Create managed output dir
         output_dir = request.output_dir
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
         except Exception as exc:
             return ClipResult.failure(f"Cannot create output directory: {exc}")
 
-        # 4. Determine output filename
         clip_name = request.clip_name.strip() or "clip"
-        output_path = output_dir / f"{clip_name}.mp4"
-
-        # 5. Invoke VideoCreator
         settings = request.settings
+
         try:
-            if settings.mode == "slideshow":
-                ok = self._creator.create_slideshow_video(
-                    image_paths=ordered_images,
-                    output_path=output_path,
-                    duration_per_image=settings.duration_per_image,
-                    transition_duration=settings.transition_duration,
-                    fps=settings.fps,
-                    codec=settings.codec,
-                    quality=settings.quality,
-                )
+            if request.source_bundle:
+                source = self._assembly_service.build_source_from_bundle(request.source_bundle)
             else:
-                ok = self._creator.create_video_from_images(
-                    image_paths=ordered_images,
-                    output_path=output_path,
-                    fps=settings.fps,
-                    codec=settings.codec,
-                    quality=settings.quality,
-                )
+                source = self._assembly_service.build_source_from_paths(ordered_paths)
         except Exception as exc:
-            logger.exception("[MovieClipService] VideoCreator raised an exception")
-            return ClipResult.failure(f"VideoCreator error: {exc}")
+            logger.exception("[MovieClipService] Failed to resolve assembly source")
+            return ClipResult.failure(f"Assembly source error: {exc}")
 
-        if not ok:
-            return ClipResult.failure("FFmpeg reported a failure; check application logs")
-
-        # 6. Write manifest
-        frame_count = len(ordered_images)
-        duration_sec = (
-            frame_count / max(1, settings.fps)
-            if settings.mode == "sequence"
-            else frame_count * settings.duration_per_image
-        )
-
-        manifest = ClipManifest(
-            clip_name=clip_name,
-            output_path=str(output_path),
-            source_images=[str(p) for p in ordered_images],
-            settings={
-                "fps": settings.fps,
-                "codec": settings.codec,
-                "quality": settings.quality,
-                "mode": settings.mode,
-            },
-            frame_count=frame_count,
-            duration_seconds=round(duration_sec, 3),
-        )
-
-        manifest_path = output_dir / f"{clip_name}_manifest.json"
-        try:
-            manifest.write(manifest_path)
-        except Exception as exc:
-            logger.warning(f"[MovieClipService] Failed to write manifest: {exc}")
-            # Non-fatal: clip was built; manifest failure is a warning
-            return ClipResult(
-                success=True,
-                output_path=output_path,
-                manifest_path=None,
-                frame_count=frame_count,
-                duration_seconds=duration_sec,
+        assembly_result = self._assembly_service.assemble(
+            AssemblyRequest(
+                source=source,
+                output_dir=output_dir,
+                clip_name=clip_name,
+                fps=settings.fps,
+                codec=settings.codec,
+                quality=settings.quality,
+                mode=settings.mode,
+                duration_per_image=settings.duration_per_image,
+                transition_duration=settings.transition_duration,
             )
+        )
+        if not assembly_result.success or not assembly_result.primary_path:
+            return ClipResult.failure(assembly_result.error or "Assembly failed")
+
+        frame_paths = source.resolved_frame_paths()
+        source_paths = source.resolved_segment_output_paths()
+        frame_count = len(frame_paths) or len(source_paths)
+        duration_sec = self._estimate_duration_seconds(
+            settings=settings,
+            frame_count=frame_count,
+            has_frame_source=bool(frame_paths),
+        )
+        output_path = Path(assembly_result.primary_path)
+        manifest_path = Path(assembly_result.manifest_path) if assembly_result.manifest_path else None
 
         logger.info(
             f"[MovieClipService] Clip built: {output_path.name} "
@@ -163,7 +141,36 @@ class MovieClipService:
             manifest_path=manifest_path,
             frame_count=frame_count,
             duration_seconds=duration_sec,
+            artifact_bundle=(
+                dict(assembly_result.export_output.artifact_bundle)
+                if assembly_result.export_output
+                else {}
+            ),
+            source_bundle=request.source_bundle or source.to_dict(),
+            assembly_result=assembly_result.to_dict(),
         )
+
+    def build_clip_from_source_bundle(
+        self,
+        source_bundle: dict[str, Any],
+        output_dir: Path,
+        settings: ClipSettings | None = None,
+        clip_name: str = "",
+    ) -> ClipResult:
+        """Build a clip directly from a canonical sequence or assembly bundle."""
+        try:
+            source = self._assembly_service.build_source_from_bundle(source_bundle)
+        except Exception as exc:
+            return ClipResult.failure(f"Invalid source bundle: {exc}")
+
+        request = ClipRequest(
+            image_paths=[Path(item) for item in (source.resolved_frame_paths() or source.resolved_segment_output_paths())],
+            output_dir=output_dir,
+            settings=settings or ClipSettings(),
+            clip_name=clip_name or source.source_id or "clip",
+            source_bundle=source_bundle,
+        )
+        return self.build_clip(request)
 
     def build_clip_from_source(
         self,
@@ -184,3 +191,40 @@ class MovieClipService:
             clip_name=clip_name or source_dir.name,
         )
         return self.build_clip(request)
+
+    def _export_image_sequence(
+        self,
+        *,
+        image_paths: list[Path],
+        output_path: str | Path,
+        fps: int,
+        codec: str,
+        quality: str,
+        mode: str,
+        duration_per_image: float,
+        transition_duration: float,
+    ) -> Path:
+        return export_image_sequence_video(
+            image_paths=image_paths,
+            output_path=output_path,
+            fps=fps,
+            codec=codec,
+            quality=quality,
+            mode=mode,
+            duration_per_image=duration_per_image,
+            transition_duration=transition_duration,
+            creator=self._creator,
+        )
+
+    def _estimate_duration_seconds(
+        self,
+        *,
+        settings: ClipSettings,
+        frame_count: int,
+        has_frame_source: bool,
+    ) -> float:
+        if not has_frame_source:
+            return 0.0
+        if settings.mode == "slideshow":
+            return frame_count * settings.duration_per_image
+        return frame_count / max(1, settings.fps)
