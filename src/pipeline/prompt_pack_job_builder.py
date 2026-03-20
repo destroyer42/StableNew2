@@ -411,6 +411,8 @@ class PromptPackNormalizedJobBuilder:
             "refiner": merged_config.get("refiner"),
             "adetailer": merged_config.get("adetailer"),
             "upscale": merged_config.get("upscale"),
+            "animatediff": merged_config.get("animatediff"),
+            "video_workflow": merged_config.get("video_workflow"),
             "aesthetic": merged_config.get("aesthetic"),
         }
         payload["pack_name"] = entry.pack_name or entry.pack_id
@@ -433,9 +435,10 @@ class PromptPackNormalizedJobBuilder:
             "adetailer": merged_config.get("adetailer", {}),
             "upscale": merged_config.get("upscale", {}),
             "animatediff": merged_config.get("animatediff", {}),
+            "video_workflow": merged_config.get("video_workflow", {}),
         }
         chain: list[StageConfig] = []
-        for stage in ("txt2img", "img2img", "adetailer", "upscale", "animatediff"):
+        for stage in ("txt2img", "img2img", "adetailer", "upscale", "animatediff", "video_workflow"):
             data = stage_sections.get(stage, {}) or {}
             enabled = bool(stage_flags.get(stage, stage == "txt2img"))
             extra: dict[str, Any] = {}
@@ -490,6 +493,17 @@ class PromptPackNormalizedJobBuilder:
                         "stride": data.get("stride"),
                         "overlap": data.get("overlap"),
                         "format": data.get("format"),
+                    }
+                )
+            if stage == "video_workflow":
+                extra.update(
+                    {
+                        "workflow_id": data.get("workflow_id"),
+                        "workflow_version": data.get("workflow_version"),
+                        "backend_id": data.get("backend_id"),
+                        "end_anchor_path": data.get("end_anchor_path"),
+                        "mid_anchor_paths": data.get("mid_anchor_paths"),
+                        "motion_profile": data.get("motion_profile"),
                     }
                 )
             # BUGFIX: ADetailer stage should NOT have model/VAE fields set from config
@@ -650,6 +664,7 @@ class PromptPackNormalizedJobBuilder:
             "adetailer": bool(pipeline_section.get("adetailer_enabled", False)),
             "upscale": bool(pipeline_section.get("upscale_enabled", False)),
             "animatediff": bool(pipeline_section.get("animatediff_enabled", False)),
+            "video_workflow": bool(pipeline_section.get("video_workflow_enabled", False)),
         }
         normalized = dict(defaults)
         for key, value in overrides.items():

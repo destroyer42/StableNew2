@@ -155,6 +155,33 @@ def test_send_history_job_image_to_svd_selects_svd_tab(tmp_path) -> None:
     svd_tab.set_source_image_path.assert_called_once()
 
 
+def test_send_history_job_image_to_video_workflow_selects_workflow_tab(tmp_path) -> None:
+    source_path = tmp_path / "source.png"
+    source_path.write_bytes(b"png")
+
+    workflow_tab = Mock()
+    notebook = Mock()
+    controller = AppController.__new__(AppController)
+    controller.app_state = SimpleNamespace(
+        history_items=[
+            JobHistoryEntry(
+                job_id="job-456",
+                created_at=datetime.utcnow(),
+                status=JobStatus.COMPLETED,
+                result={"output_paths": [str(source_path)]},
+            )
+        ]
+    )
+    controller.main_window = SimpleNamespace(video_workflow_tab=workflow_tab, center_notebook=notebook)
+    controller._append_log = lambda *_args, **_kwargs: None
+
+    routed = controller.send_history_job_image_to_video_workflow("job-456")
+
+    assert routed == str(source_path)
+    notebook.select.assert_called_once_with(workflow_tab)
+    workflow_tab.set_source_image_path.assert_called_once()
+
+
 def test_get_recent_svd_history_extracts_variant_details(tmp_path) -> None:
     source_path = tmp_path / "source.png"
     video_path = tmp_path / "clip.mp4"

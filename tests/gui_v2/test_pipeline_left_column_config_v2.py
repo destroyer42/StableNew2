@@ -8,7 +8,7 @@ from src.gui.sidebar_panel_v2 import SidebarPanelV2
 
 @pytest.mark.gui
 def test_pipeline_left_column_config_v2() -> None:
-    """Test that PipelineTabFrameV2 contains both SidebarPanelV2 and PipelineConfigPanelV2."""
+    """Test that PipelineTabFrameV2 uses sidebar-owned stage controls only."""
     try:
         root, app_state, controller, window = build_v2_app()
     except Exception as exc:
@@ -24,20 +24,16 @@ def test_pipeline_left_column_config_v2() -> None:
         sidebar = getattr(pipeline_tab, "sidebar", None)
         assert isinstance(sidebar, SidebarPanelV2), "SidebarPanelV2 should be present"
 
-        # Check that pipeline config panel exists (now integrated into sidebar)
+        # The archived PipelineConfigPanel is no longer part of the live GUI path.
         config_panel = getattr(sidebar, "pipeline_config_panel", None)
-        assert config_panel is not None, "PipelineConfigPanel should be present in sidebar"
+        assert config_panel is None, "PipelineConfigPanel should not be present in the live sidebar"
 
         stage_states = getattr(sidebar, "stage_states", None)
         assert stage_states is not None, "Sidebar should expose stage toggle state"
         for stage_name in ("txt2img", "img2img", "adetailer", "upscale"):
             assert stage_name in stage_states, f"Stage toggle {stage_name} should exist"
 
-        # Check that both panels have access to controller and app_state (may be None in test environment)
-        assert hasattr(config_panel, "controller"), "Config panel should have controller attribute"
-        assert hasattr(config_panel, "app_state"), "Config panel should have app_state attribute"
-
-        # Check that the panels are properly integrated
+        # Check that the sidebar is properly integrated
         left_inner = getattr(pipeline_tab, "left_inner", None)
         assert left_inner is not None, "Left inner frame should exist"
 

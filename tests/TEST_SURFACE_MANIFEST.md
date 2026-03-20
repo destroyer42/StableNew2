@@ -2,99 +2,97 @@
 # Active Test Surface for StableNew v2.6
 
 Status: Authoritative
-Updated: 2026-03-12
+Updated: 2026-03-19
 
 ---
 
 ## 1. Purpose
 
-This manifest classifies all test areas, their canonical locations, and their
-collection status. It is the single source of truth for "which tests are supposed
-to run in CI" and "where to add new tests for each subsystem."
+This manifest classifies the test surface into canonical, compat, and excluded
+areas so CI and developers can tell which suites define current runtime truth.
+
+Canonical suites validate the active v2.6 architecture. Compat suites validate
+temporary migration or legacy-compat behavior. Quarantine and archive do not
+define architecture.
 
 ---
 
-## 2. Active Test Directories (repository test surface)
+## 2. Active Test Directories
 
-All directories below are under `tests/`. They are part of the maintained test
-surface, even if CI currently runs only a subset of them in required gates.
+All directories below are under `tests/`. They remain maintained surfaces, but
+they do not all have the same authority.
 
 | Directory | Subsystem | Notes |
 |---|---|---|
-| `tests/ai_v2/` | AI pipeline v2 | |
-| `tests/api/` | WebUI API client | |
-| `tests/app/` | Application-level smoke | |
-| `tests/cluster/` | Cluster compute | |
-| `tests/compat/` | Compatibility layer | |
-| `tests/controller/` | AppController, job service, heartbeat | |
-| `tests/data/` | Data access / cache | |
-| `tests/debughub/` | DebugHub diagnostics | |
-| `tests/history/` | Job history / history cache | |
-| `tests/integration/` | Cross-subsystem integration | Optional/full-suite CI, not required gate |
-| `tests/journey/` | End-to-end journey | Optional/full-suite CI, tagged `journey` |
-| `tests/journeys/` | Additional journey tests | Optional/full-suite CI |
-| `tests/learning/` | Legacy learning tests | |
+| `tests/ai_v2/` | AI pipeline v2 | Canonical |
+| `tests/api/` | WebUI API client | Canonical |
+| `tests/app/` | Application-level smoke | Canonical |
+| `tests/cluster/` | Cluster compute | Canonical |
+| `tests/compat/` | Compatibility and migration validation | Temporary; not canonical runtime truth |
+| `tests/controller/` | AppController, job service, heartbeat | Canonical |
+| `tests/data/` | Data access and cache | Canonical |
+| `tests/debughub/` | DebugHub diagnostics | Canonical |
+| `tests/history/` | Job history and cache | Canonical |
+| `tests/integration/` | Cross-subsystem integration | Canonical integration only; optional/full-suite CI |
+| `tests/journey/` | End-to-end journey | Canonical journey; optional/full-suite CI |
+| `tests/journeys/` | Additional journey tests | Canonical journey; optional/full-suite CI |
+| `tests/learning/` | Learning subsystem | Canonical learning tests and hooks |
 | `tests/learning_v2/` | v2.6 learning subsystem | Canonical; priority |
-| `tests/photo_optimize/` | Photo optimize workflow | |
-| `tests/pipeline/` | Builder pipeline, VAE, NJR | |
-| `tests/queue/` | Queue, persistence, remove | |
-| `tests/randomizer/` | Randomizer determinism | |
-| `tests/regression/` | Regression cases | |
-| `tests/safety/` | Safety guard tests | |
-| `tests/services/` | Background services | |
-| `tests/state/` | State persistence, workspace paths | |
-| `tests/utils/` | Utility functions | |
-| `tests/video/` | Video workflow | |
-| `tests/gui_v2/` | GUI v2 integration | Optional/full-suite CI; not in required gate |
+| `tests/photo_optimize/` | Photo optimize workflow | Canonical |
+| `tests/pipeline/` | Builder pipeline, VAE, NJR | Canonical |
+| `tests/queue/` | Queue, persistence, remove | Canonical |
+| `tests/randomizer/` | Randomizer determinism | Canonical |
+| `tests/regression/` | Regression cases | Canonical |
+| `tests/safety/` | Safety guard tests | Canonical |
+| `tests/services/` | Background services | Canonical |
+| `tests/state/` | State persistence and workspace paths | Canonical |
+| `tests/system/` | Architecture and surface enforcement | Canonical |
+| `tests/utils/` | Utility functions | Canonical |
+| `tests/video/` | Video workflow | Canonical |
+| `tests/gui_v2/` | GUI v2 integration | Canonical GUI integration; optional/full-suite CI |
 
 ---
 
 ## 3. CI Gate Mapping
 
-The current CI policy is split intentionally:
+The CI policy is intentionally tiered:
 
 | Surface | Coverage |
 |---|---|
-| Required CI gate | lint + fast deterministic non-GUI/non-journey/non-integration tests |
-| Optional/full-suite CI | `tests/gui_v2/`, `tests/integration/`, `tests/journey/`, `tests/journeys/`, and the broader suite under Xvfb |
+| Required canonical gate | fast deterministic canonical runtime tests |
+| Optional/full-suite CI | `tests/gui_v2/`, `tests/integration/`, `tests/journey/`, `tests/journeys/`, and the broader suite under a GUI-capable environment |
+| Compat gate | `tests/compat/` and explicitly marked migration or legacy-compat checks |
+
+Canonical gates should prefer current queue-first, NJR-first runtime truth.
+Compat coverage exists to constrain temporary migration behavior and must shrink
+over time.
 
 ---
 
-## 4. Excluded by CI Configuration
+## 4. Excluded by Default Collection Policy
 
 | Path | Reason | How to Run Locally |
 |---|---|---|
-| `tests/gui/` | Requires live Tk display | `pytest tests/gui/ -v` |
+| `tests/gui/` | Requires a live Tk display | `pytest tests/gui/ -v` |
 | `tests/quarantine/` | Tk-dependent or manual scripts | See `tests/quarantine/README.md` |
-| `tests/tmp_executor/` | Temp / scratch | Evaluate and promote or delete |
+| `tests/tmp_executor/` | Temp or scratch | Evaluate and promote or delete |
 | `tests/legacy/` | Pre-v2.6 tests | Reference only |
 
 ---
 
-## 5. Test Placement Rules
+## 5. Placement Rules
 
-- **Where does a new unit test for `src/X/y.py` go?**
-  → `tests/X/test_y.py` or the nearest matching directory in §2.
-
-- **Where does a controller integration test go?**
-  → `tests/controller/`
-
-- **Where does a learning analytics test go?**
-  → `tests/learning_v2/`
-
-- **Where does a queue/persistence test go?**
-  → `tests/queue/`
-
-- **Where does a GUI test go if it requires Tk?**
-  → `tests/quarantine/` until it is rewritten with mock fixtures;
-    then `tests/gui_v2/` or `tests/gui/`
-
-- **Fixture files (static committed data)?**
-  → `tests/fixtures/` only. No runtime artifacts in fixtures/.
+- New unit tests for `src/X/y.py` go in `tests/X/test_y.py` or the nearest matching canonical directory above.
+- Controller integration tests go in `tests/controller/`.
+- Learning analytics tests go in `tests/learning_v2/` unless they exercise existing learning hooks in `tests/learning/`.
+- Queue and persistence tests go in `tests/queue/`.
+- GUI tests that still need a live Tk display go in `tests/quarantine/` until rewritten with mock fixtures.
+- Fixture files belong in `tests/fixtures/` only. No runtime artifacts in fixtures.
+- Archive DTO or legacy submission semantics belong in `tests/compat/`, not in canonical subsystem directories.
 
 ---
 
-## 6. Canonical Test Naming Conventions
+## 6. Naming Conventions
 
 - Pure unit tests: `test_<module_name>.py`
 - Contract tests: `test_<area>_contract.py`
@@ -105,12 +103,12 @@ The current CI policy is split intentionally:
 
 ## 7. Maintenance Rules
 
-- If a new test directory is added under `tests/`, add it to §2 in the same PR.
-- If a test is removed or quarantined, update §3 in the same PR.
-- Do not add tests directly to the root of the repository; use canonical
-  subdirectories.
+- If a new test directory is added under `tests/`, update Section 2 in the same PR.
+- If a test is moved between canonical, compat, quarantine, or archive buckets, update Sections 2 and 3 in the same PR.
+- Do not add tests directly to the repository root; use canonical subdirectories.
+- Canonical suites must not import archive runtime DTOs. If legacy coverage is still needed, move it to `tests/compat/`.
 
 ---
 
-**Document Status**: ✅ CANONICAL
-**Last Updated**: 2026-03-12
+Document Status: CANONICAL
+Last Updated: 2026-03-19

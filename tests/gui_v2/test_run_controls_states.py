@@ -1,7 +1,7 @@
 """Tests for PR-111: Run Controls UX + Status Feedback.
 
 Validates:
-- AppStateV2 new run state fields
+- AppStateV2 queue-first run state fields
 - PipelineRunControlsV2.refresh_states() button enable/disable logic
 """
 
@@ -27,10 +27,6 @@ class TestAppStateV2RunStateFields:
         state = AppStateV2()
         assert state.is_run_in_progress is False
 
-    def test_is_direct_run_in_progress_default_false(self) -> None:
-        state = AppStateV2()
-        assert state.is_direct_run_in_progress is False
-
     def test_is_queue_paused_default_false(self) -> None:
         state = AppStateV2()
         assert state.is_queue_paused is False
@@ -47,11 +43,6 @@ class TestAppStateV2RunStateFields:
         state = AppStateV2()
         state.set_is_run_in_progress(True)
         assert state.is_run_in_progress is True
-
-    def test_set_is_direct_run_in_progress_true(self) -> None:
-        state = AppStateV2()
-        state.set_is_direct_run_in_progress(True)
-        assert state.is_direct_run_in_progress is True
 
     def test_set_is_queue_paused_true(self) -> None:
         state = AppStateV2()
@@ -75,13 +66,6 @@ class TestAppStateV2RunStateFields:
         state.set_is_run_in_progress(True)
         assert notifications == ["notified"]
 
-    def test_set_is_direct_run_in_progress_notifies_listener(self) -> None:
-        state = AppStateV2()
-        notifications = []
-        state.subscribe("is_direct_run_in_progress", lambda: notifications.append("notified"))
-        state.set_is_direct_run_in_progress(True)
-        assert notifications == ["notified"]
-
     def test_set_is_queue_paused_notifies_listener(self) -> None:
         state = AppStateV2()
         notifications = []
@@ -102,6 +86,26 @@ class TestAppStateV2RunStateFields:
         state.subscribe("last_error_message", lambda: notifications.append("notified"))
         state.set_last_error_message("Error occurred")
         assert notifications == ["notified"]
+
+    def test_set_run_config_updates_canonical_config_layers(self) -> None:
+        state = AppStateV2()
+
+        state.set_run_config(
+            {
+                "run_mode": "queue",
+                "source": "run",
+                "prompt_source": "pack",
+                "video_workflow": {
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "backend_id": "comfy",
+                },
+            }
+        )
+
+        assert state.intent_config["run_mode"] == "queue"
+        assert state.intent_config["source"] == "run"
+        assert state.execution_config["video_workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+        assert state.backend_options["video"]["workflow"]["backend_id"] == "comfy"
 
     def test_no_notify_if_same_value(self) -> None:
         state = AppStateV2()
@@ -148,7 +152,6 @@ class MockAppState:
     """Minimal mock of AppStateV2 for testing button states."""
 
     is_run_in_progress: bool = False
-    is_direct_run_in_progress: bool = False
     is_queue_paused: bool = False
     current_pack: str | None = None
     auto_run_queue: bool = True

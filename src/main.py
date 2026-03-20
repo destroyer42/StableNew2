@@ -35,6 +35,11 @@ from .api.webui_process_manager import (
 from .app_factory import build_v2_app
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
+from .video.comfy_process_manager import (
+    ComfyProcessConfig,
+    ComfyProcessManager,
+    build_default_comfy_process_config,
+)
 
 # Used by tests and entrypoint contract
 ENTRYPOINT_GUI_CLASS = main_window.ENTRYPOINT_GUI_CLASS
@@ -43,6 +48,7 @@ ENTRYPOINT_GUI_CLASS = main_window.ENTRYPOINT_GUI_CLASS
 # PR-PROCESS-001: Emergency cleanup for WebUI processes
 # Global reference for emergency cleanup (last-resort safety net)
 _webui_manager_global: WebUIProcessManager | None = None
+_comfy_manager_global: ComfyProcessManager | None = None
 _emergency_cleanup_registered = False
 
 
@@ -68,13 +74,26 @@ def _emergency_webui_cleanup() -> None:
         logger.error("EMERGENCY CLEANUP: Failed - %s", exc, exc_info=True)
 
 
+def _emergency_comfy_cleanup() -> None:
+    if _comfy_manager_global is None:
+        return
+
+    logger = logging.getLogger(__name__)
+    try:
+        logger.warning("EMERGENCY CLEANUP: Stopping ComfyUI via atexit handler")
+        _comfy_manager_global.stop(grace_seconds=1.0)
+        logger.warning("EMERGENCY CLEANUP: ComfyUI cleanup complete")
+    except Exception as exc:
+        logger.error("EMERGENCY CLEANUP: ComfyUI cleanup failed - %s", exc, exc_info=True)
+
+
 def _register_emergency_cleanup(window) -> None:
     """
     Register emergency cleanup handler once WebUI manager is available.
     
     PR-PROCESS-001: Called asynchronously after WebUI bootstrap completes.
     """
-    global _webui_manager_global, _emergency_cleanup_registered
+    global _webui_manager_global, _comfy_manager_global, _emergency_cleanup_registered
     
     if _emergency_cleanup_registered:
         return
@@ -83,10 +102,14 @@ def _register_emergency_cleanup(window) -> None:
     if webui_mgr:
         _webui_manager_global = webui_mgr
         atexit.register(_emergency_webui_cleanup)
+    comfy_mgr = getattr(window, 'comfy_process_manager', None)
+    if comfy_mgr:
+        _comfy_manager_global = comfy_mgr
+        atexit.register(_emergency_comfy_cleanup)
+    if webui_mgr or comfy_mgr:
         _emergency_cleanup_registered = True
         logging.getLogger(__name__).debug(
-            "Emergency cleanup handler registered for WebUI PID %s",
-            webui_mgr.pid
+            "Emergency cleanup handler registered for managed runtimes"
         )
 
 
@@ -107,6 +130,20 @@ def wait_for_webui_ready(
     from .api.healthcheck import wait_for_webui_ready as _healthcheck_wait_for_webui_ready
 
     return _healthcheck_wait_for_webui_ready(
+        base_url,
+        timeout=timeout,
+        poll_interval=poll_interval,
+    )
+
+
+def wait_for_comfy_ready(
+    base_url: str,
+    timeout: float = 30.0,
+    poll_interval: float = 0.5,
+) -> bool:
+    from .video.comfy_healthcheck import wait_for_comfy_ready as _healthcheck_wait_for_comfy_ready
+
+    return _healthcheck_wait_for_comfy_ready(
         base_url,
         timeout=timeout,
         poll_interval=poll_interval,
@@ -167,6 +204,35 @@ def bootstrap_webui(config: dict[str, Any]) -> WebUIProcessManager | None:
     return manager
 
 
+def bootstrap_comfy(config: dict[str, Any]) -> ComfyProcessManager | None:
+    """Bootstrap managed local ComfyUI when configured."""
+
+    proc_config: ComfyProcessConfig | None = config.get("process_config")
+    if proc_config is None and config.get("comfy_command"):
+        proc_config = ComfyProcessConfig(
+            command=list(config.get("comfy_command") or []),
+            working_dir=config.get("comfy_workdir"),
+            startup_timeout_seconds=float(config.get("comfy_startup_timeout_seconds") or 30.0),
+            autostart_enabled=bool(config.get("comfy_autostart_enabled")),
+            base_url=config.get("comfy_base_url"),
+        )
+
+    if proc_config is None:
+        logging.info("No ComfyUI configuration available")
+        base_url = config.get("comfy_base_url")
+        if base_url:
+            wait_for_comfy_ready(base_url)
+        return None
+
+    manager = ComfyProcessManager(proc_config)
+    if proc_config.autostart_enabled:
+        manager.start()
+    wait_for_comfy_ready(
+        config.get("comfy_base_url"), timeout=proc_config.startup_timeout_seconds, poll_interval=0.5
+    )
+    return manager
+
+
 def _load_webui_config() -> dict[str, Any]:
     cfg = {
         "webui_base_url": os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
@@ -184,6 +250,32 @@ def _load_webui_config() -> dict[str, Any]:
         if autostart_env is not None:
             proc_config.autostart_enabled = autostart_env.lower() in {"1", "true", "yes"}
         timeout_override = os.getenv("STABLENEW_WEBUI_TIMEOUT")
+        if timeout_override:
+            try:
+                proc_config.startup_timeout_seconds = float(timeout_override)
+            except Exception:
+                pass
+        cfg["process_config"] = proc_config
+    return cfg
+
+
+def _load_comfy_config() -> dict[str, Any]:
+    cfg = {
+        "comfy_base_url": os.getenv("STABLENEW_COMFY_BASE_URL", "http://127.0.0.1:8188"),
+    }
+
+    proc_config = build_default_comfy_process_config()
+    if proc_config:
+        env_override_cmd = os.getenv("STABLENEW_COMFY_COMMAND", "").split()
+        if env_override_cmd:
+            proc_config.command = env_override_cmd
+        workdir_override = os.getenv("STABLENEW_COMFY_WORKDIR")
+        if workdir_override:
+            proc_config.working_dir = workdir_override
+        autostart_env = os.getenv("STABLENEW_COMFY_AUTOSTART")
+        if autostart_env is not None:
+            proc_config.autostart_enabled = autostart_env.lower() in {"1", "true", "yes"}
+        timeout_override = os.getenv("STABLENEW_COMFY_TIMEOUT")
         if timeout_override:
             try:
                 proc_config.startup_timeout_seconds = float(timeout_override)
@@ -216,6 +308,31 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
         name="WebUI-Bootstrap",
         daemon=True,
         purpose="Async WebUI bootstrap during startup",
+        suppress_daemon_warning=True,
+    )
+
+
+def _async_bootstrap_comfy(root: Any, app_state, window) -> None:
+    """Asynchronously bootstrap ComfyUI after GUI is loaded."""
+
+    def _bootstrap_worker():
+        try:
+            config = _load_comfy_config()
+            comfy_manager = bootstrap_comfy(config)
+            if comfy_manager:
+                root.after(0, lambda: _update_window_comfy_manager(window, comfy_manager))
+                logging.debug("ComfyUI bootstrap completed asynchronously")
+        except Exception as exc:
+            logging.warning(f"Async ComfyUI bootstrap failed: {exc}")
+
+    from src.utils.thread_registry import get_thread_registry
+
+    registry = get_thread_registry()
+    registry.spawn(
+        target=_bootstrap_worker,
+        name="ComfyUI-Bootstrap",
+        daemon=True,
+        purpose="Async ComfyUI bootstrap during startup",
         suppress_daemon_warning=True,
     )
 
@@ -385,6 +502,13 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
 
 
 # --- File Access Logger V2.5 hooks ---
+def _update_window_comfy_manager(window, comfy_manager: ComfyProcessManager) -> None:
+    window.comfy_process_manager = comfy_manager
+    controller = getattr(window, "app_controller", None)
+    if controller:
+        setattr(controller, "comfy_process_manager", comfy_manager)
+
+
 def _install_file_access_hooks(logger: "FileAccessLogger") -> None:
     """
     Monkeypatch open / Path.open / importlib.import_module so that we can
@@ -540,6 +664,7 @@ def main() -> None:
     root.after(1000, lambda: _register_emergency_cleanup(window))
     
     root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
+    root.after(700, lambda: _async_bootstrap_comfy(root, app_state, window))
 
     try:
         root.mainloop()

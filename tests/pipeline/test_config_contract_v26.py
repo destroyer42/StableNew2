@@ -43,6 +43,24 @@ def test_build_config_layers_derives_video_backend_options_from_execution_config
     assert layers.backend_options["video"]["animatediff"]["fps"] == 12
 
 
+def test_build_config_layers_derives_video_workflow_backend_options_from_execution_config() -> None:
+    execution_config = {
+        "video_workflow": {
+            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_version": "1.0.0",
+            "backend_id": "comfy",
+        }
+    }
+
+    layers = build_config_layers(
+        intent_config={"run_mode": "queue", "source": "video"},
+        execution_config=execution_config,
+    )
+
+    assert layers.backend_options["video"]["workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert layers.backend_options["video"]["workflow"]["backend_id"] == "comfy"
+
+
 def test_extract_execution_config_reads_layered_payloads() -> None:
     layered = {
         "config_layers": {

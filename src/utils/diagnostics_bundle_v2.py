@@ -171,6 +171,19 @@ def build_crash_bundle(
                         "runtime/job_snapshot.json",
                         json.dumps(_anonymize(job_snapshot), indent=2),
                     )
+                    selected_job = _select_bundle_job_summary(job_snapshot)
+                    result_summary = selected_job.get("result_summary")
+                    if isinstance(result_summary, Mapping) and result_summary:
+                        zf.writestr(
+                            "runtime/result_summary.json",
+                            json.dumps(_anonymize(dict(result_summary)), indent=2),
+                        )
+                        replay_descriptor = result_summary.get("replay_descriptor")
+                        if isinstance(replay_descriptor, Mapping) and replay_descriptor:
+                            zf.writestr(
+                                "runtime/replay_descriptor.json",
+                                json.dumps(_anonymize(dict(replay_descriptor)), indent=2),
+                            )
                 if inspector_lines and include_process_state:
                     zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
                 _include_jsonl_logs(zf)
@@ -259,6 +272,27 @@ def _include_queue_state(zf: zipfile.ZipFile) -> None:
         logger.debug("Failed to include queue state in diagnostics bundle", exc_info=True)
         return
     zf.writestr("runtime/queue_state.json", json.dumps(_anonymize(payload), indent=2))
+
+
+def _select_bundle_job_summary(job_snapshot: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(job_snapshot, Mapping):
+        return {}
+    jobs = job_snapshot.get("jobs")
+    if not isinstance(jobs, list):
+        return {}
+    queue = job_snapshot.get("queue")
+    current_job_id = queue.get("current_job_id") if isinstance(queue, Mapping) else None
+
+    for job in jobs:
+        if isinstance(job, Mapping) and current_job_id and job.get("job_id") == current_job_id:
+            return dict(job)
+    for job in jobs:
+        if isinstance(job, Mapping) and job.get("status") == "running":
+            return dict(job)
+    for job in jobs:
+        if isinstance(job, Mapping):
+            return dict(job)
+    return {}
 
 
 def _collect_image_paths(roots: list[Path], *, limit: int = 25) -> list[Path]:

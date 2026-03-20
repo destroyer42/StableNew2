@@ -1,391 +1,192 @@
-# PR Template Guide v2.6
+# StableNew PR Template v2.6
 
-**Status**: CANONICAL  
-**Version**: 2.6  
-**Date**: 2025-12-26
-
----
+Status: Canonical
+Updated: 2026-03-19
 
 ## Purpose
 
-This document defines the standard structure for Pull Request (PR) documentation in StableNew v2.6+. All PRs must follow this template to ensure consistency, traceability, and maintainability.
+This template is the required format for executable PR specifications in
+StableNew v2.6. It is written for planner-to-executor handoff, including human
+review, Copilot execution, and Codex execution.
 
----
+Every PR spec must be concrete enough that an implementation agent can execute
+it without inventing architecture, reviving legacy seams, or widening scope.
 
-## PR Document Structure
+## Required Structure
 
-Every PR document must contain the following sections in order:
+Use the following sections in order.
 
 ### 1. Header
 
 ```markdown
-# PR-{CATEGORY}-{NUMBER}: {Title}
+# PR-{CATEGORY}-{NUMBER} - {Title}
 
-**Status**: {Status}
-**Priority**: {Priority}
-**Effort**: {Effort}
-**Phase**: {Phase}
-**Date**: {Date}
-**Implementation Date**: {Date} (if implemented)
+Status: Specification | In Progress | Completed | Cancelled
+Priority: LOW | MEDIUM | HIGH | CRITICAL
+Effort: SMALL | MEDIUM | LARGE
+Phase: {Roadmap phase}
+Date: YYYY-MM-DD
 ```
 
-**Fields**:
-- `Status`: 🟡 Specification | 🔵 In Progress | ✅ Implemented | ❌ Cancelled
-- `Priority`: LOW | MEDIUM | HIGH | CRITICAL
-- `Effort`: SMALL (1-2 days) | MEDIUM (1 week) | LARGE (2+ weeks)
-- `Phase`: Phase number or category (e.g., "Post-Phase 4 Enhancement")
-- `Date`: Specification date
-- `Implementation Date`: Actual completion date (add after implementation)
+Accepted category prefixes used by the current repo:
 
-**Categories**:
-- `CORE`: Core architecture changes
-- `GUI`: GUI changes
-- `TEST`: Testing infrastructure
-- `CLEANUP`: Code cleanup/refactoring
-- `PROCESS`: Process improvements
-- `CI`: CI/CD changes
-- `DOCS`: Documentation only
+- `UNIFY`
+- `NJR`
+- `MIG`
+- `CTRL`
+- `CONFIG`
+- `PERF`
+- `VIDEO`
+- `COMFY`
+- `TEST`
+- `OBS`
+- `GUI`
+- `POLISH`
+- `HARDEN`
 
 ### 2. Context & Motivation
 
-```markdown
-## Context & Motivation
+Must include:
 
-### Problem Statement
-{What problem are we solving?}
-
-### Why This Matters
-{Why is this important? What's the impact?}
-
-### Current Architecture
-{What does the system look like today?}
-
-### Reference
-{Links to related docs, issues, discussions}
-```
+- current repo truth
+- specific user or architectural problem
+- why the PR exists now
+- references to canonical docs or previous PRs
 
 ### 3. Goals & Non-Goals
 
-```markdown
-## Goals & Non-Goals
+Use flat numbered lists.
 
-### ✅ Goals
-1. {Specific, measurable goal}
-2. {Another goal}
+Goals must be observable and testable.
 
-### ❌ Non-Goals
-1. {What we explicitly won't do}
-2. {Scope limitations}
-```
+Non-goals must explicitly fence the scope and prevent architecture drift.
 
-### 4. Allowed Files
+### 4. Guardrails
 
-```markdown
-## Allowed Files
+Must include:
 
-### ✅ Files to Create
-| File | Purpose | Lines (Est.) |
-|------|---------|--------------|
-| {path} | {description} | {count} |
+- architecture invariants that this PR must preserve
+- boundaries the executor must not cross
+- explicit statement about whether NJR, queue, runner, or GUI contracts may be touched
 
-### ✅ Files to Modify
-| File | Reason | Lines Changed (Est.) |
-|------|--------|----------------------|
-| {path} | {description} | {count} |
+### 5. Allowed Files
 
-### ❌ Forbidden Files (DO NOT TOUCH)
-| File/Directory | Reason |
-|----------------|--------|
-| {path} | {why forbidden} |
-```
+Split into:
 
-**Rationale**: Explicitly listing allowed/forbidden files prevents scope creep and accidental architecture violations.
+- Files to Create
+- Files to Modify
+- Forbidden Files
 
-### 5. Implementation Plan
+The list must be explicit enough to prevent scope creep.
 
-```markdown
-## Implementation Plan
+File groups may be listed by directory or pattern only when the boundary is
+tight and obvious, for example:
 
-### Step 1: {Title}
-{Detailed step description}
+- `tests/video/test_sequence_*`
+- `src/video/*sequence*.py`
 
-**Create**: {files}
-**Modify**: {files}
+### 6. Implementation Plan
 
-```language
-{code snippets if helpful}
-```
+Break the work into ordered steps.
 
-### Step 2: {Title}
-{Next step}
+Each step must include:
 
-...
-```
+- what changes
+- why it changes
+- exact files touched in that step
+- whether tests should be added or updated
 
-**Guidelines**:
-- Break implementation into logical, sequential steps
-- Include code snippets for complex changes
-- Specify exact files for each step
-- Order steps by dependency (do prerequisites first)
+If a PR has risky edges, include a dedicated hardening step before the final UI
+or integration step.
 
-### 6. Testing Plan
+### 7. Testing Plan
 
-```markdown
-## Testing Plan
+Split into:
 
-### Unit Tests
-{Test coverage requirements}
+- Unit tests
+- Integration tests
+- Journey or smoke coverage
+- Manual verification
 
-### Integration Tests
-{Integration test requirements}
+List concrete pytest commands when known.
 
-### Journey Tests
-{E2E test requirements}
+### 8. Verification Criteria
 
-### Manual Testing
-{Manual verification steps}
-```
+Split into:
 
-### 7. Verification Criteria
+- Success criteria
+- Failure criteria
 
-```markdown
-## Verification Criteria
+Success criteria must map back to the goals.
 
-### ✅ Success Criteria
-1. {Specific, testable criterion}
-2. {Another criterion}
+### 9. Risk Assessment
 
-### ❌ Failure Criteria
-{What constitutes failure?}
-```
+Split into:
 
-### 8. Risk Assessment
+- Low-risk areas
+- Medium-risk areas with mitigation
+- High-risk areas with mitigation
+- Rollback plan
 
-```markdown
-## Risk Assessment
+### 10. Tech Debt Analysis
 
-### Low Risk Areas
-✅ {Area}: {Why low risk}
+Must include:
 
-### Medium Risk Areas
-⚠️ {Area}: {Risk description}
-- **Mitigation**: {How to mitigate}
+- debt removed
+- debt intentionally deferred
+- exact next PR owner for each deferred item
 
-### High Risk Areas
-❌ {Area}: {Risk description}
-- **Mitigation**: {How to mitigate}
+### 11. Documentation Updates
 
-### Rollback Plan
-{How to undo changes if needed}
-```
+List the docs that must change in the same PR if runtime truth changes.
 
-### 9. Tech Debt Analysis
+For documentation-only follow-up, name the follow-up PR explicitly.
+
+### 12. Dependencies
+
+Split into:
+
+- internal module dependencies
+- external tools or runtimes
+
+### 13. Approval & Execution
+
+Use:
 
 ```markdown
-## Tech Debt Removed
-✅ {Issue resolved}
-
-## Tech Debt Added
-⚠️ {New tech debt (with justification)}
-
-**Net Tech Debt**: {+/- count}
-```
-
-### 10. Architecture Alignment
-
-```markdown
-## Architecture Alignment
-
-### ✅ Enforces Architecture v2.6
-{How this PR aligns with canonical architecture}
-
-### ✅ Follows Testing Standards
-{How testing follows standards}
-
-### ✅ Maintains Separation of Concerns
-{How SoC is maintained}
-```
-
-### 11. Dependencies
-
-```markdown
-## Dependencies
-
-### External
-{External libraries, services, tools}
-
-### Internal
-{Internal modules, components}
-```
-
-### 12. Timeline & Effort
-
-```markdown
-## Timeline & Effort
-
-### Breakdown
-| Task | Effort | Duration |
-|------|--------|----------|
-| {task} | {hours/days} | {date range} |
-
-**Total**: {time estimate}
-```
-
-### 13. Approval & Sign-Off
-
-```markdown
-## Approval & Sign-Off
-
-**Planner**: {Agent/Person}
-**Executor**: {Agent/Person}
-**Reviewer**: {Agent/Person}
-
-**Approval Status**: {Status}
+Planner: {Agent}
+Executor: {Agent}
+Reviewer: {Agent/Human}
+Approval Status: Pending | Approved | Implemented
 ```
 
 ### 14. Next Steps
 
-```markdown
-## Next Steps
+List the immediate next PRs or follow-on tasks.
 
-1. {Action item}
-2. {Action item}
-3. {Action item}
-```
+## Execution Rules
 
----
+All PR specs must respect the current canon:
 
-## Post-Implementation: Implementation Summary
+- `docs/ARCHITECTURE_v2.6.md`
+- `docs/GOVERNANCE_v2.6.md`
+- `docs/StableNew Roadmap v2.6.md`
+- `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
+- `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 
-**IMPORTANT**: After a PR is implemented, add this section to document actual implementation details:
+PR specs must not:
 
-```markdown
-## Implementation Summary
+- reintroduce `DIRECT`
+- create a second job model
+- leak backend workflow JSON outside `src/video/`
+- revive archive DTOs as active runtime dependencies
+- leave both old and new paths active
 
-**Implementation Date**: {Date}
-**Executor**: {Agent/Person}
-**Status**: ✅ COMPLETE | ⚠️ PARTIAL | ❌ FAILED
+## Post-Implementation Summary
 
-### What Was Implemented
+After implementation, append a short summary section that records:
 
-#### 1. {Feature/Component} ✅
-{Description of what was built}
-- Key details
-- Design decisions
-- Deviations from spec (if any)
-
-#### 2. {Next Component} ✅
-{Description}
-
-### Design Decisions
-
-1. **{Decision Title}**: {Rationale}
-2. **{Another Decision}**: {Rationale}
-
-### Files Created ({count})
-1. `{path}` ({lines} lines) - {purpose}
-2. `{path}` ({lines} lines) - {purpose}
-
-**Total New Lines**: ~{count}
-
-### Files Modified ({count})
-1. `{path}` (+{lines} lines) - {changes}
-2. `{path}` (+{lines} lines) - {changes}
-
-**Total Modified Lines**: ~{count}
-
-### Verification
-
-#### {Test Type}
-```bash
-{command}
-```
-**Result**: {outcome} ✅/❌
-
-### What Works Now
-
-1. ✅ {Working feature}
-2. ✅ {Another feature}
-
-### What's Next
-
-1. {Follow-up task}
-2. {Another task}
-
-### Lessons Learned
-
-1. **{Lesson}**: {Description}
-2. **{Another Lesson}**: {Description}
-
-### Tech Debt Addressed
-
-- ✅ {Issue resolved}
-- ⚠️ {New tech debt added}
-
-**Net Tech Debt**: {+/- count}
-```
-
----
-
-## Examples
-
-See these PRs for complete examples:
-- [PR-CI-JOURNEY-001](PR-CI-JOURNEY-001.md): CI journey tests (COMPLETE with implementation summary)
-- [PR-PROCESS-001](../docs/archive/completed_prs/PR-PROCESS-001.md): Process cleanup (if exists)
-
----
-
-## Best Practices
-
-### DO:
-- ✅ Be specific and concrete
-- ✅ Include code snippets for complex changes
-- ✅ List all files that will be touched
-- ✅ Provide verification steps
-- ✅ Document design decisions
-- ✅ Add implementation summary after completion
-
-### DON'T:
-- ❌ Leave goals vague or unmeasurable
-- ❌ Skip risk assessment
-- ❌ Forget to specify forbidden files
-- ❌ Omit rollback plan
-- ❌ Forget to document tech debt impact
-- ❌ Skip post-implementation summary
-
----
-
-## Template Checklist
-
-Before submitting PR for approval:
-- [ ] All sections present
-- [ ] Goals are specific and measurable
-- [ ] Allowed/forbidden files explicitly listed
-- [ ] Implementation steps are sequential and complete
-- [ ] Testing plan covers all changes
-- [ ] Success/failure criteria defined
-- [ ] Risks identified with mitigations
-- [ ] Tech debt impact analyzed
-- [ ] Architecture alignment verified
-- [ ] No contradictions introduced with Tier 1–2 canonical docs (see Canonical_Document_Ownership_v2.6.md §5)
-
-After implementation:
-- [ ] Implementation Summary added
-- [ ] Status updated to ✅ IMPLEMENTED
-- [ ] Implementation Date added
-- [ ] Files created/modified documented
-- [ ] Verification results included
-- [ ] Lessons learned documented
-- [ ] Tech debt reconciled
-
----
-
-## Version History
-
-- **v2.6** (2025-12-26): Added post-implementation summary requirement
-- **v2.5** (2024-xx-xx): Initial template structure
-
----
-
-**Document Status**: ✅ CANONICAL  
-**Last Updated**: 2025-12-26
+- what was delivered
+- actual files changed
+- tests run
+- deferred debt and next PR owner

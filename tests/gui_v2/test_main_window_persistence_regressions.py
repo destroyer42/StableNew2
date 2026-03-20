@@ -67,6 +67,14 @@ class _StubSVDTab:
         return self._payload
 
 
+class _StubVideoWorkflowTab:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def get_video_workflow_state(self):
+        return self._payload
+
+
 class _StubControllerForCleanup:
     def __init__(self) -> None:
         self.called = 0
@@ -147,6 +155,31 @@ def test_save_ui_state_persists_svd_selection(tmp_path: Path) -> None:
     saved = store.load_state()
     assert saved is not None
     assert saved["svd"]["source_image_path"] == "C:/tmp/source.png"
+
+
+def test_save_ui_state_persists_video_workflow_selection(tmp_path: Path) -> None:
+    store = UIStateStore(tmp_path / "ui_state.json")
+
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot()
+    window.center_notebook = _StubNotebook()
+    window.learning_tab = _StubLearningTab({})
+    window.video_workflow_tab = _StubVideoWorkflowTab(
+        {
+            "workflow_id": "ltx_multiframe_anchor_v1",
+            "source_image_path": "C:/tmp/source.png",
+            "end_anchor_path": "C:/tmp/end.png",
+        }
+    )
+
+    from unittest.mock import patch
+
+    with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
+        window._save_ui_state()
+
+    saved = store.load_state()
+    assert saved is not None
+    assert saved["video_workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
 
 
 def test_trigger_deferred_queue_autostart_calls_job_controller() -> None:

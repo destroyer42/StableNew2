@@ -1,13 +1,9 @@
-"""Learning record builder tests (LEGACY).
-
-Tests learning record creation with legacy PipelineConfig.
-"""
+"""Learning record builder tests."""
 
 from __future__ import annotations
 
-import pytest
+from dataclasses import dataclass, field
 
-from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.learning.learning_record import LearningRecord
 from src.learning.learning_record_builder import build_learning_record
 from src.pipeline.pipeline_runner import PipelineRunResult
@@ -49,9 +45,25 @@ def _run_result_stub(run_id: str = "run-123") -> PipelineRunResult:
     )
 
 
-@pytest.mark.legacy
+@dataclass
+class MinimalLearningConfig:
+    prompt: str
+    model: str
+    sampler: str
+    width: int
+    height: int
+    steps: int
+    cfg_scale: float
+    metadata: dict[str, str] = field(default_factory=dict)
+    config: dict[str, str | int | float] = field(default_factory=dict)
+    variant_configs: list[dict[str, object]] = field(default_factory=list)
+    randomizer_mode: str = ""
+    randomizer_plan_size: int = 0
+    base_model: str = ""
+
+
 def test_learning_record_builder_basic_roundtrip():
-    cfg = PipelineConfig(
+    cfg = MinimalLearningConfig(
         prompt="p",
         model="m",
         sampler="Euler",
@@ -60,6 +72,15 @@ def test_learning_record_builder_basic_roundtrip():
         steps=20,
         cfg_scale=7.5,
         metadata={"user": "tester"},
+        base_model="m",
+        config={
+            "model": "m",
+            "sampler": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.5,
+            "width": 512,
+            "height": 512,
+        },
     )
     result = _run_result_stub()
     record = build_learning_record(cfg, result)

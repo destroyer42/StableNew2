@@ -200,77 +200,82 @@ def job_service(job_queue: JobQueue, runner: SingleNodeJobRunner) -> JobService:
     """JobService wired to queue and runner."""
     service = JobService(job_queue=job_queue, runner=runner)
     service.auto_run_enabled = True  # Enable auto-start for tests
-    return service
+    yield service
+    runner.stop()
 
 
 # ---------------------------------------------------------------------------
-# Test: Direct Mode Execution
+# Test: Legacy direct-labeled normalization
 # ---------------------------------------------------------------------------
 
 
-class TestDirectModeExecution:
-    """Tests for direct (synchronous) job execution."""
+class TestLegacyDirectNormalization:
+    """Tests for queue-only handling of legacy direct-labeled jobs."""
 
-    def test_direct_mode_executes_immediately(
+    def test_legacy_direct_mode_executes_via_queue(
         self,
         job_service: JobService,
+        job_queue: JobQueue,
         recording_callable: RecordingRunCallable,
     ) -> None:
-        """submit_direct() executes job immediately and synchronously."""
+        """Direct-labeled jobs are coerced to queue and still execute."""
         job = make_job("direct-001", run_mode="direct")
 
-        result = job_service.submit_direct(job)
+        job_service.submit_job_with_run_mode(job)
+        final_job = poll_until_terminal(job_queue, "direct-001")
 
-        # Job was executed
+        assert job.run_mode == "queue"
         assert recording_callable.get_job_ids() == ["direct-001"]
-        # Result returned
-        assert result is not None
-        assert result.get("job_id") == "direct-001"
+        assert final_job is not None
+        assert final_job.status == JobStatus.COMPLETED
 
-    def test_direct_mode_receives_correct_config(
+    def test_legacy_direct_mode_receives_correct_config(
         self,
         job_service: JobService,
+        job_queue: JobQueue,
         recording_callable: RecordingRunCallable,
     ) -> None:
-        """submit_direct() passes job with correct pipeline_config."""
-        job = make_job("direct-002", model="special-model", steps=42)
+        """Legacy direct-labeled jobs preserve normalized config after coercion."""
+        job = make_job("direct-002", model="special-model", steps=42, run_mode="direct")
 
-        job_service.submit_direct(job)
+        job_service.submit_job_with_run_mode(job)
+        final_job = poll_until_terminal(job_queue, "direct-002")
 
+        assert final_job is not None
         assert len(recording_callable.calls) == 1
         executed_job = recording_callable.calls[0]
         assert executed_job._normalized_record.config["model"] == "special-model"
         assert executed_job._normalized_record.config["steps"] == 42
 
-    def test_direct_mode_job_completes(
+    def test_legacy_direct_mode_job_completes(
         self,
         job_service: JobService,
         job_queue: JobQueue,
     ) -> None:
-        """submit_direct() marks job as COMPLETED on success."""
-        job = make_job("direct-003")
+        """Legacy direct-labeled jobs still reach COMPLETED."""
+        job = make_job("direct-003", run_mode="direct")
 
-        job_service.submit_direct(job)
+        job_service.submit_job_with_run_mode(job)
 
-        # Check job status in queue
-        queued_job = job_queue.get_job("direct-003")
+        queued_job = poll_until_terminal(job_queue, "direct-003")
         assert queued_job is not None
         assert queued_job.status == JobStatus.COMPLETED
 
-    def test_direct_mode_handles_error(
+    def test_legacy_direct_mode_handles_error(
         self,
         job_queue: JobQueue,
     ) -> None:
-        """submit_direct() marks job as FAILED on exception."""
+        """Legacy direct-labeled jobs still surface failures after coercion."""
         failing_callable = RecordingRunCallable(should_raise=True)
         runner = SingleNodeJobRunner(job_queue, failing_callable)
         service = JobService(job_queue, runner)
-        job = make_job("direct-fail")
+        service.auto_run_enabled = True
+        job = make_job("direct-fail", run_mode="direct")
 
-        with pytest.raises(RuntimeError, match="Simulated"):
-            service.submit_direct(job)
+        service.submit_job_with_run_mode(job)
 
-        queued_job = job_queue.get_job("direct-fail")
+        queued_job = poll_until_terminal(job_queue, "direct-fail")
+        runner.stop()
         assert queued_job is not None
         assert queued_job.status == JobStatus.FAILED
 
@@ -441,13 +446,13 @@ class TestMultipleQueuedJobs:
 
 
 class TestDirectQueueParity:
-    """Tests that direct and queue modes produce same execution behavior."""
+    """Tests that legacy direct-labeled and queue-labeled jobs behave the same."""
 
     def test_same_config_both_modes(
         self,
         job_queue: JobQueue,
     ) -> None:
-        """Same config is passed to callable in both direct and queue modes."""
+        """Same config is passed to callable after legacy direct coercion and queue submit."""
         direct_calls: list[Job] = []
         queue_calls: list[Job] = []
 
@@ -459,19 +464,24 @@ class TestDirectQueueParity:
             queue_calls.append(job)
             return {"ok": True}
 
-        # Direct mode
+        # Legacy direct-labeled mode coerced through queue-only runtime
         direct_runner = SingleNodeJobRunner(job_queue, direct_recorder)
         direct_service = JobService(job_queue, direct_runner)
-        direct_job = make_job("parity-direct", model="parity-model", steps=99)
-        direct_service.submit_direct(direct_job)
+        direct_service.auto_run_enabled = True
+        direct_job = make_job("parity-direct", model="parity-model", steps=99, run_mode="direct")
+        direct_service.submit_job_with_run_mode(direct_job)
+        poll_until_terminal(job_queue, "parity-direct")
 
         # Queue mode (fresh queue)
         queue2 = JobQueue()
         queue_runner = SingleNodeJobRunner(queue2, queue_recorder)
         queue_service = JobService(queue2, queue_runner)
+        queue_service.auto_run_enabled = True
         queue_job = make_job("parity-queue", model="parity-model", steps=99)
         queue_service.submit_queued(queue_job)
         poll_until_terminal(queue2, "parity-queue")
+        direct_runner.stop()
+        queue_runner.stop()
 
         # Both received same config
         assert len(direct_calls) == 1
@@ -502,12 +512,14 @@ class TestQueueErrorHandling:
         failing_callable = RecordingRunCallable(should_raise=True)
         runner = SingleNodeJobRunner(job_queue, failing_callable)
         service = JobService(job_queue, runner)
+        service.auto_run_enabled = True
 
         job = make_job("fail-001")
         service.submit_queued(job)
 
         # Poll until terminal
         final_job = poll_until_terminal(job_queue, "fail-001")
+        runner.stop()
 
         assert final_job is not None
         assert final_job.status == JobStatus.FAILED
@@ -527,6 +539,7 @@ class TestQueueErrorHandling:
 
         runner = SingleNodeJobRunner(job_queue, selective_failure)
         service = JobService(job_queue, runner)
+        service.auto_run_enabled = True
 
         service.submit_queued(make_job("success-1"))
         service.submit_queued(make_job("fail-middle"))
@@ -534,6 +547,7 @@ class TestQueueErrorHandling:
 
         # Poll until all terminal
         poll_until_all_terminal(job_queue, ["success-1", "fail-middle", "success-2"])
+        runner.stop()
 
         # Check statuses
         job1 = job_queue.get_job("success-1")
@@ -621,6 +635,7 @@ class TestRunnerLifecycle:
         recording = RecordingRunCallable()
         runner = SingleNodeJobRunner(job_queue, recording)
         service = JobService(job_queue, runner)
+        service.auto_run_enabled = True
 
         # Submit job and immediately pause
         job = make_job("pause-001")
@@ -635,6 +650,7 @@ class TestRunnerLifecycle:
 
         # Job should eventually complete
         final = poll_until_terminal(job_queue, "pause-001", timeout=3.0)
+        runner.stop()
         assert final is not None
         # Could be COMPLETED or still processing depending on timing
         # At minimum, the system shouldn't crash
@@ -665,6 +681,7 @@ class TestSubmitJobsBatch:
 
         runner = SingleNodeJobRunner(job_queue, track_calls)
         service = JobService(job_queue, runner)
+        service.auto_run_enabled = True
 
         jobs = [
             make_job("batch-direct-1", run_mode="direct"),
@@ -675,10 +692,11 @@ class TestSubmitJobsBatch:
         service.submit_jobs(jobs)
 
         # Wait for queue jobs
-        poll_until_all_terminal(job_queue, ["batch-queue-1", "batch-queue-2"])
+        poll_until_all_terminal(job_queue, ["batch-direct-1", "batch-queue-1", "batch-queue-2"])
+        runner.stop()
 
-        # Direct job was called
-        assert "batch-direct-1" in direct_calls or "batch-direct-1" in queue_calls
+        # Legacy direct-labeled jobs are coerced into queue-backed execution
+        assert "batch-direct-1" in queue_calls
 
         # All jobs completed
         all_ids = direct_calls + queue_calls

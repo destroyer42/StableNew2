@@ -1,11 +1,11 @@
 # StableNew
 
-StableNew is a local image and video orchestration system built around a single
+StableNew is a local image and video orchestrator built around a single outer
 job contract, a queue-first runtime, canonical artifacts, history, replay, and
 learning-oriented metadata.
 
 Version: v2.6  
-Status: active migration closure and platform unification  
+Status: post-unification, entering video productization and UX polish  
 Canonical docs entrypoint: `docs/DOCS_INDEX_v2.6.md`
 
 ## Canonical Runtime
@@ -17,7 +17,7 @@ StableNew's canonical runtime is:
 Non-negotiable runtime rules:
 
 - Fresh execution is queue-only.
-- `Run Now` means queue submit + immediate auto-start, not a second executor.
+- `Run Now` means queue submit + immediate auto-start.
 - NJR is the outer execution contract for image generation, video generation,
   replay, reprocess, learning, CLI, and image edit.
 - StableNew owns orchestration, queueing, artifacts, history, replay, and
@@ -29,7 +29,7 @@ Preferred still-image stage chain:
 
 ## Intent Surfaces
 
-StableNew currently supports or is standardizing these intent surfaces:
+StableNew currently supports these active intent surfaces:
 
 - PromptPack-driven image generation
 - Reprocess and image-edit submissions
@@ -49,18 +49,24 @@ The repo already has the backbone required for the end-state:
 - canonical artifact and manifest contracts
 - replay and reprocess substrate
 - a real `src/video/` backend seam for video execution
+- a managed local Comfy runtime and one pinned LTX workflow routed through NJR,
+  queue, runner, artifacts, history, and replay
 
-There is still migration debt to remove:
+The remaining follow-on product debt is now narrower:
 
-- archive `PipelineConfig` imports in live source and tests
-- `legacy_njr_adapter` still present in runtime code
-- `DIRECT` terminology and behavior still present in code/tests
 - oversized controller ownership in `app_controller.py` and `pipeline_controller.py`
+- compat-only tests still preserve some migration behavior under `tests/compat/`
+- GUI-facing config state still exposes a dict projection, although
+  `AppStateV2` now mirrors canonical `intent_config`, `execution_config`, and
+  `backend_options`
+- longer-form video sequencing, stitching, continuity, and story-planning
+  layers are still future work
 
-Current migration closure and PR sequencing are tracked in:
+Current sequencing is tracked in:
 
 - `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
+- `docs/StableNew Roadmap v2.6.md`
 
 ## Start Here
 
@@ -70,7 +76,7 @@ Read these first:
 2. `docs/ARCHITECTURE_v2.6.md`
 3. `docs/GOVERNANCE_v2.6.md`
 4. `docs/StableNew Roadmap v2.6.md`
-5. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+5. `docs/PR_TEMPLATE_v2.6.md`
 
 Useful subsystem docs:
 
@@ -111,9 +117,9 @@ Testing policy:
 - compat-migration suites are temporary and must shrink over time
 - quarantine suites must be explicit and not silently define architecture
 
-Current collection baseline used by the documentation reset:
+Current collection baseline:
 
-- `pytest --collect-only -q` -> `2348 collected / 1 skipped`
+- `pytest --collect-only -q` -> `2377 collected / 0 skipped`
 
 ## Notes
 

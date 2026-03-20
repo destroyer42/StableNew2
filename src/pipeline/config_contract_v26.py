@@ -28,6 +28,7 @@ _EXECUTION_HINT_KEYS = {
     "upscale",
     "animatediff",
     "svd_native",
+    "video_workflow",
     "hires_fix",
     "refiner",
     "randomization",
@@ -105,6 +106,9 @@ def derive_backend_options(execution_config: Mapping[str, Any] | None) -> dict[s
         stage_config = config.get(stage_name)
         if isinstance(stage_config, Mapping) and stage_config:
             video_options[stage_name] = _mapping_dict(stage_config)
+    workflow_config = config.get("video_workflow")
+    if isinstance(workflow_config, Mapping) and workflow_config:
+        video_options["workflow"] = _mapping_dict(workflow_config)
     if video_options:
         return {"video": video_options}
     return {}

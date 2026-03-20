@@ -1,44 +1,76 @@
-# KNOWN_PITFALLS_QUEUE_TESTING.md
-## StableNew V2 / V2.5 — Queue Testing Pitfalls & Correct Patterns (Lint-clean)
+# Known Pitfalls: Queue Testing v2.6
 
-## 1. Overview
-StableNew’s queue subsystem is intentionally asynchronous:
-- Direct runs execute synchronously.
-- Queued runs execute in a background worker thread.
+Status: Active testing reference
+Updated: 2026-03-19
 
-This design is correct but introduces pitfalls for tests.
+## 1. Purpose
 
-## 2. Pitfall: Race Condition Between submit_queued() and run_next_now()
-Background runner may consume the queued job before run_next_now() runs.
+StableNew fresh execution is queue-only.
 
-### Correct Pattern
-Use job_history polling, not run_next_now().
+Queue tests are intentionally asynchronous and must validate the real
+queue-backed lifecycle rather than simulating a second execution path.
 
-## 3. Pitfall: Asserting Status on the Original Job Object
-Runner updates JobHistory’s job record, not the original object.
+## 2. Canonical Driver Layer
 
-### Correct Pattern
-Fetch job from history and assert terminal status.
+Tests should drive through the real user-facing path:
 
-## 4. Pitfall: Using sleep() Instead of Polling
-Sleeping is flaky. Poll until completed.
+GUI or controller -> `JobService` -> queue -> `PipelineRunner` -> history/result recording
 
-## 5. Pitfall: Mixing Manual Queue Driving With Background Runner
-Do not call run_next_now() after submit_queued().
+Do not bypass this with direct runner driving unless the test is explicitly a
+runner-unit test.
 
-## 6. Pitfall: Asserting Ordering Without Draining Queue Correctly
-Submit one job, wait, then submit next.
+## 3. Common Pitfalls
 
-## 7. Correct Architectural Driver Layer
-Tests must drive through:
-GUI V2 → AppController → PipelineController → JobService → Runner → WebUI Stub → JobHistory
+### Pitfall: Treating `Run Now` as a direct execution mode
 
-## 8. Summary Checklist
-Avoid races, stale job objects, sleeps, mixed drivers, and direct runner calls.
+`Run Now` is queue submit plus immediate auto-start. Tests must not assume a
+separate `DIRECT` runtime.
 
-- Watchdog threads introduced in Phase 3 may cancel long-running jobs when resource caps fire; queue tests should expect cancellations triggered by `[WATCHDOG]` log entries rather than assuming a manual stop hook.
-- Phase 4 OS-level containers may force-kill job children via `[CONTAINER]` log notifications; queue tests should allow brief `[CONTAINER] job=… kill_all invoked` spikes when jobs finish or when OS-level limits fire, but the queue status should still settle to a terminal state.
-- Phase 5 adds the diagnostics dashboard and `[DIAG]` reports; queue tests should tolerate silent log interactions when the controller generates bundled diagnostics (manual button, watchdog violations, or exception hooks) without assuming they mutate queue state.
+### Pitfall: Calling manual queue-driving hooks after queue submission
 
-## Recommended Location
-docs/testing/KNOWN_PITFALLS_QUEUE_TESTING.md
+If the background runner is enabled, manual queue-driving calls create races and
+false failures.
+
+### Pitfall: Asserting against the original job object
+
+Terminal status belongs to the stored queue/history record, not to a stale
+pre-submission object reference.
+
+### Pitfall: Using `sleep()` instead of polling
+
+Polling terminal state is the correct pattern. Blind sleeping is flaky.
+
+### Pitfall: Rebuilding status from logs instead of canonical history/results
+
+Tests should assert against structured queue/history/result state whenever
+possible.
+
+## 4. Correct Test Patterns
+
+Use:
+
+- queue submission through the real controller or service seam under test
+- polling against history or result state
+- deterministic mocks for external runtimes
+- explicit cleanup for local worker threads when test-owned services are created
+
+Avoid:
+
+- direct runner execution for fresh jobs
+- mixed manual and background queue driving
+- stale object assertions
+- time-based sleeps as the primary synchronization method
+
+## 5. Queue-Test Checklist
+
+- submit work through the intended queue-facing seam
+- wait for terminal state by polling
+- assert terminal state from canonical history or stored result
+- verify artifacts or summaries through canonical result metadata
+- clean up locally started services, threads, or process managers
+
+## 6. Notes
+
+- Recovery, watchdog, and diagnostics behavior may emit additional logs without
+  changing the required terminal queue outcome.
+- Video workflow jobs follow the same queue-first testing rule as image jobs.

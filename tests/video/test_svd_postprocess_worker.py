@@ -1,22 +1,36 @@
 from __future__ import annotations
 
 import sys
+import types
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
 pytest.importorskip("cv2")
+pytest.importorskip("torch")
 
 from src.video import svd_postprocess_worker as worker
 
 
-def test_install_torchvision_compat_shims_registers_functional_tensor() -> None:
+def test_install_torchvision_compat_shims_registers_functional_tensor(monkeypatch: pytest.MonkeyPatch) -> None:
     sys.modules.pop("torchvision.transforms.functional_tensor", None)
+
+    torchvision_module = types.ModuleType("torchvision")
+    transforms_module = types.ModuleType("torchvision.transforms")
+    functional_module = types.ModuleType("torchvision.transforms.functional")
+    functional_module.normalize = object()
+    functional_module.fake_op = lambda value: value
+
+    monkeypatch.setitem(sys.modules, "torchvision", torchvision_module)
+    monkeypatch.setitem(sys.modules, "torchvision.transforms", transforms_module)
+    monkeypatch.setitem(sys.modules, "torchvision.transforms.functional", functional_module)
 
     worker._install_torchvision_compat_shims()
 
-    assert "torchvision.transforms.functional_tensor" in sys.modules
+    shim = sys.modules.get("torchvision.transforms.functional_tensor")
+    assert shim is not None
+    assert getattr(shim, "fake_op") is functional_module.fake_op
 
 
 def test_run_face_restore_uses_gfpgan_runtime(tmp_path: Path, monkeypatch) -> None:

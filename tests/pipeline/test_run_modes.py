@@ -93,18 +93,6 @@ class TestRunModeEnforcement:
     def job_service(self, job_queue, mock_runner):
         return JobService(job_queue, mock_runner)
 
-    def test_submit_direct_normalizes_to_queue_run_now(self, job_service):
-        """Legacy submit_direct should normalize to queue-backed Run Now semantics."""
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            run_mode="direct",
-        )
-        result = job_service.submit_direct(job)
-        assert result["job_id"] == job.job_id
-        assert result["queued"] is True
-        assert result["run_mode"] == "queue"
-        assert job.run_mode == "queue"
-
     def test_submit_queued_adds_to_queue(self, job_service, job_queue):
         """submit_queued should add job to queue without blocking."""
         job = Job(

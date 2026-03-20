@@ -1,12 +1,18 @@
 # Image Metadata Contract v2.6
 
 Status: Canonical Addendum
-Updated: 2025-12-24
+Updated: 2026-03-19
 
 ## Purpose
 
 StableNew embeds a compact, deterministic metadata capsule inside output images (PNG preferred; JPG supported).
 This metadata is portable for inspection and DebugHub bundling, but History remains authoritative.
+
+Scope note:
+
+- This contract applies to embedded still-image metadata.
+- Video artifacts and video manifests are governed by the canonical artifact,
+  history, and replay contracts rather than by this embedded image capsule.
 
 ## Required Keys
 

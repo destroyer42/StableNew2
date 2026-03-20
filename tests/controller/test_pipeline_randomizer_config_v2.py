@@ -25,21 +25,9 @@ class DummyConfigManager:
         return True
 
 
-class StubPipelineConfigPanel:
-    def __init__(self) -> None:
-        self.applied_configs: list[dict[str, Any]] = []
-        self.randomizer_config: dict[str, Any] = {"randomization_enabled": False, "max_variants": 1}
-
-    def apply_run_config(self, config: dict[str, Any]) -> None:
-        self.applied_configs.append(dict(config))
-
-    def get_randomizer_config(self) -> dict[str, Any]:
-        return dict(self.randomizer_config)
-
-
 def _make_controller(
     config: dict[str, Any],
-) -> tuple[AppController, DummyConfigManager, StubPipelineConfigPanel]:
+) -> tuple[AppController, DummyConfigManager]:
     config_manager = DummyConfigManager(config)
     controller = AppController(
         None,
@@ -52,27 +40,26 @@ def _make_controller(
     controller.get_available_samplers = lambda: ["sampler-a"]
     controller.state.current_config.model_name = "model-a"
     controller.state.current_config.sampler_name = "sampler-a"
-    panel = StubPipelineConfigPanel()
-    controller.main_window = SimpleNamespace(pipeline_config_panel_v2=panel)
-    return controller, config_manager, panel
+    controller.main_window = SimpleNamespace()
+    controller._spawn_tracked_thread = lambda *, target, name, purpose: target()
+    return controller, config_manager
 
 
 def test_load_randomizer_settings_apply_to_panel() -> None:
     config = {"randomization_enabled": True, "max_variants": 5}
-    controller, _, panel = _make_controller(config)
+    controller, _ = _make_controller(config)
 
     controller.on_pipeline_pack_load_config("pack1")
 
-    assert panel.applied_configs
-    assert panel.applied_configs[-1]["randomization_enabled"] is True
-    assert panel.applied_configs[-1]["max_variants"] == 5
+    assert controller.app_state.run_config["randomization_enabled"] is True
+    assert controller.app_state.run_config["max_variants"] == 5
     assert controller.state.current_config.randomization_enabled is True
     assert controller.state.current_config.max_variants == 5
 
 
 def test_apply_config_writes_randomizer_settings_to_pack() -> None:
-    controller, config_manager, panel = _make_controller({})
-    panel.randomizer_config = {"randomization_enabled": True, "max_variants": 8}
+    controller, config_manager = _make_controller({})
+    controller.app_state.set_run_config({"randomization_enabled": True, "max_variants": 8})
 
     controller.on_pipeline_pack_apply_config(["pack-x"])
 
@@ -82,7 +69,7 @@ def test_apply_config_writes_randomizer_settings_to_pack() -> None:
 
 
 def test_add_packs_to_job_snapshots_randomizer_settings() -> None:
-    controller, _, _ = _make_controller({})
+    controller, _ = _make_controller({})
     controller.app_state.set_run_config({"randomization_enabled": True, "max_variants": 6})
     
     # Mock both the pack finder and pack reader

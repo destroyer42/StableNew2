@@ -21,11 +21,13 @@ def _base_config():
         "img2img": {"enabled": False, "model": "m", "sampler_name": "Euler", "steps": 10},
         "upscale": {"enabled": False, "upscaler": "R-ESRGAN 4x+"},
         "animatediff": {"enabled": False, "fps": 8, "video_length": 16},
+        "video_workflow": {"enabled": False, "workflow_id": "ltx_multiframe_anchor_v1"},
         "pipeline": {
             "txt2img_enabled": True,
             "img2img_enabled": False,
             "upscale_enabled": False,
             "animatediff_enabled": False,
+            "video_workflow_enabled": False,
         },
     }
 
@@ -227,6 +229,30 @@ def test_plan_builder_animatediff_without_prior_stage_raises():
     cfg["pipeline"]["txt2img_enabled"] = False
     cfg["animatediff"]["enabled"] = True
     cfg["pipeline"]["animatediff_enabled"] = True
+    with pytest.raises(ValueError):
+        build_stage_execution_plan(cfg)
+
+
+def test_plan_builder_txt2img_and_video_workflow():
+    cfg = _base_config()
+    cfg["video_workflow"]["enabled"] = True
+    cfg["video_workflow"]["workflow_id"] = "ltx_multiframe_anchor_v1"
+    cfg["pipeline"]["video_workflow_enabled"] = True
+
+    plan = build_stage_execution_plan(cfg)
+
+    assert [s.stage_type for s in plan.stages] == ["txt2img", "video_workflow"]
+    assert plan.stages[-1].requires_input_image is True
+
+
+def test_plan_builder_video_workflow_without_prior_stage_raises():
+    cfg = _base_config()
+    cfg["txt2img"]["enabled"] = False
+    cfg["pipeline"]["txt2img_enabled"] = False
+    cfg["video_workflow"]["enabled"] = True
+    cfg["video_workflow"]["workflow_id"] = "ltx_multiframe_anchor_v1"
+    cfg["pipeline"]["video_workflow_enabled"] = True
+
     with pytest.raises(ValueError):
         build_stage_execution_plan(cfg)
 

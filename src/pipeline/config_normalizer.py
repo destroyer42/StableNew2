@@ -229,6 +229,7 @@ def normalize_pipeline_config(config: Mapping[str, Any] | None) -> dict[str, Any
     normalized["adetailer"] = _merge_stage("adetailer")
     normalized["upscale"] = _merge_stage("upscale", _UPSCALE_TOP_LEVEL_KEYS)
     normalized["animatediff"] = _mapping_dict(raw.get("animatediff"))
+    normalized["video_workflow"] = _mapping_dict(raw.get("video_workflow"))
 
     pipeline = _mapping_dict(raw.get("pipeline"))
     pipeline["txt2img_enabled"] = bool(
@@ -245,6 +246,9 @@ def normalize_pipeline_config(config: Mapping[str, Any] | None) -> dict[str, Any
     )
     pipeline["animatediff_enabled"] = bool(
         pipeline.get("animatediff_enabled", normalized["animatediff"].get("enabled", False))
+    )
+    pipeline["video_workflow_enabled"] = bool(
+        pipeline.get("video_workflow_enabled", normalized["video_workflow"].get("enabled", False))
     )
     normalized["pipeline"] = pipeline
 

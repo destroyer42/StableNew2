@@ -2,22 +2,22 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-18
+Updated: 2026-03-19
 
-0. Purpose
+## 0. Purpose
 
 This index defines the active document set for StableNew v2.6 and identifies
 which files are canonical, operational, backlog-driving, or archived.
 
-1. Canonical Document Hierarchy
+## 1. Canonical Document Hierarchy
 
-1.1 Tier 1 - System Constitution
+### 1.1 Tier 1 - System constitution
 
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
 
-1.2 Tier 2 - Canonical Execution, Testing, And Workflow Specs
+### 1.2 Tier 2 - Execution and workflow canon
 
 - `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
 - `docs/Builder Pipeline Deep-Dive (v2.6).md`
@@ -25,87 +25,75 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/ARCHITECTURE_ENFORCEMENT_CHECKLIST_v2.6.md`
 - `docs/StableNew_Coding_and_Testing_v2.6.md`
 - `docs/PR_TEMPLATE_v2.6.md`
-- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
 - `docs/Canonical_Document_Ownership_v2.6.md`
 - `AGENTS.md`
 - `.github/copilot-instructions.md`
 
-1.3 Tier 3 - Active Migration And Expansion Backlogs
+### 1.3 Tier 3 - Active subsystem references
+
+- `docs/Learning_System_Spec_v2.6.md`
+- `docs/GUI_Ownership_Map_v2.6.md`
+- `docs/Movie_Clips_Workflow_v2.6.md`
+- `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
+- `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
+- `docs/Randomizer_Spec_v2.6.md`
+
+### 1.4 Tier 4 - Active backlog and planning queue
 
 - `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
+- `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
+- `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
+- `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
+- `docs/PR_Backlog/PR-VIDEO-218-Continuity-Pack-Foundation.md`
+- `docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
+- `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
+- `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
 
-These documents sequence active work but do not outrank Tier 1 or Tier 2.
+### 1.5 Reference and history
 
-1.4 Tier 4 - Subsystem Specifications
+- `docs/CompletedPR/` contains completed PR records
+- `docs/archive/` contains historical, superseded, and reference-only material
 
-- `docs/Learning_System_Spec_v2.6.md`
-- `docs/Image_Metadata_Contract_v2.6.md`
-- `docs/Movie_Clips_Workflow_v2.6.md`
-- `docs/GUI_Ownership_Map_v2.6.md`
-- `docs/Randomizer_Spec_v2.5.md`
-- `docs/Cluster_Compute_Spec_v2.5.md`
-
-The retained v2.5 docs above remain reference specs only until replaced.
-
-1.5 Tier 5 - Testing Infrastructure
-
-- `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
-- `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
-- `docs/PR-CI-JOURNEY-001.md`
-- `docs/TEST-SUITE-ANALYSIS-2026-01-01.md`
-
-1.6 Tier 6 - Operator And Reference Guides
-
-- `README.md`
-- `docs/agentic/USAGE_GUIDE.md`
-- `.github/PULL_REQUEST_TEMPLATE.md`
-
-These support development and operations but do not override the canonical
-documents above.
-
-2. Canonical Reading Order
+## 2. Canonical Reading Order
 
 Read in this order:
 
 1. `README.md`
-2. `docs/ARCHITECTURE_v2.6.md`
-3. `docs/GOVERNANCE_v2.6.md`
-4. `docs/StableNew Roadmap v2.6.md`
-5. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
-6. `docs/StableNew_Coding_and_Testing_v2.6.md`
-7. `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
-8. `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
+2. `docs/DOCS_INDEX_v2.6.md`
+3. `docs/ARCHITECTURE_v2.6.md`
+4. `docs/GOVERNANCE_v2.6.md`
+5. `docs/StableNew Roadmap v2.6.md`
+6. `docs/PR_TEMPLATE_v2.6.md`
+7. subsystem docs relevant to the work
+8. active PR backlog specs if planning or executing roadmap work
 
-3. Duplicate And Redirect Rules
+## 3. Root Folder Rule
 
-- `docs/archive/superseded/StableNew_Architecture_v2.6.md` is not an active
-  architecture source.
-- The only canonical architecture document is `docs/ARCHITECTURE_v2.6.md`.
-- Any duplicate architecture summary must be archived or reduced to a redirect note.
+- `docs/` root is reserved for active docs only
+- `docs/PR_Backlog/` is for active and historical planning docs
+- `docs/CompletedPR/` is for completed PR records
+- `docs/archive/` is reference-only and not active canon
 
-4. Root Folder Rule
+## 4. Explicit Non-Active Documents
 
-- `docs/` root is reserved for canonical active docs only.
-- Backlogs and draft PR materials belong under `docs/PR_Backlog/`.
-- Completed PR records belong under `docs/CompletedPR/`.
-- Historical, superseded, discovery, and reference-only materials belong under
-  `docs/archive/`.
+These are no longer part of the active root doc set:
 
-5. Active Agent Instruction Surface
+- `docs/archive/superseded/StableNew_v2.6_Canonical_Execution_Contract.md`
+- `docs/archive/reference/Cluster_Compute_Spec_v2.5.md`
+- `docs/archive/reference/Randomizer_Spec_v2.5.md`
+- `docs/archive/reference/testing/TEST-SUITE-ANALYSIS-2026-01-01.md`
+- `docs/CompletedPR/PR-CI-JOURNEY-001-CI-Journey-Tests-with-WebUI-Mocks.md`
 
-Active machine-facing guidance is catalogued in `.github/INSTRUCTION_SURFACE.md`.
-That manifest is the single source of truth for what is active, what is
-archived, and what precedence order applies.
+## 5. Retained v2.5 Document
 
-6. Maintenance Rules
+No v2.5 docs remain in the active root set.
 
-- If the runtime story changes, update `README.md` in the same PR.
-- If canonical architecture or roadmap truth changes, update Tier 1 docs in the
-  same PR.
-- If migration order changes, update
-  `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md` in the same
-  PR.
-- If Comfy/video sequencing changes, update
-  `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md` in the same PR.
-- Historical documents should be archived, not left active.
+## 6. Maintenance Rules
+
+- If active file locations change, update this index in the same PR.
+- If a doc stops being active, move it to `CompletedPR` or `archive`, do not
+  leave it in the root folder.
+- If a retained v2.5 doc is superseded, remove it from the active hierarchy in
+  the same PR that introduces the replacement.

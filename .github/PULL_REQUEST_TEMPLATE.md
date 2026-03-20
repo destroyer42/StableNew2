@@ -4,7 +4,7 @@ Describe the problem, the change, and why the change is required.
 # Canonical References
 - `AGENTS.md`
 - `docs/ARCHITECTURE_v2.6.md`
-- `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+- `docs/GOVERNANCE_v2.6.md`
 - `docs/PR_TEMPLATE_v2.6.md`
 
 # Goals
@@ -46,6 +46,6 @@ pytest -q
 - State the rollback approach.
 
 # Architecture Check
-- Confirm PromptPack-only sourcing remains intact.
+- Confirm no new prompt or executable-config construction was introduced outside canonical builders/compilers.
 - Confirm NJR-only execution remains intact.
 - Confirm no duplicate runtime path was introduced.

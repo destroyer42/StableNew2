@@ -6,7 +6,7 @@ from typing import Any
 
 ARTIFACT_SCHEMA_VERSION = "stablenew.artifact.v2.6"
 
-_VIDEO_STAGES = {"animatediff", "svd_native"}
+_VIDEO_STAGES = {"animatediff", "svd_native", "video_workflow"}
 
 
 def _coerce_path(value: Any) -> str | None:

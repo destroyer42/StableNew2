@@ -1,464 +1,212 @@
 GOVERNANCE_v2.6.md
-StableNew — Canonical Development & Decision-Making Model
+StableNew - Canonical Development and Decision-Making Model
 
-Status: Authoritative**
-Updated: 2025-12-09
+Status: Authoritative
+Updated: 2026-03-19
 
-0. Purpose of Governance_v2.6
+## 0. Purpose
 
-Governance_v2.6 defines:
+Governance v2.6 defines:
 
-How decisions are made
-
-What counts as canonical truth
-
-What LLM agents may and may not do
-
-How PRs must be structured, approved, and executed
-
-How we enforce architectural boundaries
-
-How documentation is updated and validated
-
-How we guarantee deterministic, stable evolution of StableNew
+- how canonical truth is ranked
+- what architecture invariants may not be violated
+- what agents and humans may and may not do
+- how PRs must be planned, executed, reviewed, and documented
+- how StableNew avoids legacy drift and contradictory runtime stories
 
 This document is binding on:
 
-Codex (Executor Agent)
+- human contributors
+- Codex
+- ChatGPT
+- Copilot
+- any future automation acting on the repository
 
-ChatGPT (Planner Agent)
+No code path, PR, or subsystem spec may contradict this file.
 
-All human contributors
+## 1. Canonical Truth Hierarchy
 
-All future agents
+### 1.1 Tier 1 - Constitutional documents
 
-No PR, code path, or architectural decision may contradict this file.
+These define the current product and runtime truth:
 
-1. Canonical Truth Hierarchy
+- `docs/ARCHITECTURE_v2.6.md`
+- `docs/GOVERNANCE_v2.6.md`
+- `docs/StableNew Roadmap v2.6.md`
 
-StableNew has a strict hierarchy of “sources of truth.”
+### 1.2 Tier 2 - Execution and workflow canon
 
-Changes must follow this priority order:
+These explain how the constitutional runtime is applied:
 
-1.1 Top-Level Canonical Documents (unchallengeable)
+- `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
+- `docs/Builder Pipeline Deep-Dive (v2.6).md`
+- `docs/DEBUG HUB v2.6.md`
+- `docs/StableNew_Coding_and_Testing_v2.6.md`
+- `docs/PR_TEMPLATE_v2.6.md`
+- `docs/Canonical_Document_Ownership_v2.6.md`
+- `docs/DOCS_INDEX_v2.6.md`
+- `AGENTS.md`
+- `.github/copilot-instructions.md`
 
-docs/ARCHITECTURE_v2.6.md
+### 1.3 Tier 3 - Active subsystem references
 
-docs/StableNew Roadmap v2.6.md
+- `docs/Learning_System_Spec_v2.6.md`
+- `docs/GUI_Ownership_Map_v2.6.md`
+- `docs/Movie_Clips_Workflow_v2.6.md`
+- `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/Randomizer_Spec_v2.6.md`
+- `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
+- `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
 
-docs/GOVERNANCE_v2.6.md
+### 1.4 Tier 4 - Backlogs, PR records, and archive
 
-docs/PROMPT_PACK_LIFECYCLE_v2.6.md
+- `docs/PR_Backlog/`
+- `docs/CompletedPR/`
+- `docs/archive/`
 
-docs/Builder Pipeline Deep-Dive (v2.6).md
+These are important for planning and history but do not outrank Tier 1-3.
 
-docs/DEBUG HUB v2.6.md
+## 2. Core Governance Pillars
 
-docs/StableNew_Coding_and_Testing_v2.6.md
+### 2.1 One outer execution contract
 
-docs/PR_TEMPLATE_v2.6.md
+`NormalizedJobRecord` is the only outer executable job contract.
 
-AGENTS.md
+Fresh execution, replay, reprocess, image edit, learning submissions, CLI
+submissions, and video workflow submissions must all converge to NJR before
+execution.
 
-.github/copilot-instructions.md
+### 2.2 Queue-only fresh execution
 
-If any PR or generated code contradicts these → it must be rejected or rewritten.
+Fresh production execution is queue-only.
 
-1.2 Secondary Canonical References
+`Run Now` is a UX behavior, not a separate runtime path:
 
-docs/Learning_System_Spec_v2.6.md
+- build NJR-backed work
+- submit it to `JobService`
+- auto-start processing if allowed
 
-docs/Randomizer_Spec_v2.5.md (retained; no v2.6 replacement exists yet)
+### 2.3 StableNew is the orchestrator
 
-docs/Cluster_Compute_Spec_v2.5.md (retained; no v2.6 replacement exists yet)
+StableNew owns:
 
-All PR-CORE specs
+- intent intake
+- builder and compiler logic
+- queue and lifecycle policy
+- runner orchestration
+- artifacts and manifests
+- history, replay, learning, and diagnostics
 
-These may be updated, but must obey the top-level documents.
+Backends execute only.
 
-1.3 Lowest-Level Truth
+### 2.4 PromptPack is primary, not universal
 
-Implementation code
+PromptPack remains the primary image authoring surface.
 
-Unit and integration tests
+It is not the only valid source of intent across the product. Other valid
+surfaces include:
 
-E2E golden-path tests
+- reprocess
+- image edit
+- history replay
+- learning-generated submissions
+- CLI submissions
+- video workflow submissions
 
-If implementation disagrees with top-level docs, implementation must be changed, never the reverse (unless the design itself is evolving deliberately).
+What remains forbidden is inventing prompt/config construction in GUI code or
+creating alternate execution architectures outside the canonical pipeline.
 
-2. Governance Pillars
+### 2.5 No live legacy execution model
 
-This governance model ensures StableNew remains:
+The runtime must not rely on:
 
-Deterministic
+- `DIRECT` fresh execution
+- archive DTOs as active runtime dependencies
+- `PipelineConfig` as an execution contract
+- `legacy_njr_adapter`
+- backend workflow JSON as a public contract
 
-Testable
+Persisted legacy data is handled by migration tooling, not indefinite runtime
+compatibility.
 
-Maintainable
+### 2.6 Zero drift
 
-Architecturally unified
+No PR may knowingly:
 
-Free of legacy drift
+- leave contradictory docs active
+- preserve duplicate runtime stories
+- keep both old and new execution paths alive
+- add shims without an explicit deprecation and removal owner
 
-There are 7 governing pillars.
+## 3. Role Boundaries
 
-2.1 Pillar 1 — Single Source of Prompt Truth
+### 3.1 Planner
 
-Only PromptPacks may supply prompt text.
-This is enforced by:
+The planner must:
 
-Architecture_v2.6
+- produce executable PR specs
+- preserve architecture invariants
+- keep documentation synchronized
+- identify and remove tech debt
 
-Builder Pipeline Deep Dive
+### 3.2 Executor
 
-PromptPack Lifecycle v2.6
+The executor must:
 
-PR Template compliance checks
+- implement only approved scope
+- refuse contradictory or underspecified work
+- avoid architectural invention
+- run verification and report real results
 
-Any PR introducing new prompt sources is automatically rejected.
+### 3.3 Human owner
 
-2.2 Pillar 2 — NJR as the Sole Execution Format
+The human owner sets priority, approves direction, and resolves intentional
+design changes.
 
-All controllers, runners, queues, and debug tooling operate exclusively on:
+## 4. Required PR Behavior
 
-NormalizedJobRecord (NJR)
+Every meaningful PR must:
 
-No alternate job format is allowed.
-Any additional formats → must be deleted.
+- state goals and non-goals
+- define allowed and forbidden files
+- state tests to run
+- state documentation changes
+- state rollback and deferred-debt ownership
 
-2.3 Pillar 3 — Deterministic Builder Pipeline
+PR planning and execution format is defined by `docs/PR_TEMPLATE_v2.6.md`.
 
-The builder pipeline is the only path for job construction.
-Any deviation → governance violation.
+## 5. Documentation Sync Rules
 
-Tests must enforce determinism across:
+If runtime truth changes, update the affected docs in the same PR.
 
-randomizer variants
+At minimum:
 
-sweep variants
+- architecture or runtime truth -> Tier 1 docs
+- builder or PromptPack truth -> PromptPack and builder docs
+- testing policy -> coding/testing docs and test-specific references
+- doc movement or active-set changes -> `docs/DOCS_INDEX_v2.6.md`
 
-stage chains
+Historical records and stale analysis belong in `docs/CompletedPR/` or
+`docs/archive/`, not in the active root doc set.
 
-seed allocation
+## 6. Enforcement Summary
 
-config merges
+Reject or rewrite any PR that:
 
-2.4 Pillar 4 — Zero Tech-Debt Drift
+- introduces a second execution path
+- introduces a second job model
+- reintroduces live legacy execution seams
+- lets GUI code construct prompts or runtime configs directly
+- changes behavior without updating the active docs
 
-StableNew employs a simple rule:
+## 7. Practical Reading Order
 
-No PR may create, preserve, or expand tech debt.
-If tech debt is encountered, it must be resolved immediately.
+For active development, read in this order:
 
-Required:
+1. `docs/DOCS_INDEX_v2.6.md`
+2. `docs/ARCHITECTURE_v2.6.md`
+3. `docs/GOVERNANCE_v2.6.md`
+4. `docs/StableNew Roadmap v2.6.md`
+5. `docs/PR_TEMPLATE_v2.6.md`
 
-All legacy paths must be deleted
-
-All partial migrations must be resolved
-
-All “temporary shims” are forbidden
-
-Any discrepancy triggers a TECH-DEBT section in the PR
-
-Failure to comply = PR rejection.
-
-2.5 Pillar 5 — Strict Subsystem Boundaries
-
-Subsystems must never violate boundaries:
-
-GUI
-
-may display NJR summaries
-
-may emit PackJobEntry selections
-
-must never construct prompts/configs
-
-Controllers
-
-orchestrate operations
-
-never modify NJRs
-
-never build configs manually
-
-Builder
-
-exclusive responsible entity for constructing NJRs
-
-Queue
-
-manages lifecycle
-
-consumes NJRs
-
-never mutates them
-
-Runner
-
-executes NJRs
-
-never builds config
-
-never modifies NJRs
-
-DebugHub
-
-introspection only
-
-never shapes execution
-
-Subsystem coupling is a violation punishable by mandatory refactor.
-
-2.6 Pillar 6 — Golden Path Compliance (Non-Negotiable)
-
-The 12 Golden Path tests represent:
-
-The minimum acceptable definition of a functional StableNew pipeline.
-
-Every PR must pass:
-
-Unit tests
-
-Integration tests
-
-Golden Path tests
-
-If a PR breaks Golden Path → revert or reject.
-
-2.7 Pillar 7 — Mandatory Documentation Sync
-
-Documentation is part of the codebase.
-Every PR must:
-
-update the relevant canonical documents
-
-keep architecture consistent
-
-include diagrams where appropriate
-
-update the PR template checklist
-
-If a PR changes behavior without updating docs → reject.
-
-3. LLM Agent Governance
-
-StableNew development uses two cooperating agents:
-
-ChatGPT (Planner Agent)
-
-Codex (Executor Agent)
-
-Governance mandates their roles.
-
-3.1 ChatGPT Planner (High-Level Reasoner)
-
-ChatGPT MUST:
-
-Generate PR specs
-
-Produce architecture documents
-
-Ensure subsystem boundaries
-
-Validate reasoning against canonical docs
-
-Never generate code directly unless building test stubs
-
-Never bypass the PR workflow
-
-Never encourage shortcuts that produce drift
-
-ChatGPT MUST NOT:
-
-modify the repository
-
-produce final implementation code
-
-contradict governance documents
-
-3.2 Codex Executor (Implementation Engine)
-
-Codex MUST:
-
-implement PRs strictly as written
-
-delete legacy code instead of preserving it
-
-update tests & documentation
-
-follow the architectural boundaries
-
-correct structural weaknesses during implementation
-
-reject incomplete specs
-
-Codex MUST NOT:
-
-infer architecture from outdated code
-
-create new execution pathways
-
-leave TODOs, partial migrations, or temporary hacks
-
-accept ambiguous PRs
-
-If Codex identifies ambiguity → it must request clarification through the PR spec.
-
-3.3 Interaction Rules
-
-ChatGPT writes PR specs → Codex executes
-
-Codex never writes architecture docs
-
-ChatGPT never directly modifies code
-
-Both agents must obey Architecture_v2.6 above all else
-
-All design changes must pass through governance review
-
-4. PR Governance
-
-PR Template v2.6 is mandatory.
-Every PR must include:
-
-Intent
-
-Architectural impact
-
-File modification list
-
-Step-by-step implementation plan
-
-Test plan
-
-Documentation plan
-
-TECH-DEBT IMPACT analysis
-
-Rollback plan
-
-PRs must always:
-
-reduce code surface area
-
-remove unused code
-
-simplify subsystem responsibilities
-
-improve determinism
-
-increase test coverage
-
-clarify architecture
-
-Forbidden PR behaviors:
-
-adding new system states
-
-ambiguous builder logic
-
-new prompt sources
-
-partial refactors
-
-“quick fixes” that bypass architecture
-
-undocumented changes
-
-5. Release Governance
-
-StableNew uses semantic versioning for architecture:
-
-v2.6 — Deterministic Core Recovery
-
-v2.7 — Enhanced Diagnostics & Learning
-
-v3.0 — Cluster Execution & Distributed Learning
-
-Every release must meet the following:
-Requirement	Description
-Canonical Docs Updated	All v2.6 docs validated
-Tech Debt Near-Zero	No major leftover debt
-Golden Path Green	All 12 tests pass
-GUI V2 Complete	No V1 code present
-PromptPack Lifecycle Clean	No duplicate prompt paths
-Builder Deterministic	Verified via hashing
-6. Governance Enforcement Rules
-
-Governance_v2.6 is binding.
-Violations require immediate correction.
-
-6.1 Automatic Violations
-
-If a PR:
-
-introduces prompt drift
-
-creates a second builder path
-
-constructs configs in GUI
-
-mutates NJR
-
-bypasses Queue
-
-adds new legacy compatibility layers
-
-introduces nondeterminism
-
-leaves dead code
-
-contradicts Architecture_v2.6
-
-→ PR is automatically rejected or must be rewritten.
-
-6.2 Continuous Refactor Mandate
-
-If governance is violated by existing code:
-
-Contributors are obligated to eliminate the violation
-
-The fix must occur before merging new features
-
-7. Amending Governance
-
-Governance may only be updated when:
-
-Reason reviewed by ChatGPT Planner
-
-Architectural impact evaluated
-
-Roadmap alignment confirmed
-
-PR explicitly titled PR-GOVERNANCE-X
-
-Full system-wide reasoning documented
-
-Governance cannot drift silently.
-
-8. Summary
-
-Governance_v2.6 ensures:
-
-StableNew remains predictable, testable, and maintainable
-
-Architecture stays unified and pure
-
-NJR remains the only execution format
-
-PromptPack remains the only prompt source
-
-Builder remains deterministic
-
-PRs remain disciplined
-
-Tech debt is aggressively eliminated
-
-Agents operate within strict, non-overlapping roles
-
-Documentation stays in sync with code
-
-StableNew succeeds only when every subsystem, every PR, and every agent follows Governance_v2.6.
-
-END — Governance_v2.6 (Canonical Edition)
+Then read subsystem docs relevant to the change.

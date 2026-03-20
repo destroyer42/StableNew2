@@ -22,6 +22,7 @@ from src.pipeline.job_models_v2 import (
     UnifiedJobSummary,
 )
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest
+from src.pipeline.result_contract_v26 import build_diagnostics_descriptor
 from src.queue.job_history_store import JobHistoryStore
 from src.queue.job_model import Job, JobExecutionMetadata, JobPriority, JobStatus, RetryAttempt
 from src.queue.job_queue import JobQueue
@@ -418,35 +419,6 @@ class JobService:
             job_ids.append(job.job_id)
         return job_ids
 
-    def run_njrs_direct(
-        self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest
-    ) -> list[str]:
-        """Queue NJRs immediately and kick the runner (queue-only Run Now semantics)."""
-        job_ids: list[str] = []
-        for record in njrs[: run_request.max_njr_count]:
-            job = self._job_from_njr(record, run_request)
-            job.run_mode = PipelineRunMode.QUEUE.value
-            self.run_now(job)
-            job_ids.append(job.job_id)
-        return job_ids
-
-    def submit_direct(self, job: Job) -> dict | None:
-        """Legacy compatibility shim: normalize to ordinary queue submission."""
-        log_with_ctx(
-            logger,
-            logging.INFO,
-            f"Legacy submit_direct normalized to queue submission for job {job.job_id}",
-            ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
-        )
-        job.run_mode = PipelineRunMode.QUEUE.value
-        self.submit_queued(job)
-        return {
-            "job_id": job.job_id,
-            "success": True,
-            "queued": True,
-            "run_mode": PipelineRunMode.QUEUE.value,
-        }
-
     def submit_queued(self, job: Job, *, emit_queue_updated: bool = True) -> None:
         """Submit a job to the queue for background execution.
 
@@ -815,15 +787,7 @@ class JobService:
         def _result_summary(result: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(result, dict):
                 return {}
-            metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
-            return {
-                "success": result.get("success"),
-                "error": result.get("error"),
-                "duration_ms": metadata.get("duration_ms"),
-                "recovery_classification": metadata.get("recovery_classification"),
-                "output_count": len(result.get("variants") or []),
-                "stage_event_count": len(result.get("stage_events") or []),
-            }
+            return build_diagnostics_descriptor(result)
 
         jobs = []
         for job in self.job_queue.list_jobs():

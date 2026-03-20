@@ -14,6 +14,7 @@ from src.utils.logger import InMemoryLogHandler
 class DummyJobService:
     def get_diagnostics_snapshot(self) -> dict[str, object]:
         return {
+            "queue": {"current_job_id": "job-1"},
             "jobs": [
                 {
                     "job_id": "job-1",
@@ -21,6 +22,14 @@ class DummyJobService:
                     "external_pids": [42],
                     "run_mode": "queue",
                     "priority": "NORMAL",
+                    "result_summary": {
+                        "schema": "stablenew.diagnostics-descriptor.v2.6",
+                        "output_count": 1,
+                        "replay_descriptor": {
+                            "schema": "stablenew.replay-descriptor.v2.6",
+                            "run_id": "job-1",
+                        },
+                    },
                 }
             ]
         }
@@ -74,6 +83,8 @@ def test_build_crash_bundle_includes_runtime_artifacts(tmp_path: Path, monkeypat
     with zipfile.ZipFile(bundle) as zf:
         names = set(zf.namelist())
         assert "runtime/job_snapshot.json" in names
+        assert "runtime/result_summary.json" in names
+        assert "runtime/replay_descriptor.json" in names
         assert "runtime/queue_state.json" in names
         assert "runtime/webui_tail.json" in names
         assert "metadata/process_inspector.txt" in names

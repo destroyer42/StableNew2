@@ -1,11 +1,11 @@
 StableNew Roadmap v2.6.md
 (Canonical Edition)
 
-Status: Authoritative
-Updated: 2026-03-18
+Status: Authoritative  
+Updated: 2026-03-19  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
-0. Strategic Objective
+## 0. Strategic Objective
 
 Turn StableNew into a polished local orchestrator for image and video creation
 with:
@@ -14,203 +14,198 @@ with:
 - one outer job model
 - one queue-first submission path
 - one runner
-- one canonical artifact/history contract
+- one canonical artifact/history/replay contract
 - one coherent documentation and testing surface
 
 North Star runtime:
 
 `Intent Surface -> Builder/Compiler -> NJR -> JobService Queue -> PipelineRunner -> Stage/Backend Execution -> Canonical Artifacts -> History/Learning/Diagnostics`
 
-1. Core Outcomes
+## 1. What Is Now Done
 
-1.1 Final NJR unification
+The original v2.6 unification sequence is complete through `PR-POLISH-214`.
 
-- NJR is the only outer executable job contract
-- image and video both use NJR
-- replay, reprocess, CLI, learning, and image edit all converge to NJR
-
-1.2 Queue-only execution
+Delivered outcomes:
 
 - fresh execution is queue-only
-- `Run Now` becomes queue submit + immediate auto-start
-- no dual-path runtime semantics
+- NJR is the outer job contract for both image and video work
+- live archive execution seams are gone
+- canonical config layering exists
+- test taxonomy is normalized
+- diagnostics and replay are unified across image and video
+- the managed Comfy runtime exists
+- one pinned LTX workflow exists
+- the dedicated `Video Workflow` GUI surface exists
+- the last live `submit_direct()` and `PipelineConfigPanel` compatibility seams are gone
 
-1.3 StableNew-owned orchestration
+Current collection baseline:
 
-- StableNew owns intent, queue, runner, history, artifacts, diagnostics, and replay
-- external runtimes and backends execute only
+- `pytest --collect-only -q` -> `2377 collected / 0 skipped`
 
-1.4 Config unification
+## 2. Remaining Structural Debt
 
-- intent config
-- normalized execution config
-- backend-local options
+The biggest remaining cross-cutting debt is now narrower and more product-facing:
 
-These layers must be separate and explicit.
+- `src/controller/app_controller.py` remains about `5658` LOC
+- `src/controller/pipeline_controller.py` remains about `1572` LOC
+- `tests/compat/` still preserves temporary migration behavior that should continue shrinking
+- `AppStateV2.run_config` still exists as a GUI-facing dict projection, even though
+  canonical config layers are now mirrored alongside it
+- higher-level video sequence, stitch, continuity, and planning layers are not yet implemented
 
-1.5 Simpler testing and debugging
+## 3. Status of the Older Revised Video Queue
 
-- canonical suites define runtime truth
-- compat suites exist only to migrate old persisted data
-- quarantine is explicit and not allowed to define architecture
+The earlier `PR-VIDEO-078` to `PR-VIDEO-088` plan has been partially or fully absorbed by the
+unification work:
 
-2. Current Starting Point
+- `PR-VIDEO-078` completed in substance via the canonical video backend registry and adapters
+- `PR-VIDEO-079` completed via workflow registry/spec work in `src/video/`
+- `PR-VIDEO-080` completed via the managed local Comfy runtime
+- `PR-VIDEO-081` completed via the workflow compiler
+- `PR-VIDEO-082` completed via the first pinned LTX workflow
+- `PR-VIDEO-083` is substantially complete via the dedicated `Video Workflow` GUI tab, but still needs richer workflow/video UX convergence
+- `PR-VIDEO-084` is still missing: sequence orchestration and segment planning
+- `PR-VIDEO-085` is still missing: stitch/interpolation/clip-assembly unification
+- `PR-VIDEO-086` is substantially covered by `PR-OBS-212`; future improvements are now follow-on polish, not a blocked foundation item
+- `PR-VIDEO-087` is still missing: continuity packs
+- `PR-VIDEO-088` is still missing: story/shot planning
 
-The repo already has important strengths:
+## 4. Revised Post-Unification PR Queue
 
-- NJR-first queue/runner backbone
-- canonical artifact/manifests substrate
-- replay and reprocess substrate
-- `src/video/` backend seam for video execution
-- healthy collection baseline: `2338 collected / 1 skipped`
+This is the real queue from current repo state, not from an older idealized snapshot.
 
-The biggest remaining debt seams are:
+### 1. `PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence`
 
-- `src/controller/app_controller.py` remains oversized
-- `src/controller/pipeline_controller.py` remains oversized
-- live archive `PipelineConfig` imports remain in source and tests
-- `src/pipeline/legacy_njr_adapter.py` is still present
-- `DIRECT` still exists in code/tests and older docs
-- active docs still contradict each other
+Close the remaining gap between `video_workflow`, history, manifests, and output routing.
 
-3. Roadmap Phases
+Primary outcomes:
 
-Phase 0 - Canonical docs reset
+- deterministic output routing for workflow-video jobs
+- better recent/history affordances for video workflow outputs
+- cleaner handoff between `Video Workflow`, SVD, and Movie Clips surfaces
+- removal of any remaining stage-specific video UI assumptions that should now be generic
 
-Goal:
+Detailed execution spec:
 
-- one active architecture story
-- one active roadmap
-- one active migration backlog
-- one active Comfy/video backlog
-- one operator-facing README
+- `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 
-Primary PR:
+### 2. `PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning`
 
-- `PR-UNIFY-201-Canonical-Docs-Reset-and-Architecture-Constitution`
+Implement the first-class long-form video planning layer.
 
-Phase 1 - NJR and submission-path closure
+Primary outcomes:
 
-Goal:
+- `VideoSequenceJob`
+- `VideoSegmentPlan`
+- deterministic carry-forward rules
+- overlap metadata
+- per-segment provenance in canonical artifacts/manifests
 
-- remove live `DIRECT` execution
-- introduce queue-only fresh submission
-- add one-time migration tooling for old queue/history data
-- delete live archive execution seams
+Detailed execution spec:
 
-Primary PRs:
+- `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
 
-- `PR-NJR-202-Queue-Only-Submission-Contract`
-- `PR-MIG-203-One-Time-History-Queue-Migration-Tool`
-- `PR-MIG-204-Delete-Live-Legacy-Execution-Seams`
+### 3. `PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification`
 
-Phase 2 - Controller, config, and test unification
+Turn post-video assembly into a StableNew-owned artifact path instead of disconnected utilities.
 
-Goal:
+Primary outcomes:
 
-- decompose controller ownership
-- publish one canonical config model
-- normalize test taxonomy and CI gates
+- stitched-output artifacts
+- interpolated-output artifacts
+- sequence-aware clip/export integration
+- explicit bridge between sequence outputs and Movie Clips
 
-Primary PRs:
+Detailed execution spec:
 
-- `PR-CTRL-205-Controller-Decomposition-and-Port-Boundaries`
-- `PR-CONFIG-206-Canonical-Config-Unification`
-- `PR-TEST-211-Test-Taxonomy-and-Suite-Normalization`
+- `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
 
-Phase 3 - Video contract completion and Comfy foundation
+### 4. `PR-VIDEO-218-Continuity-Pack-Foundation`
 
-Goal:
+Add continuity containers that can survive across jobs and sequences.
 
-- finalize NJR-driven video alignment
-- add workflow registry/compiler
-- add managed local Comfy runtime
-- ship the first pinned LTX workflow
+Primary outcomes:
 
-Primary PRs:
+- `ContinuityPack`
+- anchor-set linkage
+- character/wardrobe/scene references
+- manifest/history linkage for continuity-aware runs
 
-- `PR-VIDEO-207-NJR-Video-Contract-Completion`
-- `PR-COMFY-208-Workflow-Registry-and-Compiler`
-- `PR-COMFY-209-Managed-Comfy-Runtime-and-Dependency-Probes`
-- `PR-COMFY-210-First-Pinned-LTX-Workflow`
+Detailed execution spec:
 
-Delivered progress:
+- `docs/PR_Backlog/PR-VIDEO-218-Continuity-Pack-Foundation.md`
 
-- `PR-PERF-206A`, `PR-PERF-206B`, and `PR-PERF-206C` removed the most obvious
-  preview/queue-path regressions before the next migration and video tranche
-- `PR-VIDEO-207` completed the generic NJR-driven video artifact/history
-  contract while keeping stage-specific compatibility summaries alive
+### 5. `PR-VIDEO-219-Story-and-Shot-Planning-Foundation`
 
-Phase 4 - Observability and GUI completion
+Add manual planning structures above sequence jobs.
 
-Goal:
+Primary outcomes:
 
-- unify image/video diagnostics and replay
-- remove residual runtime legacy GUI seams
-- add the dedicated workflow video surface
+- `StoryPlan`
+- `ScenePlan`
+- `ShotPlan`
+- `AnchorPlan`
+- deterministic compilation from plan -> sequence jobs
 
-Primary PRs:
+Detailed execution spec:
 
-- `PR-OBS-212-Image-Video-Diagnostics-and-Replay-Unification`
-- `PR-GUI-213-GUI-Queue-Only-and-Video-Surface-Cleanup`
+- `docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
 
-Phase 5 - AAA polish and release readiness
+### 6. `PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter`
 
-Goal:
+Focus on the user experience of the current product without changing toolkits yet.
 
-- throughput tuning
-- restart/recovery cleanliness
-- model-switch minimization
-- deterministic outputs
-- full golden-path confidence
-- docs harmonization and release posture
+Primary outcomes:
 
-Primary PR:
+- tighter queue/history/video workflow ergonomics
+- clearer status and result surfaces
+- less modal friction across PromptPack, History, SVD, Video Workflow, and Movie Clips
+- better progressive disclosure and defaults for video workflows
 
-- `PR-POLISH-214-AAA-Stability-and-Performance-Pass`
+Detailed execution spec:
 
-4. Near-Term Priorities
+- `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
-The immediate order of operations is:
+### 7. `PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink`
 
-1. reset the docs and remove contradiction
-2. collapse fresh execution to queue-only
-3. replace live legacy runtime support with one-time migration tooling
-4. remove archive DTO and legacy adapter seams
-5. decompose controllers after ownership rules are documented
+Finish the most visible cross-cutting cleanup that still affects GUI work.
 
-This keeps architectural cleanup ahead of Comfy expansion.
+Primary outcomes:
 
-5. Mid-Term Outcomes
+- replace more direct `run_config` dict usage with a dedicated GUI config adapter
+- further reduce `AppController` and `PipelineController`
+- keep UX work from hard-coding against legacy state shape
 
-After migration closure, StableNew should support:
+Detailed execution spec:
 
-- backend-agnostic video execution through the existing `src/video/` seam
-- a managed local Comfy runtime
-- a pinned LTX workflow compiled from StableNew-native inputs
-- deterministic sequence planning, clip stitching, and future continuity/story planning
+- `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
 
-6. Done Definition
+## 5. Missing Common Functionality to Fold Into the Queue
 
-StableNew v2.6 unification is only complete when all of the following are true:
+These are the important missing capabilities that are not just “nice to have”:
 
-- no live archive imports remain
-- no live `DIRECT` execution remains
-- no live `pipeline_config` execution remains
-- image and video both run through NJR -> queue -> runner
-- artifacts/history/replay share one canonical contract
-- canonical tests are green and archive-free
-- compat tests are temporary, explicit, and shrinking
-- `README.md`, `docs/ARCHITECTURE_v2.6.md`, and `docs/DOCS_INDEX_v2.6.md` all tell the same story
+- workflow-video output routing is not yet as mature as still-image output routing
+- there is no first-class long-form sequence job model yet
+- post-video stitching and interpolation are not yet unified under one canonical artifact/result path
+- continuity and planning layers do not yet exist above individual jobs
+- the current GUI has dedicated video surfaces, but not yet a fully coherent end-to-end video workspace
 
-7. Guiding Principle
+## 6. Done Definition for the Next Stage
+
+StableNew’s next stage is successful when:
+
+- image and short-form video are both solid under the current queue-first architecture
+- long-form video has a first-class planning/orchestration path
+- post-video outputs are canonical artifacts, not side utilities
+- continuity and shot-planning data can persist through manifests/history
+- the GUI feels intentionally designed around the current workflow set
+
+## 7. Guiding Principle
 
 Prefer doing it right over doing it easy.
 
-Every PR should make StableNew:
+At this point, “right” means:
 
-- simpler to reason about
-- easier to test
-- easier to debug
-- more reliable under long queue runs
-- faster to evolve without architectural drift
+- keep the architecture stable
+- add missing product layers on top of the stable core
+- improve UX before considering a toolkit rewrite

@@ -24,6 +24,7 @@ from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
+from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.gui.zone_map_v2 import get_root_zone_config
 from src.services.ui_state_store import get_ui_state_store
 from src.utils import InMemoryLogHandler
@@ -254,6 +255,20 @@ class MainWindowV2:
         self.svd_tab = self.add_tab("svd", "SVD Img2Vid", _make_svd)
         self._restore_svd_tab_state()
 
+        def _make_video_workflow(parent):
+            return VideoWorkflowTabFrameV2(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.video_workflow_tab = self.add_tab(
+            "video_workflow",
+            "Video Workflow",
+            _make_video_workflow,
+        )
+        self._restore_video_workflow_tab_state()
+
         # PR-PERSIST-001: Restore selected tab
         self._restore_tab_selection()
 
@@ -449,12 +464,6 @@ class MainWindowV2:
         except Exception:
             pass
 
-        # Update pipeline tab with controller if it exists
-        if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "pipeline_config_panel"):
-            try:
-                self.pipeline_tab.pipeline_config_panel.controller = controller
-            except Exception:
-                pass
         if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "sidebar"):
             try:
                 self.pipeline_tab.sidebar.controller = controller
@@ -489,6 +498,12 @@ class MainWindowV2:
                     bind_app_state(self.app_state)
                 else:
                     self.photo_optimize_tab.app_state = self.app_state
+            except Exception:
+                pass
+        if hasattr(self, "video_workflow_tab"):
+            try:
+                self.video_workflow_tab.app_controller = controller
+                self.video_workflow_tab.app_state = self.app_state
             except Exception:
                 pass
 
@@ -788,6 +803,15 @@ class MainWindowV2:
         except Exception:
             pass
 
+        try:
+            comfy_manager = getattr(self, "comfy_process_manager", None)
+            if comfy_manager:
+                stop = getattr(comfy_manager, "shutdown", None) or getattr(comfy_manager, "stop", None)
+                if callable(stop):
+                    stop()
+        except Exception:
+            pass
+
     def _wire_status_bar(self) -> None:
         if not getattr(self, "status_bar_v2", None):
             return
@@ -1006,6 +1030,18 @@ class MainWindowV2:
             except Exception:
                 if "svd" not in state:
                     state["svd"] = {}
+            try:
+                video_tab = getattr(self, "video_workflow_tab", None)
+                video_getter = getattr(video_tab, "get_video_workflow_state", None)
+                if callable(video_getter):
+                    video_state = video_getter()
+                    if isinstance(video_state, dict):
+                        state["video_workflow"] = video_state
+                    elif "video_workflow" not in state:
+                        state["video_workflow"] = {}
+            except Exception:
+                if "video_workflow" not in state:
+                    state["video_workflow"] = {}
 
             ui_store.save_state(state)
             logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
@@ -1081,6 +1117,19 @@ class MainWindowV2:
                 restore(svd_state)
         except Exception as e:
             logger.warning(f"Failed to restore SVD tab state: {e}")
+
+    def _restore_video_workflow_tab_state(self) -> None:
+        """Restore persisted Video Workflow tab state."""
+        try:
+            ui_store = get_ui_state_store()
+            state = ui_store.load_state() or {}
+            video_state = state.get("video_workflow")
+            tab = getattr(self, "video_workflow_tab", None)
+            restore = getattr(tab, "restore_video_workflow_state", None)
+            if callable(restore):
+                restore(video_state)
+        except Exception as e:
+            logger.warning(f"Failed to restore Video Workflow tab state: {e}")
 
 
 def run_app(

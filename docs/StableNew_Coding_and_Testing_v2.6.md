@@ -24,25 +24,26 @@ Every PR, every refactor, every feature must conform to this.
 
 These laws cannot be violated anywhere in the repo.
 
-1.1 The PromptPack-Only Law
+1.1 The No GUI-Owned Prompt Construction Law
 
-There is only one source of prompts:
+PromptPack remains the primary image authoring surface, but StableNew now has
+multiple valid intent surfaces.
 
-PromptPack TXT rows
+What remains forbidden is creating fresh executable prompt/config state in GUI
+code or bypassing canonical builders and compilers.
 
 Forbidden everywhere:
 
-GUI free-text prompt entry
+GUI free-text prompt entry becoming execution truth
 
-Controller-provided prompt strings
+controller-side ad hoc prompt assembly outside canonical builder/compiler flows
 
-Legacy job_draft.prompt
+legacy `job_draft.prompt` style execution payloads
 
-DraftBundle-based prompts
+draft-bundle or dict-only runtime payloads
 
-Any job payload containing custom text
-
-If code creates a prompt from anywhere except a PromptPack row → PR rejected.
+If code creates fresh execution prompt/config state outside the canonical
+builder/compiler paths → PR rejected.
 
 1.2 The Single Builder Law
 
@@ -64,13 +65,16 @@ legacy prompt resolution code
 
 Legacy RunPayload/job.payload helpers were removed in PR-CORE1-B5 and must not reappear in new code or tests.
 
-All jobs must pass through:
+PromptPack-authored image jobs must pass through:
 
 RandomizerEngineV2
 ConfigVariantPlanV2
 UnifiedPromptResolver
 UnifiedConfigResolver
 JobBuilderV2
+
+Other intent surfaces may use different builder/compiler entrypoints, but they
+must still converge to NJR before queue submission.
 
 1.3 The Immutable Job Law
 

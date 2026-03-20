@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from src.gui.gui_invoker import GuiInvoker
+from src.pipeline.config_contract_v26 import build_config_layers
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
     NormalizedJobRecord,
@@ -136,6 +137,9 @@ class AppStateV2:
     queue_status: str = "idle"
     history_items: list[JobHistoryEntry] = field(default_factory=list)
     run_config: dict[str, Any] = field(default_factory=dict)
+    intent_config: dict[str, Any] = field(default_factory=dict)
+    execution_config: dict[str, Any] = field(default_factory=dict)
+    backend_options: dict[str, Any] = field(default_factory=dict)
     current_config: CurrentConfig = field(default_factory=CurrentConfig)
     _resource_listeners: list[Callable[[dict[str, list[Any]]], None]] = field(default_factory=list)
     # Canonical PromptPack-first draft state used by controllers (CORE1-A1)
@@ -152,7 +156,6 @@ class AppStateV2:
 
     # PR-111: Run Controls UX state flags
     is_run_in_progress: bool = False
-    is_direct_run_in_progress: bool = False
     is_queue_paused: bool = False
     last_run_job_id: str | None = None
     last_error_message: str | None = None
@@ -310,9 +313,28 @@ class AppStateV2:
     def set_run_config(self, value: dict[str, Any] | None) -> None:
         if value is None:
             return
-        if self.run_config != value:
-            self.run_config = dict(value)
+        normalized = dict(value)
+        layers = build_config_layers(
+            intent_config=normalized,
+            execution_config=normalized,
+            backend_options=None,
+        )
+        changed = False
+        if self.run_config != normalized:
+            self.run_config = normalized
+            changed = True
+        if self.intent_config != layers.intent_config:
+            self.intent_config = dict(layers.intent_config)
+            changed = True
+        if self.execution_config != layers.execution_config:
+            self.execution_config = dict(layers.execution_config)
+            changed = True
+        if self.backend_options != layers.backend_options:
+            self.backend_options = dict(layers.backend_options)
+            changed = True
+        if changed:
             self._notify("run_config")
+            self._notify("config_layers")
 
     def set_adetailer_enabled(self, value: bool) -> None:
         normalized = bool(value)
@@ -458,11 +480,6 @@ class AppStateV2:
         if self.is_run_in_progress != value:
             self.is_run_in_progress = value
             self._notify("is_run_in_progress")
-
-    def set_is_direct_run_in_progress(self, value: bool) -> None:
-        if self.is_direct_run_in_progress != value:
-            self.is_direct_run_in_progress = value
-            self._notify("is_direct_run_in_progress")
 
     def set_is_queue_paused(self, value: bool) -> None:
         if self.is_queue_paused != value:

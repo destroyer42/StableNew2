@@ -13,7 +13,7 @@ Primary authorities:
 
 1. `AGENTS.md`
 2. `docs/ARCHITECTURE_v2.6.md`
-3. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+3. `docs/GOVERNANCE_v2.6.md`
 4. `docs/StableNew_Coding_and_Testing_v2.6.md`
 5. `docs/PR_TEMPLATE_v2.6.md`
 
@@ -23,11 +23,11 @@ If this file conflicts with those documents, the canonical docs win.
 
 StableNew has one valid job path:
 
-PromptPack -> Builder Pipeline -> NormalizedJobRecord -> Queue -> Runner -> History -> Learning
+Intent Surface -> Builder/Compiler -> NormalizedJobRecord -> Queue -> Runner -> Artifacts -> History/Learning/Diagnostics
 
 Critical invariants:
 
-- PromptPack is the only prompt source.
+- PromptPack is the primary image authoring surface, not the only valid intent surface.
 - `AppStateV2` owns runtime draft state.
 - Controllers orchestrate; they do not invent alternate job formats.
 - `NormalizedJobRecord` is the only valid execution payload for new work.

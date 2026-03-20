@@ -1,7 +1,7 @@
 Learning_System_Spec_v2.6.md
 
 Status: Canonical
-Updated: 2026-03-10
+Updated: 2026-03-19
 
 0. Purpose
 
@@ -14,7 +14,16 @@ It covers:
 - review and rating capture
 - recommendation evidence rules
 
-Learning remains a post-execution subsystem. It consumes outputs and ratings; it does not build alternate execution paths and it does not modify the `PromptPack -> Builder -> NJR -> Queue -> Runner` architecture.
+Learning remains a post-execution subsystem. It consumes outputs and ratings; it
+does not build alternate execution paths and it does not modify the canonical
+`Intent Surface -> Builder/Compiler -> NJR -> Queue -> Runner` architecture.
+
+Current scope note:
+
+- Learning is still primarily image-stage focused.
+- Workflow-video, sequence planning, continuity packs, and story-planning are
+  not yet first-class learning surfaces.
+- When those arrive, this document must be extended rather than bypassed.
 
 1. Learning Workspace
 

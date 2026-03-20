@@ -11,6 +11,7 @@ _CANONICAL_STAGE_ORDER = {
     "upscale": 3,
     "animatediff": 4,
     "svd_native": 5,
+    "video_workflow": 6,
 }
 
 

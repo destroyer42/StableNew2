@@ -2894,13 +2894,6 @@ class AppController:
         return True, ""
 
     def _set_validation_feedback(self, valid: bool, message: str) -> None:
-        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
-        panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
-        if panel and hasattr(panel, "set_validation_message"):
-            try:
-                panel.set_validation_message("" if valid else message)
-            except Exception:
-                pass
         run_bar = getattr(self.main_window, "run_control_bar_v2", None)
         if run_bar and hasattr(run_bar, "set_run_enabled"):
             try:
@@ -3503,10 +3496,6 @@ class AppController:
             snapshot["enabled"] = ad_enabled
             self.app_state.set_adetailer_config(snapshot)
 
-        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
-        pipeline_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
-        if run_snapshot and pipeline_panel and hasattr(pipeline_panel, "apply_run_config"):
-            pipeline_panel.apply_run_config(run_snapshot)
         if self.app_state and isinstance(run_snapshot, dict):
             self.app_state.set_run_config(dict(run_snapshot))
 
@@ -3949,15 +3938,6 @@ class AppController:
             core_overrides = self._extract_core_overrides_from_preset(preset_config)
             if core_overrides:
                 self._apply_core_overrides(core_overrides)
-
-            # Update PipelineConfigPanelV2 if available
-            # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
-            pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
-            if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
-                try:
-                    pipeline_config_panel.apply_run_config(preset_config)
-                except Exception:
-                    pass
 
             self._append_log(f"[controller] Applied preset '{preset_name}' to run config")
             self._apply_adetailer_config_section(preset_config)
@@ -4717,16 +4697,15 @@ class AppController:
         self._update_run_config_randomizer(enabled=normalized_enabled, max_variants=normalized_max)
 
     def _get_panel_randomizer_config(self) -> dict[str, Any] | None:
-        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
-        panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
-        if panel is None or not hasattr(panel, "get_randomizer_config"):
+        run_config = getattr(self.app_state, "run_config", {}) if self.app_state else {}
+        if not isinstance(run_config, dict):
             return None
-        try:
-            config = panel.get_randomizer_config()
-        except Exception:
+        if "randomization_enabled" not in run_config and "max_variants" not in run_config:
             return None
-        if not config:
-            return None
+        config = {
+            "randomization_enabled": bool(run_config.get("randomization_enabled", False)),
+            "max_variants": int(run_config.get("max_variants", 1) or 1),
+        }
         return config
 
     def _run_config_with_lora(self) -> dict[str, Any]:
@@ -4849,14 +4828,6 @@ class AppController:
             self._apply_randomizer_from_config(pack_config)
         self._sync_prompt_optimizer_run_config(pack_config)
 
-        # Update stage cards if available
-        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
-        pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
-        if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
-            try:
-                pipeline_config_panel.apply_run_config(pack_config)
-            except Exception as e:
-                self._append_log(f"[controller] Error applying pack config to stages: {e}")
         stage_panel = self._get_stage_cards_panel()
         if stage_panel:
             for card_name in ("txt2img", "img2img", "upscale"):
@@ -5648,15 +5619,6 @@ class AppController:
             self._apply_randomizer_from_config(preset_config)
         self._sync_prompt_optimizer_run_config(preset_config)
 
-        # Update stage cards
-        # PR-CORE1-12: pipeline_config_panel_v2 is DEPRECATED - no longer wired in GUI V2
-        pipeline_config_panel = getattr(self.main_window, "pipeline_config_panel_v2", None)
-        if pipeline_config_panel and hasattr(pipeline_config_panel, "apply_run_config"):
-            try:
-                pipeline_config_panel.apply_run_config(preset_config)
-                self._append_log(f"[controller] Loaded preset '{preset_name}' to stages")
-            except Exception as e:
-                self._append_log(f"[controller] Error loading preset to stages: {e}")
         self._apply_adetailer_config_section(preset_config)
 
     def on_pipeline_preset_save_from_stages(self, preset_name: str) -> None:
@@ -5866,6 +5828,61 @@ class AppController:
         self._append_log(f"[svd] Routed image to SVD tab: {path.name}")
         return str(path)
 
+    def _get_video_workflow_controller(self):
+        controller = getattr(self, "_video_workflow_controller", None)
+        if controller is None:
+            from src.controller.video_workflow_controller import VideoWorkflowController
+
+            controller = VideoWorkflowController(app_controller=self)
+            self._video_workflow_controller = controller
+        return controller
+
+    def get_video_workflow_specs(self) -> list[dict[str, Any]]:
+        return self._get_video_workflow_controller().list_workflow_specs()
+
+    def build_video_workflow_defaults(self) -> dict[str, Any]:
+        return self._get_video_workflow_controller().build_default_form_state()
+
+    def submit_video_workflow_job(
+        self,
+        *,
+        source_image_path: str | Path,
+        form_data: dict[str, Any],
+    ) -> str:
+        controller = self._get_video_workflow_controller()
+        job_id = controller.submit_video_workflow_job(
+            source_image_path=source_image_path,
+            form_data=form_data,
+        )
+        self._append_log(
+            f"[video_workflow] Queued workflow '{form_data.get('workflow_id', '')}' job {job_id} "
+            f"for {Path(source_image_path).name}"
+        )
+        return job_id
+
+    def send_image_to_video_workflow(self, image_path: str | Path) -> str:
+        path = Path(image_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Video workflow source image does not exist: {path}")
+        main_window = getattr(self, "main_window", None)
+        if main_window is None:
+            raise RuntimeError("Main window is not available")
+        workflow_tab = getattr(main_window, "video_workflow_tab", None)
+        if workflow_tab is None:
+            raise RuntimeError("Video Workflow tab is not available")
+        notebook = getattr(main_window, "center_notebook", None)
+        if notebook is not None:
+            try:
+                notebook.select(workflow_tab)
+            except Exception:
+                pass
+        setter = getattr(workflow_tab, "set_source_image_path", None)
+        if not callable(setter):
+            raise RuntimeError("Video Workflow tab does not support source handoff")
+        setter(str(path), status_message=f"Loaded into Video Workflow tab: {path.name}")
+        self._append_log(f"[video_workflow] Routed image to Video Workflow tab: {path.name}")
+        return str(path)
+
     def send_history_job_image_to_svd(self, job_id: str) -> str:
         entry = self._get_history_entry_by_job_id(job_id)
         if entry is None:
@@ -5874,6 +5891,17 @@ class AppController:
         if image_path is None:
             raise ValueError(f"History job {job_id} has no image output available for SVD")
         return self.send_image_to_svd(image_path)
+
+    def send_history_job_image_to_video_workflow(self, job_id: str) -> str:
+        entry = self._get_history_entry_by_job_id(job_id)
+        if entry is None:
+            raise ValueError(f"History job not found: {job_id}")
+        image_path = self._get_history_image_path(entry)
+        if image_path is None:
+            raise ValueError(
+                f"History job {job_id} has no image output available for Video Workflow"
+            )
+        return self.send_image_to_video_workflow(image_path)
 
     def clear_svd_model_cache(self, model_id: str | None = None) -> None:
         controller = self._get_svd_controller()

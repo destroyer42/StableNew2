@@ -7,7 +7,7 @@ This module provides the canonical StageSequencer class for building
 stage execution plans. All pipeline runs should go through StageSequencer.build_plan().
 
 The canonical stage ordering is:
-    txt2img -> img2img -> adetailer -> upscale -> animatediff
+    txt2img -> img2img -> adetailer -> upscale -> animatediff -> video_workflow
 
 The preferred still-image flow is:
     txt2img -> optional img2img -> optional adetailer -> optional final upscale
@@ -141,6 +141,9 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     animatediff_enabled = pipeline_flags.get("animatediff_enabled", False) or _extract_enabled(
         config, "animatediff", False
     )
+    video_workflow_enabled = pipeline_flags.get("video_workflow_enabled", False) or _extract_enabled(
+        config, "video_workflow", False
+    )
 
     order = 0
     generation_stages = []
@@ -224,6 +227,24 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
         stages.append(stage)
         order += 1
 
+    if video_workflow_enabled:
+        if not any(_is_image_producing_stage(stage) for stage in stages):
+            raise InvalidStagePlanError(
+                "Video workflow requires a preceding image-producing stage."
+            )
+        payload = _stage_payload(config, "video_workflow")
+        _require_fields(payload, ["workflow_id"], "video_workflow")
+        metadata = _build_stage_metadata(config, payload, stage="video_workflow")
+        stage = StageExecution(
+            stage_type="video_workflow",
+            config=StageConfig(enabled=video_workflow_enabled, payload=payload, metadata=metadata),
+            order_index=order,
+            requires_input_image=True,
+            produces_output_image=False,
+        )
+        stages.append(stage)
+        order += 1
+
     if not stages:
         raise ValueError("Pipeline has no enabled stages.")
 
@@ -242,9 +263,14 @@ def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]
 
     adetailers = [stage for stage in stages if stage.stage_type == "adetailer"]
     animatediffs = [stage for stage in stages if stage.stage_type == "animatediff"]
+    video_workflows = [stage for stage in stages if stage.stage_type == "video_workflow"]
 
     if len(animatediffs) > 1:
         raise InvalidStagePlanError("Multiple AnimateDiff stages are not supported.")
+    if len(video_workflows) > 1:
+        raise InvalidStagePlanError("Multiple video workflow stages are not supported.")
+    if animatediffs and video_workflows:
+        raise InvalidStagePlanError("Only one terminal video stage may be enabled at a time.")
     if adetailers and not any(
         _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "adetailer"
     ):
@@ -253,6 +279,10 @@ def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]
         _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "animatediff"
     ):
         raise InvalidStagePlanError("AnimateDiff stage requires a preceding image-producing stage.")
+    if video_workflows and not any(
+        _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "video_workflow"
+    ):
+        raise InvalidStagePlanError("Video workflow stage requires a preceding image-producing stage.")
 
     order_map = {
         "txt2img": 0,
@@ -260,6 +290,7 @@ def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]
         "adetailer": 2,
         "upscale": 3,
         "animatediff": 4,
+        "video_workflow": 5,
     }
     ordered = sorted(stages, key=lambda stage: (order_map.get(stage.stage_type, 99), stage.order_index))
     if ordered != stages:
@@ -312,6 +343,7 @@ def _build_stage_metadata(
             "upscale_enabled": pipeline_flags.get("upscale_enabled", False),
             "adetailer_enabled": pipeline_flags.get("adetailer_enabled", False),
             "animatediff_enabled": pipeline_flags.get("animatediff_enabled", False),
+            "video_workflow_enabled": pipeline_flags.get("video_workflow_enabled", False),
         },
     )
 

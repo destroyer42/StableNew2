@@ -25,6 +25,7 @@ _STAGE_DISPLAY_MAP: dict[str, str] = {
     "adetailer": "ADetailer",
     "animatediff": "AnimateDiff",
     "svd_native": "SVD Img2Vid",
+    "video_workflow": "Video Workflow",
 }
 
 
@@ -164,7 +165,7 @@ class JobStatusV2(str, Enum):
     FAILED = "failed"
 
 
-StageType = Literal["txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native"]
+StageType = Literal["txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native", "video_workflow"]
 
 
 # ---------------------------------------------------------------------------
@@ -651,7 +652,7 @@ class NormalizedJobRecord:
     # Reprocessing support: provide input images to skip txt2img
     input_image_paths: list[str] = field(default_factory=list)
     # Start stage for reprocessing: skip stages before this one
-    # Options: "txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native"
+    # Options: "txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native", "video_workflow"
     start_stage: str | None = None
     # PR-LEARN-003: Learning experiment context for completion routing
     learning_context: LearningJobContext | None = None
@@ -693,7 +694,7 @@ class NormalizedJobRecord:
         if isinstance(stages, list):
             return [str(stage) for stage in stages if stage]
         flags = []
-        for stage in ("txt2img", "img2img", "upscale", "adetailer", "animatediff", "svd_native"):
+        for stage in ("txt2img", "img2img", "upscale", "adetailer", "animatediff", "svd_native", "video_workflow"):
             enabled = self._config_value(f"stage_{stage}_enabled", stage)
             if enabled or (isinstance(enabled, bool) and enabled):
                 flags.append(stage)

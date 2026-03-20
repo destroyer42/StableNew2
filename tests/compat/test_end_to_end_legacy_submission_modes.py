@@ -1,7 +1,8 @@
 """End-to-End Smoke Tests: GUI → Queue → Runner → History (PR-113).
 
-Validates that a minimal pipeline run works end-to-end for both DIRECT and QUEUE flows
-using stubbed WebUI client (no real GPU/network).
+Validates that a minimal pipeline run works end-to-end for queue-native flows and
+legacy direct-labeled submissions that normalize through the queue-only runtime,
+using a stubbed WebUI client (no real GPU/network).
 
 LEGACY TEST SUITE: Uses PipelineConfig for backward compatibility testing.
 """
@@ -31,6 +32,8 @@ from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from tests.helpers.job_helpers import make_test_job_from_njr, make_test_njr
+
+pytestmark = [pytest.mark.compat, pytest.mark.legacy]
 
 
 def wait_for_job_completion(
@@ -319,12 +322,11 @@ def job_service(
         patched["artifacts"] = {"variants": result_dict.get("variants", [])}
         return patched
 
-    runner = SingleNodeJobRunner(
-        job_queue,
-        run_callable=run_job,
-        poll_interval=0.01,
-    )
-    return JobService(job_queue, runner, history_store)
+    runner = SingleNodeJobRunner(job_queue, run_callable=run_job, poll_interval=0.01)
+    service = JobService(job_queue, runner, history_store)
+    service.auto_run_enabled = True
+    yield service
+    runner.stop()
 
 
 @pytest.fixture
@@ -351,7 +353,7 @@ def small_pipeline_config() -> PipelineConfig:
 @pytest.mark.smoke
 @pytest.mark.integration
 class TestDirectRunNowEndToEnd:
-    """Scenario 1: Test DIRECT run via 'Run Now' button semantics (LEGACY)."""
+    """Scenario 1: legacy direct-labeled jobs normalize through queue-only runtime."""
 
     def test_direct_run_now_end_to_end(
         self,
@@ -362,13 +364,13 @@ class TestDirectRunNowEndToEnd:
         job_service: JobService,
         small_pipeline_config: PipelineConfig,
     ) -> None:
-        """DIRECT run completes and writes JobRecord with stub images."""
-        # Build a Job with direct run_mode
+        """Legacy direct-labeled run completes and writes a queue-backed history entry."""
         job = _job_from_config(
             prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
-            prompt_source="manual",
+            prompt_source="pack",
+            prompt_pack_id="legacy-run-now-pack",
             base_model="test-model-v1",
             sampler="Euler",
             steps=5,
@@ -377,16 +379,9 @@ class TestDirectRunNowEndToEnd:
             height=256,
         )
 
-        # Execute job synchronously (direct run)
-        result = job_service.submit_direct(job)
+        job_service.submit_job_with_run_mode(job)
+        history_job = wait_for_job_completion(history_store, job.job_id, timeout=2.0)
 
-        # Verify job completed
-        assert result is not None
-        assert result.get("success") is True
-        assert result["metadata"]["run_mode"] == "direct"
-        assert result["metadata"]["source"] == "run_now"
-
-        # Verify StubApiClient was called
         assert len(stub_api_client.calls) >= 1
         last_call = stub_api_client.calls[-1]
         assert last_call["prompt"] == "A beautiful test image"
@@ -394,11 +389,10 @@ class TestDirectRunNowEndToEnd:
         assert last_call["width"] == 256
         assert last_call["height"] == 256
 
-        # Verify job in history
-        history_job = history_store.get_job(job.job_id)
         assert history_job is not None
         assert history_job.status == JobStatus.COMPLETED
-        assert history_job.run_mode == "direct"
+        assert history_job.run_mode == "queue"
+        assert job.run_mode == "queue"
 
     def test_direct_run_records_completion_timestamp(
         self,
@@ -407,12 +401,13 @@ class TestDirectRunNowEndToEnd:
         history_store: JSONLJobHistoryStore,
         small_pipeline_config: PipelineConfig,
     ) -> None:
-        """DIRECT run records completed_at timestamp."""
+        """Legacy direct-labeled run records completed_at timestamp after coercion."""
         job = _job_from_config(
             prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
-            prompt_source="manual",
+            prompt_source="pack",
+            prompt_pack_id="legacy-run-now-pack",
             base_model="test-model-v1",
             sampler="Euler",
             steps=5,
@@ -422,28 +417,28 @@ class TestDirectRunNowEndToEnd:
         )
 
         before_run = datetime.utcnow()
-        job_service.submit_direct(job)
+        job_service.submit_job_with_run_mode(job)
+        history_job = wait_for_job_completion(history_store, job.job_id, timeout=2.0)
         after_run = datetime.utcnow()
 
-        history_job = history_store.get_job(job.job_id)
         assert history_job is not None
         assert history_job.completed_at is not None
-        # Completed should be between before and after
         assert before_run <= history_job.completed_at <= after_run
 
-    def test_direct_run_with_manual_prompt_source(
+    def test_direct_run_with_pack_prompt_source(
         self,
         stub_api_client: StubApiClient,
         job_service: JobService,
         history_store: JSONLJobHistoryStore,
         small_pipeline_config: PipelineConfig,
     ) -> None:
-        """DIRECT run with manual prompt source is recorded correctly."""
+        """Legacy direct-labeled run preserves pack prompt-source metadata."""
         job = _job_from_config(
             prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
-            prompt_source="manual",
+            prompt_source="pack",
+            prompt_pack_id="legacy-run-now-pack",
             base_model="test-model-v1",
             sampler="Euler",
             steps=5,
@@ -452,12 +447,12 @@ class TestDirectRunNowEndToEnd:
             height=256,
         )
 
-        job_service.submit_direct(job)
+        job_service.submit_job_with_run_mode(job)
+        history_job = wait_for_job_completion(history_store, job.job_id, timeout=2.0)
 
-        history_job = history_store.get_job(job.job_id)
         assert history_job is not None
-        # Note: prompt_source may be in job.prompt_source, check if history captures it
-        assert history_job.run_mode == "direct"
+        assert history_job.run_mode == "queue"
+        assert job.prompt_source == "pack"
 
 
 # ---------------------------------------------------------------------------
@@ -627,7 +622,7 @@ class TestQueueRunEndToEnd:
 @pytest.mark.smoke
 @pytest.mark.integration
 class TestMixedRunModes:
-    """Test that direct and queue runs can coexist."""
+    """Test that legacy direct-labeled and queue runs can coexist."""
 
     def test_direct_then_queue_runs(
         self,
@@ -636,13 +631,13 @@ class TestMixedRunModes:
         history_store: JSONLJobHistoryStore,
         small_pipeline_config: PipelineConfig,
     ) -> None:
-        """Direct run followed by queue run both complete successfully."""
-        # Direct run first
+        """Legacy direct-labeled run followed by queue run both complete successfully."""
         direct_job = _job_from_config(
             prompt="A beautiful test image",
             run_mode="direct",
             source="run_now",
-            prompt_source="manual",
+            prompt_source="pack",
+            prompt_pack_id="legacy-run-now-pack",
             base_model="test-model-v1",
             sampler="Euler",
             steps=5,
@@ -650,9 +645,8 @@ class TestMixedRunModes:
             width=256,
             height=256,
         )
-        job_service.submit_direct(direct_job)
+        job_service.submit_job_with_run_mode(direct_job)
 
-        # Queue run second
         queue_job = _job_from_config(
             prompt="Queue test prompt",
             run_mode="queue",
@@ -668,24 +662,18 @@ class TestMixedRunModes:
         )
         job_service.submit_queued(queue_job)
 
-        # Wait for queue job to complete (background runner processes it)
+        direct_history = wait_for_job_completion(history_store, direct_job.job_id, timeout=2.0)
         queue_history = wait_for_job_completion(history_store, queue_job.job_id, timeout=2.0)
-
-        # Stop the runner to clean up
         job_service.runner.stop()
-
-        # Both should be completed
-        direct_history = history_store.get_job(direct_job.job_id)
 
         assert direct_history is not None
         assert direct_history.status == JobStatus.COMPLETED
-        assert direct_history.run_mode == "direct"
+        assert direct_history.run_mode == "queue"
 
         assert queue_history is not None
         assert queue_history.status == JobStatus.COMPLETED
         assert queue_history.run_mode == "queue"
 
-        # Pipeline runner should have been called twice
         assert len(stub_runner.runs) == 2
 
 

@@ -234,11 +234,40 @@ def test_get_diagnostics_snapshot_includes_queue_and_checkpoint_state(service: J
     job = make_job("diag")
     job.status = JobStatus.RUNNING
     job.result = {
+        "run_id": "diag-run",
         "success": False,
         "error": "boom",
-        "metadata": {"duration_ms": 123, "recovery_classification": "pre_stage_health_failed"},
-        "stage_events": [{"stage": "txt2img"}],
-        "variants": [{"path": "output/test.png"}],
+        "metadata": {
+            "duration_ms": 123,
+            "recovery_classification": "pre_stage_health_failed",
+            "video_backend_results": {
+                "video_workflow": {
+                    "backend_id": "comfy",
+                    "count": 1,
+                    "primary_path": "output/test.mp4",
+                }
+            },
+        },
+        "stage_events": [{"stage": "video_workflow"}],
+        "variants": [
+            {
+                "stage": "video_workflow",
+                "path": "output/test.mp4",
+                "video_backend_id": "comfy",
+                "video_replay_manifest": {
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_version": "1.0.0",
+                },
+                "artifact": {
+                    "schema": "stablenew.artifact.v2.6",
+                    "stage": "video_workflow",
+                    "artifact_type": "video",
+                    "primary_path": "output/test.mp4",
+                    "output_paths": ["output/test.mp4"],
+                    "manifest_path": "output/test.json",
+                },
+            }
+        ],
     }
     job.execution_metadata.stage_checkpoints.append(
         StageCheckpoint(stage_name="txt2img", output_paths=["output/test.png"])
@@ -259,3 +288,9 @@ def test_get_diagnostics_snapshot_includes_queue_and_checkpoint_state(service: J
     assert job_entry["return_to_queue_count"] == 2
     assert job_entry["result_summary"]["duration_ms"] == 123
     assert job_entry["result_summary"]["output_count"] == 1
+    assert job_entry["result_summary"]["primary_stage"] == "video_workflow"
+    assert job_entry["result_summary"]["backends"][0]["backend_id"] == "comfy"
+    assert (
+        job_entry["result_summary"]["replay_descriptor"]["backends"][0]["workflow_id"]
+        == "ltx_multiframe_anchor_v1"
+    )

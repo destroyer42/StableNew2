@@ -30,10 +30,18 @@ class VideoExecutionRequest:
     stage_config: dict[str, Any]
     output_dir: Path
     input_image_path: Path | None = None
+    start_anchor_path: Path | None = None
+    end_anchor_path: Path | None = None
+    mid_anchor_paths: list[Path] = field(default_factory=list)
     image_name: str | None = None
     prompt: str = ""
     negative_prompt: str = ""
+    motion_profile: str = ""
     job_id: str | None = None
+    workflow_id: str | None = None
+    workflow_version: str | None = None
+    workflow_inputs: dict[str, Any] = field(default_factory=dict)
+    backend_options: dict[str, Any] = field(default_factory=dict)
     cancel_token: Any = None
     context_metadata: dict[str, Any] = field(default_factory=dict)
 

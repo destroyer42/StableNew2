@@ -10,7 +10,7 @@ Read these first:
 
 1. `AGENTS.md`
 2. `docs/ARCHITECTURE_v2.6.md`
-3. `docs/StableNew_v2.6_Canonical_Execution_Contract.md`
+3. `docs/GOVERNANCE_v2.6.md`
 4. `docs/StableNew_Coding_and_Testing_v2.6.md`
 5. `docs/PR_TEMPLATE_v2.6.md`
 
