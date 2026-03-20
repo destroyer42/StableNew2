@@ -258,6 +258,77 @@ def test_tab_build_clip_no_controller(tab: MovieClipsTabFrameV2, tmp_path: Path)
     assert "Controller" in tab._build_status or tab._build_status != ""
 
 
+# ---------------------------------------------------------------------------
+# PR-VIDEO-215: set_source_frame_paths handoff
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.gui
+def test_set_source_frame_paths_loads_valid_images(tk_root: tk.Tk, tmp_path: Path) -> None:
+    """set_source_frame_paths populates the image list and switches to manual mode."""
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        frame1 = tmp_path / "frame_001.png"
+        frame2 = tmp_path / "frame_002.png"
+        frame1.write_bytes(b"png")
+        frame2.write_bytes(b"png")
+
+        tab.set_source_frame_paths([str(frame1), str(frame2)])
+
+        assert tab.source_mode_var.get() == SOURCE_MODE_MANUAL
+        assert len(tab._image_paths) == 2
+        assert frame1 in tab._image_paths
+        assert frame2 in tab._image_paths
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
+def test_set_source_frame_paths_filters_non_image_extensions(tk_root: tk.Tk, tmp_path: Path) -> None:
+    """set_source_frame_paths ignores non-image file extensions."""
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        frame_png = tmp_path / "frame_001.png"
+        frame_mp4 = tmp_path / "clip.mp4"
+        frame_png.write_bytes(b"png")
+        frame_mp4.write_bytes(b"mp4")
+
+        tab.set_source_frame_paths([str(frame_png), str(frame_mp4)])
+
+        assert len(tab._image_paths) == 1
+        assert frame_png in tab._image_paths
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
+def test_set_source_frame_paths_empty_list_sets_status(tk_root: tk.Tk) -> None:
+    """set_source_frame_paths with no valid frames sets a status message."""
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        tab.set_source_frame_paths([])
+        # Status label should have been updated (non-empty text about no frames)
+        status = tab.status_label.cget("text")
+        assert status  # Some status text is set
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
+def test_set_source_frame_paths_accepts_custom_status_message(tk_root: tk.Tk, tmp_path: Path) -> None:
+    """set_source_frame_paths applies a caller-provided status message."""
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        frame1 = tmp_path / "frame_001.png"
+        frame1.write_bytes(b"png")
+
+        tab.set_source_frame_paths([str(frame1)], status_message="Loaded from workflow")
+
+        assert tab.status_label.cget("text") == "Loaded from workflow"
+    finally:
+        tab.destroy()
+
+
 def test_tab_build_clip_delegates_to_controller(tk_root: tk.Tk, tmp_path: Path):
     controller = MagicMock()
     tab = MovieClipsTabFrameV2(tk_root, app_controller=controller)

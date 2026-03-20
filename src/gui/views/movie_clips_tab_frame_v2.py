@@ -468,6 +468,28 @@ class MovieClipsTabFrameV2(ttk.Frame):
             "mode": self.mode_var.get(),
         }
 
+    def set_source_frame_paths(
+        self,
+        paths: list[str],
+        *,
+        status_message: str | None = None,
+    ) -> None:
+        """Accept a list of frame paths from a video-artifact handoff bundle (PR-VIDEO-215).
+
+        Switches to manual source mode and populates the image list so the user
+        can immediately build a clip from workflow-video frame outputs.
+        """
+        resolved = [Path(p) for p in paths if p]
+        valid = [p for p in resolved if p.suffix.lower() in _IMAGE_EXTENSIONS]
+        if not valid:
+            self._set_status(status_message or "No valid frame images in bundle.")
+            return
+        self.source_mode_var.set(SOURCE_MODE_MANUAL)
+        self._set_image_list(valid)
+        self._set_status(
+            status_message or f"Loaded {len(valid)} frame(s) from video output."
+        )
+
     def restore_movie_clips_state(self, payload: dict[str, Any] | None) -> bool:
         """Restore persisted state. Returns True if anything was applied."""
         if not isinstance(payload, dict):

@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
+from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
 
 
 def _minimal_normalized_record() -> NormalizedJobRecord:
@@ -48,6 +49,9 @@ def test_run_njr_delegates_to_executor() -> None:
     assert result.success is True
     assert result.variants[0]["path"] == "output.png"
     assert result.variants[0]["artifact"]["primary_path"] == "output.png"
+    assert result.metadata["replay_descriptor"]["artifact_type"] == "image"
+    assert result.metadata["replay_descriptor"]["primary_stage"] == "txt2img"
+    assert result.metadata["diagnostics_descriptor"]["output_count"] == 1
 
 
 def test_pipeline_run_result_to_dict_and_back() -> None:
@@ -201,6 +205,105 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
     assert result.variants[0]["video_backend_id"] == "svd_native"
     assert record.thumbnail_path == str(preview)
     assert record.output_paths == [str(output_video)]
+
+
+def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    end_path = tmp_path / "end.png"
+    input_path.write_bytes(b"seed")
+    end_path.write_bytes(b"end")
+    output_video = tmp_path / "workflow.mp4"
+    manifest = tmp_path / "workflow.json"
+    output_video.write_bytes(b"mp4")
+    manifest.write_text("{}", encoding="utf-8")
+
+    class _WorkflowBackend:
+        backend_id = "comfy"
+        capabilities = VideoBackendCapabilities(
+            backend_id="comfy",
+            stage_types=("video_workflow",),
+            requires_input_image=True,
+            supports_prompt_text=True,
+            supports_negative_prompt=True,
+            supports_multiple_anchors=True,
+        )
+
+        def execute(self, pipeline, request):
+            assert request.workflow_id == "ltx_multiframe_anchor_v1"
+            assert request.end_anchor_path == end_path
+            return VideoExecutionResult.from_stage_result(
+                backend_id="comfy",
+                stage_name="video_workflow",
+                result={
+                    "path": str(output_video),
+                    "video_path": str(output_video),
+                    "output_paths": [str(output_video)],
+                    "manifest_path": str(manifest),
+                    "workflow_id": request.workflow_id,
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "video_workflow",
+                        "artifact_type": "video",
+                        "primary_path": str(output_video),
+                        "output_paths": [str(output_video)],
+                        "manifest_path": str(manifest),
+                        "input_image_path": str(input_path),
+                    },
+                },
+                backend_metadata={"workflow_id": request.workflow_id},
+                replay_manifest_fragment={"workflow_id": request.workflow_id},
+            )
+
+    registry = VideoBackendRegistry()
+    registry.register(_WorkflowBackend())
+    runner._video_backends = registry
+    record = NormalizedJobRecord(
+        job_id="runner-video-workflow",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[
+            StageConfig(
+                stage_type="video_workflow",
+                enabled=True,
+                extra={
+                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_version": "1.0.0",
+                    "end_anchor_path": str(end_path),
+                },
+            )
+        ],
+        input_image_paths=[str(input_path)],
+        start_stage="video_workflow",
+    )
+    pipeline = Mock()
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert result.metadata["video_artifacts"]["video_workflow"]["backend_id"] == "comfy"
+    assert result.metadata["video_primary_artifact"]["stage"] == "video_workflow"
+    assert result.metadata["video_backend_results"]["video_workflow"]["backend_id"] == "comfy"
+    assert result.variants[0]["video_backend_id"] == "comfy"
+    assert result.variants[0]["artifact"]["primary_path"] == str(output_video)
+    assert result.metadata["replay_descriptor"]["artifact_type"] == "video"
+    assert result.metadata["replay_descriptor"]["primary_stage"] == "video_workflow"
+    assert result.metadata["replay_descriptor"]["backends"][0]["backend_id"] == "comfy"
+    assert result.metadata["replay_descriptor"]["backends"][0]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert result.metadata["diagnostics_descriptor"]["primary_stage"] == "video_workflow"
+    # PR-VIDEO-215: stage-specific key for video_workflow must be stamped
+    assert "video_workflow_artifact" in result.metadata
+    assert result.metadata["video_workflow_artifact"]["stage"] == "video_workflow"
+    assert result.metadata["video_workflow_artifact"]["backend_id"] == "comfy"
+    assert result.metadata["video_workflow_artifact"]["primary_path"] == str(output_video)
 
 
 def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Path) -> None:

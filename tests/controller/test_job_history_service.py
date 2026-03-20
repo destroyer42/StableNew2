@@ -82,3 +82,88 @@ def test_history_service_records_result(tmp_path):
     entry = service.get_job("finished")
     assert entry is not None
     assert entry.result == {"mode": "test"}
+
+
+# ---------------------------------------------------------------------------
+# PR-VIDEO-215: video bundle normalisation
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_result_video_bundle_stamps_video_bundle():
+    """_normalize_result_video_bundle adds top-level video_bundle from metadata."""
+    result = {
+        "success": True,
+        "metadata": {
+            "video_primary_artifact": {
+                "stage": "video_workflow",
+                "backend_id": "comfy",
+                "primary_path": "/out/clip.mp4",
+                "thumbnail_path": "/out/frame_001.png",
+                "manifest_paths": ["/out/manifests/clip.json"],
+                "output_paths": ["/out/clip.mp4"],
+                "count": 1,
+            }
+        },
+    }
+    normalized = JobHistoryService._normalize_result_video_bundle(result)
+    assert normalized is not result  # new dict, not mutated
+    bundle = normalized.get("video_bundle")
+    assert isinstance(bundle, dict)
+    assert bundle["stage"] == "video_workflow"
+    assert bundle["backend_id"] == "comfy"
+    assert bundle["primary_path"] == "/out/clip.mp4"
+    assert bundle["thumbnail_path"] == "/out/frame_001.png"
+    assert bundle["artifact_type"] == "video"
+
+
+def test_normalize_result_video_bundle_no_op_without_video():
+    """No video_bundle added when metadata has no video_primary_artifact."""
+    result = {"success": True, "metadata": {"output_dir": "/out"}}
+    normalized = JobHistoryService._normalize_result_video_bundle(result)
+    assert normalized is result  # unchanged
+    assert "video_bundle" not in normalized
+
+
+def test_normalize_result_video_bundle_no_op_if_already_present():
+    """No-op when video_bundle is already stamped."""
+    result = {"video_bundle": {"stage": "video_workflow"}, "metadata": {}}
+    normalized = JobHistoryService._normalize_result_video_bundle(result)
+    assert normalized is result
+
+
+def test_normalize_result_video_bundle_handles_none():
+    assert JobHistoryService._normalize_result_video_bundle(None) is None
+
+
+def test_build_entry_stamps_video_bundle_for_video_job(tmp_path):
+    """record() stamps video_bundle when pipeline result contains video metadata."""
+    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
+    queue = JobQueue(history_store=store)
+    service = JobHistoryService(queue, store)
+
+    job = Job(job_id="video-job", priority=JobPriority.NORMAL)
+    queue.submit(job)
+    queue.mark_running(job.job_id)
+
+    video_result = {
+        "success": True,
+        "metadata": {
+            "video_primary_artifact": {
+                "stage": "video_workflow",
+                "backend_id": "comfy",
+                "primary_path": "/out/clip.mp4",
+                "thumbnail_path": "/out/frame_001.png",
+                "manifest_paths": ["/out/manifests/clip.json"],
+                "output_paths": ["/out/clip.mp4"],
+                "count": 1,
+            }
+        },
+    }
+    service.record(job, result=video_result)
+
+    # Read directly from history store to inspect the saved entry
+    history_entry = service._history.get_job("video-job")
+    assert history_entry is not None
+    assert isinstance(history_entry.result, dict)
+    assert "video_bundle" in history_entry.result
+    assert history_entry.result["video_bundle"]["stage"] == "video_workflow"

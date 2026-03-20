@@ -68,6 +68,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         self.svd_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.video_workflow_btn = ttk.Button(
+            action_bar,
+            text="Video Workflow",
+            command=self._on_send_to_video_workflow,
+            state=tk.DISABLED,
+        )
+        self.video_workflow_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
@@ -136,6 +143,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
         self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
+        self._history_menu.add_command(label="Send to Video Workflow", command=self._on_send_to_video_workflow)
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self.history_tree.bind("<Button-3>", self._on_context_menu)
 
@@ -176,6 +184,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.open_btn.configure(state=tk.DISABLED)
         self.replay_btn.configure(state=tk.DISABLED)
         self.svd_btn.configure(state=tk.DISABLED)
+        self.video_workflow_btn.configure(state=tk.DISABLED)
         self.explain_btn.configure(state=tk.DISABLED)
 
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
@@ -222,6 +231,7 @@ class JobHistoryPanelV2(ttk.Frame):
             self.open_btn.configure(state=tk.DISABLED)
             self.replay_btn.configure(state=tk.DISABLED)
             self.svd_btn.configure(state=tk.DISABLED)
+            self.video_workflow_btn.configure(state=tk.DISABLED)
             self.explain_btn.configure(state=tk.DISABLED)
             return
         self._update_action_buttons(entry)
@@ -271,6 +281,16 @@ class JobHistoryPanelV2(ttk.Frame):
             except Exception:
                 pass
 
+    def _on_send_to_video_workflow(self) -> None:
+        if not self._selected_job_id or not self.controller:
+            return
+        handler = getattr(self.controller, "send_history_job_image_to_video_workflow", None)
+        if callable(handler):
+            try:
+                handler(self._selected_job_id)
+            except Exception:
+                pass
+
     def _on_context_menu(self, event: tk.Event) -> None:
         item = self.history_tree.identify_row(event.y)
         if not item:
@@ -291,23 +311,37 @@ class JobHistoryPanelV2(ttk.Frame):
             self.open_btn.configure(state=tk.DISABLED)
             self.replay_btn.configure(state=tk.DISABLED)
             self.svd_btn.configure(state=tk.DISABLED)
+            self.video_workflow_btn.configure(state=tk.DISABLED)
             self.explain_btn.configure(state=tk.DISABLED)
             self._history_menu.entryconfigure("Animate with SVD", state=tk.DISABLED)
+            self._history_menu.entryconfigure("Send to Video Workflow", state=tk.DISABLED)
             self._history_menu.entryconfigure("Explain This Job", state=tk.DISABLED)
             return
         self.open_btn.configure(state=tk.NORMAL)
         self.replay_btn.configure(state=tk.NORMAL)
         self.explain_btn.configure(state=tk.NORMAL)
-        svd_state = tk.NORMAL if self._entry_supports_svd(entry) else tk.DISABLED
+        svd_state = tk.NORMAL if self._entry_supports_image_handoff(entry) else tk.DISABLED
+        vw_state = tk.NORMAL if self._entry_supports_video_workflow_handoff(entry) else tk.DISABLED
         self.svd_btn.configure(state=svd_state)
+        self.video_workflow_btn.configure(state=vw_state)
         self._history_menu.entryconfigure("Animate with SVD", state=svd_state)
+        self._history_menu.entryconfigure("Send to Video Workflow", state=vw_state)
         self._history_menu.entryconfigure("Explain This Job", state=tk.NORMAL)
 
-    def _entry_supports_svd(self, entry: JobHistoryEntry) -> bool:
+    def _entry_supports_image_handoff(self, entry: JobHistoryEntry) -> bool:
+        """Returns True if the entry has a still-image primary output suitable for SVD."""
         artifact = self._extract_primary_artifact(entry)
         artifact_type = str(artifact.get("artifact_type") or "").strip().lower()
         if artifact_type == "video":
             return False
+        return True
+
+    def _entry_supports_video_workflow_handoff(self, entry: JobHistoryEntry) -> bool:
+        """Returns True for any selected history entry.
+
+        Unlike SVD, Video Workflow can accept both still-image and video outputs
+        (via thumbnail or source frame), so any completed job can be routed here.
+        """
         return True
 
     def _get_display_status(self, entry: JobHistoryEntry) -> str:
@@ -498,7 +532,7 @@ class JobHistoryPanelV2(ttk.Frame):
                 if isinstance(aggregate, dict):
                     aggregates.append(dict(aggregate))
 
-        for key in ("svd_native_artifact", "animatediff_artifact"):
+        for key in ("video_workflow_artifact", "svd_native_artifact", "animatediff_artifact"):
             aggregate = metadata.get(key)
             if isinstance(aggregate, dict):
                 aggregates.append(dict(aggregate))

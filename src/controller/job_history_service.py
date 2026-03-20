@@ -242,6 +242,33 @@ class JobHistoryService:
                 return f"{prompt[:64]} | {model}"
         return job.summary()
 
+    @staticmethod
+    def _normalize_result_video_bundle(result: dict | None) -> dict | None:
+        """Stamp a top-level ``video_bundle`` key when the result contains a
+        video primary artifact.  History consumers can read this single key
+        instead of performing stage-name heuristics on nested metadata.
+        """
+        if not isinstance(result, dict):
+            return result
+        if result.get("video_bundle"):
+            return result
+        metadata = result.get("metadata") or {}
+        video_primary = metadata.get("video_primary_artifact")
+        if not isinstance(video_primary, dict):
+            return result
+        normalized = dict(result)
+        normalized["video_bundle"] = {
+            "primary_path": video_primary.get("primary_path"),
+            "stage": video_primary.get("stage"),
+            "backend_id": video_primary.get("backend_id"),
+            "artifact_type": "video",
+            "thumbnail_path": video_primary.get("thumbnail_path"),
+            "manifest_paths": list(video_primary.get("manifest_paths") or []),
+            "output_paths": list(video_primary.get("output_paths") or []),
+            "count": video_primary.get("count"),
+        }
+        return normalized
+
     def _build_entry(
         self,
         job: Job,
@@ -255,6 +282,9 @@ class JobHistoryService:
         raw_keys = snapshot.get("prompt_keys")
         if isinstance(raw_keys, list):
             prompt_keys = raw_keys
+        effective_result = self._normalize_result_video_bundle(
+            result if result is not None else job.result
+        )
         return JobHistoryEntry(
             job_id=job.job_id,
             created_at=job.created_at,
@@ -265,7 +295,7 @@ class JobHistoryService:
             error_message=error or job.error_message,
             worker_id=getattr(job, "worker_id", None),
             run_mode=getattr(job, "run_mode", "queue"),
-            result=result if result is not None else job.result,
+            result=effective_result,
             prompt_source=getattr(job, "prompt_source", "manual"),
             prompt_pack_id=getattr(job, "prompt_pack_id", None),
             prompt_keys=prompt_keys,

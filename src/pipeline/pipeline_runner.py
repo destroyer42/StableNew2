@@ -21,6 +21,10 @@ from src.pipeline.artifact_contract import canonicalize_variant_entries
 from src.pipeline.executor import Pipeline
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.payload_builder import build_sdxl_payload
+from src.pipeline.result_contract_v26 import (
+    build_diagnostics_descriptor,
+    build_replay_descriptor,
+)
 from src.pipeline.stage_sequencer import (
     StageExecution,
     StageExecutionPlan,
@@ -236,16 +240,34 @@ class PipelineRunner:
                     pack_name=pack_name,
                     max_length=100,
                 )
+            raw_mid_anchor_paths = config_dict.get("mid_anchor_paths") or []
+            if isinstance(raw_mid_anchor_paths, (str, Path)):
+                normalized_mid_anchor_paths = [Path(raw_mid_anchor_paths)]
+            else:
+                normalized_mid_anchor_paths = [
+                    Path(item)
+                    for item in raw_mid_anchor_paths
+                    if item
+                ]
+
             request = VideoExecutionRequest(
                 backend_id=backend.backend_id,
                 stage_name=stage_name,
                 stage_config=dict(config_dict),
                 output_dir=run_dir,
                 input_image_path=Path(input_path) if input_path else None,
+                end_anchor_path=Path(config_dict["end_anchor_path"])
+                if config_dict.get("end_anchor_path")
+                else None,
+                mid_anchor_paths=normalized_mid_anchor_paths,
                 image_name=image_name,
                 prompt=prompt,
                 negative_prompt=negative_prompt,
+                motion_profile=str(config_dict.get("motion_profile") or ""),
                 job_id=njr.job_id,
+                workflow_id=str(config_dict.get("workflow_id") or "") or None,
+                workflow_version=str(config_dict.get("workflow_version") or "") or None,
+                backend_options=dict(config_dict.get("backend_options") or {}),
                 cancel_token=cancel_token,
                 context_metadata={
                     "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
@@ -313,6 +335,8 @@ class PipelineRunner:
                 metadata["animatediff_artifact"] = dict(aggregate)
             elif stage_name == "svd_native":
                 metadata["svd_native_artifact"] = dict(aggregate)
+            elif stage_name == "video_workflow":
+                metadata["video_workflow_artifact"] = dict(aggregate)
 
         if backend_results:
             video_backend_results = metadata.setdefault("video_backend_results", {})
@@ -1023,6 +1047,18 @@ class PipelineRunner:
             stage_plan=plan,
             stage_events=stage_events,
         )
+        try:
+            njr_snapshot = njr.to_queue_snapshot()
+        except Exception:
+            njr_snapshot = {"normalized_job": {"job_id": njr.job_id}}
+        result.metadata["replay_descriptor"] = build_replay_descriptor(
+            result.to_dict(),
+            njr_snapshot=njr_snapshot,
+        )
+        result.metadata["diagnostics_descriptor"] = build_diagnostics_descriptor(
+            result.to_dict(),
+            njr_snapshot=njr_snapshot,
+        )
         logger.info(f"ðŸ” DEBUG: PipelineRunResult created with success={success}, error={error}, variants={len(variants)}")
         result_dict = result.to_dict()
         logger.info(f"ðŸ” DEBUG: to_dict() success={result_dict.get('success')}, error={result_dict.get('error')}")
@@ -1163,16 +1199,25 @@ class PipelineRunner:
         svd_native = [
             stage for stage in stages if stage.stage_type == StageTypeEnum.SVD_NATIVE.value
         ]
+        video_workflows = [
+            stage for stage in stages if stage.stage_type == StageTypeEnum.VIDEO_WORKFLOW.value
+        ]
         if len(adetailers) > 1:
             raise ValueError("Multiple ADetailer stages are not supported.")
         if len(animatediffs) > 1:
             raise ValueError("Multiple AnimateDiff stages are not supported.")
         if len(svd_native) > 1:
             raise ValueError("Multiple SVD Native stages are not supported.")
+        if len(video_workflows) > 1:
+            raise ValueError("Multiple video workflow stages are not supported.")
+        if sum(bool(group) for group in (animatediffs, svd_native, video_workflows)) > 1:
+            raise ValueError("Only one terminal video stage may be enabled at a time.")
         if animatediffs and stages[-1].stage_type != StageTypeEnum.ANIMATEDIFF.value:
             raise ValueError("AnimateDiff stage must be the final stage.")
         if svd_native and stages[-1].stage_type != StageTypeEnum.SVD_NATIVE.value:
             raise ValueError("SVD Native stage must be the final stage.")
+        if video_workflows and stages[-1].stage_type != StageTypeEnum.VIDEO_WORKFLOW.value:
+            raise ValueError("Video workflow stage must be the final stage.")
         if adetailers and not any(
             self._is_image_producing_stage_type(stage.stage_type)
             for stage in stages
@@ -1188,14 +1233,19 @@ class PipelineRunner:
             )
             if trailing_img2img:
                 raise ValueError("ADetailer stage must not run before img2img.")
-            trailing_non_animatediff = [
+            trailing_non_terminal_video = [
                 stage.stage_type
                 for stage in stages[first_adetailer_index + 1 :]
-                if stage.stage_type != StageTypeEnum.ANIMATEDIFF.value
+                if stage.stage_type
+                not in {
+                    StageTypeEnum.ANIMATEDIFF.value,
+                    StageTypeEnum.SVD_NATIVE.value,
+                    StageTypeEnum.VIDEO_WORKFLOW.value,
+                }
             ]
-            if any(stage_type != StageTypeEnum.UPSCALE.value for stage_type in trailing_non_animatediff):
+            if any(stage_type != StageTypeEnum.UPSCALE.value for stage_type in trailing_non_terminal_video):
                 raise ValueError(
-                    "Only upscale and animatediff stages may follow ADetailer."
+                    "Only upscale and terminal video stages may follow ADetailer."
                 )
         if animatediffs and not any(
             self._is_image_producing_stage_type(stage.stage_type)
@@ -1209,6 +1259,12 @@ class PipelineRunner:
             if stage.stage_type != StageTypeEnum.SVD_NATIVE.value
         ):
             raise ValueError("SVD Native stage requires a preceding image-producing stage.")
+        if video_workflows and not any(
+            self._is_image_producing_stage_type(stage.stage_type)
+            for stage in stages
+            if stage.stage_type != StageTypeEnum.VIDEO_WORKFLOW.value
+        ):
+            raise ValueError("Video workflow stage requires a preceding image-producing stage.")
 
     def set_learning_enabled(self, enabled: bool) -> None:
         """Toggle passive learning record emission."""
