@@ -4,6 +4,10 @@ from copy import deepcopy
 from time import time
 from uuid import uuid4
 
+from src.pipeline.config_contract_v26 import (
+    canonicalize_intent_config,
+    extract_adaptive_refinement_intent,
+)
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 
 _TXT2IMG_INACTIVE_HIRES_KEYS = (
@@ -114,6 +118,15 @@ def build_cli_njr(
         images_per_prompt=max(1, int(batch_size or 1)),
         run_mode="QUEUE",
         queue_source="RUN_NOW",
+        intent_config=canonicalize_intent_config(
+            {
+                "run_mode": "queue",
+                "source": "cli",
+                "prompt_source": "cli",
+                "requested_job_label": run_name,
+                "adaptive_refinement": extract_adaptive_refinement_intent(full_config),
+            }
+        ),
         extra_metadata={
             "execution_source": "cli",
             **({"run_name": run_name} if run_name else {}),

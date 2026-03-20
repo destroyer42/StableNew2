@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from src.gui.app_state_v2 import PackJobEntry
-from src.pipeline.config_contract_v26 import canonicalize_intent_config, derive_backend_options
+from src.pipeline.config_contract_v26 import (
+    canonicalize_intent_config,
+    derive_backend_options,
+    extract_adaptive_refinement_intent,
+)
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
     BatchSettings,
@@ -332,6 +336,9 @@ class PromptPackNormalizedJobBuilder:
                     else "add_to_queue",
                     "prompt_source": "pack",
                     "prompt_pack_id": entry.pack_id,
+                    "adaptive_refinement": extract_adaptive_refinement_intent(
+                        entry.config_snapshot or merged_config
+                    ),
                 }
             )
             record.backend_options = derive_backend_options(record.config)

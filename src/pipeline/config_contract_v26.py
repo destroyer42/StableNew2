@@ -45,6 +45,7 @@ _INTENT_TOP_LEVEL_KEYS = (
     "source",
     "prompt_source",
     "prompt_pack_id",
+    "adaptive_refinement",
     "config_snapshot_id",
     "requested_job_label",
     "selected_row_ids",
@@ -88,9 +89,23 @@ def canonicalize_intent_config(value: Any) -> dict[str, Any]:
         data = _mapping_dict(value)
     normalized: dict[str, Any] = {}
     for key in _INTENT_TOP_LEVEL_KEYS:
-        if key in data and data[key] not in (None, ""):
-            normalized[key] = deepcopy(data[key])
+        if key not in data:
+            continue
+        item = data[key]
+        if item in (None, ""):
+            continue
+        if isinstance(item, Mapping) and not item:
+            continue
+        normalized[key] = deepcopy(item)
     return normalized
+
+
+def extract_adaptive_refinement_intent(value: Any) -> dict[str, Any]:
+    intent = canonicalize_intent_config(value)
+    payload = intent.get("adaptive_refinement")
+    if isinstance(payload, Mapping) and payload:
+        return _mapping_dict(payload)
+    return {}
 
 
 def extract_execution_config(value: Any) -> dict[str, Any]:
@@ -260,6 +275,7 @@ __all__ = [
     "canonicalize_backend_options",
     "canonicalize_intent_config",
     "derive_backend_options",
+    "extract_adaptive_refinement_intent",
     "extract_continuity_linkage",
     "extract_plan_origin_linkage",
     "extract_execution_config",

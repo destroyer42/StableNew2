@@ -35,6 +35,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/GUI_Ownership_Map_v2.6.md`
 - `docs/Movie_Clips_Workflow_v2.6.md`
 - `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
 - `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
 - `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
 - `docs/Randomizer_Spec_v2.6.md`

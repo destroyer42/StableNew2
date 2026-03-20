@@ -36,6 +36,7 @@ class PipelineRunRequest:
     sweep_state: dict[str, Any] | None = None
     randomizer_plan: dict[str, Any] | None = None
     explicit_output_dir: str | None = None
+    adaptive_refinement: dict[str, Any] | None = None
     tags: list[str] = field(default_factory=list)
     requested_job_label: str | None = None
     max_njr_count: int = 256
@@ -57,6 +58,8 @@ class PipelineRunRequest:
             _ensure_json_serializable(self.sweep_state)
         if self.randomizer_plan is not None:
             _ensure_json_serializable(self.randomizer_plan)
+        if self.adaptive_refinement is not None:
+            _ensure_json_serializable(self.adaptive_refinement)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -68,6 +71,7 @@ class PipelineRunRequest:
             "sweep_state": self.sweep_state,
             "randomizer_plan": self.randomizer_plan,
             "explicit_output_dir": self.explicit_output_dir,
+            "adaptive_refinement": self.adaptive_refinement,
             "tags": list(self.tags),
             "requested_job_label": self.requested_job_label,
             "max_njr_count": self.max_njr_count,
@@ -87,6 +91,7 @@ class PipelineRunRequest:
             sweep_state=data.get("sweep_state"),
             randomizer_plan=data.get("randomizer_plan"),
             explicit_output_dir=data.get("explicit_output_dir"),
+            adaptive_refinement=data.get("adaptive_refinement"),
             tags=list(data.get("tags") or []),
             requested_job_label=data.get("requested_job_label"),
             max_njr_count=int(data.get("max_njr_count", 256)),

@@ -4,6 +4,7 @@ from src.pipeline.config_contract_v26 import (
     CONFIG_CONTRACT_SCHEMA_V26,
     attach_config_layers,
     build_config_layers,
+    extract_adaptive_refinement_intent,
     extract_continuity_linkage,
     extract_execution_config,
 )
@@ -102,3 +103,44 @@ def test_extract_continuity_linkage_reads_metadata_block() -> None:
 
     assert continuity["pack_id"] == "cont-001"
     assert continuity["pack_summary"]["display_name"] == "Hero Pack"
+
+
+def test_canonicalize_intent_config_preserves_nested_adaptive_refinement() -> None:
+    layers = build_config_layers(
+        intent_config={
+            "run_mode": "queue",
+            "source": "add_to_queue",
+            "adaptive_refinement": {
+                "schema": "stablenew.adaptive-refinement.v1",
+                "enabled": True,
+                "mode": "observe",
+                "profile_id": "auto_v1",
+            },
+        },
+        execution_config={},
+    )
+
+    assert layers.intent_config["adaptive_refinement"]["enabled"] is True
+    assert layers.intent_config["adaptive_refinement"]["mode"] == "observe"
+
+
+def test_extract_adaptive_refinement_intent_reads_layered_payload() -> None:
+    layered = {
+        "config_layers": {
+            "schema": CONFIG_CONTRACT_SCHEMA_V26,
+            "intent_config": {
+                "adaptive_refinement": {
+                    "schema": "stablenew.adaptive-refinement.v1",
+                    "enabled": True,
+                    "mode": "observe",
+                }
+            },
+            "execution_config": {},
+            "backend_options": {},
+        }
+    }
+
+    adaptive = extract_adaptive_refinement_intent(layered)
+
+    assert adaptive["enabled"] is True
+    assert adaptive["mode"] == "observe"
