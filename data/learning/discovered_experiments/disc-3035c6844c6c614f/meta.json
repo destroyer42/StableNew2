@@ -1,0 +1,16 @@
+{
+  "created_at": "2026-03-20T11:36:10Z",
+  "display_name": "TXT2IMG \u00b7 varying model",
+  "group_id": "disc-3035c6844c6c614f",
+  "input_lineage_key": "",
+  "notes": "",
+  "prompt_hash": "cda8d45fb4668635",
+  "scan_source_dirs": [],
+  "schema_version": "1.0",
+  "stage": "txt2img",
+  "status": "waiting_review",
+  "updated_at": "2026-03-20T11:36:10Z",
+  "varying_fields": [
+    "model"
+  ]
+}

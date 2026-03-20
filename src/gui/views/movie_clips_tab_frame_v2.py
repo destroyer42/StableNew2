@@ -30,6 +30,7 @@ from src.gui.view_contracts.movie_clips_contract import (
     format_source_mode_label,
     sort_image_names,
 )
+from src.gui.view_contracts.video_workspace_contract import summarize_movie_clips_source
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.codec_var = tk.StringVar(value=DEFAULT_CODEC)
         self.quality_var = tk.StringVar(value=DEFAULT_QUALITY)
         self.mode_var = tk.StringVar(value=DEFAULT_MODE)
+        self.source_summary_var = tk.StringVar(value=summarize_movie_clips_source().empty_state)
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -117,7 +119,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
 
         self.browse_btn = ttk.Button(
             header,
-            text="Browse…",
+            text="Browse...",
             style="Dark.TButton",
             command=self._on_browse_folder,
         )
@@ -130,13 +132,25 @@ class MovieClipsTabFrameV2(ttk.Frame):
             command=self._on_load_images,
         )
         self.load_btn.grid(row=0, column=5, sticky="w")
+        self.latest_video_btn = ttk.Button(
+            header,
+            text="Use Latest Video Output",
+            style="Dark.TButton",
+            command=self._on_use_latest_video_output,
+        )
+        self.latest_video_btn.grid(row=0, column=6, sticky="w", padx=(6, 0))
 
         self.status_label = ttk.Label(
             header,
             text="",
             style="Dark.TLabel",
         )
-        self.status_label.grid(row=0, column=6, sticky="e", padx=(8, 0))
+        self.status_label.grid(row=0, column=7, sticky="e", padx=(8, 0))
+        ttk.Label(
+            header,
+            textvariable=self.source_summary_var,
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, columnspan=8, sticky="w", pady=(6, 0))
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
@@ -179,7 +193,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
 
         self.add_images_btn = ttk.Button(
             btn_row,
-            text="Add Images…",
+            text="Add Images...",
             style="Dark.TButton",
             command=self._on_add_images,
         )
@@ -379,7 +393,24 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._source_bundle = None
         self._refresh_list_widget()
         self._update_summary()
+        self._update_source_summary()
         self._set_status("")
+
+    def _on_use_latest_video_output(self) -> None:
+        controller = self.app_controller
+        getter = getattr(controller, "get_latest_video_output_bundle", None)
+        if not callable(getter):
+            self._set_status("Latest video lookup is not connected.")
+            return
+        try:
+            bundle = getter()
+        except Exception as exc:
+            self._set_status(f"Video lookup failed: {exc}")
+            return
+        if not isinstance(bundle, dict) or not bundle:
+            self._set_status("No recent video output available.")
+            return
+        self.set_source_bundle(bundle, status_message="Loaded latest video output.")
 
     def _on_build_clip(self) -> None:
         """Delegate clip build to controller (wired in PR-VIDEO-002)."""
@@ -392,7 +423,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
             self._set_build_status("No images selected.")
             return
         settings = self._collect_settings()
-        self._set_build_status("Building…")
+        self._set_build_status("Building...")
         try:
             handler(
                 image_paths=list(self._image_paths),
@@ -409,7 +440,11 @@ class MovieClipsTabFrameV2(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _on_build_complete(self, output_path: str) -> None:
-        self._set_build_status(f"Done: {Path(output_path).name}")
+        summary = summarize_movie_clips_source(
+            image_paths=[str(path) for path in self._image_paths],
+            bundle=self._source_bundle,
+        )
+        self._set_build_status(f"Done: {Path(output_path).name} | {summary.headline}")
 
     def _on_build_error(self, reason: str) -> None:
         self._set_build_status(f"Error: {reason}")
@@ -422,6 +457,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._image_paths = paths
         self._refresh_list_widget()
         self._update_summary()
+        self._update_source_summary()
 
     def _refresh_list_widget(self) -> None:
         try:
@@ -444,6 +480,18 @@ class MovieClipsTabFrameV2(ttk.Frame):
             self.status_label.configure(text=msg)
         except Exception:
             pass
+
+    def _update_source_summary(self) -> None:
+        summary = summarize_movie_clips_source(
+            image_paths=[str(path) for path in self._image_paths],
+            bundle=self._source_bundle,
+        )
+        text = summary.headline
+        if summary.detail:
+            text = f"{text} | {summary.detail}"
+        if not self._image_paths and not self._source_bundle:
+            text = summary.empty_state
+        self.source_summary_var.set(text)
 
     def _set_build_status(self, msg: str) -> None:
         self._build_status = msg

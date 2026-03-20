@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from src.gui.gui_invoker import GuiInvoker
-from src.pipeline.config_contract_v26 import build_config_layers
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
     NormalizedJobRecord,
@@ -15,6 +14,7 @@ from src.pipeline.job_models_v2 import (
 )
 from src.queue.job_history_store import JobHistoryEntry
 from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
+from src.gui.config_adapter_v26 import GuiConfigAdapterV26
 from src.utils.config import LoraRuntimeConfig
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -170,6 +170,14 @@ class AppStateV2:
     apply_global_negative_img2img: bool = True
     apply_global_negative_upscale: bool = True
     apply_global_negative_adetailer: bool = True
+    _config_adapter: GuiConfigAdapterV26 = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._config_adapter = GuiConfigAdapterV26(self)
+
+    @property
+    def config_adapter(self) -> GuiConfigAdapterV26:
+        return self._config_adapter
 
     def set_invoker(self, invoker: GuiInvoker) -> None:
         """Set an invoker used to marshal notifications onto the GUI thread."""
@@ -313,26 +321,7 @@ class AppStateV2:
     def set_run_config(self, value: dict[str, Any] | None) -> None:
         if value is None:
             return
-        normalized = dict(value)
-        layers = build_config_layers(
-            intent_config=normalized,
-            execution_config=normalized,
-            backend_options=None,
-        )
-        changed = False
-        if self.run_config != normalized:
-            self.run_config = normalized
-            changed = True
-        if self.intent_config != layers.intent_config:
-            self.intent_config = dict(layers.intent_config)
-            changed = True
-        if self.execution_config != layers.execution_config:
-            self.execution_config = dict(layers.execution_config)
-            changed = True
-        if self.backend_options != layers.backend_options:
-            self.backend_options = dict(layers.backend_options)
-            changed = True
-        if changed:
+        if self._config_adapter.apply_run_config(value):
             self._notify("run_config")
             self._notify("config_layers")
 

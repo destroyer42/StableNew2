@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-19  
+Updated: 2026-03-20  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -40,7 +40,7 @@ Delivered outcomes:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2377 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2540 collected / 0 skipped`
 
 ## 2. Remaining Structural Debt
 
@@ -185,6 +185,8 @@ Detailed execution spec:
 
 ### 6. `PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter`
 
+Status: Completed 2026-03-20
+
 Focus on the user experience of the current product without changing toolkits yet.
 
 Primary outcomes:
@@ -194,11 +196,17 @@ Primary outcomes:
 - less modal friction across PromptPack, History, SVD, Video Workflow, and Movie Clips
 - better progressive disclosure and defaults for video workflows
 
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
 ### 7. `PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink`
+
+Status: Completed 2026-03-20
 
 Finish the most visible cross-cutting cleanup that still affects GUI work.
 
@@ -208,19 +216,33 @@ Primary outcomes:
 - further reduce `AppController` and `PipelineController`
 - keep UX work from hard-coding against legacy state shape
 
+Delivered outcomes:
+
+- `AppStateV2` now exposes a dedicated `GuiConfigAdapterV26` facade over
+  canonical config layers
+- GUI-facing config mutation for randomizer and submission projection now routes
+  through `GuiConfigService`
+- history replay/hydration logic moved behind a bounded pipeline-controller
+  handoff service instead of living directly in the top-level controller
+
+Completion record:
+
+- `docs/CompletedPR/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
 
 ## 5. Missing Common Functionality to Fold Into the Queue
 
-These are the important missing capabilities that are not just “nice to have”:
+These are the important missing capabilities that are not just "nice to have":
 
-- the current GUI has dedicated video surfaces, but not yet a fully coherent end-to-end video workspace
+- continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
+- further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
 
 ## 6. Done Definition for the Next Stage
 
-StableNew’s next stage is successful when:
+StableNew's next stage is successful when:
 
 - image and short-form video are both solid under the current queue-first architecture
 - long-form video has a first-class planning/orchestration path

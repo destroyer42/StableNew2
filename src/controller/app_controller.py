@@ -73,6 +73,7 @@ from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
 )
+from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
 )
@@ -1188,6 +1189,9 @@ class AppController:
             capture_stage_plan_for_tests=self._capture_stage_plan_for_tests,
             invoke_mock_generate_for_tests=self._invoke_mock_generate_for_tests,
         )
+
+    def _get_gui_config_service(self) -> GuiConfigService:
+        return GuiConfigService()
 
     def on_run_job_now_v2(self) -> Any:
         """
@@ -2871,7 +2875,9 @@ class AppController:
         cfg = self.app_state.current_config if self.app_state else self.state.current_config
         if not getattr(cfg, "model_name", None) and self.state.current_config:
             cfg = self.state.current_config
-        run_cfg = getattr(self.app_state, "run_config", {}) if self.app_state else {}
+        gui_config = self._get_gui_config_service()
+        adapter = gui_config.get_adapter(self.app_state)
+        run_cfg = adapter.get_run_config_projection() if adapter is not None else {}
         model_name = (
             getattr(cfg, "model_name", None) or run_cfg.get("model") or run_cfg.get("model_name")
         )
@@ -4662,74 +4668,34 @@ class AppController:
     def _update_run_config_randomizer(
         self, enabled: bool | None = None, max_variants: int | None = None
     ) -> None:
-        if not self.app_state:
-            return
-        current = dict(self.app_state.run_config or {})
-        updated = False
-        if enabled is not None and current.get("randomization_enabled") != enabled:
-            current["randomization_enabled"] = enabled
-            updated = True
-        if max_variants is not None and current.get("max_variants") != max_variants:
-            current["max_variants"] = max_variants
-            updated = True
-        if updated:
-            self.app_state.set_run_config(current)
+        self._get_gui_config_service().update_randomizer(
+            app_state=self.app_state,
+            enabled=enabled,
+            max_variants=max_variants,
+        )
 
     def _apply_randomizer_from_config(self, config: dict[str, Any]) -> None:
         if not config:
             return
-        fallback = self.state.current_config
-        random_section = config.get("randomization") or {}
-        enabled = config.get("randomization_enabled")
-        if enabled is None:
-            enabled = random_section.get("enabled", fallback.randomization_enabled)
-        max_variants = config.get("max_variants")
-        if max_variants is None:
-            max_variants = random_section.get("max_variants", fallback.max_variants)
-        try:
-            normalized_max = int(max_variants)
-        except (TypeError, ValueError):
-            normalized_max = fallback.max_variants
-        normalized_max = max(1, normalized_max)
-        normalized_enabled = bool(enabled)
-        fallback.randomization_enabled = normalized_enabled
-        fallback.max_variants = normalized_max
-        self._update_run_config_randomizer(enabled=normalized_enabled, max_variants=normalized_max)
+        self._get_gui_config_service().apply_randomizer_from_config(
+            app_state=self.app_state,
+            fallback_current_config=self.state.current_config,
+            config=config,
+        )
 
     def _get_panel_randomizer_config(self) -> dict[str, Any] | None:
-        run_config = getattr(self.app_state, "run_config", {}) if self.app_state else {}
-        if not isinstance(run_config, dict):
-            return None
-        if "randomization_enabled" not in run_config and "max_variants" not in run_config:
-            return None
-        config = {
-            "randomization_enabled": bool(run_config.get("randomization_enabled", False)),
-            "max_variants": int(run_config.get("max_variants", 1) or 1),
-        }
-        return config
+        return self._get_gui_config_service().get_panel_randomizer_config(
+            app_state=self.app_state,
+            fallback_current_config=self.state.current_config,
+        )
 
     def _run_config_with_lora(self) -> dict[str, Any]:
-        base = self.app_state.run_config.copy() if self.app_state else {}
-        if self.app_state and self.app_state.lora_strengths:
-            base["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
         prompt_optimizer_config = self._read_prompt_optimizer_ui_config()
-        if prompt_optimizer_config is not None:
-            base["prompt_optimizer"] = prompt_optimizer_config
-        
-        # Defensive checks for state access
-        if "randomization_enabled" not in base:
-            if hasattr(self, 'state') and self.state and hasattr(self.state, 'current_config'):
-                base["randomization_enabled"] = getattr(self.state.current_config, 'randomization_enabled', False)
-            else:
-                base["randomization_enabled"] = False
-                
-        if "max_variants" not in base:
-            if hasattr(self, 'state') and self.state and hasattr(self.state, 'current_config'):
-                base["max_variants"] = getattr(self.state.current_config, 'max_variants', 1)
-            else:
-                base["max_variants"] = 1
-                
-        return base
+        return self._get_gui_config_service().build_run_config_with_lora(
+            app_state=self.app_state,
+            fallback_current_config=getattr(self.state, "current_config", None),
+            prompt_optimizer_config=prompt_optimizer_config,
+        )
 
     def _lora_settings_payload(self) -> dict[str, dict[str, Any]] | None:
         if not self.app_state:
@@ -5805,6 +5771,16 @@ class AppController:
                     return str(path)
         return None
 
+    def get_latest_video_output_bundle(self) -> dict[str, Any] | None:
+        app_state = getattr(self, "app_state", None)
+        history_items = list(getattr(app_state, "history_items", []) or [])
+        for entry in history_items:
+            bundle = self._get_history_video_bundle(entry)
+            if isinstance(bundle, dict):
+                if bundle.get("primary_path") or bundle.get("output_paths") or bundle.get("frame_paths"):
+                    return bundle
+        return None
+
     def send_image_to_svd(self, image_path: str | Path) -> str:
         path = Path(image_path)
         if not path.exists():
@@ -5867,19 +5843,13 @@ class AppController:
         main_window = getattr(self, "main_window", None)
         if main_window is None:
             raise RuntimeError("Main window is not available")
-        workflow_tab = getattr(main_window, "video_workflow_tab", None)
-        if workflow_tab is None:
-            raise RuntimeError("Video Workflow tab is not available")
-        notebook = getattr(main_window, "center_notebook", None)
-        if notebook is not None:
-            try:
-                notebook.select(workflow_tab)
-            except Exception:
-                pass
-        setter = getattr(workflow_tab, "set_source_image_path", None)
-        if not callable(setter):
-            raise RuntimeError("Video Workflow tab does not support source handoff")
-        setter(str(path), status_message=f"Loaded into Video Workflow tab: {path.name}")
+        from src.gui.controllers.video_workspace_handoff import route_image_to_video_workflow
+
+        route_image_to_video_workflow(
+            main_window=main_window,
+            image_path=str(path),
+            status_message=f"Loaded into Video Workflow tab: {path.name}",
+        )
         self._append_log(f"[video_workflow] Routed image to Video Workflow tab: {path.name}")
         return str(path)
 
@@ -5901,29 +5871,18 @@ class AppController:
             main_window = getattr(self, "main_window", None)
             if main_window is None:
                 raise RuntimeError("Main window is not available")
-            workflow_tab = getattr(main_window, "video_workflow_tab", None)
-            if workflow_tab is None:
-                raise RuntimeError("Video Workflow tab is not available")
-            notebook = getattr(main_window, "center_notebook", None)
-            if notebook is not None:
-                try:
-                    notebook.select(workflow_tab)
-                except Exception:
-                    pass
-            bundle_setter = getattr(workflow_tab, "set_source_bundle", None)
-            if callable(bundle_setter):
-                from src.video.video_artifact_helpers import extract_source_image_for_handoff
+            from src.gui.controllers.video_workspace_handoff import route_bundle_to_video_workflow
 
-                bundle_setter(
-                    dict(bundle),
-                    status_message="Loaded video output into Video Workflow tab.",
+            best_path = route_bundle_to_video_workflow(
+                main_window=main_window,
+                bundle=dict(bundle),
+                status_message="Loaded video output into Video Workflow tab.",
+            )
+            if best_path:
+                self._append_log(
+                    f"[video_workflow] Routed video history output to Video Workflow tab: {Path(best_path).name}"
                 )
-                best_path = extract_source_image_for_handoff(bundle)
-                if best_path:
-                    self._append_log(
-                        f"[video_workflow] Routed video history output to Video Workflow tab: {Path(best_path).name}"
-                    )
-                    return str(best_path)
+                return str(best_path)
 
         image_path = self._get_history_image_path(entry)
         if image_path is None:
@@ -5931,6 +5890,46 @@ class AppController:
                 f"History job {job_id} has no usable image or video output available for Video Workflow"
             )
         return self.send_image_to_video_workflow(image_path)
+
+    def send_history_job_to_movie_clips(self, job_id: str) -> str:
+        entry = self._get_history_entry_by_job_id(job_id)
+        if entry is None:
+            raise ValueError(f"History job not found: {job_id}")
+        main_window = getattr(self, "main_window", None)
+        if main_window is None:
+            raise RuntimeError("Main window is not available")
+
+        bundle = self._get_history_video_bundle(entry)
+        if bundle:
+            from src.gui.controllers.video_workspace_handoff import route_bundle_to_movie_clips
+
+            route_bundle_to_movie_clips(
+                main_window=main_window,
+                bundle=dict(bundle),
+                status_message="Loaded history output into Movie Clips.",
+            )
+            primary_path = str(bundle.get("primary_path") or "")
+            if primary_path:
+                self._append_log(
+                    f"[movie_clips] Routed history output to Movie Clips: {Path(primary_path).name}"
+                )
+            else:
+                self._append_log("[movie_clips] Routed history output to Movie Clips")
+            return primary_path
+
+        image_path = self._get_history_image_path(entry)
+        if image_path is None:
+            raise ValueError(f"History job {job_id} has no usable output available for Movie Clips")
+
+        from src.gui.controllers.video_workspace_handoff import route_image_to_movie_clips
+
+        route_image_to_movie_clips(
+            main_window=main_window,
+            image_path=image_path,
+            status_message=f"Loaded {Path(image_path).name} into Movie Clips.",
+        )
+        self._append_log(f"[movie_clips] Routed image to Movie Clips: {Path(image_path).name}")
+        return str(image_path)
 
     def clear_svd_model_cache(self, model_id: str | None = None) -> None:
         controller = self._get_svd_controller()

@@ -506,6 +506,12 @@ class MainWindowV2:
                 self.video_workflow_tab.app_state = self.app_state
             except Exception:
                 pass
+        if hasattr(self, "movie_clips_tab"):
+            try:
+                self.movie_clips_tab.app_controller = controller
+                self.movie_clips_tab.app_state = self.app_state
+            except Exception:
+                pass
 
     def _ensure_window_geometry(self) -> None:
         """Apply default geometry/minimums so the three-column layout is visible."""

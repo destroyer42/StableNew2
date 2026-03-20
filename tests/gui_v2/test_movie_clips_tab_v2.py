@@ -290,6 +290,17 @@ def test_tab_build_clip_no_controller(tab: MovieClipsTabFrameV2, tmp_path: Path)
     assert "Controller" in tab._build_status or tab._build_status != ""
 
 
+def test_tab_source_summary_updates_from_manual_image_list(tk_root: tk.Tk, tmp_path: Path):
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        image_path = tmp_path / "img.png"
+        image_path.write_bytes(b"")
+        tab._set_image_list([image_path])
+        assert "img.png" in tab.source_summary_var.get()
+    finally:
+        tab.destroy()
+
+
 # ---------------------------------------------------------------------------
 # PR-VIDEO-215: set_source_frame_paths handoff
 # ---------------------------------------------------------------------------
@@ -408,6 +419,28 @@ def test_set_source_bundle_prefers_frame_paths_for_video_bundle(tk_root: tk.Tk, 
 
         assert tab._image_paths == [frame0, frame1]
         assert "source item" in tab.status_label.cget("text") or tab.status_label.cget("text")
+    finally:
+        tab.destroy()
+
+
+def test_tab_use_latest_video_output_routes_bundle(tk_root: tk.Tk, tmp_path: Path) -> None:
+    controller = MagicMock()
+    frame = tmp_path / "frame_001.png"
+    clip = tmp_path / "clip.mp4"
+    frame.write_bytes(b"png")
+    clip.write_bytes(b"mp4")
+    controller.get_latest_video_output_bundle.return_value = {
+        "stage": "video_workflow",
+        "frame_paths": [str(frame)],
+        "output_paths": [str(clip)],
+        "primary_path": str(clip),
+    }
+    tab = MovieClipsTabFrameV2(tk_root, app_controller=controller)
+    try:
+        tab._on_use_latest_video_output()
+        assert tab.source_mode_var.get() == SOURCE_MODE_MANUAL
+        assert tab._image_paths == [frame]
+        assert "Loaded latest video output." in tab.status_label.cget("text")
     finally:
         tab.destroy()
 

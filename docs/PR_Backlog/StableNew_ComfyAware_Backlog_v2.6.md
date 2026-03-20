@@ -1,7 +1,7 @@
 # StableNew Comfy-Aware Backlog v2.6
 
 Status: Active subordinate backlog  
-Updated: 2026-03-19
+Updated: 2026-03-20
 
 ## Purpose
 
@@ -55,7 +55,8 @@ The earlier `PR-VIDEO-078` through `PR-VIDEO-088` plan maps to current repo stat
 
 Beyond the old numbered plan, the current repo still lacks a few important product layers:
 
-- Movie Clips and Video Workflow still need further workspace-level UX convergence
+- the GUI still needs the dedicated config adapter/final controller shrink pass
+- continuity and story planning still need richer first-class UX on top of the new workspace flow
 
 ## Revised Video/Product Queue
 
@@ -166,6 +167,8 @@ Execution spec:
 
 ### `PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter`
 
+Status: Completed 2026-03-20
+
 Improve the experience of the now-stable surfaces before considering a toolkit rewrite.
 
 Required outputs:
@@ -173,6 +176,10 @@ Required outputs:
 - tighter queue/history/video-workflow ergonomics
 - clearer status and result surfaces
 - lower-friction movement between PromptPack, History, SVD, Video Workflow, and Movie Clips
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
 Execution spec:
 

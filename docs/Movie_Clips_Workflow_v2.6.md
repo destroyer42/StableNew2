@@ -1,7 +1,7 @@
 # Movie Clips Workflow v2.6
 
 Status: Active subsystem reference
-Updated: 2026-03-19
+Updated: 2026-03-20
 
 ## 1. Purpose
 
@@ -30,7 +30,7 @@ Movie Clips may consume:
 - run folders
 - manually selected images
 - history-handoff image sources
-- future canonical sequence or assembled-video source bundles
+- canonical workflow-video, sequence, or assembled-video source bundles
 
 Movie Clips may not:
 
@@ -77,17 +77,17 @@ broader video workspace alongside:
 - SVD
 - Video Workflow
 
-The next planned work is:
+The recent convergence work delivered:
 
 - richer workflow-video output routing into Movie Clips
 - sequence-aware and assembled-video input handling
 - tighter UX convergence with the rest of the video workspace
 
-Those are tracked in:
+Those were delivered in:
 
-- `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
-- `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
-- `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
+- `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
+- `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
+- `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
 ## 6. Testing Surface
 

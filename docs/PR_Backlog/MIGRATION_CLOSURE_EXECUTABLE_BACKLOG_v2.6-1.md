@@ -1,7 +1,7 @@
 # StableNew Migration Closure Executable Backlog v2.6
 
 Status: Migration closure sequence completed  
-Updated: 2026-03-19
+Updated: 2026-03-20
 
 ## Purpose
 
@@ -32,7 +32,7 @@ What that means in practice:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2377 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2540 collected / 0 skipped`
 
 ## Completed PR Sequence
 
@@ -111,7 +111,8 @@ The following items are still real, but they are no longer migration blockers:
 
 - `src/controller/app_controller.py` is still oversized
 - `src/controller/pipeline_controller.py` is still oversized
-- `AppStateV2.run_config` still exists as a projection for GUI compatibility
+- `AppStateV2.run_config` still exists as a derived compatibility projection,
+  but it is now adapter-backed rather than treated as the primary GUI config surface
 - `tests/compat/` still preserves temporary migration behaviors
 - long-form video sequencing, stitching, continuity, and story-planning remain future work
 

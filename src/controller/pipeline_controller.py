@@ -26,6 +26,9 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 from src.api.client import SDWebUIClient
 from src.config.app_config import is_queue_execution_enabled
 from src.controller.job_history_service import JobHistoryService
+from src.controller.pipeline_controller_services.history_handoff_service import (
+    HistoryHandoffService,
+)
 from src.controller.pipeline_submission_service import PipelinePreviewSubmissionService
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
@@ -58,7 +61,6 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
     wrap_exception,
 )
-from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
@@ -455,6 +457,9 @@ class PipelineController(_GUIPipelineController):
             run_job_callback=self._run_job,
             learning_enabled=self._learning_enabled,
         )
+
+    def _get_history_handoff_service(self) -> HistoryHandoffService:
+        return HistoryHandoffService()
 
     def build_pipeline_config_with_profiles(
         self,
@@ -1642,68 +1647,21 @@ class PipelineController(_GUIPipelineController):
             return []
         return [record]
 
-    def _hydrate_history_record(self, entry: Any) -> HistoryRecord | None:
-        if entry is None:
-            return None
-        if isinstance(entry, HistoryRecord):
-            return entry
-        raw: dict[str, Any] = {}
-        if isinstance(entry, Mapping):
-            raw.update(entry)
-        else:
-            raw.update(getattr(entry, "__dict__", {}) or {})
-        if hasattr(entry, "job_id"):
-            raw.setdefault("job_id", entry.job_id)
-            raw.setdefault("id", entry.job_id)
-        if hasattr(entry, "status"):
-            raw.setdefault("status", entry.status)
-        if hasattr(entry, "created_at"):
-            raw.setdefault("timestamp", entry.created_at)
-        snapshot = getattr(entry, "snapshot", None)
-        if snapshot is not None:
-            raw.setdefault("snapshot", snapshot)
-        return HistoryRecord.from_dict(raw)
+    def _hydrate_history_record(self, entry: Any):
+        return self._get_history_handoff_service().hydrate_history_record(entry)
 
     def _hydrate_njr_from_snapshot(
         self, snapshot: Mapping[str, Any] | None
     ) -> NormalizedJobRecord | None:
-        if not snapshot:
-            return None
-        constructor = getattr(NormalizedJobRecord, "from_snapshot", None)
-        if callable(constructor):
-            try:
-                return constructor(snapshot)
-            except Exception:
-                pass
-        if "normalized_job" in snapshot:
-            return normalized_job_from_snapshot(snapshot)
-        return normalized_job_from_snapshot({"normalized_job": snapshot})
+        return self._get_history_handoff_service().hydrate_njr_from_snapshot(snapshot)
 
     def replay_job_from_history(self, job_id: str) -> int:
-        history_service = self.get_job_history_service()
-        if history_service is None:
-            return 0
-        entry = history_service.get_job(job_id)
-        record = self._hydrate_history_record(entry)
-        if record is None:
-            return 0
-        njr = self._hydrate_njr_from_snapshot(record.njr_snapshot)
-        if njr is None:
-            return 0
-        records = [njr]
-        if self._app_state and hasattr(self._app_state, "set_preview_jobs"):
-            try:
-                self._app_state.set_preview_jobs(records)
-            except Exception:
-                pass
-        run_config = record.metadata or record.njr_snapshot.get("run_config") or {}
-        if run_config:
-            self._last_run_config = run_config
-        count = self._submit_normalized_jobs(
-            records,
-            run_config=run_config,
-            source=record.njr_snapshot.get("source", "gui"),
-            prompt_source=record.njr_snapshot.get("prompt_source", "manual"),
+        count = self._get_history_handoff_service().replay_job_from_history(
+            job_id=job_id,
+            history_service=self.get_job_history_service(),
+            app_state=self._app_state,
+            submit_normalized_jobs=self._submit_normalized_jobs,
+            set_last_run_config=lambda config: setattr(self, "_last_run_config", config),
         )
         if count:
             _logger.info("Replayed job %s with %d queued job(s)", job_id, count)
