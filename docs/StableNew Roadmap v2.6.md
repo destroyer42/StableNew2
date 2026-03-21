@@ -481,21 +481,50 @@ Detailed execution spec:
 
 ### 19. `PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX`
 
-Status: Planned
+Status: Completed
 
-Replace the legacy-feeling `Core Config` surface with clearer generation and
-recipe UX.
+Replace the legacy-feeling `Core Config` surface with a real base-generation
+ownership boundary and readable recipe UX.
 
 Primary outcomes:
 
-- `Core Config` renamed and narrowed to `Base Generation`
-- stage cards own only stage-local overrides
-- pipeline presets become readable `Saved Recipes` with summaries
+- `Core Config` removed from the active v2 path and replaced by `Base Generation`
+- txt2img no longer acts as a second owner for global base-generation fields
+- `Pipeline Presets` become readable `Saved Recipes` with summaries
+- sidebar/controller `core_*` GUI vocabulary is retired in the active v2 path
 - visible precedence between base generation and stage overrides
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
 
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
+
+### 19A. `PR-GUI-235A-PresetNaming`
+
+Status: Completed
+
+Clean up the active Pipeline v2 naming after the ownership reset so the live
+sidebar/controller path speaks in `Saved Recipe` terms instead of `Preset`
+terms, while leaving the underlying `ConfigManager` storage contract untouched.
+
+Primary outcomes:
+
+- active sidebar variables and callbacks use `saved_recipe_*` naming
+- active pipeline controller callbacks use `saved_recipe` terminology
+- active GUI tests follow the new names and intent
+- legacy storage still remains under `presets/` until a future storage-contract
+  cleanup PR explicitly changes that boundary
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-235A-PresetNaming.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-235A-PresetNaming.md`
 
 ### 20. `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
 

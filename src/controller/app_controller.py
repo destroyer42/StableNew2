@@ -3921,38 +3921,39 @@ class AppController:
         if combo is None:
             return
         new_preset = combo.get()
-        self.on_preset_selected(new_preset)
+        self.on_saved_recipe_selected(new_preset)
 
-    def on_preset_selected(self, preset_name: str) -> None:
-        self._append_log(f"[controller] Preset selected: {preset_name}")
+    def on_saved_recipe_selected(self, recipe_name: str) -> None:
+        self._append_log(f"[controller] Saved recipe selected: {recipe_name}")
         # selection should not immediately mutate config; wait for action
 
-    def apply_preset_to_run_config(self, preset_config: dict[str, Any], preset_name: str) -> None:
-        """Apply preset configuration to the current run config."""
+    def apply_saved_recipe_to_run_config(
+        self, recipe_config: dict[str, Any], recipe_name: str
+    ) -> None:
+        """Apply saved recipe configuration to the current run config."""
         try:
             # Update AppStateV2 run_config
             if self.app_state is not None:
                 try:
-                    self.app_state.set_run_config(preset_config)
+                    self.app_state.set_run_config(recipe_config)
                 except Exception:
                     pass
                 else:
-                    self._apply_randomizer_from_config(preset_config)
-            self._sync_prompt_optimizer_run_config(preset_config)
+                    self._apply_randomizer_from_config(recipe_config)
+            self._sync_prompt_optimizer_run_config(recipe_config)
 
-            # Extract core config fields from preset and apply to core config panel
-            core_overrides = self._extract_core_overrides_from_preset(preset_config)
-            if core_overrides:
-                self._apply_core_overrides(core_overrides)
+            base_generation_overrides = self._extract_base_generation_overrides_from_recipe(recipe_config)
+            if base_generation_overrides:
+                self._apply_base_generation_overrides(base_generation_overrides)
 
-            self._append_log(f"[controller] Applied preset '{preset_name}' to run config")
-            self._apply_adetailer_config_section(preset_config)
+            self._append_log(f"[controller] Applied saved recipe '{recipe_name}' to run config")
+            self._apply_adetailer_config_section(recipe_config)
 
         except Exception as e:
-            self._append_log(f"[controller] Error applying preset '{preset_name}': {e}")
+            self._append_log(f"[controller] Error applying saved recipe '{recipe_name}': {e}")
 
-    def _extract_core_overrides_from_preset(self, preset_config: dict[str, Any]) -> dict[str, Any]:
-        """Extract core configuration overrides from preset config."""
+    def _extract_base_generation_overrides_from_recipe(self, preset_config: dict[str, Any]) -> dict[str, Any]:
+        """Extract base-generation overrides from a saved recipe config."""
         overrides = {}
 
         # Get txt2img config as primary source
@@ -3961,10 +3962,20 @@ class AppController:
         # Extract model
         if "model" in txt2img_config and txt2img_config["model"]:
             overrides["model"] = txt2img_config["model"]
+        elif "model_name" in txt2img_config and txt2img_config["model_name"]:
+            overrides["model"] = txt2img_config["model_name"]
+
+        if "vae" in txt2img_config and txt2img_config["vae"]:
+            overrides["vae"] = txt2img_config["vae"]
+        elif "vae_name" in txt2img_config and txt2img_config["vae_name"]:
+            overrides["vae"] = txt2img_config["vae_name"]
 
         # Extract sampler
         if "sampler_name" in txt2img_config and txt2img_config["sampler_name"]:
             overrides["sampler"] = txt2img_config["sampler_name"]
+
+        if "scheduler" in txt2img_config and txt2img_config["scheduler"]:
+            overrides["scheduler"] = txt2img_config["scheduler"]
 
         # Extract steps
         if "steps" in txt2img_config:
@@ -3999,12 +4010,14 @@ class AppController:
             except (ValueError, TypeError):
                 pass
 
+        if "seed" in txt2img_config:
+            overrides["seed"] = txt2img_config.get("seed")
+
         return overrides
 
-    def _apply_core_overrides(self, overrides: dict[str, Any]) -> None:
-        """Apply core configuration overrides to the core config panel."""
+    def _apply_base_generation_overrides(self, overrides: dict[str, Any]) -> None:
+        """Apply base-generation overrides to the pipeline sidebar."""
         try:
-            # Find the core config panel in the sidebar
             pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
             if pipeline_tab is None:
                 return
@@ -4013,17 +4026,16 @@ class AppController:
             if sidebar_panel is None:
                 return
 
-            core_config_panel = getattr(sidebar_panel, "get_core_config_panel", lambda: None)()
-            if core_config_panel is None:
+            base_generation_panel = getattr(sidebar_panel, "get_base_generation_panel", lambda: None)()
+            if base_generation_panel is None:
                 return
 
-            # Apply the overrides
-            if hasattr(core_config_panel, "apply_from_overrides"):
-                core_config_panel.apply_from_overrides(overrides)
-                self._append_log(f"[controller] Applied core config overrides: {overrides}")
+            if hasattr(base_generation_panel, "apply_from_overrides"):
+                base_generation_panel.apply_from_overrides(overrides)
+                self._append_log(f"[controller] Applied base generation overrides: {overrides}")
 
         except Exception as e:
-            self._append_log(f"[controller] Error applying core config overrides: {e}")
+            self._append_log(f"[controller] Error applying base generation overrides: {e}")
 
     def _on_pack_list_select(self, event: Any) -> None:
         if self.main_window is None:
@@ -4502,11 +4514,11 @@ class AppController:
         dropdowns = self._dropdown_loader.load_dropdowns(self, self.app_state)
         self._dropdown_loader.apply_to_gui(pipeline_tab, dropdowns)
 
-        # Also refresh the sidebar's core config panel
+        # Also refresh the sidebar's base-generation panel
         sidebar = self._get_sidebar_panel()
-        if sidebar and hasattr(sidebar, "refresh_core_config_from_webui"):
+        if sidebar and hasattr(sidebar, "refresh_base_generation_from_webui"):
             try:
-                sidebar.refresh_core_config_from_webui()
+                sidebar.refresh_base_generation_from_webui()
             except Exception:
                 pass
 
@@ -4976,21 +4988,23 @@ class AppController:
             else:
                 self._append_log(f"[controller] Failed to apply config to pack '{pack_id}'")
 
-    def save_current_pipeline_preset(self, preset_name: str) -> bool:
-        """Persist the current pipeline/stage config as a named preset."""
-        self._append_log(f"[controller] Saving current pipeline config as preset '{preset_name}'")
+    def save_current_pipeline_saved_recipe(self, recipe_name: str) -> bool:
+        """Persist the current pipeline/stage config as a named saved recipe."""
+        self._append_log(
+            f"[controller] Saving current pipeline config as saved recipe '{recipe_name}'"
+        )
         payload = self._run_config_with_lora()
         panel_randomizer = self._get_panel_randomizer_config()
         if panel_randomizer:
             payload.update(panel_randomizer)
         if not payload:
-            self._append_log("[controller] No current config to save as preset")
+            self._append_log("[controller] No current config to save as saved recipe")
             return False
-        success = self._config_manager.save_preset(preset_name, payload)
+        success = self._config_manager.save_preset(recipe_name, payload)
         if success:
-            self._append_log(f"[controller] Preset '{preset_name}' saved")
+            self._append_log(f"[controller] Saved recipe '{recipe_name}'")
         else:
-            self._append_log(f"[controller] Failed to save preset '{preset_name}'")
+            self._append_log(f"[controller] Failed to save recipe '{recipe_name}'")
         return success
 
     def _collect_current_stage_configs(self) -> dict[str, Any]:
@@ -5530,66 +5544,68 @@ class AppController:
         self.job_service.resume()
         self._append_log("[controller] Resumed current job")
 
-    def on_pipeline_preset_apply_to_default(self, preset_name: str) -> None:
-        """Apply preset config to the current run config and optionally mark default."""
-        self._append_log(f"[controller] Applying preset '{preset_name}' to default")
+    def on_pipeline_saved_recipe_apply_to_working_state(self, recipe_name: str) -> None:
+        """Apply saved recipe config to the current run config and optionally mark default."""
+        self._append_log(f"[controller] Applying saved recipe '{recipe_name}' to working state")
 
-        preset_config = self._load_and_apply_preset(preset_name)
-        if preset_config is None:
+        recipe_config = self._load_and_apply_saved_recipe(recipe_name)
+        if recipe_config is None:
             return
 
-        success = self._config_manager.set_default_preset(preset_name)
+        success = self._config_manager.set_default_preset(recipe_name)
         if success:
-            self._append_log(f"[controller] Set '{preset_name}' as default preset")
+            self._append_log(f"[controller] Set '{recipe_name}' as default preset")
         else:
             self._append_log("[controller] Failed to set default preset")
 
-    def _load_and_apply_preset(self, preset_name: str) -> dict[str, Any] | None:
-        preset_config = self._config_manager.load_preset(preset_name)
-        if preset_config is None:
-            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+    def _load_and_apply_saved_recipe(self, recipe_name: str) -> dict[str, Any] | None:
+        recipe_config = self._config_manager.load_preset(recipe_name)
+        if recipe_config is None:
+            self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
             return None
 
-        self.apply_preset_to_run_config(preset_config, preset_name)
-        return preset_config
+        self.apply_saved_recipe_to_run_config(recipe_config, recipe_name)
+        return recipe_config
 
-    def on_pipeline_preset_apply_to_packs(self, preset_name: str, pack_ids: list[str]) -> None:
-        """Copy preset values into configs of selected packs."""
-        self._append_log(f"[controller] Applying preset '{preset_name}' to packs: {pack_ids}")
+    def on_pipeline_saved_recipe_apply_to_selected_packs(
+        self, recipe_name: str, pack_ids: list[str]
+    ) -> None:
+        """Copy saved recipe values into configs of selected packs."""
+        self._append_log(f"[controller] Applying saved recipe '{recipe_name}' to packs: {pack_ids}")
 
-        preset_config = self._config_manager.load_preset(preset_name)
-        if preset_config is None:
-            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+        recipe_config = self._config_manager.load_preset(recipe_name)
+        if recipe_config is None:
+            self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
             return
 
         # Apply to each pack
         for pack_id in pack_ids:
-            success = self._config_manager.save_pack_config(pack_id, preset_config)
+            success = self._config_manager.save_pack_config(pack_id, recipe_config)
             if success:
-                self._append_log(f"[controller] Applied preset to pack '{pack_id}'")
+                self._append_log(f"[controller] Applied saved recipe to pack '{pack_id}'")
             else:
-                self._append_log(f"[controller] Failed to apply preset to pack '{pack_id}'")
+                self._append_log(f"[controller] Failed to apply saved recipe to pack '{pack_id}'")
 
-    def on_pipeline_preset_load_to_stages(self, preset_name: str) -> None:
-        """Load preset values into stage cards."""
-        self._append_log(f"[controller] Loading preset '{preset_name}' to stages")
+    def on_pipeline_saved_recipe_load_to_pipeline(self, recipe_name: str) -> None:
+        """Load saved recipe values into the active pipeline workspace."""
+        self._append_log(f"[controller] Loading saved recipe '{recipe_name}' to pipeline")
 
-        preset_config = self._config_manager.load_preset(preset_name)
-        if preset_config is None:
-            self._append_log(f"[controller] Failed to load preset: {preset_name}")
+        recipe_config = self._config_manager.load_preset(recipe_name)
+        if recipe_config is None:
+            self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
             return
 
         # Apply to run config
         if self.app_state:
-            self.app_state.set_run_config(preset_config)
-            self._apply_randomizer_from_config(preset_config)
-        self._sync_prompt_optimizer_run_config(preset_config)
+            self.app_state.set_run_config(recipe_config)
+            self._apply_randomizer_from_config(recipe_config)
+        self._sync_prompt_optimizer_run_config(recipe_config)
 
-        self._apply_adetailer_config_section(preset_config)
+        self._apply_adetailer_config_section(recipe_config)
 
-    def on_pipeline_preset_save_from_stages(self, preset_name: str) -> None:
-        """Save current stage config as a preset."""
-        self._append_log(f"[controller] Saving preset '{preset_name}' from stages")
+    def on_pipeline_saved_recipe_save_current(self, recipe_name: str) -> None:
+        """Save current stage config as a saved recipe."""
+        self._append_log(f"[controller] Saving saved recipe '{recipe_name}' from stages")
 
         # Get current config
         current_config = self._run_config_with_lora()
@@ -5598,22 +5614,22 @@ class AppController:
             return
 
         # Save as preset
-        success = self._config_manager.save_preset(preset_name, current_config)
+        success = self._config_manager.save_preset(recipe_name, current_config)
         if success:
-            self._append_log(f"[controller] Saved preset '{preset_name}'")
+            self._append_log(f"[controller] Saved recipe '{recipe_name}'")
         else:
-            self._append_log(f"[controller] Failed to save preset '{preset_name}'")
+            self._append_log(f"[controller] Failed to save saved recipe '{recipe_name}'")
 
-    def on_pipeline_preset_delete(self, preset_name: str) -> None:
-        """Remove an existing preset."""
-        self._append_log(f"[controller] Deleting preset '{preset_name}'")
+    def on_pipeline_saved_recipe_delete(self, recipe_name: str) -> None:
+        """Remove an existing saved recipe."""
+        self._append_log(f"[controller] Deleting saved recipe '{recipe_name}'")
 
         # TODO: Add confirmation dialog if needed
-        success = self._config_manager.delete_preset(preset_name)
+        success = self._config_manager.delete_preset(recipe_name)
         if success:
-            self._append_log(f"[controller] Deleted preset '{preset_name}'")
+            self._append_log(f"[controller] Deleted saved recipe '{recipe_name}'")
         else:
-            self._append_log(f"[controller] Failed to delete preset '{preset_name}'")
+            self._append_log(f"[controller] Failed to delete saved recipe '{recipe_name}'")
 
     # ------------------------------------------------------------------
     # PR-CORE-VIDEO-002: Movie Clips entrypoints

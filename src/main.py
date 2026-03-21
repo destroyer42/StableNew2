@@ -367,13 +367,13 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                 last_logged_state = None
                 consecutive_failures = 0
                 error_logged = False
-                core_config_refreshed = False
+                base_generation_refreshed = False
 
                 def trigger_sidebar_refresh() -> None:
                     sidebar = getattr(window, "sidebar_panel_v2", None)
                     if sidebar is None:
                         return
-                    refresh = getattr(sidebar, "refresh_core_config_from_webui", None)
+                    refresh = getattr(sidebar, "refresh_base_generation_from_webui", None)
                     if callable(refresh):
                         try:
                             refresh()
@@ -398,7 +398,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                         last_logged_state, \
                         consecutive_failures, \
                         error_logged, \
-                        core_config_refreshed
+                        base_generation_refreshed
                     try:
                         state = connection_controller.get_state()
                         if state != last_logged_state and log_changes:
@@ -410,11 +410,11 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                         else:
                             consecutive_failures = 0
                             error_logged = False
-                            if core_config_refreshed and state in {
+                            if base_generation_refreshed and state in {
                                 WebUIConnectionState.DISCONNECTED,
                                 WebUIConnectionState.ERROR,
                             }:
-                                core_config_refreshed = False
+                                base_generation_refreshed = False
 
                         if consecutive_failures >= 3:
                             try:
@@ -433,7 +433,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
 
                         sync_state(state)
                         last_logged_state = state
-                        if state == WebUIConnectionState.READY and not core_config_refreshed:
+                        if state == WebUIConnectionState.READY and not base_generation_refreshed:
                             # Notify both the sidebar (UI) and the AppController so resources/dropdowns are refreshed
                             trigger_sidebar_refresh()
                             try:
@@ -445,7 +445,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                                         pass
                             except Exception:
                                 pass
-                            core_config_refreshed = True
+                            base_generation_refreshed = True
                     except Exception as e:
                         if not error_logged:
                             logging.warning(f"Status update failed: {e}")

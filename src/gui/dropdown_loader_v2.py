@@ -164,11 +164,11 @@ class DropdownLoader:
                 target_panel.apply_resources(resources)
             except Exception:
                 pass
-        core_panel = getattr(sidebar, "core_config_panel", None)
-        if core_panel is not None:
-            self._apply_core_config_panel(core_panel, resources)
+        base_panel = getattr(sidebar, "base_generation_panel", None)
+        if base_panel is not None:
+            self._apply_base_generation_panel(base_panel, resources)
 
-    def _apply_core_config_panel(self, panel: Any, resources: dict[str, list[Any]]) -> None:
+    def _apply_base_generation_panel(self, panel: Any, resources: dict[str, list[Any]]) -> None:
         self._apply_combo(
             panel,
             "_model_combo",
@@ -189,6 +189,13 @@ class DropdownLoader:
             getattr(panel, "sampler_var", None),
             resources.get("samplers", []),
             resource_key="samplers",
+        )
+        self._apply_combo(
+            panel,
+            "_scheduler_combo",
+            getattr(panel, "scheduler_var", None),
+            resources.get("schedulers", []),
+            resource_key="schedulers",
         )
 
     def _apply_combo(

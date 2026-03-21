@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.controller.webui_connection_controller import WebUIConnectionState
-from src.gui.core_config_panel_v2 import CoreConfigPanelV2
+from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 
 
 class DummyAdapter:
@@ -39,9 +39,9 @@ def tk_root():
         pass
 
 
-def test_core_config_refresh_updates_dropdowns(tk_root):
+def test_base_generation_refresh_updates_dropdowns(tk_root):
     adapter = DummyAdapter(models=["m1", "m2"], vaes=["v1"], samplers=["s1"])
-    panel = CoreConfigPanelV2(
+    panel = BaseGenerationPanelV2(
         tk_root,
         include_vae=True,
         include_refresh=True,
@@ -53,13 +53,13 @@ def test_core_config_refresh_updates_dropdowns(tk_root):
     panel.refresh_from_adapters()
 
     assert tuple(panel._model_combo["values"]) == ("m1", "m2")
-    assert tuple(panel._vae_combo["values"]) == ("v1",)
+    assert tuple(panel._vae_combo["values"]) == ("No VAE (model default)", "v1")
     assert tuple(panel._sampler_combo["values"]) == ("s1",)
 
 
-def test_core_config_refresh_preserves_selection(tk_root):
+def test_base_generation_refresh_preserves_selection(tk_root):
     adapter = DummyAdapter(models=["keep", "other"], vaes=["v1"], samplers=["s1"])
-    panel = CoreConfigPanelV2(
+    panel = BaseGenerationPanelV2(
         tk_root,
         include_vae=True,
         include_refresh=True,
@@ -92,7 +92,7 @@ def test_core_config_refresh_triggered_on_ready(monkeypatch):
         def __init__(self):
             self.refresh_calls = 0
 
-        def refresh_core_config_from_webui(self):
+        def refresh_base_generation_from_webui(self):
             self.refresh_calls += 1
 
     class FakeWindow:

@@ -24,11 +24,11 @@ def test_pipeline_preset_dropdown_applies_to_run_config():
     sidebar = window.pipeline_tab.sidebar
     sidebar.config_manager.load_preset = controller._config_manager.load_preset
     sidebar.config_manager.list_presets = controller._config_manager.list_presets
-    sidebar._populate_preset_combo()
+    sidebar._populate_saved_recipe_combo()
 
-    sidebar.preset_var.set("demo")
-    sidebar._on_preset_selected()
-    sidebar._on_preset_apply_to_default()
+    sidebar.saved_recipe_var.set("demo")
+    sidebar._on_saved_recipe_selected()
+    sidebar._on_saved_recipe_apply_to_working_state()
 
     assert app_state.run_config.get("pipeline", {}).get("txt2img_enabled") is False
 

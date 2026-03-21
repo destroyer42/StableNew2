@@ -43,12 +43,12 @@ def controller():
 
 def test_on_apply_to_default_updates_run_config(controller):
     controller, cm = controller
-    controller.on_pipeline_preset_apply_to_default("demo")
+    controller.on_pipeline_saved_recipe_apply_to_working_state("demo")
     assert controller.app_state.run_config.get("pipeline", {}).get("txt2img_enabled") is False
     assert controller.app_state.run_config["randomization_enabled"] is True
 
 
 def test_apply_to_default_missing_runs_safely(controller):
     controller, _ = controller
-    controller.on_pipeline_preset_apply_to_default("missing")
+    controller.on_pipeline_saved_recipe_apply_to_working_state("missing")
     assert controller.app_state.run_config == {}

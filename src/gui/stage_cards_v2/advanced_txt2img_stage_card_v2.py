@@ -18,23 +18,41 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
     NO_VAE_DISPLAY = "No VAE (model default)"
 
     def __init__(
-        self, master: tk.Misc, *, controller: Any = None, theme: Any = None, **kwargs: Any
+        self,
+        master: tk.Misc,
+        *,
+        controller: Any = None,
+        theme: Any = None,
+        base_generation_panel: Any | None = None,
+        **kwargs: Any,
     ) -> None:
         self.controller = controller
         self.theme = theme
+        self.base_generation_panel = base_generation_panel
+        self._shared_base_generation = base_generation_panel is not None
         self._on_change = None
         super().__init__(master, title=self.panel_header, **kwargs)
 
     def _build_body(self, parent: ttk.Frame) -> None:
-        # Core vars
-        self.model_var = tk.StringVar()
-        self.vae_var = tk.StringVar()
-        self.sampler_var = tk.StringVar()
-        self.scheduler_var = tk.StringVar()
-        self.steps_var = tk.IntVar(value=20)
-        self.cfg_var = tk.DoubleVar(value=7.0)
-        self.width_var = tk.IntVar(value=512)
-        self.height_var = tk.IntVar(value=512)
+        if self._shared_base_generation:
+            self.model_var = self.base_generation_panel.model_var
+            self.vae_var = self.base_generation_panel.vae_var
+            self.sampler_var = self.base_generation_panel.sampler_var
+            self.scheduler_var = self.base_generation_panel.scheduler_var
+            self.steps_var = self.base_generation_panel.steps_var
+            self.cfg_var = self.base_generation_panel.cfg_var
+            self.width_var = self.base_generation_panel.width_var
+            self.height_var = self.base_generation_panel.height_var
+            self.seed_var = self.base_generation_panel.seed_var
+        else:
+            self.model_var = tk.StringVar()
+            self.vae_var = tk.StringVar()
+            self.sampler_var = tk.StringVar()
+            self.scheduler_var = tk.StringVar()
+            self.steps_var = tk.IntVar(value=20)
+            self.cfg_var = tk.DoubleVar(value=7.0)
+            self.width_var = tk.IntVar(value=512)
+            self.height_var = tk.IntVar(value=512)
         self.clip_skip_var = tk.IntVar(value=2)
 
         self._refiner_model_name_map: dict[str, str] = {}
@@ -47,98 +65,89 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         refiner_values = self._load_refiner_models(model_resources)
         # Note: _apply_refiner_hiress_defaults() is called later after refiner/hires vars are defined
 
-        # Sampler/steps/cfg
-        self.sampler_section = SamplerSection(parent)
-        self.sampler_section.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        # Link primary sampler vars to section vars to preserve API
-        self.sampler_section.sampler_var = self.sampler_var
-        # Replace sampler section widgets with spinboxes/bound vars
-        try:
-            for child in self.sampler_section.winfo_children():
-                child.destroy()
-        except Exception:
-            pass
-        ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", padx=(0, 4)
-        )
-        sampler_resources = (
-            self.controller.list_upscalers()
-            if self.controller and hasattr(self.controller, "list_upscalers")
-            else []
-        )
-        sampler_values = (
-            [r.display_name for r in sampler_resources]
-            if sampler_resources
-            else getattr(self.controller, "get_available_samplers", lambda: [])()
-            if self.controller
-            else ["Euler", "DPM++ 2M"]
-        )
-        self.sampler_combo = ttk.Combobox(
-            self.sampler_section,
-            textvariable=self.sampler_var,
-            values=sampler_values,
-            state="readonly",
-            width=18,
-            style="Dark.TCombobox",
-        )
-        self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        next_row = 0
+        if self._shared_base_generation:
+            helper = ttk.Label(
+                parent,
+                text="Shared model, sampler, resolution, and seed live in Base Generation.",
+                style=BODY_LABEL_STYLE,
+                wraplength=420,
+                justify="left",
+            )
+            helper.grid(row=next_row, column=0, sticky="ew", pady=(0, 8))
+            next_row += 1
+        else:
+            self.sampler_section = SamplerSection(parent)
+            self.sampler_section.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+            self.sampler_section.sampler_var = self.sampler_var
+            try:
+                for child in self.sampler_section.winfo_children():
+                    child.destroy()
+            except Exception:
+                pass
+            ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(
+                row=0, column=0, sticky="w", padx=(0, 4)
+            )
+            sampler_resources = (
+                self.controller.list_upscalers()
+                if self.controller and hasattr(self.controller, "list_upscalers")
+                else []
+            )
+            sampler_values = (
+                [r.display_name for r in sampler_resources]
+                if sampler_resources
+                else getattr(self.controller, "get_available_samplers", lambda: [])()
+                if self.controller
+                else ["Euler", "DPM++ 2M"]
+            )
+            self.sampler_combo = ttk.Combobox(
+                self.sampler_section,
+                textvariable=self.sampler_var,
+                values=sampler_values,
+                state="readonly",
+                width=18,
+                style="Dark.TCombobox",
+            )
+            self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
-        ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(
-            row=0, column=2, sticky="w", padx=(0, 4)
-        )
-        # Steps spinbox so users can type exact values or use arrows
-        self.steps_spinbox = ttk.Spinbox(
-            self.sampler_section,
-            from_=1,
-            to=150,
-            textvariable=self.steps_var,
-            width=6,
-            style="Dark.TSpinbox",
-        )
-        self.steps_spinbox.grid(row=0, column=3, sticky="ew")
+            ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(
+                row=0, column=2, sticky="w", padx=(0, 4)
+            )
+            self.steps_spinbox = ttk.Spinbox(
+                self.sampler_section,
+                from_=1,
+                to=150,
+                textvariable=self.steps_var,
+                width=6,
+                style="Dark.TSpinbox",
+            )
+            self.steps_spinbox.grid(row=0, column=3, sticky="ew")
 
-        ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0)
-        )
-        # CFG slider with fixed range 1.0-30.0
-        from src.gui.enhanced_slider import EnhancedSlider
+            ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(
+                row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0)
+            )
+            from src.gui.enhanced_slider import EnhancedSlider
 
-        # PR-GUI-LAYOUT-002: Remove fixed width to allow slider to expand
-        self.cfg_slider = EnhancedSlider(
-            self.sampler_section,
-            from_=1.0,
-            to=30.0,
-            variable=self.cfg_var,
-            resolution=0.1,
-            label="",
-            command=self._on_cfg_changed,
-        )
-        self.cfg_slider.grid(row=1, column=1, sticky="ew", pady=(6, 0), padx=(0, 8))
-        for col in range(4):
-            self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+            self.cfg_slider = EnhancedSlider(
+                self.sampler_section,
+                from_=1.0,
+                to=30.0,
+                variable=self.cfg_var,
+                resolution=0.1,
+                label="",
+                command=self._on_cfg_changed,
+            )
+            self.cfg_slider.grid(row=1, column=1, sticky="ew", pady=(6, 0), padx=(0, 8))
+            for col in range(4):
+                self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+            next_row = 1
 
-        # Model/vae/scheduler/clip/size
         meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
-        meta.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        ttk.Label(meta, text="Model", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", padx=(0, 4)
-        )
+        meta.grid(row=next_row, column=0, sticky="ew", pady=(0, 8))
         model_display_names = (
             [r.display_name for r in model_resources]
             if model_resources
             else ["sd_xl_base_1.0", "sd15"]
-        )
-        self.model_combo = ttk.Combobox(
-            meta,
-            textvariable=self.model_var,
-            values=model_display_names,
-            state="readonly",
-            width=18,
-            style="Dark.TCombobox",
-        )
-        self.model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(meta, text="VAE", style=BODY_LABEL_STYLE).grid(
-            row=0, column=2, sticky="w", padx=(0, 4)
         )
         vae_resources = (
             self.controller.list_vaes()
@@ -150,42 +159,57 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             vae_display_names.extend(r.display_name for r in vae_resources)
         else:
             vae_display_names.append("default")
-        self.vae_combo = ttk.Combobox(
-            meta,
-            textvariable=self.vae_var,
-            values=vae_display_names,
-            state="readonly",
-            width=18,
-            style="Dark.TCombobox",
-        )
-        self.vae_combo.grid(row=0, column=3, sticky="ew")
         # Map display_name to internal name for config
         self._model_name_map = {r.display_name: r.name for r in model_resources}
         self._vae_name_map = {r.display_name: r.name for r in vae_resources}
         self._vae_name_map[self.NO_VAE_DISPLAY] = ""  # Empty string means no VAE selected
 
-        def on_model_selected(*_: Any) -> None:
-            selected_display = self.model_var.get()
-            selected_name = self._model_name_map.get(selected_display, selected_display)
-            # Update config dict for payload correctness
-            if hasattr(self, "config") and isinstance(self.config, dict):
-                self.config["model"] = selected_name
-                self.config["model_name"] = selected_name
-            if hasattr(self.controller, "on_model_selected"):
-                self.controller.on_model_selected(selected_name)
+        if not self._shared_base_generation:
+            ttk.Label(meta, text="Model", style=BODY_LABEL_STYLE).grid(
+                row=0, column=0, sticky="w", padx=(0, 4)
+            )
+            self.model_combo = ttk.Combobox(
+                meta,
+                textvariable=self.model_var,
+                values=model_display_names,
+                state="readonly",
+                width=18,
+                style="Dark.TCombobox",
+            )
+            self.model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+            ttk.Label(meta, text="VAE", style=BODY_LABEL_STYLE).grid(
+                row=0, column=2, sticky="w", padx=(0, 4)
+            )
+            self.vae_combo = ttk.Combobox(
+                meta,
+                textvariable=self.vae_var,
+                values=vae_display_names,
+                state="readonly",
+                width=18,
+                style="Dark.TCombobox",
+            )
+            self.vae_combo.grid(row=0, column=3, sticky="ew")
 
-        def on_vae_selected(*_: Any) -> None:
-            selected_display = self.vae_var.get()
-            selected_name = self._vae_name_map.get(selected_display, selected_display)
-            # Update config dict for payload correctness
-            if hasattr(self, "config") and isinstance(self.config, dict):
-                self.config["vae"] = selected_name
-                self.config["vae_name"] = selected_name
-            if hasattr(self.controller, "on_vae_selected"):
-                self.controller.on_vae_selected(selected_name)
+            def on_model_selected(*_: Any) -> None:
+                selected_display = self.model_var.get()
+                selected_name = self._model_name_map.get(selected_display, selected_display)
+                if hasattr(self, "config") and isinstance(self.config, dict):
+                    self.config["model"] = selected_name
+                    self.config["model_name"] = selected_name
+                if hasattr(self.controller, "on_model_selected"):
+                    self.controller.on_model_selected(selected_name)
 
-        self.model_var.trace_add("write", on_model_selected)
-        self.vae_var.trace_add("write", on_vae_selected)
+            def on_vae_selected(*_: Any) -> None:
+                selected_display = self.vae_var.get()
+                selected_name = self._vae_name_map.get(selected_display, selected_display)
+                if hasattr(self, "config") and isinstance(self.config, dict):
+                    self.config["vae"] = selected_name
+                    self.config["vae_name"] = selected_name
+                if hasattr(self.controller, "on_vae_selected"):
+                    self.controller.on_vae_selected(selected_name)
+
+            self.model_var.trace_add("write", on_model_selected)
+            self.vae_var.trace_add("write", on_vae_selected)
 
         # Preload last-run config if available
         if self.controller and hasattr(self.controller, "get_last_run_config"):
@@ -212,38 +236,21 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                     self.model_var.set(model_display)
                 if vae_display:
                     self.vae_var.set(vae_display)
-                if hasattr(last_run, "sampler_name"):
+                if not self._shared_base_generation and hasattr(last_run, "sampler_name"):
                     self.sampler_var.set(getattr(last_run, "sampler_name", ""))
-                if hasattr(last_run, "scheduler"):
+                if not self._shared_base_generation and hasattr(last_run, "scheduler"):
                     self.scheduler_var.set(getattr(last_run, "scheduler", ""))
-                if hasattr(last_run, "steps"):
+                if not self._shared_base_generation and hasattr(last_run, "steps"):
                     self.steps_var.set(getattr(last_run, "steps", 20))
-                if hasattr(last_run, "cfg_scale"):
+                if not self._shared_base_generation and hasattr(last_run, "cfg_scale"):
                     self.cfg_var.set(getattr(last_run, "cfg_scale", 7.0))
-                if hasattr(last_run, "width"):
+                if not self._shared_base_generation and hasattr(last_run, "width"):
                     self.width_var.set(getattr(last_run, "width", 512))
-                if hasattr(last_run, "height"):
+                if not self._shared_base_generation and hasattr(last_run, "height"):
                     self.height_var.set(getattr(last_run, "height", 512))
 
-        ttk.Label(meta, text="Scheduler", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", pady=(6, 2)
-        )
-        scheduler_values = (
-            getattr(self.controller, "get_available_schedulers", lambda: [])()
-            if self.controller
-            else ["Normal", "Karras"]
-        )
-        self.scheduler_combo = ttk.Combobox(
-            meta,
-            textvariable=self.scheduler_var,
-            values=scheduler_values,
-            state="readonly",
-            width=14,
-            style="Dark.TCombobox",
-        )
-        self.scheduler_combo.grid(row=1, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(meta, text="Clip skip", style=BODY_LABEL_STYLE).grid(
-            row=1, column=2, sticky="w", pady=(6, 2)
+            row=0, column=0, sticky="w", pady=(6, 2)
         )
         self.clip_skip_spin = ttk.Spinbox(
             meta,
@@ -254,54 +261,33 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             width=6,
             style="Dark.TSpinbox",
         )
-        self.clip_skip_spin.grid(row=1, column=3, sticky="ew")
-
-        ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(
-            row=2, column=0, sticky="w", pady=(6, 2)
-        )
-        # Width combobox with multiples of 128 only
-        width_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
-        self.width_combo = ttk.Combobox(
-            meta,
-            textvariable=self.width_var,
-            values=width_values,
-            state="readonly",
-            width=8,
-            style="Dark.TCombobox",
-        )
-        self.width_combo.grid(row=2, column=1, sticky="ew", padx=(0, 8))
-
-        ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE).grid(
-            row=2, column=2, sticky="w", pady=(6, 2)
-        )
-        # Height combobox with multiples of 128 only
-        height_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
-        self.height_combo = ttk.Combobox(
-            meta,
-            textvariable=self.height_var,
-            values=height_values,
-            state="readonly",
-            width=8,
-            style="Dark.TCombobox",
-        )
-        self.height_combo.grid(row=2, column=3, sticky="ew")
+        self.clip_skip_spin.grid(row=0, column=1, sticky="ew")
         
         # Final Size display (calculated from width x height x hires x upscale)
         ttk.Label(meta, text="Final Size", style=BODY_LABEL_STYLE).grid(
-            row=3, column=0, sticky="w", pady=(6, 2)
+            row=1, column=0, sticky="w", pady=(6, 2)
         )
         self.final_size_label = ttk.Label(
             meta, text="512 x 512", style=BODY_LABEL_STYLE
         )
-        self.final_size_label.grid(row=3, column=1, columnspan=3, sticky="w", pady=(6, 2))
+        self.final_size_label.grid(row=1, column=1, columnspan=3, sticky="w", pady=(6, 2))
         
         for col in range(4):
             meta.columnconfigure(col, weight=1 if col in (1, 3) else 0)
 
         # Seed/randomize
         self.seed_section = SeedSection(parent)
-        self.seed_section.grid(row=2, column=0, sticky="ew")
-        self.seed_var = self.seed_section.seed_var  # exposed for compatibility
+        if self._shared_base_generation:
+            self.seed_section.grid_remove()
+        else:
+            self.seed_section.grid(row=next_row + 1, column=0, sticky="ew")
+            self.seed_var = self.seed_section.seed_var  # exposed for compatibility
+
+        if self._shared_base_generation:
+            try:
+                self.seed_section.seed_var = self.seed_var
+            except Exception:
+                pass
 
         for var in self.watchable_vars():
             try:
@@ -838,6 +824,37 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         
         return config
 
+    def to_stage_local_config_dict(self) -> dict[str, Any]:
+        use_refiner = bool(self.refiner_enabled_var.get())
+        return {
+            "txt2img": {
+                "clip_skip": int(self.clip_skip_var.get() or 2),
+                "use_refiner": use_refiner,
+                **(
+                    {
+                        "refiner_checkpoint": self._refiner_model_name_map.get(
+                            self.refiner_model_var.get(),
+                            self.refiner_model_var.get().strip(),
+                        ),
+                        "refiner_model_name": self._refiner_model_name_map.get(
+                            self.refiner_model_var.get(),
+                            self.refiner_model_var.get().strip(),
+                        ),
+                        "refiner_switch_at": float(self.refiner_switch_var.get() or 0.8),
+                    }
+                    if use_refiner
+                    else {}
+                ),
+                "enable_hr": bool(self.hires_enabled_var.get()),
+                "hr_upscaler": self.hires_upscaler_var.get().strip(),
+                "hr_scale": float(self.hires_factor_var.get() or 2.0),
+                "hr_second_pass_steps": int(self.hires_steps_var.get() or 0),
+                "denoising_strength": float(self.hires_denoise_var.get() or 0.3),
+                "hires_use_base_model": bool(self.hires_use_base_model_var.get()),
+                "hr_checkpoint_name": self.hires_model_var.get().strip() if self.hires_model_var.get() else "",
+            }
+        }
+
     def validate(self) -> ValidationResult:
         # All controls are now constrained by UI, minimal validation needed
         try:
@@ -853,25 +870,28 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         return ValidationResult(True, None)
 
     def watchable_vars(self) -> list[tk.Variable]:
-        return [
-            self.model_var,
-            self.vae_var,
-            self.sampler_var,
-            self.scheduler_var,
-            self.steps_var,
-            self.cfg_var,
-            self.width_var,
-            self.height_var,
-            self.clip_skip_var,
-        ]
+        vars = [self.clip_skip_var]
+        if not self._shared_base_generation:
+            vars = [
+                self.model_var,
+                self.vae_var,
+                self.sampler_var,
+                self.scheduler_var,
+                self.steps_var,
+                self.cfg_var,
+                self.width_var,
+                self.height_var,
+            ] + vars
+        return vars
 
     def apply_resource_update(self, resources: dict[str, list[Any]] | None) -> None:
         if not resources:
             return
-        self._update_model_options(resources.get("models") or [])
-        self._update_vae_options(resources.get("vaes") or [])
-        self._set_sampler_options(resources.get("samplers") or [])
-        self._set_scheduler_options(resources.get("schedulers") or [])
+        if not self._shared_base_generation:
+            self._update_model_options(resources.get("models") or [])
+            self._update_vae_options(resources.get("vaes") or [])
+            self._set_sampler_options(resources.get("samplers") or [])
+            self._set_scheduler_options(resources.get("schedulers") or [])
         self._update_refiner_model_options(resources.get("models") or [])
         self._update_hires_upscaler_options(resources.get("upscalers") or [])
         self._update_hires_model_options(resources.get("models") or [])

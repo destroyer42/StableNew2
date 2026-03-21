@@ -168,16 +168,18 @@ class PipelineTabFrame(ttk.Frame):
             controller=self.pipeline_controller,
             theme=self.theme,
             app_state=self.app_state,
+            base_generation_panel=getattr(self.sidebar, "base_generation_panel", None),
             on_change=lambda: self._sync_state_overrides(),
         )
         self.stage_cards_panel.pack(fill="both", expand=True)
+        base_generation_panel = getattr(self.sidebar, "base_generation_panel", None)
         txt2img_card = getattr(self.stage_cards_panel, "txt2img_card", None)
         img2img_card = getattr(self.stage_cards_panel, "img2img_card", None)
         upscale_card = getattr(self.stage_cards_panel, "upscale_card", None)
-        self.txt2img_width = getattr(txt2img_card, "width_var", tk.IntVar(value=512))
-        self.txt2img_height = getattr(txt2img_card, "height_var", tk.IntVar(value=512))
-        self.txt2img_steps = getattr(txt2img_card, "steps_var", tk.IntVar(value=20))
-        self.txt2img_cfg_scale = getattr(txt2img_card, "cfg_var", tk.DoubleVar(value=7.0))
+        self.txt2img_width = getattr(base_generation_panel, "width_var", tk.IntVar(value=512))
+        self.txt2img_height = getattr(base_generation_panel, "height_var", tk.IntVar(value=512))
+        self.txt2img_steps = getattr(base_generation_panel, "steps_var", tk.IntVar(value=20))
+        self.txt2img_cfg_scale = getattr(base_generation_panel, "cfg_var", tk.DoubleVar(value=7.0))
         self.img2img_width = getattr(img2img_card, "width_var", tk.IntVar(value=512))
         self.img2img_height = getattr(img2img_card, "height_var", tk.IntVar(value=512))
         self.img2img_strength = getattr(img2img_card, "denoise_var", tk.DoubleVar(value=0.3))
@@ -328,7 +330,15 @@ class PipelineTabFrame(ttk.Frame):
             except Exception:
                 pass
 
-        overrides = self.stage_cards_panel.to_overrides(prompt_text=prompt_text)
+        overrides: dict[str, Any] = {}
+        sidebar = getattr(self, "sidebar", None)
+        if sidebar is not None and hasattr(sidebar, "get_base_generation_overrides"):
+            try:
+                overrides.update(sidebar.get_base_generation_overrides())
+            except Exception:
+                pass
+        stage_overrides = self.stage_cards_panel.to_overrides(prompt_text=prompt_text)
+        overrides.update(stage_overrides)
         try:
             self.state_manager.pipeline_overrides = overrides
         except Exception:
@@ -405,6 +415,7 @@ class PipelineTabFrame(ttk.Frame):
 
     def _handle_sidebar_change(self) -> None:
         self._apply_stage_visibility()
+        self._sync_state_overrides()
         if hasattr(self, "preview_panel"):
             try:
                 self.preview_panel.update_from_controls(self.sidebar)

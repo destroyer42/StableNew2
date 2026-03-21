@@ -22,6 +22,7 @@ class StageCardsPanel(ttk.Frame):
         controller=None,
         theme=None,
         app_state: Any | None = None,
+        base_generation_panel: Any | None = None,
         on_change: Callable[[], None] | None = None,
         **kwargs: Any,
     ) -> None:
@@ -29,6 +30,7 @@ class StageCardsPanel(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self._on_change = on_change
         self.app_state = app_state
+        self.base_generation_panel = base_generation_panel
         self._stage_order = get_pipeline_stage_order() or [
             "txt2img",
             "adetailer",
@@ -42,6 +44,7 @@ class StageCardsPanel(ttk.Frame):
                 controller=controller,
                 theme=theme,
                 app_state=self.app_state,
+                base_generation_panel=self.base_generation_panel,
                 collapsible=True,
                 collapse_key="card_txt2img",
             ),
@@ -234,33 +237,28 @@ class StageCardsPanel(ttk.Frame):
             card.grid_remove()
 
     def to_overrides(self, prompt_text: str | None = None) -> dict[str, Any]:
-        overrides: dict[str, Any] = {}
-        txt_cfg = getattr(self, "txt2img_card", None)
-        if txt_cfg and hasattr(txt_cfg, "to_config_dict"):
-            try:
-                section = txt_cfg.to_config_dict().get("txt2img", {}) or {}
-                overrides.update(
-                    {
-                        "prompt": prompt_text or "",
-                        "model": section.get("model", ""),
-                        "model_name": section.get("model", ""),
-                        "vae_name": section.get("vae", ""),
-                        "sampler": section.get("sampler_name", ""),
-                        "steps": int(section.get("steps", 20) or 20),
-                        "cfg_scale": float(section.get("cfg_scale", 7.0) or 7.0),
-                        "width": int(section.get("width", 512) or 512),
-                        "height": int(section.get("height", 512) or 512),
-                    }
-                )
-            except Exception:
-                pass
+        overrides: dict[str, Any] = {"prompt": prompt_text or ""}
         metadata: dict[str, Any] = {}
+        txt_cfg = getattr(self, "txt2img_card", None)
+        if txt_cfg is not None:
+            extractor = getattr(txt_cfg, "to_stage_local_config_dict", None)
+            if callable(extractor):
+                try:
+                    metadata["txt2img"] = extractor().get("txt2img", {})
+                except Exception:
+                    metadata["txt2img"] = {}
         img_cfg = getattr(self, "img2img_card", None)
         if img_cfg and hasattr(img_cfg, "to_config_dict"):
             try:
                 metadata["img2img"] = img_cfg.to_config_dict().get("img2img", {})
             except Exception:
                 metadata["img2img"] = {}
+        ad_cfg = getattr(self, "adetailer_card", None)
+        if ad_cfg and hasattr(ad_cfg, "to_config_dict"):
+            try:
+                metadata["adetailer"] = ad_cfg.to_config_dict().get("adetailer", {})
+            except Exception:
+                metadata["adetailer"] = {}
         up_cfg = getattr(self, "upscale_card", None)
         if up_cfg and hasattr(up_cfg, "to_config_dict"):
             try:
