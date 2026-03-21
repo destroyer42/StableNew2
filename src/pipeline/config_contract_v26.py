@@ -46,6 +46,7 @@ _INTENT_TOP_LEVEL_KEYS = (
     "prompt_source",
     "prompt_pack_id",
     "adaptive_refinement",
+    "secondary_motion",
     "config_snapshot_id",
     "requested_job_label",
     "selected_row_ids",
@@ -103,6 +104,14 @@ def canonicalize_intent_config(value: Any) -> dict[str, Any]:
 def extract_adaptive_refinement_intent(value: Any) -> dict[str, Any]:
     intent = canonicalize_intent_config(value)
     payload = intent.get("adaptive_refinement")
+    if isinstance(payload, Mapping) and payload:
+        return _mapping_dict(payload)
+    return {}
+
+
+def extract_secondary_motion_intent(value: Any) -> dict[str, Any]:
+    intent = canonicalize_intent_config(value)
+    payload = intent.get("secondary_motion")
     if isinstance(payload, Mapping) and payload:
         return _mapping_dict(payload)
     return {}
@@ -276,6 +285,7 @@ __all__ = [
     "canonicalize_intent_config",
     "derive_backend_options",
     "extract_adaptive_refinement_intent",
+    "extract_secondary_motion_intent",
     "extract_continuity_linkage",
     "extract_plan_origin_linkage",
     "extract_execution_config",

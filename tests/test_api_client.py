@@ -78,6 +78,36 @@ class TestSDWebUIClient:
             models = self.client.get_models()
             assert [m["title"] for m in models] == ["model1", "model2"]
 
+    def test_get_models_failure_enters_short_cooldown(self):
+        """Repeated callers should not re-hit sd-models immediately after a hard failure."""
+        self.client._request_context = MagicMock()
+        failure_ctx = MagicMock()
+        failure_ctx.__enter__.return_value = None
+        failure_ctx.__exit__.return_value = None
+        self.client._request_context.return_value = failure_ctx
+
+        first = self.client.get_models()
+        second = self.client.get_models()
+
+        assert first == []
+        assert second == []
+        self.client._request_context.assert_called_once()
+
+    def test_get_vae_models_failure_enters_short_cooldown(self):
+        """Repeated callers should not re-hit sd-vae immediately after a hard failure."""
+        self.client._request_context = MagicMock()
+        failure_ctx = MagicMock()
+        failure_ctx.__enter__.return_value = None
+        failure_ctx.__exit__.return_value = None
+        self.client._request_context.return_value = failure_ctx
+
+        first = self.client.get_vae_models()
+        second = self.client.get_vae_models()
+
+        assert first == []
+        assert second == []
+        self.client._request_context.assert_called_once()
+
     def test_get_current_model_success(self):
         """Test successful get_current_model call"""
         with requests_mock.Mocker() as m:

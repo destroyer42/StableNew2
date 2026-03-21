@@ -136,3 +136,33 @@ def test_build_from_run_request_preserves_adaptive_refinement_intent() -> None:
     assert len(jobs) == 1
     assert jobs[0].intent_config["adaptive_refinement"]["enabled"] is True
     assert jobs[0].intent_config["adaptive_refinement"]["mode"] == "observe"
+
+
+def test_build_from_run_request_preserves_secondary_motion_intent() -> None:
+    builder = JobBuilderV2(id_fn=lambda: "job-motion", time_fn=lambda: 123.0)
+    entry = _build_pack_entry()
+    request = PipelineRunRequest(
+        prompt_pack_id=entry.pack_id,
+        selected_row_ids=[str(entry.pack_row_index)],
+        config_snapshot_id="cfg-motion",
+        run_mode=PipelineRunMode.QUEUE,
+        source=PipelineRunSource.ADD_TO_QUEUE,
+        secondary_motion={
+            "schema": "stablenew.secondary-motion.v1",
+            "enabled": True,
+            "mode": "observe",
+            "intent": "micro_sway",
+            "regions": ["hair", "fabric"],
+            "allow_prompt_bias": False,
+            "allow_native_backend": False,
+            "record_decisions": True,
+            "algorithm_version": "v1",
+        },
+        pack_entries=[entry],
+    )
+
+    jobs = builder.build_from_run_request(request)
+
+    assert len(jobs) == 1
+    assert jobs[0].intent_config["secondary_motion"]["enabled"] is True
+    assert jobs[0].intent_config["secondary_motion"]["mode"] == "observe"

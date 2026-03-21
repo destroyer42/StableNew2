@@ -5,6 +5,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 from src.pipeline.executor import Pipeline
 
+_TINY_PNG_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0ioAAAAASUVORK5CYII="
+)
+
 
 def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> None:
     pipeline = Pipeline(Mock(), Mock())
@@ -123,3 +127,88 @@ def test_adetailer_manifest_model_prefers_requested_stage_checkpoint() -> None:
     assert result is not None
     manifest_metadata = write_manifest_mock.call_args.kwargs["metadata"]
     assert manifest_metadata["model"] == "base-model.safetensors"
+
+
+def test_upscale_single_mode_uses_extended_timeout_without_global_model_switch() -> None:
+    pipeline = Pipeline(Mock(), Mock())
+    pipeline.client.set_model = Mock()
+    pipeline.client.set_vae = Mock()
+    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
+
+    captured: dict[str, object] = {}
+
+    def _upscale_image(**kwargs):
+        captured.update(kwargs)
+        return {"image": "result_b64"}
+
+    pipeline.client.upscale_image = Mock(side_effect=_upscale_image)
+
+    with patch.object(pipeline, "_load_image_base64", return_value=_TINY_PNG_BASE64), \
+         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
+         patch.object(pipeline, "_write_manifest_file") as write_manifest_mock:
+        config = {
+            "upscale_mode": "single",
+            "upscaler": "R-ESRGAN 4x+",
+            "upscaling_resize": 2.0,
+            "model": "base-model.safetensors",
+            "sd_model_checkpoint": "base-model.safetensors",
+            "sd_vae": "base-vae.safetensors",
+        }
+
+        result = pipeline.run_upscale_stage(
+            input_image_path=Path("input.png"),
+            config=config,
+            output_dir=Path("output"),
+            image_name="test_upscale",
+        )
+
+    assert result is not None
+    assert captured["timeout"] == 300.0
+    pipeline.client.set_model.assert_not_called()
+    pipeline.client.set_vae.assert_not_called()
+    manifest_metadata = write_manifest_mock.call_args.kwargs["metadata"]
+    assert manifest_metadata["model"] == "base-model.safetensors"
+    assert manifest_metadata["vae"] == "base-vae.safetensors"
+
+
+def test_upscale_img2img_pins_requested_stage_checkpoint_without_global_switch() -> None:
+    pipeline = Pipeline(Mock(), Mock())
+    pipeline.client.set_model = Mock()
+    pipeline.client.set_vae = Mock()
+    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
+
+    with patch.object(pipeline, "_load_image_base64", return_value=_TINY_PNG_BASE64), \
+         patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}) as generate_mock, \
+         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
+         patch.object(pipeline, "_write_manifest_file") as write_manifest_mock:
+        config = {
+            "upscale_mode": "img2img",
+            "upscaler": "R-ESRGAN 4x+",
+            "upscaling_resize": 2.0,
+            "steps": 18,
+            "denoising_strength": 0.2,
+            "model": "base-model.safetensors",
+            "sd_model_checkpoint": "base-model.safetensors",
+            "sd_vae": "base-vae.safetensors",
+        }
+
+        result = pipeline.run_upscale_stage(
+            input_image_path=Path("input.png"),
+            config=config,
+            output_dir=Path("output"),
+            image_name="test_upscale_img2img",
+        )
+
+    assert result is not None
+    payload = generate_mock.call_args.args[1]
+    assert payload["sd_model"] == "base-model.safetensors"
+    assert payload["sd_vae"] == "base-vae.safetensors"
+    assert payload["override_settings"]["sd_model_checkpoint"] == "base-model.safetensors"
+    assert payload["override_settings"]["sd_vae"] == "base-vae.safetensors"
+    pipeline.client.set_model.assert_not_called()
+    pipeline.client.set_vae.assert_not_called()
+    manifest_metadata = write_manifest_mock.call_args.kwargs["metadata"]
+    assert manifest_metadata["model"] == "base-model.safetensors"
+    assert manifest_metadata["vae"] == "base-vae.safetensors"

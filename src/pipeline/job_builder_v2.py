@@ -26,6 +26,7 @@ from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     derive_backend_options,
     extract_adaptive_refinement_intent,
+    extract_secondary_motion_intent,
 )
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
@@ -259,6 +260,9 @@ class JobBuilderV2:
                         "prompt_pack_id": run_request.prompt_pack_id,
                         "adaptive_refinement": extract_adaptive_refinement_intent(
                             {"adaptive_refinement": run_request.adaptive_refinement}
+                        ),
+                        "secondary_motion": extract_secondary_motion_intent(
+                            {"secondary_motion": run_request.secondary_motion}
                         ),
                         "config_snapshot_id": run_request.config_snapshot_id,
                         "requested_job_label": run_request.requested_job_label,

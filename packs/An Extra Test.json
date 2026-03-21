@@ -108,10 +108,6 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
             0.09890109890109891
           ]
         ]
@@ -167,10 +163,6 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
             0.19780219780219782
           ]
         ]
@@ -226,11 +218,7 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.2967032967032967
+            0.4120879120879121
           ]
         ]
       },
@@ -285,11 +273,7 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.39560439560439564
+            0.4945054945054945
           ]
         ]
       },
@@ -344,69 +328,6 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.510989010989011
-          ]
-        ]
-      },
-      {
-        "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
-        "positive_embeddings": [
-          [
-            "Stable_Yogis_General_Positives_V1",
-            0.87
-          ],
-          [
-            "Stable_Yogis_Anatomy_Positives_V1",
-            0.857143
-          ],
-          [
-            "Stable_Yogis_Realism_Positives_V1",
-            0.863636
-          ],
-          [
-            "face_refiner",
-            0.958904
-          ]
-        ],
-        "negative_embeddings": [
-          [
-            "NEGATIVE_HANDS",
-            0.95614
-          ],
-          [
-            "SDXLnegXL",
-            0.985714
-          ],
-          [
-            "sdxl_cyberrealistic_simpleneg-neg",
-            0.972527
-          ],
-          [
-            "easynegative",
-            0.69802
-          ]
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
             0.6098901098901099
           ]
         ]
@@ -462,10 +383,6 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
             0.7087912087912087
           ]
         ]
@@ -521,11 +438,7 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.8076923076923077
+            0.7912087912087913
           ]
         ]
       },
@@ -580,11 +493,7 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.9065934065934065
+            0.8901098901098901
           ]
         ]
       },
@@ -639,10 +548,6 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
             1.0054945054945055
           ]
         ]
@@ -698,11 +603,7 @@
           ],
           [
             "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            1.1043956043956045
+            1.120879120879121
           ]
         ]
       },
@@ -757,11 +658,62 @@
           ],
           [
             "anatomy_helper",
+            1.1902173913043477
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "face_refiner",
+            0.958904
+          ]
+        ],
+        "negative_embeddings": [
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            1.2032967032967035
+            "DetailedEyes_V3",
+            0.8
+          ],
+          [
+            "anatomy_helper",
+            1.3021978021978022
           ]
         ]
       }
@@ -837,8 +789,8 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "juggernautXL_ragnarokBy",
-      "model_name": "juggernautXL_ragnarokBy",
+      "model": "realismFromHadesXL_2ndAnniversary",
+      "model_name": "realismFromHadesXL_2ndAnniversary",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
@@ -858,7 +810,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
+      "hr_checkpoint_name": "realismFromHadesXL_2ndAnniversary.safetensors [897626cbf4]"
     },
     "img2img": {
       "model": "",

@@ -1,6 +1,6 @@
 # PR-VIDEO-236 - Secondary Motion Intent Contract and Observation-Only Policy Carrier
 
-Status: Specification
+Status: Implemented 2026-03-21
 Priority: HIGH
 Effort: MEDIUM
 Phase: Secondary Motion Foundation
@@ -354,7 +354,7 @@ free of backend behavior changes.
 Planner: GitHub Copilot
 Executor: Codex or Copilot
 Reviewer: Human + architecture review
-Approval Status: Pending
+Approval Status: Implemented
 
 ## Next Steps
 

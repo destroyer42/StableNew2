@@ -7,6 +7,7 @@ from uuid import uuid4
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     extract_adaptive_refinement_intent,
+    extract_secondary_motion_intent,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 
@@ -125,6 +126,7 @@ def build_cli_njr(
                 "prompt_source": "cli",
                 "requested_job_label": run_name,
                 "adaptive_refinement": extract_adaptive_refinement_intent(full_config),
+                "secondary_motion": extract_secondary_motion_intent(full_config),
             }
         ),
         extra_metadata={

@@ -42,3 +42,37 @@ def test_upscale_image_handles_http_error() -> None:
         result = client.upscale_image("raw_base64_data", "Latent", 1.5)
         assert result is None
         assert len(mocker.request_history) == 2
+
+
+def test_upscale_image_uses_extended_endpoint_timeout() -> None:
+    """Single-image upscale should use a stage-specific timeout longer than generation default."""
+    client = SDWebUIClient()
+    client._sleep = _no_sleep
+
+    captured: dict[str, object] = {}
+
+    def _fake_request_context(*args, **kwargs):
+        captured["timeout"] = kwargs.get("timeout")
+
+        class _Ctx:
+            def __enter__(self):
+                class _Resp:
+                    def json(self):
+                        return {"image": "upscaled_image"}
+
+                    def close(self):
+                        return None
+
+                return _Resp()
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+        return _Ctx()
+
+    client._request_context = _fake_request_context  # type: ignore[assignment]
+
+    result = client.upscale_image("raw_base64_data", "R-ESRGAN 4x+", 2.0)
+
+    assert result == {"image": "upscaled_image"}
+    assert captured["timeout"] == 300.0

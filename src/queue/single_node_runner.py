@@ -433,7 +433,11 @@ class SingleNodeJobRunner:
                 else:
                     result = None
                 canonical_result = normalize_run_result(result, default_run_id=job.job_id)
-                logger.info(f"🔍 DEBUG: canonical_result success={canonical_result.get('success')}, error={canonical_result.get('error')}")
+                logger.debug(
+                    "[queue/result] canonical result success=%s error=%s",
+                    canonical_result.get("success"),
+                    canonical_result.get("error"),
+                )
                 duration_ms = int((time.monotonic() - start_time) * 1000)
                 metadata = canonical_result.get("metadata") or {}
                 metadata["duration_ms"] = duration_ms
@@ -455,10 +459,14 @@ class SingleNodeJobRunner:
                     continue
                 error_message = canonical_result.get("error")
                 success = canonical_result.get("success")
-                logger.info(f"🔍 DEBUG: Before fallback logic - success={success}, error_message={error_message}")
+                logger.debug(
+                    "[queue/result] before fallback success=%s error=%s",
+                    success,
+                    error_message,
+                )
                 if success is None:
                     success = error_message is None
-                logger.info(f"🔍 DEBUG: After fallback logic - success={success}")
+                logger.debug("[queue/result] after fallback success=%s", success)
                 if success:
                     self.job_queue.mark_completed(job.job_id, result=canonical_result)
                     status_value = "completed"

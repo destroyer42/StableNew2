@@ -16,6 +16,7 @@ from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     derive_backend_options,
     extract_adaptive_refinement_intent,
+    extract_secondary_motion_intent,
 )
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
@@ -337,6 +338,9 @@ class PromptPackNormalizedJobBuilder:
                     "prompt_source": "pack",
                     "prompt_pack_id": entry.pack_id,
                     "adaptive_refinement": extract_adaptive_refinement_intent(
+                        entry.config_snapshot or merged_config
+                    ),
+                    "secondary_motion": extract_secondary_motion_intent(
                         entry.config_snapshot or merged_config
                     ),
                 }

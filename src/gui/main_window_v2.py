@@ -289,6 +289,7 @@ class MainWindowV2:
                 self.bottom_zone,
                 log_handler=self.gui_log_handler,
                 on_generate_bundle=bundle_cmd,
+                audience="operator",
             )
             self.log_trace_panel_v2.grid(row=0, column=0, sticky="nsew")
 

@@ -920,7 +920,7 @@ class JobService:
             self._start_watchdog(job)
         elif status == JobStatus.COMPLETED:
             self._log_job_finished(job.job_id, "completed", "Job completed successfully.")
-            logger.info(f"[JobService] About to emit EVENT_JOB_FINISHED for job {job.job_id}")
+            logger.debug("[job_service/events] emitting EVENT_JOB_FINISHED for job %s", job.job_id)
             self._emit(self.EVENT_JOB_FINISHED, job)
             self._record_job_history(job, status)
             # PR-LEARN-003: Notify completion handlers
@@ -1033,12 +1033,16 @@ class JobService:
     def _emit(self, event: str, *args: Any) -> None:
         callbacks = self._listeners.get(event, [])
         if event == self.EVENT_JOB_FINISHED:
-            logger.info(f"[JobService] _emit({event}): {len(callbacks)} callback(s) registered")
+            logger.debug(
+                "[job_service/events] %s has %s callback(s)",
+                event,
+                len(callbacks),
+            )
         
         for callback in callbacks:
             try:
                 if event == self.EVENT_JOB_FINISHED:
-                    logger.info(f"[JobService] Calling callback: {callback}")
+                    logger.debug("[job_service/events] calling callback=%s", callback)
                 
                 if self._event_dispatcher:
                     # schedule via dispatcher to preserve caller thread

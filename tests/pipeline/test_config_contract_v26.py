@@ -5,6 +5,7 @@ from src.pipeline.config_contract_v26 import (
     attach_config_layers,
     build_config_layers,
     extract_adaptive_refinement_intent,
+    extract_secondary_motion_intent,
     extract_continuity_linkage,
     extract_execution_config,
 )
@@ -144,3 +145,50 @@ def test_extract_adaptive_refinement_intent_reads_layered_payload() -> None:
 
     assert adaptive["enabled"] is True
     assert adaptive["mode"] == "observe"
+
+
+def test_canonicalize_intent_config_preserves_nested_secondary_motion() -> None:
+    layers = build_config_layers(
+        intent_config={
+            "run_mode": "queue",
+            "source": "video",
+            "secondary_motion": {
+                "schema": "stablenew.secondary-motion.v1",
+                "enabled": True,
+                "mode": "observe",
+                "intent": "micro_sway",
+                "regions": ["hair", "fabric"],
+                "allow_prompt_bias": False,
+                "allow_native_backend": False,
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            },
+        },
+        execution_config={},
+    )
+
+    assert layers.intent_config["secondary_motion"]["enabled"] is True
+    assert layers.intent_config["secondary_motion"]["mode"] == "observe"
+
+
+def test_extract_secondary_motion_intent_reads_layered_payload() -> None:
+    layered = {
+        "config_layers": {
+            "schema": CONFIG_CONTRACT_SCHEMA_V26,
+            "intent_config": {
+                "secondary_motion": {
+                    "schema": "stablenew.secondary-motion.v1",
+                    "enabled": True,
+                    "mode": "observe",
+                    "intent": "micro_sway",
+                }
+            },
+            "execution_config": {},
+            "backend_options": {},
+        }
+    }
+
+    secondary_motion = extract_secondary_motion_intent(layered)
+
+    assert secondary_motion["enabled"] is True
+    assert secondary_motion["mode"] == "observe"

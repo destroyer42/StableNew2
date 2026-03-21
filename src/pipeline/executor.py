@@ -1603,7 +1603,7 @@ class Pipeline:
     def _log_pipeline_cancellation(self, phase: str, exc: Exception) -> None:
         """Emit a consistent INFO-level log for pipeline cancellations."""
 
-        logger.info("⚠️ Pipeline cancelled during %s; aborting remaining stages. (%s)", phase, exc)
+        logger.info("[pipeline/cancel] cancelled during %s; aborting remaining stages. (%s)", phase, exc)
 
     def run_upscale(
         self,
@@ -1985,7 +1985,8 @@ class Pipeline:
         base_negative = config.get("negative_prompt", "")
         enhanced_negative = self.config_manager.add_global_negative(base_negative)
         logger.info(
-            f"🛡️ Applied global NSFW prevention (img2img) - Enhanced: '{enhanced_negative[:100]}...'"
+            "[img2img/negative] applied global NSFW prevention: '%s...'",
+            enhanced_negative[:100],
         )
 
         # Set model and VAE if specified
@@ -2054,7 +2055,7 @@ class Pipeline:
         # Query WebUI for ACTUAL current model and VAE (what's really being used)
         model_name = config.get("model") or config.get("sd_model_checkpoint") or self.client.get_current_model() or "Unknown"
         vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
-        logger.info(f"📝 img2img manifest - Model: {model_name}, VAE: {vae_name}")
+        logger.info("[manifest/img2img] model=%s vae=%s", model_name, vae_name)
 
         metadata = {
             "name": image_name,
@@ -2149,9 +2150,6 @@ class Pipeline:
                 )
                 requested_model = None  # Don't try to set this as SD model
         
-        if requested_model or requested_vae:
-            self._ensure_model_and_vae(requested_model, requested_vae)
-
         logger.info(f"Starting ADetailer for: {input_image_path.name}")
 
         # Load input image
@@ -2235,7 +2233,7 @@ class Pipeline:
         )
         final_prompt = prompt_optimizer_result.positive.optimized_prompt
         ad_neg_final = prompt_optimizer_result.negative.optimized_prompt
-        logger.info("🔵 [ADETAILER_DEBUG] adetailer_prompt='%s', txt2img_prompt='%s', final_prompt='%s'", 
+        logger.debug("[adetailer/prompt] adetailer_prompt='%s' txt2img_prompt='%s' final_prompt='%s'",
                     adetailer_prompt[:60] if adetailer_prompt else "(empty)",
                     prompt[:60] if prompt else "(empty)",
                     final_prompt[:60] if final_prompt else "(empty)")
@@ -2346,7 +2344,7 @@ class Pipeline:
 
         # DEBUG: Log ADetailer payload dimensions to verify no resizing
         logger.warning(
-            "🔍 ADETAILER PAYLOAD: width=%s, height=%s, face[ad_use_inpaint_width_height]=%s, face[ad_inpaint_width]=%s, face[ad_inpaint_height]=%s",
+            "[adetailer/payload] width=%s height=%s face.ad_use_inpaint_width_height=%s face.ad_inpaint_width=%s face.ad_inpaint_height=%s",
             payload_width,
             payload_height,
             face_args.get("ad_use_inpaint_width_height"),
@@ -2402,8 +2400,8 @@ class Pipeline:
 
         # Query WebUI for ACTUAL current model and VAE
         model_name = requested_model or config.get("model") or config.get("sd_model_checkpoint") or self.client.get_current_model() or "Unknown"
-        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
-        logger.info(f"📝 ADetailer manifest - Model: {model_name}, VAE: {vae_name}")
+        vae_name = requested_vae or config.get("vae") or self.client.get_current_vae() or "Automatic"
+        logger.info("[manifest/adetailer] model=%s vae=%s", model_name, vae_name)
 
         metadata = {
             "name": final_image_name,
@@ -2541,7 +2539,7 @@ class Pipeline:
         # Query WebUI for ACTUAL current model and VAE
         model_name = self.client.get_current_model() or config.get("model") or "Unknown"
         vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
-        logger.info(f"📝 run_upscale manifest - Model: {model_name}, VAE: {vae_name}")
+        logger.info("[manifest/upscale] model=%s vae=%s", model_name, vae_name)
 
         metadata = {
             "name": image_name,
@@ -2609,7 +2607,7 @@ class Pipeline:
         Returns:
             Pipeline results for this prompt
         """
-        logger.info(f"🎨 Processing prompt {prompt_index + 1} from pack '{pack_name}'")
+        logger.info("[executor/pack] processing prompt %s from pack '%s'", prompt_index + 1, pack_name)
 
         # Create pack-specific directory structure
         self._begin_run_metrics()
@@ -2704,19 +2702,19 @@ class Pipeline:
             return results
         
         # Log phase completion at WARNING level for visibility
-        logger.warning(f"✅ txt2img phase completed: {len(results['txt2img'])} image(s) generated")
+        logger.info("[executor/txt2img] phase completed: %s image(s) generated", len(results["txt2img"]))
         
         # CRITICAL: Free VRAM after txt2img phase completes
         # Prevents VRAM accumulation before refinement stages
         try:
-            logger.warning("🧹 Clearing VRAM after txt2img phase...")
+            logger.info("[executor/txt2img] clearing VRAM after phase")
             if hasattr(self.client, 'free_vram'):
                 if self.client.free_vram(unload_model=False):
-                    logger.warning("✅ VRAM cleared successfully after txt2img phase")
+                    logger.info("[executor/txt2img] VRAM cleared successfully after phase")
                 else:
-                    logger.warning("⚠️  VRAM clear returned False after txt2img phase")
+                    logger.warning("[executor/txt2img] VRAM clear returned False after phase")
         except Exception as exc:
-            logger.warning(f"❌ Failed to clear VRAM after txt2img phase: {exc}")
+            logger.warning("[executor/txt2img] failed to clear VRAM after phase: %s", exc)
 
         # Phase 2: refinement (img2img/adetailer/upscale) per base image
         for batch_idx, txt2img_meta in enumerate(results["txt2img"]):
@@ -2842,16 +2840,16 @@ class Pipeline:
                         final_image_path = last_image_path
                         
                         # CRITICAL: Free VRAM after img2img before next stage
-                        logger.warning("✅ img2img stage completed")
+                        logger.info("[executor/img2img] stage completed")
                         try:
-                            logger.warning("🧹 Clearing VRAM after img2img stage...")
+                            logger.info("[executor/img2img] clearing VRAM after stage")
                             if hasattr(self.client, 'free_vram'):
                                 if self.client.free_vram(unload_model=False):
-                                    logger.warning("✅ VRAM cleared successfully after img2img")
+                                    logger.info("[executor/img2img] VRAM cleared successfully after stage")
                                 else:
-                                    logger.warning("⚠️  VRAM clear returned False after img2img")
+                                    logger.warning("[executor/img2img] VRAM clear returned False after stage")
                         except Exception as exc:
-                            logger.warning(f"❌ Failed to clear VRAM after img2img: {exc}")
+                            logger.warning("[executor/img2img] failed to clear VRAM after stage: %s", exc)
                             
                 if adetailer_enabled:
                     adetailer_cfg = dict(config.get("adetailer", {}))
@@ -2878,16 +2876,16 @@ class Pipeline:
                         
                         # CRITICAL: Free VRAM before upscale to prevent OOM
                         # ADetailer can leave models loaded consuming 14+ GB
-                        logger.warning("✅ adetailer stage completed")
+                        logger.info("[executor/adetailer] stage completed")
                         try:
-                            logger.warning("🧹 Clearing VRAM after ADetailer before upscale...")
+                            logger.info("[executor/adetailer] clearing VRAM before upscale")
                             if hasattr(self.client, 'free_vram'):
                                 if self.client.free_vram(unload_model=False):
-                                    logger.warning("✅ VRAM cleared successfully after ADetailer")
+                                    logger.info("[executor/adetailer] VRAM cleared successfully after stage")
                                 else:
-                                    logger.warning("⚠️  VRAM clear returned False after ADetailer")
+                                    logger.warning("[executor/adetailer] VRAM clear returned False after stage")
                         except Exception as exc:
-                            logger.warning(f"❌ Failed to clear VRAM after ADetailer: {exc}")
+                            logger.warning("[executor/adetailer] failed to clear VRAM after stage: %s", exc)
                 
                 if upscale_enabled:
                     upscale_dir = pack_dir / "upscaled"
@@ -2906,16 +2904,16 @@ class Pipeline:
                         
                         # CRITICAL: Free VRAM after upscale for cleanup
                         # Ensures next job starts with clean VRAM state
-                        logger.warning("✅ upscale stage completed")
+                        logger.info("[executor/upscale] stage completed")
                         try:
-                            logger.warning("🧹 Clearing VRAM after upscale for next job...")
+                            logger.info("[executor/upscale] clearing VRAM for next job")
                             if hasattr(self.client, 'free_vram'):
                                 if self.client.free_vram(unload_model=False):
-                                    logger.warning("✅ VRAM cleared successfully after upscale")
+                                    logger.info("[executor/upscale] VRAM cleared successfully after stage")
                                 else:
-                                    logger.warning("⚠️  VRAM clear returned False after upscale")
+                                    logger.warning("[executor/upscale] VRAM clear returned False after stage")
                         except Exception as exc:
-                            logger.warning(f"❌ Failed to clear VRAM after upscale: {exc}")
+                            logger.warning("[executor/upscale] failed to clear VRAM after stage: %s", exc)
                     else:
                         final_image_path = last_image_path
                 else:
@@ -3005,7 +3003,10 @@ class Pipeline:
             images_processed=len(results.get("summary", [])),
         )
         logger.info(
-            f"✅ Completed pack '{pack_name}' prompt {prompt_index + 1}: {len(results['summary'])} images"
+            "[executor/pack] completed pack '%s' prompt %s: %s image(s)",
+            pack_name,
+            prompt_index + 1,
+            len(results["summary"]),
         )
         return results
 
@@ -3053,7 +3054,11 @@ class Pipeline:
             
             # Extract batch_size from config (images_per_prompt)
             stage_batch_size = config.get("batch_size", 1)
-            logger.info("🔵 [BATCH_SIZE_DEBUG] executor.run_txt2img_stage: config['batch_size']=%s, stage_batch_size=%s", config.get('batch_size'), stage_batch_size)
+            logger.debug(
+                "[executor/txt2img] config batch_size=%s stage_batch_size=%s",
+                config.get("batch_size"),
+                stage_batch_size,
+            )
 
             # Apply global positive and negative prompts to txt2img stage only
             pipeline_section = config.get("pipeline", {})
@@ -3127,9 +3132,9 @@ class Pipeline:
             
             # Log refiner status for debugging
             if not use_refiner_flag and refiner_checkpoint:
-                logger.info("🚫 Refiner disabled via use_refiner=False (checkpoint present but ignored)")
+                logger.info("[executor/txt2img] refiner disabled via use_refiner=False; checkpoint ignored")
             elif use_refiner:
-                logger.info("✅ Refiner enabled: checkpoint=%s, switch_at=%.3f", refiner_checkpoint, refiner_switch_at)
+                logger.info("[executor/txt2img] refiner enabled checkpoint=%s switch_at=%.3f", refiner_checkpoint, refiner_switch_at)
 
             if use_refiner:
                 # Compute expected switch step number within the base pass and within combined progress
@@ -3148,7 +3153,7 @@ class Pipeline:
                 )
                 total_steps_progress = base_steps + effective_hr_steps
                 logger.info(
-                    "🎨 SDXL Refiner enabled: %s | switch_at=%s (≈ step %d of base %d; ≈ %d/%d total)",
+                    "[executor/txt2img] SDXL refiner enabled: %s | switch_at=%s (about step %d of base %d; about %d/%d total)",
                     refiner_checkpoint,
                     refiner_switch_at,
                     expected_switch_step_base,
@@ -3162,8 +3167,12 @@ class Pipeline:
             requested_vae = txt2img_config.get("vae")
             
             # Debug: log what config we received
-            logger.info(f"🔍 [EXECUTOR] Config keys: {list(txt2img_config.keys())}")
-            logger.info(f"🔍 [EXECUTOR] Received requested_model='{requested_model}', requested_vae='{requested_vae}'")
+            logger.debug("[executor/txt2img] config keys=%s", list(txt2img_config.keys()))
+            logger.debug(
+                "[executor/txt2img] requested_model='%s' requested_vae='%s'",
+                requested_model,
+                requested_vae,
+            )
             
             if requested_model or requested_vae:
                 self._ensure_model_and_vae(requested_model, requested_vae)
@@ -3173,17 +3182,17 @@ class Pipeline:
             if requested_model:
                 model_name = requested_model
             else:
-                logger.info(f"🔍 Querying WebUI for current model...")
+                logger.debug("[executor/txt2img] querying WebUI for current model")
                 model_name = self.client.get_current_model() or "Unknown"
             
             # For VAE: check if key exists in config (even if empty string)
             if "vae" in txt2img_config:
                 vae_name = requested_vae or ""  # Use empty string if explicitly set to empty
             else:
-                logger.info(f"🔍 Querying WebUI for current VAE...")
+                logger.debug("[executor/txt2img] querying WebUI for current VAE")
                 vae_name = self.client.get_current_vae() or "Automatic"
             
-            logger.info(f"📝 Manifest will use - Model: {model_name}, VAE: {vae_name}")
+            logger.info("[manifest/txt2img] model=%s vae=%s", model_name, vae_name)
 
             self._ensure_hypernetwork(
                 txt2img_config.get("hypernetwork"),
@@ -3194,9 +3203,9 @@ class Pipeline:
             sampler_config = self._parse_sampler_config(txt2img_config)
 
             # Log configuration validation
-            logger.debug(f"📝 Input txt2img config: {json.dumps(txt2img_config, indent=2)}")
+            logger.debug("[executor/txt2img] input config=%s", json.dumps(txt2img_config, indent=2))
 
-            logger.info("🔵 [BATCH_SIZE_DEBUG] executor: About to create WebUI payload with batch_size=%s", stage_batch_size)
+            logger.debug("[executor/txt2img] about to create payload with batch_size=%s", stage_batch_size)
             payload = {
                 "prompt": enhanced_positive,  # Use enhanced positive with global terms
                 "negative_prompt": enhanced_negative,
@@ -3259,7 +3268,7 @@ class Pipeline:
             payload["negative_prompt"] = prompt_optimizer_result.negative.optimized_prompt
             try:
                 logger.info(
-                    "🎨 Final txt2img negative prompt (with global + aesthetic): '%s'",
+                    "[executor/txt2img] final negative prompt='%s'",
                     (payload["negative_prompt"][:160] + "...")
                     if len(payload["negative_prompt"]) > 160
                     else payload["negative_prompt"],
@@ -3290,7 +3299,7 @@ class Pipeline:
                 # Log Safe Mode status for transparency
                 if not self.client.options_write_enabled:
                     logger.info(
-                        "🎨 Refiner enabled with Safe Mode active. "
+                        "[executor/txt2img] refiner enabled with Safe Mode active. "
                         "Using WebUI's native refiner API (no explicit model switch needed). "
                         "Refiner checkpoint: %s",
                         refiner_checkpoint_clean
@@ -3300,12 +3309,19 @@ class Pipeline:
                 payload["refiner_checkpoint"] = refiner_checkpoint_clean
                 payload["refiner_switch_at"] = refiner_switch_at
                 logger.debug(
-                    f"🎨 Refiner params: checkpoint={refiner_checkpoint_clean}, switch_at={refiner_switch_at}"
+                    "[executor/txt2img] refiner params checkpoint=%s switch_at=%s",
+                    refiner_checkpoint_clean,
+                    refiner_switch_at,
                 )
 
             # Log final payload for validation
-            logger.debug(f"🚀 Sending txt2img payload: {json.dumps(payload, indent=2)}")
-            logger.info("🔵 [BATCH_SIZE_DEBUG] executor: Final payload batch_size=%s, n_iter=%s (should generate %s total images)", payload.get('batch_size'), payload.get('n_iter'), payload.get('batch_size', 1) * payload.get('n_iter', 1))
+            logger.debug("[executor/txt2img] sending payload=%s", json.dumps(payload, indent=2))
+            logger.debug(
+                "[executor/txt2img] final payload batch_size=%s n_iter=%s expected_images=%s",
+                payload.get("batch_size"),
+                payload.get("n_iter"),
+                payload.get("batch_size", 1) * payload.get("n_iter", 1),
+            )
 
             # Generate image
             self._apply_webui_defaults_once()
@@ -3331,7 +3347,11 @@ class Pipeline:
 
             # Log how many images were actually generated
             num_images_received = len(response["images"])
-            logger.info("🔵 [BATCH_SIZE_DEBUG] WebUI returned %s images (expected %s)", num_images_received, payload.get('batch_size', 1) * payload.get('n_iter', 1))
+            logger.debug(
+                "[executor/txt2img] WebUI returned %s image(s) expected=%s",
+                num_images_received,
+                payload.get("batch_size", 1) * payload.get("n_iter", 1),
+            )
             
             # Save ALL images with unique filenames
             # When multiple images are returned (batch_size > 1 OR n_iter > 1), use _batch{idx} suffix
@@ -3380,7 +3400,12 @@ class Pipeline:
                 from src.utils.file_io import get_unique_output_path
                 image_path = get_unique_output_path(image_path)
                 
-                logger.info("🔵 [BATCH_SIZE_DEBUG] Saving image %s/%s: %s", batch_idx + 1, num_images_received, image_path.name)
+                logger.debug(
+                    "[executor/txt2img] saving image %s/%s: %s",
+                    batch_idx + 1,
+                    num_images_received,
+                    image_path.name,
+                )
                 image_metadata = dict(base_metadata)
                 image_metadata["name"] = batch_image_name
                 image_metadata["path"] = str(image_path)
@@ -3632,7 +3657,7 @@ class Pipeline:
             payload["negative_prompt"] = prompt_optimizer_result.negative.optimized_prompt
             try:
                 logger.info(
-                    "🎨 Final img2img negative prompt (with%s global + aesthetic): '%s'",
+                    "[executor/img2img] final negative prompt (with%s global + aesthetic): '%s'",
                     "" if apply_global else "out",
                     (payload["negative_prompt"][:160] + "...")
                     if len(payload["negative_prompt"]) > 160
@@ -4095,12 +4120,9 @@ class Pipeline:
         try:
             self._ensure_not_cancelled(cancel_token, "upscale stage start")
             
-            # Set model and VAE if specified (ensure consistency across pipeline stages)
             requested_model = config.get("model") or config.get("sd_model_checkpoint")
             # Handle VAE: get from config but don't default to fallback if empty
             requested_vae = config.get("vae") if "vae" in config else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
-            if requested_model or requested_vae:
-                self._ensure_model_and_vae(requested_model, requested_vae)
             
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -4150,7 +4172,7 @@ class Pipeline:
                 # Upscale can use a lot of RAM - check memory pressure
                 if mem_percent > 85.0 or mem_available_gb < 3.0:
                     logger.warning(
-                        "⚠️ High memory pressure before upscale: %.1f%% used, %.1fGB available - freeing caches",
+                        "[executor/upscale] high memory pressure before upscale: %.1f%% used, %.1fGB available; freeing caches",
                         mem_percent, mem_available_gb
                     )
                     
@@ -4203,6 +4225,15 @@ class Pipeline:
                     "batch_size": 1,
                     "n_iter": 1,
                 }
+                override_settings: dict[str, Any] = {}
+                if requested_model:
+                    payload["sd_model"] = requested_model
+                    override_settings["sd_model_checkpoint"] = requested_model
+                if requested_vae:
+                    payload["sd_vae"] = requested_vae
+                    override_settings["sd_vae"] = requested_vae
+                if override_settings:
+                    payload["override_settings"] = override_settings
 
                 try:
                     logger.info(
@@ -4289,6 +4320,7 @@ class Pipeline:
                     gfpgan_visibility=gfpgan_vis,
                     codeformer_visibility=codeformer_vis,
                     codeformer_weight=codeformer_weight,
+                    timeout=300.0,
                 )
                 stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
                 response_key = "image"
@@ -4339,8 +4371,8 @@ class Pipeline:
 
             # Query WebUI for ACTUAL current model and VAE
             model_name = config.get("model") or config.get("sd_model_checkpoint") or self.client.get_current_model() or "Unknown"
-            vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
-            logger.info(f"📝 Upscale manifest - Model: {model_name}, VAE: {vae_name}")
+            vae_name = requested_vae or config.get("vae") or self.client.get_current_vae() or "Automatic"
+            logger.info("[manifest/upscale] model=%s vae=%s", model_name, vae_name)
             
             metadata = {
                 "name": image_name,
@@ -4420,7 +4452,7 @@ class Pipeline:
                     mem = psutil.virtual_memory()
                     if mem.percent > 90.0:
                         logger.warning(
-                            "⚠️ Memory still high after upscale: %.1f%% used - consider reducing upscale factor or batch size",
+                            "[executor/upscale] memory still high after upscale: %.1f%% used; consider reducing upscale factor or batch size",
                             mem.percent
                         )
                 except Exception:
@@ -4485,7 +4517,7 @@ class Pipeline:
             config_negative = adetailer_cfg.get("adetailer_negative_prompt", "").strip()
             prompt_text = config_positive if config_positive else (prompt or "")
             negative_text = config_negative if config_negative else (negative_prompt or "")
-            logger.info("🔵 [ADETAILER_PROMPT_DEBUG] config_positive='%s', config_negative='%s', using prompt='%s', negative='%s'",
+            logger.debug("[adetailer/stage] config_positive='%s' config_negative='%s' using prompt='%s' negative='%s'",
                        config_positive[:40] if config_positive else "(empty)",
                        config_negative[:40] if config_negative else "(empty)",
                        prompt_text[:40] if prompt_text else "(empty)",

@@ -1,7 +1,7 @@
 # StableNew Comfy-Aware Backlog v2.6
 
 Status: Active subordinate backlog  
-Updated: 2026-03-20
+Updated: 2026-03-21
 
 ## Purpose
 
@@ -194,7 +194,7 @@ video/runtime tranche is the StableNew-owned secondary motion layer.
 
 ### `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
 
-Status: Planned
+Status: Completed 2026-03-21
 
 Freeze the secondary-motion outer contract before any backend behavior change.
 
@@ -204,6 +204,19 @@ Required outputs:
   `motion_profile`
 - runner observation-only policy metadata for the existing video stages
 - a StableNew-owned `src/video/motion/` package boundary and schema document
+
+Delivered outcomes:
+
+- `src/video/motion/` now exists as a StableNew-owned pure policy subsystem
+- `secondary_motion` survives canonicalization and all current NJR builder paths
+- runner video requests now carry observation-only
+  `context_metadata["secondary_motion_policy"]`
+- run metadata now records `secondary_motion` stage-policy observations without
+  changing backend output behavior
+
+Schema reference:
+
+- `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 
 Guiding roadmap:
 

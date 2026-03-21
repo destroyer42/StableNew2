@@ -9,7 +9,7 @@ from pathlib import Path
 class PromptPackListManager:
     """Manages loading, saving, and editing custom prompt pack lists."""
 
-    def __init__(self, file_path: str = "custom_pack_lists.json"):
+    def __init__(self, file_path: str = "state/custom_pack_lists.json"):
         """
         Initializes the list manager.
 
@@ -37,6 +37,7 @@ class PromptPackListManager:
     def _save(self) -> bool:
         """Saves the current lists to the JSON file."""
         try:
+            self.file_path.parent.mkdir(parents=True, exist_ok=True)
             with self.file_path.open("w", encoding="utf-8") as f:
                 json.dump(self.lists, f, indent=2, ensure_ascii=False)
             return True

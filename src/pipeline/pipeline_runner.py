@@ -17,7 +17,10 @@ from src.gui.state import CancellationError
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
-from src.pipeline.config_contract_v26 import extract_adaptive_refinement_intent
+from src.pipeline.config_contract_v26 import (
+    extract_adaptive_refinement_intent,
+    extract_secondary_motion_intent,
+)
 from src.pipeline.artifact_contract import canonicalize_variant_entries
 from src.pipeline.executor import Pipeline
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -39,6 +42,7 @@ from src.refinement.subject_scale_policy_service import SubjectScalePolicyServic
 from src.state.output_routing import classify_njr_output_route, get_output_route_root
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
+from src.video.motion.secondary_motion_policy_service import SecondaryMotionPolicyService
 from src.video.video_backend_registry import VideoBackendRegistry, build_default_video_backend_registry
 from src.video.video_backend_types import VideoExecutionRequest, VideoExecutionResult
 
@@ -315,6 +319,21 @@ class PipelineRunner:
             config_dict["enabled"] = True
             if njr.scheduler:
                 config_dict["scheduler"] = njr.scheduler
+        secondary_motion_intent = extract_secondary_motion_intent(
+            getattr(njr, "intent_config", None) or {}
+        )
+        secondary_motion_enabled = bool(secondary_motion_intent.get("enabled")) and str(
+            secondary_motion_intent.get("mode") or "disabled"
+        ).lower() in {"observe", "apply"}
+        secondary_motion_subject_summary = self._extract_secondary_motion_subject_summary(metadata)
+        if secondary_motion_enabled:
+            metadata.setdefault(
+                "secondary_motion",
+                {
+                    "intent": dict(secondary_motion_intent),
+                    "video_stage_policies": [],
+                },
+            )
 
         next_stage_paths: list[str] = []
         manifest_paths: list[str] = []
@@ -366,6 +385,26 @@ class PipelineRunner:
                     for item in raw_mid_anchor_paths
                     if item
                 ]
+            secondary_motion_observation: dict[str, Any] | None = None
+            request_context_metadata = {
+                "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
+                "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
+                "variant_index": getattr(njr, "variant_index", 0),
+                "batch_index": img_idx,
+            }
+            if secondary_motion_enabled:
+                secondary_motion_observation = self._secondary_motion_policy_service.build_observation(
+                    intent=secondary_motion_intent,
+                    stage_name=stage_name,
+                    backend_id=backend.backend_id,
+                    prompt=prompt,
+                    negative_prompt=negative_prompt,
+                    motion_profile=str(config_dict.get("motion_profile") or ""),
+                    subject_summary=secondary_motion_subject_summary,
+                )
+                request_context_metadata["secondary_motion_policy"] = dict(
+                    secondary_motion_observation["policy"]
+                )
 
             request = VideoExecutionRequest(
                 backend_id=backend.backend_id,
@@ -386,16 +425,35 @@ class PipelineRunner:
                 workflow_version=str(config_dict.get("workflow_version") or "") or None,
                 backend_options=dict(config_dict.get("backend_options") or {}),
                 cancel_token=cancel_token,
-                context_metadata={
-                    "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
-                    "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
-                    "variant_index": getattr(njr, "variant_index", 0),
-                    "batch_index": img_idx,
-                },
+                context_metadata=request_context_metadata,
             )
             execution_result = backend.execute(self._pipeline, request)
             if execution_result is None:
                 continue
+            if secondary_motion_enabled and secondary_motion_observation:
+                secondary_motion_payload = metadata.setdefault(
+                    "secondary_motion",
+                    {
+                        "intent": dict(secondary_motion_intent),
+                        "video_stage_policies": [],
+                    },
+                )
+                stage_policy_entry = {
+                    "stage_name": stage_name,
+                    "backend_id": backend.backend_id,
+                    "batch_index": img_idx,
+                    "motion_profile": str(config_dict.get("motion_profile") or ""),
+                    "policy": dict(secondary_motion_observation["policy"]),
+                    "prompt_features": dict(secondary_motion_observation["prompt_features"]),
+                    "subject_summary": dict(secondary_motion_observation["subject_summary"]),
+                }
+                if input_path:
+                    stage_policy_entry["input_image_path"] = str(input_path)
+                secondary_motion_payload["primary_policy"] = dict(
+                    secondary_motion_payload.get("primary_policy")
+                    or secondary_motion_observation["policy"]
+                )
+                secondary_motion_payload["video_stage_policies"].append(stage_policy_entry)
 
             backend_results.append(execution_result)
             variant_payload = execution_result.to_variant_payload()
@@ -772,8 +830,17 @@ class PipelineRunner:
         manifests_dir = run_dir / "manifests"
         manifests_dir.mkdir(exist_ok=True)
         
-        logger.info(f"ðŸŽ¯ [OUTPUT_PATH] Images will be saved to: {run_dir.absolute()}")
-        logger.info(f"ðŸŽ¯ [OUTPUT_PATH] Manifests will be saved to: {manifests_dir.absolute()}")
+        log_with_ctx(
+            logger,
+            logging.INFO,
+            "[pipeline/output] resolved output directories",
+            ctx=LogContext(subsystem="pipeline"),
+            extra_fields={
+                "event": "output_dirs_resolved",
+                "output_dir": str(run_dir.absolute()),
+                "manifests_dir": str(manifests_dir.absolute()),
+            },
+        )
         
         # PR-PIPE-001: Set current job ID on executor for manifest tracking
         self._pipeline._current_job_id = njr.job_id
@@ -879,16 +946,20 @@ class PipelineRunner:
             start_stage = getattr(njr, "start_stage", None)
             if input_images:
                 current_stage_paths = list(input_images)
-                logger.info(f"ðŸ”„ [REPROCESS] Starting with {len(current_stage_paths)} input images: {[str(p) for p in input_images[:3]]}")
+                logger.info(
+                    "[pipeline/reprocess] starting with %s input image(s): %s",
+                    len(current_stage_paths),
+                    [str(p) for p in input_images[:3]],
+                )
                 # Verify input files exist
                 for img_path in input_images:
                     if not Path(img_path).exists():
-                        logger.error(f"ðŸ”„ [REPROCESS] ERROR: Input image not found: {img_path}")
+                        logger.error("[pipeline/reprocess] input image not found: %s", img_path)
                         raise FileNotFoundError(f"Reprocess input image not found: {img_path}")
                 if start_stage:
-                    logger.info(f"ðŸ”„ [REPROCESS] Will start from stage: {start_stage}")
+                    logger.info("[pipeline/reprocess] will start from stage=%s", start_stage)
             else:
-                logger.info("ðŸ”µ [PIPELINE] Normal job (not reprocessing)")
+                logger.info("[pipeline] normal job (not reprocessing)")
             
             # Track whether we've reached the start_stage (for reprocessing mode)
             reached_start_stage = (start_stage is None)  # If no start_stage, begin immediately
@@ -918,8 +989,8 @@ class PipelineRunner:
                     # Serialize txt2img API batches to reduce WebUI post-sampling finalize pressure.
                     batch_size_value = 1
                     n_iter_value = image_count
-                    logger.info(
-                        "ðŸ”µ [BATCH_SIZE_DEBUG] pipeline_runner: njr.images_per_prompt=%s, using batch_size=%s, n_iter=%s",
+                    logger.debug(
+                        "[pipeline/txt2img] images_per_prompt=%s batch_size=%s n_iter=%s",
                         njr.images_per_prompt,
                         batch_size_value,
                         n_iter_value,
@@ -987,15 +1058,15 @@ class PipelineRunner:
                             payload[key] = njr.extra_metadata[key]
                     
                     # Debug logging for hires fix
-                    logger.info("ðŸ”µ [HIRES_DEBUG] payload: enable_hr=%s, hr_scale=%s, hr_upscaler=%s, hr_second_pass_steps=%s, denoise=%s",
+                    logger.debug("[pipeline/txt2img] hires payload enable_hr=%s hr_scale=%s hr_upscaler=%s hr_second_pass_steps=%s denoise=%s",
                                payload.get("enable_hr"), payload.get("hr_scale"), payload.get("hr_upscaler"),
                                payload.get("hr_second_pass_steps"), payload.get("denoising_strength"))
                     # Add pipeline section for global negative settings
                     if isinstance(njr_config, dict) and "pipeline" in njr_config:
                         payload["pipeline"] = njr_config["pipeline"]
                     
-                    logger.info(
-                        "ðŸ”µ [BATCH_SIZE_DEBUG] pipeline_runner: payload['batch_size']=%s, payload['n_iter']=%s",
+                    logger.debug(
+                        "[pipeline/txt2img] payload batch_size=%s n_iter=%s",
                         payload.get('batch_size'),
                         payload.get('n_iter'),
                     )
@@ -1028,7 +1099,7 @@ class PipelineRunner:
                     # Extract ALL image paths from metadata for batch processing
                     if result and "all_paths" in result:
                         current_stage_paths = result["all_paths"]
-                        logger.info(f"ðŸ”µ [BATCH_PIPELINE] txt2img produced {len(current_stage_paths)} images")
+                        logger.info("[pipeline/txt2img] produced %s image(s)", len(current_stage_paths))
                     elif result and "path" in result:
                         # Fallback for single image (backward compatibility)
                         current_stage_paths = [result["path"]]
@@ -1082,7 +1153,11 @@ class PipelineRunner:
                     use_original_name = original_inputs and getattr(njr, 'start_stage', None)
                     
                     for img_idx, input_path in enumerate(current_stage_paths):
-                        logger.info(f"ðŸ”µ [BATCH_PIPELINE] Processing img2img for image {img_idx + 1}/{len(current_stage_paths)}")
+                        logger.debug(
+                            "[pipeline/img2img] processing image %s/%s",
+                            img_idx + 1,
+                            len(current_stage_paths),
+                        )
                         # For reprocess jobs, include original filename to prevent collisions
                         if use_original_name and img_idx < len(original_inputs):
                             input_stem = PathLib(original_inputs[img_idx]).stem[:30]  # First 30 chars of original filename
@@ -1112,7 +1187,7 @@ class PipelineRunner:
                     
                     # Update current_stage_paths for next stage
                     current_stage_paths = next_stage_paths
-                    logger.info(f"ðŸ”µ [BATCH_PIPELINE] img2img completed {len(current_stage_paths)} images")
+                    logger.info("[pipeline/img2img] completed %s image(s)", len(current_stage_paths))
                     
                 elif stage.stage_name == "adetailer":
                     if not current_stage_paths:
@@ -1146,12 +1221,12 @@ class PipelineRunner:
                         config_dict["scheduler"] = njr.scheduler
                     
                     # Debug logging
-                    logger.info("ðŸ”µ [ADETAILER_CONFIG_DEBUG] config_dict keys: %s", list(config_dict.keys()))
-                    logger.info("ðŸ”µ [ADETAILER_CONFIG_DEBUG] adetailer_steps=%s, adetailer_denoise=%s, adetailer_cfg=%s",
+                    logger.debug("[pipeline/adetailer] config keys=%s", list(config_dict.keys()))
+                    logger.debug("[pipeline/adetailer] steps=%s denoise=%s cfg=%s",
                                config_dict.get("adetailer_steps", "NOT SET"),
                                config_dict.get("adetailer_denoise", "NOT SET"),
                                config_dict.get("adetailer_cfg", "NOT SET"))
-                    logger.info("ðŸ”µ [ADETAILER_PROMPT_DEBUG] adetailer_prompt='%s', adetailer_negative='%s'",
+                    logger.debug("[pipeline/adetailer] prompt='%s' negative='%s'",
                                config_dict.get("adetailer_prompt", "(not set)")[:60],
                                config_dict.get("adetailer_negative_prompt", "(not set)")[:60])
                     
@@ -1191,13 +1266,17 @@ class PipelineRunner:
                     use_original_name = original_inputs and getattr(njr, 'start_stage', None)
                     
                     for img_idx, input_path in enumerate(current_stage_paths):
-                        logger.info(f"ðŸ”µ [BATCH_PIPELINE] Processing adetailer for image {img_idx + 1}/{len(current_stage_paths)}")
+                        logger.debug(
+                            "[pipeline/adetailer] processing image %s/%s",
+                            img_idx + 1,
+                            len(current_stage_paths),
+                        )
                         
                         # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
                         if use_original_name and img_idx > 0:  # Not first image (first one is fresh)
                             try:
                                 if client and hasattr(client, "free_vram"):
-                                    logger.info("ðŸ§¹ Freeing VRAM BEFORE adetailer image...")
+                                    logger.info("[pipeline/adetailer] freeing VRAM before image")
                                     client.free_vram(unload_model=True)
                                     time.sleep(1.0)  # Give WebUI time to stabilize
                             except Exception:
@@ -1252,7 +1331,7 @@ class PipelineRunner:
                         )
                         # Collect output path from this image
                         if result and "path" in result:
-                            logger.info(f"âœ… [ADETAILER_OUTPUT] Saved: {result['path']}")
+                            logger.info("[pipeline/adetailer] saved output=%s", result["path"])
                             next_stage_paths.append(result["path"])
                             if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
                                 metadata["adaptive_refinement"]["image_decisions"].append(
@@ -1265,7 +1344,7 @@ class PipelineRunner:
                                     }
                                 )
                         else:
-                            logger.warning(f"âŒ [ADETAILER_OUTPUT] No output from image {img_idx}")
+                            logger.warning("[pipeline/adetailer] no output from image index=%s", img_idx)
                             if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
                                 metadata["adaptive_refinement"]["image_decisions"].append(
                                     {
@@ -1283,14 +1362,14 @@ class PipelineRunner:
                         if use_original_name and img_idx < len(current_stage_paths) - 1:  # Not last image
                             try:
                                 if client and hasattr(client, "free_vram"):
-                                    logger.info("ðŸ§¹ Freeing VRAM between adetailer images...")
+                                    logger.info("[pipeline/adetailer] freeing VRAM between images")
                                     client.free_vram(unload_model=True)
                             except Exception:
                                 pass  # Non-fatal
                     
                     # Update current_stage_paths for next stage
                     current_stage_paths = next_stage_paths
-                    logger.info(f"ðŸ”µ [BATCH_PIPELINE] adetailer completed {len(current_stage_paths)} images")
+                    logger.info("[pipeline/adetailer] completed %s image(s)", len(current_stage_paths))
                     
                 elif stage.stage_name == "upscale":
                     if not current_stage_paths:
@@ -1303,9 +1382,9 @@ class PipelineRunner:
                         config_dict = asdict(stage_config)
                         # Flatten 'extra' dict to top level for executor
                         if "extra" in config_dict:
-                            logger.info(f"ðŸ”µ [UPSCALE_CONFIG_DEBUG] extra dict before flatten: {config_dict['extra']}")
+                            logger.debug("[pipeline/upscale] extra config before flatten=%s", config_dict["extra"])
                             config_dict.update(config_dict.pop("extra"))
-                            logger.info(f"ðŸ”µ [UPSCALE_CONFIG_DEBUG] config_dict after flatten - upscaler={config_dict.get('upscaler')}")
+                            logger.debug("[pipeline/upscale] config after flatten upscaler=%s", config_dict.get("upscaler"))
                     else:
                         config_dict = {}
                         logger.warning("[UPSCALE_CONFIG_DEBUG] No upscale stage config found in stage_chain")
@@ -1350,13 +1429,17 @@ class PipelineRunner:
                     use_original_name = original_inputs and getattr(njr, 'start_stage', None)
                     
                     for img_idx, input_path in enumerate(current_stage_paths):
-                        logger.info(f"ðŸ”µ [BATCH_PIPELINE] Processing upscale for image {img_idx + 1}/{len(current_stage_paths)}")
+                        logger.debug(
+                            "[pipeline/upscale] processing image %s/%s",
+                            img_idx + 1,
+                            len(current_stage_paths),
+                        )
                         
                         # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
                         if use_original_name and img_idx > 0:  # Not first image
                             try:
                                 if client and hasattr(client, "free_vram"):
-                                    logger.info("ðŸ§¹ Freeing VRAM BEFORE upscale image...")
+                                    logger.info("[pipeline/upscale] freeing VRAM before image")
                                     client.free_vram(unload_model=True)
                                     time.sleep(1.0)  # Give WebUI time to stabilize
                             except Exception:
@@ -1411,7 +1494,7 @@ class PipelineRunner:
                         )
                         # Collect output path from this image
                         if result and "path" in result:
-                            logger.info(f"âœ… [UPSCALE_OUTPUT] Saved: {result['path']}")
+                            logger.info("[pipeline/upscale] saved output=%s", result["path"])
                             next_stage_paths.append(result["path"])
                             if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
                                 metadata["adaptive_refinement"]["image_decisions"].append(
@@ -1425,7 +1508,7 @@ class PipelineRunner:
                                     }
                                 )
                         else:
-                            logger.warning(f"âŒ [UPSCALE_OUTPUT] No output from image {img_idx}")
+                            logger.warning("[pipeline/upscale] no output from image index=%s", img_idx)
                             if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
                                 metadata["adaptive_refinement"]["image_decisions"].append(
                                     {
@@ -1441,7 +1524,7 @@ class PipelineRunner:
                         
                     # Update current_stage_paths for next stage
                     current_stage_paths = next_stage_paths
-                    logger.info(f"ðŸ”µ [BATCH_PIPELINE] upscale completed {len(current_stage_paths)} images")
+                    logger.info("[pipeline/upscale] completed %s image(s)", len(current_stage_paths))
                     
                 elif self._video_backends.is_registered_stage(stage.stage_name):
                     if not current_stage_paths:
@@ -1542,7 +1625,7 @@ class PipelineRunner:
                 metadata["adaptive_refinement"] = refinement_payload
         except Exception as exc:
             error = str(exc)
-            logger.error(f"âŒ Pipeline execution failed: {exc}", exc_info=True)
+            logger.error("[pipeline] execution failed: %s", exc, exc_info=True)
             stage_events.append(
                 {
                     "stage": stage.stage_name if "stage" in locals() else "pipeline",
@@ -1595,9 +1678,18 @@ class PipelineRunner:
             result.to_dict(),
             njr_snapshot=njr_snapshot,
         )
-        logger.info(f"ðŸ” DEBUG: PipelineRunResult created with success={success}, error={error}, variants={len(variants)}")
+        logger.debug(
+            "[pipeline/result] PipelineRunResult created success=%s error=%s variants=%s",
+            success,
+            error,
+            len(variants),
+        )
         result_dict = result.to_dict()
-        logger.info(f"ðŸ” DEBUG: to_dict() success={result_dict.get('success')}, error={result_dict.get('error')}")
+        logger.debug(
+            "[pipeline/result] result.to_dict success=%s error=%s",
+            result_dict.get("success"),
+            result_dict.get("error"),
+        )
         try:
             njr.output_paths = list(current_stage_paths or [])
             artifact_thumbnail = (
@@ -1707,6 +1799,7 @@ class PipelineRunner:
         self._video_backends = video_backend_registry or build_default_video_backend_registry()
         self._prompt_intent_analyzer = PromptIntentAnalyzer()
         self._refinement_policy_service = SubjectScalePolicyService()
+        self._secondary_motion_policy_service = SecondaryMotionPolicyService()
 
     def _resolve_refinement_policy_service(
         self,
@@ -1784,6 +1877,36 @@ class PipelineRunner:
             cache[key] = dict(assessment)
             assessments.append(dict(assessment))
         return assessments, notes
+
+    @staticmethod
+    def _extract_secondary_motion_subject_summary(metadata: Mapping[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(metadata, Mapping):
+            return {}
+        refinement_payload = metadata.get("adaptive_refinement")
+        if not isinstance(refinement_payload, Mapping):
+            return {}
+        decision_bundle = refinement_payload.get("decision_bundle")
+        if isinstance(decision_bundle, Mapping):
+            observation = decision_bundle.get("observation")
+            if isinstance(observation, Mapping):
+                subject_assessment = observation.get("subject_assessment")
+                if isinstance(subject_assessment, Mapping):
+                    return dict(subject_assessment)
+        image_decisions = refinement_payload.get("image_decisions")
+        if isinstance(image_decisions, list):
+            for item in image_decisions:
+                if not isinstance(item, Mapping):
+                    continue
+                decision_bundle = item.get("decision_bundle")
+                if not isinstance(decision_bundle, Mapping):
+                    continue
+                observation = decision_bundle.get("observation")
+                if not isinstance(observation, Mapping):
+                    continue
+                subject_assessment = observation.get("subject_assessment")
+                if isinstance(subject_assessment, Mapping):
+                    return dict(subject_assessment)
+        return {}
 
     def _ensure_not_cancelled(self, cancel_token: CancelToken | None, context: str) -> None:
         if (

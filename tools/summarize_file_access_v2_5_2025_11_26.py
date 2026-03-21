@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 LOG_DIR = Path("logs/file_access")
-INVENTORY_PATH = Path("repo_inventory.json")
+INVENTORY_PATH = Path("inventory") / "repo_inventory.json"
 REPORT_DIR = Path("reports/file_access")
 CSV_PATH = REPORT_DIR / "file_access_summary.csv"
 MD_PATH = REPORT_DIR / "CLEANHOUSE_REPORT_V2_5_2025_11_26.md"

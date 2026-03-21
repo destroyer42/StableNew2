@@ -349,3 +349,38 @@ def test_prompt_pack_job_builder_preserves_adaptive_refinement_intent(tmp_path: 
     assert records
     assert records[0].intent_config["adaptive_refinement"]["enabled"] is True
     assert records[0].intent_config["adaptive_refinement"]["mode"] == "observe"
+
+
+def test_prompt_pack_job_builder_preserves_secondary_motion_intent(tmp_path: Path) -> None:
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=StubConfigManager(tmp_path),
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+    )
+    entry = PackJobEntry(
+        pack_id="motion-pack",
+        pack_name="Motion Pack",
+        prompt_text="A portrait",
+        config_snapshot={
+            "secondary_motion": {
+                "schema": "stablenew.secondary-motion.v1",
+                "enabled": True,
+                "mode": "observe",
+                "intent": "micro_sway",
+                "regions": ["hair"],
+                "allow_prompt_bias": False,
+                "allow_native_backend": False,
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            }
+        },
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    assert records[0].intent_config["secondary_motion"]["enabled"] is True
+    assert records[0].intent_config["secondary_motion"]["mode"] == "observe"

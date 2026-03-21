@@ -308,7 +308,12 @@ class _ApiTab(ttk.Frame):
         bundle_cmd = getattr(controller, "generate_diagnostics_bundle_manual", None)
         log_frame = ttk.Frame(self)
         log_frame.pack(fill=tk.BOTH, expand=True)
-        panel = LogTracePanelV2(log_frame, log_handler=log_handler, on_generate_bundle=bundle_cmd)
+        panel = LogTracePanelV2(
+            log_frame,
+            log_handler=log_handler,
+            on_generate_bundle=bundle_cmd,
+            audience="trace",
+        )
         panel.pack(fill=tk.BOTH, expand=True)
 
 

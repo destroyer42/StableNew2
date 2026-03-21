@@ -2,7 +2,7 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-20
+Updated: 2026-03-21
 
 ## 0. Purpose
 
@@ -37,6 +37,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/Image_Metadata_Contract_v2.6.md`
 - `docs/StableNew Secondary Motion Layer Design.md`
 - `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
+- `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 - `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
 - `docs/WebUI Restart and Lost Connection Investigation 2026-03-20.md`
 - `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
@@ -48,6 +49,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 - `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
 - `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 - `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
 - `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
@@ -73,6 +75,10 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 - `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 - `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+- `docs/PR_Backlog/PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization.md`
+- `docs/PR_Backlog/PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters.md`
+- `docs/PR_Backlog/PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup.md`
+- `docs/PR_Backlog/PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split.md`
 
 ### 1.5 Reference and history
 

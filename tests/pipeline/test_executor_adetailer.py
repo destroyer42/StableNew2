@@ -210,3 +210,44 @@ def test_adetailer_payload_pins_requested_sd_checkpoint_and_manifest_prefers_it(
         assert payload["sd_model"] == "base-model.safetensors"
         assert payload["override_settings"]["sd_model_checkpoint"] == "base-model.safetensors"
         assert result["model"] == "base-model.safetensors"
+
+
+def test_adetailer_uses_request_override_without_global_model_switch() -> None:
+    """ADetailer should pin the request locally without calling WebUI /options model switching."""
+    pipeline = Pipeline(Mock(), Mock())
+    pipeline.client.set_model = Mock()
+    pipeline.client.set_vae = Mock()
+    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
+
+    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
+         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
+         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
+         patch("builtins.open", MagicMock()):
+
+        config = {
+            "adetailer_enabled": True,
+            "adetailer_model": "face_yolov8n.pt",
+            "adetailer_steps": 20,
+            "model": "base-model.safetensors",
+            "sd_model_checkpoint": "base-model.safetensors",
+            "sd_vae": "base-vae.safetensors",
+        }
+
+        result = pipeline.run_adetailer(
+            input_image_path=Path("input.png"),
+            prompt="test prompt",
+            negative_prompt="test negative",
+            config=config,
+            run_dir=Path("output"),
+            image_name="test",
+        )
+
+    assert result is not None
+    payload = generate_mock.call_args.args[1]
+    assert payload["sd_model"] == "base-model.safetensors"
+    assert payload["override_settings"]["sd_model_checkpoint"] == "base-model.safetensors"
+    assert payload["sd_vae"] == "base-vae.safetensors"
+    assert payload["override_settings"]["sd_vae"] == "base-vae.safetensors"
+    pipeline.client.set_model.assert_not_called()
+    pipeline.client.set_vae.assert_not_called()

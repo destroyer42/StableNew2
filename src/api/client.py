@@ -65,6 +65,8 @@ POOL_BLOCK = True
 DEFAULT_CONNECT_TIMEOUT = 3.0
 DEFAULT_READ_TIMEOUT = 60.0
 OPTIONS_POST_MIN_INTERVAL = 6.0
+UPSCALE_SINGLE_IMAGE_TIMEOUT = 300.0
+RESOURCE_ENDPOINT_RETRY_COOLDOWN_SEC = 15.0
 
 # PR-HARDEN-001: Reduced generation timeout for faster failure detection
 DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
@@ -171,6 +173,7 @@ class SDWebUIClient:
         )
         self._session_id = id(self._session)
         self._last_http_500_summary: dict[str, Any] | None = None
+        self._resource_endpoint_cooldowns: dict[str, float] = {}
 
     def _build_http_session(self) -> requests.Session:
         session = requests.Session()
@@ -665,6 +668,28 @@ class SDWebUIClient:
             return False, "throttle"
         return True, None
 
+    def _resource_endpoint_on_cooldown(self, endpoint: str) -> bool:
+        until = self._resource_endpoint_cooldowns.get(endpoint, 0.0)
+        now = time.monotonic()
+        if until > now:
+            logger.debug(
+                "Skipping %s fetch; endpoint cooldown active for %.1fs",
+                endpoint,
+                until - now,
+            )
+            return True
+        if until:
+            self._resource_endpoint_cooldowns.pop(endpoint, None)
+        return False
+
+    def _mark_resource_endpoint_failed(self, endpoint: str) -> None:
+        self._resource_endpoint_cooldowns[endpoint] = (
+            time.monotonic() + RESOURCE_ENDPOINT_RETRY_COOLDOWN_SEC
+        )
+
+    def _clear_resource_endpoint_failure(self, endpoint: str) -> None:
+        self._resource_endpoint_cooldowns.pop(endpoint, None)
+
     def _option_supports(self, key: str) -> bool:
         """Return True if the API advertises the given /options key."""
 
@@ -911,7 +936,17 @@ class SDWebUIClient:
         Returns:
             Response data including base64 encoded images
         """
-        logger.info("🔵 [BATCH_SIZE_DEBUG] client.txt2img: Received payload with batch_size=%s, n_iter=%s", payload.get('batch_size'), payload.get('n_iter'))
+        log_with_ctx(
+            logger,
+            logging.DEBUG,
+            "[api/request] txt2img payload received",
+            ctx=LogContext(subsystem="api", stage="txt2img"),
+            extra_fields={
+                "event": "txt2img_payload_received",
+                "batch_size": payload.get("batch_size"),
+                "n_iter": payload.get("n_iter"),
+            },
+        )
         with self._request_context(
             "post",
             "/sdapi/v1/txt2img",
@@ -1106,6 +1141,7 @@ class SDWebUIClient:
         gfpgan_visibility: float = 0.0,
         codeformer_visibility: float = 0.0,
         codeformer_weight: float = 0.5,
+        timeout: float | None = None,
     ) -> dict[str, Any] | None:
         """
         Upscale image using extra upscalers with optional face restoration.
@@ -1142,7 +1178,7 @@ class SDWebUIClient:
             "Upscale payload built",
             ctx=ctx,
             extra_fields={
-                "endpoint": "/sdapi/v1/extra-single-image",
+            "endpoint": "/sdapi/v1/extra-single-image",
                 "image_len": len(payload["image"]),
                 "upscaler": upscaler,
                 "scale": upscaling_resize,
@@ -1154,6 +1190,7 @@ class SDWebUIClient:
             json=payload,
             stage="upscale",
             policy=UPSCALE_RETRY_POLICY,
+            timeout=timeout or UPSCALE_SINGLE_IMAGE_TIMEOUT,
         ) as response:
             if response is None:
                 _log_stage_failure("upscale", "No response from extra-single-image")
@@ -1331,17 +1368,23 @@ class SDWebUIClient:
         Returns:
             List of model information
         """
+        endpoint = "/sdapi/v1/sd-models"
+        if self._resource_endpoint_on_cooldown(endpoint):
+            return []
 
-        with self._request_context("get", "/sdapi/v1/sd-models", timeout=10) as response:
+        with self._request_context("get", endpoint, timeout=10) as response:
             if response is None:
+                self._mark_resource_endpoint_failed(endpoint)
                 return []
 
             try:
                 data = response.json()
             except ValueError as exc:
                 logger.error(f"Failed to parse models response: {exc}")
+                self._mark_resource_endpoint_failed(endpoint)
                 return []
 
+        self._clear_resource_endpoint_failure(endpoint)
         logger.debug("Retrieved %s models", len(data))
         return data
 
@@ -1352,16 +1395,23 @@ class SDWebUIClient:
         Returns:
             List of VAE model information
         """
-        with self._request_context("get", "/sdapi/v1/sd-vae", timeout=10) as response:
+        endpoint = "/sdapi/v1/sd-vae"
+        if self._resource_endpoint_on_cooldown(endpoint):
+            return []
+
+        with self._request_context("get", endpoint, timeout=10) as response:
             if response is None:
+                self._mark_resource_endpoint_failed(endpoint)
                 return []
 
             try:
                 data = response.json()
             except ValueError as exc:
                 logger.error(f"Failed to parse VAE models response: {exc}")
+                self._mark_resource_endpoint_failed(endpoint)
                 return []
 
+        self._clear_resource_endpoint_failure(endpoint)
         logger.debug("Retrieved %s VAE models", len(data))
         return data
 
@@ -1789,7 +1839,7 @@ class SDWebUIClient:
             try:
                 data = response.json()
                 model = data.get("sd_model_checkpoint")
-                logger.info(f"✅ get_current_model: {model}")
+                logger.debug("[api/model] current model=%s", model)
                 return model
             except ValueError as exc:
                 logger.error(f"Failed to parse current model response: {exc}")
@@ -1812,9 +1862,9 @@ class SDWebUIClient:
                 vae = data.get("sd_vae")
                 # WebUI returns "Automatic" or "None" when no VAE is explicitly set
                 if vae in ("Automatic", "None", None, ""):
-                    logger.info("✅ get_current_vae: Automatic")
+                    logger.debug("[api/vae] current vae=Automatic")
                     return "Automatic"
-                logger.info(f"✅ get_current_vae: {vae}")
+                logger.debug("[api/vae] current vae=%s", vae)
                 return vae
             except ValueError as exc:
                 logger.error(f"Failed to parse current VAE response: {exc}")

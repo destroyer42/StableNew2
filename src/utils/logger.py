@@ -23,6 +23,42 @@ _structured_logger_registry: weakref.WeakSet[Any] = weakref.WeakSet()
 _async_log_queue: queue.Queue[logging.LogRecord] | None = None
 _async_queue_listener: QueueListener | None = None
 
+_ASCII_REPLACEMENTS: dict[str, str] = {
+    "→": "->",
+    "—": "-",
+    "–": "-",
+    "▼": "v",
+    "▲": "^",
+    "✅": "[ok]",
+    "❌": "[error]",
+    "⚠️": "[warn]",
+    "⚠": "[warn]",
+    "🔍": "[debug]",
+    "🔵": "[debug]",
+    "📝": "[manifest]",
+    "🎯": "[detail]",
+    "🎨": "[prompt]",
+    "🚫": "[skip]",
+    "🚀": "[request]",
+    "✨": "[detail]",
+    "🔀": "[refiner]",
+    "🛡️": "[safety]",
+    "🛡": "[safety]",
+    "🧹": "[memory]",
+    "⏭️": "[skip]",
+    "⏭": "[skip]",
+}
+_LOG_REQUIRED_FIELDS: tuple[str, ...] = (
+    "event",
+    "subsystem",
+    "stage",
+    "job_id",
+    "run_id",
+    "image_index",
+    "duration_ms",
+    "outcome",
+)
+
 def get_structured_logger_registry_count() -> int:
     """Return the current count of active StructuredLogger instances."""
     return len(_structured_logger_registry)
@@ -48,6 +84,16 @@ def close_all_structured_loggers() -> None:
 def get_logger(name: str) -> logging.Logger:
     """Return a module logger with a single indirection for future tweaks."""
     return logging.getLogger(name)
+
+
+def normalize_log_message(value: str) -> str:
+    """Normalize UI-facing log text to stable ASCII-friendly output."""
+    text = str(value or "")
+    for source, replacement in _ASCII_REPLACEMENTS.items():
+        text = text.replace(source, replacement)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = " ".join(text.split())
+    return text
 
 
 def install_async_logging(
@@ -249,24 +295,25 @@ def log_with_ctx(
     extra_fields: Mapping[str, Any] | None = None,
 ) -> None:
     """Log a message with optional structured context, appended as JSON."""
+    normalized_message = normalize_log_message(message)
     payload: dict[str, Any] = {}
     if ctx is not None:
         payload.update(ctx.to_dict())
     if extra_fields:
         payload.update(extra_fields)
-    json_payload: dict[str, Any] = {"message": message}
+    json_payload: dict[str, Any] = {"message": normalized_message}
     json_payload.update(payload)
 
     if payload:
         logger.log(
             level,
             "%s | %s",
-            message,
+            normalized_message,
             json.dumps(payload, sort_keys=True, ensure_ascii=False),
             extra={"json_payload": json_payload},
         )
     else:
-        logger.log(level, "%s", message, extra={"json_payload": json_payload})
+        logger.log(level, "%s", normalized_message, extra={"json_payload": json_payload})
 
 
 class InMemoryLogHandler(logging.Handler):
@@ -280,27 +327,69 @@ class InMemoryLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            msg = self.format(record)
+            msg = normalize_log_message(self.format(record))
         except Exception:
-            msg = record.getMessage()
+            msg = normalize_log_message(record.getMessage())
+
+        payload = getattr(record, "json_payload", None)
+        if isinstance(payload, dict):
+            payload = self._normalize_payload(payload)
 
         entry = {
             "level": record.levelname,
             "name": record.name,
             "message": msg,
             "created": record.created,
+            "first_created": record.created,
+            "last_created": record.created,
+            "repeat_count": 1,
         }
-        payload = getattr(record, "json_payload", None)
         if payload is not None:
             entry["payload"] = payload
 
         with self._lock:
+            if self._entries and self._same_entry(self._entries[-1], entry):
+                current = self._entries[-1]
+                current["repeat_count"] = int(current.get("repeat_count", 1)) + 1
+                current["last_created"] = record.created
+                return
             self._entries.append(entry)
 
     def get_entries(self) -> Iterable[dict[str, Any]]:
         """Return a snapshot of the current entries."""
         with self._lock:
             return list(self._entries)
+
+    def _normalize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(payload)
+        message = normalized.get("message")
+        if isinstance(message, str):
+            normalized["message"] = normalize_log_message(message)
+        event = normalized.get("event")
+        if isinstance(event, str):
+            normalized["event"] = normalize_log_message(event)
+        return normalized
+
+    def _same_entry(self, left: dict[str, Any], right: dict[str, Any]) -> bool:
+        if left.get("level") != right.get("level"):
+            return False
+        if left.get("name") != right.get("name"):
+            return False
+        if left.get("message") != right.get("message"):
+            return False
+        return self._entry_signature(left.get("payload")) == self._entry_signature(right.get("payload"))
+
+    def _entry_signature(self, payload: Any) -> tuple[Any, ...] | None:
+        if not isinstance(payload, dict):
+            return None
+        signature: list[Any] = []
+        for key in _LOG_REQUIRED_FIELDS:
+            signature.append(payload.get(key))
+        envelope = payload.get("error_envelope") or payload.get("envelope")
+        if isinstance(envelope, dict):
+            signature.append(envelope.get("error_type"))
+            signature.append(envelope.get("severity"))
+        return tuple(signature)
 
 
 def attach_gui_log_handler(max_entries: int = 500) -> InMemoryLogHandler:

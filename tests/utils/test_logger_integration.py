@@ -21,8 +21,14 @@ def test_log_with_ctx_appends_context() -> None:
         assert "run-123" in msg
         assert "txt2img" in msg
         assert "pipeline" in msg
+        payload = entries[-1]["payload"]
+        assert payload["message"] == "stage started"
+        assert payload["run_id"] == "run-123"
+        assert payload["stage"] == "txt2img"
+        assert payload["subsystem"] == "pipeline"
     finally:
         logger.setLevel(original_level)
+        logger.removeHandler(handler)
 
 
 def test_inmemory_log_handler_respects_max_entries() -> None:
@@ -40,6 +46,7 @@ def test_inmemory_log_handler_respects_max_entries() -> None:
         assert any("message-9" in entry["message"] for entry in entries)
     finally:
         logger.setLevel(original_level)
+        logger.removeHandler(handler)
 
 
 def test_attach_gui_log_handler() -> None:
@@ -59,3 +66,4 @@ def test_attach_gui_log_handler() -> None:
     entries = list(handler.get_entries())
     assert len(entries) >= 1
     assert "test message" in entries[-1]["message"]
+    root_logger.removeHandler(handler)

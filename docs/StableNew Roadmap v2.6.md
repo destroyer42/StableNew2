@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-20  
+Updated: 2026-03-21  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -40,7 +40,7 @@ Delivered outcomes:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2580 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2606 collected / 0 skipped`
 
 ## 2. Remaining Structural Debt
 
@@ -528,7 +528,7 @@ Detailed execution spec:
 
 ### 20. `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
 
-Status: Planned
+Status: Completed 2026-03-21
 
 Freeze the secondary-motion outer contract before any backend behavior change.
 
@@ -539,6 +539,20 @@ Primary outcomes:
 - runner observation-only motion planning metadata for the existing video
   stages
 - a StableNew-owned `src/video/motion/` package boundary and schema document
+
+Delivered outcomes:
+
+- `src/video/motion/` now owns the versioned intent and policy carrier
+- `secondary_motion` survives canonicalization and NJR persistence through main,
+  prompt-pack, and CLI builders
+- runner video requests now receive metadata-only
+  `context_metadata["secondary_motion_policy"]`
+- run metadata now records observation-only per-video-stage policies without
+  mutating backend behavior, manifests, or container metadata
+
+Schema reference:
+
+- `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 
 Guiding roadmap:
 
@@ -630,6 +644,41 @@ Primary outcomes:
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+
+## 4A. Post-`PR-VIDEO-241` Structural Queue
+
+The next major queue after the secondary motion tranche is tracked in:
+
+- `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
+
+That queue converts the 2026-03-21 deep-research audit into a repo-truth-based
+remediation sequence. The highest-priority follow-on items are:
+
+- `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
+- `PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation`
+- `PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement`
+- `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
+- `PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards`
+- `PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction`
+- `PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes`
+- `PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization`
+  Completed 2026-03-21
+- `PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters`
+  Completed 2026-03-21
+- `PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup`
+  Completed 2026-03-21
+- `PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split`
+  Completed 2026-03-21
+- `PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation`
+- `PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition`
+- `PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes`
+- `PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion`
+- `PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure`
+- `PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure`
+
+Recommendation L is now delivered through `PR-OBS-249A` through
+`PR-OBS-249D`. After `PR-OBS-249D`, the bottom log is the operator surface and
+the Debug Hub is the detailed trace surface.
 
 ## 5. Missing Common Functionality to Fold Into the Queue
 

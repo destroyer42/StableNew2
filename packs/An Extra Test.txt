@@ -6,72 +6,72 @@ neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fing
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.09890109890109891>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.09890109890109891>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.19780219780219782>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.19780219780219782>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.2967032967032967>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.4120879120879121>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.39560439560439564>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.4945054945054945>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.510989010989011>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.6098901098901099>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.6098901098901099>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.7087912087912087>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.7087912087912087>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.7912087912087913>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.8076923076923077>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8901098901098901>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:0.9065934065934065>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:1.0054945054945055>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:1.0054945054945055>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:1.120879120879121>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:1.1043956043956045>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:1.1902173913043477>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps
 
 (<embedding:Stable_Yogis_General_Positives_V1>:0.87) (<embedding:Stable_Yogis_Anatomy_Positives_V1>:0.857143) (<embedding:Stable_Yogis_Realism_Positives_V1>:0.863636) (<embedding:face_refiner>:0.958904)
 a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]
-<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:0.8> <lora:NsfwPovAllInOneLoraSdxl-000009:1.2032967032967035>
+<lora:add-detail-xl:0.8> <lora:DetailedEyes_V3:0.8> <lora:anatomy_helper:1.3021978021978022>
 neg: (<embedding:NEGATIVE_HANDS>:0.95614) (<embedding:SDXLnegXL>:0.985714) (<embedding:sdxl_cyberrealistic_simpleneg-neg>:0.972527) (<embedding:easynegative>:0.69802)
 neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps

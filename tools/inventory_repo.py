@@ -3,7 +3,7 @@ Lightweight repository inventory helper.
 
 Walks the tree, captures per-file metadata, builds a best-effort static import
 graph from src/main.py, and emits:
-- repo_inventory.json (machine-readable)
+- inventory/repo_inventory.json (machine-readable)
 - docs/ACTIVE_MODULES.md
 - docs/LEGACY_CANDIDATES.md
 
@@ -23,7 +23,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = ROOT / "docs"
-OUTPUT_JSON = ROOT / "repo_inventory.json"
+INVENTORY_DIR = ROOT / "inventory"
+OUTPUT_JSON = INVENTORY_DIR / "repo_inventory.json"
 OUTPUT_ACTIVE_MD = DOCS_DIR / "ACTIVE_MODULES.md"
 OUTPUT_LEGACY_MD = DOCS_DIR / "LEGACY_CANDIDATES.md"
 
@@ -173,6 +174,7 @@ def mark_reachable(records: dict[Path, FileRecord]) -> None:
 
 
 def write_json(records: dict[Path, FileRecord]) -> None:
+    OUTPUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_JSON.write_text(
         json.dumps(
             {
