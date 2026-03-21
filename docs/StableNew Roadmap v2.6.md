@@ -40,7 +40,7 @@ Delivered outcomes:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2540 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2568 collected / 0 skipped`
 
 ## 2. Remaining Structural Debt
 
@@ -51,10 +51,15 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
 - `tests/compat/` still preserves temporary migration behavior that should continue shrinking
 - `AppStateV2.run_config` still exists as a GUI-facing dict projection, even though
   canonical config layers are now mirrored alongside it
-- image generation still lacks a runner-owned adaptive refinement layer for
-  small-subject, distant-face, and difficult-pose recovery
-- manifests, replay, and learning do not yet carry a canonical adaptive
-  refinement decision provenance
+- adaptive refinement now exists through detector-backed observation and
+  ADetailer-safe actuation, but prompt/upscale policy and learning closure are
+  still missing
+- replay and learning still need fuller canonical adaptive-refinement
+  provenance beyond the current runner/manifest/embedded-image path
+- video generation still lacks a StableNew-owned secondary motion layer that is
+  replayable across AnimateDiff, SVD native, and workflow-video backends
+- manifests, replay, container metadata, and learning do not yet carry a
+  canonical secondary-motion policy and application provenance
 
 ## 3. Status of the Older Revised Video Queue
 
@@ -238,7 +243,7 @@ Detailed execution spec:
 
 ### 8. `PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Establish the canonical adaptive refinement contract before any behavior change.
 
@@ -248,6 +253,10 @@ Primary outcomes:
 - a StableNew-owned `src/refinement/` package boundary
 - builder and NJR persistence without new job models
 - import-boundary guard tests and a schema document
+
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
 
 Guiding roadmap:
 
@@ -259,7 +268,7 @@ Detailed execution spec:
 
 ### 9. `PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Add the deterministic observation layer before any output-changing behavior.
 
@@ -269,13 +278,17 @@ Primary outcomes:
 - observation-only decision bundles in runner metadata
 - null-detector fallback and no stage mutation
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
 
 ### 10. `PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Add the first real subject-assessment path without making OpenCV mandatory.
 
@@ -285,13 +298,17 @@ Primary outcomes:
 - threshold versioning for scale-band assessment
 - richer observation bundles with deterministic fallback behavior
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
 
 ### 11. `PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Roll out the first controlled runtime actuation, limited to ADetailer.
 
@@ -300,6 +317,10 @@ Primary outcomes:
 - per-image ADetailer-safe overrides
 - explicit rollout modes and rollback path
 - manifest-facing provenance for applied overrides
+
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
 
 Detailed execution spec:
 
@@ -339,14 +360,123 @@ Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
 
+### 14. `PR-VIDEO-230-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
+
+Status: Planned
+
+Freeze the secondary-motion outer contract before any backend behavior change.
+
+Primary outcomes:
+
+- one nested `intent_config["secondary_motion"]` payload distinct from the
+  existing `motion_profile`
+- runner observation-only motion planning metadata for the existing video
+  stages
+- a StableNew-owned `src/video/motion/` package boundary and schema document
+
+Guiding roadmap:
+
+- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-230-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+
+### 15. `PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
+
+Status: Planned
+
+Land the shared deterministic engine and the one canonical provenance contract
+before backend rollout.
+
+Primary outcomes:
+
+- a StableNew-owned shared secondary-motion engine and worker contract
+- compact replay and container-metadata summaries plus detailed manifest helpers
+- no backend wiring yet, only the reusable runtime and summary contract
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+
+### 16. `PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration`
+
+Status: Planned
+
+Use the safest existing postprocess seam to land the first real runtime motion
+path.
+
+Primary outcomes:
+
+- runner-injected transient SVD motion execution config
+- shared-engine application as SVD postprocess stage zero
+- canonical motion provenance in SVD manifest, replay, and container metadata
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+
+### 17. `PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+
+Status: Planned
+
+Insert the shared engine into the existing AnimateDiff frame pipeline.
+
+Primary outcomes:
+
+- shared-engine application between frame write and video encode
+- skip-safe AnimateDiff motion behavior with stable output-path semantics
+- canonical motion provenance in AnimateDiff manifest, replay, and container metadata
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+
+### 18. `PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+
+Status: Planned
+
+Close the last major backend parity gap for the shared motion carrier.
+
+Primary outcomes:
+
+- StableNew-owned extract/apply/re-encode parity path for workflow-video
+- canonical replay closure without a new custom Comfy node dependency
+- consistent motion summary shape across all three current video backends
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+
+### 19. `PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+
+Status: Planned
+
+Close the loop by making the shared motion carrier visible to learning and
+recommendation flows without weakening evidence-tier safeguards.
+
+Primary outcomes:
+
+- scalar motion metrics in learning records
+- backend-aware and application-path-aware motion recommendation context
+- no raw frame or dense motion payload retention in centralized learning data
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+
 ## 5. Missing Common Functionality to Fold Into the Queue
 
 These are the important missing capabilities that are not just "nice to have":
 
-- adaptive refinement for small, distant, or profile faces is still missing from
-  the image pipeline
-- manifests, replay, and learning still need a canonical refinement-decision
-  provenance path
+- adaptive refinement still needs prompt-patch, upscale-policy, and learning
+  closure after the new ADetailer-safe slice
+- replay and learning still need fuller canonical refinement-decision
+  provenance beyond the current runner/manifest/image-metadata path
+- secondary motion is still missing as a StableNew-owned, replayable video
+  layer across AnimateDiff, SVD native, and workflow-video backends
+- manifests, replay fragments, container metadata, and learning still need a
+  canonical secondary-motion provenance path distinct from `motion_profile`
 - continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
 - further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
 
@@ -357,10 +487,13 @@ StableNew's next stage is successful when:
 - image and short-form video are both solid under the current queue-first architecture
 - image generation can apply runner-owned adaptive refinement under explicit
   rollout modes without creating a second execution model
+- video generation can apply runner-owned secondary motion across the existing
+  video backends without creating a new stage or new job model
 - long-form video has a first-class planning/orchestration path
 - post-video outputs are canonical artifacts, not side utilities
 - continuity and shot-planning data can persist through manifests/history
-- manifests and learning records can preserve adaptive refinement provenance
+- manifests, replay fragments, container metadata, and learning records can
+  preserve both adaptive-refinement and secondary-motion provenance
 - the GUI feels intentionally designed around the current workflow set
 
 ## 7. Guiding Principle

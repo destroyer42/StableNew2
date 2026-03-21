@@ -6,10 +6,15 @@ from tkinter import filedialog, ttk
 from typing import Any
 
 from src.gui.controllers.learning_controller import LearningController
+from src.gui.models.prompt_metadata import build_prompt_metadata
+from src.gui.models.prompt_pack_model import PromptPackModel, PromptSlot
 from src.gui.ui_tokens import TOKENS
 from src.learning.experiment_naming import build_experiment_identity
 from src.learning.stage_capabilities import get_stage_capability, get_variables_for_stage, list_supported_stages
 from src.learning.variable_selection_contract import normalize_resource_entries
+from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
+from src.utils.file_io import read_prompt_pack
+from src.utils.prompt_packs import discover_packs
 
 
 class ExperimentDesignPanel(ttk.Frame):
@@ -20,15 +25,19 @@ class ExperimentDesignPanel(ttk.Frame):
         master: tk.Misc,
         learning_controller: LearningController | None = None,
         prompt_workspace_state: Any | None = None,
+        packs_dir: str | Path | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, *args, **kwargs)
         self.learning_controller = learning_controller
         self.prompt_workspace_state = prompt_workspace_state
+        self._packs_dir = Path(packs_dir) if packs_dir is not None else None
         self._name_auto_generated = True
         self._description_auto_generated = True
         self._suspend_identity_tracking = False
+        self._prompt_pack_paths: dict[str, Path] = {}
+        self._prompt_option_payloads: dict[str, dict[str, Any]] = {}
 
         # Configure layout
         self.columnconfigure(0, weight=1)
@@ -197,24 +206,40 @@ class ExperimentDesignPanel(ttk.Frame):
         # Prompt Source
         prompt_frame = ttk.LabelFrame(self, text="Prompt Source", padding=5)
         prompt_frame.grid(row=13, column=0, sticky="ew", pady=(0, 10))
-        prompt_frame.columnconfigure(0, weight=1)
+        prompt_frame.columnconfigure(1, weight=1)
 
-        self.prompt_source_var = tk.StringVar(value="workspace")
-        ttk.Radiobutton(
+        ttk.Label(prompt_frame, text="Source:").grid(row=0, column=0, sticky="w", pady=(0, 2))
+        self.prompt_source_var = tk.StringVar(value="pack")
+        self.prompt_source_combo = ttk.Combobox(
             prompt_frame,
-            text="Use current Prompt Workspace slot",
-            variable=self.prompt_source_var,
-            value="workspace",
-            command=self._on_prompt_source_changed,
-        ).grid(row=0, column=0, sticky="w", pady=2)
+            textvariable=self.prompt_source_var,
+            values=["pack", "custom"],
+            state="readonly",
+        )
+        self.prompt_source_combo.grid(row=0, column=1, sticky="ew", pady=(0, 8))
+        self.prompt_source_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_prompt_source_changed())
 
-        ttk.Radiobutton(
+        ttk.Label(prompt_frame, text="Prompt Pack:").grid(row=1, column=0, sticky="w", pady=(0, 2))
+        self.prompt_pack_var = tk.StringVar(value="")
+        self.prompt_pack_combo = ttk.Combobox(
             prompt_frame,
-            text="Custom prompt text:",
-            variable=self.prompt_source_var,
-            value="custom",
-            command=self._on_prompt_source_changed,
-        ).grid(row=1, column=0, sticky="w", pady=2)
+            textvariable=self.prompt_pack_var,
+            state="readonly",
+        )
+        self.prompt_pack_combo.grid(row=1, column=1, sticky="ew", pady=(0, 8))
+        self.prompt_pack_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_prompt_pack_selected())
+
+        ttk.Label(prompt_frame, text="Prompt:").grid(row=2, column=0, sticky="w", pady=(0, 2))
+        self.prompt_item_var = tk.StringVar(value="")
+        self.prompt_item_combo = ttk.Combobox(
+            prompt_frame,
+            textvariable=self.prompt_item_var,
+            state="readonly",
+        )
+        self.prompt_item_combo.grid(row=2, column=1, sticky="ew", pady=(0, 8))
+        self.prompt_item_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_prompt_item_selected())
+
+        ttk.Label(prompt_frame, text="Custom prompt text:").grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 2))
 
         self.custom_prompt_var = tk.StringVar(value="")
         self.custom_prompt_text = tk.Text(
@@ -227,10 +252,10 @@ class ExperimentDesignPanel(ttk.Frame):
             highlightbackground=TOKENS.colors.border_subtle,
             highlightcolor=TOKENS.colors.accent_primary,
         )
-        self.custom_prompt_text.grid(row=2, column=0, sticky="ew", pady=(2, 0))
+        self.custom_prompt_text.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(2, 0))
         self.custom_prompt_text.bind("<KeyRelease>", lambda _e: self._on_prompt_text_edited())
-        
-        # Populate text field with workspace prompt initially
+
+        self._refresh_prompt_pack_choices()
         self._on_prompt_source_changed()
 
         # Buttons
@@ -265,35 +290,186 @@ class ExperimentDesignPanel(ttk.Frame):
         self._suggest_identity()
 
     def _on_prompt_source_changed(self) -> None:
-        """Handle prompt source radio button changes.
-        
-        When 'workspace' is selected, populate the text field with the current
-        workspace prompt so the user can see what will be used.
-        """
-        if self.prompt_source_var.get() == "workspace" and self.prompt_workspace_state:
-            try:
-                # Get current prompt from workspace
-                current_prompt = self.prompt_workspace_state.get_current_prompt_text()
-                if current_prompt:
-                    # Update text field to show the workspace prompt
-                    self.custom_prompt_text.delete("1.0", tk.END)
-                    self.custom_prompt_text.insert("1.0", current_prompt)
-                    # Make it read-only when workspace source is selected
-                    self.custom_prompt_text.config(state="disabled")
-                else:
-                    # No prompt available
-                    self.custom_prompt_text.delete("1.0", tk.END)
-                    self.custom_prompt_text.insert("1.0", "(No prompt in workspace)")
-                    self.custom_prompt_text.config(state="disabled")
-            except Exception:
-                # If there's an error accessing workspace state
-                self.custom_prompt_text.delete("1.0", tk.END)
-                self.custom_prompt_text.insert("1.0", "(Workspace prompt not available)")
-                self.custom_prompt_text.config(state="disabled")
-        else:
-            # Custom mode - enable text field for editing
+        use_pack = self.prompt_source_var.get() == "pack"
+        self.prompt_pack_combo.config(state="readonly" if use_pack else "disabled")
+        self.prompt_item_combo.config(state="readonly" if use_pack else "disabled")
+        self.custom_prompt_text.config(state="disabled" if use_pack else "normal")
+
+        if use_pack:
+            selected = self._get_selected_prompt_payload()
+            preview = selected.get("prompt_text") if selected else ""
             self.custom_prompt_text.config(state="normal")
+            self.custom_prompt_text.delete("1.0", tk.END)
+            self.custom_prompt_text.insert("1.0", preview or "(No prompt selected)")
+            self.custom_prompt_text.config(state="disabled")
+
+            variable_name = self.variable_var.get()
+            if variable_name == "LoRA Strength" and self.lora_frame.winfo_manager() == "grid":
+                self._build_lora_mode_content()
         self._refresh_identity_preview()
+
+    def _resolve_packs_dir(self) -> Path:
+        if self._packs_dir is not None:
+            return self._packs_dir
+        if self.prompt_workspace_state:
+            try:
+                current_path = self.prompt_workspace_state.get_current_path()
+                if current_path:
+                    return Path(current_path).parent
+            except Exception:
+                pass
+        return Path("packs")
+
+    def _refresh_prompt_pack_choices(self) -> None:
+        self._prompt_pack_paths = {
+            info.name: info.path
+            for info in discover_packs(self._resolve_packs_dir())
+        }
+        pack_names = list(self._prompt_pack_paths.keys())
+        self.prompt_pack_combo.configure(values=pack_names)
+
+        current_name = self.prompt_pack_var.get().strip()
+        if current_name not in self._prompt_pack_paths:
+            workspace_name = ""
+            if self.prompt_workspace_state:
+                try:
+                    workspace_name = self.prompt_workspace_state.get_current_pack_name()
+                except Exception:
+                    workspace_name = ""
+            selected_name = workspace_name if workspace_name in self._prompt_pack_paths else (pack_names[0] if pack_names else "")
+            self.prompt_pack_var.set(selected_name)
+
+        self._refresh_prompt_choices()
+
+    @staticmethod
+    def _render_slot_positive_prompt(slot: PromptSlot) -> str:
+        parts: list[str] = []
+        embeds = normalize_embedding_entries(getattr(slot, "positive_embeddings", []))
+        if embeds:
+            parts.append(" ".join(render_embedding_reference(name, weight) for name, weight in embeds))
+        text = str(getattr(slot, "text", "") or "").strip()
+        if text:
+            parts.append(text)
+        return "\n".join(parts).strip()
+
+    @staticmethod
+    def _render_slot_negative_prompt(slot: PromptSlot) -> str:
+        parts: list[str] = []
+        embeds = normalize_embedding_entries(getattr(slot, "negative_embeddings", []))
+        if embeds:
+            parts.append(" ".join(render_embedding_reference(name, weight) for name, weight in embeds))
+        text = str(getattr(slot, "negative", "") or "").strip()
+        if text:
+            parts.append(text)
+        return "\n".join(parts).strip()
+
+    def _load_prompt_payloads_for_pack(self, pack_path: Path) -> list[dict[str, Any]]:
+        json_path = pack_path if pack_path.suffix.lower() == ".json" else pack_path.with_suffix(".json")
+        payloads: list[dict[str, Any]] = []
+
+        if json_path.exists():
+            pack = PromptPackModel.load_from_file(json_path)
+            for slot in pack.slots:
+                slot_positive = self._render_slot_positive_prompt(slot)
+                slot_negative = self._render_slot_negative_prompt(slot)
+                if not (slot_positive or slot_negative or getattr(slot, "loras", [])):
+                    continue
+                preview = (str(getattr(slot, "text", "") or "") or slot_positive).strip().replace("\n", " ")
+                preview = preview[:48] + ("..." if len(preview) > 48 else "")
+                label = f"Prompt {int(getattr(slot, 'index', 0)) + 1}"
+                if preview:
+                    label = f"{label}: {preview}"
+                payloads.append(
+                    {
+                        "label": label,
+                        "prompt_index": int(getattr(slot, "index", 0)),
+                        "slot": slot,
+                        "prompt_text": slot_positive,
+                        "negative_prompt_text": slot_negative,
+                        "loras": [
+                            {"name": str(name), "weight": float(weight)}
+                            for name, weight in list(getattr(slot, "loras", []) or [])
+                            if str(name or "").strip()
+                        ],
+                    }
+                )
+            return payloads
+
+        for index, prompt in enumerate(read_prompt_pack(pack_path)):
+            positive = str(prompt.get("positive", "") or "").strip()
+            negative = str(prompt.get("negative", "") or "").strip()
+            if not (positive or negative):
+                continue
+            preview = positive.replace("\n", " ")
+            preview = preview[:48] + ("..." if len(preview) > 48 else "")
+            label = f"Prompt {index + 1}"
+            if preview:
+                label = f"{label}: {preview}"
+            slot = PromptSlot(index=index, text=positive, negative=negative)
+            payloads.append(
+                {
+                    "label": label,
+                    "prompt_index": index,
+                    "slot": slot,
+                    "prompt_text": positive,
+                    "negative_prompt_text": negative,
+                    "loras": [],
+                }
+            )
+        return payloads
+
+    def _refresh_prompt_choices(self) -> None:
+        self._prompt_option_payloads = {}
+        selected_pack = self.prompt_pack_var.get().strip()
+        pack_path = self._prompt_pack_paths.get(selected_pack)
+        payloads = self._load_prompt_payloads_for_pack(pack_path) if pack_path else []
+        labels = [payload["label"] for payload in payloads]
+        self._prompt_option_payloads = {payload["label"]: payload for payload in payloads}
+        self.prompt_item_combo.configure(values=labels)
+
+        current_label = self.prompt_item_var.get().strip()
+        if current_label not in self._prompt_option_payloads:
+            self.prompt_item_var.set(labels[0] if labels else "")
+
+    def _get_selected_prompt_payload(self) -> dict[str, Any] | None:
+        label = self.prompt_item_var.get().strip()
+        payload = self._prompt_option_payloads.get(label)
+        if not payload:
+            return None
+        pack_name = self.prompt_pack_var.get().strip()
+        pack_path = self._prompt_pack_paths.get(pack_name)
+        return {
+            **payload,
+            "prompt_pack_name": pack_name,
+            "prompt_pack_path": str(pack_path) if pack_path else "",
+        }
+
+    def _build_selected_prompt_workspace_state(self) -> Any | None:
+        payload = self._get_selected_prompt_payload()
+        if not payload:
+            return None
+        slot = payload["slot"]
+        positive = str(payload.get("prompt_text", "") or "")
+        negative = str(payload.get("negative_prompt_text", "") or "")
+        return type(
+            "SelectedPromptWorkspaceState",
+            (),
+            {
+                "get_current_slot": staticmethod(lambda: slot),
+                "get_current_prompt_text": staticmethod(lambda: positive),
+                "get_current_negative_text": staticmethod(lambda: negative),
+                "get_current_prompt_metadata": staticmethod(
+                    lambda: build_prompt_metadata(f"{positive}\n{negative}")
+                ),
+            },
+        )()
+
+    def _on_prompt_pack_selected(self) -> None:
+        self._refresh_prompt_choices()
+        self._on_prompt_item_selected()
+
+    def _on_prompt_item_selected(self) -> None:
+        self._on_prompt_source_changed()
 
     def _on_build_preview(self) -> None:
         """Handle build preview button click."""
@@ -316,6 +492,13 @@ class ExperimentDesignPanel(ttk.Frame):
             "custom_prompt": self.custom_prompt_text.get("1.0", tk.END).strip()
             if self.prompt_source_var.get() == "custom"
             else "",
+            "selected_prompt_text": "",
+            "selected_negative_prompt": "",
+            "selected_prompt_pack_name": "",
+            "selected_prompt_pack_path": "",
+            "selected_prompt_index": 0,
+            "selected_prompt_label": "",
+            "selected_prompt_loras": [],
             # PR-LEARN-020: Include selected items for discrete/resource variables
             "selected_items": [
                 choice for choice, var in self.choice_vars.items() if var.get()
@@ -332,6 +515,21 @@ class ExperimentDesignPanel(ttk.Frame):
                 lora for lora, var in self.lora_choice_vars.items() if var.get()
             ] if hasattr(self, "lora_choice_vars") else [],
         }
+
+        if experiment_data["prompt_source"] == "pack":
+            selected_prompt = self._get_selected_prompt_payload()
+            if selected_prompt:
+                experiment_data.update(
+                    {
+                        "selected_prompt_text": str(selected_prompt.get("prompt_text", "") or ""),
+                        "selected_negative_prompt": str(selected_prompt.get("negative_prompt_text", "") or ""),
+                        "selected_prompt_pack_name": str(selected_prompt.get("prompt_pack_name", "") or ""),
+                        "selected_prompt_pack_path": str(selected_prompt.get("prompt_pack_path", "") or ""),
+                        "selected_prompt_index": int(selected_prompt.get("prompt_index", 0) or 0),
+                        "selected_prompt_label": str(selected_prompt.get("label", "") or ""),
+                        "selected_prompt_loras": list(selected_prompt.get("loras") or []),
+                    }
+                )
 
         # Validate
         validation_error = self._validate_experiment_data(experiment_data)
@@ -433,6 +631,11 @@ class ExperimentDesignPanel(ttk.Frame):
 
         if data["prompt_source"] == "custom" and not data["custom_prompt"]:
             return "Custom prompt text is required when using custom prompt source"
+        if data["prompt_source"] == "pack":
+            if not data.get("selected_prompt_pack_name"):
+                return "Prompt pack must be selected"
+            if not data.get("selected_prompt_text"):
+                return "Prompt must be selected from the chosen prompt pack"
 
         return None
 
@@ -652,11 +855,9 @@ class ExperimentDesignPanel(ttk.Frame):
     def _get_prompt_preview_text(self) -> str:
         if self.prompt_source_var.get() == "custom":
             return self.custom_prompt_text.get("1.0", tk.END).strip()
-        if self.prompt_workspace_state:
-            try:
-                return self.prompt_workspace_state.get_current_prompt_text() or ""
-            except Exception:
-                return ""
+        selected_prompt = self._get_selected_prompt_payload()
+        if selected_prompt:
+            return str(selected_prompt.get("prompt_text", "") or "")
         return ""
 
     def _current_model_vae(self) -> tuple[str, str]:
@@ -817,7 +1018,12 @@ class ExperimentDesignPanel(ttk.Frame):
         available_loras = []
         if hasattr(self, 'learning_controller') and self.learning_controller:
             try:
-                loras = self.learning_controller._get_current_loras()
+                override = (
+                    self._build_selected_prompt_workspace_state()
+                    if self.prompt_source_var.get() == "pack"
+                    else None
+                )
+                loras = self.learning_controller._get_current_loras(prompt_workspace_state_override=override)
                 available_loras = [l["name"] for l in loras]
             except Exception:
                 pass
@@ -843,7 +1049,7 @@ class ExperimentDesignPanel(ttk.Frame):
         if not available_loras:
             ttk.Label(
                 lora_select_frame,
-                text="No enabled LoRAs in stage card",
+                text="No enabled LoRAs in current prompt or runtime config",
                 foreground="red"
             ).pack(anchor="w", pady=(2, 0))
         
@@ -903,7 +1109,12 @@ class ExperimentDesignPanel(ttk.Frame):
         available_loras = []
         if hasattr(self, 'learning_controller') and self.learning_controller:
             try:
-                loras = self.learning_controller._get_current_loras()
+                override = (
+                    self._build_selected_prompt_workspace_state()
+                    if self.prompt_source_var.get() == "pack"
+                    else None
+                )
+                loras = self.learning_controller._get_current_loras(prompt_workspace_state_override=override)
                 available_loras = [l["name"] for l in loras]
             except Exception:
                 pass
@@ -946,7 +1157,7 @@ class ExperimentDesignPanel(ttk.Frame):
         if not available_loras:
             ttk.Label(
                 checklist_inner,
-                text="No enabled LoRAs in stage card",
+                text="No enabled LoRAs in current prompt or runtime config",
                 foreground="red"
             ).pack(anchor="w", pady=2)
         else:
@@ -1005,12 +1216,23 @@ class ExperimentDesignPanel(ttk.Frame):
         self.step_var.set(float(metadata.get("step_value", self.step_var.get())))
         self.images_var.set(int(getattr(experiment, "images_per_value", 1) or 1))
         prompt_text = str(getattr(experiment, "prompt_text", "") or "")
-        self.prompt_source_var.set("custom" if prompt_text else "workspace")
+        prompt_source = str(metadata.get("prompt_source", "custom" if prompt_text else "pack") or "pack")
+        self.prompt_source_var.set(prompt_source)
+        selected_pack_name = str(metadata.get("selected_prompt_pack_name", "") or "")
+        if selected_pack_name:
+            self.prompt_pack_var.set(selected_pack_name)
+        self._refresh_prompt_pack_choices()
+        selected_prompt_index = metadata.get("selected_prompt_index")
+        if selected_prompt_index is not None:
+            for label, payload in self._prompt_option_payloads.items():
+                if int(payload.get("prompt_index", -1)) == int(selected_prompt_index):
+                    self.prompt_item_var.set(label)
+                    break
         self._on_prompt_source_changed()
         self.custom_prompt_text.config(state="normal")
         self.custom_prompt_text.delete("1.0", tk.END)
         self.custom_prompt_text.insert("1.0", prompt_text)
-        if self.prompt_source_var.get() == "workspace":
+        if self.prompt_source_var.get() == "pack":
             self._on_prompt_source_changed()
         self._on_variable_changed()
         selected_items = {str(item) for item in metadata.get("selected_items", [])}

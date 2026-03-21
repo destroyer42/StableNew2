@@ -65,3 +65,20 @@ def test_optimizer_preserves_negative_embedding_prefix() -> None:
 
     assert result.negative.optimized_prompt == "<embedding:SDXLnegXL>, bad anatomy, blurry, watermark"
     assert result.negative.buckets["embedding_tokens"] == ["<embedding:SDXLnegXL>"]
+
+
+def test_optimizer_extracts_mixed_positive_embeddings_to_absolute_front() -> None:
+    service = PromptOptimizerService(PromptOptimizerConfig())
+    result = service.optimize_prompts(
+        "cinematic lighting, beautiful woman (<embedding:face_refiner>:0.8), japanese garden, <embedding:styleA>, masterpiece",
+        "",
+        pipeline_name="txt2img",
+    )
+
+    assert result.positive.optimized_prompt.startswith(
+        "(<embedding:face_refiner>:0.8), <embedding:styleA>, beautiful woman"
+    )
+    assert result.positive.buckets["embedding_tokens"] == [
+        "(<embedding:face_refiner>:0.8)",
+        "<embedding:styleA>",
+    ]

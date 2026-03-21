@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
+from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
 
@@ -110,6 +111,248 @@ def test_run_njr_does_not_emit_adaptive_refinement_metadata_when_disabled() -> N
 
     assert result.success is True
     assert "adaptive_refinement" not in result.metadata
+
+
+def test_run_njr_caches_refinement_assessment_per_output_path(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    output_path = tmp_path / "output.png"
+    output_path.write_bytes(b"png")
+    record = _minimal_normalized_record()
+    record.positive_prompt = "portrait woman"
+    record.intent_config = {
+        "adaptive_refinement": {
+            "schema": "stablenew.adaptive-refinement.v1",
+            "enabled": True,
+            "mode": "observe",
+            "profile_id": "auto_v1",
+            "detector_preference": "opencv",
+            "record_decisions": True,
+            "algorithm_version": "v1",
+        }
+    }
+
+    class _ServiceStub:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def build_bundle(self, **_kwargs):
+            return {
+                "schema": "stablenew.refinement-decision.v1",
+                "algorithm_version": "v1",
+                "mode": "observe",
+                "policy_id": "observe_only_v1",
+                "detector_id": "null",
+                "observation": {},
+                "applied_overrides": {},
+                "prompt_patch": {},
+                "notes": [],
+            }
+
+        def assess(self, image_path):
+            key = str(image_path)
+            self.calls.append(key)
+            return {
+                "detector_id": "opencv",
+                "algorithm_version": "v1",
+                "image_path": key,
+                "image_width": 100,
+                "image_height": 100,
+                "detections": [],
+                "detection_count": 0,
+                "primary_detection_index": None,
+                "face_area_ratio": None,
+                "face_height_ratio": None,
+                "face_width_ratio": None,
+                "scale_band": "no_face",
+                "pose_band": "unknown",
+                "notes": ["no_face_detected"],
+            }
+
+    service = _ServiceStub()
+    runner._resolve_refinement_policy_service = lambda _pref: (service, ["opencv_requested"])  # type: ignore[method-assign]
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_txt2img_stage.return_value = {
+        "path": str(output_path),
+        "all_paths": [str(output_path), str(output_path)],
+    }
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert service.calls == [str(output_path)]
+    assert result.metadata["adaptive_refinement"]["decision_bundle"]["detector_id"] == "opencv"
+    assert result.metadata["adaptive_refinement"]["detector_notes"] == ["opencv_requested"]
+    assert len(result.metadata["adaptive_refinement"]["decision_bundle"]["observation"]["image_assessments"]) == 2
+
+
+def test_run_njr_records_detector_fallback_notes(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    output_path = tmp_path / "output.png"
+    output_path.write_bytes(b"png")
+    record = _minimal_normalized_record()
+    record.positive_prompt = "portrait woman"
+    record.intent_config = {
+        "adaptive_refinement": {
+            "schema": "stablenew.adaptive-refinement.v1",
+            "enabled": True,
+            "mode": "observe",
+            "profile_id": "auto_v1",
+            "detector_preference": "opencv",
+            "record_decisions": True,
+            "algorithm_version": "v1",
+        }
+    }
+    runner._resolve_refinement_policy_service = (  # type: ignore[method-assign]
+        lambda _pref: (SubjectScalePolicyService(), ["opencv_requested_but_unavailable_fell_back_to_null"])
+    )
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_txt2img_stage.return_value = {"path": str(output_path)}
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert (
+        "opencv_requested_but_unavailable_fell_back_to_null"
+        in result.metadata["adaptive_refinement"]["detector_notes"]
+    )
+
+
+def test_collect_refinement_assessments_times_out_to_null_fallback(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    output_path = tmp_path / "late.png"
+    output_path.write_bytes(b"png")
+
+    class _SlowService:
+        def assess(self, _image_path):
+            raise AssertionError("timeout fallback should short-circuit before assess")
+
+    assessments, notes = runner._collect_refinement_assessments(
+        service=_SlowService(),  # type: ignore[arg-type]
+        output_paths=[str(output_path)],
+        timeout_seconds=-1.0,
+    )
+
+    assert notes == ["detector_timeout_fell_back_to_null"]
+    assert assessments[0]["detector_id"] == "null"
+    assert assessments[0]["image_path"] == str(output_path)
+    assert assessments[0]["notes"] == ["detector_timeout_fell_back_to_null"]
+
+
+def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_a = tmp_path / "input_a.png"
+    input_b = tmp_path / "input_b.png"
+    input_a.write_bytes(b"a")
+    input_b.write_bytes(b"b")
+    output_a = tmp_path / "output_a.png"
+    output_b = tmp_path / "output_b.png"
+    record = NormalizedJobRecord(
+        job_id="runner-adetailer-refine",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[StageConfig(stage_type="adetailer", enabled=True, extra={})],
+        input_image_paths=[str(input_a), str(input_b)],
+        start_stage="adetailer",
+    )
+    record.positive_prompt = "profile portrait with detailed face"
+    record.intent_config = {
+        "adaptive_refinement": {
+            "schema": "stablenew.adaptive-refinement.v1",
+            "enabled": True,
+            "mode": "adetailer",
+            "profile_id": "auto_v1",
+            "detector_preference": "null",
+            "record_decisions": True,
+            "algorithm_version": "v1",
+        }
+    }
+
+    class _ServiceStub:
+        def build_bundle(self, *, mode, prompt_intent, image_path, extra_observation=None):
+            applied = (
+                {
+                    "ad_confidence": 0.22,
+                    "ad_mask_min_ratio": 0.003,
+                    "ad_inpaint_only_masked_padding": 48,
+                }
+                if str(image_path).endswith("input_a.png")
+                else {}
+            )
+            return {
+                "schema": "stablenew.refinement-decision.v1",
+                "algorithm_version": "v1",
+                "mode": mode,
+                "policy_id": "adetailer_micro_face_v1" if applied else None,
+                "detector_id": "null",
+                "observation": {
+                    "prompt_intent": dict(prompt_intent),
+                    "subject_assessment": {"detector_id": "null", "scale_band": "micro" if applied else "large"},
+                },
+                "applied_overrides": applied,
+                "prompt_patch": {},
+                "notes": [],
+            }
+
+        def assess(self, _image_path):
+            return {
+                "detector_id": "null",
+                "algorithm_version": "v1",
+                "image_path": None,
+                "image_width": None,
+                "image_height": None,
+                "detections": [],
+                "detection_count": 0,
+                "primary_detection_index": None,
+                "face_area_ratio": None,
+                "face_height_ratio": None,
+                "face_width_ratio": None,
+                "scale_band": "no_face",
+                "pose_band": "unknown",
+                "notes": ["no_face_detected"],
+            }
+
+    captured_configs: list[dict[str, object]] = []
+
+    def _run_adetailer_stage(*, input_image_path, config, output_dir, image_name, prompt=None, negative_prompt=None, cancel_token=None):
+        captured_configs.append(dict(config))
+        output_path = output_a if str(input_image_path).endswith("input_a.png") else output_b
+        return {
+            "path": str(output_path),
+            "adaptive_refinement": dict(config.get("adaptive_refinement") or {}),
+        }
+
+    runner._resolve_refinement_policy_service = lambda _pref: (_ServiceStub(), [])  # type: ignore[method-assign]
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_adetailer_stage.side_effect = _run_adetailer_stage
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert pipeline.run_adetailer_stage.call_count == 2
+    assert captured_configs[0]["adetailer_confidence"] == 0.22
+    assert captured_configs[0]["ad_mask_min_ratio"] == 0.003
+    assert captured_configs[0]["adetailer_padding"] == 48
+    assert "adetailer_confidence" not in captured_configs[1]
+    assert "ad_mask_min_ratio" not in captured_configs[1]
+    assert "adetailer_padding" not in captured_configs[1]
+    assert len(result.metadata["adaptive_refinement"]["image_decisions"]) == 2
+    assert (
+        result.metadata["adaptive_refinement"]["image_decisions"][0]["decision_bundle"]["applied_overrides"]["ad_confidence"]
+        == 0.22
+    )
 
 
 def test_pipeline_run_result_to_dict_and_back() -> None:

@@ -2142,6 +2142,7 @@ class Pipeline:
         # Use adetailer-specific negative prompt if provided, otherwise use txt2img negative
         # NOTE: ADetailer has its own custom prompts and should NOT get global positive/negative applied
         base_ad_neg = config.get("adetailer_negative_prompt", "")
+        adaptive_refinement = dict(config.get("adaptive_refinement") or {})
         if base_ad_neg:
             # Use the specific adetailer negative prompt as-is (no global merging)
             ad_neg_final = base_ad_neg
@@ -2205,9 +2206,9 @@ class Pipeline:
             "ad_mask_merge_invert": get_with_fallback_warning(config, "ad_mask_merge_invert", "None", source="run_adetailer", warn=False),
             "ad_inpaint_only_masked": True,
             "ad_inpaint_only_masked_padding": get_with_fallback_warning(config, "adetailer_padding", 32, source="run_adetailer", warn=False),
-            "ad_use_inpaint_width_height": False,  # Disable dimension optimization to prevent crashes on large images
-            "ad_inpaint_width": payload_width,  # Lock to source dimensions - prevent resizing
-            "ad_inpaint_height": payload_height,  # Lock to source dimensions - prevent resizing
+            "ad_use_inpaint_width_height": bool(config.get("ad_use_inpaint_width_height", False)),
+            "ad_inpaint_width": _coerce_dimension(config.get("ad_inpaint_width"), payload_width),
+            "ad_inpaint_height": _coerce_dimension(config.get("ad_inpaint_height"), payload_height),
             "ad_x_offset": 0,  # Disable x tiling
             "ad_y_offset": 0,  # Disable y tiling
             "ad_mask_only_top_k_largest": True,  # Process only largest detection
@@ -2374,6 +2375,8 @@ class Pipeline:
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
         }
+        if adaptive_refinement:
+            metadata["adaptive_refinement"] = adaptive_refinement
         metadata_builder = self._build_image_metadata_builder(
             image_path=image_path,
             stage="adetailer",

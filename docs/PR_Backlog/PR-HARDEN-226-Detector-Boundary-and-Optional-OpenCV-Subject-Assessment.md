@@ -1,6 +1,6 @@
 # PR-HARDEN-226 - Detector Boundary and Optional OpenCV Subject Assessment
 
-Status: Specification
+Status: Implemented 2026-03-20
 Priority: HIGH
 Effort: MEDIUM
 Phase: Adaptive Refinement Assessment Layer

@@ -1,6 +1,6 @@
 # PR-HARDEN-227 - Safe ADetailer Adaptive Policy Application
 
-Status: Specification
+Status: Implemented 2026-03-20
 Priority: HIGH
 Effort: MEDIUM
 Phase: Adaptive Refinement Controlled Actuation

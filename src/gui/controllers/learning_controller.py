@@ -7,9 +7,11 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
+from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.recommendation_engine import RecommendationEngine
@@ -108,12 +110,16 @@ class LearningController:
         # Determine prompt text based on prompt_source
         prompt_text = ""
         prompt_source = experiment_data.get("prompt_source", "custom")
+        negative_prompt_text = ""
         
         if prompt_source == "custom":
             prompt_text = experiment_data.get("custom_prompt", "")
+        elif prompt_source == "pack":
+            prompt_text = str(experiment_data.get("selected_prompt_text", "") or "")
+            negative_prompt_text = str(experiment_data.get("selected_negative_prompt", "") or "")
         elif prompt_source == "current" and self.prompt_workspace_state:
-            # BUGFIX: Use current prompt pack when source is 'current'
             prompt_text = self.prompt_workspace_state.get_current_prompt_text() or ""
+            negative_prompt_text = self.prompt_workspace_state.get_current_negative_text() or ""
         
         # Look up variable metadata
         variable_name = experiment_data.get("variable_under_test", "")
@@ -136,6 +142,13 @@ class LearningController:
             "comparison_mode": experiment_data.get("comparison_mode", False),
             "fixed_strength": experiment_data.get("fixed_strength", 1.0),
             "selected_loras": experiment_data.get("selected_loras", []),
+            "prompt_source": prompt_source,
+            "selected_prompt_pack_name": experiment_data.get("selected_prompt_pack_name", ""),
+            "selected_prompt_pack_path": experiment_data.get("selected_prompt_pack_path", ""),
+            "selected_prompt_index": experiment_data.get("selected_prompt_index", 0),
+            "selected_prompt_label": experiment_data.get("selected_prompt_label", ""),
+            "selected_prompt_negative_text": negative_prompt_text,
+            "selected_prompt_loras": list(experiment_data.get("selected_prompt_loras", []) or []),
         }
         
         # Create LearningExperiment from form data
@@ -281,7 +294,32 @@ class LearningController:
         else:
             raise ValueError(f"Unsupported variable type: {meta.value_type}")
 
-    def _get_current_loras(self) -> list[dict[str, Any]]:
+    def _build_prompt_workspace_state_from_experiment(self) -> Any | None:
+        experiment = self.learning_state.current_experiment
+        metadata = dict(getattr(experiment, "metadata", {}) or {})
+        if str(metadata.get("prompt_source", "") or "") != "pack":
+            return self.prompt_workspace_state
+
+        prompt_text = str(getattr(experiment, "prompt_text", "") or "")
+        negative_text = str(metadata.get("selected_prompt_negative_text", "") or "")
+        lora_entries = list(metadata.get("selected_prompt_loras") or [])
+        slot_loras: list[tuple[str, float]] = []
+        for entry in lora_entries:
+            if isinstance(entry, dict):
+                name = str(entry.get("name", "") or "").strip()
+                if not name:
+                    continue
+                weight = float(entry.get("weight", entry.get("strength", 1.0)) or 1.0)
+                slot_loras.append((name, weight))
+        slot = SimpleNamespace(text=prompt_text, negative=negative_text, loras=slot_loras)
+        return SimpleNamespace(
+            get_current_slot=lambda: slot,
+            get_current_prompt_text=lambda: prompt_text,
+            get_current_negative_text=lambda: negative_text,
+            get_current_prompt_metadata=lambda: build_prompt_metadata(f"{prompt_text}\n{negative_text}"),
+        )
+
+    def _get_current_loras(self, *, prompt_workspace_state_override: Any | None = None) -> list[dict[str, Any]]:
         """Get currently selected LoRAs from stage card state.
         
         PR-LEARN-022: Retrieves enabled LoRAs from baseline config for LoRA variable.
@@ -297,8 +335,13 @@ class LearningController:
         try:
             baseline = self._get_baseline_config()
             app_state = getattr(self.app_controller, "_app_state", None) if self.app_controller else None
+            prompt_workspace_state = (
+                prompt_workspace_state_override
+                or self._build_prompt_workspace_state_from_experiment()
+                or self.prompt_workspace_state
+            )
             loras = collect_available_loras(
-                prompt_workspace_state=self.prompt_workspace_state,
+                prompt_workspace_state=prompt_workspace_state,
                 app_state=app_state,
                 baseline_config=baseline,
             )
@@ -642,7 +685,10 @@ class LearningController:
             prompt = "a test prompt"
         
         # Get negative prompt from experiment or current prompt workspace
-        negative_prompt = getattr(experiment, "negative_prompt_text", "") or ""
+        negative_prompt = (
+            getattr(experiment, "negative_prompt_text", "") or ""
+            or str(getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "") or "")
+        )
         if not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
         
@@ -718,6 +764,21 @@ class LearningController:
             record.variant_index = variant_index
             record.variant_total = variant_total
             record.learning_context = learning_ctx
+            prompt_source = str(getattr(experiment, "metadata", {}).get("prompt_source", "manual") or "manual")
+            record.prompt_source = "pack" if prompt_source == "pack" else "manual"  # type: ignore[attr-defined]
+            selected_prompt_loras = list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or [])
+            if selected_prompt_loras:
+                from src.pipeline.job_models_v2 import LoRATag
+
+                for entry in selected_prompt_loras:
+                    if not isinstance(entry, dict):
+                        continue
+                    name = str(entry.get("name", "") or "").strip()
+                    if not name:
+                        continue
+                    weight = float(entry.get("weight", entry.get("strength", 1.0)) or 1.0)
+                    if all(tag.name != name for tag in record.lora_tags):
+                        record.lora_tags.append(LoRATag(name=name, weight=weight))
             return record
 
         # Build NormalizedJobRecord
@@ -755,7 +816,22 @@ class LearningController:
                 "seed_resize_from_w": seed_resize_from_w,
             },
         )
-        record.prompt_source = "manual"  # type: ignore[attr-defined]
+        prompt_source = str(getattr(experiment, "metadata", {}).get("prompt_source", "manual") or "manual")
+        record.prompt_source = "pack" if prompt_source == "pack" else "manual"  # type: ignore[attr-defined]
+
+        selected_prompt_loras = list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or [])
+        if selected_prompt_loras:
+            from src.pipeline.job_models_v2 import LoRATag
+
+            for entry in selected_prompt_loras:
+                if not isinstance(entry, dict):
+                    continue
+                name = str(entry.get("name", "") or "").strip()
+                if not name:
+                    continue
+                weight = float(entry.get("weight", entry.get("strength", 1.0)) or 1.0)
+                if all(tag.name != name for tag in record.lora_tags):
+                    record.lora_tags.append(LoRATag(name=name, weight=weight))
         
         # PR-LEARN-022: Apply LoRA override if present
         lora_override = final_config.get("lora_override")

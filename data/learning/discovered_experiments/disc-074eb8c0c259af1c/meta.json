@@ -9,7 +9,7 @@
   "schema_version": "1.0",
   "stage": "txt2img",
   "status": "waiting_review",
-  "updated_at": "2026-03-20T11:36:10Z",
+  "updated_at": "2026-03-20T22:56:54Z",
   "varying_fields": [
     "model"
   ]

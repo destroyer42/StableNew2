@@ -140,6 +140,56 @@ In `PR-HARDEN-225`, this block is metadata-only:
 - no executor payload mutation
 - no stage-config mutation
 
+## Detector Enrichment in `PR-HARDEN-226`
+
+`PR-HARDEN-226` keeps the feature observation-only, but enriches
+`decision_bundle.observation.subject_assessment` with real detector output when
+available.
+
+Supported detector ids in v1:
+
+- `null`
+- `opencv`
+
+Assessment fields are:
+
+- `detector_id`
+- `algorithm_version`
+- `image_path`
+- `image_width`
+- `image_height`
+- `detections`
+- `detection_count`
+- `primary_detection_index`
+- `face_area_ratio`
+- `face_height_ratio`
+- `face_width_ratio`
+- `scale_band`
+- `pose_band`
+- `notes`
+
+`scale_band` thresholds are explicit and versioned under
+`SubjectScalePolicyConfig`:
+
+- `micro` when `face_area_ratio < 0.004`
+- `small` when `face_area_ratio < 0.012`
+- `medium` when `face_area_ratio < 0.030`
+- `large` otherwise
+- `no_face` when no detections are present
+
+Runner-owned fallback notes introduced in `PR-HARDEN-226`:
+
+- `opencv_requested_but_unavailable_fell_back_to_null`
+- `detector_timeout_fell_back_to_null`
+- `detector_error_fell_back_to_null`
+
+Observation bundles may also carry `decision_bundle.observation.image_assessments`
+as a per-output-image list, but this remains analysis-only in `PR-HARDEN-226`:
+
+- no stage mutation
+- no manifest mutation
+- no embedded-image-metadata mutation
+
 ## Series Constraints
 
 - `PR-HARDEN-224`: contract only, no runtime behavior change
@@ -172,3 +222,56 @@ must reuse the same semantic fields carried inside `adaptive_refinement`.
 
 No PR in this series may introduce a second refinement-only provenance block for
 one subsystem.
+
+## ADetailer Actuation in `PR-HARDEN-227`
+
+`PR-HARDEN-227` is the first behavior-changing slice, but it remains tightly
+scoped:
+
+- only `mode = "adetailer"` or `mode = "full"` may apply overrides
+- only ADetailer-local override keys may be present
+- prompt patching and upscale policy remain absent until `PR-HARDEN-228`
+
+Allowed v1 applied override keys:
+
+- `ad_mask_min_ratio`
+- `ad_confidence`
+- `ad_inpaint_only_masked_padding`
+- `ad_use_inpaint_width_height`
+- `ad_inpaint_width`
+- `ad_inpaint_height`
+
+Canonical actuation shape:
+
+```json
+{
+  "adaptive_refinement": {
+    "intent": {
+      "mode": "adetailer"
+    },
+    "prompt_intent": {},
+    "decision_bundle": {
+      "schema": "stablenew.refinement-decision.v1",
+      "algorithm_version": "v1",
+      "mode": "adetailer",
+      "policy_id": "adetailer_micro_face_v1",
+      "detector_id": "opencv",
+      "observation": {
+        "subject_assessment": {
+          "scale_band": "micro"
+        }
+      },
+      "applied_overrides": {
+        "ad_confidence": 0.22,
+        "ad_mask_min_ratio": 0.003,
+        "ad_inpaint_only_masked_padding": 48
+      },
+      "prompt_patch": {},
+      "notes": ["small_subject_recovery"]
+    }
+  }
+}
+```
+
+If no overrides are selected, `applied_overrides` stays empty rather than
+inventing fake keys.

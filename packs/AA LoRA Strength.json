@@ -4,7 +4,7 @@
     "slots": [
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -20,8 +20,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -48,18 +60,26 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
           [
             "anatomy_helper",
+            0.8
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -75,8 +95,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -103,6 +135,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -111,14 +147,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.09890109890109891
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -134,8 +170,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -162,6 +210,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -170,14 +222,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.19780219780219782
+            "CinematicStyle_v1",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -193,8 +245,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -221,6 +285,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -229,14 +297,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.2967032967032967
+            "Photoshoot_Realism",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -252,8 +320,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -280,6 +360,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -288,14 +372,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.39560439560439564
+            "Realism_Lora_By_Stable_yogi_SDXL8.1",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -311,8 +395,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -339,6 +435,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -347,14 +447,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.510989010989011
+            "finenude_v0_2a",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -370,8 +470,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -398,6 +510,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -406,14 +522,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.6098901098901099
+            "sdxl1.0_realastic_female_lora",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -429,8 +545,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -457,6 +585,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -465,14 +597,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7087912087912087
+            "stvmccrr",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -488,8 +620,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -516,6 +660,10 @@
             0.8
           ],
           [
+            "epiCRealismHelper",
+            0.8
+          ],
+          [
             "DetailedEyes_V3",
             0.8
           ],
@@ -524,14 +672,14 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.8076923076923077
+            "xl_yamer_style-3.0",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
+        "text": "full body shot, filling the frame, of a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
         "positive_embeddings": [
           [
@@ -547,8 +695,20 @@
             0.863636
           ],
           [
+            "Stable_Yogis_PDXL_Positives2",
+            0.870968
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ],
+          [
             "face_refiner",
             0.958904
+          ],
+          [
+            "Stable-Yogis-Makeup-Enhancer-XL",
+            0.81383
           ]
         ],
         "negative_embeddings": [
@@ -575,62 +735,7 @@
             0.8
           ],
           [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.9065934065934065
-          ]
-        ]
-      },
-      {
-        "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
-        "positive_embeddings": [
-          [
-            "Stable_Yogis_General_Positives_V1",
-            0.87
-          ],
-          [
-            "Stable_Yogis_Anatomy_Positives_V1",
-            0.857143
-          ],
-          [
-            "Stable_Yogis_Realism_Positives_V1",
-            0.863636
-          ],
-          [
-            "face_refiner",
-            0.958904
-          ]
-        ],
-        "negative_embeddings": [
-          [
-            "NEGATIVE_HANDS",
-            0.95614
-          ],
-          [
-            "SDXLnegXL",
-            0.985714
-          ],
-          [
-            "sdxl_cyberrealistic_simpleneg-neg",
-            0.972527
-          ],
-          [
-            "easynegative",
-            0.69802
-          ]
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
+            "epiCRealismHelper",
             0.8
           ],
           [
@@ -642,126 +747,8 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            1.0054945054945055
-          ]
-        ]
-      },
-      {
-        "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
-        "positive_embeddings": [
-          [
-            "Stable_Yogis_General_Positives_V1",
-            0.87
-          ],
-          [
-            "Stable_Yogis_Anatomy_Positives_V1",
-            0.857143
-          ],
-          [
-            "Stable_Yogis_Realism_Positives_V1",
-            0.863636
-          ],
-          [
-            "face_refiner",
-            0.958904
-          ]
-        ],
-        "negative_embeddings": [
-          [
-            "NEGATIVE_HANDS",
-            0.95614
-          ],
-          [
-            "SDXLnegXL",
-            0.985714
-          ],
-          [
-            "sdxl_cyberrealistic_simpleneg-neg",
-            0.972527
-          ],
-          [
-            "easynegative",
-            0.69802
-          ]
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
+            "DTStyle",
             0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            1.1043956043956045
-          ]
-        ]
-      },
-      {
-        "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, in [[environment]], [[pose]], in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
-        "positive_embeddings": [
-          [
-            "Stable_Yogis_General_Positives_V1",
-            0.87
-          ],
-          [
-            "Stable_Yogis_Anatomy_Positives_V1",
-            0.857143
-          ],
-          [
-            "Stable_Yogis_Realism_Positives_V1",
-            0.863636
-          ],
-          [
-            "face_refiner",
-            0.958904
-          ]
-        ],
-        "negative_embeddings": [
-          [
-            "NEGATIVE_HANDS",
-            0.95614
-          ],
-          [
-            "SDXLnegXL",
-            0.985714
-          ],
-          [
-            "sdxl_cyberrealistic_simpleneg-neg",
-            0.972527
-          ],
-          [
-            "easynegative",
-            0.69802
-          ]
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            1.2032967032967035
           ]
         ]
       }
@@ -818,7 +805,9 @@
         {
           "name": "perspective",
           "values": [
-            "full body shot with subject centered and the subject filling most of the frame with minimal background space and a natural perspective"
+            "very low angle full body shot",
+            "high angle full body shot",
+            "full frontal shot"
           ]
         },
         {

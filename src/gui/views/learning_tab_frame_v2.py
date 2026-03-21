@@ -204,6 +204,7 @@ class LearningTabFrame(ttk.Frame):
             prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
             if self.app_state
             else None,
+            packs_dir=getattr(getattr(self.pipeline_controller, "_config_manager", None), "packs_dir", None),
             style=CARD_FRAME_STYLE,
         )
         self.experiment_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 2), pady=4)

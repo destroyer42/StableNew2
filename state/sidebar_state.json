@@ -1,6 +1,8 @@
 {
-  "selected_list": "CharactersList",
-  "selected_packs": [],
-  "prompt_text": "A futuristic city with flying vehicles",
+  "selected_list": "Landscape and portrait",
+  "selected_packs": [
+    "A single prompt for testing"
+  ],
+  "prompt_text": "",
   "schema_version": "2.6"
 }
