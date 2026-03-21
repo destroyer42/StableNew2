@@ -1187,6 +1187,21 @@ class SidebarPanelV2(ttk.Frame):
             "enabled": bool(self.global_positive_enabled_var.get()),
             "text": self.global_positive_text_var.get().strip(),
         }
+
+    def apply_global_prompt_config(self, config: dict[str, Any] | None) -> None:
+        if not config:
+            return
+        pipeline = config.get("pipeline") or {}
+        self.global_positive_enabled_var.set(
+            bool(pipeline.get("apply_global_positive_txt2img", False))
+        )
+        self.global_negative_enabled_var.set(
+            bool(pipeline.get("apply_global_negative_txt2img", True))
+        )
+        if "global_positive_prompt" in config:
+            self.global_positive_text_var.set(str(config.get("global_positive_prompt") or ""))
+        if "global_negative_prompt" in config:
+            self.global_negative_text_var.set(str(config.get("global_negative_prompt") or ""))
     
     def _save_global_negative(self) -> None:
         """Save global negative prompt to disk."""

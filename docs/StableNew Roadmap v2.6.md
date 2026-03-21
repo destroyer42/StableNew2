@@ -564,7 +564,7 @@ Detailed execution spec:
 
 ### 21. `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
 
-Status: Planned
+Status: Completed 2026-03-21
 
 Land the shared deterministic engine and the one canonical provenance contract
 before backend rollout.
@@ -575,9 +575,73 @@ Primary outcomes:
 - compact replay and container-metadata summaries plus detailed manifest helpers
 - no backend wiring yet, only the reusable runtime and summary contract
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+
+### 21A. `PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping`
+
+Status: Implemented, follow-on required
+
+Interleaved critical hardening gate before the next runtime-heavy backend
+rollout.
+
+Primary outcomes:
+
+- GPU-pressure risk classification and pre-stage warnings for image pipeline
+  execution
+- managed WebUI launch profiles including an SDXL-guarded low-memory mode
+- failure damping for repeated readiness, watchdog, and diagnostics storms
+- improved diagnostics bundles for stall and pressure incidents
+- explicit warnings when live WebUI model state drifts from requested stage
+  intent
+
+Reason for slotting here:
+
+- current image/runtime instability is significant enough that continuing
+  backend-runtime rollout first would reduce confidence in later video PR
+  validation
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
+
+Validation note:
+
+- live 10-job validation improved observability but did not materially stabilize
+  the workload; a follow-on recovery/admission-control hardening pass is now
+  required before the next runtime-heavy video PR
+
+### 21B. `PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control`
+
+Status: Planned
+
+Follow-on critical hardening gate after `PR-HARDEN-256` real-world validation
+showed that warnings alone are not enough.
+
+Primary outcomes:
+
+- detect poisoned or stale WebUI runtime state before heavy jobs begin
+- force guarded clean restart and readiness recovery when runtime state is not
+  healthy
+- refuse clearly unsafe heavy stage execution instead of timing out deep in
+  WebUI
+- make watchdog and diagnostics single-flight authoritative
+- surface duplicate-process risk and stale-process pressure in logs and
+  diagnostics
+
+Reason for slotting here:
+
+- `PR-HARDEN-256` reduced blind spots but did not reduce failures enough to
+  safely continue with `PR-VIDEO-238`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
 
 ### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
@@ -645,7 +709,22 @@ Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
-## 4A. Post-`PR-VIDEO-241` Structural Queue
+## 4A. Post-`PR-VIDEO-241` Prompt Optimizer Tranche
+
+The next product-facing image/prompt tranche is tracked in:
+
+- `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
+
+It is intentionally queued after the current secondary-motion video sequence
+and before broader lower-leverage cleanup. The planned rollout is:
+
+- `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
+- `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
+- `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
+- `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
+- `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
+
+## 4B. Post-`PR-VIDEO-241` Structural Queue
 
 The next major queue after the secondary motion tranche is tracked in:
 
@@ -692,6 +771,8 @@ These are the important missing capabilities that are not just "nice to have":
   layer across AnimateDiff, SVD native, and workflow-video backends
 - manifests, replay fragments, container metadata, and learning still need a
   canonical secondary-motion provenance path distinct from `motion_profile`
+- image/runtime stability still needs GPU-pressure-aware guardrails and better
+  failure damping before more runtime-heavy backend rollout
 - continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
 - further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
 

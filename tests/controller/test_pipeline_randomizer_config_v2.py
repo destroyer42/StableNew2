@@ -57,6 +57,32 @@ def test_load_randomizer_settings_apply_to_panel() -> None:
     assert controller.state.current_config.max_variants == 5
 
 
+def test_load_pack_config_restores_global_prompt_toggle_state() -> None:
+    config = {
+        "pipeline": {
+            "apply_global_positive_txt2img": True,
+            "apply_global_negative_txt2img": False,
+        },
+        "global_positive_prompt": "cinematic lighting",
+        "global_negative_prompt": "watermark",
+    }
+    controller, _ = _make_controller(config)
+
+    sidebar = SimpleNamespace(
+        applied=None,
+        apply_global_prompt_config=lambda cfg: setattr(sidebar, "applied", dict(cfg)),
+    )
+    controller.main_window = SimpleNamespace(sidebar_panel_v2=sidebar)
+
+    controller.on_pipeline_pack_load_config("pack1")
+
+    assert sidebar.applied is not None
+    assert sidebar.applied["pipeline"]["apply_global_positive_txt2img"] is True
+    assert sidebar.applied["pipeline"]["apply_global_negative_txt2img"] is False
+    assert sidebar.applied["global_positive_prompt"] == "cinematic lighting"
+    assert sidebar.applied["global_negative_prompt"] == "watermark"
+
+
 def test_apply_config_writes_randomizer_settings_to_pack() -> None:
     controller, config_manager = _make_controller({})
     controller.app_state.set_run_config({"randomization_enabled": True, "max_variants": 8})

@@ -288,6 +288,13 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 self.seed_section.seed_var = self.seed_var
             except Exception:
                 pass
+            try:
+                self.seed_section.subseed_var = self.base_generation_panel.subseed_var
+                self.seed_section.subseed_strength_var = (
+                    self.base_generation_panel.subseed_strength_var
+                )
+            except Exception:
+                pass
 
         for var in self.watchable_vars():
             try:

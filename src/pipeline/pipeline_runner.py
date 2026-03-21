@@ -107,6 +107,23 @@ class PipelineRunner:
         )
 
     @staticmethod
+    def _log_job_pressure_outlook(njr: NormalizedJobRecord) -> None:
+        config = dict(getattr(njr, "config", {}) or {})
+        width = int(config.get("width", 0) or 0)
+        height = int(config.get("height", 0) or 0)
+        if width <= 0 or height <= 0:
+            return
+        megapixels = (width * height) / 1_000_000.0
+        stages = [stage.stage_type for stage in getattr(njr, "stage_chain", []) if getattr(stage, "enabled", False)]
+        if megapixels < 1.5 and "upscale" not in stages:
+            return
+        logger.warning(
+            "[pipeline/pressure] job entering high-pressure image path: %.3fMP base geometry, stages=%s",
+            megapixels,
+            stages,
+        )
+
+    @staticmethod
     def _apply_adetailer_refinement_overrides(
         config_dict: dict[str, Any],
         applied_overrides: Mapping[str, Any] | None,
@@ -775,6 +792,7 @@ class PipelineRunner:
         # Build run plan directly from NJR
         from src.pipeline.run_plan import build_run_plan_from_njr
 
+        self._log_job_pressure_outlook(njr)
         plan = build_run_plan_from_njr(njr)
         
         # Prepare output dir with pack-model-vae naming structure

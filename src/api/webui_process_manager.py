@@ -157,6 +157,7 @@ class WebUIProcessConfig:
     command: list[str]
     working_dir: str | None = None
     env_overrides: Mapping[str, str] | None = None
+    launch_profile: str = "standard"
     startup_timeout_seconds: float = 60.0
     poll_interval_seconds: float = 0.5
     auto_restart_on_crash: bool = False
@@ -231,6 +232,17 @@ class WebUIProcessManager:
     @property
     def process(self) -> subprocess.Popen | None:
         return self._process
+
+    def get_launch_profile(self) -> str:
+        return str(self._config.launch_profile or "standard")
+
+    def set_launch_profile(self, profile: str) -> None:
+        from src.config import app_config
+
+        normalized = str(profile or "standard").strip() or "standard"
+        self._config.launch_profile = normalized
+        self._config.command = list(app_config.resolve_webui_launch_command(normalized))
+        app_config.set_webui_launch_profile(normalized)
 
     def ensure_running(self) -> bool:
         # Note: The orphan monitor thread now handles preventing orphaned processes.
@@ -328,7 +340,12 @@ class WebUIProcessManager:
             logging.DEBUG,
             "Starting WebUI process",
             ctx=ctx,
-            extra_fields={"command": self._config.command, "working_dir": self._config.working_dir},
+            extra_fields={
+                "command": self._config.command,
+                "working_dir": self._config.working_dir,
+                "launch_profile": self._config.launch_profile,
+                "event": "webui_process_start",
+            },
         )
         run_session_id = build_run_session_id()
 
@@ -418,6 +435,17 @@ class WebUIProcessManager:
                 cwd=self._config.working_dir,
             )
             logger.debug(launch_msg)
+            log_with_ctx(
+                logger,
+                logging.INFO,
+                "WebUI launch profile resolved",
+                ctx=ctx,
+                extra_fields={
+                    "event": "webui_launch_profile_resolved",
+                    "launch_profile": self._config.launch_profile,
+                    "pid": self._pid,
+                },
+            )
             self._stdout_tail.clear()
             self._stderr_tail.clear()
             self._start_output_capture(run_session_id)
@@ -636,6 +664,7 @@ class WebUIProcessManager:
         max_attempts: int = 6,
         base_delay: float = 1.0,
         max_delay: float = 8.0,
+        profile_override: str | None = None,
     ) -> bool:
         """Restart the WebUI process and wait for its API to become available."""
 
@@ -650,7 +679,25 @@ class WebUIProcessManager:
 
         ctx = LogContext(subsystem="api")
         log_with_ctx(logger, logging.INFO, "Restarting WebUI process", ctx=ctx)
+        if profile_override:
+            try:
+                self.set_launch_profile(profile_override)
+            except Exception as exc:
+                log_with_ctx(
+                    logger,
+                    logging.ERROR,
+                    "Failed to apply WebUI launch profile override",
+                    ctx=ctx,
+                    extra_fields={"profile_override": profile_override, "error": str(exc)},
+                )
+                return False
         base_url = self._configured_base_url()
+        try:
+            from src.api.healthcheck import clear_readiness_failure_state
+
+            clear_readiness_failure_state(base_url)
+        except Exception:
+            logger.debug("Failed to clear readiness failure state before restart", exc_info=True)
         attempts = max(1, int(max_attempts))
         base_delay_s = max(0.0, float(base_delay))
         max_delay_s = max(0.0, float(max_delay))
@@ -669,6 +716,7 @@ class WebUIProcessManager:
                         "attempt": attempt_index,
                         "max_attempts": attempts,
                         "error": str(exc),
+                        "launch_profile": self.get_launch_profile(),
                     },
                 )
 
@@ -684,6 +732,7 @@ class WebUIProcessManager:
                         "attempt": attempt_index,
                         "max_attempts": attempts,
                         "error": str(exc),
+                        "launch_profile": self.get_launch_profile(),
                     },
                 )
                 ready = False
@@ -712,6 +761,7 @@ class WebUIProcessManager:
                             extra_fields={
                                 "attempt": attempt_index,
                                 "max_attempts": attempts,
+                                "launch_profile": self.get_launch_profile(),
                             },
                         )
                     except WebUIReadinessTimeout as exc:
@@ -726,6 +776,7 @@ class WebUIProcessManager:
                                 "total_waited_s": exc.total_waited,
                                 "checks": str(exc.checks_status),
                                 "stdout_tail_snippet": exc.stdout_tail[:500] if exc.stdout_tail else "",
+                                "launch_profile": self.get_launch_profile(),
                             },
                         )
                         ready = False
@@ -740,6 +791,7 @@ class WebUIProcessManager:
                                 "max_attempts": attempts,
                                 "error": str(exc),
                                 "base_url": base_url,
+                                "launch_profile": self.get_launch_profile(),
                             },
                         )
                         ready = False
@@ -760,6 +812,7 @@ class WebUIProcessManager:
                     "max_attempts": attempts,
                     "ready": ready,
                     "base_url": base_url,
+                    "launch_profile": self.get_launch_profile(),
                 },
             )
             if ready:
@@ -1116,6 +1169,9 @@ class WebUIProcessManager:
             "stderr_log_path": str(self._stderr_log_path) if self._stderr_log_path else "",
             "pid": self.pid,
             "running": self.is_running(),
+            "launch_profile": self._config.launch_profile,
+            "command": list(self._config.command),
+            "working_dir": self._config.working_dir or "",
         }
 
     def get_stdout_tail_text(self, max_lines: int = 200) -> str:
@@ -1503,6 +1559,8 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
     cached_workdir = cache.get("workdir")
     cached_command = cache.get("command")
 
+    launch_profile = app_config.get_webui_launch_profile()
+
     if cached_workdir and cached_command:
         workdir_path = Path(cached_workdir)
         if workdir_path.exists() and workdir_path.is_dir():
@@ -1513,6 +1571,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                 config = WebUIProcessConfig(
                     command=cached_command,
                     working_dir=cached_workdir,
+                    launch_profile=launch_profile,
                     autostart_enabled=app_config.is_webui_autostart_enabled(),
                     base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
                 )
@@ -1529,6 +1588,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         return WebUIProcessConfig(
             command=command,
             working_dir=workdir,
+            launch_profile=launch_profile,
             autostart_enabled=app_config.is_webui_autostart_enabled(),
             base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
         )
@@ -1540,7 +1600,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         workdir_path = Path(workdir)
         # Determine command based on platform
         if os.name == "nt":
-            command = ["webui-user.bat", "--api", "--xformers"]
+            command = list(app_config.resolve_webui_launch_command(launch_profile))
         else:
             command = ["bash", "webui.sh", "--api"]
 
@@ -1553,6 +1613,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             return WebUIProcessConfig(
                 command=command,
                 working_dir=workdir,
+                launch_profile=launch_profile,
                 autostart_enabled=app_config.is_webui_autostart_enabled(),
                 base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
             )

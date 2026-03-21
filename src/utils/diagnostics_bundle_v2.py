@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import threading
 import time
@@ -12,10 +13,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.api.webui_process_manager import get_global_webui_process_manager
 from src.config.app_config import get_jsonl_log_config
 from src.services.queue_store_v2 import get_queue_state_path
 from src.utils.logger import InMemoryLogHandler
-from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
+from src.utils.process_inspector_v2 import (
+    collect_gpu_snapshot,
+    format_process_brief,
+    iter_stablenew_like_processes,
+)
 from src.utils.system_info_v2 import collect_system_snapshot
 from src.utils.image_metadata import decode_payload, read_image_metadata
 
@@ -41,6 +47,88 @@ def _resolve_output_dir(output_dir: Path | None) -> Path:
 # Single-flight / cooldown guards for async bundle creation
 _LAST_BUNDLE_TS: dict[str, float] = {}
 _IN_FLIGHT: set[str] = set()
+_PRESSURE_REASON_HINTS = {"ui_heartbeat_stall", "queue_runner_stall", "webui_pressure", "webui_unavailable"}
+
+
+def _is_pressure_reason(reason: str) -> bool:
+    candidate = str(reason or "").strip().lower()
+    return candidate in _PRESSURE_REASON_HINTS or "pressure" in candidate or "stall" in candidate
+
+
+def _reason_guard_name(reason: str) -> str:
+    safe = "".join(ch if ch.isalnum() else "_" for ch in str(reason or "diagnostic").lower())
+    return safe.strip("_") or "diagnostic"
+
+
+def _cooldown_marker_path(directory: Path, reason: str) -> Path:
+    return directory / f".diag_cooldown_{_reason_guard_name(reason)}.json"
+
+
+def _lock_marker_path(directory: Path, reason: str) -> Path:
+    return directory / f".diag_lock_{_reason_guard_name(reason)}.lock"
+
+
+def _cross_process_cooldown_active(directory: Path, reason: str, cooldown_s: float) -> bool:
+    marker = _cooldown_marker_path(directory, reason)
+    if not marker.exists():
+        return False
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+        last_ts = float(payload.get("last_ts", 0.0) or 0.0)
+    except Exception:
+        try:
+            last_ts = marker.stat().st_mtime
+        except Exception:
+            return False
+    return (time.time() - last_ts) < float(cooldown_s)
+
+
+def _write_cooldown_marker(directory: Path, reason: str) -> None:
+    marker = _cooldown_marker_path(directory, reason)
+    payload = {"pid": os.getpid(), "last_ts": time.time()}
+    try:
+        marker.write_text(json.dumps(payload), encoding="utf-8")
+    except Exception:
+        logger.debug("Failed to write diagnostics cooldown marker", exc_info=True)
+
+
+def _acquire_cross_process_lock(directory: Path, reason: str) -> Path | None:
+    lock_path = _lock_marker_path(directory, reason)
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return None
+    try:
+        os.write(fd, json.dumps({"pid": os.getpid(), "ts": time.time()}).encode("utf-8"))
+    finally:
+        os.close(fd)
+    return lock_path
+
+
+def _release_cross_process_lock(lock_path: Path | None) -> None:
+    if lock_path is None:
+        return
+    try:
+        lock_path.unlink(missing_ok=True)
+    except Exception:
+        logger.debug("Failed to release diagnostics lock %s", lock_path, exc_info=True)
+
+
+def _resolve_default_webui_tail(
+    reason: str,
+    provided_tail: Mapping[str, Any] | None,
+) -> Mapping[str, Any] | None:
+    if provided_tail:
+        return provided_tail
+    if not _is_pressure_reason(reason):
+        return None
+    manager = get_global_webui_process_manager()
+    if manager is None:
+        return None
+    try:
+        return manager.get_recent_output_tail(max_lines=200)
+    except Exception:
+        return None
 
 
 def build_async(
@@ -58,6 +146,13 @@ def build_async(
     webui_tail: Mapping[str, Any] | None = None,
 ) -> threading.Thread | None:
     """Create a diagnostics bundle asynchronously (single-flight per reason)."""
+    effective_include_process_state = bool(include_process_state or _is_pressure_reason(reason))
+    effective_webui_tail = _resolve_default_webui_tail(reason, webui_tail)
+    directory = _resolve_output_dir(output_dir)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     now = time.monotonic()
     with _BUNDLE_LOCK:
         last = _LAST_BUNDLE_TS.get(reason, 0.0)
@@ -65,8 +160,15 @@ def build_async(
             return
         if (now - last) < float(cooldown_s):
             return None
+        if _cross_process_cooldown_active(directory, reason, cooldown_s):
+            return None
         _IN_FLIGHT.add(reason)
         _LAST_BUNDLE_TS[reason] = now
+    lock_path = _acquire_cross_process_lock(directory, reason)
+    if lock_path is None:
+        with _BUNDLE_LOCK:
+            _IN_FLIGHT.discard(reason)
+        return None
 
     def _worker():
         try:
@@ -75,15 +177,17 @@ def build_async(
                 log_handler=log_handler,
                 job_service=job_service,
                 extra_context=extra_context,
-                webui_tail=webui_tail,
+                webui_tail=effective_webui_tail,
                 output_dir=output_dir,
                 image_roots=image_roots,
-                include_process_state=include_process_state,
+                include_process_state=effective_include_process_state,
                 include_queue_state=include_queue_state,
             )
+            _write_cooldown_marker(directory, reason)
         finally:
             with _BUNDLE_LOCK:
                 _IN_FLIGHT.discard(reason)
+            _release_cross_process_lock(lock_path)
             if on_done:
                 try:
                     on_done()
@@ -109,6 +213,8 @@ def build_crash_bundle(
     include_queue_state: bool = False,
 ) -> Path | None:
     """Create a diagnostics zip bundle for the given reason."""
+    effective_include_process_state = bool(include_process_state or _is_pressure_reason(reason))
+    effective_webui_tail = _resolve_default_webui_tail(reason, webui_tail)
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_reason = _sanitize_filename(reason) or "diagnostic"
@@ -129,9 +235,9 @@ def build_crash_bundle(
                 "timestamp": timestamp,
                 "system": collect_system_snapshot(),
                 "bundle_features": {
-                    "include_process_state": bool(include_process_state),
+                    "include_process_state": bool(effective_include_process_state),
                     "include_queue_state": bool(include_queue_state),
-                    "include_webui_tail": bool(webui_tail),
+                    "include_webui_tail": bool(effective_webui_tail),
                 },
             }
             # Accept context from new argument (overrides extra_context if both given)
@@ -141,9 +247,12 @@ def build_crash_bundle(
                 metadata["context"] = _anonymize(extra_context)
             if job_snapshot:
                 metadata["job_snapshot"] = _anonymize(job_snapshot)
-            sanitized_tail = _anonymize(webui_tail) if webui_tail else None
+            sanitized_tail = _anonymize(effective_webui_tail) if effective_webui_tail else None
             if sanitized_tail:
                 metadata["webui_tail"] = sanitized_tail
+            gpu_snapshot = collect_gpu_snapshot()
+            if gpu_snapshot:
+                metadata["gpu_snapshot"] = gpu_snapshot
 
             # PR-HB-003: Capture thread dump for heartbeat stall diagnostics
             # Never let thread dump failure prevent bundle creation
@@ -184,8 +293,10 @@ def build_crash_bundle(
                                 "runtime/replay_descriptor.json",
                                 json.dumps(_anonymize(dict(replay_descriptor)), indent=2),
                             )
-                if inspector_lines and include_process_state:
+                if inspector_lines and effective_include_process_state:
                     zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
+                if gpu_snapshot:
+                    zf.writestr("metadata/gpu_snapshot.json", json.dumps(_anonymize(gpu_snapshot), indent=2))
                 _include_jsonl_logs(zf)
                 _include_image_metadata(zf, image_roots)
                 if include_queue_state:

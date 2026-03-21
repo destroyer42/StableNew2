@@ -9,6 +9,10 @@ EMBEDDING_WEIGHTED_RE = re.compile(
     re.IGNORECASE,
 )
 EMBEDDING_PLAIN_RE = re.compile(r"<embedding:([^>]+)>", re.IGNORECASE)
+LEGACY_EMBEDDING_RE = re.compile(
+    r"<(?!\s*(?:embedding|lora):)([A-Za-z0-9_.-]+)>",
+    re.IGNORECASE,
+)
 
 
 def _coerce_weight(value: Any, default: float = 1.0) -> float:
@@ -70,10 +74,34 @@ def extract_embedding_entries(text: str) -> list[tuple[str, float]]:
     working = EMBEDDING_WEIGHTED_RE.sub(" ", working)
     for match in EMBEDDING_PLAIN_RE.finditer(working):
         entries.append((match.group(1).strip(), 1.0))
+    working = EMBEDDING_PLAIN_RE.sub(" ", working)
+    for match in LEGACY_EMBEDDING_RE.finditer(working):
+        entries.append((match.group(1).strip(), 1.0))
     return [(name, weight) for name, weight in entries if name]
+
+
+def extract_embedding_token_strings(text: str) -> list[str]:
+    tokens: list[str] = []
+    working = str(text or "")
+    for match in EMBEDDING_WEIGHTED_RE.finditer(working):
+        token = match.group(0).strip()
+        if token:
+            tokens.append(token)
+    working = EMBEDDING_WEIGHTED_RE.sub(" ", working)
+    for match in EMBEDDING_PLAIN_RE.finditer(working):
+        token = match.group(0).strip()
+        if token:
+            tokens.append(token)
+    working = EMBEDDING_PLAIN_RE.sub(" ", working)
+    for match in LEGACY_EMBEDDING_RE.finditer(working):
+        token = match.group(0).strip()
+        if token:
+            tokens.append(token)
+    return tokens
 
 
 def strip_embedding_entries(text: str) -> str:
     stripped = EMBEDDING_WEIGHTED_RE.sub(" ", str(text or ""))
     stripped = EMBEDDING_PLAIN_RE.sub(" ", stripped)
+    stripped = LEGACY_EMBEDDING_RE.sub(" ", stripped)
     return " ".join(stripped.split()).strip()

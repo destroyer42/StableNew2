@@ -251,3 +251,46 @@ def test_adetailer_uses_request_override_without_global_model_switch() -> None:
     assert payload["override_settings"]["sd_vae"] == "base-vae.safetensors"
     pipeline.client.set_model.assert_not_called()
     pipeline.client.set_vae.assert_not_called()
+
+
+def test_adetailer_normalizes_scheduler_and_respects_explicit_pass_enables() -> None:
+    pipeline = Pipeline(Mock(), Mock())
+
+    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
+         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
+         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
+         patch("builtins.open", MagicMock()):
+
+        config = {
+            "adetailer_enabled": True,
+            "enable_face_pass": False,
+            "enable_hands_pass": True,
+            "adetailer_model": "face_yolov8n.pt",
+            "adetailer_steps": 20,
+            "adetailer_scheduler": "inherit",
+            "adetailer_hands_scheduler": "Use same scheduler",
+            "ad_hands_use_inpaint_width_height": True,
+            "ad_hands_inpaint_width": 640,
+            "ad_hands_inpaint_height": 896,
+        }
+
+        result = pipeline.run_adetailer(
+            input_image_path=Path("input.png"),
+            prompt="test prompt",
+            negative_prompt="test negative",
+            config=config,
+            run_dir=Path("output"),
+            image_name="test",
+        )
+
+    assert result is not None
+    payload = generate_mock.call_args.args[1]
+    face_args = payload["alwayson_scripts"]["ADetailer"]["args"][2]
+    hand_args = payload["alwayson_scripts"]["ADetailer"]["args"][3]
+    assert face_args["ad_tab_enable"] is False
+    assert face_args["ad_scheduler"] == "Use same scheduler"
+    assert hand_args["ad_tab_enable"] is True
+    assert hand_args["ad_scheduler"] == "Use same scheduler"
+    assert hand_args["ad_use_inpaint_width_height"] is True
+    assert hand_args["ad_inpaint_width"] == 640
+    assert hand_args["ad_inpaint_height"] == 896

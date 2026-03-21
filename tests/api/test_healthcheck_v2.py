@@ -7,6 +7,7 @@ from src.api.healthcheck import (
     MODELS_PATH,
     OPTIONS_PATH,
     PROGRESS_PATH,
+    _READINESS_FAILURE_STATE,
     WebUIHealthCheckTimeout,
     wait_for_webui_ready,
 )
@@ -65,3 +66,22 @@ def test_wait_for_webui_ready_includes_last_error_in_timeout(monkeypatch):
         wait_for_webui_ready("http://127.0.0.1:7860", timeout=0.2, poll_interval=0.01)
 
     assert OPTIONS_PATH in str(excinfo.value)
+
+
+def test_wait_for_webui_ready_enters_short_backoff_after_repeated_connection_refusals(monkeypatch):
+    _READINESS_FAILURE_STATE.clear()
+
+    def fake_get(url, timeout):  # noqa: ARG001
+        raise requests.exceptions.ConnectionError("actively refused")
+
+    monkeypatch.setattr("src.api.healthcheck.requests.get", fake_get)
+
+    with pytest.raises(WebUIHealthCheckTimeout):
+        wait_for_webui_ready("http://127.0.0.1:7860", timeout=0.05, poll_interval=0.01)
+    with pytest.raises(WebUIHealthCheckTimeout):
+        wait_for_webui_ready("http://127.0.0.1:7860", timeout=0.05, poll_interval=0.01)
+
+    with pytest.raises(WebUIHealthCheckTimeout) as excinfo:
+        wait_for_webui_ready("http://127.0.0.1:7860", timeout=0.05, poll_interval=0.01)
+
+    assert "backoff active" in str(excinfo.value)

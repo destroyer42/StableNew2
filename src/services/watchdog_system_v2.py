@@ -16,9 +16,11 @@ class SystemWatchdogV2:
 
     # Cooldowns prevent spam while a condition remains true
     COOLDOWN_S = {
-        "ui_heartbeat_stall": 30.0,
-        "queue_runner_stall": 30.0,
+        "ui_heartbeat_stall": 120.0,
+        "queue_runner_stall": 90.0,
     }
+    _ACTIVE_LOCK = threading.Lock()
+    _ACTIVE_THREAD: threading.Thread | None = None
 
     def __init__(
         self, app_controller, diagnostics_service, *, check_interval_s: float | None = None
@@ -40,6 +42,11 @@ class SystemWatchdogV2:
         
         PR-WATCHDOG-001: Changed to non-daemon for clean shutdown.
         """
+        with self._ACTIVE_LOCK:
+            if self._thread and self._thread.is_alive():
+                return
+            if self.__class__._ACTIVE_THREAD and self.__class__._ACTIVE_THREAD.is_alive():
+                return
         # PR-WATCHDOG-001: Changed from daemon=True to daemon=False
         t = threading.Thread(
             target=self._loop,
@@ -48,6 +55,8 @@ class SystemWatchdogV2:
         )
         t.start()
         self._thread = t
+        with self._ACTIVE_LOCK:
+            self.__class__._ACTIVE_THREAD = t
 
     def stop(self) -> None:
         """Stop the watchdog thread gracefully.
@@ -58,6 +67,9 @@ class SystemWatchdogV2:
         if self._thread and self._thread.is_alive():
             # PR-WATCHDOG-001: Increased timeout for reliable shutdown
             self._thread.join(timeout=10.0)
+        with self._ACTIVE_LOCK:
+            if self.__class__._ACTIVE_THREAD is self._thread:
+                self.__class__._ACTIVE_THREAD = None
         wait_for_idle = getattr(self.diagnostics, "wait_for_idle", None)
         if callable(wait_for_idle):
             try:
@@ -74,6 +86,8 @@ class SystemWatchdogV2:
             try:
                 # PR-WATCHDOG-001: Skip checks if shutdown requested
                 if hasattr(self.app, '_is_shutting_down') and self.app._is_shutting_down:
+                    break
+                if not threading.main_thread().is_alive():
                     break
                 self._check()
             except Exception:
@@ -103,6 +117,10 @@ class SystemWatchdogV2:
         )
 
     def _trigger(self, reason: str, now: float) -> None:
+        if not threading.main_thread().is_alive():
+            return
+        if hasattr(self.app, "_is_shutting_down") and self.app._is_shutting_down:
+            return
         cooldown = float(self.COOLDOWN_S.get(reason, 30.0))
 
         with self._lock:
@@ -134,6 +152,8 @@ class SystemWatchdogV2:
             "ui_stall_threshold_s": self.UI_STALL_S,
             "last_ui_heartbeat_ts": ui_heartbeat_ts,
             "watchdog_now_ts": now,
+            "shutdown_in_progress": bool(getattr(self.app, "_is_shutting_down", False)),
+            "main_thread_alive": bool(threading.main_thread().is_alive()),
         }
 
         def _done_callback():
@@ -149,10 +169,24 @@ class SystemWatchdogV2:
         try:
             # If your diagnostics_service has build_async, use it.
             if hasattr(diagnostics, "build_async"):
+                webui_tail = None
+                try:
+                    from src.api.webui_process_manager import get_global_webui_process_manager
+
+                    manager = get_global_webui_process_manager()
+                    if manager is not None:
+                        webui_tail = manager.get_recent_output_tail(max_lines=200)
+                except Exception:
+                    webui_tail = None
                 # Call with on_done if supported; fall back if not accepted by signature.
                 try:
                     diagnostics.build_async(
-                        reason=reason, context=context, on_done=_done_callback
+                        reason=reason,
+                        context=context,
+                        on_done=_done_callback,
+                        include_process_state=True,
+                        webui_tail=webui_tail,
+                        cooldown_s=cooldown,
                     )  # type: ignore[arg-type]
                 except TypeError:
                     # Older API: call without on_done and clear in-flight in a spawned thread

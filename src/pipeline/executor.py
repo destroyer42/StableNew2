@@ -15,7 +15,7 @@ from datetime import datetime
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping
 
 from PIL import Image
 
@@ -41,6 +41,7 @@ from src.pipeline.video import VideoCreator, write_video_frames
 from src.refinement.prompt_patcher import apply_prompt_patch
 from src.video.container_metadata import write_video_container_metadata
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
+from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
 
 from ..api import SDWebUIClient
 from ..gui.state import CancellationError, CancelToken
@@ -842,6 +843,312 @@ class Pipeline:
             self._current_vae = None
             raise
 
+    def _assess_stage_pressure(
+        self,
+        *,
+        stage_name: str,
+        width: int,
+        height: int,
+        batch_size: int = 1,
+        steps: int | None = None,
+        enabled_passes: int = 0,
+    ) -> dict[str, Any]:
+        width = max(int(width or 0), 1)
+        height = max(int(height or 0), 1)
+        batch_size = max(int(batch_size or 1), 1)
+        pixel_count = width * height
+        megapixels = pixel_count / 1_000_000.0
+        stage_multiplier = {
+            "txt2img": 1.0,
+            "adetailer": 1.15 + (0.2 * max(enabled_passes - 1, 0)),
+            "upscale": 1.35,
+        }.get(stage_name, 1.0)
+        step_multiplier = 1.0 + (max(int(steps or 0) - 20, 0) / 80.0)
+        effective_load = megapixels * batch_size * stage_multiplier * step_multiplier
+
+        status = "normal"
+        reasons: list[str] = []
+        if effective_load >= 7.0 or (stage_name == "upscale" and pixel_count >= 3_000_000):
+            status = "high_pressure"
+            reasons.append("stage geometry is large for SDXL-class processing")
+        if effective_load >= 10.0 or (stage_name == "upscale" and pixel_count >= 3_800_000):
+            status = "unsafe"
+            reasons.append("stage geometry is in a known timeout/OOM risk band")
+
+        gpu_snapshot = collect_gpu_snapshot()
+        if gpu_snapshot and isinstance(gpu_snapshot.get("devices"), list) and gpu_snapshot["devices"]:
+            primary = gpu_snapshot["devices"][0]
+            try:
+                used_mb = float(primary.get("memory_used_mb", 0.0) or 0.0)
+                total_mb = float(primary.get("memory_total_mb", 0.0) or 0.0)
+                utilization = float(primary.get("utilization_gpu_pct", 0.0) or 0.0)
+                vram_pct = ((used_mb / total_mb) * 100.0) if total_mb > 0 else 0.0
+                if vram_pct >= 90.0 or utilization >= 95.0:
+                    if status == "normal":
+                        status = "high_pressure"
+                    reasons.append(f"live GPU pressure high ({vram_pct:.1f}% VRAM, {utilization:.1f}% util)")
+                if vram_pct >= 96.0:
+                    status = "unsafe"
+                    reasons.append(f"live GPU pressure near saturation ({vram_pct:.1f}% VRAM)")
+            except Exception:
+                pass
+
+        return {
+            "schema": "stablenew.stage-pressure.v1",
+            "stage": stage_name,
+            "status": status,
+            "width": width,
+            "height": height,
+            "batch_size": batch_size,
+            "steps": int(steps or 0),
+            "megapixels": round(megapixels, 3),
+            "effective_load": round(effective_load, 3),
+            "reasons": reasons,
+            "gpu_snapshot": gpu_snapshot,
+        }
+
+    def _mitigate_stage_pressure(self, assessment: Mapping[str, Any]) -> None:
+        status = str(assessment.get("status") or "normal")
+        if status not in {"high_pressure", "unsafe"}:
+            return
+        level = logging.ERROR if status == "unsafe" else logging.WARNING
+        log_with_ctx(
+            logger,
+            level,
+            f"[executor/pressure] {assessment.get('stage')} stage entering {status}",
+            ctx=LogContext(subsystem="pipeline", stage=str(assessment.get("stage") or "")),
+            extra_fields={
+                "event": "stage_pressure_warning",
+                "outcome": status,
+                "megapixels": assessment.get("megapixels"),
+                "effective_load": assessment.get("effective_load"),
+                "reasons": assessment.get("reasons"),
+            },
+        )
+        try:
+            if hasattr(self.client, "free_vram"):
+                self.client.free_vram(unload_model=False, force_gc=True)
+        except Exception as exc:
+            logger.debug("Pressure mitigation cache clear failed: %s", exc)
+
+    def _assess_runtime_state(
+        self,
+        *,
+        stage_name: str,
+        pressure_assessment: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        status = "healthy"
+        reasons: list[str] = []
+        manager = get_global_webui_process_manager()
+        launch_profile = manager.get_launch_profile() if manager and hasattr(manager, "get_launch_profile") else None
+        connection_ok = False
+        try:
+            connection_ok = bool(self.client.check_connection(timeout=3.0))
+        except Exception:
+            connection_ok = False
+        if not connection_ok:
+            status = "poisoned"
+            reasons.append("webui connection check failed")
+
+        failure_state = {}
+        try:
+            if hasattr(self.client, "get_runtime_failure_state"):
+                failure_state = dict(self.client.get_runtime_failure_state())
+        except Exception:
+            failure_state = {}
+        readiness = failure_state.get("readiness") if isinstance(failure_state, Mapping) else None
+        if isinstance(readiness, Mapping):
+            cooldown_remaining = float(readiness.get("cooldown_remaining_s", 0.0) or 0.0)
+            hard_failures = float(readiness.get("hard_failures", 0.0) or 0.0)
+            if cooldown_remaining > 0.0:
+                status = "poisoned"
+                reasons.append(f"readiness backoff active ({cooldown_remaining:.1f}s)")
+            elif hard_failures >= 2.0 and status == "healthy":
+                status = "degraded"
+                reasons.append(f"recent readiness hard failures ({int(hard_failures)})")
+        endpoint_cooldowns = failure_state.get("resource_endpoint_cooldowns") if isinstance(failure_state, Mapping) else None
+        if isinstance(endpoint_cooldowns, Mapping) and endpoint_cooldowns:
+            if status == "healthy":
+                status = "degraded"
+            reasons.append("resource endpoint cooldowns active")
+
+        progress_snapshot = None
+        try:
+            if hasattr(self.client, "get_progress_snapshot"):
+                progress_snapshot = self.client.get_progress_snapshot()
+        except Exception:
+            progress_snapshot = None
+        if isinstance(progress_snapshot, Mapping):
+            state = progress_snapshot.get("state") or {}
+            progress = float(progress_snapshot.get("progress", 0.0) or 0.0)
+            current_job = str(state.get("job") or "").strip()
+            if progress >= 0.999 and current_job:
+                status = "poisoned"
+                reasons.append(f"stale progress state present ({current_job})")
+
+        process_risk = collect_process_risk_snapshot()
+        risk_status = str(process_risk.get("status") or "normal")
+        if risk_status == "critical":
+            status = "poisoned"
+            reasons.append("duplicate or suspicious StableNew/WebUI process state detected")
+        elif risk_status == "warning" and status == "healthy":
+            status = "degraded"
+            reasons.append("suspicious long-lived StableNew-like processes detected")
+
+        pressure_status = str((pressure_assessment or {}).get("status") or "normal")
+        if pressure_status in {"high_pressure", "unsafe"} and launch_profile != "sdxl_guarded":
+            if status == "healthy":
+                status = "degraded"
+            reasons.append("guarded WebUI launch profile not active for heavy workload")
+        if pressure_status == "unsafe":
+            status = "poisoned"
+            reasons.append("stage pressure classified unsafe")
+
+        return {
+            "schema": "stablenew.runtime-admission.v1",
+            "stage": stage_name,
+            "status": status,
+            "launch_profile": launch_profile,
+            "connection_ok": connection_ok,
+            "failure_state": failure_state,
+            "progress_snapshot": progress_snapshot,
+            "process_risk": process_risk,
+            "reasons": reasons,
+        }
+
+    def _build_runtime_admission_error(
+        self,
+        *,
+        stage_name: str,
+        runtime_state: Mapping[str, Any],
+        pressure_assessment: Mapping[str, Any] | None = None,
+    ) -> PipelineStageError:
+        error = GenerateError(
+            code=GenerateErrorCode.CONNECTION,
+            message=f"Runtime admission refused before {stage_name}: {runtime_state.get('status')}",
+            stage=stage_name,
+            details={
+                "runtime_admission": dict(runtime_state),
+                "pressure_assessment": dict(pressure_assessment or {}),
+                "recovery_classification": "runtime_admission_refused",
+            },
+        )
+        return PipelineStageError(error)
+
+    def _ensure_runtime_admissible(
+        self,
+        *,
+        stage_name: str,
+        pressure_assessment: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        runtime_state = self._assess_runtime_state(
+            stage_name=stage_name,
+            pressure_assessment=pressure_assessment,
+        )
+        status = str(runtime_state.get("status") or "healthy")
+        if status == "healthy":
+            return runtime_state
+
+        log_with_ctx(
+            logger,
+            logging.WARNING if status == "degraded" else logging.ERROR,
+            f"[executor/runtime] {stage_name} runtime state is {status}",
+            ctx=LogContext(subsystem="pipeline", stage=stage_name),
+            extra_fields={
+                "event": "runtime_admission_state",
+                "outcome": status,
+                "reasons": runtime_state.get("reasons"),
+                "launch_profile": runtime_state.get("launch_profile"),
+            },
+        )
+
+        pressure_status = str((pressure_assessment or {}).get("status") or "normal")
+        should_force_guarded = pressure_status in {"high_pressure", "unsafe"}
+        should_attempt_recovery = status == "poisoned" or should_force_guarded
+        if should_attempt_recovery and self._attempt_webui_recovery(
+            stage=stage_name,
+            reason="runtime_poisoned_or_guarded_required",
+            profile_override="sdxl_guarded" if should_force_guarded else None,
+        ):
+            try:
+                if hasattr(self.client, "clear_runtime_failure_state"):
+                    self.client.clear_runtime_failure_state()
+            except Exception:
+                logger.debug("Failed to clear runtime failure state after recovery", exc_info=True)
+            runtime_state = self._assess_runtime_state(
+                stage_name=stage_name,
+                pressure_assessment=pressure_assessment,
+            )
+            recovered_status = str(runtime_state.get("status") or "healthy")
+            if recovered_status == "healthy":
+                return runtime_state
+            if recovered_status == "degraded" and pressure_status != "unsafe":
+                return runtime_state
+
+        if pressure_status == "unsafe" and stage_name in {"adetailer", "upscale"}:
+            raise self._build_runtime_admission_error(
+                stage_name=stage_name,
+                runtime_state=runtime_state,
+                pressure_assessment=pressure_assessment,
+            )
+        if str(runtime_state.get("status") or "healthy") == "poisoned":
+            raise self._build_runtime_admission_error(
+                stage_name=stage_name,
+                runtime_state=runtime_state,
+                pressure_assessment=pressure_assessment,
+            )
+        return runtime_state
+
+    def _check_model_drift(
+        self,
+        *,
+        stage_name: str,
+        requested_model: str | None,
+        when: str,
+    ) -> dict[str, Any] | None:
+        if not requested_model:
+            return None
+        try:
+            current_model = self.client.get_current_model()
+        except Exception:
+            return None
+        if not current_model:
+            return None
+        if self._normalize_model_name(current_model) == self._normalize_model_name(requested_model):
+            return None
+        warning = {
+            "type": "model_drift",
+            "stage": stage_name,
+            "when": when,
+            "requested_model": requested_model,
+            "live_model": current_model,
+        }
+        log_with_ctx(
+            logger,
+            logging.WARNING,
+            f"[executor/model-drift] {stage_name} stage live model drift detected",
+            ctx=LogContext(subsystem="pipeline", stage=stage_name),
+            extra_fields={
+                "event": "stage_model_drift",
+                "outcome": "warning",
+                "requested_model": requested_model,
+                "live_model": current_model,
+                "when": when,
+            },
+        )
+        return warning
+
+    def _attach_runtime_warning(
+        self,
+        metadata: dict[str, Any],
+        warning: Mapping[str, Any] | None,
+    ) -> None:
+        if not warning:
+            return
+        warnings = metadata.setdefault("runtime_warnings", [])
+        if isinstance(warnings, list):
+            warnings.append(dict(warning))
+
     def _ensure_hypernetwork(self, name: str | None, strength: float | None) -> None:
         """
         Ensure the requested hypernetwork (and optional strength) is active.
@@ -986,6 +1293,7 @@ class Pipeline:
         max_attempts: int = 2,
         base_delay: float = 1.0,
         max_delay: float = 4.0,
+        profile_override: str | None = None,
     ) -> bool:
         manager = get_global_webui_process_manager()
         if manager is None:
@@ -995,9 +1303,10 @@ class Pipeline:
             )
             return False
         logger.warning(
-            "Executor attempting WebUI recovery for stage=%s reason=%s",
+            "Executor attempting WebUI recovery for stage=%s reason=%s profile_override=%s",
             stage,
             reason,
+            profile_override,
         )
         try:
             recovered = manager.restart_webui(
@@ -1005,6 +1314,7 @@ class Pipeline:
                 max_attempts=max_attempts,
                 base_delay=base_delay,
                 max_delay=max_delay,
+                profile_override=profile_override,
             )
         except Exception as exc:
             logger.error(
@@ -1019,6 +1329,11 @@ class Pipeline:
             # PR-HARDEN-007: Record recovery time so downstream health checks can use
             # a longer probe timeout during the WebUI model-loading grace window.
             self._last_recovery_time = time.monotonic()
+            try:
+                if hasattr(self.client, "clear_runtime_failure_state"):
+                    self.client.clear_runtime_failure_state()
+            except Exception:
+                logger.debug("Failed to clear client runtime failure state after recovery", exc_info=True)
         return bool(recovered)
 
     def _ensure_webui_true_ready(self) -> None:
@@ -2132,7 +2447,11 @@ class Pipeline:
 
         # Set model and VAE if specified (ensure consistency across pipeline stages)
         # BUGFIX: Don't treat ADetailer model names as SD model checkpoints
-        requested_model = config.get("model") or config.get("sd_model_checkpoint")
+        requested_model = (
+            config.get("adetailer_checkpoint_model")
+            or config.get("model")
+            or config.get("sd_model_checkpoint")
+        )
         # Handle VAE: get from config but don't default to fallback if empty
         requested_vae = config.get("vae") if "vae" in config else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
         
@@ -2174,8 +2493,34 @@ class Pipeline:
             except (TypeError, ValueError):
                 return fallback
 
+        def _normalize_adetailer_scheduler(raw_value: Any) -> str:
+            value = str(raw_value or "").strip()
+            if not value or value.lower() in {
+                "inherit",
+                "use same scheduler",
+                "use sampler default",
+            }:
+                return "Use same scheduler"
+            return value
+
         payload_width = actual_width or _coerce_dimension(config.get("width"), 512)
         payload_height = actual_height or _coerce_dimension(config.get("height"), 512)
+        enabled_passes = int(bool(config.get("enable_face_pass", True))) + int(
+            bool(config.get("enable_hands_pass", config.get("ad_hands_enabled", False)))
+        )
+        pressure_assessment = self._assess_stage_pressure(
+            stage_name="adetailer",
+            width=payload_width,
+            height=payload_height,
+            batch_size=1,
+            steps=int(config.get("adetailer_steps", config.get("steps", 14)) or 14),
+            enabled_passes=max(enabled_passes, 1),
+        )
+        self._mitigate_stage_pressure(pressure_assessment)
+        runtime_admission = self._ensure_runtime_admissible(
+            stage_name="adetailer",
+            pressure_assessment=pressure_assessment,
+        )
 
         # Use adetailer-specific negative prompt if provided, otherwise use txt2img negative
         # NOTE: ADetailer has its own custom prompts and should NOT get global positive/negative applied
@@ -2197,7 +2542,7 @@ class Pipeline:
         from src.utils.config_helpers import get_with_fallback_warning
 
         # DEBUG: Log ADetailer config received
-        logger.info(
+        logger.debug(
             "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s, mask_feather=%s",
             config.get("adetailer_model", "NOT_SET"),
             config.get("adetailer_steps", "NOT_SET"),
@@ -2207,7 +2552,7 @@ class Pipeline:
             config.get("adetailer_confidence", "NOT_SET"),
             config.get("adetailer_mask_feather", "NOT_SET"),
         )
-        logger.info(
+        logger.debug(
             "ADETAILER PROMPTS RECEIVED: positive='%s', negative='%s'",
             (config.get("adetailer_prompt", "")[:60] + "...") if len(config.get("adetailer_prompt", "")) > 60 else (config.get("adetailer_prompt", "") or "(empty)"),
             (base_ad_neg[:60] + "...") if len(base_ad_neg) > 60 else base_ad_neg,
@@ -2242,7 +2587,7 @@ class Pipeline:
         # Warns only when keys are actually missing (true fallback), not when user chose defaults
         face_args = {
             "ad_model": get_with_fallback_warning(config, "adetailer_model", "face_yolov8n.pt", source="run_adetailer"),
-            "ad_tab_enable": True,
+            "ad_tab_enable": bool(config.get("enable_face_pass", True)),
             "ad_confidence": get_with_fallback_warning(config, "adetailer_confidence", 0.35, source="run_adetailer"),
             "ad_mask_filter_method": get_with_fallback_warning(config, "ad_mask_filter_method", "Area", source="run_adetailer", warn=False),
             "ad_mask_k": get_with_fallback_warning(config, "ad_mask_k_largest", 3, source="run_adetailer", warn=False),
@@ -2251,7 +2596,7 @@ class Pipeline:
             "ad_dilate_erode": get_with_fallback_warning(config, "ad_dilate_erode", 4, source="run_adetailer", warn=False),
             "ad_mask_blur": get_with_fallback_warning(config, "ad_mask_blur", 6, source="run_adetailer", warn=False),
             "ad_mask_merge_invert": get_with_fallback_warning(config, "ad_mask_merge_invert", "None", source="run_adetailer", warn=False),
-            "ad_inpaint_only_masked": True,
+            "ad_inpaint_only_masked": bool(config.get("ad_inpaint_only_masked", True)),
             "ad_inpaint_only_masked_padding": get_with_fallback_warning(config, "adetailer_padding", 32, source="run_adetailer", warn=False),
             "ad_use_inpaint_width_height": bool(config.get("ad_use_inpaint_width_height", False)),
             "ad_inpaint_width": _coerce_dimension(config.get("ad_inpaint_width"), payload_width),
@@ -2266,14 +2611,24 @@ class Pipeline:
             "ad_denoising_strength": get_with_fallback_warning(config, "adetailer_denoise", 0.32, source="run_adetailer"),
             "ad_use_sampler": True,
             "ad_sampler": get_with_fallback_warning(config, "adetailer_sampler", "DPM++ 2M Karras", source="run_adetailer"),
-            "ad_scheduler": get_with_fallback_warning(config, "adetailer_scheduler", "Use same scheduler", source="run_adetailer", warn=False),
+            "ad_scheduler": _normalize_adetailer_scheduler(
+                get_with_fallback_warning(
+                    config,
+                    "adetailer_scheduler",
+                    "inherit",
+                    source="run_adetailer",
+                    warn=False,
+                )
+            ),
             "ad_prompt": final_prompt,
             "ad_negative_prompt": ad_neg_final,
         }
 
         hand_args = {
             "ad_model": config.get("adetailer_hands_model", "hand_yolov8n.pt"),
-            "ad_tab_enable": config.get("ad_hands_enabled", True),
+            "ad_tab_enable": bool(
+                config.get("enable_hands_pass", config.get("ad_hands_enabled", False))
+            ),
             "ad_confidence": config.get("adetailer_hands_confidence", 0.30),
             "ad_mask_filter_method": config.get("ad_hands_mask_filter_method", "Area"),
             "ad_mask_k": config.get("ad_hands_mask_k", 6),
@@ -2282,11 +2637,17 @@ class Pipeline:
             "ad_dilate_erode": config.get("ad_hands_dilate_erode", 6),
             "ad_mask_blur": config.get("ad_hands_mask_blur", 4),
             "ad_mask_merge_invert": config.get("ad_hands_mask_merge_invert", "None"),
-            "ad_inpaint_only_masked": True,
+            "ad_inpaint_only_masked": bool(config.get("ad_hands_inpaint_only_masked", True)),
             "ad_inpaint_only_masked_padding": config.get("ad_hands_padding", 16),
-            "ad_use_inpaint_width_height": False,  # Disable dimension optimization to prevent crashes on large images
-            "ad_inpaint_width": payload_width,  # Lock to source dimensions - prevent resizing
-            "ad_inpaint_height": payload_height,  # Lock to source dimensions - prevent resizing
+            "ad_use_inpaint_width_height": bool(
+                config.get("ad_hands_use_inpaint_width_height", False)
+            ),
+            "ad_inpaint_width": _coerce_dimension(
+                config.get("ad_hands_inpaint_width"), payload_width
+            ),
+            "ad_inpaint_height": _coerce_dimension(
+                config.get("ad_hands_inpaint_height"), payload_height
+            ),
             "ad_x_offset": 0,  # Disable x tiling
             "ad_y_offset": 0,  # Disable y tiling
             "ad_mask_only_top_k_largest": True,  # Process only largest detection
@@ -2297,7 +2658,9 @@ class Pipeline:
             "ad_denoising_strength": config.get("adetailer_hands_denoise", 0.25),
             "ad_use_sampler": True,
             "ad_sampler": config.get("adetailer_hands_sampler", "DPM++ 2M Karras"),
-            "ad_scheduler": config.get("adetailer_hands_scheduler", "Use same scheduler"),
+            "ad_scheduler": _normalize_adetailer_scheduler(
+                config.get("adetailer_hands_scheduler", "inherit")
+            ),
             "ad_prompt": config.get(
                 "adetailer_hands_prompt",
                 "well-formed fingers, natural knuckles, correct hand anatomy, sharp details",
@@ -2338,9 +2701,17 @@ class Pipeline:
             override_settings["sd_vae"] = requested_vae
         if override_settings:
             payload["override_settings"] = override_settings
+        entry_drift_warning = self._check_model_drift(
+            stage_name="adetailer",
+            requested_model=requested_model,
+            when="entry",
+        )
         # Add scheduler if present in config
-        if config.get("scheduler"):
-            payload["scheduler"] = config.get("scheduler")
+        payload_scheduler = str(config.get("scheduler") or "").strip()
+        if payload_scheduler:
+            normalized_payload_scheduler = _normalize_adetailer_scheduler(payload_scheduler)
+            if normalized_payload_scheduler != "Use same scheduler":
+                payload["scheduler"] = normalized_payload_scheduler
 
         # DEBUG: Log ADetailer payload dimensions to verify no resizing
         logger.warning(
@@ -2424,6 +2795,8 @@ class Pipeline:
             "vae": vae_name,
             "seeds": self._build_seed_metadata(config, gen_info),  # D-MANIFEST-001
             "stage_duration_ms": stage_duration_ms,
+            "pressure_assessment": pressure_assessment,
+            "runtime_admission": runtime_admission,
             # Accumulated stage history from input image
             "stage_history": stage_history,
             # Legacy fields for backward compatibility
@@ -2431,6 +2804,25 @@ class Pipeline:
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
         }
+        self._attach_runtime_warning(
+            metadata,
+            {
+                "type": "runtime_admission",
+                "status": runtime_admission.get("status"),
+                "reasons": list(runtime_admission.get("reasons") or []),
+            }
+            if str(runtime_admission.get("status") or "healthy") != "healthy"
+            else None,
+        )
+        self._attach_runtime_warning(metadata, entry_drift_warning)
+        self._attach_runtime_warning(
+            metadata,
+            self._check_model_drift(
+                stage_name="adetailer",
+                requested_model=requested_model,
+                when="exit",
+            ),
+        )
         if adaptive_refinement:
             metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
                 adaptive_refinement,
@@ -3059,6 +3451,18 @@ class Pipeline:
                 config.get("batch_size"),
                 stage_batch_size,
             )
+            pressure_assessment = self._assess_stage_pressure(
+                stage_name="txt2img",
+                width=int(txt2img_config.get("width", 512) or 512),
+                height=int(txt2img_config.get("height", 512) or 512),
+                batch_size=int(stage_batch_size or 1),
+                steps=int(txt2img_config.get("steps", 20) or 20),
+            )
+            self._mitigate_stage_pressure(pressure_assessment)
+            runtime_admission = self._ensure_runtime_admissible(
+                stage_name="txt2img",
+                pressure_assessment=pressure_assessment,
+            )
 
             # Apply global positive and negative prompts to txt2img stage only
             pipeline_section = config.get("pipeline", {})
@@ -3176,6 +3580,11 @@ class Pipeline:
             
             if requested_model or requested_vae:
                 self._ensure_model_and_vae(requested_model, requested_vae)
+            entry_drift_warning = self._check_model_drift(
+                stage_name="txt2img",
+                requested_model=requested_model,
+                when="entry",
+            )
             
             # Use the requested model/VAE for manifest (what we asked for)
             # Query WebUI only as fallback if not specified in config
@@ -3381,8 +3790,18 @@ class Pipeline:
                 "actual_subseed": gen_info.get("subseed"),
                 "model": model_name,
                 "vae": vae_name,
+                "pressure_assessment": pressure_assessment,
+                "runtime_admission": runtime_admission,
                 "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
             }
+            if str(runtime_admission.get("status") or "healthy") != "healthy":
+                base_metadata["runtime_warnings"] = [
+                    {
+                        "type": "runtime_admission",
+                        "status": runtime_admission.get("status"),
+                        "reasons": list(runtime_admission.get("reasons") or []),
+                    }
+                ]
             saved_variants: list[tuple[Path, dict[str, Any]]] = []
             
             for batch_idx in range(num_images_received):
@@ -3506,8 +3925,18 @@ class Pipeline:
                     "saved_images": saved_image_count,
                     "partial_success": partial_success,
                     "recovery_classification": "partial_image_response" if partial_success else None,
-                "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
-            }
+                    "pressure_assessment": pressure_assessment,
+                    "runtime_admission": runtime_admission,
+                    "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
+                }
+                if str(runtime_admission.get("status") or "healthy") != "healthy":
+                    metadata["runtime_warnings"] = [
+                        {
+                            "type": "runtime_admission",
+                            "status": runtime_admission.get("status"),
+                            "reasons": list(runtime_admission.get("reasons") or []),
+                        }
+                    ]
             if adaptive_refinement:
                 metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
                     adaptive_refinement,
@@ -4159,6 +4588,9 @@ class Pipeline:
             # REMOVED: ensure_safe_upscale_defaults() was interfering with user's tile_size=0 config
             # Forcing ESRGAN_tile to 512 broke the upscaler's tiling logic
             # User has been running tile_size=0 successfully - don't override it
+            pressure_assessment: dict[str, Any] | None = None
+            runtime_admission: dict[str, Any] | None = None
+            entry_drift_warning: dict[str, Any] | None = None
             
             # Pre-upscale memory management (upscale is memory-intensive)
             try:
@@ -4198,6 +4630,18 @@ class Pipeline:
                 upscale_factor = config.get("upscaling_resize", 2.0)
                 target_width = int(orig_width * upscale_factor)
                 target_height = int(orig_height * upscale_factor)
+                pressure_assessment = self._assess_stage_pressure(
+                    stage_name="upscale",
+                    width=target_width,
+                    height=target_height,
+                    batch_size=1,
+                    steps=int(config.get("steps", 20) or 20),
+                )
+                self._mitigate_stage_pressure(pressure_assessment)
+                runtime_admission = self._ensure_runtime_admissible(
+                    stage_name="upscale",
+                    pressure_assessment=pressure_assessment,
+                )
 
                 logger.info(
                     "UPSCALE DIAG: mode=img2img, upscaler=%s, resize=%s, input=%sx%s, target=%sx%s",
@@ -4234,6 +4678,11 @@ class Pipeline:
                     override_settings["sd_vae"] = requested_vae
                 if override_settings:
                     payload["override_settings"] = override_settings
+                entry_drift_warning = self._check_model_drift(
+                    stage_name="upscale",
+                    requested_model=requested_model,
+                    when="entry",
+                )
 
                 try:
                     logger.info(
@@ -4308,6 +4757,29 @@ class Pipeline:
                     orig_height if orig_height is not None else "?",
                     int(orig_width * upscaling_resize) if orig_width is not None else "?",
                     int(orig_height * upscaling_resize) if orig_height is not None else "?",
+                )
+                if orig_width is not None and orig_height is not None:
+                    pressure_assessment = self._assess_stage_pressure(
+                        stage_name="upscale",
+                        width=int(orig_width * upscaling_resize),
+                        height=int(orig_height * upscaling_resize),
+                        batch_size=1,
+                        steps=int(config.get("steps", 20) or 20),
+                    )
+                    self._mitigate_stage_pressure(pressure_assessment)
+                    runtime_admission = self._ensure_runtime_admissible(
+                        stage_name="upscale",
+                        pressure_assessment=pressure_assessment,
+                    )
+                if runtime_admission is None:
+                    runtime_admission = self._ensure_runtime_admissible(
+                        stage_name="upscale",
+                        pressure_assessment=pressure_assessment,
+                    )
+                entry_drift_warning = self._check_model_drift(
+                    stage_name="upscale",
+                    requested_model=requested_model,
+                    when="entry",
                 )
 
                 # Track timing for this stage
@@ -4396,9 +4868,41 @@ class Pipeline:
                 "actual_seed": None,  # Upscale doesn't return seed info
                 "actual_subseed": None,  # Upscale doesn't return seed info
                 "stage_duration_ms": stage_duration_ms,
+                "pressure_assessment": pressure_assessment or {
+                    "schema": "stablenew.stage-pressure.v1",
+                    "stage": "upscale",
+                    "status": "normal",
+                    "reasons": [],
+                },
+                "runtime_admission": runtime_admission
+                or {
+                    "schema": "stablenew.runtime-admission.v1",
+                    "stage": "upscale",
+                    "status": "healthy",
+                    "reasons": [],
+                },
                 # Accumulated stage history from previous stages
                 "stage_history": stage_history,
             }
+            self._attach_runtime_warning(
+                metadata,
+                {
+                    "type": "runtime_admission",
+                    "status": (runtime_admission or {}).get("status"),
+                    "reasons": list((runtime_admission or {}).get("reasons") or []),
+                }
+                if runtime_admission and str(runtime_admission.get("status") or "healthy") != "healthy"
+                else None,
+            )
+            self._attach_runtime_warning(metadata, entry_drift_warning)
+            self._attach_runtime_warning(
+                metadata,
+                self._check_model_drift(
+                    stage_name="upscale",
+                    requested_model=requested_model,
+                    when="exit",
+                ),
+            )
             if adaptive_refinement:
                 metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
                     adaptive_refinement,

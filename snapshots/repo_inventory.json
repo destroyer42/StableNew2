@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2026-03-21T07:11:32",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260321-071124.zip",
-  "file_count": 2263,
-  "total_size_bytes": 19937002,
+  "created_at": "2026-03-21T12:05:04",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260321-120455.zip",
+  "file_count": 2300,
+  "total_size_bytes": 19743231,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -311,8 +311,8 @@
     },
     {
       "path": "data/webui_cache.json",
-      "size_bytes": 172,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "size_bytes": 233,
+      "mtime_iso": "2026-03-21T11:14:27"
     },
     {
       "path": "data/learning/learning_records.jsonl",
@@ -1375,14 +1375,19 @@
       "mtime_iso": "2026-03-19T22:50:54"
     },
     {
+      "path": "docs/deep-research-report-prompt-optimization-world-class.md",
+      "size_bytes": 29527,
+      "mtime_iso": "2026-03-21T09:13:36"
+    },
+    {
       "path": "docs/deep-research-report-top-20-golden-recommendations.md",
       "size_bytes": 35394,
       "mtime_iso": "2026-03-21T06:30:40"
     },
     {
       "path": "docs/DOCS_INDEX_v2.6.md",
-      "size_bytes": 5515,
-      "mtime_iso": "2026-03-21T06:39:30"
+      "size_bytes": 6542,
+      "mtime_iso": "2026-03-21T10:17:55"
     },
     {
       "path": "docs/E2E_Golden_Path_Test_Matrix_v2.6.md",
@@ -1420,6 +1425,11 @@
       "mtime_iso": "2026-03-20T06:39:28"
     },
     {
+      "path": "docs/Prompt_Optimizer_WorldClass_v3_Design.md",
+      "size_bytes": 2108,
+      "mtime_iso": "2026-03-21T09:25:30"
+    },
+    {
       "path": "docs/PROMPT_PACK_LIFECYCLE_v2.6.md",
       "size_bytes": 4640,
       "mtime_iso": "2026-03-19T22:50:54"
@@ -1440,9 +1450,14 @@
       "mtime_iso": "2026-03-21T00:36:55"
     },
     {
+      "path": "docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md",
+      "size_bytes": 6318,
+      "mtime_iso": "2026-03-21T09:25:45"
+    },
+    {
       "path": "docs/StableNew Roadmap v2.6.md",
-      "size_bytes": 24395,
-      "mtime_iso": "2026-03-21T06:39:30"
+      "size_bytes": 27129,
+      "mtime_iso": "2026-03-21T10:17:55"
     },
     {
       "path": "docs/StableNew Secondary Motion Layer Design.md",
@@ -1455,9 +1470,19 @@
       "mtime_iso": "2026-03-20T06:03:07"
     },
     {
+      "path": "docs/StableNew2 Prompt Optimizer Deep Research_ World‑Class, Safe, Intent‑Aware, Policy‑Driven.pdf",
+      "size_bytes": 102743,
+      "mtime_iso": "2026-03-21T09:13:13"
+    },
+    {
       "path": "docs/StableNew_Coding_and_Testing_v2.6.md",
       "size_bytes": 22008,
       "mtime_iso": "2026-03-19T22:50:54"
+    },
+    {
+      "path": "docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md",
+      "size_bytes": 10984,
+      "mtime_iso": "2026-03-21T10:17:55"
     },
     {
       "path": "docs/WebUI Restart and Lost Connection Investigation 2026-03-20.md",
@@ -1615,6 +1640,26 @@
       "mtime_iso": "2026-03-19T22:50:54"
     },
     {
+      "path": "docs/CompletedPR/PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization.md",
+      "size_bytes": 992,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
+      "path": "docs/CompletedPR/PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters.md",
+      "size_bytes": 649,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
+      "path": "docs/CompletedPR/PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup.md",
+      "size_bytes": 731,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
+      "path": "docs/CompletedPR/PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split.md",
+      "size_bytes": 740,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
       "path": "docs/CompletedPR/PR-PERF-206A-Preview-Reuse-and-Queue-Submit-Batching.md",
       "size_bytes": 2640,
       "mtime_iso": "2026-03-18T23:32:58"
@@ -1678,6 +1723,11 @@
       "path": "docs/CompletedPR/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md",
       "size_bytes": 2457,
       "mtime_iso": "2026-03-20T06:03:07"
+    },
+    {
+      "path": "docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md",
+      "size_bytes": 1091,
+      "mtime_iso": "2026-03-21T09:27:28"
     },
     {
       "path": "docs/older/ACTIVE_MODULES.md",
@@ -4115,9 +4165,59 @@
       "mtime_iso": "2026-03-21T00:36:55"
     },
     {
+      "path": "docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md",
+      "size_bytes": 12954,
+      "mtime_iso": "2026-03-21T10:17:55"
+    },
+    {
       "path": "docs/PR_Backlog/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md",
       "size_bytes": 2077,
       "mtime_iso": "2026-03-21T00:36:55"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization.md",
+      "size_bytes": 1290,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters.md",
+      "size_bytes": 1023,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup.md",
+      "size_bytes": 986,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split.md",
+      "size_bytes": 885,
+      "mtime_iso": "2026-03-21T08:59:54"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening.md",
+      "size_bytes": 559,
+      "mtime_iso": "2026-03-21T09:25:30"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only.md",
+      "size_bytes": 503,
+      "mtime_iso": "2026-03-21T09:25:30"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing.md",
+      "size_bytes": 494,
+      "mtime_iso": "2026-03-21T09:25:30"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract.md",
+      "size_bytes": 438,
+      "mtime_iso": "2026-03-21T09:25:30"
+    },
+    {
+      "path": "docs/PR_Backlog/PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding.md",
+      "size_bytes": 495,
+      "mtime_iso": "2026-03-21T09:25:30"
     },
     {
       "path": "docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md",
@@ -4146,13 +4246,13 @@
     },
     {
       "path": "docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md",
-      "size_bytes": 13940,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 13951,
+      "mtime_iso": "2026-03-21T07:48:56"
     },
     {
       "path": "docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md",
-      "size_bytes": 11129,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 12112,
+      "mtime_iso": "2026-03-21T09:27:28"
     },
     {
       "path": "docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md",
@@ -4175,19 +4275,24 @@
       "mtime_iso": "2026-03-21T00:36:55"
     },
     {
+      "path": "docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md",
+      "size_bytes": 2055,
+      "mtime_iso": "2026-03-21T09:25:30"
+    },
+    {
       "path": "docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md",
       "size_bytes": 13190,
       "mtime_iso": "2026-03-21T00:36:55"
     },
     {
       "path": "docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md",
-      "size_bytes": 10338,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 11203,
+      "mtime_iso": "2026-03-21T09:27:28"
     },
     {
       "path": "docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md",
-      "size_bytes": 14026,
-      "mtime_iso": "2026-03-21T06:39:30"
+      "size_bytes": 14745,
+      "mtime_iso": "2026-03-21T09:00:10"
     },
     {
       "path": "docs/PR_Backlog/HistoricalRoot/PR-FILENAME-001.md",
@@ -4890,11 +4995,6 @@
       "mtime_iso": "2026-03-08T18:59:28"
     },
     {
-      "path": "inventory/stable_v2_inventory.json",
-      "size_bytes": 485649,
-      "mtime_iso": "2025-12-06T18:21:18"
-    },
-    {
       "path": "lists/Full List.json",
       "size_bytes": 548,
       "mtime_iso": "2025-11-22T07:25:45"
@@ -4941,13 +5041,13 @@
     },
     {
       "path": "packs/AA LoRA Strength.json",
-      "size_bytes": 28158,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 30912,
+      "mtime_iso": "2026-03-21T09:03:21"
     },
     {
       "path": "packs/AA LoRA Strength.txt",
-      "size_bytes": 11842,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 13760,
+      "mtime_iso": "2026-03-21T09:03:21"
     },
     {
       "path": "packs/An Extra Test.json",
@@ -5017,7 +5117,7 @@
     {
       "path": "packs/Beautiful_people_fullbody_PhotoMomentum_v26.json",
       "size_bytes": 13018,
-      "mtime_iso": "2026-03-21T00:34:25"
+      "mtime_iso": "2026-03-21T10:08:15"
     },
     {
       "path": "packs/Beautiful_people_fullbody_PhotoMomentum_v26.json.bak",
@@ -6246,13 +6346,13 @@
     },
     {
       "path": "src/api/client.py",
-      "size_bytes": 69139,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 71883,
+      "mtime_iso": "2026-03-21T11:09:51"
     },
     {
       "path": "src/api/healthcheck.py",
-      "size_bytes": 7696,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 10023,
+      "mtime_iso": "2026-03-21T11:09:35"
     },
     {
       "path": "src/api/types.py",
@@ -6266,8 +6366,8 @@
     },
     {
       "path": "src/api/webui_process_manager.py",
-      "size_bytes": 71138,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 72054,
+      "mtime_iso": "2026-03-21T11:09:16"
     },
     {
       "path": "src/api/webui_resources.py",
@@ -6301,8 +6401,8 @@
     },
     {
       "path": "src/config/app_config.py",
-      "size_bytes": 20025,
-      "mtime_iso": "2026-03-14T15:35:28"
+      "size_bytes": 21334,
+      "mtime_iso": "2026-03-21T11:08:23"
     },
     {
       "path": "src/config/prompting_defaults.py",
@@ -6311,8 +6411,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 285092,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 285625,
+      "mtime_iso": "2026-03-21T09:51:01"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -6336,8 +6436,8 @@
     },
     {
       "path": "src/controller/job_service.py",
-      "size_bytes": 50819,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 50890,
+      "mtime_iso": "2026-03-21T08:51:18"
     },
     {
       "path": "src/controller/learning_execution_controller.py",
@@ -6441,13 +6541,13 @@
     },
     {
       "path": "src/gui/app_state_v2.py",
-      "size_bytes": 20859,
-      "mtime_iso": "2026-03-20T06:39:28"
+      "size_bytes": 20911,
+      "mtime_iso": "2026-03-21T09:50:24"
     },
     {
       "path": "src/gui/base_generation_panel_v2.py",
-      "size_bytes": 28144,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 33391,
+      "mtime_iso": "2026-03-21T10:03:13"
     },
     {
       "path": "src/gui/center_panel.py",
@@ -6521,8 +6621,8 @@
     },
     {
       "path": "src/gui/log_trace_panel_v2.py",
-      "size_bytes": 10529,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 14123,
+      "mtime_iso": "2026-03-21T08:47:08"
     },
     {
       "path": "src/gui/main_window.py",
@@ -6531,8 +6631,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 47429,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 47461,
+      "mtime_iso": "2026-03-21T08:47:12"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -6621,8 +6721,8 @@
     },
     {
       "path": "src/gui/sidebar_panel_v2.py",
-      "size_bytes": 55301,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 56000,
+      "mtime_iso": "2026-03-21T09:50:53"
     },
     {
       "path": "src/gui/stage_chooser.py",
@@ -6731,8 +6831,8 @@
     },
     {
       "path": "src/gui/panels_v2/debug_hub_panel_v2.py",
-      "size_bytes": 18572,
-      "mtime_iso": "2026-03-10T07:38:47"
+      "size_bytes": 18647,
+      "mtime_iso": "2026-03-21T08:47:16"
     },
     {
       "path": "src/gui/panels_v2/debug_log_panel_v2.py",
@@ -6816,8 +6916,8 @@
     },
     {
       "path": "src/gui/stage_cards_v2/adetailer_stage_card_v2.py",
-      "size_bytes": 28351,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 34647,
+      "mtime_iso": "2026-03-21T10:05:17"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py",
@@ -6826,8 +6926,8 @@
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py",
-      "size_bytes": 47791,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 48086,
+      "mtime_iso": "2026-03-21T09:50:45"
     },
     {
       "path": "src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py",
@@ -6976,8 +7076,8 @@
     },
     {
       "path": "src/gui/views/stage_cards_panel_v2.py",
-      "size_bytes": 12610,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 13429,
+      "mtime_iso": "2026-03-21T09:50:39"
     },
     {
       "path": "src/gui/views/svd_tab_frame_v2.py",
@@ -7366,13 +7466,13 @@
     },
     {
       "path": "src/pipeline/cli_njr_builder.py",
-      "size_bytes": 4901,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 5011,
+      "mtime_iso": "2026-03-21T07:45:49"
     },
     {
       "path": "src/pipeline/config_contract_v26.py",
-      "size_bytes": 9076,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 9381,
+      "mtime_iso": "2026-03-21T07:45:25"
     },
     {
       "path": "src/pipeline/config_merger_v2.py",
@@ -7391,13 +7491,13 @@
     },
     {
       "path": "src/pipeline/executor.py",
-      "size_bytes": 208929,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 219990,
+      "mtime_iso": "2026-03-21T11:12:25"
     },
     {
       "path": "src/pipeline/job_builder_v2.py",
-      "size_bytes": 19376,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 19586,
+      "mtime_iso": "2026-03-21T07:45:39"
     },
     {
       "path": "src/pipeline/job_models_v2.py",
@@ -7406,8 +7506,8 @@
     },
     {
       "path": "src/pipeline/job_requests_v2.py",
-      "size_bytes": 4031,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 4292,
+      "mtime_iso": "2026-03-21T07:45:32"
     },
     {
       "path": "src/pipeline/last_run_store_v2_5.py",
@@ -7421,13 +7521,13 @@
     },
     {
       "path": "src/pipeline/pipeline_runner.py",
-      "size_bytes": 115404,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 120994,
+      "mtime_iso": "2026-03-21T11:12:50"
     },
     {
       "path": "src/pipeline/prompt_pack_job_builder.py",
-      "size_bytes": 34269,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 34174,
+      "mtime_iso": "2026-03-21T10:04:59"
     },
     {
       "path": "src/pipeline/prompt_pack_parser.py",
@@ -7456,8 +7556,8 @@
     },
     {
       "path": "src/pipeline/result_contract_v26.py",
-      "size_bytes": 12339,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 12555,
+      "mtime_iso": "2026-03-21T09:23:42"
     },
     {
       "path": "src/pipeline/run_config.py",
@@ -7546,8 +7646,8 @@
     },
     {
       "path": "src/prompting/sdxl_prompt_optimizer.py",
-      "size_bytes": 10509,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 10318,
+      "mtime_iso": "2026-03-21T09:57:42"
     },
     {
       "path": "src/prompting/__init__.py",
@@ -7571,8 +7671,8 @@
     },
     {
       "path": "src/queue/single_node_runner.py",
-      "size_bytes": 26713,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 26861,
+      "mtime_iso": "2026-03-21T08:51:14"
     },
     {
       "path": "src/queue/stub_runner.py",
@@ -7681,8 +7781,8 @@
     },
     {
       "path": "src/services/watchdog_system_v2.py",
-      "size_bytes": 7837,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 8834,
+      "mtime_iso": "2026-03-21T11:10:31"
     },
     {
       "path": "src/stablenew.egg-info/dependency_links.txt",
@@ -7771,13 +7871,13 @@
     },
     {
       "path": "src/utils/diagnostics_bundle_v2.py",
-      "size_bytes": 15633,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 17154,
+      "mtime_iso": "2026-03-21T11:10:19"
     },
     {
       "path": "src/utils/embedding_prompt_utils.py",
-      "size_bytes": 2820,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 3806,
+      "mtime_iso": "2026-03-21T09:57:37"
     },
     {
       "path": "src/utils/embedding_scanner.py",
@@ -7826,8 +7926,8 @@
     },
     {
       "path": "src/utils/logger.py",
-      "size_bytes": 24831,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 27853,
+      "mtime_iso": "2026-03-21T08:44:57"
     },
     {
       "path": "src/utils/logging_helpers_v2.py",
@@ -7866,8 +7966,8 @@
     },
     {
       "path": "src/utils/process_inspector_v2.py",
-      "size_bytes": 5538,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 7051,
+      "mtime_iso": "2026-03-21T11:10:02"
     },
     {
       "path": "src/utils/prompt_pack.py",
@@ -7996,8 +8096,8 @@
     },
     {
       "path": "src/video/container_metadata.py",
-      "size_bytes": 12456,
-      "mtime_iso": "2026-03-20T06:03:07"
+      "size_bytes": 12708,
+      "mtime_iso": "2026-03-21T09:23:42"
     },
     {
       "path": "src/video/continuity_models.py",
@@ -8155,6 +8255,36 @@
       "mtime_iso": "2026-03-19T22:50:54"
     },
     {
+      "path": "src/video/motion/secondary_motion_engine.py",
+      "size_bytes": 6836,
+      "mtime_iso": "2026-03-21T09:23:27"
+    },
+    {
+      "path": "src/video/motion/secondary_motion_models.py",
+      "size_bytes": 4978,
+      "mtime_iso": "2026-03-21T07:45:13"
+    },
+    {
+      "path": "src/video/motion/secondary_motion_policy_service.py",
+      "size_bytes": 6212,
+      "mtime_iso": "2026-03-21T07:45:13"
+    },
+    {
+      "path": "src/video/motion/secondary_motion_provenance.py",
+      "size_bytes": 3805,
+      "mtime_iso": "2026-03-21T09:23:27"
+    },
+    {
+      "path": "src/video/motion/secondary_motion_worker.py",
+      "size_bytes": 2182,
+      "mtime_iso": "2026-03-21T09:23:27"
+    },
+    {
+      "path": "src/video/motion/__init__.py",
+      "size_bytes": 1278,
+      "mtime_iso": "2026-03-21T09:23:42"
+    },
+    {
       "path": "tests/conftest.py",
       "size_bytes": 4662,
       "mtime_iso": "2025-12-19T05:16:38"
@@ -8181,8 +8311,8 @@
     },
     {
       "path": "tests/test_api_client.py",
-      "size_bytes": 9187,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 10391,
+      "mtime_iso": "2026-03-21T08:12:16"
     },
     {
       "path": "tests/test_cancel_token.py",
@@ -8286,8 +8416,8 @@
     },
     {
       "path": "tests/test_pr_008.py",
-      "size_bytes": 13007,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 1613,
+      "mtime_iso": "2026-03-21T10:05:53"
     },
     {
       "path": "tests/test_pr_gui_003c_runtime.py",
@@ -8431,8 +8561,8 @@
     },
     {
       "path": "tests/api/test_healthcheck_v2.py",
-      "size_bytes": 2256,
-      "mtime_iso": "2025-11-29T11:22:13"
+      "size_bytes": 3080,
+      "mtime_iso": "2026-03-21T11:14:03"
     },
     {
       "path": "tests/api/test_sdxl_payloads.py",
@@ -8456,8 +8586,8 @@
     },
     {
       "path": "tests/api/test_webui_api_upscale_payload.py",
-      "size_bytes": 1632,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 2625,
+      "mtime_iso": "2026-03-21T07:54:47"
     },
     {
       "path": "tests/api/test_webui_api_wait_until_ready.py",
@@ -8468,6 +8598,11 @@
       "path": "tests/api/test_webui_healthcheck.py",
       "size_bytes": 1133,
       "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "tests/api/test_webui_launch_profile_v2.py",
+      "size_bytes": 1335,
+      "mtime_iso": "2026-03-21T11:13:41"
     },
     {
       "path": "tests/api/test_webui_lifecycle_cleanup.py",
@@ -8991,8 +9126,8 @@
     },
     {
       "path": "tests/controller/test_pipeline_randomizer_config_v2.py",
-      "size_bytes": 3657,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 4649,
+      "mtime_iso": "2026-03-21T10:08:07"
     },
     {
       "path": "tests/controller/test_pipeline_randomizer_integration_v2.py",
@@ -9216,8 +9351,8 @@
     },
     {
       "path": "tests/gui_v2/test_adetailer_stage_card_v2.py",
-      "size_bytes": 1741,
-      "mtime_iso": "2025-12-02T08:03:48"
+      "size_bytes": 3086,
+      "mtime_iso": "2026-03-21T10:05:39"
     },
     {
       "path": "tests/gui_v2/test_advanced_txt2img_stage_card_v2.py",
@@ -9366,13 +9501,13 @@
     },
     {
       "path": "tests/gui_v2/test_log_display_v2.py",
-      "size_bytes": 1685,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 3252,
+      "mtime_iso": "2026-03-21T08:56:37"
     },
     {
       "path": "tests/gui_v2/test_log_trace_panel_v2.py",
-      "size_bytes": 1823,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 3052,
+      "mtime_iso": "2026-03-21T08:56:37"
     },
     {
       "path": "tests/gui_v2/test_main_window_persistence_regressions.py",
@@ -9411,8 +9546,8 @@
     },
     {
       "path": "tests/gui_v2/test_pipeline_base_generation_ownership_v2.py",
-      "size_bytes": 1718,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2507,
+      "mtime_iso": "2026-03-21T10:06:55"
     },
     {
       "path": "tests/gui_v2/test_pipeline_config_panel_lora_runtime.py",
@@ -9551,8 +9686,8 @@
     },
     {
       "path": "tests/gui_v2/test_pr_008.py",
-      "size_bytes": 13007,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 1699,
+      "mtime_iso": "2026-03-21T10:06:05"
     },
     {
       "path": "tests/gui_v2/test_pr_gui_004_phase_d.py",
@@ -10211,13 +10346,13 @@
     },
     {
       "path": "tests/pipeline/test_cli_njr_builder.py",
-      "size_bytes": 1309,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2565,
+      "mtime_iso": "2026-03-21T07:47:24"
     },
     {
       "path": "tests/pipeline/test_config_contract_v26.py",
-      "size_bytes": 5031,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 6595,
+      "mtime_iso": "2026-03-21T07:47:24"
     },
     {
       "path": "tests/pipeline/test_config_merger_v2.py",
@@ -10241,8 +10376,8 @@
     },
     {
       "path": "tests/pipeline/test_executor_adetailer.py",
-      "size_bytes": 8721,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 12414,
+      "mtime_iso": "2026-03-21T10:06:33"
     },
     {
       "path": "tests/pipeline/test_executor_cancellation.py",
@@ -10281,8 +10416,8 @@
     },
     {
       "path": "tests/pipeline/test_executor_refinement_manifest.py",
-      "size_bytes": 5208,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 9077,
+      "mtime_iso": "2026-03-21T07:55:35"
     },
     {
       "path": "tests/pipeline/test_executor_scheduler_parsing.py",
@@ -10306,8 +10441,8 @@
     },
     {
       "path": "tests/pipeline/test_job_builder_v2.py",
-      "size_bytes": 5111,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 6204,
+      "mtime_iso": "2026-03-21T07:47:24"
     },
     {
       "path": "tests/pipeline/test_job_model_unification_v2.py",
@@ -10391,8 +10526,8 @@
     },
     {
       "path": "tests/pipeline/test_pipeline_runner.py",
-      "size_bytes": 44954,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 48834,
+      "mtime_iso": "2026-03-21T07:47:44"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_cancel_token.py",
@@ -10421,8 +10556,8 @@
     },
     {
       "path": "tests/pipeline/test_prompt_pack_job_builder.py",
-      "size_bytes": 12765,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 15980,
+      "mtime_iso": "2026-03-21T10:06:46"
     },
     {
       "path": "tests/pipeline/test_prompt_pack_njr_invariants.py",
@@ -10478,6 +10613,11 @@
       "path": "tests/pipeline/test_resolution_e2e.py",
       "size_bytes": 1412,
       "mtime_iso": "2025-12-19T05:15:33"
+    },
+    {
+      "path": "tests/pipeline/test_result_contract_v26.py",
+      "size_bytes": 1385,
+      "mtime_iso": "2026-03-21T09:24:27"
     },
     {
       "path": "tests/pipeline/test_run_config_prompt_source.py",
@@ -10815,6 +10955,11 @@
       "mtime_iso": "2026-03-08T18:59:29"
     },
     {
+      "path": "tests/services/test_watchdog_pressure_damping_v2.py",
+      "size_bytes": 1812,
+      "mtime_iso": "2026-03-21T11:13:27"
+    },
+    {
       "path": "tests/services/test_watchdog_ui_stall_context.py",
       "size_bytes": 2977,
       "mtime_iso": "2026-03-18T18:49:47"
@@ -10891,8 +11036,8 @@
     },
     {
       "path": "tests/unit/test_sdxl_prompt_optimizer.py",
-      "size_bytes": 3773,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 4298,
+      "mtime_iso": "2026-03-21T10:06:21"
     },
     {
       "path": "tests/utils/test_api_failure_store_v2.py",
@@ -10908,6 +11053,11 @@
       "path": "tests/utils/test_config_manager_presets.py",
       "size_bytes": 3274,
       "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "tests/utils/test_diagnostics_bundle_pressure_context_v2.py",
+      "size_bytes": 1509,
+      "mtime_iso": "2026-03-21T11:13:52"
     },
     {
       "path": "tests/utils/test_diagnostics_bundle_v2.py",
@@ -10956,8 +11106,8 @@
     },
     {
       "path": "tests/utils/test_inmemory_log_handler.py",
-      "size_bytes": 458,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 1334,
+      "mtime_iso": "2026-03-21T08:57:40"
     },
     {
       "path": "tests/utils/test_jsonl_codec.py",
@@ -10966,8 +11116,8 @@
     },
     {
       "path": "tests/utils/test_logger_integration.py",
-      "size_bytes": 1994,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 2329,
+      "mtime_iso": "2026-03-21T08:56:37"
     },
     {
       "path": "tests/utils/test_logger_v2.py",
@@ -10978,6 +11128,11 @@
       "path": "tests/utils/test_lora_embedding_parser.py",
       "size_bytes": 1049,
       "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "tests/utils/test_memory_pressure_guard_v2.py",
+      "size_bytes": 1467,
+      "mtime_iso": "2026-03-21T11:13:14"
     },
     {
       "path": "tests/utils/test_negative_helpers_v2.py",
@@ -11121,8 +11276,8 @@
     },
     {
       "path": "tests/video/test_container_metadata.py",
-      "size_bytes": 4484,
-      "mtime_iso": "2026-03-20T06:03:07"
+      "size_bytes": 5328,
+      "mtime_iso": "2026-03-21T09:24:27"
     },
     {
       "path": "tests/video/test_continuity_models.py",
@@ -11143,6 +11298,36 @@
       "path": "tests/video/test_movie_clip_service.py",
       "size_bytes": 12249,
       "mtime_iso": "2026-03-19T22:50:54"
+    },
+    {
+      "path": "tests/video/test_secondary_motion_engine.py",
+      "size_bytes": 2864,
+      "mtime_iso": "2026-03-21T09:24:27"
+    },
+    {
+      "path": "tests/video/test_secondary_motion_layer_imports.py",
+      "size_bytes": 2254,
+      "mtime_iso": "2026-03-21T07:47:24"
+    },
+    {
+      "path": "tests/video/test_secondary_motion_models.py",
+      "size_bytes": 1556,
+      "mtime_iso": "2026-03-21T07:47:24"
+    },
+    {
+      "path": "tests/video/test_secondary_motion_policy_service.py",
+      "size_bytes": 1910,
+      "mtime_iso": "2026-03-21T07:47:24"
+    },
+    {
+      "path": "tests/video/test_secondary_motion_provenance.py",
+      "size_bytes": 2103,
+      "mtime_iso": "2026-03-21T09:24:27"
+    },
+    {
+      "path": "tests/video/test_secondary_motion_worker.py",
+      "size_bytes": 1449,
+      "mtime_iso": "2026-03-21T09:24:27"
     },
     {
       "path": "tests/video/test_sequence_manifest.py",

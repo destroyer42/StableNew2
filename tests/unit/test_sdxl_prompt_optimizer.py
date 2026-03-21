@@ -82,3 +82,17 @@ def test_optimizer_extracts_mixed_positive_embeddings_to_absolute_front() -> Non
         "(<embedding:face_refiner>:0.8)",
         "<embedding:styleA>",
     ]
+
+
+def test_optimizer_preserves_legacy_bare_embedding_tokens_at_front() -> None:
+    service = PromptOptimizerService(PromptOptimizerConfig())
+    result = service.optimize_prompts(
+        "dramatic light, woman portrait <stable_yogis_pdxl_positives>, sharp focus",
+        "",
+        pipeline_name="adetailer",
+    )
+
+    assert result.positive.optimized_prompt.startswith(
+        "<stable_yogis_pdxl_positives>, woman portrait"
+    )
+    assert result.positive.buckets["embedding_tokens"] == ["<stable_yogis_pdxl_positives>"]

@@ -36,10 +36,12 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/Movie_Clips_Workflow_v2.6.md`
 - `docs/Image_Metadata_Contract_v2.6.md`
 - `docs/StableNew Secondary Motion Layer Design.md`
+- `docs/Prompt_Optimizer_WorldClass_v3_Design.md`
 - `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
 - `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 - `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
 - `docs/WebUI Restart and Lost Connection Investigation 2026-03-20.md`
+- `docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
 - `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
 - `docs/Randomizer_Spec_v2.6.md`
 
@@ -48,6 +50,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 - `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
 - `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
@@ -71,10 +74,17 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
 - `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
 - `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+- `docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
+- `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
 - `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 - `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 - `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 - `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+- `docs/PR_Backlog/PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening.md`
+- `docs/PR_Backlog/PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only.md`
+- `docs/PR_Backlog/PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing.md`
+- `docs/PR_Backlog/PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract.md`
+- `docs/PR_Backlog/PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding.md`
 - `docs/PR_Backlog/PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization.md`
 - `docs/PR_Backlog/PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters.md`
 - `docs/PR_Backlog/PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup.md`

@@ -67,6 +67,29 @@ def test_write_video_container_metadata_uses_standard_ffmpeg_tags(
     assert description_payload["config"]["fps"] == 16
 
 
+def test_build_public_media_payload_includes_secondary_motion_summary() -> None:
+    payload = container_metadata.build_public_media_payload(
+        {
+            "stage": "video_workflow",
+            "backend_id": "comfy",
+            "secondary_motion": {
+                "intent": {"enabled": True, "mode": "observe", "intent": "micro_sway"},
+                "primary_policy": {
+                    "policy_id": "observe_policy_v1",
+                    "enabled": True,
+                    "backend_mode": "observe_shared_postprocess_candidate",
+                    "intensity": 0.25,
+                    "cap_pixels": 12,
+                },
+            },
+        },
+        media_type="video",
+    )
+
+    assert payload["secondary_motion"]["status"] == "observe"
+    assert payload["secondary_motion"]["policy_id"] == "observe_policy_v1"
+
+
 def test_read_video_container_metadata_uses_ffprobe_tags(monkeypatch, tmp_path: Path) -> None:
     video_path = tmp_path / "clip.mp4"
     video_path.write_bytes(b"mp4")

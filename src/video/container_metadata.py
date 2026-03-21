@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from PIL import Image, ImageSequence
 
 from src.pipeline.video import resolve_ffmpeg_executable
+from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,9 @@ def build_public_media_payload(
     mid_anchor_paths = _string_list(payload.get("mid_anchor_paths"))
     if mid_anchor_paths:
         public_payload["mid_anchor_paths"] = mid_anchor_paths
+    secondary_motion_summary = extract_secondary_motion_summary(payload)
+    if secondary_motion_summary:
+        public_payload["secondary_motion"] = secondary_motion_summary
     return {
         key: value
         for key, value in public_payload.items()

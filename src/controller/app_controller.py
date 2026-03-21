@@ -4835,6 +4835,13 @@ class AppController:
             except Exception as e:
                 self._append_log(f"[controller] Error applying output settings: {e}")
 
+        if sidebar and hasattr(sidebar, "apply_global_prompt_config"):
+            try:
+                sidebar.apply_global_prompt_config(pack_config)
+                self._append_log("[controller] Applied global prompt settings from pack config")
+            except Exception as e:
+                self._append_log(f"[controller] Error applying global prompt settings: {e}")
+
         self._append_log(f"[controller] Loaded config for pack '{pack_id}'")
 
     def on_pipeline_pack_apply_config(self, pack_ids: list[str]) -> None:
@@ -5105,6 +5112,8 @@ class AppController:
             pipeline_section = config.setdefault("pipeline", {})
             pipeline_section["apply_global_positive_txt2img"] = global_positive_config.get("enabled", False)
             pipeline_section["apply_global_negative_txt2img"] = global_negative_config.get("enabled", True)
+            config["global_positive_prompt"] = global_positive_config.get("text", "")
+            config["global_negative_prompt"] = global_negative_config.get("text", "")
             
         except Exception as e:
             # Fallback: if anything goes wrong, default to safe values

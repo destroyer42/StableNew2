@@ -90,6 +90,8 @@ class CurrentConfig:
     cfg_scale: float = 7.0
     batch_size: int = 1
     seed: int | None = None
+    subseed: int = -1
+    subseed_strength: float = 0.0
     randomization_enabled: bool = False
     max_variants: int = 1
     refiner_enabled: bool = False

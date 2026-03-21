@@ -27,6 +27,7 @@ _n_iter: int | None = None
 _seed_mode: str | None = None
 _webui_workdir: str | None = None
 _webui_command: list[str] | None = None
+_webui_launch_profile: str | None = None
 _webui_autostart_enabled: bool | None = None
 _webui_health_initial_timeout: float | None = None
 _webui_health_retry_count: int | None = None
@@ -34,6 +35,11 @@ _webui_health_retry_interval: float | None = None
 _webui_health_total_timeout: float | None = None
 STABLENEW_WEBUI_ROOT = "C:\\Users\\rob\\stable-diffusion-webui"
 STABLENEW_WEBUI_COMMAND = "webui-user.bat --api --xformers"
+_WEBUI_LAUNCH_PROFILES: dict[str, list[str]] = {
+    "standard": ["webui-user.bat", "--api", "--xformers"],
+    "sdxl_guarded": ["webui-user.bat", "--api", "--xformers", "--medvram-sdxl"],
+    "low_memory": ["webui-user.bat", "--api", "--xformers", "--medvram"],
+}
 
 
 _watchdog_config: WatchdogConfig | None = None
@@ -531,8 +537,37 @@ def set_webui_workdir(path: str | None) -> None:
 def webui_command_default() -> list[str]:
     """Default WebUI launch command based on platform."""
     if os.name == "nt":
-        return ["webui-user.bat", "--api", "--xformers"]
+        return list(resolve_webui_launch_command(get_webui_launch_profile()))
     return ["bash", "webui.sh", "--api"]
+
+
+def webui_launch_profile_default() -> str:
+    value = str(os.environ.get("STABLENEW_WEBUI_LAUNCH_PROFILE", "standard") or "standard").strip()
+    if value not in _WEBUI_LAUNCH_PROFILES:
+        return "standard"
+    return value
+
+
+def get_webui_launch_profile() -> str:
+    global _webui_launch_profile
+    if _webui_launch_profile is None:
+        _webui_launch_profile = webui_launch_profile_default()
+    return str(_webui_launch_profile or "standard")
+
+
+def set_webui_launch_profile(profile: str | None) -> None:
+    global _webui_launch_profile
+    candidate = str(profile or "").strip() or "standard"
+    if candidate not in _WEBUI_LAUNCH_PROFILES:
+        candidate = "standard"
+    _webui_launch_profile = candidate
+
+
+def resolve_webui_launch_command(profile: str | None) -> list[str]:
+    candidate = str(profile or "").strip() or "standard"
+    if candidate not in _WEBUI_LAUNCH_PROFILES:
+        candidate = "standard"
+    return list(_WEBUI_LAUNCH_PROFILES[candidate])
 
 
 def get_webui_command() -> list[str]:

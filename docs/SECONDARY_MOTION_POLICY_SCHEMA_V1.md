@@ -13,6 +13,7 @@ This document is the contract reference for:
 - `intent_config["secondary_motion"]`
 - runner-owned observation-only `secondary_motion_policy`
 - metadata-only policy carriage through video-stage execution
+- shared secondary-motion provenance summaries after `PR-VIDEO-237`
 
 Dark-launch status:
 
@@ -182,3 +183,62 @@ Rules:
 - shared engine and provenance closure: `PR-VIDEO-237`
 - backend application paths: `PR-VIDEO-238`, `PR-VIDEO-239`, `PR-VIDEO-240`
 - learning integration: `PR-VIDEO-241`
+
+## Shared Provenance Summary Contract
+
+Added in `PR-VIDEO-237`.
+
+Summary schema id:
+
+- `stablenew.secondary-motion-summary.v1`
+
+Detailed provenance schema id:
+
+- `stablenew.secondary-motion-provenance.v1`
+
+Compact summary carrier:
+
+- manifest detailed blocks via `secondary_motion.summary`
+- replay descriptor `secondary_motion`
+- diagnostics descriptor `secondary_motion`
+- public video container metadata payload `secondary_motion`
+
+Compact summary shape:
+
+```json
+{
+  "schema": "stablenew.secondary-motion-summary.v1",
+  "enabled": true,
+  "status": "observe",
+  "policy_id": "comfy_video_workflow_observe_v1",
+  "application_path": "policy_observation_only",
+  "intent": {
+    "mode": "observe",
+    "intent": "micro_sway"
+  },
+  "backend_mode": "observe_shared_postprocess_candidate",
+  "skip_reason": "observe_only",
+  "metrics": {
+    "intensity": 0.25,
+    "cap_pixels": 12
+  }
+}
+```
+
+Rules:
+
+- compact summaries carry scalar metrics only
+- full frame-level details stay in manifest-only provenance blocks
+- replay and diagnostics descriptors must not embed raw frame data
+
+Detailed manifest provenance shape:
+
+```json
+{
+  "schema": "stablenew.secondary-motion-provenance.v1",
+  "intent": { "...": "secondary-motion intent payload" },
+  "policy": { "...": "secondary-motion policy payload" },
+  "apply_result": { "...": "engine or worker apply-result payload" },
+  "summary": { "...": "secondary-motion summary payload" }
+}
+```

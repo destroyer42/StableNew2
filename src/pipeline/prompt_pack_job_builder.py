@@ -494,19 +494,19 @@ class PromptPackNormalizedJobBuilder:
                     "adetailer_denoise"
                 )
             if stage == "adetailer":
-                extra.update({
-                    "prompt": data.get("adetailer_prompt"),
-                    "negative_prompt": data.get("adetailer_negative_prompt"),
-                    "adetailer_enabled": data.get("adetailer_enabled"),
-                    "adetailer_model": data.get("adetailer_model"),
-                    "adetailer_confidence": data.get("adetailer_confidence"),
-                    "adetailer_mask_feather": data.get("adetailer_mask_feather"),
-                    "adetailer_sampler": data.get("adetailer_sampler"),
-                    "adetailer_scheduler": data.get("adetailer_scheduler"),
-                    "adetailer_steps": data.get("adetailer_steps"),
-                    "adetailer_denoise": data.get("adetailer_denoise"),
-                    "adetailer_cfg": data.get("adetailer_cfg"),
-                })
+                extra.update(
+                    {
+                        key: value
+                        for key, value in data.items()
+                        if key not in {"model", "vae"} and value not in (None, "", [])
+                    }
+                )
+                extra.update(
+                    {
+                        "prompt": data.get("adetailer_prompt"),
+                        "negative_prompt": data.get("adetailer_negative_prompt"),
+                    }
+                )
             if stage == "upscale":
                 extra.update(
                     {
@@ -549,10 +549,12 @@ class PromptPackNormalizedJobBuilder:
             if stage == "adetailer":
                 stage_model = None
                 stage_vae = None
+                stage_scheduler = None
             else:
                 stage_model = data.get("model")
                 stage_vae = data.get("vae")
-            
+                stage_scheduler = data.get("scheduler")
+              
             stage_cfg = StageConfig(
                 stage_type=stage,
                 enabled=enabled,
@@ -560,7 +562,7 @@ class PromptPackNormalizedJobBuilder:
                 cfg_scale=data.get("cfg_scale"),
                 denoising_strength=data.get("denoising_strength"),
                 sampler_name=data.get("sampler_name") or data.get("sampler"),
-                scheduler=data.get("scheduler"),
+                scheduler=stage_scheduler,
                 model=stage_model,
                 vae=stage_vae,
                 extra={k: v for k, v in extra.items() if v not in (None, "", [])},

@@ -146,6 +146,16 @@ class StageCardsPanel(ttk.Frame):
         if upscale_card is None or not hasattr(upscale_card, "update_input_dimensions"):
             return
 
+        base_generation = self.base_generation_panel
+        if base_generation is not None:
+            for name in ("width_var", "height_var"):
+                var = getattr(base_generation, name, None)
+                if var is not None:
+                    try:
+                        var.trace_add("write", lambda *_: self._update_upscale_dimensions())
+                    except Exception:
+                        pass
+
         # PR-GUI-E: Simplified watcher attachment - directly watch width/height vars
         txt2img_card = getattr(self, "txt2img_card", None)
         if txt2img_card is not None:
@@ -189,6 +199,18 @@ class StageCardsPanel(ttk.Frame):
 
         # Get dimensions from txt2img (primary) or img2img
         width, height = 512, 512  # defaults
+
+        base_generation = self.base_generation_panel
+        if (
+            base_generation is not None
+            and hasattr(base_generation, "width_var")
+            and hasattr(base_generation, "height_var")
+        ):
+            try:
+                width = int(base_generation.width_var.get())
+                height = int(base_generation.height_var.get())
+            except Exception:
+                pass
 
         txt2img_card = getattr(self, "txt2img_card", None)
         if (
@@ -256,7 +278,7 @@ class StageCardsPanel(ttk.Frame):
         ad_cfg = getattr(self, "adetailer_card", None)
         if ad_cfg and hasattr(ad_cfg, "to_config_dict"):
             try:
-                metadata["adetailer"] = ad_cfg.to_config_dict().get("adetailer", {})
+                metadata["adetailer"] = dict(ad_cfg.to_config_dict() or {})
             except Exception:
                 metadata["adetailer"] = {}
         up_cfg = getattr(self, "upscale_card", None)

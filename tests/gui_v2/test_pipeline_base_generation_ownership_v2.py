@@ -42,3 +42,26 @@ def test_stage_cards_panel_no_longer_exports_shared_base_fields(gui_app_factory)
     assert overrides["prompt"] == "portrait"
     for key in ("model", "model_name", "sampler", "width", "height", "steps", "cfg_scale"):
         assert key not in overrides
+
+
+@pytest.mark.gui
+def test_base_generation_dimensions_and_subseed_export_authoritative_overrides(
+    gui_app_factory,
+) -> None:
+    app = gui_app_factory()
+    base_generation = app.pipeline_tab.sidebar.base_generation_panel
+
+    base_generation.resolution_preset_var.set("1024x1024 (1:1)")
+    base_generation.width_var.set("1111")
+    base_generation.height_var.set("777")
+    base_generation.subseed_var.set("123456")
+    base_generation.subseed_strength_var.set("0.35")
+    base_generation._on_dimension_commit()
+
+    overrides = base_generation.get_overrides()
+
+    assert overrides["width"] == 1111
+    assert overrides["height"] == 777
+    assert overrides["resolution_preset"] == "1111x777"
+    assert overrides["subseed"] == 123456
+    assert overrides["subseed_strength"] == 0.35

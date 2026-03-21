@@ -1,6 +1,6 @@
 # PR-VIDEO-237 - Shared Secondary Motion Engine and Provenance Contract
 
-Status: Specification
+Status: Implemented 2026-03-21
 Priority: HIGH
 Effort: LARGE
 Phase: Secondary Motion Core Runtime
@@ -303,9 +303,25 @@ contract from `PR-VIDEO-236` intact.
 Planner: GitHub Copilot
 Executor: Codex or Copilot
 Reviewer: Human + architecture review
-Approval Status: Pending
+Approval Status: Executed
 
 ## Next Steps
 
 1. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 2. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+
+## Post-Implementation Summary
+
+- added a deterministic shared engine in
+  `src/video/motion/secondary_motion_engine.py`
+- added a directory-oriented worker contract in
+  `src/video/motion/secondary_motion_worker.py`
+- added detailed + compact provenance helpers in
+  `src/video/motion/secondary_motion_provenance.py`
+- extended `src/video/container_metadata.py` and
+  `src/pipeline/result_contract_v26.py` so compact motion summaries can flow
+  through container metadata, replay descriptors, and diagnostics descriptors
+- updated the schema reference in `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
+- focused verification passed:
+  `pytest tests/video/test_secondary_motion_models.py tests/video/test_secondary_motion_policy_service.py tests/video/test_secondary_motion_engine.py tests/video/test_secondary_motion_worker.py tests/video/test_secondary_motion_provenance.py tests/video/test_container_metadata.py tests/pipeline/test_result_contract_v26.py -q`
+  -> `16 passed`

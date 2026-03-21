@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import tkinter as tk
 import logging
+import tkinter as tk
 from collections.abc import Iterable
 from tkinter import ttk
 from typing import Any
@@ -15,401 +15,394 @@ from src.gui.theme_v2 import (
     DARK_SPINBOX_STYLE,
     SURFACE_FRAME_STYLE,
 )
-# PR-GUI-TOOLTIPS-001: Import tooltip system and help text
-from src.gui.widgets.tooltip_widget import HoverTooltip
-from src.gui.help_text import ADETAILER_HELP_TEXT
 
 
 class ADetailerStageCardV2(BaseStageCardV2):
-    """Minimal ADetailer stage card exposing controls via BaseStageCardV2."""
+    """Tabbed ADetailer surface with explicit face and hand pass controls."""
 
     logger = logging.getLogger(__name__)
 
-    MODEL_OPTIONS = ["face_yolov8n.pt", "adetailer_v1.pt"]
+    MODEL_OPTIONS = ["face_yolov8n.pt", "face_yolov8s.pt", "mediapipe_face_full"]
+    HAND_MODEL_OPTIONS = ["hand_yolov8n.pt", "hand_yolov8s.pt"]
     SAMPLER_OPTIONS = ["DPM++ 2M", "Euler a", "DDIM", "DPM++ SDE"]
-    MERGE_MODES = ["keep", "replace", "merge"]
+    SCHEDULER_OPTIONS = [
+        "inherit",
+        "Automatic",
+        "Karras",
+        "Exponential",
+        "Polyexponential",
+        "SGM Uniform",
+    ]
+    MASK_FILTER_OPTIONS = ["Area", "largest", "all"]
+    MASK_MERGE_OPTIONS = ["None", "Merge", "Merge and Invert"]
+    STAGE_MODEL_INHERIT = "Inherit Base Generation"
 
     def __init__(self, master: tk.Misc, *, theme: Any | None = None, **kwargs: Any) -> None:
-        # Detection settings
-        self.model_var = tk.StringVar(value=self.MODEL_OPTIONS[0])
-        self.confidence_var = tk.DoubleVar(value=0.35)
-        self.max_detections_var = tk.IntVar(value=8)
-        self.mask_blur_var = tk.IntVar(value=4)
-        self.merge_var = tk.StringVar(value=self.MERGE_MODES[0])
-        
-        # Generation settings (from executor.py lines 1358-1366)
-        self.steps_var = tk.IntVar(value=28)
-        self.cfg_var = tk.DoubleVar(value=7.0)
-        self.sampler_var = tk.StringVar(value="DPM++ 2M")
-        self.denoise_var = tk.DoubleVar(value=0.4)
-        
-        # Prompt settings
-        self.prompt_var = tk.StringVar(value="")
-        self.negative_var = tk.StringVar(value="")
-        
-        # Inpaint settings
-        self.inpaint_masked_var = tk.BooleanVar(value=True)
-        self.inpaint_padding_var = tk.IntVar(value=32)
-        self.use_inpaint_wh_var = tk.BooleanVar(value=False)
-        
-        # PR-GUI-DATA-008: Two-pass controls
+        self.stage_model_override_var = tk.StringVar(value="")
+
         self.enable_face_pass_var = tk.BooleanVar(value=True)
-        self.face_model_var = tk.StringVar(value="face_yolov8n.pt")
-        self.face_padding_var = tk.IntVar(value=32)
-        self.enable_hands_pass_var = tk.BooleanVar(value=False)
-        self.hands_model_var = tk.StringVar(value="hand_yolov8n.pt")
-        self.hands_padding_var = tk.IntVar(value=32)
-        
-        # PR-GUI-DATA-008: Mask filter controls
-        self.mask_filter_method_var = tk.StringVar(value="largest")
+        self.model_var = tk.StringVar(value=self.MODEL_OPTIONS[0])
+        self.face_model_var = self.model_var
+        self.confidence_var = tk.DoubleVar(value=0.35)
+        self.face_confidence_var = self.confidence_var
+        self.max_detections_var = tk.IntVar(value=8)
+        self.mask_blur_var = tk.IntVar(value=6)
+        self.face_mask_blur_var = self.mask_blur_var
+        self.merge_var = tk.StringVar(value="None")
+        self.face_merge_var = self.merge_var
+        self.steps_var = tk.IntVar(value=14)
+        self.face_steps_var = self.steps_var
+        self.cfg_var = tk.DoubleVar(value=5.5)
+        self.face_cfg_var = self.cfg_var
+        self.sampler_var = tk.StringVar(value="DPM++ 2M Karras")
+        self.face_sampler_var = self.sampler_var
+        self.scheduler_var = tk.StringVar(value="inherit")
+        self.face_scheduler_var = self.scheduler_var
+        self.denoise_var = tk.DoubleVar(value=0.32)
+        self.face_denoise_var = self.denoise_var
+        self.prompt_var = tk.StringVar(value="")
+        self.face_prompt_var = self.prompt_var
+        self.negative_var = tk.StringVar(value="")
+        self.face_negative_var = self.negative_var
+        self.inpaint_masked_var = tk.BooleanVar(value=True)
+        self.face_inpaint_masked_var = self.inpaint_masked_var
+        self.inpaint_padding_var = tk.IntVar(value=32)
+        self.face_padding_var = self.inpaint_padding_var
+        self.use_inpaint_wh_var = tk.BooleanVar(value=False)
+        self.face_use_inpaint_wh_var = self.use_inpaint_wh_var
+        self.face_inpaint_width_var = tk.IntVar(value=1024)
+        self.face_inpaint_height_var = tk.IntVar(value=1024)
+        self.mask_filter_method_var = tk.StringVar(value="Area")
+        self.face_mask_filter_method_var = self.mask_filter_method_var
         self.mask_k_largest_var = tk.IntVar(value=3)
+        self.face_mask_k_largest_var = self.mask_k_largest_var
         self.mask_min_ratio_var = tk.DoubleVar(value=0.01)
+        self.face_mask_min_ratio_var = self.mask_min_ratio_var
         self.mask_max_ratio_var = tk.DoubleVar(value=1.0)
-        
-        # PR-GUI-DATA-008: Mask processing controls
+        self.face_mask_max_ratio_var = self.mask_max_ratio_var
         self.dilate_erode_var = tk.IntVar(value=4)
-        self.mask_feather_var = tk.IntVar(value=5)
-        
-        # PR-GUI-DATA-008: Scheduler control
-        self.scheduler_var = tk.StringVar(value="Use sampler default")
-        
+        self.face_dilate_erode_var = self.dilate_erode_var
+        self.mask_feather_var = tk.IntVar(value=4)
+        self.face_mask_feather_var = self.mask_feather_var
+
+        self.enable_hands_pass_var = tk.BooleanVar(value=False)
+        self.hands_model_var = tk.StringVar(value=self.HAND_MODEL_OPTIONS[0])
+        self.hands_confidence_var = tk.DoubleVar(value=0.30)
+        self.hands_steps_var = tk.IntVar(value=12)
+        self.hands_cfg_var = tk.DoubleVar(value=5.0)
+        self.hands_sampler_var = tk.StringVar(value="DPM++ 2M Karras")
+        self.hands_scheduler_var = tk.StringVar(value="inherit")
+        self.hands_denoise_var = tk.DoubleVar(value=0.25)
+        self.hands_prompt_var = tk.StringVar(
+            value="well-formed fingers, natural knuckles, correct hand anatomy, sharp details"
+        )
+        self.hands_negative_var = tk.StringVar(
+            value="extra fingers, fused fingers, broken fingers, deformed hands, missing fingers"
+        )
+        self.hands_inpaint_masked_var = tk.BooleanVar(value=True)
+        self.hands_padding_var = tk.IntVar(value=16)
+        self.hands_use_inpaint_wh_var = tk.BooleanVar(value=False)
+        self.hands_inpaint_width_var = tk.IntVar(value=1024)
+        self.hands_inpaint_height_var = tk.IntVar(value=1024)
+        self.hands_mask_filter_method_var = tk.StringVar(value="Area")
+        self.hands_mask_k_largest_var = tk.IntVar(value=6)
+        self.hands_mask_min_ratio_var = tk.DoubleVar(value=0.003)
+        self.hands_mask_max_ratio_var = tk.DoubleVar(value=1.0)
+        self.hands_dilate_erode_var = tk.IntVar(value=6)
+        self.hands_mask_blur_var = tk.IntVar(value=4)
+        self.hands_mask_feather_var = tk.IntVar(value=4)
+        self.hands_merge_var = tk.StringVar(value="None")
+
         self._model_combo: ttk.Combobox | None = None
+        self._detector_combo: ttk.Combobox | None = None
         self._sampler_combo: ttk.Combobox | None = None
+        self._scheduler_combo: ttk.Combobox | None = None
         self._face_model_combo: ttk.Combobox | None = None
         self._hands_model_combo: ttk.Combobox | None = None
-        self._scheduler_combo: ttk.Combobox | None = None
+        self._stage_model_combo: ttk.Combobox | None = None
+        self._face_sampler_combo: ttk.Combobox | None = None
+        self._hand_sampler_combo: ttk.Combobox | None = None
+        self._face_widgets: list[tk.Widget] = []
+        self._hand_widgets: list[tk.Widget] = []
+        self._face_prompt_widgets: list[tk.Widget] = []
+        self._hand_prompt_widgets: list[tk.Widget] = []
+
+        self.detector_var = self.model_var
 
         super().__init__(
             master,
             title="ADetailer Stage",
-            description="Fine-tune face/hand/model outputs after txt2img.",
+            description="Face and hand refinement with explicit pass-level controls.",
             theme=theme,
             **kwargs,
         )
 
     def _build_body(self, parent: ttk.Frame) -> None:
-        """Build ADetailer configuration body with PR-GUI-DATA-008 enhancements."""
-        parent.columnconfigure(1, weight=1)
-        row = 0
+        parent.columnconfigure(0, weight=1)
 
-        # PR-GUI-DATA-008: Two-Pass Configuration Section
-        ttk.Label(parent, text="─── Pass Configuration ───", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(0, 4)
+        helper = ttk.Label(
+            parent,
+            text="Use face and hand pass tabs for pass-local settings. Stage model override is optional and inherits Base Generation by default.",
+            style=BODY_LABEL_STYLE,
+            wraplength=460,
+            justify="left",
         )
-        row += 1
-        
-        # Face pass
-        face_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
-        face_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
+        helper.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+
+        overall = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
+        overall.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        for column in range(4):
+            overall.columnconfigure(column, weight=1 if column % 2 == 1 else 0)
+
+        ttk.Label(overall, text="Stage Model Override", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", padx=(0, 4), pady=2
+        )
+        self._stage_model_combo = self._build_combo(
+            overall,
+            self.stage_model_override_var,
+            [self.STAGE_MODEL_INHERIT],
+        )
+        self._stage_model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 12), pady=2)
+
+        ttk.Label(overall, text="Face Pass", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", padx=(0, 4), pady=2
+        )
         ttk.Checkbutton(
-            face_frame,
-            text="Face Pass",
+            overall,
+            text="Enabled",
             variable=self.enable_face_pass_var,
             style=DARK_CHECKBUTTON_STYLE,
-        ).pack(side="left")
-        self._face_model_combo = ttk.Combobox(
-            face_frame,
-            textvariable=self.face_model_var,
-            values=["face_yolov8n.pt", "face_yolov8s.pt", "mediapipe_face_full"],
-            width=20,
-            state="readonly",
-            style=DARK_COMBOBOX_STYLE,
+            command=self._sync_pass_states,
+        ).grid(row=1, column=1, sticky="w", pady=2)
+
+        ttk.Label(overall, text="Hand Pass", style=BODY_LABEL_STYLE).grid(
+            row=1, column=2, sticky="w", padx=(0, 4), pady=2
         )
-        self._face_model_combo.pack(side="left", padx=(8, 0))
-        ttk.Label(face_frame, text="Padding:", style=BODY_LABEL_STYLE).pack(side="left", padx=(12, 4))
-        ttk.Spinbox(
-            face_frame,
-            from_=0,
-            to=256,
-            textvariable=self.face_padding_var,
-            width=6,
-            style=DARK_SPINBOX_STYLE,
-        ).pack(side="left")
-        row += 1
-        
-        # Hands pass
-        hands_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
-        hands_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
         ttk.Checkbutton(
-            hands_frame,
-            text="Hands Pass",
+            overall,
+            text="Enabled",
             variable=self.enable_hands_pass_var,
             style=DARK_CHECKBUTTON_STYLE,
-        ).pack(side="left")
-        self._hands_model_combo = ttk.Combobox(
-            hands_frame,
-            textvariable=self.hands_model_var,
-            values=["hand_yolov8n.pt", "hand_yolov8s.pt"],
-            width=20,
-            state="readonly",
-            style=DARK_COMBOBOX_STYLE,
+            command=self._sync_pass_states,
+        ).grid(row=1, column=3, sticky="w", pady=2)
+
+        notebook = ttk.Notebook(parent)
+        notebook.grid(row=2, column=0, sticky="nsew")
+
+        face_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
+        hand_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
+        prompt_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
+        for tab in (face_tab, hand_tab, prompt_tab):
+            tab.columnconfigure(1, weight=1)
+
+        notebook.add(face_tab, text="Face Pass")
+        notebook.add(hand_tab, text="Hand Pass")
+        notebook.add(prompt_tab, text="Prompts")
+
+        self._build_face_tab(face_tab)
+        self._build_hand_tab(hand_tab)
+        self._build_prompt_tab(prompt_tab)
+        self._sync_pass_states()
+
+    def _build_face_tab(self, parent: ttk.Frame) -> None:
+        row = 0
+        self._face_model_combo = self._add_combo_row(
+            parent, row, "Detector Model", self.face_model_var, self.MODEL_OPTIONS
         )
-        self._hands_model_combo.pack(side="left", padx=(8, 0))
-        ttk.Label(hands_frame, text="Padding:", style=BODY_LABEL_STYLE).pack(side="left", padx=(12, 4))
-        ttk.Spinbox(
-            hands_frame,
-            from_=0,
-            to=256,
-            textvariable=self.hands_padding_var,
-            width=6,
-            style=DARK_SPINBOX_STYLE,
-        ).pack(side="left")
+        self._model_combo = self._face_model_combo
+        self._detector_combo = self._face_model_combo
+        self._face_widgets.append(self._face_model_combo)
         row += 1
-        
-        # Original detection settings
-        ttk.Label(parent, text="─── Detection Settings ───", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(12, 4)
+        self._face_sampler_combo = self._add_combo_row(
+            parent, row, "Sampler", self.face_sampler_var, self.SAMPLER_OPTIONS
         )
+        self._sampler_combo = self._face_sampler_combo
+        self._face_widgets.append(self._face_sampler_combo)
+        row += 1
+        self._scheduler_combo = self._add_combo_row(
+            parent, row, "Scheduler", self.face_scheduler_var, self.SCHEDULER_OPTIONS
+        )
+        self._face_widgets.append(self._scheduler_combo)
         row += 1
 
-        self._model_combo = self._add_labeled_combo(
+        for label, variable, start, end, increment in (
+            ("Confidence", self.face_confidence_var, 0.0, 1.0, 0.01),
+            ("Steps", self.face_steps_var, 1, 150, 1),
+            ("CFG", self.face_cfg_var, 1.0, 30.0, 0.1),
+            ("Denoising", self.face_denoise_var, 0.0, 1.0, 0.01),
+            ("Padding", self.face_padding_var, 0, 256, 1),
+            ("Mask Blur", self.face_mask_blur_var, 0, 64, 1),
+            ("Mask Feather", self.face_mask_feather_var, 0, 64, 1),
+            ("Dilate / Erode", self.face_dilate_erode_var, -64, 64, 1),
+            ("Max Detections", self.max_detections_var, 1, 32, 1),
+            ("Mask Max-K", self.face_mask_k_largest_var, 1, 16, 1),
+            ("Mask Min Ratio", self.face_mask_min_ratio_var, 0.0, 1.0, 0.001),
+            ("Mask Max Ratio", self.face_mask_max_ratio_var, 0.0, 1.0, 0.001),
+            ("Inpaint Width", self.face_inpaint_width_var, 64, 4096, 64),
+            ("Inpaint Height", self.face_inpaint_height_var, 64, 4096, 64),
+        ):
+            widget = self._add_spin_row(parent, row, label, variable, start, end, increment)
+            self._face_widgets.append(widget)
+            row += 1
+
+        filter_combo = self._add_combo_row(
             parent,
-            "ADetailer model:",
-            self.model_var,
-            self.MODEL_OPTIONS,
             row,
+            "Mask Filter",
+            self.face_mask_filter_method_var,
+            self.MASK_FILTER_OPTIONS,
         )
+        self._face_widgets.append(filter_combo)
+        row += 1
+        merge_combo = self._add_combo_row(
+            parent, row, "Mask Merge", self.face_merge_var, self.MASK_MERGE_OPTIONS
+        )
+        self._face_widgets.append(merge_combo)
         row += 1
 
-        row = self._add_spin_section(
-            parent,
-            row,
-            "Confidence:",
-            self.confidence_var,
-            0.1,
-            1.0,
-            0.05,
-            format_str="%.2f",
-            help_key="confidence",  # PR-GUI-TOOLTIPS-001
-        )
-
-        row = self._add_spin_section(
-            parent,
-            row,
-            "Max detections:",
-            self.max_detections_var,
-            1,
-            32,
-            1,
-            help_key="max_detections",  # PR-GUI-TOOLTIPS-001
-        )
-
-        row = self._add_spin_section(
-            parent,
-            row,
-            "Mask blur:",
-            self.mask_blur_var,
-            0,
-            16,
-            1,
-            help_key="mask_blur",  # PR-GUI-TOOLTIPS-001
-        )
-
-        self._add_labeled_combo(
-            parent,
-            "Mask merge mode:",
-            self.merge_var,
-            self.MERGE_MODES,
-            row,
-            help_key="mask_merge_mode",  # PR-GUI-TOOLTIPS-001
-            width=15,  # PR-GUI-LAYOUT-002: Limit width to align with spinboxes
-        )
-        row += 1
-        
-        # PR-GUI-DATA-008: Mask Filter Controls
-        ttk.Label(parent, text="─── Mask Filtering ───", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(12, 4)
-        )
-        row += 1
-        
-        self._add_labeled_combo(
-            parent,
-            "Filter Method:",
-            self.mask_filter_method_var,
-            ["largest", "all"],
-            row,
-            help_key="filter_method",  # PR-GUI-TOOLTIPS-001
-        )
-        row += 1
-        
-        row = self._add_spin_section(
-            parent, row, "Max K:", self.mask_k_largest_var, 1, 10, 1, help_key="max_k"
-        )
-        row = self._add_spin_section(
-            parent, row, "Min Ratio:", self.mask_min_ratio_var, 0.0, 1.0, 0.01, format_str="%.2f", help_key="min_ratio"
-        )
-        row = self._add_spin_section(
-            parent, row, "Max Ratio:", self.mask_max_ratio_var, 0.0, 1.0, 0.01, format_str="%.2f", help_key="max_ratio"
-        )
-        
-        # PR-GUI-DATA-008: Mask Processing Controls
-        ttk.Label(parent, text="─── Mask Processing ───", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(12, 4)
-        )
-        row += 1
-        
-        row = self._add_spin_section(
-            parent, row, "Dilate/Erode:", self.dilate_erode_var, -32, 32, 1, help_key="dilate_erode"
-        )
-        row = self._add_spin_section(
-            parent, row, "Feather:", self.mask_feather_var, 0, 64, 1, help_key="feather"
-        )
-        
-        # Generation parameters section
-        ttk.Label(parent, text="─── Generation Settings ───", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(12, 4)
-        )
-        row += 1
-        
-        row = self._add_spin_section(parent, row, "Steps:", self.steps_var, 1, 150, 1)
-        row = self._add_spin_section(
-            parent, row, "CFG Scale:", self.cfg_var, 1.0, 30.0, 0.5, format_str="%.1f"
-        )
-        row = self._add_spin_section(
-            parent, row, "Denoising:", self.denoise_var, 0.0, 1.0, 0.05, format_str="%.2f"
-        )
-        
-        # Sampler dropdown
-        self._sampler_combo = self._add_labeled_combo(
-            parent, "Sampler:", self.sampler_var, self.SAMPLER_OPTIONS, row
-        )
-        row += 1
-        
-        # PR-GUI-DATA-008: Scheduler Control
-        self._scheduler_combo = self._add_labeled_combo(
-            parent,
-            "Scheduler:",
-            self.scheduler_var,
-            ["Use sampler default", "Automatic", "Karras", "Exponential", "SGM Uniform"],
-            row,
-        )
-        row += 1
-        
-        # Prompts section
-        ttk.Label(parent, text="─── Prompts (optional) ───", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(12, 4)
-        )
-        row += 1
-        
-        ttk.Label(parent, text="Prompt:", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, sticky="nw", pady=2
-        )
-        prompt_entry = ttk.Entry(parent, textvariable=self.prompt_var, style=DARK_ENTRY_STYLE)
-        prompt_entry.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
-        row += 1
-        
-        ttk.Label(parent, text="Negative:", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, sticky="nw", pady=2
-        )
-        neg_entry = ttk.Entry(parent, textvariable=self.negative_var, style=DARK_ENTRY_STYLE)
-        neg_entry.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
-        row += 1
-        
-        # Inpaint settings
-        ttk.Label(parent, text="─── Inpaint Settings ───", style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(12, 4)
-        )
-        row += 1
-        
         inpaint_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         inpaint_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
-        ttk.Checkbutton(
+        masked = ttk.Checkbutton(
             inpaint_frame,
             text="Only masked",
-            variable=self.inpaint_masked_var,
+            variable=self.face_inpaint_masked_var,
             style=DARK_CHECKBUTTON_STYLE,
-        ).pack(side="left", padx=(0, 6))
-        ttk.Checkbutton(
-            inpaint_frame,
-            text="Use inpaint W/H",
-            variable=self.use_inpaint_wh_var,
-            style=DARK_CHECKBUTTON_STYLE,
-        ).pack(side="left")
-        row += 1
-        
-        row = self._add_spin_section(
-            parent, row, "Inpaint padding:", self.inpaint_padding_var, 0, 256, 4
         )
+        masked.pack(side="left", padx=(0, 8))
+        inpaint_wh = ttk.Checkbutton(
+            inpaint_frame,
+            text="Use inpaint width/height",
+            variable=self.face_use_inpaint_wh_var,
+            style=DARK_CHECKBUTTON_STYLE,
+            command=self._sync_pass_states,
+        )
+        inpaint_wh.pack(side="left")
+        self._face_widgets.extend([masked, inpaint_wh])
 
-    def _add_labeled_combo(
+    def _build_hand_tab(self, parent: ttk.Frame) -> None:
+        row = 0
+        self._hands_model_combo = self._add_combo_row(
+            parent, row, "Detector Model", self.hands_model_var, self.HAND_MODEL_OPTIONS
+        )
+        self._hand_widgets.append(self._hands_model_combo)
+        row += 1
+        self._hand_sampler_combo = self._add_combo_row(
+            parent, row, "Sampler", self.hands_sampler_var, self.SAMPLER_OPTIONS
+        )
+        self._hand_widgets.append(self._hand_sampler_combo)
+        row += 1
+        hand_scheduler = self._add_combo_row(
+            parent, row, "Scheduler", self.hands_scheduler_var, self.SCHEDULER_OPTIONS
+        )
+        self._hand_widgets.append(hand_scheduler)
+        row += 1
+
+        for label, variable, start, end, increment in (
+            ("Confidence", self.hands_confidence_var, 0.0, 1.0, 0.01),
+            ("Steps", self.hands_steps_var, 1, 150, 1),
+            ("CFG", self.hands_cfg_var, 1.0, 30.0, 0.1),
+            ("Denoising", self.hands_denoise_var, 0.0, 1.0, 0.01),
+            ("Padding", self.hands_padding_var, 0, 256, 1),
+            ("Mask Blur", self.hands_mask_blur_var, 0, 64, 1),
+            ("Mask Feather", self.hands_mask_feather_var, 0, 64, 1),
+            ("Dilate / Erode", self.hands_dilate_erode_var, -64, 64, 1),
+            ("Mask Max-K", self.hands_mask_k_largest_var, 1, 16, 1),
+            ("Mask Min Ratio", self.hands_mask_min_ratio_var, 0.0, 1.0, 0.001),
+            ("Mask Max Ratio", self.hands_mask_max_ratio_var, 0.0, 1.0, 0.001),
+            ("Inpaint Width", self.hands_inpaint_width_var, 64, 4096, 64),
+            ("Inpaint Height", self.hands_inpaint_height_var, 64, 4096, 64),
+        ):
+            widget = self._add_spin_row(parent, row, label, variable, start, end, increment)
+            self._hand_widgets.append(widget)
+            row += 1
+
+        filter_combo = self._add_combo_row(
+            parent,
+            row,
+            "Mask Filter",
+            self.hands_mask_filter_method_var,
+            self.MASK_FILTER_OPTIONS,
+        )
+        self._hand_widgets.append(filter_combo)
+        row += 1
+        merge_combo = self._add_combo_row(
+            parent, row, "Mask Merge", self.hands_merge_var, self.MASK_MERGE_OPTIONS
+        )
+        self._hand_widgets.append(merge_combo)
+        row += 1
+
+        inpaint_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
+        inpaint_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
+        hand_masked = ttk.Checkbutton(
+            inpaint_frame,
+            text="Only masked",
+            variable=self.hands_inpaint_masked_var,
+            style=DARK_CHECKBUTTON_STYLE,
+        )
+        hand_masked.pack(side="left", padx=(0, 8))
+        inpaint_wh = ttk.Checkbutton(
+            inpaint_frame,
+            text="Use inpaint width/height",
+            variable=self.hands_use_inpaint_wh_var,
+            style=DARK_CHECKBUTTON_STYLE,
+            command=self._sync_pass_states,
+        )
+        inpaint_wh.pack(side="left")
+        self._hand_widgets.extend([hand_masked, inpaint_wh])
+
+    def _build_prompt_tab(self, parent: ttk.Frame) -> None:
+        face_frame = ttk.LabelFrame(parent, text="Face Pass Prompts", style="Dark.TLabelframe")
+        face_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        face_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(face_frame, text="Prompt", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", pady=2
+        )
+        face_prompt = ttk.Entry(face_frame, textvariable=self.face_prompt_var, style=DARK_ENTRY_STYLE)
+        face_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
+        ttk.Label(face_frame, text="Negative", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", pady=2
+        )
+        face_negative = ttk.Entry(
+            face_frame, textvariable=self.face_negative_var, style=DARK_ENTRY_STYLE
+        )
+        face_negative.grid(row=1, column=1, sticky="ew", pady=2, padx=(8, 0))
+        self._face_prompt_widgets.extend([face_prompt, face_negative])
+
+        hand_frame = ttk.LabelFrame(parent, text="Hand Pass Prompts", style="Dark.TLabelframe")
+        hand_frame.grid(row=1, column=0, sticky="ew")
+        hand_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(hand_frame, text="Prompt", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", pady=2
+        )
+        hand_prompt = ttk.Entry(hand_frame, textvariable=self.hands_prompt_var, style=DARK_ENTRY_STYLE)
+        hand_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
+        ttk.Label(hand_frame, text="Negative", style=BODY_LABEL_STYLE).grid(
+            row=1, column=0, sticky="w", pady=2
+        )
+        hand_negative = ttk.Entry(
+            hand_frame, textvariable=self.hands_negative_var, style=DARK_ENTRY_STYLE
+        )
+        hand_negative.grid(row=1, column=1, sticky="ew", pady=2, padx=(8, 0))
+        self._hand_prompt_widgets.extend([hand_prompt, hand_negative])
+
+    def _add_combo_row(
         self,
         parent: ttk.Frame,
+        row: int,
         label: str,
         variable: tk.StringVar,
         options: Iterable[str],
-        row: int,
-        help_key: str | None = None,  # PR-GUI-TOOLTIPS-001: Optional help text key
-        width: int | None = None,  # PR-GUI-LAYOUT-002: Optional width limit
     ) -> ttk.Combobox:
-        """Add a labeled combobox with optional inline help and hover tooltip.
-        
-        Args:
-            parent: Parent frame
-            label: Label text
-            variable: Variable to bind to combobox
-            options: Available options
-            row: Grid row number
-            help_key: Key in ADETAILER_HELP_TEXT for tooltip (PR-GUI-TOOLTIPS-001)
-            width: Optional width in characters (PR-GUI-LAYOUT-002)
-            
-        Returns:
-            The created combobox widget
-        """
-        # PR-GUI-TOOLTIPS-001: Only create row_frame if help_key is provided
-        if help_key and help_key in ADETAILER_HELP_TEXT:
-            # Create horizontal frame for label + combobox + help text
-            row_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
-            row_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
-            row_frame.columnconfigure(2, weight=1)
-            
-            # Label
-            ttk.Label(row_frame, text=label, style=BODY_LABEL_STYLE).grid(
-                row=0, column=0, sticky="w"
-            )
-            
-            # Combobox
-            combo_kwargs = {
-                "values": list(options),
-                "textvariable": variable,
-                "state": "readonly",
-                "style": DARK_COMBOBOX_STYLE,
-            }
-            if width is not None:
-                combo_kwargs["width"] = width
-            combo = ttk.Combobox(row_frame, **combo_kwargs)
-            combo.grid(row=0, column=1, sticky="w", padx=(8, 8))
-            
-            # Add inline help text and hover tooltip
-            help_info = ADETAILER_HELP_TEXT[help_key]
-            help_label = ttk.Label(
-                row_frame,
-                text=f"ⓘ {help_info['short']}",
-                style=BODY_LABEL_STYLE,
-            )
-            help_label.configure(foreground="#888888", cursor="question_arrow")
-            help_label.grid(row=0, column=2, sticky="w", padx=(4, 0))
-            HoverTooltip(help_label, help_info["long"])
-        else:
-            # Original layout: simple label + combobox in parent's 2-column grid
-            ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
-                row=row, column=0, sticky="w", pady=2
-            )
-            combo_kwargs = {
-                "values": list(options),
-                "textvariable": variable,
-                "state": "readonly",
-                "style": DARK_COMBOBOX_STYLE,
-            }
-            if width is not None:
-                combo_kwargs["width"] = width
-            combo = ttk.Combobox(parent, **combo_kwargs)
-            # PR-GUI-LAYOUT-002: Use "w" sticky if width specified, otherwise "ew"
-            sticky = "w" if width is not None else "ew"
-            combo.grid(row=row, column=1, sticky=sticky, pady=2, padx=(8, 0))
-        
+        ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
+            row=row, column=0, sticky="w", pady=2
+        )
+        combo = self._build_combo(parent, variable, options)
+        combo.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
         return combo
 
-    def _add_spin_section(
+    def _add_spin_row(
         self,
         parent: ttk.Frame,
         row: int,
@@ -418,261 +411,335 @@ class ADetailerStageCardV2(BaseStageCardV2):
         minimum: float,
         maximum: float,
         increment: float,
-        format_str: str = "%.1f",
-        help_key: str | None = None,  # PR-GUI-TOOLTIPS-001: Optional help text key
-    ) -> int:
-        """Add a labeled spinbox with optional inline help and hover tooltip.
-        
-        Args:
-            parent: Parent frame
-            row: Grid row number
-            label: Label text
-            variable: Variable to bind to spinbox
-            minimum: Minimum value
-            maximum: Maximum value
-            increment: Step increment
-            format_str: Format string for floats
-            help_key: Key in ADETAILER_HELP_TEXT for tooltip (PR-GUI-TOOLTIPS-001)
-            
-        Returns:
-            Next available row number
-        """
-        # PR-GUI-TOOLTIPS-001: Only create row_frame if help_key is provided
-        if help_key and help_key in ADETAILER_HELP_TEXT:
-            # Create horizontal frame for label + spinbox + help text
-            row_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
-            row_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
-            row_frame.columnconfigure(2, weight=1)
-            
-            # Label
-            ttk.Label(row_frame, text=label, style=BODY_LABEL_STYLE).grid(
-                row=0, column=0, sticky="w"
-            )
-            
-            # Spinbox
-            spin_kwargs: dict[str, Any] = {
-                "from_": minimum,
-                "to": maximum,
-                "increment": increment,
-                "textvariable": variable,
-                "width": 8,
-                "style": DARK_SPINBOX_STYLE,
-            }
-            if isinstance(variable, tk.DoubleVar):
-                spin_kwargs["format"] = format_str
-            
-            spin = ttk.Spinbox(row_frame, **spin_kwargs)
-            spin.grid(row=0, column=1, sticky="w", padx=(8, 8))
-            
-            # Add inline help text and hover tooltip
-            help_info = ADETAILER_HELP_TEXT[help_key]
-            help_label = ttk.Label(
-                row_frame,
-                text=f"ⓘ {help_info['short']}",
-                style=BODY_LABEL_STYLE,
-            )
-            help_label.configure(foreground="#888888", cursor="question_arrow")
-            help_label.grid(row=0, column=2, sticky="w", padx=(4, 0))
-            HoverTooltip(help_label, help_info["long"])
-        else:
-            # Original layout: simple label + spinbox in parent's 2-column grid
-            ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
-                row=row, column=0, sticky="w", pady=2
-            )
-            spin_kwargs: dict[str, Any] = {
-                "from_": minimum,
-                "to": maximum,
-                "increment": increment,
-                "textvariable": variable,
-                "width": 8,
-                "style": DARK_SPINBOX_STYLE,
-            }
-            if isinstance(variable, tk.DoubleVar):
-                spin_kwargs["format"] = format_str
-            
-            spin = ttk.Spinbox(parent, **spin_kwargs)
-            spin.grid(row=row, column=1, sticky="w", pady=2, padx=(8, 0))
-        
-        return row + 1
+    ) -> ttk.Spinbox:
+        ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
+            row=row, column=0, sticky="w", pady=2
+        )
+        spin = ttk.Spinbox(
+            parent,
+            from_=minimum,
+            to=maximum,
+            increment=increment,
+            textvariable=variable,
+            width=10,
+            style=DARK_SPINBOX_STYLE,
+        )
+        spin.grid(row=row, column=1, sticky="w", pady=2, padx=(8, 0))
+        return spin
+
+    def _build_combo(
+        self, parent: ttk.Frame, variable: tk.StringVar, values: Iterable[str]
+    ) -> ttk.Combobox:
+        return ttk.Combobox(
+            parent,
+            textvariable=variable,
+            values=tuple(values),
+            state="readonly",
+            style=DARK_COMBOBOX_STYLE,
+        )
+
+    def _sync_pass_states(self) -> None:
+        self._set_widgets_enabled(self._face_widgets, bool(self.enable_face_pass_var.get()))
+        self._set_widgets_enabled(
+            self._face_prompt_widgets, bool(self.enable_face_pass_var.get())
+        )
+        self._set_widgets_enabled(self._hand_widgets, bool(self.enable_hands_pass_var.get()))
+        self._set_widgets_enabled(
+            self._hand_prompt_widgets, bool(self.enable_hands_pass_var.get())
+        )
+
+    def _set_widgets_enabled(self, widgets: Iterable[tk.Widget], enabled: bool) -> None:
+        for widget in widgets:
+            try:
+                if isinstance(widget, ttk.Combobox):
+                    widget.configure(state="readonly" if enabled else "disabled")
+                elif isinstance(widget, ttk.Entry):
+                    widget.configure(state="normal" if enabled else "disabled")
+                else:
+                    widget.configure(state="normal" if enabled else "disabled")
+            except Exception:
+                pass
+
+    @classmethod
+    def _normalize_scheduler_value(cls, value: object) -> str:
+        raw = str(value or "").strip()
+        if not raw or raw in {"Use same scheduler", "Use sampler default"}:
+            return "inherit"
+        for option in cls.SCHEDULER_OPTIONS:
+            if raw.lower() == option.lower():
+                return option
+        return "inherit"
+
+    @classmethod
+    def _normalize_stage_model_override(cls, value: object) -> str:
+        raw = str(value or "").strip()
+        if not raw or raw == cls.STAGE_MODEL_INHERIT:
+            return ""
+        return raw
 
     def load_from_dict(self, cfg: dict[str, Any] | None) -> None:
-        """Load configuration from dict with PR-GUI-DATA-008 enhancements."""
         if not cfg:
             return
-        # Detection settings
-        self.model_var.set(cfg.get("adetailer_model") or cfg.get("ad_model") or self.MODEL_OPTIONS[0])
-        self.confidence_var.set(float(cfg.get("adetailer_confidence") or cfg.get("ad_confidence", 0.35)))
-        self.max_detections_var.set(int(cfg.get("max_detections", 8)))
-        self.mask_blur_var.set(int(cfg.get("mask_blur") or cfg.get("ad_mask_blur", 4)))
-        self.merge_var.set(cfg.get("mask_merge_mode") or self.MERGE_MODES[0])
-        
-        # Generation settings (from executor.py fields)
-        self.steps_var.set(int(cfg.get("adetailer_steps") or cfg.get("ad_steps", 28)))
-        self.cfg_var.set(float(cfg.get("adetailer_cfg") or cfg.get("ad_cfg_scale", 7.0)))
-        self.sampler_var.set(cfg.get("adetailer_sampler") or cfg.get("ad_sampler", "DPM++ 2M"))
-        self.denoise_var.set(float(cfg.get("adetailer_denoise") or cfg.get("ad_denoising_strength", 0.4)))
-        
-        # Prompt settings
-        self.prompt_var.set(cfg.get("adetailer_prompt") or cfg.get("ad_prompt", ""))
-        self.negative_var.set(cfg.get("adetailer_negative_prompt") or cfg.get("ad_negative_prompt", ""))
-        
-        # Inpaint settings
-        self.inpaint_masked_var.set(bool(cfg.get("ad_inpaint_only_masked", True)))
-        self.inpaint_padding_var.set(int(cfg.get("ad_inpaint_only_masked_padding", 32)))
-        self.use_inpaint_wh_var.set(bool(cfg.get("ad_use_inpaint_width_height", False)))
-        
-        # PR-GUI-DATA-008: Two-pass controls
+
+        self.stage_model_override_var.set(
+            self._normalize_stage_model_override(
+                cfg.get("adetailer_checkpoint_model") or cfg.get("sd_model_checkpoint")
+            )
+            or self.STAGE_MODEL_INHERIT
+        )
         self.enable_face_pass_var.set(bool(cfg.get("enable_face_pass", True)))
-        self.face_model_var.set(cfg.get("face_model", "face_yolov8n.pt"))
-        self.face_padding_var.set(int(cfg.get("face_padding", 32)))
-        self.enable_hands_pass_var.set(bool(cfg.get("enable_hands_pass", False)))
-        self.hands_model_var.set(cfg.get("hands_model", "hand_yolov8n.pt"))
-        self.hands_padding_var.set(int(cfg.get("hands_padding", 32)))
-        
-        # PR-GUI-DATA-008: Mask filter controls
-        self.mask_filter_method_var.set(cfg.get("mask_filter_method", "largest"))
-        self.mask_k_largest_var.set(int(cfg.get("mask_k_largest", 3)))
-        self.mask_min_ratio_var.set(float(cfg.get("mask_min_ratio", 0.01)))
-        self.mask_max_ratio_var.set(float(cfg.get("mask_max_ratio", 1.0)))
-        
-        # PR-GUI-DATA-008: Mask processing controls
-        self.dilate_erode_var.set(int(cfg.get("mask_dilate_erode", 4)))
-        self.mask_feather_var.set(int(cfg.get("mask_feather", 5)))
-        
-        # PR-GUI-DATA-008: Scheduler control
-        self.scheduler_var.set(cfg.get("scheduler", "Use sampler default"))
+        self.face_model_var.set(
+            str(cfg.get("adetailer_model") or cfg.get("face_model") or self.MODEL_OPTIONS[0])
+        )
+        self.face_confidence_var.set(
+            float(cfg.get("adetailer_confidence", cfg.get("ad_confidence", 0.35)))
+        )
+        self.max_detections_var.set(int(cfg.get("max_detections", 8)))
+        self.face_mask_blur_var.set(int(cfg.get("mask_blur", cfg.get("ad_mask_blur", 6))))
+        self.face_merge_var.set(
+            str(cfg.get("ad_mask_merge_invert") or cfg.get("mask_merge_mode") or "None")
+        )
+        self.face_steps_var.set(int(cfg.get("adetailer_steps", cfg.get("ad_steps", 14))))
+        self.face_cfg_var.set(float(cfg.get("adetailer_cfg", cfg.get("ad_cfg_scale", 5.5))))
+        self.face_sampler_var.set(
+            str(cfg.get("adetailer_sampler") or cfg.get("ad_sampler") or "DPM++ 2M Karras")
+        )
+        self.face_scheduler_var.set(
+            self._normalize_scheduler_value(cfg.get("adetailer_scheduler") or cfg.get("scheduler"))
+        )
+        self.face_denoise_var.set(
+            float(cfg.get("adetailer_denoise", cfg.get("ad_denoising_strength", 0.32)))
+        )
+        self.face_prompt_var.set(str(cfg.get("adetailer_prompt") or cfg.get("ad_prompt") or ""))
+        self.face_negative_var.set(
+            str(cfg.get("adetailer_negative_prompt") or cfg.get("ad_negative_prompt") or "")
+        )
+        self.face_inpaint_masked_var.set(bool(cfg.get("ad_inpaint_only_masked", True)))
+        self.face_padding_var.set(
+            int(cfg.get("ad_inpaint_only_masked_padding", cfg.get("adetailer_padding", 32)))
+        )
+        self.face_use_inpaint_wh_var.set(bool(cfg.get("ad_use_inpaint_width_height", False)))
+        self.face_inpaint_width_var.set(int(cfg.get("ad_inpaint_width", 1024)))
+        self.face_inpaint_height_var.set(int(cfg.get("ad_inpaint_height", 1024)))
+        self.face_mask_filter_method_var.set(
+            str(cfg.get("ad_mask_filter_method") or cfg.get("mask_filter_method") or "Area")
+        )
+        self.face_mask_k_largest_var.set(
+            int(cfg.get("ad_mask_k_largest", cfg.get("mask_k_largest", 3)))
+        )
+        self.face_mask_min_ratio_var.set(
+            float(cfg.get("ad_mask_min_ratio", cfg.get("mask_min_ratio", 0.01)))
+        )
+        self.face_mask_max_ratio_var.set(
+            float(cfg.get("ad_mask_max_ratio", cfg.get("mask_max_ratio", 1.0)))
+        )
+        self.face_dilate_erode_var.set(
+            int(cfg.get("ad_dilate_erode", cfg.get("mask_dilate_erode", 4)))
+        )
+        self.face_mask_feather_var.set(
+            int(cfg.get("ad_mask_feather", cfg.get("adetailer_mask_feather", cfg.get("mask_feather", 4))))
+        )
+
+        self.enable_hands_pass_var.set(
+            bool(cfg.get("enable_hands_pass", cfg.get("ad_hands_enabled", False)))
+        )
+        self.hands_model_var.set(
+            str(cfg.get("adetailer_hands_model") or cfg.get("hands_model") or self.HAND_MODEL_OPTIONS[0])
+        )
+        self.hands_confidence_var.set(float(cfg.get("adetailer_hands_confidence", 0.30)))
+        self.hands_steps_var.set(int(cfg.get("adetailer_hands_steps", 12)))
+        self.hands_cfg_var.set(float(cfg.get("adetailer_hands_cfg", 5.0)))
+        self.hands_sampler_var.set(str(cfg.get("adetailer_hands_sampler") or "DPM++ 2M Karras"))
+        self.hands_scheduler_var.set(
+            self._normalize_scheduler_value(cfg.get("adetailer_hands_scheduler"))
+        )
+        self.hands_denoise_var.set(float(cfg.get("adetailer_hands_denoise", 0.25)))
+        self.hands_prompt_var.set(str(cfg.get("adetailer_hands_prompt", self.hands_prompt_var.get())))
+        self.hands_negative_var.set(
+            str(cfg.get("adetailer_hands_negative_prompt", self.hands_negative_var.get()))
+        )
+        self.hands_inpaint_masked_var.set(bool(cfg.get("ad_hands_inpaint_only_masked", True)))
+        self.hands_padding_var.set(int(cfg.get("ad_hands_padding", cfg.get("hands_padding", 16))))
+        self.hands_use_inpaint_wh_var.set(bool(cfg.get("ad_hands_use_inpaint_width_height", False)))
+        self.hands_inpaint_width_var.set(int(cfg.get("ad_hands_inpaint_width", 1024)))
+        self.hands_inpaint_height_var.set(int(cfg.get("ad_hands_inpaint_height", 1024)))
+        self.hands_mask_filter_method_var.set(str(cfg.get("ad_hands_mask_filter_method", "Area")))
+        self.hands_mask_k_largest_var.set(int(cfg.get("ad_hands_mask_k", 6)))
+        self.hands_mask_min_ratio_var.set(float(cfg.get("ad_hands_mask_min_ratio", 0.003)))
+        self.hands_mask_max_ratio_var.set(float(cfg.get("ad_hands_mask_max_ratio", 1.0)))
+        self.hands_dilate_erode_var.set(int(cfg.get("ad_hands_dilate_erode", 6)))
+        self.hands_mask_blur_var.set(int(cfg.get("ad_hands_mask_blur", 4)))
+        self.hands_mask_feather_var.set(int(cfg.get("ad_hands_mask_feather", 4)))
+        self.hands_merge_var.set(str(cfg.get("ad_hands_mask_merge_invert", "None")))
+        self._sync_pass_states()
 
     def to_config_dict(self) -> dict[str, Any]:
-        """Export config with keys matching executor.py expectations and PR-GUI-DATA-008 enhancements."""
         return {
-            # Detection settings (original fields)
-            "adetailer_model": self.model_var.get(),
-            "ad_model": self.model_var.get(),  # Dual key for compatibility
-            "adetailer_confidence": self.confidence_var.get(),
-            "ad_confidence": self.confidence_var.get(),  # Dual key
+            "adetailer_checkpoint_model": self._normalize_stage_model_override(
+                self.stage_model_override_var.get()
+            ),
+            "adetailer_model": self.face_model_var.get(),
+            "adetailer_confidence": self.face_confidence_var.get(),
+            "ad_confidence": self.face_confidence_var.get(),
             "max_detections": self.max_detections_var.get(),
-            "mask_blur": self.mask_blur_var.get(),
-            "ad_mask_blur": self.mask_blur_var.get(),  # Dual key
-            "mask_merge_mode": self.merge_var.get(),
-            
-            # Generation settings
-            "adetailer_steps": self.steps_var.get(),
-            "ad_steps": self.steps_var.get(),  # Dual key
-            "adetailer_cfg": self.cfg_var.get(),
-            "ad_cfg_scale": self.cfg_var.get(),  # Dual key
-            "adetailer_sampler": self.sampler_var.get(),
-            "ad_sampler": self.sampler_var.get(),  # Dual key
-            "adetailer_denoise": self.denoise_var.get(),
-            "ad_denoising_strength": self.denoise_var.get(),  # Dual key
-            
-            # Prompt settings
-            "adetailer_prompt": self.prompt_var.get(),
-            "ad_prompt": self.prompt_var.get(),  # Dual key
-            "adetailer_negative_prompt": self.negative_var.get(),
-            "ad_negative_prompt": self.negative_var.get(),  # Dual key
-            
-            # Inpaint settings
-            "ad_inpaint_only_masked": self.inpaint_masked_var.get(),
-            "ad_inpaint_only_masked_padding": self.inpaint_padding_var.get(),
-            "ad_use_inpaint_width_height": self.use_inpaint_wh_var.get(),
-            
-            # PR-GUI-DATA-008: Two-pass controls
+            "mask_blur": self.face_mask_blur_var.get(),
+            "ad_mask_blur": self.face_mask_blur_var.get(),
+            "mask_merge_mode": self.face_merge_var.get(),
+            "ad_mask_merge_invert": self.face_merge_var.get(),
+            "adetailer_steps": self.face_steps_var.get(),
+            "ad_steps": self.face_steps_var.get(),
+            "adetailer_cfg": self.face_cfg_var.get(),
+            "ad_cfg_scale": self.face_cfg_var.get(),
+            "adetailer_sampler": self.face_sampler_var.get(),
+            "ad_sampler": self.face_sampler_var.get(),
+            "adetailer_scheduler": self._normalize_scheduler_value(self.face_scheduler_var.get()),
+            "scheduler": self._normalize_scheduler_value(self.face_scheduler_var.get()),
+            "adetailer_denoise": self.face_denoise_var.get(),
+            "ad_denoising_strength": self.face_denoise_var.get(),
+            "adetailer_prompt": self.face_prompt_var.get(),
+            "ad_prompt": self.face_prompt_var.get(),
+            "adetailer_negative_prompt": self.face_negative_var.get(),
+            "ad_negative_prompt": self.face_negative_var.get(),
+            "ad_inpaint_only_masked": self.face_inpaint_masked_var.get(),
+            "ad_inpaint_only_masked_padding": self.face_padding_var.get(),
+            "adetailer_padding": self.face_padding_var.get(),
+            "ad_use_inpaint_width_height": self.face_use_inpaint_wh_var.get(),
+            "ad_inpaint_width": self.face_inpaint_width_var.get(),
+            "ad_inpaint_height": self.face_inpaint_height_var.get(),
+            "mask_filter_method": self.face_mask_filter_method_var.get(),
+            "ad_mask_filter_method": self.face_mask_filter_method_var.get(),
+            "mask_k_largest": self.face_mask_k_largest_var.get(),
+            "ad_mask_k_largest": self.face_mask_k_largest_var.get(),
+            "mask_min_ratio": self.face_mask_min_ratio_var.get(),
+            "ad_mask_min_ratio": self.face_mask_min_ratio_var.get(),
+            "mask_max_ratio": self.face_mask_max_ratio_var.get(),
+            "ad_mask_max_ratio": self.face_mask_max_ratio_var.get(),
+            "mask_dilate_erode": self.face_dilate_erode_var.get(),
+            "ad_dilate_erode": self.face_dilate_erode_var.get(),
+            "mask_feather": self.face_mask_feather_var.get(),
+            "ad_mask_feather": self.face_mask_feather_var.get(),
+            "adetailer_mask_feather": self.face_mask_feather_var.get(),
             "enable_face_pass": self.enable_face_pass_var.get(),
-            "face_model": self.face_model_var.get(),
-            "face_padding": self.face_padding_var.get(),
-            "enable_hands_pass": self.enable_hands_pass_var.get(),
+            "adetailer_hands_model": self.hands_model_var.get(),
             "hands_model": self.hands_model_var.get(),
-            "hands_padding": self.hands_padding_var.get(),
-            
-            # PR-GUI-DATA-008: Mask filter controls
-            "mask_filter_method": self.mask_filter_method_var.get(),
-            "mask_k_largest": self.mask_k_largest_var.get(),
-            "ad_mask_k_largest": self.mask_k_largest_var.get(),  # Dual key
-            "mask_min_ratio": self.mask_min_ratio_var.get(),
-            "ad_mask_min_ratio": self.mask_min_ratio_var.get(),  # Dual key
-            "mask_max_ratio": self.mask_max_ratio_var.get(),
-            "ad_mask_max_ratio": self.mask_max_ratio_var.get(),  # Dual key
-            
-            # PR-GUI-DATA-008: Mask processing controls
-            "mask_dilate_erode": self.dilate_erode_var.get(),
-            "ad_dilate_erode": self.dilate_erode_var.get(),  # Dual key
-            "mask_feather": self.mask_feather_var.get(),
-            "ad_mask_feather": self.mask_feather_var.get(),  # Dual key
-            
-            # PR-GUI-DATA-008: Scheduler control
-            "scheduler": self.scheduler_var.get(),
-            "ad_scheduler": self.scheduler_var.get(),  # Dual key
-            
-            # Legacy mask filter fields (for backward compatibility)
-            "ad_mask_filter_method": "Area",
-            "ad_mask_merge_invert": "None",
+            "enable_hands_pass": self.enable_hands_pass_var.get(),
+            "ad_hands_enabled": self.enable_hands_pass_var.get(),
+            "adetailer_hands_confidence": self.hands_confidence_var.get(),
+            "ad_hands_mask_filter_method": self.hands_mask_filter_method_var.get(),
+            "ad_hands_mask_k": self.hands_mask_k_largest_var.get(),
+            "ad_hands_mask_min_ratio": self.hands_mask_min_ratio_var.get(),
+            "ad_hands_mask_max_ratio": self.hands_mask_max_ratio_var.get(),
+            "ad_hands_dilate_erode": self.hands_dilate_erode_var.get(),
+            "ad_hands_mask_blur": self.hands_mask_blur_var.get(),
+            "ad_hands_mask_feather": self.hands_mask_feather_var.get(),
+            "ad_hands_mask_merge_invert": self.hands_merge_var.get(),
+            "ad_hands_padding": self.hands_padding_var.get(),
+            "ad_hands_inpaint_only_masked": self.hands_inpaint_masked_var.get(),
+            "ad_hands_use_inpaint_width_height": self.hands_use_inpaint_wh_var.get(),
+            "ad_hands_inpaint_width": self.hands_inpaint_width_var.get(),
+            "ad_hands_inpaint_height": self.hands_inpaint_height_var.get(),
+            "adetailer_hands_steps": self.hands_steps_var.get(),
+            "adetailer_hands_cfg": self.hands_cfg_var.get(),
+            "adetailer_hands_denoise": self.hands_denoise_var.get(),
+            "adetailer_hands_sampler": self.hands_sampler_var.get(),
+            "adetailer_hands_scheduler": self._normalize_scheduler_value(
+                self.hands_scheduler_var.get()
+            ),
+            "adetailer_hands_prompt": self.hands_prompt_var.get(),
+            "adetailer_hands_negative_prompt": self.hands_negative_var.get(),
         }
 
     def watchable_vars(self) -> Iterable[tk.Variable]:
-        """Return all watchable variables including PR-GUI-DATA-008 additions."""
         return [
-            # Detection settings
+            self.stage_model_override_var,
+            self.enable_face_pass_var,
             self.model_var,
             self.confidence_var,
             self.max_detections_var,
             self.mask_blur_var,
             self.merge_var,
-            # Generation settings
             self.steps_var,
             self.cfg_var,
             self.sampler_var,
+            self.scheduler_var,
             self.denoise_var,
-            # Prompt settings
             self.prompt_var,
             self.negative_var,
-            # Inpaint settings
             self.inpaint_masked_var,
             self.inpaint_padding_var,
             self.use_inpaint_wh_var,
-            # PR-GUI-DATA-008: Two-pass controls
-            self.enable_face_pass_var,
-            self.face_model_var,
-            self.face_padding_var,
-            self.enable_hands_pass_var,
-            self.hands_model_var,
-            self.hands_padding_var,
-            # PR-GUI-DATA-008: Mask filter controls
+            self.face_inpaint_width_var,
+            self.face_inpaint_height_var,
             self.mask_filter_method_var,
             self.mask_k_largest_var,
             self.mask_min_ratio_var,
             self.mask_max_ratio_var,
-            # PR-GUI-DATA-008: Mask processing controls
             self.dilate_erode_var,
             self.mask_feather_var,
-            # PR-GUI-DATA-008: Scheduler control
-            self.scheduler_var,
+            self.enable_hands_pass_var,
+            self.hands_model_var,
+            self.hands_confidence_var,
+            self.hands_steps_var,
+            self.hands_cfg_var,
+            self.hands_sampler_var,
+            self.hands_scheduler_var,
+            self.hands_denoise_var,
+            self.hands_prompt_var,
+            self.hands_negative_var,
+            self.hands_inpaint_masked_var,
+            self.hands_padding_var,
+            self.hands_use_inpaint_wh_var,
+            self.hands_inpaint_width_var,
+            self.hands_inpaint_height_var,
+            self.hands_mask_filter_method_var,
+            self.hands_mask_k_largest_var,
+            self.hands_mask_min_ratio_var,
+            self.hands_mask_max_ratio_var,
+            self.hands_dilate_erode_var,
+            self.hands_mask_blur_var,
+            self.hands_mask_feather_var,
+            self.hands_merge_var,
         ]
 
     def apply_webui_resources(self, resources: dict[str, Any] | None) -> None:
         if resources is None:
             resources = {}
-        models = [str(v) for v in (resources.get("adetailer_models") or []) if str(v).strip()]
+        detector_models = [str(v) for v in (resources.get("adetailer_models") or []) if str(v).strip()]
+        checkpoint_models = []
+        for item in resources.get("models") or []:
+            name = getattr(item, "display_name", None) or getattr(item, "name", None) or str(item)
+            if str(name).strip():
+                checkpoint_models.append(str(name))
         samplers = [str(v) for v in (resources.get("samplers") or []) if str(v).strip()]
 
-        self._configure_combo(self._model_combo, models, self.model_var)
-        self._configure_combo(self._sampler_combo, samplers, self.sampler_var)
+        self._configure_combo(self._face_model_combo, detector_models, self.face_model_var)
+        self._configure_combo(
+            self._hands_model_combo,
+            detector_models or self.HAND_MODEL_OPTIONS,
+            self.hands_model_var,
+        )
+        self._configure_combo(self._sampler_combo, samplers, self.face_sampler_var)
+        self._configure_combo(self._hand_sampler_combo, samplers, self.hands_sampler_var)
+
+        if self._stage_model_combo is not None:
+            stage_values = [self.STAGE_MODEL_INHERIT] + checkpoint_models if checkpoint_models else [self.STAGE_MODEL_INHERIT]
+            current = self.stage_model_override_var.get().strip() or self.STAGE_MODEL_INHERIT
+            self._stage_model_combo.configure(values=tuple(stage_values), state="readonly")
+            self.stage_model_override_var.set(current if current in stage_values else self.STAGE_MODEL_INHERIT)
 
     def _configure_combo(
-        self, combo: ttk.Combobox | None, values: list[str], variable: tk.StringVar
+        self, combo: ttk.Combobox | None, values: Iterable[str], variable: tk.StringVar
     ) -> None:
-        if not combo:
+        if combo is None:
             return
-        # Always keep combo enabled - use default values if WebUI resources not loaded yet
-        combo.configure(
-            values=values if values else list(combo["values"]),
-            state="readonly",
-            style=DARK_COMBOBOX_STYLE,
-        )
-        if values:
+        cleaned = [str(value) for value in values if str(value).strip()]
+        existing = list(combo.cget("values"))
+        final_values = cleaned or existing
+        combo.configure(values=tuple(final_values), state="readonly", style=DARK_COMBOBOX_STYLE)
+        if final_values:
             current = variable.get()
-            if not current or current not in values:
-                variable.set(values[0])
+            if current not in final_values:
+                variable.set(final_values[0])
 
     def apply_resource_update(self, resources: dict[str, Any] | None) -> None:
-        """Apply WebUI-provided resources to adetailer model/detector dropdowns."""
         self.apply_webui_resources(resources)

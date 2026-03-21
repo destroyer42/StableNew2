@@ -228,7 +228,7 @@ Execution spec:
 
 ### `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
 
-Status: Planned
+Status: Completed 2026-03-21
 
 Land the shared deterministic engine and provenance helpers before backend
 rollout.
@@ -238,6 +238,10 @@ Required outputs:
 - StableNew-owned shared motion engine and worker contract
 - compact replay/container summary plus detailed manifest helper
 - no backend wiring yet, only the reusable runtime and summary contract
+
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 
 Execution spec:
 
@@ -307,6 +311,15 @@ Required outputs:
 Execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+
+## Adjacent Tranche Coordination
+
+The next prompt/image-product tranche is tracked separately in:
+
+- `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
+
+That work is intentionally adjacent to this video tranche, but it should not
+interrupt `PR-VIDEO-237` through `PR-VIDEO-241`.
 
 ## Done Definition
 

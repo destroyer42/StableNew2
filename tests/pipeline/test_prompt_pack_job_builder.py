@@ -384,3 +384,49 @@ def test_prompt_pack_job_builder_preserves_secondary_motion_intent(tmp_path: Pat
     assert records
     assert records[0].intent_config["secondary_motion"]["enabled"] is True
     assert records[0].intent_config["secondary_motion"]["mode"] == "observe"
+
+
+def test_prompt_pack_job_builder_preserves_extended_adetailer_stage_contract(
+    tmp_path: Path,
+) -> None:
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=StubConfigManager(tmp_path),
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+    )
+    entry = PackJobEntry(
+        pack_id="adetailer-pack",
+        pack_name="ADetailer Pack",
+        prompt_text="A portrait",
+        config_snapshot={
+            "pipeline": {"adetailer_enabled": True},
+            "adetailer": {
+                "adetailer_enabled": True,
+                "adetailer_checkpoint_model": "juggernautXL_ragnarokBy.safetensors",
+                "enable_face_pass": False,
+                "enable_hands_pass": True,
+                "adetailer_hands_model": "hand_yolov8s.pt",
+                "adetailer_hands_scheduler": "inherit",
+                "ad_hands_inpaint_only_masked": False,
+                "ad_hands_inpaint_width": 640,
+                "ad_hands_inpaint_height": 896,
+            },
+        },
+        stage_flags={"txt2img": True, "adetailer": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    adetailer_stage = next(stage for stage in records[0].stage_chain if stage.stage_type == "adetailer")
+    assert adetailer_stage.model is None
+    assert adetailer_stage.scheduler is None
+    assert adetailer_stage.extra["adetailer_checkpoint_model"] == "juggernautXL_ragnarokBy.safetensors"
+    assert adetailer_stage.extra["enable_face_pass"] is False
+    assert adetailer_stage.extra["enable_hands_pass"] is True
+    assert adetailer_stage.extra["adetailer_hands_model"] == "hand_yolov8s.pt"
+    assert adetailer_stage.extra["ad_hands_inpaint_only_masked"] is False
+    assert adetailer_stage.extra["ad_hands_inpaint_width"] == 640
+    assert adetailer_stage.extra["ad_hands_inpaint_height"] == 896

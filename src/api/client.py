@@ -15,7 +15,11 @@ from typing import TYPE_CHECKING, Any
 import requests
 from requests.adapters import HTTPAdapter
 
-from src.api.healthcheck import wait_for_webui_ready
+from src.api.healthcheck import (
+    clear_readiness_failure_state,
+    get_readiness_failure_state,
+    wait_for_webui_ready,
+)
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome, GenerateResult
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.api_failure_store_v2 import record_api_failure
@@ -237,6 +241,46 @@ class SDWebUIClient:
             return bool(health)
         except Exception:
             return False
+
+    def clear_runtime_failure_state(self) -> None:
+        """Clear cached readiness and resource-endpoint failure state."""
+
+        self._resource_endpoint_cooldowns.clear()
+        clear_readiness_failure_state(self.base_url)
+
+    def get_runtime_failure_state(self) -> dict[str, Any]:
+        """Return current failure/backoff state for diagnostics and admission logic."""
+
+        now = time.monotonic()
+        cooldowns = {
+            endpoint: round(until - now, 2)
+            for endpoint, until in self._resource_endpoint_cooldowns.items()
+            if until > now
+        }
+        return {
+            "base_url": self.base_url,
+            "resource_endpoint_cooldowns": cooldowns,
+            "readiness": get_readiness_failure_state(self.base_url),
+        }
+
+    def get_progress_snapshot(self) -> dict[str, Any] | None:
+        """Return raw progress payload even when idle, or None on error."""
+
+        try:
+            url = f"{self.base_url}/sdapi/v1/progress"
+            response = self._session.get(
+                url,
+                params={"skip_current_image": "true"},
+                timeout=(DEFAULT_CONNECT_TIMEOUT, 5.0),
+            )
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            if isinstance(data, dict):
+                return data
+        except Exception as exc:
+            logger.debug("Progress snapshot failed: %s", exc)
+        return None
 
     def _sleep(self, duration: float) -> None:
         """Sleep helper that can be overridden in tests."""
@@ -1780,16 +1824,23 @@ class SDWebUIClient:
         """
         Retrieve the current WebUI global options.
         """
+        endpoint = "/sdapi/v1/options"
+        if self._resource_endpoint_on_cooldown(endpoint):
+            raise RuntimeError("WebUI options endpoint temporarily in cooldown")
 
-        with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
+        with self._request_context("get", endpoint, timeout=10) as response:
             if response is None:
+                self._mark_resource_endpoint_failed(endpoint)
                 raise RuntimeError("Failed to retrieve WebUI options")
 
             try:
-                return response.json()
+                data = response.json()
             except ValueError as exc:  # noqa: PERF203 - explicit exception handling
                 logger.error("Failed to parse WebUI options response: %s", exc)
+                self._mark_resource_endpoint_failed(endpoint)
                 raise
+        self._clear_resource_endpoint_failure(endpoint)
+        return data
 
     def update_options(self, updates: dict[str, Any]) -> dict[str, Any]:
         """
@@ -1831,18 +1882,25 @@ class SDWebUIClient:
         Returns:
             Current model name
         """
-        with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
+        endpoint = "/sdapi/v1/options"
+        if self._resource_endpoint_on_cooldown(endpoint):
+            return None
+
+        with self._request_context("get", endpoint, timeout=10) as response:
             if response is None:
                 logger.warning("get_current_model: response is None")
+                self._mark_resource_endpoint_failed(endpoint)
                 return None
 
             try:
                 data = response.json()
+                self._clear_resource_endpoint_failure(endpoint)
                 model = data.get("sd_model_checkpoint")
                 logger.debug("[api/model] current model=%s", model)
                 return model
             except ValueError as exc:
                 logger.error(f"Failed to parse current model response: {exc}")
+                self._mark_resource_endpoint_failed(endpoint)
                 return None
 
     def get_current_vae(self) -> str | None:
@@ -1852,13 +1910,19 @@ class SDWebUIClient:
         Returns:
             Current VAE name or None if using default/Automatic
         """
-        with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
+        endpoint = "/sdapi/v1/options"
+        if self._resource_endpoint_on_cooldown(endpoint):
+            return None
+
+        with self._request_context("get", endpoint, timeout=10) as response:
             if response is None:
                 logger.warning("get_current_vae: response is None")
+                self._mark_resource_endpoint_failed(endpoint)
                 return None
 
             try:
                 data = response.json()
+                self._clear_resource_endpoint_failure(endpoint)
                 vae = data.get("sd_vae")
                 # WebUI returns "Automatic" or "None" when no VAE is explicitly set
                 if vae in ("Automatic", "None", None, ""):
@@ -1868,6 +1932,7 @@ class SDWebUIClient:
                 return vae
             except ValueError as exc:
                 logger.error(f"Failed to parse current VAE response: {exc}")
+                self._mark_resource_endpoint_failed(endpoint)
                 return None
 
 

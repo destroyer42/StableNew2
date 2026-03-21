@@ -16,6 +16,9 @@ from src.gui.theme_v2 import BODY_LABEL_STYLE, MUTED_LABEL_STYLE
 class BaseGenerationPanelV2(BaseStageCardV2):
     """Expose shared image-generation defaults for the active pipeline UI."""
 
+    MIN_DIMENSION = 64
+    MAX_DIMENSION = 4096
+
     def __init__(
         self,
         master: tk.Misc,
@@ -84,9 +87,14 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self.scheduler_var = tk.StringVar(value=str(scheduler_name))
         self.steps_var = tk.IntVar(value=int(steps))
         self.cfg_var = tk.DoubleVar(value=float(cfg_scale))
-        self.width_var = tk.IntVar(value=int(width))
-        self.height_var = tk.IntVar(value=int(height))
+        subseed = self._coerce_int(getattr(cfg, "subseed", None), -1)
+        subseed_strength = self._coerce_float(getattr(cfg, "subseed_strength", None), 0.0)
+
+        self.width_var = tk.StringVar(value=str(int(width)))
+        self.height_var = tk.StringVar(value=str(int(height)))
         self.seed_var = tk.StringVar(value="" if seed is None else str(seed))
+        self.subseed_var = tk.StringVar(value="" if int(subseed) < 0 else str(int(subseed)))
+        self.subseed_strength_var = tk.StringVar(value=str(float(subseed_strength)))
         self.resolution_preset_var = tk.StringVar(
             value=self._preset_label_from_dimensions(int(width), int(height))
         )
@@ -96,7 +104,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._sampler_combo: ttk.Combobox | None = None
         self._scheduler_combo: ttk.Combobox | None = None
         self._preset_combo: ttk.Combobox | None = None
+        self._width_combo: ttk.Combobox | None = None
+        self._height_combo: ttk.Combobox | None = None
         self._helper_label: ttk.Label | None = None
+        self._dimension_validate_cmd = None
 
         if embed_mode:
             ttk.Frame.__init__(self, master)
@@ -137,7 +148,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         row_idx = 0
         helper = ttk.Label(
             parent,
-            text="Shared defaults for the image pipeline. Stage cards only own stage-local overrides.",
+            text="Width and height are the source of truth. The preset dropdown is only a helper for common resolution pairs.",
             style=MUTED_LABEL_STYLE,
             wraplength=420,
             justify="left",
@@ -198,7 +209,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         cfg_spin.grid(row=row_idx + 1, column=3, sticky="ew", pady=(0, 4))
 
     def _build_resolution_row(self, parent: ttk.Frame, row_idx: int) -> None:
-        preset_label = ttk.Label(parent, text="Resolution", style=BODY_LABEL_STYLE)
+        preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
         preset_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         self._preset_combo = self._build_combo(parent, self.resolution_preset_var, tuple(self._preset_map.keys()))
         self._preset_combo.grid(row=row_idx, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
@@ -207,26 +218,52 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         width_label = ttk.Label(parent, text="Width", style=BODY_LABEL_STYLE)
         width_label.grid(row=row_idx, column=2, sticky="w", padx=(0, 4), pady=(0, 4))
         width_values = [str(i) for i in range(256, 2049, 128)]
-        width_combo = self._build_combo(parent, self.width_var, width_values)
-        width_combo.grid(row=row_idx, column=3, sticky="ew", padx=(0, 16), pady=(0, 4))
+        self._width_combo = self._build_numeric_combo(parent, self.width_var, width_values)
+        self._width_combo.grid(row=row_idx, column=3, sticky="ew", padx=(0, 16), pady=(0, 4))
 
         height_label = ttk.Label(parent, text="Height", style=BODY_LABEL_STYLE)
         height_label.grid(row=row_idx, column=4, sticky="w", padx=(0, 4), pady=(0, 4))
         height_values = [str(i) for i in range(256, 2049, 128)]
-        height_combo = self._build_combo(parent, self.height_var, height_values)
-        height_combo.grid(row=row_idx, column=5, sticky="ew", pady=(0, 4))
+        self._height_combo = self._build_numeric_combo(parent, self.height_var, height_values)
+        self._height_combo.grid(row=row_idx, column=5, sticky="ew", pady=(0, 4))
 
     def _build_seed_row(self, parent: ttk.Frame, row_idx: int) -> None:
         seed_label = ttk.Label(parent, text="Seed", style=BODY_LABEL_STYLE)
         seed_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         seed_entry = ttk.Entry(parent, textvariable=self.seed_var, style="Dark.TEntry")
         seed_entry.grid(row=row_idx, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
-        hint = ttk.Label(
+        seed_hint = ttk.Label(
             parent,
-            text="Leave blank or -1 for random.",
+            text="Blank or -1 = random.",
             style=MUTED_LABEL_STYLE,
         )
-        hint.grid(row=row_idx, column=2, columnspan=4, sticky="w", pady=(0, 4))
+        seed_hint.grid(row=row_idx, column=2, sticky="w", pady=(0, 4))
+        seed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_seed)
+        seed_button.grid(row=row_idx, column=3, sticky="w", pady=(0, 4))
+
+        subseed_label = ttk.Label(parent, text="Subseed", style=BODY_LABEL_STYLE)
+        subseed_label.grid(row=row_idx + 1, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
+        subseed_entry = ttk.Entry(parent, textvariable=self.subseed_var, style="Dark.TEntry")
+        subseed_entry.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
+        subseed_hint = ttk.Label(
+            parent,
+            text="Blank or -1 = disabled.",
+            style=MUTED_LABEL_STYLE,
+        )
+        subseed_hint.grid(row=row_idx + 1, column=2, sticky="w", pady=(0, 4))
+        subseed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_subseed)
+        subseed_button.grid(row=row_idx + 1, column=3, sticky="w", pady=(0, 4))
+
+        subseed_strength_label = ttk.Label(
+            parent, text="Subseed Strength", style=BODY_LABEL_STYLE
+        )
+        subseed_strength_label.grid(
+            row=row_idx + 1, column=4, sticky="w", padx=(0, 4), pady=(0, 4)
+        )
+        subseed_strength_entry = ttk.Entry(
+            parent, textvariable=self.subseed_strength_var, style="Dark.TEntry"
+        )
+        subseed_strength_entry.grid(row=row_idx + 1, column=5, sticky="ew", pady=(0, 4))
 
     def _attach_change_traces(self) -> None:
         for var in (
@@ -239,6 +276,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             self.width_var,
             self.height_var,
             self.seed_var,
+            self.subseed_var,
+            self.subseed_strength_var,
         ):
             try:
                 var.trace_add("write", lambda *_: self._on_value_changed())
@@ -306,6 +345,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 cfg.seed = None
             else:
                 cfg.seed = self._safe_int(seed_text, -1)
+            subseed_text = str(self.subseed_var.get()).strip()
+            cfg.subseed = -1 if not subseed_text or subseed_text == "-1" else self._safe_int(subseed_text, -1)
+            cfg.subseed_strength = self._safe_float(self.subseed_strength_var.get(), 0.0)
         except Exception:
             pass
 
@@ -412,15 +454,35 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         widget.grid(row=row_idx, column=1, columnspan=5, sticky="ew", pady=(0, 4))
 
     def _build_combo(
-        self, parent: ttk.Frame, variable: tk.Variable, values: Iterable[str]
+        self,
+        parent: ttk.Frame,
+        variable: tk.Variable,
+        values: Iterable[str],
+        *,
+        readonly: bool = True,
     ) -> ttk.Combobox:
         return ttk.Combobox(
             parent,
             textvariable=variable,
             values=tuple(values),
-            state="readonly",
+            state="readonly" if readonly else "normal",
             style="Dark.TCombobox",
         )
+
+    def _build_numeric_combo(
+        self, parent: ttk.Frame, variable: tk.StringVar, values: Iterable[str]
+    ) -> ttk.Combobox:
+        combo = self._build_combo(parent, variable, values, readonly=False)
+        if self._dimension_validate_cmd is None:
+            self._dimension_validate_cmd = parent.register(self._validate_dimension_input)
+        combo.configure(
+            validate="key",
+            validatecommand=(self._dimension_validate_cmd, "%P"),
+        )
+        combo.bind("<<ComboboxSelected>>", self._on_dimension_commit)
+        combo.bind("<FocusOut>", self._on_dimension_commit)
+        combo.bind("<Return>", self._on_dimension_commit)
+        return combo
 
     def _build_spin(
         self,
@@ -446,19 +508,57 @@ class BaseGenerationPanelV2(BaseStageCardV2):
     def _on_resolution_preset_selected(self, _event: object = None) -> None:
         preset = self.resolution_preset_var.get()
         width, height = self._preset_map.get(preset, self._parse_preset_label(preset))
-        self.width_var.set(width)
-        self.height_var.set(height)
+        self.width_var.set(str(width))
+        self.height_var.set(str(height))
+        self._sync_resolution_label_from_dimensions()
+
+    def _on_dimension_commit(self, _event: object = None) -> None:
+        self.width_var.set(str(self._normalize_dimension_value(self.width_var.get(), 768)))
+        self.height_var.set(str(self._normalize_dimension_value(self.height_var.get(), 768)))
+        self._sync_resolution_label_from_dimensions()
+
+    def _sync_resolution_label_from_dimensions(self) -> None:
+        width = self._normalize_dimension_value(self.width_var.get(), 768)
+        height = self._normalize_dimension_value(self.height_var.get(), 768)
+        target = self._preset_label_from_dimensions(width, height)
+        if self.resolution_preset_var.get() != target:
+            self.resolution_preset_var.set(target)
+
+    def _randomize_seed(self) -> None:
+        import random
+
+        self.seed_var.set(str(random.randint(0, 2**32 - 1)))
+
+    def _randomize_subseed(self) -> None:
+        import random
+
+        self.subseed_var.set(str(random.randint(0, 2**32 - 1)))
+
+    def _validate_dimension_input(self, proposed: str) -> bool:
+        if proposed == "":
+            return True
+        if not proposed.isdigit():
+            return False
+        try:
+            return int(proposed) <= self.MAX_DIMENSION
+        except ValueError:
+            return False
+
+    def _normalize_dimension_value(self, value: object, default: int) -> int:
+        normalized = self._safe_int(value, default)
+        return max(self.MIN_DIMENSION, min(self.MAX_DIMENSION, normalized))
 
     def get_overrides(self) -> dict[str, object]:
         width = self._safe_int(self.width_var.get(), 768)
         height = self._safe_int(self.height_var.get(), 768)
-        resolution_label = self.resolution_preset_var.get().strip()
         seed_text = str(self.seed_var.get()).strip()
         seed_value: int | None
         if not seed_text or seed_text == "-1":
             seed_value = None
         else:
             seed_value = self._safe_int(seed_text, -1)
+        subseed_text = str(self.subseed_var.get()).strip()
+        subseed_value = -1 if not subseed_text or subseed_text == "-1" else self._safe_int(subseed_text, -1)
         return {
             "model": self._normalize_model_name(self.model_var.get()),
             "model_name": self._normalize_model_name(self.model_var.get()),
@@ -468,11 +568,15 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             "scheduler": self.scheduler_var.get().strip(),
             "steps": self._safe_int(self.steps_var.get(), 20),
             "cfg_scale": self._safe_float(self.cfg_var.get(), 7.0),
-            "resolution_preset": self._preset_value_from_label(resolution_label),
+            "resolution_preset": self._preset_value_from_label(
+                self._preset_label_from_dimensions(width, height)
+            ),
             "width": width,
             "height": height,
             "ratio": self._format_ratio(width, height),
             "seed": seed_value,
+            "subseed": subseed_value,
+            "subseed_strength": self._safe_float(self.subseed_strength_var.get(), 0.0),
         }
 
     def apply_from_overrides(self, overrides: dict[str, object]) -> None:
@@ -493,8 +597,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             width = overrides.get("width")
             height = overrides.get("height")
             if width is not None and height is not None:
-                self.width_var.set(self._safe_int(width, 768))
-                self.height_var.set(self._safe_int(height, 768))
+                self.width_var.set(str(self._safe_int(width, 768)))
+                self.height_var.set(str(self._safe_int(height, 768)))
                 self.resolution_preset_var.set(
                     self._preset_label_from_dimensions(self._safe_int(width, 768), self._safe_int(height, 768))
                 )
@@ -505,6 +609,15 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                     self._on_resolution_preset_selected()
             seed = overrides.get("seed")
             self.seed_var.set("" if seed in (None, "", -1, "-1") else str(self._safe_int(seed, -1)))
+            subseed = overrides.get("subseed")
+            self.subseed_var.set(
+                "" if subseed in (None, "", -1, "-1") else str(self._safe_int(subseed, -1))
+            )
+            subseed_strength = overrides.get("subseed_strength")
+            if subseed_strength is not None:
+                self.subseed_strength_var.set(
+                    str(self._safe_float(subseed_strength, 0.0))
+                )
         finally:
             self._sync_enabled = True
         self._update_current_config()

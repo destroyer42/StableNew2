@@ -21,8 +21,7 @@ from src.prompting.prompt_types import (
     PromptOptimizationResult,
 )
 from src.utils.embedding_prompt_utils import (
-    extract_embedding_entries,
-    render_embedding_reference,
+    extract_embedding_token_strings,
     strip_embedding_entries,
 )
 
@@ -125,19 +124,15 @@ class SDXLPromptOptimizer:
             if not original:
                 continue
             working_chunk = original
-            embedding_entries = extract_embedding_entries(original)
-            if embedding_entries:
-                prefix_embeddings.extend(
-                    render_embedding_reference(name, weight)
-                    for name, weight in embedding_entries
-                    if name
-                )
+            embedding_tokens = extract_embedding_token_strings(original)
+            if embedding_tokens:
+                prefix_embeddings.extend(embedding_tokens)
                 working_chunk = strip_embedding_entries(working_chunk)
                 if not working_chunk:
                     continue
             if polarity == "positive":
                 working_chunk, lora_tokens = _extract_lora_tokens(original)
-                if embedding_entries:
+                if embedding_tokens:
                     working_chunk = strip_embedding_entries(working_chunk)
                 for token in lora_tokens:
                     result.append(

@@ -9,6 +9,7 @@ from src.pipeline.artifact_contract import (
     extract_artifact_paths,
     infer_artifact_type,
 )
+from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 
 REPLAY_DESCRIPTOR_SCHEMA_VERSION = "stablenew.replay-descriptor.v2.6"
 DIAGNOSTICS_DESCRIPTOR_SCHEMA_VERSION = "stablenew.diagnostics-descriptor.v2.6"
@@ -263,6 +264,7 @@ def build_replay_descriptor(
         "primary_artifact": dict(primary_artifact or {}),
         "primary_output_paths": list(primary_paths),
         "backends": backends,
+        "secondary_motion": extract_secondary_motion_summary(metadata),
     }
 
 
@@ -300,6 +302,7 @@ def build_diagnostics_descriptor(
         ),
         "primary_artifact": dict(primary_artifact or {}),
         "backends": collect_backend_descriptors(result),
+        "secondary_motion": extract_secondary_motion_summary(metadata),
         "replay_descriptor": build_replay_descriptor(result, njr_snapshot=njr_snapshot),
     }
 

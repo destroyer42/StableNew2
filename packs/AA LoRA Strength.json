@@ -111,208 +111,15 @@
             0.8
           ],
           [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
             "anatomy_helper",
             0.8
           ],
           [
             "NsfwPovAllInOneLoraSdxl-000009",
-            0.09890109890109891
-          ]
-        ]
-      },
-      {
-        "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
-        "positive_embeddings": [
-          [
-            "Stable_Yogis_General_Positives_V1",
-            0.87
+            0.7912087912087913
           ],
           [
-            "Stable_Yogis_Anatomy_Positives_V1",
-            0.857143
-          ],
-          [
-            "Stable_Yogis_Realism_Positives_V1",
-            0.863636
-          ],
-          [
-            "Stable_Yogis_PDXL_Positives",
-            0.9
-          ]
-        ],
-        "negative_embeddings": [
-          [
-            "NEGATIVE_HANDS",
-            0.95614
-          ],
-          [
-            "SDXLnegXL",
-            0.985714
-          ],
-          [
-            "sdxl_cyberrealistic_simpleneg-neg",
-            0.972527
-          ],
-          [
-            "easynegative",
-            0.69802
-          ]
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
-            0.8
-          ],
-          [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.19780219780219782
-          ]
-        ]
-      },
-      {
-        "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
-        "positive_embeddings": [
-          [
-            "Stable_Yogis_General_Positives_V1",
-            0.87
-          ],
-          [
-            "Stable_Yogis_Anatomy_Positives_V1",
-            0.857143
-          ],
-          [
-            "Stable_Yogis_Realism_Positives_V1",
-            0.863636
-          ],
-          [
-            "Stable_Yogis_PDXL_Positives",
-            0.9
-          ]
-        ],
-        "negative_embeddings": [
-          [
-            "NEGATIVE_HANDS",
-            0.95614
-          ],
-          [
-            "SDXLnegXL",
-            0.985714
-          ],
-          [
-            "sdxl_cyberrealistic_simpleneg-neg",
-            0.972527
-          ],
-          [
-            "easynegative",
-            0.69802
-          ]
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
-            0.8
-          ],
-          [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.3131868131868132
-          ]
-        ]
-      },
-      {
-        "index": 0,
-        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
-        "positive_embeddings": [
-          [
-            "Stable_Yogis_General_Positives_V1",
-            0.87
-          ],
-          [
-            "Stable_Yogis_Anatomy_Positives_V1",
-            0.857143
-          ],
-          [
-            "Stable_Yogis_Realism_Positives_V1",
-            0.863636
-          ],
-          [
-            "Stable_Yogis_PDXL_Positives",
-            0.9
-          ]
-        ],
-        "negative_embeddings": [
-          [
-            "NEGATIVE_HANDS",
-            0.95614
-          ],
-          [
-            "SDXLnegXL",
-            0.985714
-          ],
-          [
-            "sdxl_cyberrealistic_simpleneg-neg",
-            0.972527
-          ],
-          [
-            "easynegative",
-            0.69802
-          ]
-        ],
-        "loras": [
-          [
-            "add-detail-xl",
-            0.8
-          ],
-          [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
-            "anatomy_helper",
-            0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.39560439560439564
           ]
         ]
@@ -363,19 +170,15 @@
             0.8
           ],
           [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
             "anatomy_helper",
             0.8
           ],
           [
             "NsfwPovAllInOneLoraSdxl-000009",
+            0.7912087912087913
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.510989010989011
           ]
         ]
@@ -426,11 +229,62 @@
             0.8
           ],
           [
-            "epiCRealismHelper",
+            "anatomy_helper",
             0.8
           ],
           [
-            "DetailedEyes_V3",
+            "NsfwPovAllInOneLoraSdxl-000009",
+            0.7912087912087913
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            0.5934065934065934
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ]
+        ],
+        "negative_embeddings": [
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
             0.8
           ],
           [
@@ -439,7 +293,129 @@
           ],
           [
             "NsfwPovAllInOneLoraSdxl-000009",
-            0.6098901098901099
+            0.7912087912087913
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            0.6923076923076923
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ]
+        ],
+        "negative_embeddings": [
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.8
+          ],
+          [
+            "anatomy_helper",
+            0.8
+          ],
+          [
+            "NsfwPovAllInOneLoraSdxl-000009",
+            0.7912087912087913
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "positive_embeddings": [
+          [
+            "Stable_Yogis_General_Positives_V1",
+            0.87
+          ],
+          [
+            "Stable_Yogis_Anatomy_Positives_V1",
+            0.857143
+          ],
+          [
+            "Stable_Yogis_Realism_Positives_V1",
+            0.863636
+          ],
+          [
+            "Stable_Yogis_PDXL_Positives",
+            0.9
+          ]
+        ],
+        "negative_embeddings": [
+          [
+            "NEGATIVE_HANDS",
+            0.95614
+          ],
+          [
+            "SDXLnegXL",
+            0.985714
+          ],
+          [
+            "sdxl_cyberrealistic_simpleneg-neg",
+            0.972527
+          ],
+          [
+            "easynegative",
+            0.69802
+          ]
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.8
+          ],
+          [
+            "anatomy_helper",
+            0.8
+          ],
+          [
+            "NsfwPovAllInOneLoraSdxl-000009",
+            0.8241758241758242
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            0.9230769230769231
           ]
         ]
       },
@@ -489,20 +465,16 @@
             0.8
           ],
           [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
-            0.8
-          ],
-          [
             "anatomy_helper",
             0.8
           ],
           [
             "NsfwPovAllInOneLoraSdxl-000009",
             0.7087912087912087
+          ],
+          [
+            "sdxl1.0_realastic_female_lora",
+            0.8
           ]
         ]
       },
@@ -549,14 +521,6 @@
         "loras": [
           [
             "add-detail-xl",
-            0.8
-          ],
-          [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
-            "DetailedEyes_V3",
             0.8
           ],
           [
@@ -566,6 +530,10 @@
           [
             "NsfwPovAllInOneLoraSdxl-000009",
             0.8241758241758242
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            1.0384615384615383
           ]
         ]
       },
@@ -612,10 +580,6 @@
         "loras": [
           [
             "add-detail-xl",
-            0.8
-          ],
-          [
-            "epiCRealismHelper",
             0.8
           ],
           [
@@ -629,6 +593,10 @@
           [
             "NSFWFilterXL_animagine",
             0.8
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            1.120879120879121
           ]
         ]
       },
@@ -675,10 +643,6 @@
         "loras": [
           [
             "add-detail-xl",
-            0.8
-          ],
-          [
-            "epiCRealismHelper",
             0.8
           ],
           [
@@ -692,6 +656,10 @@
           [
             "NSFWFilterXL_animagine",
             0.9065934065934065
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            1.3021978021978022
           ]
         ]
       },
@@ -738,7 +706,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.8
+            1.0673076923076923
           ],
           [
             "epiCRealismHelper",
@@ -750,7 +718,7 @@
           ],
           [
             "anatomy_helper",
-            0.8
+            1.184782608695652
           ],
           [
             "NSFWFilterXL_animagine",
@@ -804,20 +772,20 @@
             0.8
           ],
           [
-            "epiCRealismHelper",
-            0.8
-          ],
-          [
             "DetailedEyes_V3",
-            0.8
+            1.2517985611510791
           ],
           [
             "anatomy_helper",
-            0.8
+            1.2717391304347827
           ],
           [
             "NSFWFilterXL_animagine",
             1.2032967032967035
+          ],
+          [
+            "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
+            1.335164835164835
           ]
         ]
       }
@@ -882,9 +850,9 @@
         {
           "name": "pose",
           "values": [
-            "giving a teasing blowjob",
-            "having butterfly sex",
-            "licking a man's cock"
+            "giving a teasing blowjob deepthroat licking cock",
+            "having butterfly sex while orgasming",
+            "riding cowgirl"
           ]
         }
       ]

@@ -13,10 +13,70 @@ MODELS_PATH = "/sdapi/v1/sd-models"
 OPTIONS_PATH = "/sdapi/v1/options"
 _SHORT_PORT_PROBE_TIMEOUT = 3.0
 _SHORT_PORT_PROBE_INTERVAL = 1.0
+_READINESS_FAILURE_STATE: dict[str, dict[str, float]] = {}
+_HARD_FAILURE_THRESHOLD = 2
+_READINESS_BACKOFF_BASE_SEC = 15.0
+_READINESS_BACKOFF_MAX_SEC = 90.0
 
 
 class WebUIHealthCheckTimeout(TimeoutError):
     """Raised when WebUI does not respond within the allotted time."""
+
+
+def _is_hard_connection_failure(exc: Exception | None) -> bool:
+    if exc is None:
+        return False
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return True
+    text = str(exc).lower()
+    return "actively refused" in text or "failed to establish a new connection" in text
+
+
+def _readiness_cooldown_remaining(base_url: str) -> float:
+    state = _READINESS_FAILURE_STATE.get(base_url) or {}
+    until = float(state.get("cooldown_until", 0.0) or 0.0)
+    remaining = until - time.monotonic()
+    if remaining <= 0:
+        if base_url in _READINESS_FAILURE_STATE:
+            _READINESS_FAILURE_STATE[base_url]["cooldown_until"] = 0.0
+        return 0.0
+    return remaining
+
+
+def _record_readiness_failure(base_url: str, exc: Exception | None) -> None:
+    if not _is_hard_connection_failure(exc):
+        return
+    state = _READINESS_FAILURE_STATE.setdefault(base_url, {"hard_failures": 0.0, "cooldown_until": 0.0})
+    state["hard_failures"] = float(state.get("hard_failures", 0.0) or 0.0) + 1.0
+    hard_failures = int(state["hard_failures"])
+    if hard_failures < _HARD_FAILURE_THRESHOLD:
+        return
+    exponent = max(0, hard_failures - _HARD_FAILURE_THRESHOLD)
+    cooldown = min(_READINESS_BACKOFF_BASE_SEC * (2**exponent), _READINESS_BACKOFF_MAX_SEC)
+    state["cooldown_until"] = time.monotonic() + cooldown
+
+
+def _clear_readiness_failure(base_url: str) -> None:
+    _READINESS_FAILURE_STATE.pop(base_url, None)
+
+
+def clear_readiness_failure_state(base_url: str | None = None) -> None:
+    """Clear cached readiness backoff state for one base URL or all URLs."""
+
+    if base_url:
+        _clear_readiness_failure(base_url)
+        return
+    _READINESS_FAILURE_STATE.clear()
+
+
+def get_readiness_failure_state(base_url: str) -> dict[str, float]:
+    """Return a snapshot of readiness failure state for diagnostics."""
+
+    state = _READINESS_FAILURE_STATE.get(base_url) or {}
+    return {
+        "hard_failures": float(state.get("hard_failures", 0.0) or 0.0),
+        "cooldown_remaining_s": _readiness_cooldown_remaining(base_url),
+    }
 
 
 def _build_url(base_url: str, path: str) -> str:
@@ -53,6 +113,17 @@ def _probe_progress_endpoint(url: str, timeout: float) -> bool:
 def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: float = 0.5) -> bool:
     logger = get_logger(__name__)
     ctx = LogContext(subsystem="api")
+    cooldown_remaining = _readiness_cooldown_remaining(base_url)
+    if cooldown_remaining > 0:
+        msg = f"WebUI readiness backoff active for {cooldown_remaining:.1f}s"
+        log_with_ctx(
+            logger,
+            logging.DEBUG,
+            msg,
+            ctx=ctx,
+            extra_fields={"event": "webui_readiness_backoff", "base_url": base_url, "cooldown_remaining_s": cooldown_remaining},
+        )
+        raise WebUIHealthCheckTimeout(msg)
     log_with_ctx(
         logger,
         logging.DEBUG,
@@ -82,6 +153,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
     while time.time() < deadline:
         models_error = _probe_json_endpoint(models_url, MODELS_PATH, request_timeout)
         if models_error is None:
+            _clear_readiness_failure(base_url)
             log_with_ctx(
                 logger,
                 logging.DEBUG,
@@ -103,6 +175,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
 
         options_error = _probe_json_endpoint(options_url, OPTIONS_PATH, request_timeout)
         if options_error is None:
+            _clear_readiness_failure(base_url)
             log_with_ctx(
                 logger,
                 logging.DEBUG,
@@ -140,6 +213,7 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
 
     msg = "WebUI did not become ready within allotted time"
     if last_error:
+        _record_readiness_failure(base_url, last_error)
         msg = f"{msg}: {last_error}"
         log_with_ctx(
             logger,
@@ -149,6 +223,8 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
             extra_fields={
                 "last_error": str(last_error),
                 "last_error_endpoint": last_error_endpoint,
+                "event": "webui_readiness_timeout",
+                "hard_connection_failure": _is_hard_connection_failure(last_error),
             },
         )
     else:
