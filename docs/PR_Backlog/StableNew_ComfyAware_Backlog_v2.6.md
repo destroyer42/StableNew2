@@ -192,7 +192,7 @@ Execution spec:
 With `PR-HARDEN-224` through `PR-HARDEN-229` assumed complete, the next
 video/runtime tranche is the StableNew-owned secondary motion layer.
 
-### `PR-VIDEO-230-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
+### `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
 
 Status: Planned
 
@@ -211,9 +211,9 @@ Guiding roadmap:
 
 Execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-230-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
 
-### `PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
+### `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
 
 Status: Planned
 
@@ -228,9 +228,9 @@ Required outputs:
 
 Execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 
-### `PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration`
+### `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
 Status: Planned
 
@@ -244,9 +244,9 @@ Required outputs:
 
 Execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
-### `PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+### `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
 Status: Planned
 
@@ -260,9 +260,9 @@ Required outputs:
 
 Execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
-### `PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+### `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
 Status: Planned
 
@@ -277,9 +277,9 @@ Required outputs:
 
 Execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
-### `PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+### `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
 Status: Planned
 
@@ -293,7 +293,7 @@ Required outputs:
 
 Execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
 ## Done Definition
 

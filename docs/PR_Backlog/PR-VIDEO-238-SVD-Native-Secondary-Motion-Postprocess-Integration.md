@@ -1,4 +1,4 @@
-# PR-VIDEO-232 - SVD Native Secondary Motion Postprocess Integration
+# PR-VIDEO-238 - SVD Native Secondary Motion Postprocess Integration
 
 Status: Specification
 Priority: HIGH
@@ -17,7 +17,7 @@ the first real runtime mutation after the shared engine contract is frozen.
 
 ### Specific Problem
 
-The shared engine from `PR-VIDEO-231` is not useful to end users until at least
+The shared engine from `PR-VIDEO-237` is not useful to end users until at least
 one backend can apply it. SVD is the correct first integration target, but the
 repo must not expose a second user-owned config surface under `svd_native`
 instead of using the canonical `intent_config["secondary_motion"]` contract.
@@ -33,7 +33,7 @@ workflow complexity.
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/StableNew Secondary Motion Layer Design.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 
 ## Goals & Non-Goals
 
@@ -132,7 +132,7 @@ outer contract.
 
 Required details:
 
-- plan secondary motion in the runner using the contract from `PR-VIDEO-230`
+- plan secondary motion in the runner using the contract from `PR-VIDEO-236`
 - when stage `svd_native` is executing and motion is in `apply` mode, merge a
   copied `postprocess.secondary_motion` block into the stage config sent to the
   backend
@@ -150,7 +150,7 @@ Wire the shared engine into the structured SVD postprocess flow.
 Required details:
 
 - execute secondary motion before face restore, interpolation, and upscale
-- reuse the shared worker/action contract from `PR-VIDEO-231`
+- reuse the shared worker/action contract from `PR-VIDEO-237`
 - propagate `applied`, `skipped`, and `not_applicable` states into the SVD
   postprocess metadata block
 
@@ -266,11 +266,11 @@ contract intact for the later backend PRs.
 ### Debt Intentionally Deferred
 
 - AnimateDiff integration
-  - Owner: `PR-VIDEO-233`
+  - Owner: `PR-VIDEO-239`
 - workflow-video parity integration
-  - Owner: `PR-VIDEO-234`
+  - Owner: `PR-VIDEO-240`
 - learning integration
-  - Owner: `PR-VIDEO-235`
+  - Owner: `PR-VIDEO-241`
 
 ## Documentation Updates
 
@@ -283,8 +283,8 @@ contract intact for the later backend PRs.
 
 ### Internal Module Dependencies
 
-- `PR-VIDEO-230` motion contract and runner carrier
-- `PR-VIDEO-231` shared engine and provenance helpers
+- `PR-VIDEO-236` motion contract and runner carrier
+- `PR-VIDEO-237` shared engine and provenance helpers
 - existing SVD config, postprocess, and runner modules
 
 ### External Tools or Runtimes
@@ -300,5 +300,5 @@ Approval Status: Pending
 
 ## Next Steps
 
-1. `PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
-2. `PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+1. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+2. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`

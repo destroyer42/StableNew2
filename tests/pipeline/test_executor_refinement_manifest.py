@@ -91,3 +91,35 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
         manifest_metadata["adaptive_refinement"]["prompt_patch_provenance"]["positive"]["applied_add"]
         == ["clear irises"]
     )
+
+
+def test_adetailer_manifest_model_prefers_requested_stage_checkpoint() -> None:
+    pipeline = Pipeline(Mock(), Mock())
+    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    pipeline.client.get_current_vae = Mock(return_value="vae.pt")
+
+    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
+         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}), \
+         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
+         patch.object(pipeline, "_write_manifest_file") as write_manifest_mock, \
+         patch("builtins.open", MagicMock()):
+        config = {
+            "adetailer_enabled": True,
+            "adetailer_model": "face_yolov8n.pt",
+            "adetailer_steps": 20,
+            "model": "base-model.safetensors",
+            "sd_model_checkpoint": "base-model.safetensors",
+        }
+
+        result = pipeline.run_adetailer(
+            input_image_path=Path("input.png"),
+            prompt="test prompt",
+            negative_prompt="test negative",
+            config=config,
+            run_dir=Path("output"),
+            image_name="test",
+        )
+
+    assert result is not None
+    manifest_metadata = write_manifest_mock.call_args.kwargs["metadata"]
+    assert manifest_metadata["model"] == "base-model.safetensors"

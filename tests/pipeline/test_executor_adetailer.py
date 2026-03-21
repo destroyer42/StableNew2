@@ -176,3 +176,37 @@ def test_adetailer_payload_uses_adaptive_refinement_overrides():
         assert face_args["ad_use_inpaint_width_height"] is True
         assert face_args["ad_inpaint_width"] == 768
         assert face_args["ad_inpaint_height"] == 768
+
+
+def test_adetailer_payload_pins_requested_sd_checkpoint_and_manifest_prefers_it():
+    """ADetailer should pin the requested SD model in the payload and manifest."""
+    pipeline = Pipeline(Mock(), Mock())
+    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+
+    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
+         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
+         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
+         patch("builtins.open", MagicMock()):
+
+        config = {
+            "adetailer_enabled": True,
+            "adetailer_model": "face_yolov8n.pt",
+            "adetailer_steps": 20,
+            "model": "base-model.safetensors",
+            "sd_model_checkpoint": "base-model.safetensors",
+        }
+
+        result = pipeline.run_adetailer(
+            input_image_path=Path("input.png"),
+            prompt="test prompt",
+            negative_prompt="test negative",
+            config=config,
+            run_dir=Path("output"),
+            image_name="test",
+        )
+
+        assert result is not None
+        payload = generate_mock.call_args.args[1]
+        assert payload["sd_model"] == "base-model.safetensors"
+        assert payload["override_settings"]["sd_model_checkpoint"] == "base-model.safetensors"
+        assert result["model"] == "base-model.safetensors"

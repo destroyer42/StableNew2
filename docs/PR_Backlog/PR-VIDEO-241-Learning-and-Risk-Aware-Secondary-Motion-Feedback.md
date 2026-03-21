@@ -1,4 +1,4 @@
-# PR-VIDEO-235 - Learning and Risk-Aware Secondary Motion Feedback
+# PR-VIDEO-241 - Learning and Risk-Aware Secondary Motion Feedback
 
 Status: Specification
 Priority: HIGH
@@ -10,7 +10,7 @@ Date: 2026-03-20
 
 ### Current Repo Truth
 
-After `PR-VIDEO-234`, StableNew can plan and apply the shared secondary-motion
+After `PR-VIDEO-240`, StableNew can plan and apply the shared secondary-motion
 layer across the three current video backends. The remaining gap is learning and
 recommendation closure: the feature will be replayable, but not yet analyzable
 or tunable through the repo's existing local learning surfaces.
@@ -33,7 +33,7 @@ bounded-storage rules.
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/Learning_System_Spec_v2.6.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
 ## Goals & Non-Goals
 
@@ -263,7 +263,7 @@ provenance intact.
 
 ### Internal Module Dependencies
 
-- `PR-VIDEO-230` through `PR-VIDEO-234`
+- `PR-VIDEO-236` through `PR-VIDEO-240`
 - existing learning record builder and recommendation engine
 
 ### External Tools or Runtimes

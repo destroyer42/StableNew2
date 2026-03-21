@@ -366,9 +366,16 @@ class ConfigMergerV2:
     ) -> dict[str, Any]:
         """Merge ADetailer sub-config with precedence rules."""
         if not override_enabled or override_adetailer is None:
-            return deepcopy(base_adetailer)
+            merged = deepcopy(base_adetailer)
+            legacy_detector_model = merged.pop("model", None)
+            if legacy_detector_model is not None and "adetailer_model" not in merged:
+                merged["adetailer_model"] = legacy_detector_model
+            return merged
 
         merged = deepcopy(base_adetailer)
+        legacy_detector_model = merged.pop("model", None)
+        if legacy_detector_model is not None and "adetailer_model" not in merged:
+            merged["adetailer_model"] = legacy_detector_model
 
         if override_adetailer.enabled is not None:
             merged["enabled"] = override_adetailer.enabled
@@ -377,8 +384,7 @@ class ConfigMergerV2:
 
         # Core detection settings
         if override_adetailer.model is not None:
-            merged["model"] = override_adetailer.model
-            merged["adetailer_model"] = override_adetailer.model  # Dual key
+            merged["adetailer_model"] = override_adetailer.model
         if override_adetailer.confidence is not None:
             merged["confidence"] = override_adetailer.confidence
             merged["adetailer_confidence"] = override_adetailer.confidence  # Dual key

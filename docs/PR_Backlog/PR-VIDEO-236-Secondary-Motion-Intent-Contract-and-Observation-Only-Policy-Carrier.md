@@ -1,4 +1,4 @@
-# PR-VIDEO-230 - Secondary Motion Intent Contract and Observation-Only Policy Carrier
+# PR-VIDEO-236 - Secondary Motion Intent Contract and Observation-Only Policy Carrier
 
 Status: Specification
 Priority: HIGH
@@ -320,13 +320,13 @@ free of backend behavior changes.
 ### Debt Intentionally Deferred
 
 - shared deterministic engine and provenance helpers
-  - Owner: `PR-VIDEO-231`
+  - Owner: `PR-VIDEO-237`
 - backend runtime integration
-  - Owner: `PR-VIDEO-232`, `PR-VIDEO-233`, `PR-VIDEO-234`
+  - Owner: `PR-VIDEO-238`, `PR-VIDEO-239`, `PR-VIDEO-240`
 - learning integration
-  - Owner: `PR-VIDEO-235`
+  - Owner: `PR-VIDEO-241`
 - GUI exposure
-  - Owner: follow-on PR after `PR-VIDEO-235`
+  - Owner: follow-on PR after `PR-VIDEO-241`
 
 ## Documentation Updates
 
@@ -358,5 +358,5 @@ Approval Status: Pending
 
 ## Next Steps
 
-1. `PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
-2. `PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration`
+1. `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
+2. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`

@@ -2052,7 +2052,7 @@ class Pipeline:
         stage_history = self._extract_stage_history_from_input(input_image_path)
 
         # Query WebUI for ACTUAL current model and VAE (what's really being used)
-        model_name = self.client.get_current_model() or config.get("model") or config.get("sd_model_checkpoint") or "Unknown"
+        model_name = config.get("model") or config.get("sd_model_checkpoint") or self.client.get_current_model() or "Unknown"
         vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
         logger.info(f"📝 img2img manifest - Model: {model_name}, VAE: {vae_name}")
 
@@ -2331,6 +2331,15 @@ class Pipeline:
                 }
             },
         }
+        override_settings: dict[str, Any] = {}
+        if requested_model:
+            payload["sd_model"] = requested_model
+            override_settings["sd_model_checkpoint"] = requested_model
+        if requested_vae:
+            payload["sd_vae"] = requested_vae
+            override_settings["sd_vae"] = requested_vae
+        if override_settings:
+            payload["override_settings"] = override_settings
         # Add scheduler if present in config
         if config.get("scheduler"):
             payload["scheduler"] = config.get("scheduler")
@@ -2392,7 +2401,7 @@ class Pipeline:
         stage_history = self._extract_stage_history_from_input(input_image_path)
 
         # Query WebUI for ACTUAL current model and VAE
-        model_name = self.client.get_current_model() or config.get("model") or config.get("sd_model_checkpoint") or "Unknown"
+        model_name = requested_model or config.get("model") or config.get("sd_model_checkpoint") or self.client.get_current_model() or "Unknown"
         vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
         logger.info(f"📝 ADetailer manifest - Model: {model_name}, VAE: {vae_name}")
 
@@ -4329,7 +4338,7 @@ class Pipeline:
             stage_history = self._extract_stage_history_from_input(input_image_path)
 
             # Query WebUI for ACTUAL current model and VAE
-            model_name = self.client.get_current_model() or config.get("model") or "Unknown"
+            model_name = config.get("model") or config.get("sd_model_checkpoint") or self.client.get_current_model() or "Unknown"
             vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
             logger.info(f"📝 Upscale manifest - Model: {model_name}, VAE: {vae_name}")
             

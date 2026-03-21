@@ -1,4 +1,4 @@
-# PR-VIDEO-231 - Shared Secondary Motion Engine and Provenance Contract
+# PR-VIDEO-237 - Shared Secondary Motion Engine and Provenance Contract
 
 Status: Specification
 Priority: HIGH
@@ -10,7 +10,7 @@ Date: 2026-03-20
 
 ### Current Repo Truth
 
-After `PR-VIDEO-230`, StableNew has a frozen outer motion contract and a runner
+After `PR-VIDEO-236`, StableNew has a frozen outer motion contract and a runner
 observation carrier, but there is still no reusable motion engine and no shared
 provenance helper that later backends can adopt verbatim.
 
@@ -28,7 +28,7 @@ for manifests, replay fragments, and container metadata.
 ### Why This PR Exists Now
 
 This PR isolates the algorithm and provenance work before any backend wiring.
-That keeps `PR-VIDEO-232` through `PR-VIDEO-234` focused on backend-specific
+That keeps `PR-VIDEO-238` through `PR-VIDEO-240` focused on backend-specific
 integration instead of re-arguing the engine contract.
 
 ### Reference
@@ -37,7 +37,7 @@ integration instead of re-arguing the engine contract.
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/StableNew Secondary Motion Layer Design.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/PR-VIDEO-230-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
 
 ## Goals & Non-Goals
 
@@ -259,7 +259,7 @@ Suggested command set:
 ### Rollback Plan
 
 Remove the shared engine and provenance helper files while leaving the outer
-contract from `PR-VIDEO-230` intact.
+contract from `PR-VIDEO-236` intact.
 
 ## Tech Debt Analysis
 
@@ -271,13 +271,13 @@ contract from `PR-VIDEO-230` intact.
 ### Debt Intentionally Deferred
 
 - SVD integration
-  - Owner: `PR-VIDEO-232`
+  - Owner: `PR-VIDEO-238`
 - AnimateDiff integration
-  - Owner: `PR-VIDEO-233`
+  - Owner: `PR-VIDEO-239`
 - workflow-video parity integration
-  - Owner: `PR-VIDEO-234`
+  - Owner: `PR-VIDEO-240`
 - learning integration
-  - Owner: `PR-VIDEO-235`
+  - Owner: `PR-VIDEO-241`
 
 ## Documentation Updates
 
@@ -290,7 +290,7 @@ contract from `PR-VIDEO-230` intact.
 
 ### Internal Module Dependencies
 
-- `PR-VIDEO-230` motion models and policy service
+- `PR-VIDEO-236` motion models and policy service
 - container metadata helpers
 - replay/diagnostics descriptor builders
 
@@ -307,5 +307,5 @@ Approval Status: Pending
 
 ## Next Steps
 
-1. `PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration`
-2. `PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+1. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+2. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`

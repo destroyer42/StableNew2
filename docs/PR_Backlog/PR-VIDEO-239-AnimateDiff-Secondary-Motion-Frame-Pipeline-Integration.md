@@ -1,4 +1,4 @@
-# PR-VIDEO-233 - AnimateDiff Secondary Motion Frame Pipeline Integration
+# PR-VIDEO-239 - AnimateDiff Secondary Motion Frame Pipeline Integration
 
 Status: Specification
 Priority: HIGH
@@ -18,14 +18,14 @@ video stage.
 
 ### Specific Problem
 
-The shared engine from `PR-VIDEO-231` is not yet wired into AnimateDiff. If the
+The shared engine from `PR-VIDEO-237` is not yet wired into AnimateDiff. If the
 integration is done carelessly, it will either mutate WebUI payload semantics,
 redefine `motion_profile`, or make the final video artifact depend on a prompt
 rewrite path instead of a deterministic shared postprocess.
 
 ### Why This PR Exists Now
 
-After SVD proves the first real runtime path in `PR-VIDEO-232`, AnimateDiff is
+After SVD proves the first real runtime path in `PR-VIDEO-238`, AnimateDiff is
 the next backend that can adopt the same shared engine with relatively low risk
 because its frame directory already exists before encode time.
 
@@ -34,8 +34,8 @@ because its frame directory already exists before encode time.
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/StableNew Secondary Motion Layer Design.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
-- `docs/PR_Backlog/PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
 ## Goals & Non-Goals
 
@@ -236,9 +236,9 @@ intact.
 ### Debt Intentionally Deferred
 
 - workflow-video parity integration
-  - Owner: `PR-VIDEO-234`
+  - Owner: `PR-VIDEO-240`
 - learning integration
-  - Owner: `PR-VIDEO-235`
+  - Owner: `PR-VIDEO-241`
 - prompt/native-bias experimentation
   - Owner: follow-on PR after runtime tranche closure
 
@@ -253,8 +253,8 @@ intact.
 
 ### Internal Module Dependencies
 
-- `PR-VIDEO-230` motion contract and runner carrier
-- `PR-VIDEO-231` shared engine and provenance helpers
+- `PR-VIDEO-236` motion contract and runner carrier
+- `PR-VIDEO-237` shared engine and provenance helpers
 - existing AnimateDiff runtime in `src/pipeline/executor.py`
 
 ### External Tools or Runtimes
@@ -270,5 +270,5 @@ Approval Status: Pending
 
 ## Next Steps
 
-1. `PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
-2. `PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+1. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+2. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`

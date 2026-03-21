@@ -139,12 +139,12 @@ The series follows eight execution rules.
 
 | PR | Title | Core outcome | Depends on |
 | ---- | ----- | ------------ | ---------- |
-| `PR-VIDEO-230` | Secondary Motion Intent Contract and Observation-Only Policy Carrier | Canonical `intent_config["secondary_motion"]`, pure policy planning, builder persistence, runner observation metadata | `PR-HARDEN-224` through `PR-HARDEN-229` |
-| `PR-VIDEO-231` | Shared Secondary Motion Engine and Provenance Contract | StableNew-owned deterministic engine, worker contract, compact provenance helpers, replay/container summary contract | `PR-VIDEO-230` |
-| `PR-VIDEO-232` | SVD Native Secondary Motion Postprocess Integration | First real runtime application path, injected as SVD postprocess stage zero with canonical provenance | `PR-VIDEO-231` |
-| `PR-VIDEO-233` | AnimateDiff Secondary Motion Frame Pipeline Integration | Shared engine inserted between frame write and encode, with skip-safe provenance | `PR-VIDEO-232` |
-| `PR-VIDEO-234` | Workflow Video Secondary Motion Parity and Replay Closure | Workflow-video extract/apply/re-encode parity path, canonical replay closure, no new Comfy node dependency | `PR-VIDEO-233` |
-| `PR-VIDEO-235` | Learning and Risk-Aware Secondary Motion Feedback | Scalar motion metrics in learning records and recommendation stratification by backend/application path | `PR-VIDEO-234` |
+| `PR-VIDEO-236` | Secondary Motion Intent Contract and Observation-Only Policy Carrier | Canonical `intent_config["secondary_motion"]`, pure policy planning, builder persistence, runner observation metadata | `PR-HARDEN-224` through `PR-HARDEN-229` |
+| `PR-VIDEO-237` | Shared Secondary Motion Engine and Provenance Contract | StableNew-owned deterministic engine, worker contract, compact provenance helpers, replay/container summary contract | `PR-VIDEO-236` |
+| `PR-VIDEO-238` | SVD Native Secondary Motion Postprocess Integration | First real runtime application path, injected as SVD postprocess stage zero with canonical provenance | `PR-VIDEO-237` |
+| `PR-VIDEO-239` | AnimateDiff Secondary Motion Frame Pipeline Integration | Shared engine inserted between frame write and encode, with skip-safe provenance | `PR-VIDEO-238` |
+| `PR-VIDEO-240` | Workflow Video Secondary Motion Parity and Replay Closure | Workflow-video extract/apply/re-encode parity path, canonical replay closure, no new Comfy node dependency | `PR-VIDEO-239` |
+| `PR-VIDEO-241` | Learning and Risk-Aware Secondary Motion Feedback | Scalar motion metrics in learning records and recommendation stratification by backend/application path | `PR-VIDEO-240` |
 
 ## Higher-Order Effects and Incorporated Mitigations
 
@@ -192,7 +192,7 @@ Incorporated correction:
 
 Incorporated mitigation:
 
-- `PR-VIDEO-231` lands shared provenance helpers before any backend applies the
+- `PR-VIDEO-237` lands shared provenance helpers before any backend applies the
   feature
 - all later backend PRs must use those helpers rather than hand-building motion
   payloads
@@ -201,7 +201,7 @@ Incorporated mitigation:
 
 Incorporated mitigation:
 
-- `PR-VIDEO-230` freezes a separate outer contract and schema doc
+- `PR-VIDEO-236` freezes a separate outer contract and schema doc
 - later manifests and diagnostics must preserve both values explicitly when
   both are present
 
@@ -237,7 +237,7 @@ Incorporated mitigation:
 
 ### Gate A: Contract Freeze
 
-Applies after `PR-VIDEO-230`.
+Applies after `PR-VIDEO-236`.
 
 Required before continuing:
 
@@ -249,7 +249,7 @@ Required before continuing:
 
 ### Gate B: Engine and Provenance Freeze
 
-Applies after `PR-VIDEO-231`.
+Applies after `PR-VIDEO-237`.
 
 Required before continuing:
 
@@ -261,7 +261,7 @@ Required before continuing:
 
 ### Gate C: Backend Rollout Stability
 
-Applies after `PR-VIDEO-232`, `PR-VIDEO-233`, and `PR-VIDEO-234`.
+Applies after `PR-VIDEO-238`, `PR-VIDEO-239`, and `PR-VIDEO-240`.
 
 Required before continuing:
 
@@ -272,7 +272,7 @@ Required before continuing:
 
 ### Gate D: Learning Stability
 
-Applies after `PR-VIDEO-235`.
+Applies after `PR-VIDEO-241`.
 
 Required before closing the tranche:
 
@@ -306,5 +306,5 @@ These items are intentionally deferred so the runtime tranche stays bounded:
 - richer pose, segmentation, or optical-flow-assisted detectors beyond the
   baseline shared-engine path
 
-Those follow-ons should be planned only after `PR-VIDEO-235` is complete and
+Those follow-ons should be planned only after `PR-VIDEO-241` is complete and
 the shared motion carrier is stable.

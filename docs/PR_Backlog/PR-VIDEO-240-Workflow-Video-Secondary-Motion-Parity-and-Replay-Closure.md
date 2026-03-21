@@ -1,4 +1,4 @@
-# PR-VIDEO-234 - Workflow Video Secondary Motion Parity and Replay Closure
+# PR-VIDEO-240 - Workflow Video Secondary Motion Parity and Replay Closure
 
 Status: Specification
 Priority: HIGH
@@ -33,8 +33,8 @@ existing video backends.
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/StableNew Secondary Motion Layer Design.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
-- `docs/PR_Backlog/PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
 ## Goals & Non-Goals
 
@@ -238,9 +238,9 @@ AnimateDiff, and the shared engine intact.
 - workflow-native Comfy/LTX node integration
   - Owner: follow-on PR after runtime tranche closure
 - learning integration
-  - Owner: `PR-VIDEO-235`
+  - Owner: `PR-VIDEO-241`
 - GUI exposure
-  - Owner: follow-on PR after `PR-VIDEO-235`
+  - Owner: follow-on PR after `PR-VIDEO-241`
 
 ## Documentation Updates
 
@@ -253,8 +253,8 @@ AnimateDiff, and the shared engine intact.
 
 ### Internal Module Dependencies
 
-- `PR-VIDEO-230` motion contract and runner carrier
-- `PR-VIDEO-231` shared engine and provenance helpers
+- `PR-VIDEO-236` motion contract and runner carrier
+- `PR-VIDEO-237` shared engine and provenance helpers
 - existing workflow-video backend and managed-runtime path
 
 ### External Tools or Runtimes
@@ -270,5 +270,5 @@ Approval Status: Pending
 
 ## Next Steps
 
-1. `PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+1. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 2. follow-on workflow-native Comfy/LTX node planning after runtime tranche closure

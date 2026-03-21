@@ -40,7 +40,7 @@ Delivered outcomes:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2568 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2588 collected / 0 skipped`
 
 ## 2. Remaining Structural Debt
 
@@ -51,11 +51,12 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
 - `tests/compat/` still preserves temporary migration behavior that should continue shrinking
 - `AppStateV2.run_config` still exists as a GUI-facing dict projection, even though
   canonical config layers are now mirrored alongside it
-- adaptive refinement now exists through detector-backed observation and
-  ADetailer-safe actuation, but prompt/upscale policy and learning closure are
-  still missing
-- replay and learning still need fuller canonical adaptive-refinement
-  provenance beyond the current runner/manifest/embedded-image path
+- adaptive refinement now exists through detector-backed observation,
+  ADetailer-safe actuation, prompt/upscale policy integration, and
+  learning-aware feedback, but the core image path still needs checkpoint and
+  output-routing hardening
+- Pipeline sidebar and review/reprocess UX still carry product-level cleanup
+  debt around pack discovery, scan roots, and duplicated surfaces
 - video generation still lacks a StableNew-owned secondary motion layer that is
   replayable across AnimateDiff, SVD native, and workflow-video backends
 - manifests, replay, container metadata, and learning do not yet carry a
@@ -368,7 +369,119 @@ Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
 
-### 14. `PR-VIDEO-230-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
+### 14. `PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup`
+
+Status: Completed 2026-03-20
+
+Remove the remaining hidden model-switch ambiguity from the image path.
+
+Primary outcomes:
+
+- explicit SD checkpoint pinning in the actual ADetailer/img2img payload path
+- manifest model precedence hardened to prefer requested stage config over
+  ambient WebUI state
+- removal of the generic ADetailer `model` alias from canonical config merging
+- regression coverage proving txt2img, ADetailer, and upscale stay pinned to
+  the NJR base model by default
+
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
+
+### 15. `PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit`
+
+Status: Planned
+
+Remove route confusion from output directory selection and make the base output
+root deterministic.
+
+Primary outcomes:
+
+- `output_dir` means root only, not route-plus-root
+- known legacy route suffixes stripped before route resolution
+- canonical route selection derived from job/stage intent instead of folder-name
+  guesswork
+- regression tests for regular image, AnimateDiff, workflow-video, and
+  discovered-output scanning
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
+
+### 16. `PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery`
+
+Status: Planned
+
+Fix the confusing PromptPack selector UX and make refresh behavior real.
+
+Primary outcomes:
+
+- remove the empty legacy pack text field from the Pipeline sidebar
+- make refresh rediscover actual PromptPack files, including JSON-backed packs
+- align the selector label and empty state with current PromptPack behavior
+- add GUI tests for refresh, discovery, and state persistence
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
+
+### 17. `PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix`
+
+Status: Planned
+
+Make discovered-experiment scanning use the same canonical output root as the
+rest of the product.
+
+Primary outcomes:
+
+- remove fallback scanning from ad hoc `app_state.output_dir`
+- use canonical config/engine output root for discovered runs
+- add regression coverage for regular image outputs and routed video outputs
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
+
+### 18. `PR-GUI-234-Reprocess-Surface-Consolidation`
+
+Status: Planned
+
+Reduce duplicated reprocess UX and keep one canonical advanced reprocess
+surface.
+
+Primary outcomes:
+
+- `Review` becomes the canonical advanced reprocess surface
+- sidebar reprocess is reduced to a minimal launcher or removed
+- duplicated behaviors and confusing parallel controls are eliminated
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-234-Reprocess-Surface-Consolidation.md`
+
+### 19. `PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX`
+
+Status: Planned
+
+Replace the legacy-feeling `Core Config` surface with clearer generation and
+recipe UX.
+
+Primary outcomes:
+
+- `Core Config` renamed and narrowed to `Base Generation`
+- stage cards own only stage-local overrides
+- pipeline presets become readable `Saved Recipes` with summaries
+- visible precedence between base generation and stage overrides
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
+
+### 20. `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
 
 Status: Planned
 
@@ -388,9 +501,9 @@ Guiding roadmap:
 
 Detailed execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-230-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
 
-### 15. `PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
+### 21. `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
 
 Status: Planned
 
@@ -405,9 +518,9 @@ Primary outcomes:
 
 Detailed execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-231-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 
-### 16. `PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration`
+### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
 Status: Planned
 
@@ -422,9 +535,9 @@ Primary outcomes:
 
 Detailed execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-232-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
-### 17. `PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+### 23. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
 Status: Planned
 
@@ -438,9 +551,9 @@ Primary outcomes:
 
 Detailed execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-233-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
-### 18. `PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+### 24. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
 Status: Planned
 
@@ -454,9 +567,9 @@ Primary outcomes:
 
 Detailed execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-234-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
-### 19. `PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+### 25. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
 Status: Planned
 
@@ -471,7 +584,7 @@ Primary outcomes:
 
 Detailed execution spec:
 
-- `docs/PR_Backlog/PR-VIDEO-235-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
 ## 5. Missing Common Functionality to Fold Into the Queue
 
