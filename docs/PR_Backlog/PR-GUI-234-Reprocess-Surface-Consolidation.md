@@ -1,6 +1,6 @@
 # PR-GUI-234 - Reprocess Surface Consolidation
 
-Status: Specification
+Status: Completed 2026-03-20
 Priority: MEDIUM
 Effort: MEDIUM
 Phase: Review/Reprocess UX Cleanup
@@ -76,3 +76,9 @@ Approval Status: Pending
 
 - `PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX`
 
+## Implementation Summary
+
+- collapsed the Pipeline sidebar reprocess card into a launcher for Review
+- marked Review as the canonical advanced reprocess workspace
+- removed duplicated sidebar image-selection and stage-selection controls
+- added GUI regressions for the launcher handoff and Review workspace ownership

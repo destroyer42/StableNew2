@@ -460,7 +460,7 @@ Detailed execution spec:
 
 ### 18. `PR-GUI-234-Reprocess-Surface-Consolidation`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Reduce duplicated reprocess UX and keep one canonical advanced reprocess
 surface.
@@ -470,6 +470,10 @@ Primary outcomes:
 - `Review` becomes the canonical advanced reprocess surface
 - sidebar reprocess is reduced to a minimal launcher or removed
 - duplicated behaviors and confusing parallel controls are eliminated
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-234-Reprocess-Surface-Consolidation.md`
 
 Detailed execution spec:
 
