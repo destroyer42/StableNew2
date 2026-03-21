@@ -43,7 +43,10 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
                 "ad_mask_min_ratio": 0.003,
                 "ad_inpaint_only_masked_padding": 48,
             },
-            "prompt_patch": {},
+            "prompt_patch": {
+                "add_positive": ["clear irises"],
+                "remove_positive": ["soft face"],
+            },
             "notes": ["small_subject_recovery"],
         },
         "detector_notes": [],
@@ -83,3 +86,8 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
     manifest_metadata = write_manifest_mock.call_args.kwargs["metadata"]
     assert manifest_metadata["adaptive_refinement"]["intent"]["mode"] == "adetailer"
     assert manifest_metadata["adaptive_refinement"]["decision_bundle"]["policy_id"] == "adetailer_micro_face_v1"
+    assert manifest_metadata["adaptive_refinement"]["prompt_patch_provenance"]["stage_name"] == "adetailer"
+    assert (
+        manifest_metadata["adaptive_refinement"]["prompt_patch_provenance"]["positive"]["applied_add"]
+        == ["clear irises"]
+    )

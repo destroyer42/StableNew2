@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from src.learning.learning_record import LearningRecord
 from src.learning.learning_record_builder import build_learning_record
@@ -90,3 +91,70 @@ def test_learning_record_builder_basic_roundtrip():
     assert record.stage_events
     assert record.base_config["txt2img"]["model"] == "m"
     assert record.primary_model == "m"
+
+
+def test_learning_record_builder_includes_compact_adaptive_refinement_metadata(tmp_path: Path):
+    output_path = tmp_path / "output.png"
+    output_path.write_bytes(b"not-a-real-image")
+    cfg = MinimalLearningConfig(
+        prompt="portrait woman",
+        model="m",
+        sampler="Euler",
+        width=512,
+        height=512,
+        steps=20,
+        cfg_scale=7.5,
+        base_model="m",
+        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+    )
+    result = _run_result_stub("run-refine")
+    result.variants = [{"path": str(output_path)}]
+    result.metadata["adaptive_refinement"] = {
+        "intent": {
+            "mode": "full",
+            "profile_id": "auto_v1",
+            "detector_preference": "null",
+            "algorithm_version": "v1",
+        },
+        "prompt_intent": {
+            "intent_band": "portrait",
+            "requested_pose": "profile",
+            "wants_face_detail": True,
+        },
+        "decision_bundle": {
+            "algorithm_version": "v1",
+            "policy_id": "full_upscale_detail_v1",
+            "detector_id": "null",
+            "observation": {
+                "subject_assessment": {
+                    "scale_band": "small",
+                    "pose_band": "profile",
+                    "detection_count": 1,
+                    "face_area_ratio": 0.14,
+                }
+            },
+            "applied_overrides": {"upscale_steps": 18},
+            "prompt_patch": {"add_positive": ["clear irises"]},
+        },
+        "image_decisions": [
+            {"decision_bundle": {"policy_id": "full_upscale_detail_v1"}},
+            {"decision_bundle": {"policy_id": "full_upscale_detail_v1"}},
+        ],
+    }
+
+    record = build_learning_record(cfg, result)
+
+    refinement = record.metadata["adaptive_refinement"]
+    assert refinement["mode"] == "full"
+    assert refinement["policy_id"] == "full_upscale_detail_v1"
+    assert refinement["policy_ids"] == ["full_upscale_detail_v1"]
+    assert refinement["scale_band"] == "small"
+    assert refinement["pose_band"] == "profile"
+    assert refinement["face_detected"] is True
+    assert refinement["face_count"] == 1
+    assert refinement["face_area_ratio"] == 0.14
+    assert refinement["has_prompt_patch"] is True
+    assert refinement["has_applied_overrides"] is True
+    assert refinement["prompt_patch_ops"] == "add_positive"
+    assert refinement["applied_override_keys"] == "upscale_steps"
+    assert refinement["image_decision_count"] == 2

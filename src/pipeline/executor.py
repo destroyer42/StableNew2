@@ -38,6 +38,7 @@ from src.pipeline.animatediff_models import (
     resolve_animatediff_motion_module,
 )
 from src.pipeline.video import VideoCreator, write_video_frames
+from src.refinement.prompt_patcher import apply_prompt_patch
 from src.video.container_metadata import write_video_container_metadata
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 
@@ -408,6 +409,45 @@ class Pipeline:
                 result=prompt_optimizer_result,
                 config=prompt_optimizer_config,
             )
+
+    @staticmethod
+    def _extract_prompt_patch_payload(adaptive_refinement: dict[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(adaptive_refinement, dict):
+            return {}
+        decision_bundle = adaptive_refinement.get("decision_bundle")
+        if not isinstance(decision_bundle, dict):
+            return {}
+        prompt_patch = decision_bundle.get("prompt_patch")
+        if not isinstance(prompt_patch, dict):
+            return {}
+        return dict(prompt_patch)
+
+    def _attach_prompt_patch_provenance(
+        self,
+        adaptive_refinement: dict[str, Any] | None,
+        *,
+        stage_name: str,
+        original_positive: str,
+        original_negative: str,
+        final_positive: str,
+        final_negative: str,
+    ) -> dict[str, Any]:
+        payload = dict(adaptive_refinement or {})
+        patch_application = apply_prompt_patch(
+            original_positive,
+            original_negative,
+            self._extract_prompt_patch_payload(payload),
+        )
+        prompt_provenance = patch_application.to_dict()
+        prompt_provenance.update(
+            {
+                "stage_name": stage_name,
+                "final_positive": str(final_positive or ""),
+                "final_negative": str(final_negative or ""),
+            }
+        )
+        payload["prompt_patch_provenance"] = prompt_provenance
+        return payload
 
     def _clean_metadata_payload(self, payload: Any) -> Any:
         """Remove large binary blobs (e.g., base64 images) from metadata payloads."""
@@ -2178,6 +2218,15 @@ class Pipeline:
         # Use adetailer-specific prompt if provided, otherwise use txt2img prompt
         adetailer_prompt = config.get("adetailer_prompt", "")
         final_prompt = adetailer_prompt if adetailer_prompt else prompt
+        original_final_prompt = final_prompt
+        original_final_negative = ad_neg_final
+        patch_application = apply_prompt_patch(
+            final_prompt,
+            ad_neg_final,
+            self._extract_prompt_patch_payload(adaptive_refinement),
+        )
+        final_prompt = patch_application.positive.patched
+        ad_neg_final = patch_application.negative.patched
         prompt_optimizer_result, prompt_optimizer_config = self._run_prompt_optimizer(
             positive_prompt=final_prompt,
             negative_prompt=ad_neg_final,
@@ -2220,8 +2269,8 @@ class Pipeline:
             "ad_use_sampler": True,
             "ad_sampler": get_with_fallback_warning(config, "adetailer_sampler", "DPM++ 2M Karras", source="run_adetailer"),
             "ad_scheduler": get_with_fallback_warning(config, "adetailer_scheduler", "Use same scheduler", source="run_adetailer", warn=False),
-            "ad_prompt": config.get("adetailer_prompt", final_prompt),
-            "ad_negative_prompt": config.get("adetailer_negative_prompt", ad_neg_final),
+            "ad_prompt": final_prompt,
+            "ad_negative_prompt": ad_neg_final,
         }
 
         hand_args = {
@@ -2376,7 +2425,14 @@ class Pipeline:
             "actual_subseed": gen_info.get("subseed"),
         }
         if adaptive_refinement:
-            metadata["adaptive_refinement"] = adaptive_refinement
+            metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
+                adaptive_refinement,
+                stage_name="adetailer",
+                original_positive=original_final_prompt,
+                original_negative=original_final_negative,
+                final_positive=final_prompt,
+                final_negative=ad_neg_final,
+            )
         metadata_builder = self._build_image_metadata_builder(
             image_path=image_path,
             stage="adetailer",
@@ -2994,11 +3050,17 @@ class Pipeline:
             pipeline_section = config.get("pipeline", {})
             apply_global_positive = pipeline_section.get("apply_global_positive_txt2img", True)
             apply_global_negative = pipeline_section.get("apply_global_negative_txt2img", True)
+            adaptive_refinement = dict(config.get("adaptive_refinement") or {})
             
             # Apply global positive (prepends quality/style terms)
             original_positive_prompt = prompt
+            patch_application = apply_prompt_patch(
+                original_positive_prompt,
+                negative_prompt,
+                self._extract_prompt_patch_payload(adaptive_refinement),
+            )
             _, enhanced_positive, positive_global_applied, positive_global_terms = self._merge_stage_positive(
-                original_positive_prompt, apply_global_positive
+                patch_application.positive.patched, apply_global_positive
             )
             if positive_global_applied:
                 logger.info(
@@ -3011,7 +3073,7 @@ class Pipeline:
             # Apply global negative (appends NSFW prevention terms)
             original_negative_prompt = negative_prompt
             _, enhanced_negative, negative_global_applied, negative_global_terms = self._merge_stage_negative(
-                original_negative_prompt, apply_global_negative
+                patch_application.negative.patched, apply_global_negative
             )
             if negative_global_applied:
                 logger.info(
@@ -3402,24 +3464,29 @@ class Pipeline:
                     "subseed": payload.get("subseed", -1),
                     "subseed_strength": payload.get("subseed_strength", 0.0),
                     "config": self._clean_metadata_payload(payload),
-                    "output_path": str(image_path),
-                    "path": str(image_path),
-                    "all_paths": [str(p) for p in saved_paths],  # All generated images for batch processing
+                "output_path": str(image_path),
+                "path": str(image_path),
+                "all_paths": [str(p) for p in saved_paths],  # All generated images for batch processing
                     "expected_images": expected_image_count,
                     "returned_images": num_images_received,
                     "saved_images": saved_image_count,
                     "partial_success": partial_success,
                     "recovery_classification": "partial_image_response" if partial_success else None,
-                    "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
-                }
+                "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
+            }
+            if adaptive_refinement:
+                metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
+                    adaptive_refinement,
+                    stage_name="txt2img",
+                    original_positive=original_positive_prompt,
+                    original_negative=original_negative_prompt,
+                    final_positive=payload.get("prompt", enhanced_positive),
+                    final_negative=payload.get("negative_prompt", enhanced_negative),
+                )
 
-                # Manifests already saved per-variant in the loop above
-                self._record_stage_event("txt2img", "exit", 1, 1, False)
-                return metadata
-            else:
-                logger.error("Failed to save generated image")
-                self._record_stage_event("txt2img", "exit", 1, 1, False)
-                return None
+            # Manifests already saved per-variant in the loop above
+            self._record_stage_event("txt2img", "exit", 1, 1, False)
+            return metadata
 
         except CancellationError:
             self._record_stage_event("txt2img", "cancelled", 1, 1, True)
@@ -3473,6 +3540,7 @@ class Pipeline:
                 config.get("hypernetwork"),
                 config.get("hypernetwork_strength"),
             )
+            adaptive_refinement = dict(config.get("adaptive_refinement") or {})
 
             # Build img2img payload
             # Combine negative prompt with optional adjustments
@@ -3481,13 +3549,20 @@ class Pipeline:
             original_negative_prompt = (
                 base_negative if not neg_adjust else f"{base_negative} {neg_adjust}".strip()
             )
+            patch_application = apply_prompt_patch(
+                prompt,
+                original_negative_prompt,
+                self._extract_prompt_patch_payload(adaptive_refinement),
+            )
+            patched_prompt = patch_application.positive.patched
+            patched_negative_prompt = patch_application.negative.patched
 
             # Optionally apply global negative safety terms based on stage flag
             apply_global = (
                 (full_config or {}).get("pipeline", {}).get("apply_global_negative_img2img", True)
             )
             _, enhanced_negative, global_applied, global_terms = self._merge_stage_negative(
-                original_negative_prompt, apply_global
+                patched_negative_prompt, apply_global
             )
             if global_applied:
                 try:
@@ -3504,7 +3579,7 @@ class Pipeline:
 
             payload = {
                 "init_images": [input_image_b64],
-                "prompt": prompt,
+                "prompt": patched_prompt,
                 "negative_prompt": enhanced_negative,
                 "steps": config.get("steps", 15),
                 "cfg_scale": config.get("cfg_scale", 7.0),
@@ -3590,7 +3665,7 @@ class Pipeline:
                 "source_image_path": str(input_image_path),
                 "mask_image_path": str(mask_image_path) if mask_image_path else None,
                 "original_prompt": prompt,
-                "final_prompt": payload.get("prompt", prompt),
+                "final_prompt": payload.get("prompt", patched_prompt),
                 "original_negative_prompt": original_negative_prompt,
                 "final_negative_prompt": payload.get("negative_prompt", ""),
                 "global_negative_applied": global_applied,
@@ -3608,6 +3683,15 @@ class Pipeline:
                 "actual_seed": gen_info.get("seed"),
                 "actual_subseed": gen_info.get("subseed"),
             }
+            if adaptive_refinement:
+                metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
+                    adaptive_refinement,
+                    stage_name="img2img",
+                    original_positive=prompt,
+                    original_negative=original_negative_prompt,
+                    final_positive=payload.get("prompt", patched_prompt),
+                    final_negative=payload.get("negative_prompt", enhanced_negative),
+                )
             run_dir = self._resolve_run_dir(output_dir)
             metadata_builder = self._build_image_metadata_builder(
                 image_path=image_path,
@@ -4019,6 +4103,16 @@ class Pipeline:
                 return None
 
             upscale_mode = config.get("upscale_mode", "single")
+            adaptive_refinement = dict(config.get("adaptive_refinement") or {})
+            original_positive_prompt = str(config.get("prompt", "") or "")
+            original_negative_prompt = str(config.get("negative_prompt", "") or "")
+            patch_application = apply_prompt_patch(
+                original_positive_prompt,
+                original_negative_prompt,
+                self._extract_prompt_patch_payload(adaptive_refinement),
+            )
+            patched_positive_prompt = patch_application.positive.patched
+            patched_negative_prompt = patch_application.negative.patched
 
             # DEBUG: Log full upscale config
             logger.info(
@@ -4086,8 +4180,8 @@ class Pipeline:
 
                 payload = {
                     "init_images": [input_image_b64],
-                    "prompt": config.get("prompt", ""),
-                    "negative_prompt": config.get("negative_prompt", ""),
+                    "prompt": patched_positive_prompt,
+                    "negative_prompt": patched_negative_prompt,
                     "steps": config.get("steps", 20),
                     "cfg_scale": config.get("cfg_scale", 7.0),
                     "denoising_strength": config.get("denoising_strength", 0.35),
@@ -4264,6 +4358,19 @@ class Pipeline:
                 # Accumulated stage history from previous stages
                 "stage_history": stage_history,
             }
+            if adaptive_refinement:
+                metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
+                    adaptive_refinement,
+                    stage_name="upscale",
+                    original_positive=original_positive_prompt,
+                    original_negative=original_negative_prompt,
+                    final_positive=payload.get("prompt", patched_positive_prompt)
+                    if upscale_mode == "img2img"
+                    else patched_positive_prompt,
+                    final_negative=payload.get("negative_prompt", patched_negative_prompt)
+                    if upscale_mode == "img2img"
+                    else patched_negative_prompt,
+                )
             run_dir = self._resolve_run_dir(output_dir)
             metadata_builder = self._build_image_metadata_builder(
                 image_path=image_path,

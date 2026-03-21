@@ -142,7 +142,33 @@ class RecommendationEngine:
             return "medium"
         return "large"
 
-    def _build_query_context(self, prompt_text: str, stage: str) -> dict[str, str]:
+    @staticmethod
+    def _normalize_refinement_context(value: Any) -> dict[str, Any]:
+        payload = dict(value or {}) if isinstance(value, dict) else {}
+        raw_policy_ids = payload.get("policy_ids") or []
+        policy_ids = (
+            [str(item or "").strip() for item in raw_policy_ids if str(item or "").strip()]
+            if isinstance(raw_policy_ids, list)
+            else []
+        )
+        return {
+            "mode": str(payload.get("mode") or ""),
+            "policy_id": str(payload.get("policy_id") or ""),
+            "policy_ids": policy_ids,
+            "detector_id": str(payload.get("detector_id") or ""),
+            "scale_band": str(payload.get("scale_band") or ""),
+            "pose_band": str(payload.get("pose_band") or ""),
+            "prompt_intent_band": str(payload.get("prompt_intent_band") or ""),
+            "has_prompt_patch": bool(payload.get("has_prompt_patch")),
+            "has_applied_overrides": bool(payload.get("has_applied_overrides")),
+        }
+
+    def _build_query_context(
+        self,
+        prompt_text: str,
+        stage: str,
+        refinement_context: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
         # PR-046: detect people presence for context-aware subscore weighting
         lower_tokens = {
             t.strip().lower()
@@ -150,6 +176,7 @@ class RecommendationEngine:
             if t.strip()
         }
         has_people = bool(lower_tokens & _PEOPLE_KEYWORDS)
+        refinement = self._normalize_refinement_context(refinement_context)
         return {
             "stage": str(stage or "txt2img"),
             "style_bucket": "default",
@@ -157,6 +184,14 @@ class RecommendationEngine:
             "resolution_bucket": "unknown",
             "model": "",
             "has_people": str(has_people),
+            "refinement_mode": str(refinement.get("mode") or ""),
+            "refinement_policy_id": str(refinement.get("policy_id") or ""),
+            "refinement_scale_band": str(refinement.get("scale_band") or ""),
+            "refinement_pose_band": str(refinement.get("pose_band") or ""),
+            "refinement_detector_id": str(refinement.get("detector_id") or ""),
+            "refinement_prompt_intent_band": str(refinement.get("prompt_intent_band") or ""),
+            "refinement_has_prompt_patch": str(bool(refinement.get("has_prompt_patch"))),
+            "refinement_has_applied_overrides": str(bool(refinement.get("has_applied_overrides"))),
         }
 
     def _load_records(self) -> list[dict[str, Any]]:
@@ -256,6 +291,9 @@ class RecommendationEngine:
                     base_config.get("width"),
                     base_config.get("height"),
                 ),
+                "adaptive_refinement": self._normalize_refinement_context(
+                    metadata.get("adaptive_refinement")
+                ),
                 # PR-046: normalized rating detail for context-aware weighting
                 **self._normalize_metadata_detail(metadata),
             }
@@ -299,6 +337,33 @@ class RecommendationEngine:
         elif prompt_bucket == "low":
             weight -= 0.2
         rationale_bits.append(f"prompt-{prompt_bucket}")
+
+        refinement = self._normalize_refinement_context(record.get("adaptive_refinement"))
+        query_policy_id = str(query_context.get("refinement_policy_id", "") or "")
+        record_policy_id = str(refinement.get("policy_id") or "")
+        if query_policy_id and record_policy_id:
+            if query_policy_id == record_policy_id or query_policy_id in refinement.get("policy_ids", []):
+                weight += 0.35
+                rationale_bits.append("refinement-policy-match")
+            else:
+                weight -= 0.12
+                rationale_bits.append("refinement-policy-mismatch")
+
+        query_scale_band = str(query_context.get("refinement_scale_band", "") or "")
+        record_scale_band = str(refinement.get("scale_band") or "")
+        if query_scale_band and record_scale_band:
+            if query_scale_band == record_scale_band:
+                weight += 0.20
+                rationale_bits.append("refinement-scale-match")
+            else:
+                weight -= 0.08
+                rationale_bits.append("refinement-scale-mismatch")
+
+        query_intent_band = str(query_context.get("refinement_prompt_intent_band", "") or "")
+        record_intent_band = str(refinement.get("prompt_intent_band") or "")
+        if query_intent_band and record_intent_band and query_intent_band == record_intent_band:
+            weight += 0.05
+            rationale_bits.append("refinement-intent-match")
 
         # PR-046: conservative rating-detail adjustment (bounded ±0.15)
         query_has_people = str(query_context.get("has_people", "")).lower() == "true"
@@ -469,9 +534,10 @@ class RecommendationEngine:
                 context_weights = param_context_weights[param_name][value]
                 context_confidence = 0.0
                 if context_weights:
+                    context_mean = statistics.mean(context_weights)
                     context_confidence = max(
                         0.0,
-                        min(1.0, statistics.mean(context_weights) / 2.0),
+                        min(1.0, (context_mean - 1.0) / 1.5),
                     )
                 confidence = max(
                     0.0,
@@ -511,7 +577,9 @@ class RecommendationEngine:
                         f"{query_context.get('stage','')}|"
                         f"{query_context.get('model','')}|"
                         f"{query_context.get('style_bucket','default')}|"
-                        f"{query_context.get('resolution_bucket','unknown')}"
+                        f"{query_context.get('resolution_bucket','unknown')}|"
+                        f"{query_context.get('refinement_policy_id','')}|"
+                        f"{query_context.get('refinement_scale_band','')}"
                     ),
                 )
 
@@ -523,9 +591,14 @@ class RecommendationEngine:
         # Could implement correlation analysis between parameters
         return {}
 
-    def recommend(self, prompt_text: str, stage: str) -> RecommendationSet:
+    def recommend(
+        self,
+        prompt_text: str,
+        stage: str,
+        refinement_context: dict[str, Any] | None = None,
+    ) -> RecommendationSet:
         """Get recommendations for a specific prompt and stage combination."""
-        query_context = self._build_query_context(prompt_text, stage)
+        query_context = self._build_query_context(prompt_text, stage, refinement_context)
         if self._should_reload_cache():
             records = self._load_records()
             scored_records = self._score_records(records)
@@ -548,7 +621,9 @@ class RecommendationEngine:
             record for record in relevant_records if str(record.get("record_kind", "")) == "learning_experiment_rating"
         ]
         review_records = [
-            record for record in relevant_records if str(record.get("record_kind", "")) == "review_tab_feedback"
+            record
+            for record in relevant_records
+            if str(record.get("record_kind", "")) in {"review_tab_feedback", "legacy"}
         ]
         # PR-044: deterministic evidence-tier policy — never suppress usable evidence
         if len(experiment_records) >= 3:

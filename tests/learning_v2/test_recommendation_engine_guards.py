@@ -84,3 +84,36 @@ def test_recommendation_engine_ignores_review_tab_feedback_for_learning_recommen
 
     assert result.recommendations
     assert all(rec.parameter_name != "sampler" or rec.recommended_value == "Euler a" for rec in result.recommendations)
+
+
+def test_recommendation_engine_refinement_context_does_not_bypass_sparse_evidence_guard(tmp_path: Path) -> None:
+    path = tmp_path / "records.jsonl"
+    _write_records(
+        path,
+        [
+            {
+                "timestamp": "2026-03-10T21:00:00",
+                "primary_sampler": "Euler a",
+                "primary_scheduler": "normal",
+                "primary_steps": 20,
+                "primary_cfg_scale": 7.0,
+                "base_config": {"prompt": "portrait", "stage": "txt2img"},
+                "metadata": {
+                    "record_kind": "learning_experiment_rating",
+                    "user_rating": 4,
+                    "adaptive_refinement": {"policy_id": "full_upscale_detail_v1", "scale_band": "small"},
+                },
+            }
+        ],
+    )
+
+    engine = RecommendationEngine(path)
+    result = engine.recommend(
+        "portrait",
+        "txt2img",
+        refinement_context={"policy_id": "full_upscale_detail_v1", "scale_band": "small"},
+    )
+
+    assert result.evidence_tier == "experiment_sparse_plus_review"
+    assert result.automation_eligible is False
+    assert result.recommendations

@@ -355,6 +355,126 @@ def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path
     )
 
 
+def test_run_njr_applies_full_mode_upscale_refinement_without_leakage(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_a = tmp_path / "input_a.png"
+    input_b = tmp_path / "input_b.png"
+    input_a.write_bytes(b"a")
+    input_b.write_bytes(b"b")
+    output_a = tmp_path / "upscaled_a.png"
+    output_b = tmp_path / "upscaled_b.png"
+    record = NormalizedJobRecord(
+        job_id="runner-upscale-refine",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[StageConfig(stage_type="upscale", enabled=True, extra={"upscale_mode": "img2img"})],
+        input_image_paths=[str(input_a), str(input_b)],
+        start_stage="upscale",
+    )
+    record.positive_prompt = "portrait woman, soft face"
+    record.negative_prompt = "blurry"
+    record.intent_config = {
+        "adaptive_refinement": {
+            "schema": "stablenew.adaptive-refinement.v1",
+            "enabled": True,
+            "mode": "full",
+            "profile_id": "auto_v1",
+            "detector_preference": "null",
+            "record_decisions": True,
+            "algorithm_version": "v1",
+        }
+    }
+
+    class _ServiceStub:
+        def build_bundle(self, *, mode, prompt_intent, image_path, extra_observation=None):
+            is_first = str(image_path).endswith("input_a.png")
+            return {
+                "schema": "stablenew.refinement-decision.v1",
+                "algorithm_version": "v1",
+                "mode": mode,
+                "policy_id": "full_upscale_detail_v1" if is_first else None,
+                "detector_id": "null",
+                "observation": {
+                    "prompt_intent": dict(prompt_intent),
+                    "subject_assessment": {"detector_id": "null", "scale_band": "small" if is_first else "large"},
+                },
+                "applied_overrides": (
+                    {"upscale_steps": 18, "upscale_denoising_strength": 0.18}
+                    if is_first
+                    else {}
+                ),
+                "prompt_patch": (
+                    {
+                        "add_positive": ["clear irises"],
+                        "remove_positive": ["soft face"],
+                        "add_negative": ["blurred eyes"],
+                    }
+                    if is_first
+                    else {}
+                ),
+                "notes": [],
+            }
+
+        def assess(self, _image_path):
+            return {
+                "detector_id": "null",
+                "algorithm_version": "v1",
+                "image_path": None,
+                "image_width": None,
+                "image_height": None,
+                "detections": [],
+                "detection_count": 0,
+                "primary_detection_index": None,
+                "face_area_ratio": None,
+                "face_height_ratio": None,
+                "face_width_ratio": None,
+                "scale_band": "no_face",
+                "pose_band": "unknown",
+                "notes": ["no_face_detected"],
+            }
+
+    captured_configs: list[dict[str, object]] = []
+
+    def _run_upscale_stage(*, input_image_path, config, output_dir, image_name, cancel_token=None):
+        captured_configs.append(dict(config))
+        output_path = output_a if str(input_image_path).endswith("input_a.png") else output_b
+        return {
+            "path": str(output_path),
+            "adaptive_refinement": dict(config.get("adaptive_refinement") or {}),
+        }
+
+    runner._resolve_refinement_policy_service = lambda _pref: (_ServiceStub(), [])  # type: ignore[method-assign]
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_upscale_stage.side_effect = _run_upscale_stage
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert pipeline.run_upscale_stage.call_count == 2
+    assert captured_configs[0]["steps"] == 18
+    assert captured_configs[0]["denoising_strength"] == 0.18
+    assert captured_configs[0]["prompt"] == "portrait woman, soft face"
+    assert captured_configs[0]["negative_prompt"] == "blurry"
+    assert captured_configs[0]["adaptive_refinement"]["decision_bundle"]["prompt_patch"]["add_positive"] == ["clear irises"]
+    assert captured_configs[1]["steps"] is None
+    assert captured_configs[1]["denoising_strength"] is None
+    assert len(result.metadata["adaptive_refinement"]["image_decisions"]) == 2
+    assert result.metadata["adaptive_refinement"]["image_decisions"][0]["stage_name"] == "upscale"
+    assert (
+        result.metadata["adaptive_refinement"]["image_decisions"][0]["decision_bundle"]["applied_overrides"]["upscale_steps"]
+        == 18
+    )
+
+
 def test_pipeline_run_result_to_dict_and_back() -> None:
     result = PipelineRunResult(
         run_id="roundtrip-001",

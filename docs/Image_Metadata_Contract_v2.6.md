@@ -78,6 +78,17 @@ When a still-image stage manifest carries a top-level
 image payload through the stage manifest capsule. StableNew must not create a
 second image-only refinement schema for embedded metadata.
 
+That mirrored block may include:
+
+- `decision_bundle.applied_overrides`
+- `decision_bundle.prompt_patch`
+- `prompt_patch_provenance`
+
+This allows external readers and later learning/replay tooling to recover the
+original prompt inputs, bounded adaptive mutations, and final stage prompts
+from the same canonical carrier without needing a StableNew-only translation
+step.
+
 ## Size Policy
 
 - Soft cap: 32 KB (raw JSON)

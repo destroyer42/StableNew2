@@ -328,7 +328,7 @@ Detailed execution spec:
 
 ### 12. `PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Complete the runtime portion of adaptive refinement with bounded prompt and
 upscale integration.
@@ -339,13 +339,17 @@ Primary outcomes:
 - bounded upscale policy application
 - original-prompt and final-prompt provenance for replay
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
 
 ### 13. `PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Close the loop by making refinement decisions visible to the local learning
 system without weakening evidence-tier safeguards.
@@ -355,6 +359,10 @@ Primary outcomes:
 - scalar refinement metrics in learning records
 - refinement-aware recommendation context
 - conservative, evidence-tier-respecting feedback for future tuning
+
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
 
 Detailed execution spec:
 

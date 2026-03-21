@@ -1,8 +1,6 @@
 {
-  "selected_list": "Landscape and portrait",
-  "selected_packs": [
-    "A single prompt for testing"
-  ],
+  "selected_list": "CharactersList",
+  "selected_packs": [],
   "prompt_text": "",
   "schema_version": "2.6"
 }

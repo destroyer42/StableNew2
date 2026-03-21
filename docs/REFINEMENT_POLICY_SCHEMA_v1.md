@@ -275,3 +275,98 @@ Canonical actuation shape:
 
 If no overrides are selected, `applied_overrides` stays empty rather than
 inventing fake keys.
+
+## Prompt Patch and Upscale Actuation in `PR-HARDEN-228`
+
+`PR-HARDEN-228` extends the same carrier with two additional v1 behaviors:
+
+- deterministic stage-scoped text-token prompt patching
+- bounded upscale-policy overrides for `mode = "full"`
+
+Prompt patches remain constrained to:
+
+- `add_positive`
+- `remove_positive`
+- `add_negative`
+- `remove_negative`
+
+Bounded upscale override keys in v1:
+
+- `upscale_steps`
+- `upscale_denoising_strength`
+- `upscale_sampler_name`
+- `upscale_scheduler`
+- `upscale_upscaling_resize`
+
+Canonical provenance additions:
+
+```json
+{
+  "adaptive_refinement": {
+    "decision_bundle": {
+      "prompt_patch": {
+        "add_positive": ["clear irises"],
+        "remove_positive": ["soft face"],
+        "add_negative": ["blurred eyes"],
+        "remove_negative": []
+      },
+      "applied_overrides": {
+        "upscale_steps": 18,
+        "upscale_denoising_strength": 0.18
+      }
+    },
+    "prompt_patch_provenance": {
+      "stage_name": "upscale",
+      "positive": {
+        "original": "portrait woman, soft face",
+        "patched": "portrait woman, clear irises",
+        "applied_add": ["clear irises"],
+        "applied_remove": ["soft face"]
+      },
+      "negative": {
+        "original": "blurry",
+        "patched": "blurry, blurred eyes",
+        "applied_add": ["blurred eyes"],
+        "applied_remove": []
+      },
+      "requested_patch": {},
+      "applied_patch": {},
+      "ignored_patch": {}
+    }
+  }
+}
+```
+
+Rules:
+
+- prompt patching happens inside StableNew executor stage logic only
+- NJR base prompts remain unchanged
+- prompt patch provenance must survive into manifests and embedded image
+  metadata through the same canonical `adaptive_refinement` block
+- forbidden tokens remain ignored rather than rewritten when they look like
+  LoRA tags, embedding references, textual inversion names, or weighted syntax
+
+## Learning and Recommendation Context in `PR-HARDEN-229`
+
+`PR-HARDEN-229` does not introduce a new runtime schema. It reuses the same
+semantic carrier and maps a compact learning summary from it.
+
+Learning-facing rules:
+
+- only scalar or short-string refinement fields may be persisted into learning
+  records
+- `policy_id`, `policy_ids`, `detector_id`, `scale_band`, `pose_band`,
+  `face_detected`, `face_count`, `face_area_ratio`, `prompt_intent_band`,
+  `has_prompt_patch`, and `has_applied_overrides` are all valid compact
+  projections
+- optional `sharpness_variance` may be added when it can be computed locally
+  and cheaply
+- image crops, detector frames, and other large binary artifacts remain
+  forbidden
+
+Recommendation-facing rules:
+
+- refinement context may stratify recommendations conservatively
+- evidence-tier protections remain unchanged
+- refinement-aware recommendations remain advisory unless existing evidence
+  rules already permit automation

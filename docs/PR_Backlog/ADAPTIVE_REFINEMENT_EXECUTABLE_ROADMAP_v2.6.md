@@ -124,11 +124,11 @@ Completed:
 - `PR-HARDEN-225`
 - `PR-HARDEN-226`
 - `PR-HARDEN-227`
-
-Remaining:
-
 - `PR-HARDEN-228`
 - `PR-HARDEN-229`
+
+Remaining:
+- none
 
 ## Phase Gates
 
@@ -182,6 +182,8 @@ Required before continuing:
 ### Gate D: Metadata and Learning Stability
 
 Applies after `PR-HARDEN-228` and before `PR-HARDEN-229` is considered done.
+
+Status: Passed on 2026-03-20 after `PR-HARDEN-229`
 
 Required before closing the tranche:
 

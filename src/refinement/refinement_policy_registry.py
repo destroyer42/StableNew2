@@ -68,6 +68,58 @@ class NoOpRefinementPolicyRegistry:
 
         return policy_id, overrides, tuple(notes)
 
+    def _build_prompt_patch(
+        self,
+        *,
+        observation: dict[str, Any],
+    ) -> tuple[dict[str, Any], tuple[str, ...]]:
+        prompt_intent = dict(observation.get("prompt_intent") or {})
+        assessment = dict(observation.get("subject_assessment") or {})
+        scale_band = str(assessment.get("scale_band") or "unknown")
+        wants_profile = self._as_bool(prompt_intent.get("wants_profile"))
+        wants_face_detail = self._as_bool(prompt_intent.get("wants_face_detail"))
+        face_width_ratio = self._as_float(assessment.get("face_width_ratio"))
+
+        should_patch = scale_band in {"micro", "small"} or wants_profile or wants_face_detail
+        if face_width_ratio is not None and face_width_ratio < 0.22:
+            should_patch = True
+        if not should_patch:
+            return {}, ()
+        return (
+            {
+                "add_positive": [
+                    "sharp facial detail",
+                    "clear irises",
+                    "natural skin texture",
+                ],
+                "add_negative": [
+                    "soft face",
+                    "blurred eyes",
+                ],
+            },
+            ("prompt_detail_patch_v1",),
+        )
+
+    def _build_upscale_policy(
+        self,
+        *,
+        observation: dict[str, Any],
+    ) -> tuple[dict[str, Any], tuple[str, ...]]:
+        assessment = dict(observation.get("subject_assessment") or {})
+        prompt_intent = dict(observation.get("prompt_intent") or {})
+        scale_band = str(assessment.get("scale_band") or "unknown")
+        wants_face_detail = self._as_bool(prompt_intent.get("wants_face_detail"))
+
+        if scale_band not in {"micro", "small"} and not wants_face_detail:
+            return {}, ()
+        return (
+            {
+                "upscale_steps": 18,
+                "upscale_denoising_strength": 0.18,
+            },
+            ("upscale_detail_policy_v1",),
+        )
+
     def build_decision_bundle(
         self,
         *,
@@ -78,6 +130,7 @@ class NoOpRefinementPolicyRegistry:
         observation_payload = dict(observation or {})
         policy_id: str | None = None
         applied_overrides: dict[str, Any] = {}
+        prompt_patch: dict[str, Any] = {}
         notes: tuple[str, ...] = ()
         if normalized_mode == "observe":
             policy_id = "observe_only_v1"
@@ -85,6 +138,17 @@ class NoOpRefinementPolicyRegistry:
             policy_id, applied_overrides, notes = self._build_adetailer_policy(
                 observation=cast(dict[str, Any], observation_payload),
             )
+            if normalized_mode == "full":
+                stage_name = str(observation_payload.get("stage_name") or "").strip().lower()
+                if stage_name == "upscale":
+                    policy_id = "full_upscale_detail_v1"
+                    applied_overrides, notes = self._build_upscale_policy(
+                        observation=cast(dict[str, Any], observation_payload),
+                    )
+                prompt_patch, patch_notes = self._build_prompt_patch(
+                    observation=cast(dict[str, Any], observation_payload),
+                )
+                notes = tuple(dict.fromkeys([*notes, *patch_notes]))
         return RefinementDecisionBundle(
             algorithm_version=self.algorithm_version,
             mode=normalized_mode,
@@ -92,5 +156,6 @@ class NoOpRefinementPolicyRegistry:
             detector_id=str(observation_payload.get("subject_assessment", {}).get("detector_id") or "null"),
             observation=observation_payload,
             applied_overrides=applied_overrides,
+            prompt_patch=prompt_patch,
             notes=notes,
         )
