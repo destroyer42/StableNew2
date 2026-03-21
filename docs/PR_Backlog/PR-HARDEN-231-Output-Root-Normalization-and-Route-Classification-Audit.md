@@ -1,6 +1,6 @@
 # PR-HARDEN-231 - Output Root Normalization and Route Classification Audit
 
-Status: Specification
+Status: Implemented 2026-03-20
 Priority: HIGH
 Effort: MEDIUM
 Phase: Output Routing Hardening
@@ -104,4 +104,20 @@ Approval Status: Pending
 ## Next Steps
 
 - `PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery`
+
+## Post-Implementation Summary
+
+- added canonical output-root normalization in `src/state/output_routing.py`
+  so trailing route folders like `output/animatediff` are stripped before route
+  selection
+- updated existing-output classification to prefer manifest metadata before
+  folder-name guesses
+- added targeted coverage in `tests/state/test_output_routing.py`
+- extended `tests/pipeline/test_output_folder_structure.py` to prove a regular
+  Pipeline job is not trapped under `output/animatediff/Pipeline`
+- verification passed:
+  `pytest tests/state/test_output_routing.py tests/pipeline/test_output_folder_structure.py -q`
+  -> `12 passed`
+- `python -m compileall src/state/output_routing.py tests/state/test_output_routing.py tests/pipeline/test_output_folder_structure.py`
+- `pytest --collect-only -q -rs` -> `2580 collected / 0 skipped`
 

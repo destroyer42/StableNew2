@@ -8,7 +8,7 @@ import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.state.output_routing import OUTPUT_ROUTE_PIPELINE
+from src.state.output_routing import OUTPUT_ROUTE_ANIMATEDIFF, OUTPUT_ROUTE_PIPELINE
 
 
 class TestOutputFolderStructure:
@@ -523,3 +523,48 @@ class TestOutputFolderStructure:
         route_root = explicit_output_dir / OUTPUT_ROUTE_PIPELINE
         assert route_root.exists()
         assert any("ExplicitPack" in folder.name for folder in route_root.iterdir())
+
+    def test_trailing_route_suffix_in_output_dir_is_normalized_before_routing(
+        self, mock_api_client, mock_structured_logger, tmp_path
+    ):
+        """A misconfigured output root like output/animatediff should not trap Pipeline jobs."""
+        PipelineRunner._pack_folder_cache.clear()
+        misconfigured_output_root = tmp_path / "output" / OUTPUT_ROUTE_ANIMATEDIFF
+        misconfigured_output_root.mkdir(parents=True, exist_ok=True)
+        runner = PipelineRunner(
+            api_client=mock_api_client,
+            structured_logger=mock_structured_logger,
+            runs_base_dir=str(tmp_path / "default_output"),
+        )
+
+        njr = NormalizedJobRecord(
+            job_id="normalized_output_root_job",
+            config={},
+            path_output_dir=str(misconfigured_output_root),
+            filename_template="image_{index:04d}",
+            prompt_pack_name="NormalizedPack",
+            positive_prompt="A captain",
+            negative_prompt="",
+            base_model="sd_xl_base_1.0.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+            images_per_prompt=1,
+            stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
+        )
+
+        mock_result = {
+            "path": f"{misconfigured_output_root}/txt2img_00.png",
+            "all_paths": [f"{misconfigured_output_root}/txt2img_00.png"],
+            "name": "txt2img_00",
+            "stage": "txt2img",
+        }
+        runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+
+        result = runner.run_njr(njr)
+
+        assert result.success is True
+        assert (tmp_path / "output" / OUTPUT_ROUTE_PIPELINE).exists()
+        assert not (tmp_path / "output" / OUTPUT_ROUTE_ANIMATEDIFF / OUTPUT_ROUTE_PIPELINE).exists()

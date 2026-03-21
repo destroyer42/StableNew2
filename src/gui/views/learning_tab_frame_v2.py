@@ -21,6 +21,8 @@ from src.learning.experiment_store import LearningExperimentStore
 from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
 from src.services.ui_state_store import get_ui_state_store
+from src.state.output_routing import get_output_root
+from src.utils.config import ConfigManager
 
 
 class LearningTabFrame(ttk.Frame):
@@ -550,11 +552,29 @@ class LearningTabFrame(ttk.Frame):
         self.learning_controller.ignore_discovered_group(group_id)
         self._refresh_discovered_inbox()
 
+    def _resolve_discovered_output_root(self) -> str:
+        config_manager = getattr(self.pipeline_controller, "_config_manager", None)
+        configured_root = None
+
+        getter = getattr(config_manager, "get_setting", None)
+        if callable(getter):
+            try:
+                configured_root = getter("output_dir", None)
+            except Exception:
+                configured_root = None
+
+        if not configured_root:
+            try:
+                configured_root = ConfigManager().get_setting("output_dir", "output")
+            except Exception:
+                configured_root = "output"
+
+        return str(get_output_root(configured_root or "output", create=False))
+
     def _on_discovered_rescan(self) -> None:
         self.discovered_inbox_panel.set_scanning(True)
-        output_root = str(getattr(self.app_state, "output_dir", "output") or "output")
         self.learning_controller.trigger_background_scan(
-            output_root=output_root,
+            output_root=self._resolve_discovered_output_root(),
             on_complete=self._on_discovered_scan_complete,
         )
 

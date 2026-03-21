@@ -1,6 +1,6 @@
 # PR-GUI-232 - Pack Selector Cleanup and Real Pack Refresh Discovery
 
-Status: Specification
+Status: Completed 2026-03-20
 Priority: HIGH
 Effort: MEDIUM
 Phase: PromptPack UX Cleanup
@@ -84,3 +84,10 @@ Approval Status: Pending
 
 - `PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix`
 
+## Implementation Summary
+
+- removed the legacy empty prompt entry from the Pipeline sidebar pack selector
+- made prompt-pack discovery scan `.json`, `.txt`, and `.tsv`
+- taught shared pack reading to render structured JSON slot content for preview
+  and prompt counting
+- added regressions for JSON pack discovery and sidebar refresh behavior

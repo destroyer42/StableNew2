@@ -194,6 +194,8 @@ class SidebarPanelV2(ttk.Frame):
         self._preview_visible = False
         self._preview_frame: ttk.Frame | None = None
         self.pack_preview_text: tk.Text | None = None
+        # Hidden compatibility widget for older pipeline/journey touchpoints.
+        self.prompt_text: tk.Entry | None = tk.Entry(self)
         self._prompt_summaries: list[PromptPackSummary] = []
         self._manual_pack_names: list[str] | None = None
         self._current_pack_names: list[str] = []
@@ -396,14 +398,16 @@ class SidebarPanelV2(ttk.Frame):
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
 
-        # PR-GUI-H: Add prompt text and refresh button (moved from actions_card in pipeline_tab_frame)
-        prompt_row = ttk.Frame(frame)
-        prompt_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        prompt_row.columnconfigure(0, weight=1)
-        self.prompt_text = tk.Entry(prompt_row)
-        self.prompt_text.grid(row=0, column=0, sticky="ew")
+        toolbar_row = ttk.Frame(frame)
+        toolbar_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        toolbar_row.columnconfigure(0, weight=1)
+        ttk.Label(
+            toolbar_row,
+            text="Select PromptPacks to preview, apply, or add to the draft job.",
+            style=MUTED_LABEL_STYLE,
+        ).grid(row=0, column=0, sticky="w")
         self.refresh_packs_button = ttk.Button(
-            prompt_row,
+            toolbar_row,
             text="Refresh",
             width=8,
             command=self.refresh_prompt_packs,
@@ -880,9 +884,9 @@ class SidebarPanelV2(ttk.Frame):
         self._set_pack_list_values(self.pack_list_manager.get_list_names())
         self._populate_packs_for_selected_list()
         # Show brief visual feedback
-        if hasattr(self, 'refresh_packs_button'):
-            original_text = self.refresh_packs_button.cget('text')
-            self.refresh_packs_button.configure(text="✓ Refreshed")
+        if hasattr(self, "refresh_packs_button"):
+            original_text = self.refresh_packs_button.cget("text")
+            self.refresh_packs_button.configure(text="Refreshed")
             self.after(1500, lambda: self.refresh_packs_button.configure(text=original_text))
 
     def set_pack_names(self, names: list[str]) -> None:
@@ -1248,7 +1252,6 @@ class SidebarPanelV2(ttk.Frame):
             state = {
                 "selected_list": self.pack_list_var.get() if hasattr(self, "pack_list_var") else "",
                 "selected_packs": selected_packs,
-                "prompt_text": self.prompt_text.get() if hasattr(self, "prompt_text") else "",
                 "schema_version": "2.6"
             }
             SIDEBAR_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -1268,12 +1271,6 @@ class SidebarPanelV2(ttk.Frame):
             if state.get("schema_version") != "2.6":
                 logger.warning("Unsupported sidebar state schema, ignoring")
                 return
-            
-            # Restore prompt text
-            prompt_text = state.get("prompt_text", "")
-            if prompt_text and hasattr(self, "prompt_text"):
-                self.prompt_text.delete(0, tk.END)
-                self.prompt_text.insert(0, prompt_text)
             
             # Restore selected list
             selected_list = state.get("selected_list", "")

@@ -1,6 +1,6 @@
 # PR-LEARN-233 - Canonical Discovered Scan Root Fix
 
-Status: Specification
+Status: Completed 2026-03-20
 Priority: MEDIUM
 Effort: SMALL
 Phase: Learning UX and Scan Consistency
@@ -74,3 +74,9 @@ Approval Status: Pending
 
 - `PR-GUI-234-Reprocess-Surface-Consolidation`
 
+## Implementation Summary
+
+- resolved discovered-review scan roots from canonical configured engine output
+  settings instead of `app_state.output_dir`
+- normalized route-suffixed output directories back to the base output root
+- added targeted regressions for configured route folders and rescan dispatch

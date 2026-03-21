@@ -40,7 +40,7 @@ Delivered outcomes:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2588 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2580 collected / 0 skipped`
 
 ## 2. Remaining Structural Debt
 
@@ -53,8 +53,8 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
   canonical config layers are now mirrored alongside it
 - adaptive refinement now exists through detector-backed observation,
   ADetailer-safe actuation, prompt/upscale policy integration, and
-  learning-aware feedback, but the core image path still needs checkpoint and
-  output-routing hardening
+  learning-aware feedback; remaining image-path debt is now mainly product UX
+  cleanup rather than missing refinement foundations
 - Pipeline sidebar and review/reprocess UX still carry product-level cleanup
   debt around pack discovery, scan roots, and duplicated surfaces
 - video generation still lacks a StableNew-owned secondary motion layer that is
@@ -394,7 +394,7 @@ Detailed execution spec:
 
 ### 15. `PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Remove route confusion from output directory selection and make the base output
 root deterministic.
@@ -408,13 +408,17 @@ Primary outcomes:
 - regression tests for regular image, AnimateDiff, workflow-video, and
   discovered-output scanning
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
 
 ### 16. `PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Fix the confusing PromptPack selector UX and make refresh behavior real.
 
@@ -425,13 +429,17 @@ Primary outcomes:
 - align the selector label and empty state with current PromptPack behavior
 - add GUI tests for refresh, discovery, and state persistence
 
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
 
 ### 17. `PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Make discovered-experiment scanning use the same canonical output root as the
 rest of the product.
@@ -441,6 +449,10 @@ Primary outcomes:
 - remove fallback scanning from ad hoc `app_state.output_dir`
 - use canonical config/engine output root for discovered runs
 - add regression coverage for regular image outputs and routed video outputs
+
+Completion record:
+
+- `docs/CompletedPR/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
 
 Detailed execution spec:
 
