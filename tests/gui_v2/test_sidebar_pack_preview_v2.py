@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from src.gui.sidebar_panel_v2 import PromptPackSummary, SidebarPanelV2
+from src.gui.prompt_pack_adapter_v2 import PromptPackAdapterV2
 
 
 class DummyPromptPackAdapter:
@@ -156,5 +157,55 @@ def test_preview_truncation_keeps_text_bounded(tmp_path):
         text = panel.pack_preview_text.get("1.0", "end")
         assert "[Preview truncated]" in text
         assert len(text) <= panel._MAX_PREVIEW_CHARS + 50
+    finally:
+        root.destroy()
+
+
+@pytest.mark.gui
+def test_pack_selector_no_longer_exposes_legacy_prompt_entry(tmp_path):
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk not available: {exc}")
+    root.withdraw()
+    try:
+        summary = PromptPackSummary(
+            name="alpha", description="", prompt_count=1, path=Path(tmp_path / "alpha.txt")
+        )
+        panel = _build_panel(root, [summary])
+
+        assert panel.prompt_text is not None
+        assert panel.prompt_text.winfo_manager() == ""
+        assert panel.refresh_packs_button is not None
+    finally:
+        root.destroy()
+
+
+@pytest.mark.gui
+def test_refresh_prompt_packs_rediscovers_new_json_packs(tmp_path):
+    alpha = tmp_path / "alpha.txt"
+    alpha.write_text("first prompt", encoding="utf-8")
+
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk not available: {exc}")
+    root.withdraw()
+    try:
+        panel = SidebarPanelV2(root, prompt_pack_adapter=PromptPackAdapterV2(tmp_path))
+        root.update_idletasks()
+        assert panel._current_pack_names == ["alpha"]
+
+        beta = tmp_path / "beta.json"
+        beta.write_text(
+            '{"pack_data":{"slots":[{"index":0,"text":"json prompt","negative":"bad"}]}}',
+            encoding="utf-8",
+        )
+
+        panel.refresh_prompt_packs()
+        root.update_idletasks()
+
+        assert panel._current_pack_names == ["alpha", "beta"]
+        assert panel.pack_listbox.get(0, "end") == ("alpha", "beta")
     finally:
         root.destroy()

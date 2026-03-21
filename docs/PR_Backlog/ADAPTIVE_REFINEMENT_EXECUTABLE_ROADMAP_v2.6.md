@@ -25,13 +25,20 @@ StableNew already has the backbone this work needs:
 - Learning record building and recommendation analysis already exist under
   `src/learning/`.
 
-StableNew does not yet have the adaptive refinement layer itself:
+StableNew now has the first foundation slices of the adaptive refinement layer:
 
-- no `src/refinement/` package
-- no canonical `intent_config["adaptive_refinement"]` contract
-- no stable per-image decision bundle for refinement analysis
-- no real subject-assessment boundary in the runner
-- no canonical manifest or learning provenance for refinement decisions
+- `src/refinement/` exists as a StableNew-owned subsystem boundary
+- the canonical nested `intent_config["adaptive_refinement"]` contract exists
+- observation-only decision bundles can be emitted from the runner
+- the detector boundary exists with optional OpenCV fallback support
+- ADetailer-safe per-image adaptive actuation now exists with manifest and
+  embedded-image provenance reuse
+
+StableNew still does not yet have the remaining behavior-changing and feedback
+parts of the tranche:
+
+- no prompt-patch or upscale policy application
+- no learning feedback loop or recommendation-aware evaluation for refinement outcomes
 
 ## Critical Appraisal of the Research Memo
 
@@ -109,11 +116,27 @@ Additional tranche-wide execution constraints:
 | `PR-HARDEN-228` | Prompt Patch and Upscale Policy Integration | Stage-scoped prompt patching and bounded upscale policy application | `PR-HARDEN-227` |
 | `PR-HARDEN-229` | Learning Loop and Recommendation-Aware Refinement Feedback | Learning metadata, quality metrics, recommendation stratification | `PR-HARDEN-228` |
 
+## Current Execution Status
+
+Completed:
+
+- `PR-HARDEN-224`
+- `PR-HARDEN-225`
+- `PR-HARDEN-226`
+- `PR-HARDEN-227`
+- `PR-HARDEN-228`
+- `PR-HARDEN-229`
+
+Remaining:
+- none
+
 ## Phase Gates
 
 ### Gate A: Contract Freeze
 
 Applies after `PR-HARDEN-224`.
+
+Status: Passed on 2026-03-20
 
 Required before continuing:
 
@@ -127,6 +150,8 @@ Required before continuing:
 ### Gate B: Observation Stability
 
 Applies after `PR-HARDEN-225` and `PR-HARDEN-226`.
+
+Status: Passed on 2026-03-20
 
 Required before continuing:
 
@@ -144,6 +169,8 @@ Required before continuing:
 
 Applies after `PR-HARDEN-227`.
 
+Status: Passed on 2026-03-20
+
 Required before continuing:
 
 - ADetailer overrides are the only applied behavior mutation
@@ -155,6 +182,8 @@ Required before continuing:
 ### Gate D: Metadata and Learning Stability
 
 Applies after `PR-HARDEN-228` and before `PR-HARDEN-229` is considered done.
+
+Status: Passed on 2026-03-20 after `PR-HARDEN-229`
 
 Required before closing the tranche:
 

@@ -24,6 +24,9 @@ Current scope note:
 - Workflow-video, sequence planning, continuity packs, and story-planning are
   not yet first-class learning surfaces.
 - When those arrive, this document must be extended rather than bypassed.
+- Adaptive refinement learning is currently limited to compact scalar metadata
+  and conservative recommendation context; it does not auto-tune policies or
+  persist crops/binary detector artifacts.
 
 1. Learning Workspace
 
@@ -183,6 +186,48 @@ Rules:
 - sparse experiment evidence must not be replaced with noisy review feedback
 - review-tab feedback may be used only when experiment evidence is absent
 - unsupported or unknown record kinds must be ignored
+- adaptive refinement context may weight or stratify recommendations, but it
+  must not bypass existing evidence-tier protections
+
+6.1 Adaptive Refinement Learning Context
+
+When a run carries the canonical `adaptive_refinement` block, Learning stores a
+compact summary under `LearningRecord.metadata["adaptive_refinement"]`.
+
+Allowed fields are compact scalar or short-string values such as:
+
+- `mode`
+- `profile_id`
+- `algorithm_version`
+- `policy_id`
+- `policy_ids`
+- `detector_id`
+- `scale_band`
+- `pose_band`
+- `face_detected`
+- `face_count`
+- `face_area_ratio`
+- `face_height_ratio`
+- `face_width_ratio`
+- `prompt_intent_band`
+- `requested_pose`
+- `wants_face_detail`
+- `has_prompt_patch`
+- `has_applied_overrides`
+- `prompt_patch_ops`
+- `applied_override_keys`
+- `image_decision_count`
+- optional cheap local metric: `sharpness_variance`
+
+Rules:
+
+- these learning-facing values must be mapped from the canonical runtime
+  `adaptive_refinement` carrier, not renamed into a parallel schema
+- image crops, detector frames, and other large binary artifacts remain
+  forbidden
+- recommendation queries may include refinement context, but resulting
+  recommendations stay advisory unless the existing evidence-tier rules already
+  permit automation
 
 If evidence quality is insufficient, the correct behavior is to return no recommendation.
 

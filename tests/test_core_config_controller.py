@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Test script to verify CoreConfigPanelV2 uses controller methods for data sources."""
+"""Test script to verify BaseGenerationPanelV2 uses controller methods for data sources."""
 
 import tkinter as tk
 from unittest.mock import Mock
 
-from src.gui.core_config_panel_v2 import CoreConfigPanelV2
+from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 
 
 class DummyAdapter:
@@ -40,7 +40,7 @@ def test_controller_priority():
     adapter = DummyAdapter()
 
     # Create panel with both controller and adapters
-    panel = CoreConfigPanelV2(
+    panel = BaseGenerationPanelV2(
         root,
         controller=controller,
         include_vae=True,

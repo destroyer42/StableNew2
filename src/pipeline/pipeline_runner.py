@@ -17,6 +17,7 @@ from src.gui.state import CancellationError
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
+from src.pipeline.config_contract_v26 import extract_adaptive_refinement_intent
 from src.pipeline.artifact_contract import canonicalize_variant_entries
 from src.pipeline.executor import Pipeline
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -32,6 +33,9 @@ from src.pipeline.stage_sequencer import (
     StageSequencer,
     StageTypeEnum,
 )
+from src.refinement.quality_metrics import build_refinement_learning_context
+from src.refinement.prompt_intent_analyzer import PromptIntentAnalyzer
+from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 from src.state.output_routing import classify_njr_output_route, get_output_route_root
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
@@ -77,20 +81,65 @@ class PipelineRunner:
         njr: NormalizedJobRecord,
         stage_name: str,
     ) -> None:
-        """Default downstream image stages to the NJR base model unless overridden."""
+        """Pin downstream image stages to the NJR base model by default.
+
+        These stages currently do not have a first-class GUI surface for
+        explicit per-stage SD checkpoint selection, so stale hidden stage
+        config must not silently override the NJR base model.
+        """
         if stage_name not in {"img2img", "adetailer", "upscale"}:
-            return
-        if config_dict.get("model") or config_dict.get("sd_model_checkpoint"):
             return
         base_model = str(getattr(njr, "base_model", "") or "").strip()
         if not base_model:
             return
+        previous_model = str(config_dict.get("model") or config_dict.get("sd_model_checkpoint") or "").strip()
         config_dict["model"] = base_model
+        config_dict["sd_model_checkpoint"] = base_model
         logger.info(
-            "[MODEL_PIN] Pinned %s stage to NJR base model: %s",
+            "[MODEL_PIN] Pinned %s stage to NJR base model: %s%s",
             stage_name,
             base_model,
+            f" (replaced hidden stage model {previous_model})" if previous_model and previous_model != base_model else "",
         )
+
+    @staticmethod
+    def _apply_adetailer_refinement_overrides(
+        config_dict: dict[str, Any],
+        applied_overrides: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not isinstance(applied_overrides, Mapping):
+            return config_dict
+        mapped_keys = {
+            "ad_mask_min_ratio": "ad_mask_min_ratio",
+            "ad_confidence": "adetailer_confidence",
+            "ad_inpaint_only_masked_padding": "adetailer_padding",
+            "ad_use_inpaint_width_height": "ad_use_inpaint_width_height",
+            "ad_inpaint_width": "ad_inpaint_width",
+            "ad_inpaint_height": "ad_inpaint_height",
+        }
+        for source_key, target_key in mapped_keys.items():
+            if source_key in applied_overrides:
+                config_dict[target_key] = applied_overrides[source_key]
+        return config_dict
+
+    @staticmethod
+    def _apply_upscale_refinement_overrides(
+        config_dict: dict[str, Any],
+        applied_overrides: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not isinstance(applied_overrides, Mapping):
+            return config_dict
+        mapped_keys = {
+            "upscale_steps": "steps",
+            "upscale_denoising_strength": "denoising_strength",
+            "upscale_sampler_name": "sampler_name",
+            "upscale_scheduler": "scheduler",
+            "upscale_upscaling_resize": "upscaling_resize",
+        }
+        for source_key, target_key in mapped_keys.items():
+            if source_key in applied_overrides:
+                config_dict[target_key] = applied_overrides[source_key]
+        return config_dict
 
     @staticmethod
     def _sanitize_output_component(name: str) -> str:
@@ -786,6 +835,43 @@ class PipelineRunner:
             last_result = None
             prompt = getattr(njr, "positive_prompt", "") or ""
             negative_prompt = getattr(njr, "negative_prompt", "") or ""
+            adaptive_refinement_intent = extract_adaptive_refinement_intent(
+                getattr(njr, "intent_config", None) or {}
+            )
+            if adaptive_refinement_intent.get("enabled") and adaptive_refinement_intent.get("mode") in {
+                "observe",
+                "adetailer",
+                "full",
+            }:
+                prompt_intent = self._prompt_intent_analyzer.infer(
+                    positive=prompt,
+                    negative=negative_prompt,
+                    context={
+                        "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
+                        "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
+                        "variant_index": getattr(njr, "variant_index", 0),
+                        "batch_index": getattr(njr, "batch_index", 0),
+                    },
+                )
+                refinement_service, refinement_notes = self._resolve_refinement_policy_service(
+                    adaptive_refinement_intent.get("detector_preference", "null")
+                )
+                decision_bundle = refinement_service.build_bundle(
+                    mode=str(adaptive_refinement_intent.get("mode") or "observe"),
+                    prompt_intent=prompt_intent,
+                    image_path=None,
+                    extra_observation={
+                        "stage_chain": [planned_stage.stage_name for planned_stage in plan.jobs],
+                        "enabled_stage_count": len(plan.jobs),
+                    },
+                )
+                metadata["adaptive_refinement"] = {
+                    "intent": dict(adaptive_refinement_intent),
+                    "prompt_intent": dict(prompt_intent),
+                    "decision_bundle": dict(decision_bundle),
+                    "detector_notes": list(refinement_notes),
+                    "image_decisions": [],
+                }
             
             # REPROCESSING SUPPORT: Check if this is a reprocessing job
             # If input_image_paths are provided, use them as starting images
@@ -1072,6 +1158,25 @@ class PipelineRunner:
                     # Process ALL images from previous stage through adetailer
                     next_stage_paths = []
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
+                    refinement_mode = str(adaptive_refinement_intent.get("mode") or "disabled")
+                    refinement_enabled = bool(adaptive_refinement_intent.get("enabled")) and refinement_mode in {
+                        "adetailer",
+                        "full",
+                    }
+                    refinement_prompt_intent = dict(
+                        (metadata.get("adaptive_refinement") or {}).get("prompt_intent") or {}
+                    )
+                    refinement_service, refinement_notes = self._resolve_refinement_policy_service(
+                        adaptive_refinement_intent.get("detector_preference", "null")
+                    )
+                    if refinement_enabled and metadata.get("adaptive_refinement"):
+                        metadata["adaptive_refinement"]["detector_notes"] = list(
+                            dict.fromkeys(
+                                list(metadata["adaptive_refinement"].get("detector_notes") or [])
+                                + refinement_notes
+                            )
+                        )
+                        metadata["adaptive_refinement"].setdefault("image_decisions", [])
                     
                     # Build safe base name with human-readable identifiers (PR-FILENAME-001)
                     from src.utils.file_io import build_safe_image_name
@@ -1112,9 +1217,33 @@ class PipelineRunner:
                             pack_name=pack_name,
                             max_length=100
                         )
+                        per_image_config = dict(config_dict)
+                        image_refinement_payload: dict[str, Any] | None = None
+                        if refinement_enabled:
+                            decision_bundle = refinement_service.build_bundle(
+                                mode=refinement_mode,
+                                prompt_intent=refinement_prompt_intent,
+                                image_path=Path(input_path),
+                                extra_observation={
+                                    "stage_name": "adetailer",
+                                    "image_index": img_idx,
+                                    "total_images": len(current_stage_paths),
+                                },
+                            )
+                            image_refinement_payload = {
+                                "intent": dict(adaptive_refinement_intent),
+                                "prompt_intent": dict(refinement_prompt_intent),
+                                "decision_bundle": dict(decision_bundle),
+                                "detector_notes": list(refinement_notes),
+                            }
+                            self._apply_adetailer_refinement_overrides(
+                                per_image_config,
+                                decision_bundle.get("applied_overrides"),
+                            )
+                            per_image_config["adaptive_refinement"] = image_refinement_payload
                         result = self._pipeline.run_adetailer_stage(
                             input_image_path=Path(input_path),
-                            config=config_dict,
+                            config=per_image_config,
                             output_dir=run_dir,
                             image_name=image_name,
                             prompt=prompt,
@@ -1125,8 +1254,28 @@ class PipelineRunner:
                         if result and "path" in result:
                             logger.info(f"âœ… [ADETAILER_OUTPUT] Saved: {result['path']}")
                             next_stage_paths.append(result["path"])
+                            if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
+                                metadata["adaptive_refinement"]["image_decisions"].append(
+                                    {
+                                        "input_image_path": str(input_path),
+                                        "output_path": str(result["path"]),
+                                        "decision_bundle": dict(
+                                            image_refinement_payload.get("decision_bundle") or {}
+                                        ),
+                                    }
+                                )
                         else:
                             logger.warning(f"âŒ [ADETAILER_OUTPUT] No output from image {img_idx}")
+                            if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
+                                metadata["adaptive_refinement"]["image_decisions"].append(
+                                    {
+                                        "input_image_path": str(input_path),
+                                        "output_path": None,
+                                        "decision_bundle": dict(
+                                            image_refinement_payload.get("decision_bundle") or {}
+                                        ),
+                                    }
+                                )
                         variants.append(result)
                         
 
@@ -1166,6 +1315,23 @@ class PipelineRunner:
                         njr=njr,
                         stage_name="upscale",
                     )
+
+                    refinement_mode = str(adaptive_refinement_intent.get("mode") or "disabled")
+                    refinement_enabled = bool(adaptive_refinement_intent.get("enabled")) and refinement_mode == "full"
+                    refinement_prompt_intent = dict(
+                        (metadata.get("adaptive_refinement") or {}).get("prompt_intent") or {}
+                    )
+                    refinement_service, refinement_notes = self._resolve_refinement_policy_service(
+                        adaptive_refinement_intent.get("detector_preference", "null")
+                    )
+                    if refinement_enabled and metadata.get("adaptive_refinement"):
+                        metadata["adaptive_refinement"]["detector_notes"] = list(
+                            dict.fromkeys(
+                                list(metadata["adaptive_refinement"].get("detector_notes") or [])
+                                + refinement_notes
+                            )
+                        )
+                        metadata["adaptive_refinement"].setdefault("image_decisions", [])
                     
                     # Process ALL images from previous stage through upscaler
                     next_stage_paths = []
@@ -1210,9 +1376,35 @@ class PipelineRunner:
                             pack_name=pack_name,
                             max_length=100
                         )
+                        per_image_config = dict(config_dict)
+                        per_image_config.setdefault("prompt", prompt)
+                        per_image_config.setdefault("negative_prompt", negative_prompt)
+                        image_refinement_payload: dict[str, Any] | None = None
+                        if refinement_enabled:
+                            decision_bundle = refinement_service.build_bundle(
+                                mode=refinement_mode,
+                                prompt_intent=refinement_prompt_intent,
+                                image_path=Path(input_path),
+                                extra_observation={
+                                    "stage_name": "upscale",
+                                    "image_index": img_idx,
+                                    "total_images": len(current_stage_paths),
+                                },
+                            )
+                            image_refinement_payload = {
+                                "intent": dict(adaptive_refinement_intent),
+                                "prompt_intent": dict(refinement_prompt_intent),
+                                "decision_bundle": dict(decision_bundle),
+                                "detector_notes": list(refinement_notes),
+                            }
+                            self._apply_upscale_refinement_overrides(
+                                per_image_config,
+                                decision_bundle.get("applied_overrides"),
+                            )
+                            per_image_config["adaptive_refinement"] = image_refinement_payload
                         result = self._pipeline.run_upscale_stage(
                             input_image_path=Path(input_path),
-                            config=config_dict,
+                            config=per_image_config,
                             output_dir=run_dir,
                             image_name=image_name,
                             cancel_token=cancel_token,
@@ -1221,8 +1413,30 @@ class PipelineRunner:
                         if result and "path" in result:
                             logger.info(f"âœ… [UPSCALE_OUTPUT] Saved: {result['path']}")
                             next_stage_paths.append(result["path"])
+                            if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
+                                metadata["adaptive_refinement"]["image_decisions"].append(
+                                    {
+                                        "stage_name": "upscale",
+                                        "input_image_path": str(input_path),
+                                        "output_path": str(result["path"]),
+                                        "decision_bundle": dict(
+                                            image_refinement_payload.get("decision_bundle") or {}
+                                        ),
+                                    }
+                                )
                         else:
                             logger.warning(f"âŒ [UPSCALE_OUTPUT] No output from image {img_idx}")
+                            if refinement_enabled and metadata.get("adaptive_refinement") and image_refinement_payload:
+                                metadata["adaptive_refinement"]["image_decisions"].append(
+                                    {
+                                        "stage_name": "upscale",
+                                        "input_image_path": str(input_path),
+                                        "output_path": None,
+                                        "decision_bundle": dict(
+                                            image_refinement_payload.get("decision_bundle") or {}
+                                        ),
+                                    }
+                                )
                         variants.append(result)
                         
                     # Update current_stage_paths for next stage
@@ -1298,6 +1512,34 @@ class PipelineRunner:
             success = bool(current_stage_paths)
             if not success and error is None:
                 error = "No images were generated successfully"
+            if metadata.get("adaptive_refinement"):
+                refinement_payload = dict(metadata["adaptive_refinement"])
+                detector_preference = (
+                    (refinement_payload.get("intent") or {}).get("detector_preference") or "null"
+                )
+                refinement_service, refinement_notes = self._resolve_refinement_policy_service(
+                    detector_preference
+                )
+                assessments, assessment_notes = self._collect_refinement_assessments(
+                    service=refinement_service,
+                    output_paths=list(current_stage_paths or []),
+                )
+                decision_bundle = dict(refinement_payload.get("decision_bundle") or {})
+                observation = dict(decision_bundle.get("observation") or {})
+                if assessments:
+                    observation["subject_assessment"] = dict(assessments[0])
+                    observation["image_assessments"] = list(assessments)
+                decision_bundle["detector_id"] = (
+                    assessments[0]["detector_id"]
+                    if assessments
+                    else refinement_service.assess(None).get("detector_id", "null")
+                )
+                decision_bundle["observation"] = observation
+                refinement_payload["decision_bundle"] = decision_bundle
+                refinement_payload["detector_notes"] = list(
+                    dict.fromkeys(list(refinement_payload.get("detector_notes") or []) + refinement_notes + assessment_notes)
+                )
+                metadata["adaptive_refinement"] = refinement_payload
         except Exception as exc:
             error = str(exc)
             logger.error(f"âŒ Pipeline execution failed: {exc}", exc_info=True)
@@ -1463,6 +1705,85 @@ class PipelineRunner:
         self._learning_enabled = bool(learning_enabled)
         self._sequencer = sequencer or StageSequencer()
         self._video_backends = video_backend_registry or build_default_video_backend_registry()
+        self._prompt_intent_analyzer = PromptIntentAnalyzer()
+        self._refinement_policy_service = SubjectScalePolicyService()
+
+    def _resolve_refinement_policy_service(
+        self,
+        detector_preference: str,
+    ) -> tuple[SubjectScalePolicyService, list[str]]:
+        notes: list[str] = []
+        preference = str(detector_preference or "null").lower()
+        if preference != "opencv":
+            return SubjectScalePolicyService(), notes
+        try:
+            from src.refinement.detectors.opencv_face_detector import OpenCvFaceDetector
+
+            return SubjectScalePolicyService(detector=OpenCvFaceDetector()), notes
+        except Exception:
+            notes.append("opencv_requested_but_unavailable_fell_back_to_null")
+            return SubjectScalePolicyService(), notes
+
+    def _collect_refinement_assessments(
+        self,
+        *,
+        service: SubjectScalePolicyService,
+        output_paths: list[str],
+        timeout_seconds: float = 2.0,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        cache: dict[str, dict[str, Any]] = {}
+        notes: list[str] = []
+        deadline = time.monotonic() + timeout_seconds
+        assessments: list[dict[str, Any]] = []
+        for output_path in output_paths:
+            key = str(output_path)
+            if key in cache:
+                assessments.append(dict(cache[key]))
+                continue
+            if time.monotonic() > deadline:
+                fallback = {
+                    "detector_id": "null",
+                    "algorithm_version": "v1",
+                    "image_path": key,
+                    "image_width": None,
+                    "image_height": None,
+                    "detections": [],
+                    "detection_count": 0,
+                    "primary_detection_index": None,
+                    "face_area_ratio": None,
+                    "face_height_ratio": None,
+                    "face_width_ratio": None,
+                    "scale_band": "no_face",
+                    "pose_band": "unknown",
+                    "notes": ["detector_timeout_fell_back_to_null"],
+                }
+                cache[key] = fallback
+                assessments.append(dict(fallback))
+                notes.append("detector_timeout_fell_back_to_null")
+                continue
+            try:
+                assessment = service.assess(Path(key))
+            except Exception:
+                assessment = {
+                    "detector_id": "null",
+                    "algorithm_version": "v1",
+                    "image_path": key,
+                    "image_width": None,
+                    "image_height": None,
+                    "detections": [],
+                    "detection_count": 0,
+                    "primary_detection_index": None,
+                    "face_area_ratio": None,
+                    "face_height_ratio": None,
+                    "face_width_ratio": None,
+                    "scale_band": "no_face",
+                    "pose_band": "unknown",
+                    "notes": ["detector_error_fell_back_to_null"],
+                }
+                notes.append("detector_error_fell_back_to_null")
+            cache[key] = dict(assessment)
+            assessments.append(dict(assessment))
+        return assessments, notes
 
     def _ensure_not_cancelled(self, cancel_token: CancelToken | None, context: str) -> None:
         if (
@@ -1835,6 +2156,12 @@ class PipelineRunner:
             preset_name = getattr(config, "preset_name", None)
             if preset_name:
                 metadata["preset_name"] = preset_name
+            refinement_context = build_refinement_learning_context(
+                (getattr(run_result, "metadata", {}) or {}).get("adaptive_refinement"),
+                output_paths=list(run_result.output_paths),
+            )
+            if refinement_context:
+                metadata["adaptive_refinement"] = refinement_context
             record = build_learning_record(config, run_result, learning_context=metadata)
         except Exception:
             return None
@@ -1874,6 +2201,31 @@ class PipelineRunResult:
     @property
     def variant_count(self) -> int:
         return len(self.variants)
+
+    @property
+    def output_paths(self) -> list[str]:
+        paths: list[str] = []
+        for variant in self.variants:
+            if not isinstance(variant, dict):
+                continue
+            for key in ("path", "output_path", "video_path"):
+                value = variant.get(key)
+                if isinstance(value, str) and value:
+                    paths.append(value)
+            for key in ("all_paths", "output_paths", "frame_paths"):
+                values = variant.get(key)
+                if isinstance(values, list):
+                    paths.extend(str(item) for item in values if str(item or "").strip())
+            artifact = variant.get("artifact")
+            if isinstance(artifact, dict):
+                primary = artifact.get("primary_path")
+                if isinstance(primary, str) and primary:
+                    paths.append(primary)
+        deduped: list[str] = []
+        for item in paths:
+            if item not in deduped:
+                deduped.append(item)
+        return deduped
 
     def to_dict(self) -> dict[str, Any]:
         variants = canonicalize_variant_entries(self.variants)

@@ -57,6 +57,10 @@ Beyond the old numbered plan, the current repo still lacks a few important produ
 
 - the GUI still needs the dedicated config adapter/final controller shrink pass
 - continuity and story planning still need richer first-class UX on top of the new workspace flow
+- there is no StableNew-owned secondary motion layer that can be replayed
+  across `animatediff`, `svd_native`, and `video_workflow`
+- manifests, replay, and learning do not yet carry a canonical secondary-motion
+  summary distinct from the existing `motion_profile`
 
 ## Revised Video/Product Queue
 
@@ -185,12 +189,122 @@ Execution spec:
 
 - `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
+With `PR-HARDEN-224` through `PR-HARDEN-229` assumed complete, the next
+video/runtime tranche is the StableNew-owned secondary motion layer.
+
+### `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
+
+Status: Planned
+
+Freeze the secondary-motion outer contract before any backend behavior change.
+
+Required outputs:
+
+- one nested `intent_config["secondary_motion"]` payload distinct from
+  `motion_profile`
+- runner observation-only policy metadata for the existing video stages
+- a StableNew-owned `src/video/motion/` package boundary and schema document
+
+Guiding roadmap:
+
+- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
+
+Execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+
+### `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
+
+Status: Planned
+
+Land the shared deterministic engine and provenance helpers before backend
+rollout.
+
+Required outputs:
+
+- StableNew-owned shared motion engine and worker contract
+- compact replay/container summary plus detailed manifest helper
+- no backend wiring yet, only the reusable runtime and summary contract
+
+Execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+
+### `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+
+Status: Planned
+
+Use the safest current postprocess seam to land the first real motion runtime.
+
+Required outputs:
+
+- runner-injected transient SVD motion config
+- shared-engine application as SVD postprocess stage zero
+- canonical motion provenance in SVD artifacts
+
+Execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+
+### `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+
+Status: Planned
+
+Insert the shared engine into the AnimateDiff frame pipeline.
+
+Required outputs:
+
+- shared-engine application between frame write and encode
+- skip-safe AnimateDiff motion behavior with stable output-path semantics
+- canonical motion provenance in AnimateDiff artifacts
+
+Execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+
+### `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+
+Status: Planned
+
+Close the last major parity gap for the shared motion carrier without adding a
+new custom Comfy node dependency.
+
+Required outputs:
+
+- StableNew-owned extract/apply/re-encode parity path for workflow-video
+- canonical replay closure for the final video artifact
+- consistent motion summary shape across all current video backends
+
+Execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+
+### `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+
+Status: Planned
+
+Make the shared motion carrier visible to learning and recommendation flows.
+
+Required outputs:
+
+- scalar motion metrics in learning records
+- backend-aware and application-path-aware recommendation context
+- no raw frame or dense motion payload retention in centralized learning data
+
+Execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+
 ## Done Definition
 
 The next stage of video work is successful when:
 
 - short-form workflow-video is as coherent as short-form image generation
+- workflow-video, SVD native, and AnimateDiff can share a StableNew-owned
+  secondary motion layer with canonical replay provenance
 - long-form video has a first-class planning/orchestration path
 - post-video outputs are canonical artifacts, not side utilities
 - continuity and shot-planning data can persist through manifests/history
+- learning can separate motion evidence by backend and application path instead
+  of mixing incomparable video runs
 - the GUI feels designed around the actual workflow set rather than around historical seams

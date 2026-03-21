@@ -316,3 +316,36 @@ def test_prompt_pack_job_builder_omits_inactive_txt2img_hires_fields_from_execut
     assert record.config["hires_fix"]["denoise"] == 0.42
     assert record.stage_chain[0].denoising_strength is None
     assert "hires_steps" not in record.stage_chain[0].extra
+
+
+def test_prompt_pack_job_builder_preserves_adaptive_refinement_intent(tmp_path: Path) -> None:
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=StubConfigManager(tmp_path),
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+    )
+    entry = PackJobEntry(
+        pack_id="refinement-pack",
+        pack_name="Refinement Pack",
+        prompt_text="A portrait",
+        config_snapshot={
+            "adaptive_refinement": {
+                "schema": "stablenew.adaptive-refinement.v1",
+                "enabled": True,
+                "mode": "observe",
+                "profile_id": "auto_v1",
+                "detector_preference": "null",
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            }
+        },
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    assert records[0].intent_config["adaptive_refinement"]["enabled"] is True
+    assert records[0].intent_config["adaptive_refinement"]["mode"] == "observe"

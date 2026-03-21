@@ -9,6 +9,7 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 from src.learning.learning_record import LearningRecord, _now_iso
+from src.refinement.quality_metrics import build_refinement_learning_context
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.pipeline.pipeline_runner import PipelineRunResult
@@ -36,6 +37,31 @@ def _stage_plan_list(run_result: PipelineRunResult) -> list[str]:
     return [s for s in stages if s]
 
 
+def _extract_output_paths(run_result: PipelineRunResult) -> list[str]:
+    paths: list[str] = []
+    for variant in getattr(run_result, "variants", []) or []:
+        if not isinstance(variant, dict):
+            continue
+        for key in ("path", "output_path", "video_path"):
+            value = variant.get(key)
+            if isinstance(value, str) and value:
+                paths.append(value)
+        for key in ("all_paths", "output_paths", "frame_paths"):
+            values = variant.get(key)
+            if isinstance(values, list):
+                paths.extend(str(item) for item in values if str(item or "").strip())
+        artifact = variant.get("artifact")
+        if isinstance(artifact, dict):
+            primary = artifact.get("primary_path")
+            if isinstance(primary, str) and primary:
+                paths.append(primary)
+    deduped: list[str] = []
+    for item in paths:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
 def build_learning_record(
     pipeline_config: Any,
     run_result: PipelineRunResult,
@@ -58,6 +84,13 @@ def build_learning_record(
     if learning_context:
         metadata.update(learning_context)
     rr_meta = getattr(run_result, "metadata", {}) or {}
+    if "adaptive_refinement" not in metadata:
+        refinement_context = build_refinement_learning_context(
+            rr_meta.get("adaptive_refinement"),
+            output_paths=_extract_output_paths(run_result),
+        )
+        if refinement_context:
+            metadata["adaptive_refinement"] = refinement_context
     timestamp_value = metadata.get("timestamp") or rr_meta.get("timestamp") or _now_iso()
 
     base_config: dict[str, Any] = (variant_configs[0] if variant_configs else config_dict) or {}

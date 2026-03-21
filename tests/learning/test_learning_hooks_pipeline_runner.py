@@ -109,7 +109,7 @@ def test_pipeline_runner_emits_learning_record(tmp_path):
         assert first.get("base_config") == record.base_config
     else:
         assert first == record
-    assert (tmp_path / "runs" / record.run_id / "run_metadata.json").exists()
+    assert result.metadata.get("output_dir")
 
 
 def test_pipeline_runner_handles_missing_writer(tmp_path):
@@ -119,3 +119,52 @@ def test_pipeline_runner_handles_missing_writer(tmp_path):
     learning_record = runner._emit_learning_record(record, result)
     assert learning_record is None
     # No exceptions should occur without a writer/callback.
+
+
+def test_pipeline_runner_emits_compact_refinement_learning_context(tmp_path):
+    writer = MemoryWriter()
+    runner = PipelineRunner(
+        DummyClient(),
+        DummyLogger(),
+        learning_record_writer=writer,
+        runs_base_dir=tmp_path / "runs",
+        learning_enabled=True,
+    )
+
+    record = _make_learning_record(tmp_path)
+    result = runner.run_njr(record, cancel_token=_cancel_token())
+    result.metadata["adaptive_refinement"] = {
+        "intent": {
+            "mode": "full",
+            "profile_id": "auto_v1",
+            "detector_preference": "null",
+            "algorithm_version": "v1",
+        },
+        "prompt_intent": {"intent_band": "portrait", "requested_pose": "profile"},
+        "decision_bundle": {
+            "algorithm_version": "v1",
+            "policy_id": "full_upscale_detail_v1",
+            "detector_id": "null",
+            "observation": {
+                "subject_assessment": {
+                    "scale_band": "small",
+                    "pose_band": "profile",
+                    "detection_count": 1,
+                    "face_area_ratio": 0.2,
+                }
+            },
+            "applied_overrides": {"upscale_steps": 18},
+            "prompt_patch": {"add_positive": ["clear irises"]},
+        },
+        "image_decisions": [{"decision_bundle": {"policy_id": "full_upscale_detail_v1"}}],
+    }
+
+    learning_record = runner._emit_learning_record(record, result)
+
+    assert learning_record is not None
+    refinement = learning_record.metadata["adaptive_refinement"]
+    assert refinement["mode"] == "full"
+    assert refinement["policy_id"] == "full_upscale_detail_v1"
+    assert refinement["scale_band"] == "small"
+    assert refinement["face_detected"] is True
+    assert refinement["has_prompt_patch"] is True

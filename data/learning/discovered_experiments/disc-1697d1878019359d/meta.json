@@ -8,8 +8,8 @@
   "scan_source_dirs": [],
   "schema_version": "1.0",
   "stage": "txt2img",
-  "status": "waiting_review",
-  "updated_at": "2026-03-20T11:36:10Z",
+  "status": "closed",
+  "updated_at": "2026-03-20T22:58:24Z",
   "varying_fields": [
     "model"
   ]

@@ -1,4 +1,5 @@
 from src.pipeline.run_config import PromptSource, RunConfig
+from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import (
     PromptPackInfo,
     build_run_config_for_manual_prompt,
@@ -20,6 +21,18 @@ def test_discover_packs_returns_sorted_descriptors(tmp_path):
     assert isinstance(packs[0], PromptPackInfo)
 
 
+def test_discover_packs_includes_json_prompt_packs(tmp_path):
+    pack_one = tmp_path / "alpha.json"
+    pack_one.write_text('{"pack_data":{"slots":[{"index":0,"text":"hero","negative":"bad"}]}}')
+    pack_two = tmp_path / "beta.txt"
+    pack_two.write_text("prompt")
+
+    packs = discover_packs(tmp_path)
+
+    assert [p.name for p in packs] == ["alpha", "beta"]
+    assert packs[0].path == pack_one
+
+
 def test_discover_packs_ensures_directory(tmp_path):
     target = tmp_path / "nested" / "packs"
     assert not target.exists()
@@ -28,6 +41,37 @@ def test_discover_packs_ensures_directory(tmp_path):
 
     assert packs == []
     assert target.exists()
+
+
+def test_read_prompt_pack_renders_json_slot_content(tmp_path):
+    pack_path = tmp_path / "alpha.json"
+    pack_path.write_text(
+        """
+        {
+          "pack_data": {
+            "slots": [
+              {
+                "index": 0,
+                "text": "hero portrait",
+                "negative": "blurry",
+                "positive_embeddings": [["detail_boost", 0.8]],
+                "negative_embeddings": [["bad_quality", 1.0]],
+                "loras": [["cinematic", 0.65]]
+              }
+            ]
+          }
+        }
+        """.strip()
+    )
+
+    prompts = read_prompt_pack(pack_path)
+
+    assert len(prompts) == 1
+    assert (
+        prompts[0]["positive"]
+        == "(<embedding:detail_boost>:0.8) hero portrait <lora:cinematic:0.65>"
+    )
+    assert prompts[0]["negative"] == "<embedding:bad_quality> blurry"
 
 
 # ---------------------------------------------------------------------------

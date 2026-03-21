@@ -84,7 +84,7 @@ def base_pipeline_config(base_txt2img_config: dict) -> dict:
         },
         "adetailer": {
             "enabled": True,
-            "model": "face_yolov8n.pt",
+            "adetailer_model": "face_yolov8n.pt",
             "confidence": 0.3,
             "mask_blur": 4,
             "denoise_strength": 0.4,
@@ -352,7 +352,7 @@ class TestNestedStageDisable:
         """override.enabled=False disables adetailer."""
         base_ad = {
             "enabled": True,
-            "model": "face_yolov8n.pt",
+            "adetailer_model": "face_yolov8n.pt",
             "confidence": 0.3,
         }
         override_ad = ADetailerOverrides(enabled=False)
@@ -510,9 +510,21 @@ class TestPipelineLevelMerge:
             override_flags=flags,
         )
 
-        assert result["adetailer"]["model"] == "person_yolov8s.pt"
+        assert "model" not in result["adetailer"]
+        assert result["adetailer"]["adetailer_model"] == "person_yolov8s.pt"
         assert result["adetailer"]["confidence"] == 0.5
         assert result["adetailer"]["enabled"] is True
+
+    def test_merge_adetailer_config_canonicalizes_legacy_model_key(self) -> None:
+        """Legacy detector model keys should be normalized to adetailer_model."""
+        result = ConfigMergerV2.merge_adetailer_config(
+            base_adetailer={"enabled": True, "model": "face_yolov8n.pt"},
+            override_adetailer=None,
+            override_enabled=False,
+        )
+
+        assert "model" not in result
+        assert result["adetailer_model"] == "face_yolov8n.pt"
 
     def test_merge_pipeline_with_img2img_override(self, base_pipeline_config: dict) -> None:
         """Img2img overrides are applied via its own flag."""

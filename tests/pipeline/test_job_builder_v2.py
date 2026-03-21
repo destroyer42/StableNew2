@@ -108,3 +108,31 @@ def test_build_from_run_request_normalizes_alias_config_snapshot() -> None:
     assert record.config["txt2img"]["scheduler"] == "Karras"
     assert record.stage_chain[0].model == "alias-model"
     assert record.stage_chain[0].sampler_name == "DPM++ 2M"
+
+
+def test_build_from_run_request_preserves_adaptive_refinement_intent() -> None:
+    builder = JobBuilderV2(id_fn=lambda: "job-refine", time_fn=lambda: 123.0)
+    entry = _build_pack_entry()
+    request = PipelineRunRequest(
+        prompt_pack_id=entry.pack_id,
+        selected_row_ids=[str(entry.pack_row_index)],
+        config_snapshot_id="cfg-refine",
+        run_mode=PipelineRunMode.QUEUE,
+        source=PipelineRunSource.ADD_TO_QUEUE,
+        adaptive_refinement={
+            "schema": "stablenew.adaptive-refinement.v1",
+            "enabled": True,
+            "mode": "observe",
+            "profile_id": "auto_v1",
+            "detector_preference": "null",
+            "record_decisions": True,
+            "algorithm_version": "v1",
+        },
+        pack_entries=[entry],
+    )
+
+    jobs = builder.build_from_run_request(request)
+
+    assert len(jobs) == 1
+    assert jobs[0].intent_config["adaptive_refinement"]["enabled"] is True
+    assert jobs[0].intent_config["adaptive_refinement"]["mode"] == "observe"

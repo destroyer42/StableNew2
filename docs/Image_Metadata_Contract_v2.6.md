@@ -1,7 +1,7 @@
 # Image Metadata Contract v2.6
 
 Status: Canonical Addendum
-Updated: 2026-03-19
+Updated: 2026-03-20
 
 ## Purpose
 
@@ -72,6 +72,22 @@ The payload is a compact capsule derived from stage manifests (not full run meta
   }
 }
 ```
+
+When a still-image stage manifest carries a top-level
+`adaptive_refinement` block, that same block is mirrored into the embedded
+image payload through the stage manifest capsule. StableNew must not create a
+second image-only refinement schema for embedded metadata.
+
+That mirrored block may include:
+
+- `decision_bundle.applied_overrides`
+- `decision_bundle.prompt_patch`
+- `prompt_patch_provenance`
+
+This allows external readers and later learning/replay tooling to recover the
+original prompt inputs, bounded adaptive mutations, and final stage prompts
+from the same canonical carrier without needing a StableNew-only translation
+step.
 
 ## Size Policy
 

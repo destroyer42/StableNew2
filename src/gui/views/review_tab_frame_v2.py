@@ -113,6 +113,13 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.selection_label.grid(row=0, column=3, sticky="e")
 
+        self.workflow_hint_label = ttk.Label(
+            header,
+            text="Review is the canonical advanced reprocess workspace.",
+            style="Dark.TLabel",
+        )
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
         body.grid(row=1, column=0, sticky="nsew", padx=6, pady=4)

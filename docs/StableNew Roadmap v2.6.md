@@ -40,7 +40,7 @@ Delivered outcomes:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2540 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2580 collected / 0 skipped`
 
 ## 2. Remaining Structural Debt
 
@@ -51,10 +51,16 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
 - `tests/compat/` still preserves temporary migration behavior that should continue shrinking
 - `AppStateV2.run_config` still exists as a GUI-facing dict projection, even though
   canonical config layers are now mirrored alongside it
-- image generation still lacks a runner-owned adaptive refinement layer for
-  small-subject, distant-face, and difficult-pose recovery
-- manifests, replay, and learning do not yet carry a canonical adaptive
-  refinement decision provenance
+- adaptive refinement now exists through detector-backed observation,
+  ADetailer-safe actuation, prompt/upscale policy integration, and
+  learning-aware feedback; remaining image-path debt is now mainly product UX
+  cleanup rather than missing refinement foundations
+- Pipeline sidebar and review/reprocess UX still carry product-level cleanup
+  debt around pack discovery, scan roots, and duplicated surfaces
+- video generation still lacks a StableNew-owned secondary motion layer that is
+  replayable across AnimateDiff, SVD native, and workflow-video backends
+- manifests, replay, container metadata, and learning do not yet carry a
+  canonical secondary-motion policy and application provenance
 
 ## 3. Status of the Older Revised Video Queue
 
@@ -238,7 +244,7 @@ Detailed execution spec:
 
 ### 8. `PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Establish the canonical adaptive refinement contract before any behavior change.
 
@@ -248,6 +254,10 @@ Primary outcomes:
 - a StableNew-owned `src/refinement/` package boundary
 - builder and NJR persistence without new job models
 - import-boundary guard tests and a schema document
+
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
 
 Guiding roadmap:
 
@@ -259,7 +269,7 @@ Detailed execution spec:
 
 ### 9. `PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Add the deterministic observation layer before any output-changing behavior.
 
@@ -269,13 +279,17 @@ Primary outcomes:
 - observation-only decision bundles in runner metadata
 - null-detector fallback and no stage mutation
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
 
 ### 10. `PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Add the first real subject-assessment path without making OpenCV mandatory.
 
@@ -285,13 +299,17 @@ Primary outcomes:
 - threshold versioning for scale-band assessment
 - richer observation bundles with deterministic fallback behavior
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
 
 ### 11. `PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Roll out the first controlled runtime actuation, limited to ADetailer.
 
@@ -301,13 +319,17 @@ Primary outcomes:
 - explicit rollout modes and rollback path
 - manifest-facing provenance for applied overrides
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
 
 ### 12. `PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Complete the runtime portion of adaptive refinement with bounded prompt and
 upscale integration.
@@ -318,13 +340,17 @@ Primary outcomes:
 - bounded upscale policy application
 - original-prompt and final-prompt provenance for replay
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
 
 ### 13. `PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback`
 
-Status: Planned
+Status: Completed 2026-03-20
 
 Close the loop by making refinement decisions visible to the local learning
 system without weakening evidence-tier safeguards.
@@ -335,18 +361,288 @@ Primary outcomes:
 - refinement-aware recommendation context
 - conservative, evidence-tier-respecting feedback for future tuning
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
+
+### 14. `PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup`
+
+Status: Completed 2026-03-20
+
+Remove the remaining hidden model-switch ambiguity from the image path.
+
+Primary outcomes:
+
+- explicit SD checkpoint pinning in the actual ADetailer/img2img payload path
+- manifest model precedence hardened to prefer requested stage config over
+  ambient WebUI state
+- removal of the generic ADetailer `model` alias from canonical config merging
+- regression coverage proving txt2img, ADetailer, and upscale stay pinned to
+  the NJR base model by default
+
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
+
+### 15. `PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit`
+
+Status: Completed 2026-03-20
+
+Remove route confusion from output directory selection and make the base output
+root deterministic.
+
+Primary outcomes:
+
+- `output_dir` means root only, not route-plus-root
+- known legacy route suffixes stripped before route resolution
+- canonical route selection derived from job/stage intent instead of folder-name
+  guesswork
+- regression tests for regular image, AnimateDiff, workflow-video, and
+  discovered-output scanning
+
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
+
+### 16. `PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery`
+
+Status: Completed 2026-03-20
+
+Fix the confusing PromptPack selector UX and make refresh behavior real.
+
+Primary outcomes:
+
+- remove the empty legacy pack text field from the Pipeline sidebar
+- make refresh rediscover actual PromptPack files, including JSON-backed packs
+- align the selector label and empty state with current PromptPack behavior
+- add GUI tests for refresh, discovery, and state persistence
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
+
+### 17. `PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix`
+
+Status: Completed 2026-03-20
+
+Make discovered-experiment scanning use the same canonical output root as the
+rest of the product.
+
+Primary outcomes:
+
+- remove fallback scanning from ad hoc `app_state.output_dir`
+- use canonical config/engine output root for discovered runs
+- add regression coverage for regular image outputs and routed video outputs
+
+Completion record:
+
+- `docs/CompletedPR/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
+
+### 18. `PR-GUI-234-Reprocess-Surface-Consolidation`
+
+Status: Completed 2026-03-20
+
+Reduce duplicated reprocess UX and keep one canonical advanced reprocess
+surface.
+
+Primary outcomes:
+
+- `Review` becomes the canonical advanced reprocess surface
+- sidebar reprocess is reduced to a minimal launcher or removed
+- duplicated behaviors and confusing parallel controls are eliminated
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-234-Reprocess-Surface-Consolidation.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-234-Reprocess-Surface-Consolidation.md`
+
+### 19. `PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX`
+
+Status: Completed
+
+Replace the legacy-feeling `Core Config` surface with a real base-generation
+ownership boundary and readable recipe UX.
+
+Primary outcomes:
+
+- `Core Config` removed from the active v2 path and replaced by `Base Generation`
+- txt2img no longer acts as a second owner for global base-generation fields
+- `Pipeline Presets` become readable `Saved Recipes` with summaries
+- sidebar/controller `core_*` GUI vocabulary is retired in the active v2 path
+- visible precedence between base generation and stage overrides
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
+
+### 19A. `PR-GUI-235A-PresetNaming`
+
+Status: Completed
+
+Clean up the active Pipeline v2 naming after the ownership reset so the live
+sidebar/controller path speaks in `Saved Recipe` terms instead of `Preset`
+terms, while leaving the underlying `ConfigManager` storage contract untouched.
+
+Primary outcomes:
+
+- active sidebar variables and callbacks use `saved_recipe_*` naming
+- active pipeline controller callbacks use `saved_recipe` terminology
+- active GUI tests follow the new names and intent
+- legacy storage still remains under `presets/` until a future storage-contract
+  cleanup PR explicitly changes that boundary
+
+Completion record:
+
+- `docs/CompletedPR/PR-GUI-235A-PresetNaming.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-GUI-235A-PresetNaming.md`
+
+### 20. `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
+
+Status: Planned
+
+Freeze the secondary-motion outer contract before any backend behavior change.
+
+Primary outcomes:
+
+- one nested `intent_config["secondary_motion"]` payload distinct from the
+  existing `motion_profile`
+- runner observation-only motion planning metadata for the existing video
+  stages
+- a StableNew-owned `src/video/motion/` package boundary and schema document
+
+Guiding roadmap:
+
+- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+
+### 21. `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
+
+Status: Planned
+
+Land the shared deterministic engine and the one canonical provenance contract
+before backend rollout.
+
+Primary outcomes:
+
+- a StableNew-owned shared secondary-motion engine and worker contract
+- compact replay and container-metadata summaries plus detailed manifest helpers
+- no backend wiring yet, only the reusable runtime and summary contract
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
+
+### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+
+Status: Planned
+
+Use the safest existing postprocess seam to land the first real runtime motion
+path.
+
+Primary outcomes:
+
+- runner-injected transient SVD motion execution config
+- shared-engine application as SVD postprocess stage zero
+- canonical motion provenance in SVD manifest, replay, and container metadata
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+
+### 23. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+
+Status: Planned
+
+Insert the shared engine into the existing AnimateDiff frame pipeline.
+
+Primary outcomes:
+
+- shared-engine application between frame write and video encode
+- skip-safe AnimateDiff motion behavior with stable output-path semantics
+- canonical motion provenance in AnimateDiff manifest, replay, and container metadata
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+
+### 24. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+
+Status: Planned
+
+Close the last major backend parity gap for the shared motion carrier.
+
+Primary outcomes:
+
+- StableNew-owned extract/apply/re-encode parity path for workflow-video
+- canonical replay closure without a new custom Comfy node dependency
+- consistent motion summary shape across all three current video backends
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+
+### 25. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+
+Status: Planned
+
+Close the loop by making the shared motion carrier visible to learning and
+recommendation flows without weakening evidence-tier safeguards.
+
+Primary outcomes:
+
+- scalar motion metrics in learning records
+- backend-aware and application-path-aware motion recommendation context
+- no raw frame or dense motion payload retention in centralized learning data
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
 ## 5. Missing Common Functionality to Fold Into the Queue
 
 These are the important missing capabilities that are not just "nice to have":
 
-- adaptive refinement for small, distant, or profile faces is still missing from
-  the image pipeline
-- manifests, replay, and learning still need a canonical refinement-decision
-  provenance path
+- adaptive refinement still needs prompt-patch, upscale-policy, and learning
+  closure after the new ADetailer-safe slice
+- replay and learning still need fuller canonical refinement-decision
+  provenance beyond the current runner/manifest/image-metadata path
+- secondary motion is still missing as a StableNew-owned, replayable video
+  layer across AnimateDiff, SVD native, and workflow-video backends
+- manifests, replay fragments, container metadata, and learning still need a
+  canonical secondary-motion provenance path distinct from `motion_profile`
 - continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
 - further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
 
@@ -357,10 +653,13 @@ StableNew's next stage is successful when:
 - image and short-form video are both solid under the current queue-first architecture
 - image generation can apply runner-owned adaptive refinement under explicit
   rollout modes without creating a second execution model
+- video generation can apply runner-owned secondary motion across the existing
+  video backends without creating a new stage or new job model
 - long-form video has a first-class planning/orchestration path
 - post-video outputs are canonical artifacts, not side utilities
 - continuity and shot-planning data can persist through manifests/history
-- manifests and learning records can preserve adaptive refinement provenance
+- manifests, replay fragments, container metadata, and learning records can
+  preserve both adaptive-refinement and secondary-motion provenance
 - the GUI feels intentionally designed around the current workflow set
 
 ## 7. Guiding Principle

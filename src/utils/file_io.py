@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import json
 import logging
 import os
 import re
@@ -10,6 +11,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PIL import Image
+
+from src.utils.embedding_prompt_utils import (
+    normalize_embedding_entries,
+    render_embedding_reference,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,13 +158,75 @@ def write_text_file(file_path: Path, content: str) -> bool:
         return False
 
 
+def _render_prompt_pack_slot(slot: dict[str, Any]) -> dict[str, str]:
+    positive_parts: list[str] = []
+    negative_parts: list[str] = []
+
+    positive_embeddings = normalize_embedding_entries(slot.get("positive_embeddings", []))
+    if positive_embeddings:
+        positive_parts.extend(
+            render_embedding_reference(name, weight) for name, weight in positive_embeddings
+        )
+
+    positive_text = str(slot.get("text", "") or "").strip()
+    if positive_text:
+        positive_parts.append(positive_text)
+
+    loras = slot.get("loras", [])
+    if isinstance(loras, list):
+        lora_parts = []
+        for item in loras:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                continue
+            name = str(item[0] or "").strip()
+            if not name:
+                continue
+            try:
+                weight = float(item[1])
+            except (TypeError, ValueError):
+                weight = 1.0
+            lora_parts.append(f"<lora:{name}:{weight}>")
+        if lora_parts:
+            positive_parts.extend(lora_parts)
+
+    negative_embeddings = normalize_embedding_entries(slot.get("negative_embeddings", []))
+    if negative_embeddings:
+        negative_parts.extend(
+            render_embedding_reference(name, weight) for name, weight in negative_embeddings
+        )
+
+    negative_text = str(slot.get("negative", "") or "").strip()
+    if negative_text:
+        negative_parts.extend(line.strip() for line in negative_text.splitlines() if line.strip())
+
+    return {
+        "positive": " ".join(part for part in positive_parts if part).strip(),
+        "negative": " ".join(part for part in negative_parts if part).strip(),
+    }
+
+
+def _read_json_prompt_pack(content: str) -> list[dict[str, str]]:
+    data = json.loads(content)
+    pack_data = data.get("pack_data", data) if isinstance(data, dict) else {}
+    raw_slots = pack_data.get("slots", []) if isinstance(pack_data, dict) else []
+    prompts: list[dict[str, str]] = []
+    for slot in raw_slots:
+        if not isinstance(slot, dict):
+            continue
+        rendered = _render_prompt_pack_slot(slot)
+        if rendered["positive"] or rendered["negative"]:
+            prompts.append(rendered)
+    return prompts
+
+
 def read_prompt_pack(pack_path: Path) -> list[dict[str, str]]:
     """
-    Read prompt pack from .txt or .tsv file with UTF-8 safety.
+    Read prompt pack from .txt, .tsv, or .json file with UTF-8 safety.
 
     Supports:
     - Line-based .txt files with blank line separators
     - Tab-separated .tsv files
+    - JSON prompt packs with slot-based structured prompt data
     - 'neg:' prefix for negative prompts
     - Comments starting with #
 
@@ -179,7 +247,11 @@ def read_prompt_pack(pack_path: Path) -> list[dict[str, str]]:
 
         prompts = []
 
-        if pack_path.suffix.lower() == ".tsv":
+        suffix = pack_path.suffix.lower()
+
+        if suffix == ".json":
+            prompts = _read_json_prompt_pack(content)
+        elif suffix == ".tsv":
             # Tab-separated format
             for line in content.splitlines():
                 line = line.strip()
@@ -244,7 +316,7 @@ def get_prompt_packs(packs_dir: Path) -> list[Path]:
             return []
 
         pack_files = []
-        for ext in ["*.txt", "*.tsv"]:
+        for ext in ["*.json", "*.txt", "*.tsv"]:
             pack_files.extend(packs_dir.glob(ext))
 
         pack_files.sort()

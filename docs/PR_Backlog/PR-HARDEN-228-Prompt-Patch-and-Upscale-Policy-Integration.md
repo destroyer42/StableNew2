@@ -1,6 +1,6 @@
 # PR-HARDEN-228 - Prompt Patch and Upscale Policy Integration
 
-Status: Specification
+Status: Completed 2026-03-20
 Priority: HIGH
 Effort: LARGE
 Phase: Adaptive Refinement Full Runtime Integration

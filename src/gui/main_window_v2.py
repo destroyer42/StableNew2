@@ -467,10 +467,9 @@ class MainWindowV2:
         if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "sidebar"):
             try:
                 self.pipeline_tab.sidebar.controller = controller
-                # Also update the core config panel's controller
-                core_config_panel = getattr(self.pipeline_tab.sidebar, "core_config_panel", None)
-                if core_config_panel and hasattr(core_config_panel, "_controller"):
-                    core_config_panel._controller = controller
+                base_generation_panel = getattr(self.pipeline_tab.sidebar, "base_generation_panel", None)
+                if base_generation_panel and hasattr(base_generation_panel, "_controller"):
+                    base_generation_panel._controller = controller
             except Exception:
                 pass
         # Update run_controls with the controller
