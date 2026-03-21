@@ -570,6 +570,70 @@ def resolve_webui_launch_command(profile: str | None) -> list[str]:
     return list(_WEBUI_LAUNCH_PROFILES[candidate])
 
 
+def is_guarded_webui_launch_profile(profile: str | None) -> bool:
+    candidate = str(profile or "").strip() or "standard"
+    return candidate in {"sdxl_guarded", "low_memory"}
+
+
+def infer_webui_workload_model_family(model_name: str | None) -> str:
+    normalized = str(model_name or "").strip().lower()
+    if not normalized:
+        return "unknown"
+    if any(token in normalized for token in ("sdxl", "_xl", "-xl", " xl", "xl_", "pony")):
+        return "sdxl"
+    return "unknown"
+
+
+def recommend_webui_launch_profile_for_workload(
+    *,
+    model_name: str | None,
+    stage_name: str,
+    width: int | None,
+    height: int | None,
+    batch_size: int = 1,
+    steps: int | None = None,
+    enabled_passes: int = 0,
+    downstream_stages: list[str] | tuple[str, ...] | None = None,
+) -> str:
+    if infer_webui_workload_model_family(model_name) != "sdxl":
+        return "standard"
+
+    width = max(int(width or 0), 1)
+    height = max(int(height or 0), 1)
+    batch_size = max(int(batch_size or 1), 1)
+    megapixels = (width * height) / 1_000_000.0
+    step_multiplier = 1.0 + (max(int(steps or 0) - 20, 0) / 80.0)
+    stage_key = str(stage_name or "").strip().lower()
+    downstream = {
+        str(item or "").strip().lower()
+        for item in (downstream_stages or [])
+        if str(item or "").strip()
+    }
+
+    chain_multiplier = 1.0
+    if stage_key == "txt2img":
+        if "adetailer" in downstream:
+            chain_multiplier += 0.35
+        if "upscale" in downstream:
+            chain_multiplier += 0.55
+    elif stage_key == "adetailer":
+        chain_multiplier += 0.25 + (0.15 * max(int(enabled_passes or 0) - 1, 0))
+    elif stage_key == "upscale":
+        chain_multiplier += 0.6
+
+    effective_load = megapixels * batch_size * step_multiplier * chain_multiplier
+
+    if stage_key in {"adetailer", "upscale"} and megapixels >= 1.2:
+        return "sdxl_guarded"
+    if stage_key == "txt2img" and megapixels >= 1.4 and (
+        "adetailer" in downstream or "upscale" in downstream
+    ):
+        return "sdxl_guarded"
+    if effective_load >= 3.0:
+        return "sdxl_guarded"
+    return "standard"
+
+
 def get_webui_command() -> list[str]:
     global _webui_command
     if _webui_command is None:

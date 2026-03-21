@@ -106,6 +106,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._preset_combo: ttk.Combobox | None = None
         self._width_combo: ttk.Combobox | None = None
         self._height_combo: ttk.Combobox | None = None
+        self._steps_spin: ttk.Spinbox | None = None
+        self._cfg_spin: ttk.Spinbox | None = None
         self._helper_label: ttk.Label | None = None
         self._dimension_validate_cmd = None
 
@@ -180,7 +182,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 )
             )
         self._build_sampler_row(parent, row_idx)
-        row_idx += 1
+        row_idx += 2
         self._build_resolution_row(parent, row_idx)
         row_idx += 1
         self._build_seed_row(parent, row_idx)
@@ -198,15 +200,17 @@ class BaseGenerationPanelV2(BaseStageCardV2):
 
         steps_label = ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE)
         steps_label.grid(row=row_idx + 1, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
-        steps_spin = self._build_spin(parent, self.steps_var, from_=1, to=200, increment=1, width=6)
-        steps_spin.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
+        self._steps_spin = self._build_spin(
+            parent, self.steps_var, from_=1, to=200, increment=1, width=6
+        )
+        self._steps_spin.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
 
         cfg_label = ttk.Label(parent, text="CFG", style=BODY_LABEL_STYLE)
         cfg_label.grid(row=row_idx + 1, column=2, sticky="w", padx=(0, 4), pady=(0, 4))
-        cfg_spin = self._build_spin(
+        self._cfg_spin = self._build_spin(
             parent, self.cfg_var, from_=0.0, to=30.0, increment=0.5, width=6
         )
-        cfg_spin.grid(row=row_idx + 1, column=3, sticky="ew", pady=(0, 4))
+        self._cfg_spin.grid(row=row_idx + 1, column=3, sticky="ew", pady=(0, 4))
 
     def _build_resolution_row(self, parent: ttk.Frame, row_idx: int) -> None:
         preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)

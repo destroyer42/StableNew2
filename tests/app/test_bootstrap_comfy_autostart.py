@@ -34,6 +34,39 @@ def test_bootstrap_comfy_checks_health_when_process_config_missing(monkeypatch) 
     checker.assert_called_once_with("http://127.0.0.1:8188")
 
 
+def test_bootstrap_comfy_unmanaged_probe_is_soft_when_unavailable(monkeypatch) -> None:
+    checker = mock.Mock(side_effect=RuntimeError("connection refused"))
+    logger = mock.Mock()
+    monkeypatch.setattr(main, "wait_for_comfy_ready", checker)
+    monkeypatch.setattr(main, "logging", logger)
+
+    result = main.bootstrap_comfy({"comfy_base_url": "http://127.0.0.1:8188"})
+
+    assert result is None
+    logger.info.assert_any_call("No ComfyUI configuration available")
+    assert any("ComfyUI not available for unmanaged bootstrap probe" in str(call.args[0]) for call in logger.info.call_args_list)
+
+
+def test_bootstrap_comfy_unmanaged_manager_does_not_raise_when_server_absent(monkeypatch) -> None:
+    config = {
+        "comfy_base_url": "http://127.0.0.1:8188",
+        "process_config": mock.Mock(autostart_enabled=False, startup_timeout_seconds=5.0),
+    }
+    fake_manager = mock.Mock()
+    checker = mock.Mock(side_effect=RuntimeError("connection refused"))
+    logger = mock.Mock()
+    monkeypatch.setattr(main, "ComfyProcessManager", mock.Mock(return_value=fake_manager))
+    monkeypatch.setattr(main, "wait_for_comfy_ready", checker)
+    monkeypatch.setattr(main, "logging", logger)
+
+    result = main.bootstrap_comfy(config)
+
+    assert result is fake_manager
+    fake_manager.start.assert_not_called()
+    assert checker.called
+    assert any("ComfyUI not ready at startup; continuing unmanaged" in str(call.args[0]) for call in logger.info.call_args_list)
+
+
 def test_async_bootstrap_comfy_uses_daemon_thread(monkeypatch) -> None:
     recorded = {}
 

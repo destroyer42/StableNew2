@@ -69,7 +69,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         if self._shared_base_generation:
             helper = ttk.Label(
                 parent,
-                text="Shared model, sampler, resolution, and seed live in Base Generation.",
+                text="Shared model, sampler, scheduler, steps, CFG, resolution, and seed live in Base Generation.",
                 style=BODY_LABEL_STYLE,
                 wraplength=420,
                 justify="left",

@@ -415,3 +415,48 @@ Recommended interstitial PR:
 
 This PR should land before additional runtime-complexity work such as
 `PR-VIDEO-238`.
+
+## 8. Post-PR-257 Validation Addendum
+
+`PR-HARDEN-257` was then implemented and validated by rerunning the same heavy
+`AA LoRA Strength` workload class used in the failed `PR-HARDEN-256` check.
+
+Validation summary:
+
+- 10 sequential image jobs
+- 10 complete `txt2img -> adetailer -> upscale` chains
+- 0 failed jobs
+- average wall time: `117.358s`
+- 0 timeout events
+- 0 connection-refused events
+- 0 diagnostics bundles created
+- launch profile used during validation: `sdxl_guarded`
+
+Pressure observations remained real but manageable:
+
+- peak GPU utilization: `100%`
+- peak dedicated VRAM: `11935 MiB / 12282 MiB`
+- peak system RAM: `92.1%`
+
+Interpretation:
+
+- GPU pressure is still present, but `PR-HARDEN-257` materially improved
+  runtime stability
+- guarded restart plus runtime admission control prevented the earlier poisoned
+  runtime/retry spiral
+- diagnostics and watchdog single-flight hardening eliminated the earlier crash
+  bundle flood
+- the runtime is now stable enough to resume the blocked video sequence
+
+Updated verdict:
+
+- `PR-HARDEN-256` alone was not sufficient
+- `PR-HARDEN-256` plus `PR-HARDEN-257` is sufficient to unblock
+  `PR-VIDEO-238`
+
+Recommended follow-on:
+
+- no blocking hardening PR is required before resuming `PR-VIDEO-238`
+- one non-blocking follow-on is still worth planning: workload-aware automatic
+  selection of `sdxl_guarded` for SDXL-heavy image workloads while keeping the
+  global default launch profile conservative

@@ -42,6 +42,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
 - `docs/WebUI Restart and Lost Connection Investigation 2026-03-20.md`
 - `docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
+- `docs/Research Reports/deep-research-report-DEEP GPU memory and stall investigation - verdict.md`
 - `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
 - `docs/Randomizer_Spec_v2.6.md`
 
@@ -76,6 +77,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 - `docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
 - `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
+- `docs/PR_Backlog/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
 - `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 - `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 - `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`

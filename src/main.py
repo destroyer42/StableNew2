@@ -221,15 +221,29 @@ def bootstrap_comfy(config: dict[str, Any]) -> ComfyProcessManager | None:
         logging.info("No ComfyUI configuration available")
         base_url = config.get("comfy_base_url")
         if base_url:
-            wait_for_comfy_ready(base_url)
+            try:
+                wait_for_comfy_ready(base_url)
+            except Exception as exc:
+                logging.info("ComfyUI not available for unmanaged bootstrap probe: %s", exc)
         return None
 
     manager = ComfyProcessManager(proc_config)
     if proc_config.autostart_enabled:
         manager.start()
-    wait_for_comfy_ready(
-        config.get("comfy_base_url"), timeout=proc_config.startup_timeout_seconds, poll_interval=0.5
-    )
+        wait_for_comfy_ready(
+            config.get("comfy_base_url"),
+            timeout=proc_config.startup_timeout_seconds,
+            poll_interval=0.5,
+        )
+    else:
+        try:
+            wait_for_comfy_ready(
+                config.get("comfy_base_url"),
+                timeout=min(float(proc_config.startup_timeout_seconds or 30.0), 2.0),
+                poll_interval=0.5,
+            )
+        except Exception as exc:
+            logging.info("ComfyUI not ready at startup; continuing unmanaged: %s", exc)
     return manager
 
 

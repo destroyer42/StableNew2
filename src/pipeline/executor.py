@@ -22,6 +22,7 @@ from PIL import Image
 from src.api.client import WebUIPayloadValidationError, PROGRESS_STALL_THRESHOLD_SEC, STALL_INTERRUPT_THRESHOLD_SEC
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
+from src.config import app_config
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_registry import (
     build_prompt_optimization_record,
@@ -931,6 +932,70 @@ class Pipeline:
         except Exception as exc:
             logger.debug("Pressure mitigation cache clear failed: %s", exc)
 
+    def _remaining_stage_chain(self) -> list[str]:
+        if not self._current_stage_chain:
+            return []
+        index = int(self._current_stage_index or 0)
+        if index < 0 or index >= len(self._current_stage_chain):
+            return []
+        return [str(stage or "") for stage in self._current_stage_chain[index + 1 :]]
+
+    def _maybe_apply_workload_launch_policy(
+        self,
+        *,
+        stage_name: str,
+        requested_model: str | None,
+        pressure_assessment: Mapping[str, Any] | None = None,
+        enabled_passes: int = 0,
+    ) -> str | None:
+        assessment = dict(pressure_assessment or {})
+        recommended = app_config.recommend_webui_launch_profile_for_workload(
+            model_name=requested_model,
+            stage_name=stage_name,
+            width=assessment.get("width"),
+            height=assessment.get("height"),
+            batch_size=int(assessment.get("batch_size", 1) or 1),
+            steps=int(assessment.get("steps", 0) or 0),
+            enabled_passes=enabled_passes,
+            downstream_stages=self._remaining_stage_chain(),
+        )
+        manager = get_global_webui_process_manager()
+        current_profile = (
+            manager.get_launch_profile()
+            if manager and hasattr(manager, "get_launch_profile")
+            else app_config.get_webui_launch_profile()
+        )
+
+        if recommended == "standard" or app_config.is_guarded_webui_launch_profile(current_profile):
+            return str(current_profile or recommended or "standard")
+
+        log_with_ctx(
+            logger,
+            logging.INFO,
+            f"[executor/launch-policy] {stage_name} workload prefers {recommended}",
+            ctx=LogContext(subsystem="pipeline", stage=stage_name),
+            extra_fields={
+                "event": "workload_launch_profile_recommended",
+                "outcome": "guarded_upgrade",
+                "current_profile": current_profile,
+                "recommended_profile": recommended,
+                "model_name": requested_model,
+                "downstream_stages": self._remaining_stage_chain(),
+                "megapixels": assessment.get("megapixels"),
+                "effective_load": assessment.get("effective_load"),
+            },
+        )
+
+        recovered = self._attempt_webui_recovery(
+            stage=stage_name,
+            reason="workload_launch_policy_upgrade",
+            profile_override=recommended,
+            max_attempts=1,
+        )
+        if recovered:
+            return recommended
+        return str(current_profile or "standard")
+
     def _assess_runtime_state(
         self,
         *,
@@ -996,7 +1061,7 @@ class Pipeline:
             reasons.append("suspicious long-lived StableNew-like processes detected")
 
         pressure_status = str((pressure_assessment or {}).get("status") or "normal")
-        if pressure_status in {"high_pressure", "unsafe"} and launch_profile != "sdxl_guarded":
+        if pressure_status in {"high_pressure", "unsafe"} and not app_config.is_guarded_webui_launch_profile(launch_profile):
             if status == "healthy":
                 status = "degraded"
             reasons.append("guarded WebUI launch profile not active for heavy workload")
@@ -2517,6 +2582,12 @@ class Pipeline:
             enabled_passes=max(enabled_passes, 1),
         )
         self._mitigate_stage_pressure(pressure_assessment)
+        self._maybe_apply_workload_launch_policy(
+            stage_name="adetailer",
+            requested_model=requested_model,
+            pressure_assessment=pressure_assessment,
+            enabled_passes=max(enabled_passes, 1),
+        )
         runtime_admission = self._ensure_runtime_admissible(
             stage_name="adetailer",
             pressure_assessment=pressure_assessment,
@@ -3451,6 +3522,8 @@ class Pipeline:
                 config.get("batch_size"),
                 stage_batch_size,
             )
+            requested_model = txt2img_config.get("model") or txt2img_config.get("sd_model_checkpoint")
+            requested_vae = txt2img_config.get("vae")
             pressure_assessment = self._assess_stage_pressure(
                 stage_name="txt2img",
                 width=int(txt2img_config.get("width", 512) or 512),
@@ -3459,6 +3532,11 @@ class Pipeline:
                 steps=int(txt2img_config.get("steps", 20) or 20),
             )
             self._mitigate_stage_pressure(pressure_assessment)
+            self._maybe_apply_workload_launch_policy(
+                stage_name="txt2img",
+                requested_model=requested_model,
+                pressure_assessment=pressure_assessment,
+            )
             runtime_admission = self._ensure_runtime_admissible(
                 stage_name="txt2img",
                 pressure_assessment=pressure_assessment,
@@ -3566,10 +3644,6 @@ class Pipeline:
                     total_steps_progress,
                 )
 
-            # Set model and VAE if specified
-            requested_model = txt2img_config.get("model") or txt2img_config.get("sd_model_checkpoint")
-            requested_vae = txt2img_config.get("vae")
-            
             # Debug: log what config we received
             logger.debug("[executor/txt2img] config keys=%s", list(txt2img_config.keys()))
             logger.debug(
@@ -4638,6 +4712,11 @@ class Pipeline:
                     steps=int(config.get("steps", 20) or 20),
                 )
                 self._mitigate_stage_pressure(pressure_assessment)
+                self._maybe_apply_workload_launch_policy(
+                    stage_name="upscale",
+                    requested_model=requested_model,
+                    pressure_assessment=pressure_assessment,
+                )
                 runtime_admission = self._ensure_runtime_admissible(
                     stage_name="upscale",
                     pressure_assessment=pressure_assessment,
@@ -4767,6 +4846,11 @@ class Pipeline:
                         steps=int(config.get("steps", 20) or 20),
                     )
                     self._mitigate_stage_pressure(pressure_assessment)
+                    self._maybe_apply_workload_launch_policy(
+                        stage_name="upscale",
+                        requested_model=requested_model,
+                        pressure_assessment=pressure_assessment,
+                    )
                     runtime_admission = self._ensure_runtime_admissible(
                         stage_name="upscale",
                         pressure_assessment=pressure_assessment,

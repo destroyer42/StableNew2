@@ -585,7 +585,7 @@ Detailed execution spec:
 
 ### 21A. `PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping`
 
-Status: Implemented, follow-on required
+Status: Implemented
 
 Interleaved critical hardening gate before the next runtime-heavy backend
 rollout.
@@ -613,12 +613,14 @@ Detailed execution spec:
 Validation note:
 
 - live 10-job validation improved observability but did not materially stabilize
-  the workload; a follow-on recovery/admission-control hardening pass is now
-  required before the next runtime-heavy video PR
+  the workload on its own
+- the required follow-on hardening pass was delivered by `PR-HARDEN-257`
+- combined outcome: the same workload class later completed successfully under
+  guarded recovery and admission control
 
 ### 21B. `PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control`
 
-Status: Planned
+Status: Implemented 2026-03-21
 
 Follow-on critical hardening gate after `PR-HARDEN-256` real-world validation
 showed that warnings alone are not enough.
@@ -636,12 +638,40 @@ Primary outcomes:
 
 Reason for slotting here:
 
-- `PR-HARDEN-256` reduced blind spots but did not reduce failures enough to
-  safely continue with `PR-VIDEO-238`
+- `PR-HARDEN-256` reduced blind spots but did not reduce failures enough on its
+  own, so runtime admission and guarded restart behavior had to land before the
+  next runtime-heavy video PR
 
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
+
+Validation note:
+
+- heavy rerun using the same `AA LoRA Strength` workload class completed
+  successfully: `10 / 10` complete `txt2img -> adetailer -> upscale` chains,
+  `0` failures, `0` diagnostics bundles, average wall time `117.358s`
+- validation summary: `reports/pr257_validation_summary.json`
+- `PR-VIDEO-238` is now unblocked
+
+### 21C. `PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy`
+
+Status: Implemented 2026-03-21
+
+Non-blocking follow-on to keep the global WebUI default conservative while
+automatically upgrading heavy SDXL image workloads to `sdxl_guarded`.
+
+Primary outcomes:
+
+- retains `standard` as the global default launch profile
+- automatically prefers `sdxl_guarded` for SDXL-heavy geometry and
+  `txt2img -> adetailer/upscale` workload chains
+- uses the managed restart/recovery path instead of ad hoc profile switching
+- treats `low_memory` as an already-guarded profile
+
+Detailed execution spec:
+
+- `docs/PR_Backlog/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
 
 ### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 

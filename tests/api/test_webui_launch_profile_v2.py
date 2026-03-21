@@ -23,3 +23,35 @@ def test_build_default_webui_process_config_carries_launch_profile(monkeypatch, 
     assert config is not None
     assert config.launch_profile == "sdxl_guarded"
     assert "--medvram-sdxl" in config.command
+
+
+def test_recommend_webui_launch_profile_for_heavy_sdxl_chain() -> None:
+    recommended = app_config.recommend_webui_launch_profile_for_workload(
+        model_name="juggernautXL_ragnarokBy.safetensors",
+        stage_name="txt2img",
+        width=1024,
+        height=1536,
+        batch_size=1,
+        steps=30,
+        downstream_stages=["adetailer", "upscale"],
+    )
+
+    assert recommended == "sdxl_guarded"
+
+
+def test_recommend_webui_launch_profile_keeps_light_jobs_standard() -> None:
+    recommended = app_config.recommend_webui_launch_profile_for_workload(
+        model_name="juggernautXL_ragnarokBy.safetensors",
+        stage_name="txt2img",
+        width=768,
+        height=1024,
+        batch_size=1,
+        steps=20,
+        downstream_stages=[],
+    )
+
+    assert recommended == "standard"
+
+
+def test_low_memory_profile_counts_as_guarded() -> None:
+    assert app_config.is_guarded_webui_launch_profile("low_memory") is True

@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable
 from tkinter import ttk
 from typing import Any
 
+from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY
 from src.utils import InMemoryLogHandler
 from src.utils.logger import normalize_log_message
 
@@ -124,6 +125,13 @@ class LogTracePanelV2(ttk.Frame):
             wrap=tk.WORD,
             state=tk.DISABLED,
             font=("TkDefaultFont", 9),
+            bg=BACKGROUND_ELEVATED,
+            fg=TEXT_PRIMARY,
+            insertbackground=TEXT_PRIMARY,
+            selectbackground="#3f6fd1",
+            selectforeground=TEXT_PRIMARY,
+            relief=tk.FLAT,
+            borderwidth=0,
         )
         self._log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self._log_text.tag_configure("DEBUG", foreground="#6f7d8c")

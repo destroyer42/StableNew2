@@ -32,6 +32,21 @@ def test_log_trace_panel_v2_smoke():
     root.destroy()
 
 
+def test_log_trace_panel_v2_uses_dark_text_surface() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
+    root.withdraw()
+    handler = InMemoryLogHandler(max_entries=5)
+    panel = LogTracePanelV2(root, log_handler=handler, audience="trace")
+
+    assert panel._log_text.cget("bg") not in {"white", "#ffffff", "SystemWindow"}
+    assert panel._log_text.cget("insertbackground") != ""
+
+    root.destroy()
+
+
 def test_log_trace_panel_highlights_structured_errors() -> None:
     try:
         root = tk.Tk()

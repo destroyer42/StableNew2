@@ -16,6 +16,8 @@ def test_pipeline_sync_uses_base_generation_for_shared_fields(gui_app_factory) -
 
     pipeline_tab.sidebar.base_generation_panel.model_var.set("sdxl-base")
     pipeline_tab.sidebar.base_generation_panel.sampler_var.set("Euler")
+    pipeline_tab.sidebar.base_generation_panel.steps_var.set(33)
+    pipeline_tab.sidebar.base_generation_panel.cfg_var.set(8.5)
     pipeline_tab.sidebar.base_generation_panel.width_var.set(1024)
     pipeline_tab.sidebar.base_generation_panel.height_var.set(1024)
     pipeline_tab.stage_cards_panel.txt2img_card.clip_skip_var.set(3)
@@ -25,6 +27,8 @@ def test_pipeline_sync_uses_base_generation_for_shared_fields(gui_app_factory) -
 
     assert overrides["model"] == "sdxl-base"
     assert overrides["sampler"] == "Euler"
+    assert overrides["steps"] == 33
+    assert overrides["cfg_scale"] == 8.5
     assert overrides["width"] == 1024
     assert overrides["height"] == 1024
     assert "metadata" in overrides
@@ -65,3 +69,16 @@ def test_base_generation_dimensions_and_subseed_export_authoritative_overrides(
     assert overrides["resolution_preset"] == "1111x777"
     assert overrides["subseed"] == 123456
     assert overrides["subseed_strength"] == 0.35
+
+
+@pytest.mark.gui
+def test_base_generation_steps_and_cfg_do_not_overlap_resolution_row(gui_app_factory) -> None:
+    app = gui_app_factory()
+    base_generation = app.pipeline_tab.sidebar.base_generation_panel
+
+    steps_row = int(base_generation._steps_spin.grid_info()["row"])
+    cfg_row = int(base_generation._cfg_spin.grid_info()["row"])
+    width_row = int(base_generation._width_combo.grid_info()["row"])
+
+    assert steps_row == cfg_row
+    assert steps_row < width_row

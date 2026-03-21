@@ -1,10 +1,18 @@
 # PR-HARDEN-257 - WebUI State Recovery and Admission Control
 
-Status: Specification
+Status: Implemented 2026-03-21
 Priority: CRITICAL
 Effort: LARGE
 Phase: Runtime Stability Hardening
 Date: 2026-03-21
+
+Validation outcome:
+
+- implemented and rerun successfully against the same heavy `AA LoRA Strength`
+  workload class used for the `PR-HARDEN-256` failure investigation
+- `10 / 10` complete `txt2img -> adetailer -> upscale` chains succeeded
+- `0` failures, `0` diagnostics bundles, `0` timeout/connection-refused events
+- validation summary: `reports/pr257_validation_summary.json`
 
 ## 1. Why This PR Exists
 

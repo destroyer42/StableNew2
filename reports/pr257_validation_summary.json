@@ -1,0 +1,583 @@
+{
+  "baseline": {
+    "source": "c:\\Users\\rob\\projects\\StableNew\\reports\\pr256_validation_summary.json",
+    "success_count": 3,
+    "complete_chain_count": 3,
+    "failure_count": 7,
+    "avg_wall_time_s": 323.08,
+    "diagnostics_bundles_created": [
+      "stablenew_diagnostics_20260321_162049_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162100_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162120_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162130_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162150_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162200_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162220_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162230_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162250_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162301_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162320_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162331_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162350_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162401_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162421_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162431_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162451_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162501_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162521_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162532_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162551_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162602_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162622_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162632_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162652_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162702_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162722_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162732_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162752_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162803_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162823_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162833_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162853_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162903_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162923_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162933_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_162953_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163004_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163023_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163034_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163054_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163104_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163124_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163134_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163154_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163204_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163224_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163235_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163254_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163305_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163324_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163335_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163354_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163405_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163424_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163435_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163455_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163505_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163525_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163535_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163555_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163606_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163625_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163636_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163655_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163706_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163725_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163736_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163756_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163806_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163826_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163837_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163856_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163907_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163926_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163937_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_163957_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164007_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164027_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164037_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164057_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164107_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164127_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164138_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164157_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164208_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164227_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164238_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164258_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164309_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164328_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164339_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164358_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164409_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164428_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164439_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164459_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164509_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164529_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164539_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164559_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164609_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164629_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164640_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164659_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164710_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164730_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164740_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164800_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164810_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164830_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164840_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164901_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164910_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164931_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_164941_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165001_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165011_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165031_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165041_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165101_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165111_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165131_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165141_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165202_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165212_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165232_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165242_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165302_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165312_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165332_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165342_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165402_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165412_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165433_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165443_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165503_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165513_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165533_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165543_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165603_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165613_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165634_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165643_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165704_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165713_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165734_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165744_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165804_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165814_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165834_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165844_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165905_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165914_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165935_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_165944_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170005_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170014_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170035_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170045_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170106_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170115_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170136_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170145_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170206_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170215_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170236_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170246_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170307_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170316_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170337_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170346_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170407_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170416_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170437_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170446_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170508_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170517_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170538_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170547_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170608_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170617_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170638_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170647_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170709_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170717_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170739_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170747_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170809_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170818_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170839_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170848_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170909_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170918_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170939_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_170948_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171010_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171018_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171040_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171048_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171110_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171119_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171140_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171149_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171211_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171219_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171241_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171249_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171311_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171319_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171341_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171349_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171412_ui_heartbeat_stall.zip",
+      "stablenew_diagnostics_20260321_171420_ui_heartbeat_stall.zip"
+    ],
+    "gpu_peak": {
+      "gpu_util_pct": 100.0,
+      "vram_used_mb": 11956.0,
+      "system_ram_pct": 98.6
+    }
+  },
+  "run_started_ts": 1774120422.4942548,
+  "run_finished_ts": 1774121596.375915,
+  "job_count": 10,
+  "success_count": 10,
+  "complete_chain_count": 10,
+  "failure_count": 0,
+  "avg_wall_time_s": 117.358,
+  "avg_stage_duration_ms": {
+    "adetailer": 7863.8,
+    "upscale": 66118.4
+  },
+  "log_counts": {
+    "error": 0,
+    "warning": 104,
+    "timeout": 0,
+    "connection_refused": 0
+  },
+  "diagnostics_bundles_created": 0,
+  "diagnostics_bundle_files": [],
+  "gpu_peak": {
+    "gpu_utilization_pct": 100.0,
+    "gpu_memory_used_mb": 11935.0,
+    "gpu_temperature_c": 77.0,
+    "system_ram_percent": 92.1,
+    "system_ram_used_mb": 29942.6
+  },
+  "process_risk_before": {
+    "status": "normal",
+    "stablenew_like_count": 3,
+    "main_process_count": 0,
+    "webui_process_count": 0,
+    "suspicious_processes": []
+  },
+  "process_risk_after": {
+    "status": "normal",
+    "stablenew_like_count": 3,
+    "main_process_count": 0,
+    "webui_process_count": 0,
+    "suspicious_processes": []
+  },
+  "launch_profile": "sdxl_guarded",
+  "job_results": [
+    {
+      "job_id": "pr257val_01_b5ffd88f",
+      "success": true,
+      "error": null,
+      "wall_time_s": 134.107,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 9594,
+        "upscale": 63781
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 5,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_02_8ee91b71",
+      "success": true,
+      "error": null,
+      "wall_time_s": 106.345,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 6062,
+        "upscale": 64358
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_03_9b01cbbe",
+      "success": true,
+      "error": null,
+      "wall_time_s": 108.287,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 6187,
+        "upscale": 64280
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_04_d444027f",
+      "success": true,
+      "error": null,
+      "wall_time_s": 114.76,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 6922,
+        "upscale": 71125
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_05_2a764ddf",
+      "success": true,
+      "error": null,
+      "wall_time_s": 141.741,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 10031,
+        "upscale": 72078
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_06_e224c24d",
+      "success": true,
+      "error": null,
+      "wall_time_s": 106.544,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 7000,
+        "upscale": 62094
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_07_6cbbe261",
+      "success": true,
+      "error": null,
+      "wall_time_s": 103.272,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 6578,
+        "upscale": 61780
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_08_6e8405c6",
+      "success": true,
+      "error": null,
+      "wall_time_s": 119.634,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 9953,
+        "upscale": 62078
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_09_29816684",
+      "success": true,
+      "error": null,
+      "wall_time_s": 104.306,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 6421,
+        "upscale": 62891
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    },
+    {
+      "job_id": "pr257val_10_555a8ab6",
+      "success": true,
+      "error": null,
+      "wall_time_s": 134.583,
+      "output_dir": "c:\\Users\\rob\\projects\\StableNew\\output\\pr257_validation\\Pipeline\\20260321_141342_AA_LoRA_Stre-juggernautrokBy-none",
+      "stages_present": [
+        "adetailer",
+        "txt2img",
+        "upscale"
+      ],
+      "stage_duration_ms": {
+        "adetailer": 9890,
+        "upscale": 76719
+      },
+      "runtime_warnings": {},
+      "pressure_status": {
+        "adetailer": "normal",
+        "txt2img": "normal",
+        "upscale": "high_pressure"
+      },
+      "runtime_admission": {
+        "adetailer": "healthy",
+        "txt2img": "healthy",
+        "upscale": "healthy"
+      },
+      "error_count": 0,
+      "warning_count": 11,
+      "timeout_count": 0,
+      "connection_refused_count": 0
+    }
+  ]
+}
