@@ -256,3 +256,95 @@ def test_comfy_workflow_backend_reports_missing_managed_runtime_configuration(
     else:
         raise AssertionError("Expected missing ComfyUI runtime configuration to fail")
 
+
+def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    start_anchor = tmp_path / "start.png"
+    end_anchor = tmp_path / "end.png"
+    output_video = tmp_path / "clip.mp4"
+    promoted_video = tmp_path / "clip_secondary_motion.mp4"
+    preview_frame = tmp_path / "preview.png"
+    motion_frame = tmp_path / "motion_frame.png"
+    for path, payload in (
+        (start_anchor, b"png"),
+        (end_anchor, b"png"),
+        (output_video, b"mp4"),
+        (promoted_video, b"mp4"),
+        (preview_frame, b"png"),
+        (motion_frame, b"png"),
+    ):
+        path.write_bytes(payload)
+
+    client = Mock()
+    client.get_object_info.return_value = {
+        "ComfyUI-LTXVideo": {"nodes": ["LTXLoader"]},
+        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "ltx_video": True,
+    }
+    client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
+    client.get_history.side_effect = [
+        {},
+        {
+            "prompt-123": {
+                "outputs": {
+                    "4": {
+                        "videos": [{"filename": str(output_video)}],
+                        "images": [{"filename": str(preview_frame)}],
+                    }
+                },
+                "status": {"completed": True},
+            }
+        },
+    ]
+    monkeypatch.setattr("src.video.comfy_workflow_backend.wait_for_comfy_ready", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr("src.video.comfy_workflow_backend.write_video_container_metadata", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.apply_secondary_motion_to_video",
+        lambda **_kwargs: {
+            "primary_path": str(promoted_video),
+            "output_paths": [str(promoted_video)],
+            "video_path": str(promoted_video),
+            "video_paths": [str(promoted_video)],
+            "frame_paths": [str(motion_frame)],
+            "thumbnail_path": str(motion_frame),
+            "secondary_motion": {
+                "summary": {"status": "applied", "policy_id": "workflow_motion_v1"}
+            },
+            "source_video_path": str(output_video),
+        },
+    )
+
+    backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
+    result = backend.execute(
+        pipeline=Mock(),
+        request=VideoExecutionRequest(
+            backend_id="comfy",
+            stage_name="video_workflow",
+            stage_config={
+                "enabled": True,
+                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_version": "1.0.0",
+                "secondary_motion": {
+                    "enabled": True,
+                    "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
+                    "policy": {"enabled": True, "policy_id": "workflow_motion_v1"},
+                },
+            },
+            output_dir=tmp_path,
+            input_image_path=start_anchor,
+            end_anchor_path=end_anchor,
+            image_name="clip",
+            prompt="cinematic dolly shot",
+            negative_prompt="blurry",
+            motion_profile="gentle",
+            job_id="job-123",
+        ),
+    )
+
+    assert result is not None
+    assert result.primary_path == str(promoted_video)
+    assert result.raw_result["secondary_motion_source_video_path"] == str(output_video)
+    assert result.raw_result["secondary_motion"]["summary"]["status"] == "applied"
+

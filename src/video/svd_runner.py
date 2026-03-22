@@ -10,6 +10,7 @@ from typing import Any
 from src.video.svd_config import SVDConfig
 from src.video.svd_errors import SVDModelLoadError, SVDPostprocessError
 from src.video.svd_models import SVDResult
+from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.svd_postprocess import SVDPostprocessRunner, validate_svd_postprocess_config
 from src.video.svd_preprocess import prepare_svd_input, validate_svd_source_image
 from src.video.svd_registry import write_svd_run_manifest
@@ -196,6 +197,12 @@ class SVDRunner:
                 "manifest_path": str(manifest_path),
                 "config": config.to_dict(),
             }
+            secondary_motion = ((postprocess_metadata or {}).get("secondary_motion") if isinstance(postprocess_metadata, dict) else None)
+            if isinstance(secondary_motion, dict):
+                metadata_payload["secondary_motion"] = secondary_motion
+                metadata_payload["secondary_motion_summary"] = extract_secondary_motion_summary(
+                    {"secondary_motion": secondary_motion}
+                )
             if video_path is not None:
                 write_video_container_metadata(video_path, metadata_payload)
             if gif_path is not None:

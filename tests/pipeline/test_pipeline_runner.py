@@ -845,6 +845,99 @@ def test_run_njr_emits_secondary_motion_policy_for_video_stage(tmp_path: Path) -
     assert stage_policy["policy"]["pose_class"] == "steady"
 
 
+def test_run_njr_injects_apply_mode_secondary_motion_and_collects_summary(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    output_video = tmp_path / "workflow.mp4"
+    input_path.write_bytes(b"seed")
+    output_video.write_bytes(b"mp4")
+
+    class _WorkflowBackend:
+        backend_id = "comfy"
+        capabilities = VideoBackendCapabilities(
+            backend_id="comfy",
+            stage_types=("video_workflow",),
+            requires_input_image=True,
+            supports_prompt_text=True,
+            supports_negative_prompt=True,
+            supports_multiple_anchors=True,
+        )
+
+        def execute(self, pipeline, request):
+            assert request.stage_config["secondary_motion"]["enabled"] is True
+            assert request.stage_config["secondary_motion"]["intent"]["mode"] == "apply"
+            return VideoExecutionResult.from_stage_result(
+                backend_id="comfy",
+                stage_name="video_workflow",
+                result={
+                    "path": str(output_video),
+                    "video_path": str(output_video),
+                    "output_paths": [str(output_video)],
+                    "secondary_motion": {
+                        "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
+                        "policy": {"enabled": True, "policy_id": "workflow_motion_v1"},
+                        "apply_result": {
+                            "status": "applied",
+                            "application_path": "shared_postprocess_engine",
+                            "metrics": {"frames_in": 16, "frames_out": 16},
+                        },
+                    },
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "video_workflow",
+                        "artifact_type": "video",
+                        "primary_path": str(output_video),
+                        "output_paths": [str(output_video)],
+                        "input_image_path": str(input_path),
+                    },
+                },
+            )
+
+    registry = VideoBackendRegistry()
+    registry.register(_WorkflowBackend())
+    runner._video_backends = registry
+    record = NormalizedJobRecord(
+        job_id="runner-secondary-motion-apply",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[
+            StageConfig(
+                stage_type="video_workflow",
+                enabled=True,
+                extra={"workflow_id": "ltx_multiframe_anchor_v1", "workflow_version": "1.0.0"},
+            )
+        ],
+        input_image_paths=[str(input_path)],
+        start_stage="video_workflow",
+    )
+    record.positive_prompt = "portrait woman with flowing hair"
+    record.negative_prompt = "camera shake"
+    record.intent_config = {
+        "secondary_motion": {
+            "schema": "stablenew.secondary-motion.v1",
+            "enabled": True,
+            "mode": "apply",
+            "intent": "micro_sway",
+            "regions": ["hair"],
+            "allow_native_backend": False,
+            "algorithm_version": "v1",
+        }
+    }
+    runner._pipeline = Mock()
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.metadata["secondary_motion"]["summary"]["status"] == "applied"
+    assert result.metadata["secondary_motion"]["summary"]["application_path"] == "shared_postprocess_engine"
+
+
 def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Path) -> None:
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     record = NormalizedJobRecord(

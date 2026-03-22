@@ -258,7 +258,42 @@ class SVDUpscaleConfig:
 
 
 @dataclass(frozen=True)
+class SVDSecondaryMotionConfig:
+    enabled: bool = False
+    intent: dict[str, Any] = field(default_factory=dict)
+    policy: dict[str, Any] = field(default_factory=dict)
+    seed: int | None = None
+    backend_mode: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> SVDSecondaryMotionConfig:
+        payload = dict(data or {})
+        seed = payload.get("seed")
+        intent = dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
+        policy = dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+        backend_mode = str(payload.get("backend_mode") or policy.get("backend_mode") or "")
+        enabled = bool(payload.get("enabled", policy.get("enabled", intent.get("enabled", False))))
+        return cls(
+            enabled=enabled,
+            intent=intent,
+            policy=policy,
+            seed=None if seed in (None, "") else int(seed),
+            backend_mode=backend_mode,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "intent": dict(self.intent),
+            "policy": dict(self.policy),
+            "seed": self.seed,
+            "backend_mode": self.backend_mode,
+        }
+
+
+@dataclass(frozen=True)
 class SVDPostprocessConfig:
+    secondary_motion: SVDSecondaryMotionConfig = field(default_factory=SVDSecondaryMotionConfig)
     interpolation: SVDInterpolationConfig = field(default_factory=SVDInterpolationConfig)
     face_restore: SVDFaceRestoreConfig = field(default_factory=SVDFaceRestoreConfig)
     upscale: SVDUpscaleConfig = field(default_factory=SVDUpscaleConfig)
@@ -267,6 +302,7 @@ class SVDPostprocessConfig:
     def from_dict(cls, data: dict[str, Any] | None) -> SVDPostprocessConfig:
         payload = dict(data or {})
         return cls(
+            secondary_motion=SVDSecondaryMotionConfig.from_dict(payload.get("secondary_motion")),
             interpolation=SVDInterpolationConfig.from_dict(payload.get("interpolation")),
             face_restore=SVDFaceRestoreConfig.from_dict(payload.get("face_restore")),
             upscale=SVDUpscaleConfig.from_dict(payload.get("upscale")),
@@ -274,6 +310,7 @@ class SVDPostprocessConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "secondary_motion": self.secondary_motion.to_dict(),
             "interpolation": self.interpolation.to_dict(),
             "face_restore": self.face_restore.to_dict(),
             "upscale": self.upscale.to_dict(),

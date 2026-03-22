@@ -109,6 +109,10 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/CompletedPR/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md`
 - `docs/CompletedPR/PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics.md`
 - `docs/CompletedPR/PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries.md`
+- `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+- `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+- `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+- `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 - `docs/archive/` contains historical, superseded, and reference-only material
 
 ## 2. Canonical Reading Order

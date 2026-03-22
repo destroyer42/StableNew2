@@ -15,6 +15,7 @@ from datetime import datetime
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Mapping
 
 from PIL import Image
@@ -41,6 +42,8 @@ from src.pipeline.animatediff_models import (
 from src.pipeline.video import VideoCreator, write_video_frames
 from src.refinement.prompt_patcher import apply_prompt_patch
 from src.video.container_metadata import write_video_container_metadata
+from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
+from src.video.motion.secondary_motion_worker import run_secondary_motion_worker
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
 
@@ -66,6 +69,30 @@ if TYPE_CHECKING:
 def _cached_image_base64(path_str: str) -> str | None:
     """LRU cache for recently loaded images to cut down disk reads."""
     return load_image_to_base64(Path(path_str))
+
+
+def _apply_secondary_motion_frame_directory(
+    *,
+    runtime_block: Mapping[str, Any] | None,
+    input_dir: Path,
+    output_dir: Path,
+) -> dict[str, Any] | None:
+    payload = dict(runtime_block or {}) if isinstance(runtime_block, Mapping) else {}
+    if not payload or not bool(payload.get("enabled")):
+        return None
+    intent = dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
+    policy = dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+    if not intent or not policy:
+        return None
+    return run_secondary_motion_worker(
+        {
+            "input_dir": str(input_dir),
+            "output_dir": str(output_dir),
+            "intent": intent,
+            "policy": policy,
+            "seed": payload.get("seed"),
+        }
+    )
 
 
 logger = logging.getLogger(__name__)
@@ -4696,6 +4723,25 @@ class Pipeline:
             if not frame_paths:
                 raise RuntimeError("AnimateDiff frames could not be written to disk")
 
+            secondary_motion_block = config.get("secondary_motion") if isinstance(config.get("secondary_motion"), dict) else None
+            secondary_motion_manifest = None
+            if isinstance(secondary_motion_block, dict) and secondary_motion_block.get("enabled"):
+                motion_frames_dir = output_dir / f"{video_path.stem}_secondary_motion_frames"
+                apply_result = _apply_secondary_motion_frame_directory(
+                    runtime_block=secondary_motion_block,
+                    input_dir=frames_dir,
+                    output_dir=motion_frames_dir,
+                )
+                if apply_result:
+                    motion_output_paths = [Path(path) for path in apply_result.get("output_paths") or []]
+                    if motion_output_paths:
+                        frame_paths = motion_output_paths
+                        secondary_motion_manifest = build_secondary_motion_manifest_block(
+                            intent=secondary_motion_block.get("intent"),
+                            policy=secondary_motion_block.get("policy"),
+                            apply_result=apply_result,
+                        )
+
             video_creator = VideoCreator()
             if not video_creator.create_video_from_images(
                 frame_paths,
@@ -4728,6 +4774,8 @@ class Pipeline:
                 "actual_seed": gen_info.get("seed"),
                 "actual_subseed": gen_info.get("subseed"),
             }
+            if secondary_motion_manifest is not None:
+                metadata["secondary_motion"] = secondary_motion_manifest
 
             manifest_dir = output_dir / "manifests"
             manifest_dir.mkdir(exist_ok=True, parents=True)
@@ -4767,6 +4815,7 @@ class Pipeline:
                     "thumbnail_path": str(frame_paths[0]) if frame_paths else None,
                     "config": self._clean_metadata_payload(payload),
                     "artifact": metadata["artifact"],
+                    "secondary_motion": secondary_motion_manifest,
                 },
             )
 
@@ -4844,7 +4893,7 @@ class Pipeline:
             elif output_paths:
                 primary_path = output_paths[0]
 
-            metadata = {
+            metadata: dict[str, Any] = {
                 "stage": "svd_native",
                 "path": primary_path,
                 "output_paths": output_paths,
@@ -4872,6 +4921,9 @@ class Pipeline:
                     "was_cropped": result.preprocess.was_cropped,
                 },
             }
+            secondary_motion = ((result.postprocess or {}).get("secondary_motion") if isinstance(result.postprocess, dict) else None)
+            if isinstance(secondary_motion, dict):
+                metadata["secondary_motion"] = secondary_motion
             metadata["artifact"] = artifact_manifest_payload(
                 stage="svd_native",
                 image_or_output_path=primary_path or "",

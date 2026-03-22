@@ -37,7 +37,12 @@ def test_run_svd_native_stage_returns_artifact_metadata(tmp_path: Path, monkeypa
         seed = 123
         model_id = "stabilityai/stable-video-diffusion-img2vid-xt"
         preprocess = _FakePreprocess()
-        postprocess = {"applied": ["face_restore", "upscale"]}
+        postprocess = {
+            "applied": ["secondary_motion", "face_restore", "upscale"],
+            "secondary_motion": {
+                "summary": {"status": "applied", "policy_id": "svd_secondary_motion_v1"}
+            },
+        }
 
     class _FakeRunner:
         def __init__(self, *, output_root, status_callback=None):
@@ -67,10 +72,11 @@ def test_run_svd_native_stage_returns_artifact_metadata(tmp_path: Path, monkeypa
     assert result["manifest_path"] == str(manifest_path)
     assert result["thumbnail_path"] == str(preview_path)
     assert result["preprocess"]["target_width"] == 1024
-    assert result["postprocess"]["applied"] == ["face_restore", "upscale"]
+    assert result["postprocess"]["applied"] == ["secondary_motion", "face_restore", "upscale"]
     assert result["frame_count"] == 25
     assert result["artifact"]["primary_path"] == str(output_path)
     assert result["artifact"]["manifest_path"] == str(manifest_path)
+    assert result["secondary_motion"]["summary"]["status"] == "applied"
 
 
 def test_run_svd_native_stage_requires_input_image(tmp_path: Path) -> None:

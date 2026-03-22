@@ -45,6 +45,7 @@ class AnimateDiffVideoBackend:
                 "stage_name": request.stage_name,
                 "manifest_path": result.get("manifest_path"),
                 "input_image_path": str(request.input_image_path) if request.input_image_path else None,
+                "secondary_motion": result.get("secondary_motion"),
             },
         )
 

@@ -158,3 +158,36 @@ def test_learning_record_builder_includes_compact_adaptive_refinement_metadata(t
     assert refinement["prompt_patch_ops"] == "add_positive"
     assert refinement["applied_override_keys"] == "upscale_steps"
     assert refinement["image_decision_count"] == 2
+
+
+def test_learning_record_builder_includes_compact_secondary_motion_metadata() -> None:
+    cfg = MinimalLearningConfig(
+        prompt="portrait woman",
+        model="m",
+        sampler="Euler",
+        width=512,
+        height=512,
+        steps=20,
+        cfg_scale=7.5,
+        base_model="m",
+        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+    )
+    result = _run_result_stub("run-motion")
+    result.metadata["secondary_motion"] = {
+        "summary": {
+            "enabled": True,
+            "status": "applied",
+            "policy_id": "workflow_motion_v1",
+            "application_path": "shared_postprocess_engine",
+            "backend_mode": "apply_shared_postprocess_candidate",
+            "intent": {"mode": "apply", "intent": "micro_sway"},
+            "metrics": {"regions_applied": 2, "frames_in": 16, "frames_out": 16},
+        }
+    }
+
+    record = build_learning_record(cfg, result)
+
+    secondary_motion = record.metadata["secondary_motion"]
+    assert secondary_motion["status"] == "applied"
+    assert secondary_motion["policy_id"] == "workflow_motion_v1"
+    assert secondary_motion["application_path"] == "shared_postprocess_engine"

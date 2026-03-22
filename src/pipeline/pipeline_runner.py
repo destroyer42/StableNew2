@@ -22,7 +22,6 @@ from src.pipeline.config_contract_v26 import (
     extract_secondary_motion_intent,
 )
 from src.pipeline.artifact_contract import canonicalize_variant_entries
-from src.pipeline.executor import Pipeline
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.result_contract_v26 import (
@@ -43,6 +42,7 @@ from src.state.output_routing import classify_njr_output_route, get_output_route
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
 from src.video.motion.secondary_motion_policy_service import SecondaryMotionPolicyService
+from src.video.motion.secondary_motion_provenance import build_secondary_motion_summary
 from src.video.video_backend_registry import VideoBackendRegistry, build_default_video_backend_registry
 from src.video.video_backend_types import VideoExecutionRequest, VideoExecutionResult
 
@@ -58,6 +58,24 @@ def _merge_output_dir_into_metadata(data: Mapping[str, Any]) -> dict[str, Any]:
     if output_dir and "output_dir" not in metadata:
         metadata["output_dir"] = output_dir
     return metadata
+
+
+def _build_secondary_motion_runtime_block(observation: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(observation, Mapping):
+        return None
+    intent = dict(observation.get("intent") or {}) if isinstance(observation.get("intent"), Mapping) else {}
+    policy = dict(observation.get("policy") or {}) if isinstance(observation.get("policy"), Mapping) else {}
+    if not intent or not policy:
+        return None
+    if str(intent.get("mode") or "").lower() != "apply":
+        return None
+    return {
+        "enabled": bool(policy.get("enabled", intent.get("enabled", False))),
+        "intent": intent,
+        "policy": policy,
+        "seed": intent.get("seed"),
+        "backend_mode": str(policy.get("backend_mode") or ""),
+    }
 
 
 DEFAULT_JOB_TIMEOUT_SEC: float = 600.0
@@ -423,10 +441,20 @@ class PipelineRunner:
                     secondary_motion_observation["policy"]
                 )
 
+            request_stage_config = dict(config_dict)
+            motion_runtime_block = _build_secondary_motion_runtime_block(secondary_motion_observation)
+            if motion_runtime_block:
+                if stage_name == "svd_native":
+                    request_postprocess = dict(request_stage_config.get("postprocess") or {})
+                    request_postprocess["secondary_motion"] = motion_runtime_block
+                    request_stage_config["postprocess"] = request_postprocess
+                elif stage_name in {"animatediff", "video_workflow"}:
+                    request_stage_config["secondary_motion"] = motion_runtime_block
+
             request = VideoExecutionRequest(
                 backend_id=backend.backend_id,
                 stage_name=stage_name,
-                stage_config=dict(config_dict),
+                stage_config=request_stage_config,
                 output_dir=run_dir,
                 input_image_path=Path(input_path) if input_path else None,
                 end_anchor_path=Path(config_dict["end_anchor_path"])
@@ -503,6 +531,21 @@ class PipelineRunner:
                 collected_frame_paths.extend(item for item in variant_frame_paths if item)
             if variant_frame_paths and not video_path and not gif_path:
                 frame_path_count += len(variant_frame_paths)
+            secondary_motion_result = variant_payload.get("secondary_motion")
+            if isinstance(secondary_motion_result, dict):
+                secondary_motion_payload = metadata.setdefault(
+                    "secondary_motion",
+                    {
+                        "intent": dict(secondary_motion_intent),
+                        "video_stage_policies": [],
+                    },
+                )
+                secondary_motion_payload["apply_result"] = dict(secondary_motion_result.get("apply_result") or {})
+                secondary_motion_payload["summary"] = build_secondary_motion_summary(
+                    intent=secondary_motion_result.get("intent"),
+                    policy=secondary_motion_result.get("policy"),
+                    apply_result=secondary_motion_result.get("apply_result"),
+                )
 
         output_count = (
             len(next_stage_paths)
@@ -1804,6 +1847,8 @@ class PipelineRunner:
         status_callback: Callable[[dict[str, Any]], None] | None = None,
         video_backend_registry: VideoBackendRegistry | None = None,
     ) -> None:
+        from src.pipeline.executor import Pipeline
+
         self._api_client = api_client
         self._structured_logger = structured_logger
         self._config_manager = config_manager or ConfigManager()

@@ -163,11 +163,26 @@ class RecommendationEngine:
             "has_applied_overrides": bool(payload.get("has_applied_overrides")),
         }
 
+    @staticmethod
+    def _normalize_secondary_motion_context(value: Any) -> dict[str, Any]:
+        payload = dict(value or {}) if isinstance(value, dict) else {}
+        return {
+            "enabled": bool(payload.get("enabled")),
+            "status": str(payload.get("status") or ""),
+            "policy_id": str(payload.get("policy_id") or ""),
+            "application_path": str(payload.get("application_path") or ""),
+            "backend_mode": str(payload.get("backend_mode") or ""),
+            "intent_mode": str(payload.get("intent_mode") or ""),
+            "intent_label": str(payload.get("intent_label") or ""),
+            "skip_reason": str(payload.get("skip_reason") or ""),
+        }
+
     def _build_query_context(
         self,
         prompt_text: str,
         stage: str,
         refinement_context: dict[str, Any] | None = None,
+        secondary_motion_context: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         # PR-046: detect people presence for context-aware subscore weighting
         lower_tokens = {
@@ -177,6 +192,7 @@ class RecommendationEngine:
         }
         has_people = bool(lower_tokens & _PEOPLE_KEYWORDS)
         refinement = self._normalize_refinement_context(refinement_context)
+        secondary_motion = self._normalize_secondary_motion_context(secondary_motion_context)
         return {
             "stage": str(stage or "txt2img"),
             "style_bucket": "default",
@@ -192,6 +208,11 @@ class RecommendationEngine:
             "refinement_prompt_intent_band": str(refinement.get("prompt_intent_band") or ""),
             "refinement_has_prompt_patch": str(bool(refinement.get("has_prompt_patch"))),
             "refinement_has_applied_overrides": str(bool(refinement.get("has_applied_overrides"))),
+            "secondary_motion_policy_id": str(secondary_motion.get("policy_id") or ""),
+            "secondary_motion_application_path": str(secondary_motion.get("application_path") or ""),
+            "secondary_motion_backend_mode": str(secondary_motion.get("backend_mode") or ""),
+            "secondary_motion_intent_mode": str(secondary_motion.get("intent_mode") or ""),
+            "secondary_motion_status": str(secondary_motion.get("status") or ""),
         }
 
     def _load_records(self) -> list[dict[str, Any]]:
@@ -298,6 +319,9 @@ class RecommendationEngine:
                 "adaptive_refinement": self._normalize_refinement_context(
                     metadata.get("adaptive_refinement")
                 ),
+                "secondary_motion": self._normalize_secondary_motion_context(
+                    metadata.get("secondary_motion")
+                ),
                 # PR-046: normalized rating detail for context-aware weighting
                 **self._normalize_metadata_detail(metadata),
             }
@@ -368,6 +392,25 @@ class RecommendationEngine:
         if query_intent_band and record_intent_band and query_intent_band == record_intent_band:
             weight += 0.05
             rationale_bits.append("refinement-intent-match")
+
+        secondary_motion = self._normalize_secondary_motion_context(record.get("secondary_motion"))
+        query_motion_policy = str(query_context.get("secondary_motion_policy_id", "") or "")
+        if query_motion_policy and secondary_motion.get("policy_id"):
+            if query_motion_policy == secondary_motion.get("policy_id"):
+                weight += 0.22
+                rationale_bits.append("secondary-motion-policy-match")
+            else:
+                weight -= 0.08
+                rationale_bits.append("secondary-motion-policy-mismatch")
+
+        query_motion_path = str(query_context.get("secondary_motion_application_path", "") or "")
+        if query_motion_path and secondary_motion.get("application_path"):
+            if query_motion_path == secondary_motion.get("application_path"):
+                weight += 0.12
+                rationale_bits.append("secondary-motion-path-match")
+            else:
+                weight -= 0.05
+                rationale_bits.append("secondary-motion-path-mismatch")
 
         # PR-046: conservative rating-detail adjustment (bounded ±0.15)
         query_has_people = str(query_context.get("has_people", "")).lower() == "true"
@@ -583,7 +626,9 @@ class RecommendationEngine:
                         f"{query_context.get('style_bucket','default')}|"
                         f"{query_context.get('resolution_bucket','unknown')}|"
                         f"{query_context.get('refinement_policy_id','')}|"
-                        f"{query_context.get('refinement_scale_band','')}"
+                        f"{query_context.get('refinement_scale_band','')}|"
+                        f"{query_context.get('secondary_motion_policy_id','')}|"
+                        f"{query_context.get('secondary_motion_application_path','')}"
                     ),
                 )
 
@@ -600,9 +645,15 @@ class RecommendationEngine:
         prompt_text: str,
         stage: str,
         refinement_context: dict[str, Any] | None = None,
+        secondary_motion_context: dict[str, Any] | None = None,
     ) -> RecommendationSet:
         """Get recommendations for a specific prompt and stage combination."""
-        query_context = self._build_query_context(prompt_text, stage, refinement_context)
+        query_context = self._build_query_context(
+            prompt_text,
+            stage,
+            refinement_context,
+            secondary_motion_context,
+        )
         if self._should_reload_cache():
             records = self._load_records()
             scored_records = self._score_records(records)

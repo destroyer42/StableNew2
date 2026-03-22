@@ -12,10 +12,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 
+from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.video_export import save_video_frames
@@ -150,15 +151,17 @@ class SVDPostprocessRunner:
 
         postprocess = config.postprocess
         if not (
-            postprocess.face_restore.enabled
+            postprocess.secondary_motion.enabled
+            or postprocess.face_restore.enabled
             or postprocess.interpolation.enabled
             or postprocess.upscale.enabled
         ):
             return frames, None
 
         logger.info(
-            "[SVD][postprocess] start input_frames=%s face_restore=%s interpolation=%s upscale=%s",
+            "[SVD][postprocess] start input_frames=%s secondary_motion=%s face_restore=%s interpolation=%s upscale=%s",
             len(frames),
+            postprocess.secondary_motion.enabled,
             postprocess.face_restore.enabled,
             postprocess.interpolation.enabled,
             postprocess.upscale.enabled,
@@ -172,6 +175,7 @@ class SVDPostprocessRunner:
         enabled_stage_names = [
             stage_name
             for stage_name, enabled in (
+                ("secondary_motion", postprocess.secondary_motion.enabled),
                 ("face_restore", postprocess.face_restore.enabled),
                 ("interpolation", postprocess.interpolation.enabled),
                 ("upscale", postprocess.upscale.enabled),
@@ -180,19 +184,43 @@ class SVDPostprocessRunner:
         ]
         total_enabled_stages = len(enabled_stage_names)
 
-        if postprocess.face_restore.enabled:
+        if postprocess.secondary_motion.enabled:
             self._emit_status(
-                stage_detail="postprocess: face_restore",
-                progress=0.0 if total_enabled_stages == 0 else metadata["applied"].__len__() / total_enabled_stages,
+                stage_detail="postprocess: secondary_motion",
+                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
-            current_frames = self._run_worker_stage(
+            current_frames, secondary_motion_block = self._run_secondary_motion_stage(
+                frames=current_frames,
+                postprocess=postprocess,
+                work_dir=root,
+            )
+            metadata["applied"].append("secondary_motion")
+            metadata["secondary_motion"] = secondary_motion_block
+            self._emit_status(
+                stage_detail="postprocess: secondary_motion",
+                progress=len(metadata["applied"]) / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
+
+        if postprocess.face_restore.enabled:
+            self._emit_status(
+                stage_detail="postprocess: face_restore",
+                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
+            current_frames = cast(
+                list[Image.Image],
+                self._run_worker_stage(
                 stage_name="face_restore",
                 action="face_restore",
                 frames=current_frames,
                 payload=postprocess.face_restore.to_dict(),
                 work_dir=root,
+                ),
             )
             metadata["applied"].append("face_restore")
             metadata["face_restore"] = postprocess.face_restore.to_dict()
@@ -206,7 +234,7 @@ class SVDPostprocessRunner:
         if postprocess.interpolation.enabled:
             self._emit_status(
                 stage_detail="postprocess: interpolation",
-                progress=0.0 if total_enabled_stages == 0 else metadata["applied"].__len__() / total_enabled_stages,
+                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
@@ -227,16 +255,19 @@ class SVDPostprocessRunner:
         if postprocess.upscale.enabled:
             self._emit_status(
                 stage_detail="postprocess: upscale",
-                progress=0.0 if total_enabled_stages == 0 else metadata["applied"].__len__() / total_enabled_stages,
+                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
-            current_frames = self._run_worker_stage(
+            current_frames = cast(
+                list[Image.Image],
+                self._run_worker_stage(
                 stage_name="upscale",
                 action="upscale",
                 frames=current_frames,
                 payload=postprocess.upscale.to_dict(),
                 work_dir=root,
+                ),
             )
             metadata["applied"].append("upscale")
             metadata["upscale"] = postprocess.upscale.to_dict()
@@ -260,6 +291,32 @@ class SVDPostprocessRunner:
         )
         return current_frames, metadata
 
+    def _run_secondary_motion_stage(
+        self,
+        *,
+        frames: list[Image.Image],
+        postprocess: SVDPostprocessConfig,
+        work_dir: Path,
+    ) -> tuple[list[Image.Image], dict[str, Any]]:
+        motion_payload = postprocess.secondary_motion.to_dict()
+        processed, apply_result = cast(
+            tuple[list[Image.Image], dict[str, Any]],
+            self._run_worker_stage(
+            stage_name="secondary_motion",
+            action="secondary_motion",
+            frames=frames,
+            payload=motion_payload,
+            work_dir=work_dir,
+            expect_result=True,
+            ),
+        )
+        manifest_block = build_secondary_motion_manifest_block(
+            intent=motion_payload.get("intent"),
+            policy=motion_payload.get("policy"),
+            apply_result=apply_result,
+        )
+        return processed, manifest_block
+
     def _run_worker_stage(
         self,
         *,
@@ -268,7 +325,8 @@ class SVDPostprocessRunner:
         frames: list[Image.Image],
         payload: dict[str, Any],
         work_dir: Path,
-    ) -> list[Image.Image]:
+        expect_result: bool = False,
+    ) -> list[Image.Image] | tuple[list[Image.Image], dict[str, Any]]:
         input_dir = work_dir / f"{stage_name}_input"
         output_dir = work_dir / f"{stage_name}_output"
         self._reset_dir(input_dir)
@@ -278,6 +336,7 @@ class SVDPostprocessRunner:
             stage_name,
             len(frames),
         )
+        result_payload: dict[str, Any] = {}
         try:
             save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
             config_payload = {
@@ -303,6 +362,15 @@ class SVDPostprocessRunner:
             if completed.returncode != 0:
                 message = completed.stderr.strip() or completed.stdout.strip() or "unknown worker error"
                 raise SVDPostprocessError(f"{stage_name} worker failed: {message}")
+            if expect_result:
+                stdout = completed.stdout.strip()
+                if stdout:
+                    try:
+                        result_payload = json.loads(stdout)
+                    except json.JSONDecodeError as exc:
+                        raise SVDPostprocessError(
+                            f"{stage_name} worker returned invalid JSON: {stdout}"
+                        ) from exc
         finally:
             self._close_images(frames)
             frames.clear()
@@ -315,6 +383,8 @@ class SVDPostprocessRunner:
             stage_name,
             len(processed),
         )
+        if expect_result:
+            return processed, result_payload
         return processed
 
     def _run_rife_stage(
@@ -342,8 +412,6 @@ class SVDPostprocessRunner:
         )
         try:
             save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
-
-            # Inference from the official rife-ncnn-vulkan CLI: -n expects a target frame count.
             cmd = [
                 str(executable),
                 "-i",

@@ -1,7 +1,7 @@
 SECONDARY_MOTION_POLICY_SCHEMA_V1.md
 
 Status: Active
-Updated: 2026-03-21
+Updated: 2026-03-22
 
 ## Purpose
 
@@ -11,16 +11,16 @@ backend behavior changes land.
 This document is the contract reference for:
 
 - `intent_config["secondary_motion"]`
-- runner-owned observation-only `secondary_motion_policy`
-- metadata-only policy carriage through video-stage execution
-- shared secondary-motion provenance summaries after `PR-VIDEO-237`
+- runner-owned `secondary_motion_policy`
+- transient runtime carriage into SVD, AnimateDiff, and workflow-video backends
+- shared secondary-motion provenance summaries and learning-safe scalar context
 
-Dark-launch status:
+Rollout status:
 
 - default disabled
 - no GUI surface
 - no runtime auto-enable path
-- no backend behavior changes in v1 contract freeze
+- backend apply paths active for SVD native, AnimateDiff, and workflow-video
 
 ## Canonical Intent Payload
 
@@ -66,7 +66,7 @@ Field meanings:
 
 - `schema`: versioned carrier id
 - `enabled`: feature gate for the job/run
-- `mode`: rollout mode; `observe` and `apply` are valid, but v1 only observes
+- `mode`: rollout mode; `observe` and `apply` are both valid runtime states
 - `intent`: coarse desired motion class, such as `steady`, `micro_sway`, or
   another future planner-recognized label
 - `regions`: optional coarse target regions for future use
@@ -134,7 +134,7 @@ Root carrier:
 
 - `PipelineRunResult.metadata["secondary_motion"]`
 
-Observation-only v1 shape:
+Canonical shape:
 
 ```json
 {
@@ -165,10 +165,10 @@ Observation-only v1 shape:
 
 Rules:
 
-- no manifests or container metadata are changed in `PR-VIDEO-236`
-- no prompt text, stage config, or backend options are mutated in
-  `PR-VIDEO-236`
-- this carrier is metadata-only and replay-safe
+- the runner remains the only owner of policy derivation
+- transient apply-mode stage config may be injected for supported video backends
+- prompt text is not mutated by secondary motion rollout
+- summaries remain replay-safe and scalar-only outside manifest provenance
 
 ## Non-Goals for v1
 
@@ -231,6 +231,12 @@ Rules:
 - full frame-level details stay in manifest-only provenance blocks
 - replay and diagnostics descriptors must not embed raw frame data
 
+Applied backend closure delivered across:
+
+- `PR-VIDEO-238`: SVD postprocess stage zero via worker-backed frame directory
+- `PR-VIDEO-239`: AnimateDiff between frame write and encode
+- `PR-VIDEO-240`: workflow-video extract/apply/re-encode promotion path
+
 Detailed manifest provenance shape:
 
 ```json
@@ -242,3 +248,27 @@ Detailed manifest provenance shape:
   "summary": { "...": "secondary-motion summary payload" }
 }
 ```
+
+## Learning-Safe Summary Contract
+
+Delivered in `PR-VIDEO-241`.
+
+Learning records may persist a compact secondary-motion context derived from the
+summary contract. Allowed retained fields are scalar-only:
+
+- `enabled`
+- `status`
+- `policy_id`
+- `application_path`
+- `backend_mode`
+- `intent_mode`
+- `intent_label`
+- `skip_reason`
+- bounded scalar metrics such as `regions_applied`, `frames_in`, `frames_out`
+
+Rules:
+
+- no raw frame paths in centralized learning summaries
+- no dense motion vectors or per-frame displacement payloads in learning data
+- recommendation context may stratify by policy id and application path, but
+  evidence-tier safeguards remain unchanged

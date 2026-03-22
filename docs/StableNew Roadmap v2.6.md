@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-21  
+Updated: 2026-03-22  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -57,10 +57,9 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
   cleanup rather than missing refinement foundations
 - Pipeline sidebar and review/reprocess UX still carry product-level cleanup
   debt around pack discovery, scan roots, and duplicated surfaces
-- video generation still lacks a StableNew-owned secondary motion layer that is
-  replayable across AnimateDiff, SVD native, and workflow-video backends
-- manifests, replay, container metadata, and learning do not yet carry a
-  canonical secondary-motion policy and application provenance
+- StableNew-owned secondary motion now exists across SVD native,
+  AnimateDiff, and workflow-video backends with canonical provenance,
+  container metadata, replay summaries, and learning integration
 
 ## 3. Status of the Older Revised Video Queue
 
@@ -675,7 +674,7 @@ Detailed execution spec:
 
 ### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
-Status: Planned
+Status: Completed 2026-03-22
 
 Use the safest existing postprocess seam to land the first real runtime motion
 path.
@@ -686,13 +685,17 @@ Primary outcomes:
 - shared-engine application as SVD postprocess stage zero
 - canonical motion provenance in SVD manifest, replay, and container metadata
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
 ### 23. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
-Status: Planned
+Status: Completed 2026-03-22
 
 Insert the shared engine into the existing AnimateDiff frame pipeline.
 
@@ -702,13 +705,17 @@ Primary outcomes:
 - skip-safe AnimateDiff motion behavior with stable output-path semantics
 - canonical motion provenance in AnimateDiff manifest, replay, and container metadata
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
 ### 24. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
-Status: Planned
+Status: Completed 2026-03-22
 
 Close the last major backend parity gap for the shared motion carrier.
 
@@ -718,13 +725,17 @@ Primary outcomes:
 - canonical replay closure without a new custom Comfy node dependency
 - consistent motion summary shape across all three current video backends
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+
 Detailed execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
 ### 25. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
-Status: Planned
+Status: Completed 2026-03-22
 
 Close the loop by making the shared motion carrier visible to learning and
 recommendation flows without weakening evidence-tier safeguards.
@@ -734,6 +745,10 @@ Primary outcomes:
 - scalar motion metrics in learning records
 - backend-aware and application-path-aware motion recommendation context
 - no raw frame or dense motion payload retention in centralized learning data
+
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
 Detailed execution spec:
 

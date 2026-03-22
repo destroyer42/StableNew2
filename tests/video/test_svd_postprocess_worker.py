@@ -61,3 +61,34 @@ def test_run_face_restore_uses_gfpgan_runtime(tmp_path: Path, monkeypatch) -> No
 
     assert calls == [("gfpgan-runtime", 0.55)]
     assert (output_dir / "frame_001.png").exists()
+
+
+def test_run_secondary_motion_routes_through_shared_worker(tmp_path: Path, monkeypatch) -> None:
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    Image.new("RGB", (16, 16), "white").save(input_dir / "frame_001.png")
+
+    captured: dict[str, object] = {}
+
+    def _fake_worker(payload):
+        captured.update(payload)
+        target = output_dir / "frame_001.png"
+        Image.new("RGB", (16, 16), "red").save(target)
+        return {"status": "applied", "output_paths": [str(target)]}
+
+    monkeypatch.setattr(worker, "run_secondary_motion_worker", _fake_worker)
+
+    result = worker._run_secondary_motion(
+        input_dir,
+        output_dir,
+        {
+            "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
+            "policy": {"enabled": True, "policy_id": "motion_v1"},
+            "seed": 123,
+        },
+    )
+
+    assert captured["seed"] == 123
+    assert result["status"] == "applied"

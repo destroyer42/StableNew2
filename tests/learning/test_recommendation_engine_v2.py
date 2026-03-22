@@ -78,3 +78,61 @@ def test_confidence_rationale_is_exposed(tmp_path) -> None:
     assert "context=" in best.confidence_rationale
     assert best.context_key.startswith("txt2img|")
 
+
+def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
+    records_path = tmp_path / "learning_records.jsonl"
+    _write_records(
+        records_path,
+        [
+            {
+                **_record(rating=5, stage="video_workflow", sampler="Euler a", prompt="portrait studio"),
+                "metadata": {
+                    "user_rating": 5,
+                    "stage": "video_workflow",
+                    "secondary_motion": {
+                        "enabled": True,
+                        "status": "applied",
+                        "policy_id": "workflow_motion_v1",
+                        "application_path": "shared_postprocess_engine",
+                        "backend_mode": "apply_shared_postprocess_candidate",
+                        "intent_mode": "apply",
+                    },
+                },
+            },
+            {
+                **_record(rating=2, stage="video_workflow", sampler="DPM++ 2M", prompt="portrait studio"),
+                "metadata": {
+                    "user_rating": 2,
+                    "stage": "video_workflow",
+                    "secondary_motion": {
+                        "enabled": True,
+                        "status": "applied",
+                        "policy_id": "other_motion_v1",
+                        "application_path": "frame_directory_worker",
+                        "backend_mode": "apply_shared_postprocess_candidate",
+                        "intent_mode": "apply",
+                    },
+                },
+            },
+        ],
+    )
+    engine = RecommendationEngine(records_path)
+
+    recs = engine.recommend(
+        "portrait studio",
+        "video_workflow",
+        secondary_motion_context={
+            "enabled": True,
+            "status": "applied",
+            "policy_id": "workflow_motion_v1",
+            "application_path": "shared_postprocess_engine",
+            "backend_mode": "apply_shared_postprocess_candidate",
+            "intent_mode": "apply",
+        },
+    )
+
+    best = recs.get_best_for_parameter("sampler")
+    assert best is not None
+    assert best.recommended_value == "Euler a"
+    assert "workflow_motion_v1" in best.context_key
+

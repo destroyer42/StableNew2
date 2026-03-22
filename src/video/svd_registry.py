@@ -63,6 +63,9 @@ def write_svd_run_manifest(*, run_dir: str | Path, config: SVDConfig, result: SV
             artifact_type="video",
         ),
     }
+    secondary_motion = ((result.postprocess or {}).get("secondary_motion") if isinstance(result.postprocess, dict) else None)
+    if isinstance(secondary_motion, dict):
+        payload["secondary_motion"] = dict(secondary_motion)
     manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return manifest_path
 

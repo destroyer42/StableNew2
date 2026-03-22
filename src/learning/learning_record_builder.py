@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.learning.learning_record import LearningRecord, _now_iso
 from src.refinement.quality_metrics import build_refinement_learning_context
+from src.video.motion.secondary_motion_metrics import build_secondary_motion_learning_context
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.pipeline.pipeline_runner import PipelineRunResult
@@ -91,6 +92,10 @@ def build_learning_record(
         )
         if refinement_context:
             metadata["adaptive_refinement"] = refinement_context
+    if "secondary_motion" not in metadata:
+        secondary_motion_context = build_secondary_motion_learning_context(rr_meta.get("secondary_motion"))
+        if secondary_motion_context:
+            metadata["secondary_motion"] = secondary_motion_context
     timestamp_value = metadata.get("timestamp") or rr_meta.get("timestamp") or _now_iso()
 
     base_config: dict[str, Any] = (variant_configs[0] if variant_configs else config_dict) or {}

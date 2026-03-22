@@ -45,6 +45,7 @@ class SVDNativeVideoBackend:
                 "manifest_path": result.get("manifest_path"),
                 "input_image_path": str(request.input_image_path) if request.input_image_path else None,
                 "job_id": str(request.job_id or ""),
+                "secondary_motion": result.get("secondary_motion"),
             },
         )
 

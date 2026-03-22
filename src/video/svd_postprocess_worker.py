@@ -18,6 +18,8 @@ import numpy as np
 import torch
 from PIL import Image
 
+from src.video.motion.secondary_motion_worker import run_secondary_motion_worker
+
 
 def _find_site_package_dir(name: str) -> Path | None:
     candidates: list[Path] = []
@@ -332,6 +334,19 @@ def _run_upscale(input_dir: Path, output_dir: Path, payload: dict[str, Any]) -> 
             _release_worker_memory()
 
 
+def _run_secondary_motion(input_dir: Path, output_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    intent_payload = dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
+    policy_payload = dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+    worker_payload = {
+        "input_dir": str(input_dir),
+        "output_dir": str(output_dir),
+        "intent": intent_payload,
+        "policy": policy_payload,
+        "seed": payload.get("seed"),
+    }
+    return run_secondary_motion_worker(worker_payload)
+
+
 def _release_worker_memory() -> None:
     gc.collect()
     if not torch.cuda.is_available():
@@ -363,6 +378,9 @@ def main() -> int:
         _run_face_restore(input_dir, output_dir, payload)
     elif action == "upscale":
         _run_upscale(input_dir, output_dir, payload)
+    elif action == "secondary_motion":
+        result = _run_secondary_motion(input_dir, output_dir, payload)
+        sys.stdout.write(json.dumps(result))
     else:
         raise RuntimeError(f"Unsupported worker action: {action}")
     return 0
