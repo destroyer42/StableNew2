@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from src.curation.workflow_summary import build_curation_replay_descriptor_from_snapshot
 from src.pipeline.artifact_contract import (
     build_artifact_record,
     canonicalize_variant_entries,
@@ -265,6 +266,7 @@ def build_replay_descriptor(
         "primary_output_paths": list(primary_paths),
         "backends": backends,
         "secondary_motion": extract_secondary_motion_summary(metadata),
+        "curation": build_curation_replay_descriptor_from_snapshot(njr_snapshot),
     }
 
 
@@ -303,6 +305,7 @@ def build_diagnostics_descriptor(
         "primary_artifact": dict(primary_artifact or {}),
         "backends": collect_backend_descriptors(result),
         "secondary_motion": extract_secondary_motion_summary(metadata),
+        "curation": build_curation_replay_descriptor_from_snapshot(njr_snapshot),
         "replay_descriptor": build_replay_descriptor(result, njr_snapshot=njr_snapshot),
     }
 

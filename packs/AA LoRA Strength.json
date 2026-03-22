@@ -5,7 +5,7 @@
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -60,7 +60,7 @@
             0.8
           ],
           [
-            "detailed_notrigger",
+            "CinematicStyle_v1",
             0.8
           ]
         ]
@@ -68,7 +68,7 @@
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -113,21 +113,21 @@
           [
             "anatomy_helper",
             0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7912087912087913
           ],
           [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.39560439560439564
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.9068181818181817
           ]
         ]
       },
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -174,19 +174,19 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7912087912087913
-          ],
-          [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.510989010989011
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -239,13 +239,17 @@
           [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.5934065934065934
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -290,21 +294,21 @@
           [
             "anatomy_helper",
             0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7912087912087913
           ],
           [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.6923076923076923
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -349,21 +353,21 @@
           [
             "anatomy_helper",
             0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7912087912087913
           ],
           [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.8
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -408,21 +412,21 @@
           [
             "anatomy_helper",
             0.8
-          ],
-          [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.8241758241758242
           ],
           [
             "Beautiful_Female_Face_XL_Adetailer_LoRa-000014",
             0.9230769230769231
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8
           ]
         ]
       },
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -469,11 +473,11 @@
             0.8
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.7087912087912087
+            "sdxl1.0_realastic_female_lora",
+            0.8
           ],
           [
-            "sdxl1.0_realastic_female_lora",
+            "NSFWFilterXL_animagine",
             0.8
           ]
         ]
@@ -481,7 +485,7 @@
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -540,7 +544,7 @@
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -603,7 +607,7 @@
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -666,7 +670,7 @@
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -729,7 +733,7 @@
       {
         "index": 0,
         "text": "a naked [[hair]]-haired busty athletic beautiful [[eyes]]-eyed woman, [[pose]], in a [[environment]], in the [[time]], with detailed aroused genitalia, direct eye contact, perspective is [[perspective]]",
-        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow",
         "positive_embeddings": [
           [
             "Stable_Yogis_General_Positives_V1",
@@ -842,8 +846,8 @@
         {
           "name": "perspective",
           "values": [
-            "very low angle full body shot",
-            "high angle full body shot",
+            "very low angle shot",
+            "high angle shot",
             "full frontal shot"
           ]
         },
@@ -852,7 +856,8 @@
           "values": [
             "giving a teasing blowjob deepthroat licking cock",
             "having butterfly sex while orgasming",
-            "riding cowgirl"
+            "riding cowgirl and orgasming",
+            "cumshot while on knees looking up"
           ]
         }
       ]

@@ -784,10 +784,10 @@ class JobService:
 
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         """Return diagnostics data surfaced to GUI/diagnostic tooling."""
-        def _result_summary(result: dict[str, Any] | None) -> dict[str, Any]:
+        def _result_summary(result: dict[str, Any] | None, *, njr_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
             if not isinstance(result, dict):
                 return {}
-            return build_diagnostics_descriptor(result)
+            return build_diagnostics_descriptor(result, njr_snapshot=njr_snapshot)
 
         jobs = []
         for job in self.job_queue.list_jobs():
@@ -823,7 +823,8 @@ class JobService:
                     "completed_at": job.completed_at.isoformat() if job.completed_at else None,
                     "error_envelope": serialize_envelope(job.error_envelope),
                     "result_summary": _result_summary(
-                        job.result if isinstance(job.result, dict) else None
+                        job.result if isinstance(job.result, dict) else None,
+                        njr_snapshot=getattr(job, "snapshot", None),
                     ),
                 }
             )

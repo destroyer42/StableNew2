@@ -45,6 +45,7 @@ _TXT2IMG_INACTIVE_HIRES_KEYS = (
     "hr_resize_x",
     "hr_resize_y",
 )
+_DEFAULT_MATRIX_EXPANSION_LIMIT = 8
 
 
 def _txt2img_hires_enabled(config: dict[str, Any]) -> bool:
@@ -181,25 +182,50 @@ class PromptPackNormalizedJobBuilder:
         pack_data = metadata.get("pack_data", {})
         matrix_config = pack_data.get("matrix", {})
         matrix_mode = matrix_config.get("mode", "sequential")
-        limit = matrix_config.get("limit", 0)
-        
+        limit = self._resolve_matrix_expansion_limit(entry, matrix_config, matrix_slots_dict)
+
         slot_names = list(matrix_slots_dict.keys())
         slot_values_lists = [matrix_slots_dict[name] for name in slot_names]
-        
+        total_combinations = self._estimate_matrix_combinations(slot_values_lists)
+
         # Generate combinations based on mode
         if matrix_mode == "random":
-            target_count = limit if limit > 0 else 10  # Default to 10 if no limit specified
-            combinations = list(itertools.product(*slot_values_lists))
-            random.shuffle(combinations)
-            combinations = combinations[:target_count]
-            _logger.info(f"[Matrix Expansion] Generated {len(combinations)} random combinations for {entry.pack_id} with slots: {slot_names}")
+            target_count = min(total_combinations, limit) if limit > 0 else min(
+                total_combinations,
+                _DEFAULT_MATRIX_EXPANSION_LIMIT,
+            )
+            combinations = self._sample_random_matrix_combinations(
+                slot_values_lists,
+                target_count,
+                total_combinations,
+            )
+            _logger.info(
+                "[Matrix Expansion] Generated %s random combinations for %s with slots: %s "
+                "(total_possible=%s, effective_limit=%s)",
+                len(combinations),
+                entry.pack_id,
+                slot_names,
+                total_combinations,
+                target_count,
+            )
         else:
-            # Sequential mode: generate all Cartesian product combinations
-            combinations = list(itertools.product(*slot_values_lists))
-            if limit > 0 and len(combinations) > limit:
-                combinations = combinations[:limit]
-                _logger.info(f"[Matrix Expansion] Limited combinations to {limit} (from {len(combinations)} total)")
-            _logger.info(f"[Matrix Expansion] Generating {len(combinations)} sequential combinations for {entry.pack_id} with slots: {slot_names}")
+            effective_limit = min(total_combinations, limit) if limit > 0 else total_combinations
+            combinations = list(itertools.islice(itertools.product(*slot_values_lists), effective_limit))
+            if total_combinations > effective_limit:
+                _logger.info(
+                    "[Matrix Expansion] Limited combinations to %s (from %s total) for %s",
+                    effective_limit,
+                    total_combinations,
+                    entry.pack_id,
+                )
+            _logger.info(
+                "[Matrix Expansion] Generating %s sequential combinations for %s with slots: %s "
+                "(total_possible=%s)",
+                len(combinations),
+                entry.pack_id,
+                slot_names,
+                total_combinations,
+            )
         
         # Create one entry per combination
         expanded_entries = []
@@ -222,6 +248,84 @@ class PromptPackNormalizedJobBuilder:
             expanded_entries.append(expanded_entry)
         
         return expanded_entries
+
+    def _estimate_matrix_combinations(self, slot_values_lists: list[list[str]]) -> int:
+        total = 1
+        for values in slot_values_lists:
+            total *= max(1, len(values))
+        return total
+
+    def _resolve_matrix_expansion_limit(
+        self,
+        entry: PackJobEntry,
+        matrix_config: dict[str, Any],
+        matrix_slots_dict: dict[str, list[str]],
+    ) -> int:
+        raw_limit = matrix_config.get("limit")
+        try:
+            configured_limit = max(int(raw_limit or 0), 0)
+        except Exception:
+            configured_limit = 0
+
+        if configured_limit > 0:
+            return configured_limit
+
+        randomizer_limit = 0
+        randomizer_meta = entry.randomizer_metadata or {}
+        try:
+            randomizer_limit = max(int(randomizer_meta.get("max_variants") or 0), 0)
+        except Exception:
+            randomizer_limit = 0
+        if randomizer_limit <= 0:
+            randomization_cfg = (entry.config_snapshot or {}).get("randomization", {})
+            if isinstance(randomization_cfg, dict):
+                try:
+                    randomizer_limit = max(int(randomization_cfg.get("max_variants") or 0), 0)
+                except Exception:
+                    randomizer_limit = 0
+
+        slot_values_lists = [matrix_slots_dict[name] for name in matrix_slots_dict.keys()]
+        total_combinations = self._estimate_matrix_combinations(slot_values_lists)
+        auto_limit = randomizer_limit if randomizer_limit > 0 else _DEFAULT_MATRIX_EXPANSION_LIMIT
+
+        if total_combinations > auto_limit:
+            _logger.warning(
+                "[Matrix Expansion] Pack %s has %s possible combinations with no safe matrix.limit; "
+                "auto-limiting expansion to %s. Set pack_data.matrix.limit to override.",
+                entry.pack_id,
+                total_combinations,
+                auto_limit,
+            )
+        return auto_limit
+
+    def _sample_random_matrix_combinations(
+        self,
+        slot_values_lists: list[list[str]],
+        target_count: int,
+        total_combinations: int,
+    ) -> list[tuple[str, ...]]:
+        if target_count <= 0 or total_combinations <= 0:
+            return []
+        if target_count >= total_combinations:
+            return list(itertools.product(*slot_values_lists))
+
+        sampled_indexes = random.sample(range(total_combinations), target_count)
+        sampled_indexes.sort()
+        return [self._decode_matrix_combination_index(index, slot_values_lists) for index in sampled_indexes]
+
+    def _decode_matrix_combination_index(
+        self,
+        index: int,
+        slot_values_lists: list[list[str]],
+    ) -> tuple[str, ...]:
+        values: list[str] = []
+        remaining = index
+        for slot_values in reversed(slot_values_lists):
+            slot_size = max(1, len(slot_values))
+            remaining, position = divmod(remaining, slot_size)
+            values.append(slot_values[position])
+        values.reverse()
+        return tuple(values)
 
     def _build_jobs_for_entry(self, entry: PackJobEntry) -> list[NormalizedJobRecord]:
         pack_config = self._load_pack_config(entry.pack_id)

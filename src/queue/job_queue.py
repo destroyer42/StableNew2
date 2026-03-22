@@ -14,7 +14,7 @@ from collections import deque
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.queue.job_history_store import JobHistoryStore
 from src.queue.job_model import Job, JobStatus
@@ -40,6 +40,8 @@ class JobQueue:
         self._finalized_jobs: dict[str, Job] = {}
         self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
         self._state_listeners: list[Callable[[], None]] = []
+        self._state_notifications_suppressed = 0
+        self._state_notifications_pending = False
 
     def submit(self, job: Job) -> None:
         with self._lock:
@@ -489,9 +491,17 @@ class JobQueue:
         if callback not in self._state_listeners:
             self._state_listeners.append(callback)
 
+    def coalesce_state_notifications(self) -> _QueueStateNotificationBatch:
+        return _QueueStateNotificationBatch(self)
+
     def _notify_state_listeners(self) -> None:
         """Notify listeners that the queue state has changed."""
-        for listener in list(self._state_listeners):
+        with self._lock:
+            if self._state_notifications_suppressed > 0:
+                self._state_notifications_pending = True
+                return
+            listeners = list(self._state_listeners)
+        for listener in listeners:
             try:
                 listener()
             except Exception:
@@ -506,3 +516,34 @@ class JobQueue:
                 self._jobs[job.job_id] = job
                 heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._notify_state_listeners()
+
+
+class _QueueStateNotificationBatch:
+    def __init__(self, queue: JobQueue) -> None:
+        self._queue = queue
+
+    def __enter__(self) -> _QueueStateNotificationBatch:
+        with self._queue._lock:
+            self._queue._state_notifications_suppressed += 1
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        listeners: list[Callable[[], None]] = []
+        with self._queue._lock:
+            self._queue._state_notifications_suppressed = max(
+                0,
+                self._queue._state_notifications_suppressed - 1,
+            )
+            should_flush = (
+                self._queue._state_notifications_suppressed == 0
+                and self._queue._state_notifications_pending
+            )
+            if should_flush:
+                self._queue._state_notifications_pending = False
+                listeners = list(self._queue._state_listeners)
+        for listener in listeners:
+            try:
+                listener()
+            except Exception:
+                continue
+        return False

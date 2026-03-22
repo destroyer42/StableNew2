@@ -123,6 +123,7 @@ from src.utils.prompt_packs import PromptPackInfo, discover_packs
 logger = logging.getLogger(__name__)
 
 _IMAGE_OUTPUT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
+_INITIAL_RESOURCE_PROBE_GRACE_SEC = 30.0
 
 
 class LifecycleState(Enum):
@@ -407,6 +408,7 @@ class AppController:
             self._api_client = api_client or SDWebUIClient(base_url=default_url)
             self._structured_logger = structured_logger or StructuredLogger()
             self.pipeline_runner = PipelineRunner(self._api_client, self._structured_logger)
+        self._apply_initial_resource_probe_grace()
         self._webui_api: WebUIAPI | None = None
         client = getattr(self, "_api_client", None)
         self.resource_service = resource_service or WebUIResourceService(client=client)
@@ -422,6 +424,7 @@ class AppController:
         self._duration_stats_service = None
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
+
         self._diagnostics_lock = threading.Lock()
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
         self._error_modal: ErrorModalV2 | None = None
@@ -797,6 +800,22 @@ class AppController:
                 logger.warning(f"Failed to process runtime status update: {exc}")
         
         return _status_callback
+
+    def _apply_initial_resource_probe_grace(self) -> None:
+        setter = getattr(self._api_client, "set_startup_probe_grace", None)
+        if not callable(setter):
+            return
+        duration = _INITIAL_RESOURCE_PROBE_GRACE_SEC
+        override = os.environ.get("STABLENEW_INITIAL_RESOURCE_GRACE_SEC")
+        if override:
+            try:
+                duration = max(float(override), 0.0)
+            except Exception:
+                duration = _INITIAL_RESOURCE_PROBE_GRACE_SEC
+        try:
+            setter(duration)
+        except Exception:
+            logger.debug("Failed to install initial startup probe grace", exc_info=True)
 
     def list_models(self) -> list[WebUIResource]:
         return self.resource_service.list_models()
@@ -1224,16 +1243,41 @@ class AppController:
         self._ensure_run_mode_default("add_to_queue")
         controller = getattr(self, "pipeline_controller", None)
         run_config = self._prepare_queue_run_config()
+        if getattr(self, "_queue_submit_in_progress", False):
+            self._append_log(
+                f"[controller] Queue submission already in progress; ignoring duplicate request "
+                f"(thread={thread_name})"
+            )
+            self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
+            return
         if controller is not None:
+            preview_records = list(getattr(getattr(self, "app_state", None), "preview_jobs", None) or [])
             try:
-                count = controller.enqueue_draft_jobs(run_config=run_config)
-                if count > 0:
-                    self._append_log(
-                        f"[controller] Submitted {count} job(s) from preview to queue (thread={thread_name})"
+                self._queue_submit_in_progress = True
+                self._append_log(
+                    f"[controller] Queueing preview jobs in background "
+                    f"(count={len(preview_records) if preview_records else 'draft'}) "
+                    f"(thread={thread_name})"
+                )
+                spawn_thread = getattr(self, "_spawn_tracked_thread", None)
+                if callable(spawn_thread):
+                    spawn_thread(
+                        target=self._submit_preview_jobs_to_queue_async,
+                        args=(controller, preview_records, run_config, thread_name),
+                        name="PreviewQueueSubmit",
+                        purpose="Submit preview jobs to queue asynchronously",
                     )
-                    self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
-                    return
+                else:
+                    self._submit_preview_jobs_to_queue_async(
+                        controller,
+                        preview_records,
+                        run_config,
+                        thread_name,
+                    )
+                self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
+                return
             except Exception as exc:  # noqa: BLE001
+                self._queue_submit_in_progress = False
                 self._append_log(
                     f"[controller] enqueue_draft_jobs error: {exc!r} (thread={thread_name})"
                 )
@@ -1243,6 +1287,70 @@ class AppController:
                 f"(thread={thread_name})"
             )
         self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
+
+    def _submit_preview_jobs_to_queue_async(
+        self,
+        controller: Any,
+        preview_records: list[Any],
+        run_config: dict[str, Any] | None,
+        origin_thread_name: str,
+    ) -> None:
+        submitted = 0
+        error: Exception | None = None
+        clear_preview_on_success = bool(preview_records)
+        try:
+            if preview_records:
+                submitted = int(
+                    controller.submit_preview_jobs_to_queue(
+                        records=preview_records,
+                        run_config=run_config,
+                    )
+                    or 0
+                )
+            else:
+                submitted = int(controller.enqueue_draft_jobs(run_config=run_config) or 0)
+        except Exception as exc:  # noqa: BLE001
+            error = exc
+
+        def _finish() -> None:
+            self._queue_submit_in_progress = False
+            if error is not None:
+                self._append_log(
+                    f"[controller] enqueue_draft_jobs error: {error!r} "
+                    f"(thread={origin_thread_name})"
+                )
+                return
+            if submitted > 0 and clear_preview_on_success:
+                app_state = getattr(self, "app_state", None)
+                if app_state is not None:
+                    clear_fn = getattr(app_state, "clear_job_draft", None)
+                    if callable(clear_fn):
+                        try:
+                            clear_fn()
+                        except Exception:
+                            pass
+                    preview_setter = getattr(app_state, "set_preview_jobs", None)
+                    if callable(preview_setter):
+                        try:
+                            preview_setter([])
+                        except Exception:
+                            pass
+                self._append_log(
+                    f"[controller] Submitted {submitted} job(s) from preview to queue "
+                    f"(thread={origin_thread_name})"
+                )
+                return
+            if submitted > 0:
+                self._append_log(
+                    f"[controller] Submitted {submitted} job(s) from preview to queue "
+                    f"(thread={origin_thread_name})"
+                )
+
+        dispatch = getattr(self, "_ui_dispatch", None)
+        if callable(dispatch):
+            dispatch(_finish)
+        else:
+            _finish()
 
     def _prepare_queue_run_config(self) -> dict[str, Any]:
         run_config = self._build_run_config(RunMode.QUEUE, RunSource.ADD_TO_QUEUE_BUTTON)

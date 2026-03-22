@@ -53,6 +53,38 @@ def test_get_overall_summary_with_ratings():
         assert summary.avg_rating == 4.0
 
 
+def test_get_overall_summary_tracks_curation_evidence_and_reason_tags():
+    """Verify staged-curation evidence is summarized separately."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        records_path = Path(tmpdir) / "records.jsonl"
+        writer = LearningRecordWriter(str(records_path))
+
+        record = LearningRecord.from_pipeline_context(
+            base_config={"prompt": "portrait", "stage": "txt2img"},
+            variant_configs=[{"sampler": "DPM++ 2M", "steps": 28, "cfg_scale": 6.5}],
+            randomizer_mode="staged_curation",
+            randomizer_plan_size=1,
+            metadata={
+                "record_kind": "staged_curation_event",
+                "experiment_name": "curation:disc-1",
+                "user_rating": 4.3,
+                "evidence_class": "observational",
+                "advancement_decision": "advanced_to_upscale",
+                "reason_tags": ["good_composition", "keeper"],
+            },
+        )
+        writer.append_record(record)
+
+        analytics = LearningAnalytics(writer)
+        summary = analytics.get_overall_summary()
+
+        assert summary.total_experiments == 1
+        assert summary.total_ratings == 1
+        assert summary.evidence_class_counts == {"observational": 1}
+        assert summary.decision_counts == {"advanced_to_upscale": 1}
+        assert summary.reason_tag_counts == {"good_composition": 1, "keeper": 1}
+
+
 def test_export_to_json():
     """Verify JSON export."""
     import json

@@ -5,9 +5,8 @@
 
 from __future__ import annotations
 
-import threading
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from typing import Any, Callable
 
 import tkinter as tk
@@ -45,6 +44,10 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         Called when the user clicks Ignore on a group.
     on_rescan():
         Called when the user clicks Rescan.
+    on_pick_scan_root():
+        Called when the user clicks Scan Folder.
+    on_reset_scan_root():
+        Called when the user clicks Auto Root.
     """
 
     def __init__(
@@ -54,6 +57,8 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         on_close_group: Callable[[str], None] | None = None,
         on_ignore_group: Callable[[str], None] | None = None,
         on_rescan: Callable[[], None] | None = None,
+        on_pick_scan_root: Callable[[], None] | None = None,
+        on_reset_scan_root: Callable[[], None] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
@@ -61,10 +66,13 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         self._on_close_group = on_close_group
         self._on_ignore_group = on_ignore_group
         self._on_rescan = on_rescan
+        self._on_pick_scan_root = on_pick_scan_root
+        self._on_reset_scan_root = on_reset_scan_root
         self._handles: list[DiscoveredReviewHandle] = []
         self._status_filter_var = tk.StringVar(value="active")
         self._selected_group_id: str | None = None
         self._scanning_var = tk.BooleanVar(value=False)
+        self._scan_root_var = tk.StringVar(value="Scan Root: Auto")
 
         self._build_ui()
 
@@ -93,17 +101,39 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
                 command=self._apply_filter,
             ).grid(row=0, column=col, padx=2)
 
+        self._pick_scan_root_btn = ttk.Button(
+            toolbar,
+            text="Scan Folder",
+            command=self._on_pick_scan_root_clicked,
+        )
+        self._pick_scan_root_btn.grid(row=0, column=4, padx=(8, 0), sticky="e")
+
+        self._reset_scan_root_btn = ttk.Button(
+            toolbar,
+            text="Auto Root",
+            command=self._on_reset_scan_root_clicked,
+        )
+        self._reset_scan_root_btn.grid(row=0, column=5, padx=(4, 0), sticky="e")
+
         self._scan_btn = ttk.Button(
             toolbar,
             text="Rescan",
             command=self._on_rescan_clicked,
         )
-        self._scan_btn.grid(row=0, column=5, padx=(8, 0), sticky="e")
+        self._scan_btn.grid(row=0, column=6, padx=(4, 0), sticky="e")
+
+        self._scan_root_label = ttk.Label(
+            toolbar,
+            textvariable=self._scan_root_var,
+            style=BODY_LABEL_STYLE,
+            width=36,
+        )
+        self._scan_root_label.grid(row=1, column=0, columnspan=7, sticky="w", pady=(4, 0))
 
         self._scan_status_label = ttk.Label(
             toolbar, text="", style=BODY_LABEL_STYLE, width=18
         )
-        self._scan_status_label.grid(row=0, column=6, padx=4, sticky="e")
+        self._scan_status_label.grid(row=0, column=7, padx=4, sticky="e")
 
         # --- list frame ---
         list_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE, padding=4)
@@ -190,6 +220,16 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
     def get_selected_group_id(self) -> str | None:
         return self._selected_group_id
 
+    def set_scan_root(self, scan_root: str | None) -> None:
+        """Update the displayed scan root override state."""
+        if scan_root:
+            display = str(Path(scan_root))
+            if len(display) > 52:
+                display = "..." + display[-49:]
+            self._scan_root_var.set(f"Scan Root: {display}")
+        else:
+            self._scan_root_var.set("Scan Root: Auto")
+
     # ------------------------------------------------------------------
     # Filter and render
     # ------------------------------------------------------------------
@@ -254,6 +294,14 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
     def _on_rescan_clicked(self) -> None:
         if self._on_rescan:
             self._on_rescan()
+
+    def _on_pick_scan_root_clicked(self) -> None:
+        if self._on_pick_scan_root:
+            self._on_pick_scan_root()
+
+    def _on_reset_scan_root_clicked(self) -> None:
+        if self._on_reset_scan_root:
+            self._on_reset_scan_root()
 
     def _update_action_buttons(self) -> None:
         state = "normal" if self._selected_group_id else "disabled"

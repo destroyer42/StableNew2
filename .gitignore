@@ -91,8 +91,8 @@ reports/diagnostics/*.zip
 ruff_report.json
 ruff_report_github.txt
 
-# PR-CLEANUP-LEARN-045: Runtime experiment sessions - local only, never commit
-data/learning/experiments/
+# PR-CLEANUP-LEARN-045: Learning runtime artifacts - local only, never commit
+data/learning/
 
 # PR-CLEANUP-LEARN-045: Photo optimize user assets - local only
 data/photo_optimize/assets/

@@ -365,7 +365,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 2,
+      "limit": 3,
       "slots": [
         {
           "name": "lighting",
@@ -468,7 +468,8 @@
         {
           "name": "number",
           "values": [
-            "one"
+            "one woman",
+            "two women"
           ]
         }
       ]

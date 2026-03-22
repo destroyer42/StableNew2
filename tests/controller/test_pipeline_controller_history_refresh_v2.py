@@ -57,3 +57,20 @@ def test_on_history_entry_updated_triggers_refresh(monkeypatch) -> None:
     )
     ctrl._on_history_entry_updated(entry)
     assert called
+
+
+def test_on_history_entry_updated_ignores_non_terminal_statuses() -> None:
+    ctrl = _make_controller()
+    called: list[bool] = []
+
+    def fake_refresh() -> None:
+        called.append(True)
+
+    ctrl._refresh_app_state_history = fake_refresh  # type: ignore[attr-defined]
+    entry = JobHistoryEntry(
+        job_id="job-gamma",
+        created_at=datetime.utcnow(),
+        status=JobStatus.QUEUED,
+    )
+    ctrl._on_history_entry_updated(entry)
+    assert called == []

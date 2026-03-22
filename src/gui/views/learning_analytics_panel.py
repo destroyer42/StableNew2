@@ -31,7 +31,6 @@ class LearningAnalyticsPanel(ttk.Frame):
         self.experiments_frame = ttk.LabelFrame(self, text="Experiment History", padding=5)
         self.experiments_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-        # Treeview for experiments
         columns = ("Parameter", "Variants", "Ratings", "Best Value", "Best Rating")
         self.experiments_tree = ttk.Treeview(
             self.experiments_frame,
@@ -46,7 +45,6 @@ class LearningAnalyticsPanel(ttk.Frame):
 
         self.experiments_tree.pack(fill="both", expand=True)
 
-        # Scrollbar
         scrollbar = ttk.Scrollbar(
             self.experiments_frame,
             orient="vertical",
@@ -55,7 +53,6 @@ class LearningAnalyticsPanel(ttk.Frame):
         scrollbar.pack(side="right", fill="y")
         self.experiments_tree.config(yscrollcommand=scrollbar.set)
 
-        # Export section
         self.export_frame = ttk.LabelFrame(self, text="Export", padding=5)
         self.export_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
 
@@ -82,7 +79,6 @@ class LearningAnalyticsPanel(ttk.Frame):
 
     def update_analytics(self, analytics_summary: Any) -> None:
         """Update the display with new analytics data."""
-        # Update summary text
         self.summary_text.config(state="normal")
         self.summary_text.delete(1.0, tk.END)
 
@@ -91,17 +87,29 @@ class LearningAnalyticsPanel(ttk.Frame):
             self.summary_text.config(state="disabled")
             return
 
-        lines = []
-        lines.append(f"Total Experiments: {analytics_summary.total_experiments}\n")
-        lines.append(f"Total Ratings: {analytics_summary.total_ratings}\n")
-        lines.append(f"Average Rating: {analytics_summary.avg_rating:.2f} ⭐\n")
+        lines = [
+            f"Total Experiments: {analytics_summary.total_experiments}\n",
+            f"Total Ratings: {analytics_summary.total_ratings}\n",
+            f"Average Rating: {analytics_summary.avg_rating:.2f}\n",
+        ]
+        evidence_counts = getattr(analytics_summary, "evidence_class_counts", {}) or {}
+        if evidence_counts:
+            evidence_parts = [f"{key}={value}" for key, value in sorted(evidence_counts.items())]
+            lines.append(f"Evidence Classes: {', '.join(evidence_parts)}\n")
+        decision_counts = getattr(analytics_summary, "decision_counts", {}) or {}
+        if decision_counts:
+            decision_parts = [f"{key}={value}" for key, value in sorted(decision_counts.items())]
+            lines.append(f"Decisions: {', '.join(decision_parts)}\n")
+        reason_tag_counts = getattr(analytics_summary, "reason_tag_counts", {}) or {}
+        if reason_tag_counts:
+            top_tags = sorted(reason_tag_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+            tag_parts = [f"{tag}={count}" for tag, count in top_tags]
+            lines.append(f"Top Reason Tags: {', '.join(tag_parts)}\n")
 
         self.summary_text.insert(tk.END, "".join(lines))
         self.summary_text.config(state="disabled")
 
-        # Update experiments tree
         self.experiments_tree.delete(*self.experiments_tree.get_children())
-
         for exp in analytics_summary.experiments:
             self.experiments_tree.insert(
                 "",

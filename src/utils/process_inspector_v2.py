@@ -27,6 +27,7 @@ _PYTHON_EXECUTABLES = {
 }
 _KNOWN_SCRIPT_NAMES = {"a1111_upscale_folder.py", "gui_run_packs.py", "launch_webui.py"}
 _ENV_PREFIX = "STABLENEW_"
+_SIGNIFICANT_MAIN_PROCESS_RSS_MB = 64.0
 
 
 @dataclass(frozen=True)
@@ -210,6 +211,11 @@ def collect_process_risk_snapshot(
     processes = list(iter_stablenew_like_processes())
     now = time.time()
     main_processes = [proc for proc in processes if _is_stablenew_main_process(proc.cmdline)]
+    significant_main_processes = [
+        proc
+        for proc in main_processes
+        if proc.rss_mb is None or proc.rss_mb >= _SIGNIFICANT_MAIN_PROCESS_RSS_MB
+    ]
     webui_processes = [proc for proc in processes if _is_webui_process(proc.cmdline, proc.cwd)]
 
     suspicious: list[dict[str, object]] = []
@@ -227,7 +233,7 @@ def collect_process_risk_snapshot(
             reasons.append(f"high_rss_{int(rss_mb_threshold)}mb_plus")
         if age_s is not None and age_s >= age_s_threshold and _is_pytest_process(proc.cmdline):
             reasons.append("stale_pytest_process")
-        if len(main_processes) > 1 and is_main_process:
+        if len(significant_main_processes) > 1 and proc in significant_main_processes:
             reasons.append("duplicate_stablenew_main")
         if len(webui_processes) > 1 and is_webui_process:
             reasons.append("duplicate_webui_process")
@@ -248,13 +254,14 @@ def collect_process_risk_snapshot(
     status = "normal"
     if suspicious:
         status = "warning"
-    if len(main_processes) > 1 or len(webui_processes) > 1:
+    if len(significant_main_processes) > 1 or len(webui_processes) > 1:
         status = "critical"
 
     return {
         "status": status,
         "stablenew_like_count": len(processes),
         "main_process_count": len(main_processes),
+        "significant_main_process_count": len(significant_main_processes),
         "webui_process_count": len(webui_processes),
         "suspicious_processes": suspicious,
     }

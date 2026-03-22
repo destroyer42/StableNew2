@@ -22,6 +22,7 @@ from src.api.webui_process_manager import (
     WebUIProcessManager,
     _get_webui_python_match_reasons,
     _get_webui_shell_match_reasons,
+    kill_orphaned_webui_processes_blocking_port,
 )
 
 
@@ -184,6 +185,82 @@ class TestCMDShellCleanup:
         assert isinstance(orphans, list), "Should return a list"
         
         # Note: Full integration test would require actually creating orphaned processes
+
+
+def test_port_cleanup_skips_unrelated_child_processes(monkeypatch):
+    class _FakeConn:
+        def __init__(self, pid):
+            self.laddr = Mock(port=7860)
+            self.status = "LISTEN"
+            self.pid = pid
+
+    class _FakeChild:
+        def __init__(self, pid: int, name: str, cmdline: list[str], cwd: str | None = None):
+            self.pid = pid
+            self._name = name
+            self._cmdline = cmdline
+            self._cwd = cwd
+            self.killed = False
+
+        def name(self):
+            return self._name
+
+        def cmdline(self):
+            return list(self._cmdline)
+
+        def cwd(self):
+            if self._cwd is None:
+                raise RuntimeError("no cwd")
+            return self._cwd
+
+        def kill(self):
+            self.killed = True
+
+    class _FakeProc(_FakeChild):
+        def __init__(self):
+            super().__init__(
+                111,
+                "python.exe",
+                [r"C:\stable-diffusion-webui\venv\Scripts\python.exe", "launch.py"],
+                r"C:\stable-diffusion-webui",
+            )
+            self.webui_child = _FakeChild(
+                222,
+                "cmd.exe",
+                ["cmd.exe", "/c", r"C:\stable-diffusion-webui\webui-user.bat"],
+                r"C:\stable-diffusion-webui",
+            )
+            self.unrelated_child = _FakeChild(
+                333,
+                "git.exe",
+                ["git.exe", "status"],
+                r"C:\Users\rob\projects\StableNew",
+            )
+
+        def children(self, recursive=True):
+            return [self.webui_child, self.unrelated_child]
+
+        def wait(self, timeout=3.0):
+            return 0
+
+    fake_proc = _FakeProc()
+
+    fake_psutil = Mock()
+    fake_psutil.net_connections.return_value = [_FakeConn(fake_proc.pid)]
+    fake_psutil.Process.return_value = fake_proc
+    fake_psutil.NoSuchProcess = RuntimeError
+    fake_psutil.TimeoutExpired = RuntimeError
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+
+    killed = kill_orphaned_webui_processes_blocking_port(
+        port=7860,
+        working_dir=r"C:\stable-diffusion-webui",
+    )
+
+    assert 222 in killed
+    assert 333 not in killed
+    assert fake_proc.webui_child.killed is True
+    assert fake_proc.unrelated_child.killed is False
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows-specific test")

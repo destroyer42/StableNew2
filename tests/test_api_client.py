@@ -126,6 +126,14 @@ class TestSDWebUIClient:
         assert vaes == []
         self.client._request_context.assert_not_called()
 
+    def test_set_startup_probe_grace_does_not_shrink_existing_window(self):
+        self.client.set_startup_probe_grace(30.0)
+        original_until = self.client._startup_probe_grace_until
+
+        self.client.set_startup_probe_grace(5.0)
+
+        assert self.client._startup_probe_grace_until >= original_until
+
     def test_get_current_model_success(self):
         """Test successful get_current_model call"""
         with requests_mock.Mocker() as m:

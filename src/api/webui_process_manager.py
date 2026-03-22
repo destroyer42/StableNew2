@@ -1509,6 +1509,30 @@ def kill_orphaned_webui_processes_blocking_port(port: int = 7860, working_dir: s
                             children = proc.children(recursive=True)
                             for child in children:
                                 try:
+                                    child_cmdline = child.cmdline()
+                                    try:
+                                        child_cwd = child.cwd()
+                                    except Exception:
+                                        child_cwd = None
+                                    child_python_match = _get_webui_python_match_reasons(
+                                        process_name=child.name(),
+                                        cmdline=child_cmdline,
+                                        cwd=child_cwd,
+                                        working_dir=working_dir,
+                                    )
+                                    child_shell_match = _get_webui_shell_match_reasons(
+                                        process_name=child.name(),
+                                        cmdline=child_cmdline,
+                                        cwd=child_cwd,
+                                        working_dir=working_dir,
+                                    )
+                                    if not (child_python_match or child_shell_match):
+                                        logger.debug(
+                                            "[PORT-DISCOVERY] Skipping unrelated child PID %d (%s)",
+                                            child.pid,
+                                            child.name(),
+                                        )
+                                        continue
                                     logger.info("[PORT-DISCOVERY] Killing child PID %d (%s)", child.pid, child.name())
                                     child.kill()
                                     killed_pids.append(child.pid)

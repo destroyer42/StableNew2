@@ -233,6 +233,7 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
 
             tab._on_staged_open_group("disc-stage")  # noqa: SLF001
             assert len(tab._staged_candidate_tree.get_children()) == 1  # noqa: SLF001
+            assert "Workflow summary:" in tab._staged_workflow_summary_var.get()  # noqa: SLF001
 
             tab._staged_reason_tag_vars["good_composition"].set(True)  # noqa: SLF001
             tab._staged_notes_text.insert("1.0", "promote this image")  # noqa: SLF001
@@ -242,6 +243,7 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
             assert len(events) == 1
             assert events[0].decision == "advanced_to_refine"
             assert events[0].reason_tags == ["good_composition"]
+            assert "Replay chain:" in tab._staged_replay_summary_var.get()  # noqa: SLF001
         finally:
             tab.destroy()
 

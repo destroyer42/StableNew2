@@ -32,6 +32,8 @@ from src.utils.config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
+_WINDOW_SENTINEL_OFFSCREEN = -10000
+
 
 class HeaderZone(ttk.Frame):
     def __init__(self, master: tk.Misc):
@@ -533,9 +535,15 @@ class MainWindowV2:
             
             if saved_geometry:
                 try:
-                    self.root.geometry(saved_geometry)
-                    restored = True
-                    logger.debug(f"Restored window geometry: {saved_geometry}")
+                    if self._is_window_geometry_visible(saved_geometry):
+                        self.root.geometry(saved_geometry)
+                        restored = True
+                        logger.debug(f"Restored window geometry: {saved_geometry}")
+                    else:
+                        logger.warning(
+                            "Ignoring saved off-screen window geometry: %s",
+                            saved_geometry,
+                        )
                 except Exception as e:
                     logger.warning(f"Failed to restore window geometry: {e}")
             
@@ -559,8 +567,59 @@ class MainWindowV2:
 
             if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
                 self.root.geometry(f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}")
-        
+
         self.root.minsize(MIN_MAIN_WINDOW_WIDTH, MIN_MAIN_WINDOW_HEIGHT)
+        try:
+            self.root.deiconify()
+        except Exception:
+            pass
+
+    def _parse_window_geometry(self, geometry: str) -> tuple[int, int, int | None, int | None] | None:
+        text = str(geometry or "").strip()
+        if "x" not in text:
+            return None
+        try:
+            width_str, remainder = text.split("x", 1)
+            width = int(width_str)
+            x = y = None
+            if "+" in remainder:
+                height_str, x_str, y_str = remainder.split("+", 2)
+                height = int(height_str)
+                x = int(x_str)
+                y = int(y_str)
+            else:
+                height = int(remainder)
+            return width, height, x, y
+        except Exception:
+            return None
+
+    def _is_window_geometry_visible(self, geometry: str) -> bool:
+        parsed = self._parse_window_geometry(geometry)
+        if parsed is None:
+            return False
+        width, height, x, y = parsed
+        if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
+            return False
+        if x is None or y is None:
+            return True
+        if x <= _WINDOW_SENTINEL_OFFSCREEN or y <= _WINDOW_SENTINEL_OFFSCREEN:
+            return False
+        try:
+            screen_width = int(self.root.winfo_screenwidth() or 0)
+            screen_height = int(self.root.winfo_screenheight() or 0)
+        except Exception:
+            screen_width = 0
+            screen_height = 0
+        if screen_width <= 0 or screen_height <= 0:
+            return True
+        margin_x = 80
+        margin_y = 60
+        return (
+            x < screen_width - margin_x
+            and y < screen_height - margin_y
+            and (x + width) > margin_x
+            and (y + height) > margin_y
+        )
 
     def update_pack_list(self, packs: list[str]) -> None:
         left = getattr(self, "left_zone", None)
@@ -970,7 +1029,21 @@ class MainWindowV2:
                     window_state = "zoomed"
             except Exception:
                 pass
-            
+            if window_state == "normal" and not self._is_window_geometry_visible(geometry):
+                logger.warning(
+                    "Skipping save of off-screen window geometry: %s",
+                    geometry,
+                )
+                existing_window_state = existing_state.get("window", {})
+                if isinstance(existing_window_state, dict):
+                    preserved_geometry = existing_window_state.get("geometry")
+                    if self._is_window_geometry_visible(str(preserved_geometry or "")):
+                        geometry = str(preserved_geometry)
+                    else:
+                        geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+                else:
+                    geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+
             # Get selected tab index
             selected_tab_index = 0
             try:

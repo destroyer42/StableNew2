@@ -171,6 +171,54 @@ def test_prompt_pack_job_builder_random_matrix_mode_shuffles_combinations(tmp_pa
     assert len(unique_pairs) == 3
 
 
+def test_prompt_pack_job_builder_auto_limits_unbounded_matrix_expansion(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_txt = config_manager.packs_dir / "unbounded-matrix-pack.txt"
+    pack_txt.write_text("A [[job]] in a [[environment]] with [[lighting]]", encoding="utf-8")
+    pack_txt.with_suffix(".json").write_text(
+        json.dumps(
+            {
+                "pack_data": {
+                    "matrix": {
+                        "enabled": True,
+                        "mode": "sequential",
+                        "limit": 0,
+                        "slots": [
+                            {"name": "job", "values": [f"job{i}" for i in range(10)]},
+                            {"name": "environment", "values": [f"env{i}" for i in range(10)]},
+                            {"name": "lighting", "values": [f"light{i}" for i in range(10)]},
+                        ],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+    )
+    entry = PackJobEntry(
+        pack_id=pack_txt.name,
+        pack_name="Unbounded Matrix Pack",
+        prompt_text="A [[job]] in a [[environment]] with [[lighting]]",
+        config_snapshot={"randomization": {"enabled": False}},
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False, "max_variants": 0},
+    )
+
+    expanded = builder._expand_entry_by_matrix(entry)  # noqa: SLF001
+
+    assert len(expanded) == 8
+    assert expanded[0].matrix_slot_values == {
+        "job": "job0",
+        "environment": "env0",
+        "lighting": "light0",
+    }
+
+
 def test_prompt_pack_job_builder_orders_adetailer_before_upscale(tmp_path: Path) -> None:
     builder = PromptPackNormalizedJobBuilder(
         config_manager=StubConfigManager(tmp_path),

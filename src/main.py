@@ -313,7 +313,7 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
                     startup_timeout = float(config.get("webui_startup_timeout_seconds") or 60.0)
                 except Exception:
                     startup_timeout = 60.0
-                client.set_startup_probe_grace(min(max(startup_timeout / 4.0, 10.0), 15.0))
+                client.set_startup_probe_grace(min(max(startup_timeout / 3.0, 20.0), 30.0))
             webui_manager = bootstrap_webui(config)
             if webui_manager:
                 # Update the window with the WebUI manager

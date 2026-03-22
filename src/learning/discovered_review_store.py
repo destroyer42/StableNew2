@@ -36,6 +36,8 @@ from src.learning.discovered_review_models import (
 )
 
 logger = logging.getLogger(__name__)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OUTPUT_ROOT = REPO_ROOT / "output"
 
 _SCAN_INDEX_FILE = "scan_index.json"
 _GROUPS_DIR = "discovered_experiments"
@@ -87,6 +89,8 @@ class DiscoveredReviewStore:
         meta = self._read_json(meta_path) or {}
         items = self._read_json(items_path) or []
 
+        repaired_paths = False
+
         # Merge persisted review state into items
         review_state: dict[str, Any] = self._read_json(group_dir / "review_state.json") or {}
         for item_dict in items:
@@ -96,8 +100,19 @@ class DiscoveredReviewStore:
                 item_dict["rating"] = state.get("rating", RATING_UNRATED)
                 item_dict["rating_notes"] = state.get("rating_notes", "")
                 item_dict["rated_at"] = state.get("rated_at", "")
+            resolved_artifact = self._repair_output_path(str(item_dict.get("artifact_path") or ""))
+            if resolved_artifact and resolved_artifact != str(item_dict.get("artifact_path") or ""):
+                item_dict["artifact_path"] = resolved_artifact
+                repaired_paths = True
+            resolved_manifest = self._repair_output_path(str(item_dict.get("manifest_path") or ""))
+            if resolved_manifest and resolved_manifest != str(item_dict.get("manifest_path") or ""):
+                item_dict["manifest_path"] = resolved_manifest
+                repaired_paths = True
 
-        return DiscoveredReviewExperiment.from_meta_and_items(meta, items)
+        experiment = DiscoveredReviewExperiment.from_meta_and_items(meta, items)
+        if repaired_paths:
+            self.save_group(experiment)
+        return experiment
 
     def delete_group(self, group_id: str) -> bool:
         """Remove all files for *group_id*. Returns True if anything was removed."""
@@ -306,6 +321,62 @@ class DiscoveredReviewStore:
             return 0
         data = self._read_json(items_path)
         return len(data) if isinstance(data, list) else 0
+
+    @staticmethod
+    def _repair_output_path(raw_path: str) -> str:
+        """Repair stale discovered-review paths after output-route rebalances."""
+        raw = str(raw_path or "").strip()
+        if not raw:
+            return raw
+        candidate = Path(raw)
+        if candidate.exists():
+            try:
+                return str(candidate.resolve())
+            except Exception:
+                return str(candidate)
+
+        repo_candidate = REPO_ROOT / candidate
+        if repo_candidate.exists():
+            try:
+                return str(repo_candidate.resolve())
+            except Exception:
+                return str(repo_candidate)
+
+        parts = list(candidate.parts)
+        if parts and parts[0].lower() == "output":
+            relative_parts = parts[1:]
+        else:
+            relative_parts = parts
+        if not relative_parts:
+            return raw
+
+        possible: list[Path] = []
+        possible.append(OUTPUT_ROOT.joinpath(*relative_parts))
+        if len(relative_parts) > 1:
+            possible.append(OUTPUT_ROOT.joinpath(*relative_parts[1:]))
+        for route_dir in OUTPUT_ROOT.iterdir() if OUTPUT_ROOT.exists() else []:
+            if not route_dir.is_dir():
+                continue
+            possible.append(route_dir.joinpath(*relative_parts))
+            if len(relative_parts) > 1:
+                possible.append(route_dir.joinpath(*relative_parts[1:]))
+            if len(relative_parts) >= 2:
+                possible.append(route_dir.joinpath(*relative_parts[-2:]))
+            if len(relative_parts) >= 3:
+                possible.append(route_dir.joinpath(*relative_parts[-3:]))
+
+        seen: set[str] = set()
+        for path_obj in possible:
+            key = str(path_obj)
+            if key in seen:
+                continue
+            seen.add(key)
+            if path_obj.exists():
+                try:
+                    return str(path_obj.resolve())
+                except Exception:
+                    return str(path_obj)
+        return raw
 
     @staticmethod
     def _write_json(path: Path, data: Any) -> None:

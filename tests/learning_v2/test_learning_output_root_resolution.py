@@ -13,7 +13,10 @@ def _build_frame(*, config_manager: object | None = None) -> LearningTabFrame:
     frame.app_state = SimpleNamespace(output_dir="wrong/output/animatediff")
     frame.learning_controller = SimpleNamespace(trigger_background_scan=MagicMock())
     frame.discovered_inbox_panel = SimpleNamespace(set_scanning=MagicMock())
+    frame.staged_inbox_panel = SimpleNamespace(set_scanning=MagicMock())
+    frame._custom_discovered_scan_root = None
     frame._on_discovered_scan_complete = MagicMock()
+    frame._on_staged_scan_complete = MagicMock()
     return frame
 
 
@@ -58,4 +61,33 @@ def test_on_discovered_rescan_uses_resolved_output_root(tmp_path) -> None:
     frame.learning_controller.trigger_background_scan.assert_called_once_with(
         output_root=str(tmp_path / "output"),
         on_complete=frame._on_discovered_scan_complete,
+    )
+
+
+def test_on_discovered_rescan_prefers_custom_scan_root(tmp_path) -> None:
+    custom_root = tmp_path / "custom-scan"
+    custom_root.mkdir(parents=True)
+    frame = _build_frame(config_manager=None)
+    frame._custom_discovered_scan_root = str(custom_root)
+
+    frame._on_discovered_rescan()
+
+    frame.learning_controller.trigger_background_scan.assert_called_once_with(
+        output_root=str(custom_root),
+        on_complete=frame._on_discovered_scan_complete,
+    )
+
+
+def test_on_staged_rescan_prefers_custom_scan_root(tmp_path) -> None:
+    custom_root = tmp_path / "pipeline-only"
+    custom_root.mkdir(parents=True)
+    frame = _build_frame(config_manager=None)
+    frame._custom_discovered_scan_root = str(custom_root)
+
+    frame._on_staged_rescan()
+
+    frame.staged_inbox_panel.set_scanning.assert_called_once_with(True)
+    frame.learning_controller.trigger_background_scan.assert_called_once_with(
+        output_root=str(custom_root),
+        on_complete=frame._on_staged_scan_complete,
     )

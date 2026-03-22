@@ -293,6 +293,12 @@ def build_crash_bundle(
                                 "runtime/replay_descriptor.json",
                                 json.dumps(_anonymize(dict(replay_descriptor)), indent=2),
                             )
+                            curation_descriptor = replay_descriptor.get("curation")
+                            if isinstance(curation_descriptor, Mapping) and curation_descriptor:
+                                zf.writestr(
+                                    "runtime/curation_descriptor.json",
+                                    json.dumps(_anonymize(dict(curation_descriptor)), indent=2),
+                                )
                 if inspector_lines and effective_include_process_state:
                     zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
                 if gpu_snapshot:

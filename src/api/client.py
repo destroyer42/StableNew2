@@ -71,7 +71,7 @@ DEFAULT_READ_TIMEOUT = 60.0
 OPTIONS_POST_MIN_INTERVAL = 6.0
 UPSCALE_SINGLE_IMAGE_TIMEOUT = 300.0
 RESOURCE_ENDPOINT_RETRY_COOLDOWN_SEC = 15.0
-RESOURCE_STARTUP_GRACE_SEC = 15.0
+RESOURCE_STARTUP_GRACE_SEC = 30.0
 _STARTUP_GRACE_ENDPOINTS = {
     "/sdapi/v1/sd-models",
     "/sdapi/v1/sd-vae",
@@ -264,7 +264,13 @@ class SDWebUIClient:
         """Suppress noisy resource probes during expected WebUI startup."""
 
         duration = max(float(duration_s or 0.0), 0.0)
-        self._startup_probe_grace_until = time.monotonic() + duration if duration > 0.0 else 0.0
+        if duration > 0.0:
+            self._startup_probe_grace_until = max(
+                self._startup_probe_grace_until,
+                time.monotonic() + duration,
+            )
+        else:
+            self._startup_probe_grace_until = 0.0
         self._startup_probe_grace_logged.clear()
 
     def clear_startup_probe_grace(self) -> None:

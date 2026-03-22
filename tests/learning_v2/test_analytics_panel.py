@@ -58,6 +58,9 @@ def test_update_analytics_with_data():
                 )
             ],
             parameter_stats=[],
+            evidence_class_counts={"controlled": 1, "observational": 2},
+            decision_counts={"advanced_to_refine": 2},
+            reason_tag_counts={"good_composition": 2, "bad_face": 1},
         )
 
         panel.update_analytics(summary)
@@ -65,6 +68,9 @@ def test_update_analytics_with_data():
         content = panel.summary_text.get(1.0, tk.END)
         assert "Total Experiments: 2" in content
         assert "Total Ratings: 10" in content
+        assert "Evidence Classes: controlled=1, observational=2" in content
+        assert "Decisions: advanced_to_refine=2" in content
+        assert "Top Reason Tags: good_composition=2, bad_face=1" in content
 
         # Check tree has one item
         items = panel.experiments_tree.get_children()

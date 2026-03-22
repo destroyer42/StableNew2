@@ -52,6 +52,24 @@ def _review_record(sampler: str = "DPM++ 2M", steps: int = 30, cfg: float = 9.0,
     }
 
 
+def _curation_record(sampler: str = "DPM++ 2M", steps: int = 28, cfg: float = 6.5, rating: float = 4.3) -> dict:
+    return {
+        "timestamp": "2026-03-10T21:45:00",
+        "primary_sampler": sampler,
+        "primary_scheduler": "Karras",
+        "primary_steps": steps,
+        "primary_cfg_scale": cfg,
+        "base_config": {"prompt": "portrait", "stage": "txt2img"},
+        "metadata": {
+            "record_kind": "staged_curation_event",
+            "user_rating": rating,
+            "stage": "txt2img",
+            "evidence_class": "observational",
+            "advancement_decision": "advanced_to_upscale",
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # no_evidence tier
 # ---------------------------------------------------------------------------
@@ -91,6 +109,16 @@ def test_review_only_single_record_produces_recommendations(tmp_path: Path) -> N
     assert result.recommendations
 
 
+def test_staged_curation_records_are_treated_as_review_only_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "r.jsonl"
+    _write(path, [_curation_record(rating=4.3), _curation_record(rating=4.0)])
+    engine = RecommendationEngine(path)
+    result = engine.recommend("portrait", "txt2img")
+    assert result.evidence_tier == EVIDENCE_TIER_REVIEW_ONLY
+    assert result.automation_eligible is False
+    assert result.recommendations
+
+
 # ---------------------------------------------------------------------------
 # experiment_sparse_plus_review tier  (PR-044 regression fix)
 # ---------------------------------------------------------------------------
@@ -106,6 +134,16 @@ def test_sparse_experiment_plus_review_not_empty(tmp_path: Path) -> None:
     assert result.recommendations, (
         "PR-044 regression: sparse experiment + review evidence must not return empty recommendations"
     )
+
+
+def test_sparse_experiment_plus_curation_evidence_stays_manual_only(tmp_path: Path) -> None:
+    path = tmp_path / "r.jsonl"
+    _write(path, [_exp_record(rating=4), _curation_record(rating=5.0)])
+    engine = RecommendationEngine(path)
+    result = engine.recommend("portrait", "txt2img")
+    assert result.evidence_tier == EVIDENCE_TIER_SPARSE_PLUS_REVIEW
+    assert result.automation_eligible is False
+    assert result.recommendations
 
 
 def test_two_experiment_records_plus_review_is_sparse_tier(tmp_path: Path) -> None:

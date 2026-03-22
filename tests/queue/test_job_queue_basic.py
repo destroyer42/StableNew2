@@ -43,6 +43,18 @@ def test_state_listener_notified_on_changes() -> None:
     assert events
 
 
+def test_state_listener_notifications_can_be_coalesced() -> None:
+    queue = JobQueue()
+    events: list[str] = []
+    queue.register_state_listener(lambda: events.append("updated"))
+
+    with queue.coalesce_state_notifications():
+        queue.submit(Job("listener-job-1"))
+        queue.submit(Job("listener-job-2"))
+
+    assert events == ["updated"]
+
+
 def test_restore_jobs_repopulate_queue() -> None:
     queue = JobQueue()
     job = Job("restored-job")

@@ -225,7 +225,11 @@ class RecommendationEngine:
         for record in records:
             metadata = record.get("metadata", {})
             record_kind = str(metadata.get("record_kind") or "").strip()
-            if record_kind and record_kind not in {"learning_experiment_rating", "review_tab_feedback"}:
+            if record_kind and record_kind not in {
+                "learning_experiment_rating",
+                "review_tab_feedback",
+                "staged_curation_event",
+            }:
                 continue
 
             # Only consider records with user ratings
@@ -623,7 +627,11 @@ class RecommendationEngine:
         review_records = [
             record
             for record in relevant_records
-            if str(record.get("record_kind", "")) in {"review_tab_feedback", "legacy"}
+            if str(record.get("record_kind", "")) in {
+                "review_tab_feedback",
+                "staged_curation_event",
+                "legacy",
+            }
         ]
         # PR-044: deterministic evidence-tier policy — never suppress usable evidence
         if len(experiment_records) >= 3:

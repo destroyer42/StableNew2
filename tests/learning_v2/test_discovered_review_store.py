@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from src.curation.models import SelectionEvent
@@ -187,6 +190,46 @@ def test_store_saves_updated_at_on_save(store):
     loaded = store.load_group("g-ts-001")
     assert loaded is not None
     assert loaded.updated_at >= old_ts
+
+
+def test_store_load_group_repairs_moved_output_paths(store, monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    output_root = repo_root / "output"
+    actual_artifact = output_root / "Pipeline" / "run1" / "item-1.png"
+    actual_manifest = output_root / "Pipeline" / "run1" / "manifests" / "item-1.json"
+    actual_artifact.parent.mkdir(parents=True, exist_ok=True)
+    actual_manifest.parent.mkdir(parents=True, exist_ok=True)
+    actual_artifact.write_bytes(b"fake")
+    actual_manifest.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr("src.learning.discovered_review_store.REPO_ROOT", repo_root)
+    monkeypatch.setattr("src.learning.discovered_review_store.OUTPUT_ROOT", output_root)
+
+    group_dir = Path(store.root) / "discovered_experiments" / "g-repair"
+    group_dir.mkdir(parents=True, exist_ok=True)
+    (group_dir / "meta.json").write_text(
+        json.dumps(_make_experiment("g-repair").to_meta_dict()),
+        encoding="utf-8",
+    )
+    (group_dir / "items.json").write_text(
+        json.dumps(
+            [
+                {
+                    **_make_item("item-1").to_dict(),
+                    "artifact_path": "output/run1/item-1.png",
+                    "manifest_path": "output/run1/manifests/item-1.json",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (group_dir / "review_state.json").write_text("{}", encoding="utf-8")
+
+    loaded = store.load_group("g-repair")
+
+    assert loaded is not None
+    assert loaded.items[0].artifact_path == str(actual_artifact.resolve())
+    assert loaded.items[0].manifest_path == str(actual_manifest.resolve())
 
 
 # ---------------------------------------------------------------------------

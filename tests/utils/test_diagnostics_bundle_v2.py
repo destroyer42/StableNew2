@@ -28,6 +28,11 @@ class DummyJobService:
                         "replay_descriptor": {
                             "schema": "stablenew.replay-descriptor.v2.6",
                             "run_id": "job-1",
+                            "curation": {
+                                "schema": "stablenew.curation_replay_descriptor.v2.6",
+                                "workflow_id": "curation:disc-1",
+                                "candidate_id": "item-1",
+                            },
                         },
                     },
                 }
@@ -85,6 +90,7 @@ def test_build_crash_bundle_includes_runtime_artifacts(tmp_path: Path, monkeypat
         assert "runtime/job_snapshot.json" in names
         assert "runtime/result_summary.json" in names
         assert "runtime/replay_descriptor.json" in names
+        assert "runtime/curation_descriptor.json" in names
         assert "runtime/queue_state.json" in names
         assert "runtime/webui_tail.json" in names
         assert "metadata/process_inspector.txt" in names

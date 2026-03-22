@@ -14,9 +14,21 @@ from typing import Any
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.prompt_workspace_state import PromptWorkspaceState
+from src.gui_v2.adapters.learning_adapter_v2 import (
+    list_recent_learning_records,
+    update_record_feedback,
+)
 from src.curation.curation_workflow_builder import (
     CurationSourceSelection,
     CurationWorkflowBuilder,
+)
+from src.curation.learning_bridge import (
+    CurationLearningBridge,
+    CurationLearningContext,
+)
+from src.curation.workflow_summary import (
+    build_candidate_replay_entry,
+    build_workflow_summary,
 )
 from src.curation.models import CurationCandidate, CurationWorkflow, SelectionEvent
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
@@ -1757,14 +1769,34 @@ class LearningController:
             try:
                 return self.execution_controller.list_recent_records(limit=limit)
             except Exception:
-                return []
-        return []
+                pass
+        records_path = getattr(self._learning_record_writer, "records_path", None)
+        if not records_path:
+            return []
+        try:
+            return list_recent_learning_records(Path(records_path), limit=limit)
+        except Exception:
+            return []
 
     def save_feedback(self, record: Any, rating: int, tags: str | None = None) -> Any:
         """Persist feedback through execution-controller APIs."""
         if self.execution_controller and hasattr(self.execution_controller, "save_feedback"):
-            return self.execution_controller.save_feedback(record, rating, tags)
-        return None
+            try:
+                return self.execution_controller.save_feedback(record, rating, tags)
+            except Exception:
+                pass
+        records_path = getattr(self._learning_record_writer, "records_path", None)
+        if not records_path:
+            return None
+        try:
+            return update_record_feedback(
+                Path(records_path),
+                record,
+                rating=rating,
+                tags=tags,
+            )
+        except Exception:
+            return None
 
     def save_review_feedback(self, feedback: dict[str, Any]) -> LearningRecord:
         """Persist review-tab feedback into learning records for downstream analysis."""
@@ -2414,6 +2446,42 @@ class LearningController:
             "latest_events": latest_events,
         }
 
+    def get_staged_curation_workflow_summary(self, group_id: str) -> dict[str, Any] | None:
+        """Return a summary payload for the staged-curation workflow."""
+        payload = self.load_staged_curation_group(group_id)
+        if not isinstance(payload, dict):
+            return None
+        workflow = payload.get("workflow")
+        experiment = payload.get("experiment")
+        candidates = list(payload.get("candidates") or [])
+        selection_events = list(payload.get("selection_events") or [])
+        if not isinstance(workflow, CurationWorkflow) or experiment is None:
+            return None
+        return build_workflow_summary(workflow, experiment, candidates, selection_events)
+
+    def get_staged_curation_candidate_replay_summary(
+        self,
+        group_id: str,
+        candidate_id: str,
+    ) -> dict[str, Any] | None:
+        """Return replay-lineage details for one staged-curation candidate."""
+        payload = self.load_staged_curation_group(group_id)
+        if not isinstance(payload, dict):
+            return None
+        candidates = list(payload.get("candidates") or [])
+        latest_events = dict(payload.get("latest_events") or {})
+        experiment = payload.get("experiment")
+        item_by_id = {
+            str(getattr(item, "item_id", "") or ""): item
+            for item in list(getattr(experiment, "items", []) or [])
+        }
+        for candidate in candidates:
+            if str(getattr(candidate, "candidate_id", "") or "") != str(candidate_id or ""):
+                continue
+            item = item_by_id.get(str(candidate_id or ""))
+            return build_candidate_replay_entry(candidate, item, latest_events.get(str(candidate_id or "")))
+        return None
+
     def record_staged_curation_selection(
         self,
         group_id: str,
@@ -2445,8 +2513,23 @@ class LearningController:
         )
         if not store.append_selection_event(group_id, event):
             return None
+        if self._learning_record_writer:
+            try:
+                learning_record = CurationLearningBridge.build_learning_record(
+                    CurationLearningContext(
+                        workflow_id=f"curation:{group_id}",
+                        candidate=candidate,
+                        experiment=experiment,
+                        item=item,
+                        event=event,
+                    )
+                )
+                self._learning_record_writer.append_record(learning_record)
+            except Exception:
+                pass
         self.learning_state.selected_staged_curation_group_id = group_id
         self.learning_state.selected_staged_curation_item_id = candidate.candidate_id
+        self.refresh_analytics()
         self._notify_resume_state_changed()
         return event
 

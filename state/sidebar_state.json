@@ -1,5 +1,7 @@
 {
   "selected_list": "",
-  "selected_packs": [],
+  "selected_packs": [
+    "Single-Prompt-Crazy"
+  ],
   "schema_version": "2.6"
 }

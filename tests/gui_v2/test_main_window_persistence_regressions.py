@@ -2,16 +2,38 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.gui.main_window_v2 import MainWindowV2
+from src.gui.main_window_v2 import (
+    DEFAULT_MAIN_WINDOW_HEIGHT,
+    DEFAULT_MAIN_WINDOW_WIDTH,
+    MainWindowV2,
+)
 from src.services.ui_state_store import UIStateStore
 
 
 class _StubRoot:
-    def geometry(self) -> str:
-        return "1200x800+100+50"
+    def __init__(self, geometry: str = "1200x800+100+50") -> None:
+        self._geometry = geometry
+        self.deiconified = 0
+
+    def geometry(self, value: str | None = None) -> str:
+        if value is not None:
+            self._geometry = value
+        return self._geometry
 
     def state(self) -> str:
         return "normal"
+
+    def winfo_screenwidth(self) -> int:
+        return 1920
+
+    def winfo_screenheight(self) -> int:
+        return 1080
+
+    def minsize(self, _width: int, _height: int) -> None:
+        return None
+
+    def deiconify(self) -> None:
+        self.deiconified += 1
 
 
 class _StubNotebook:
@@ -218,3 +240,49 @@ def test_cleanup_does_not_double_shutdown_webui_when_controller_present() -> Non
 
     assert window.app_controller.called == 1
     assert window.webui_process_manager.called == 0
+
+
+def test_ensure_window_geometry_ignores_offscreen_saved_geometry(tmp_path: Path) -> None:
+    store = UIStateStore(tmp_path / "ui_state.json")
+    store.save_state(
+        {
+            "window": {
+                "geometry": "1984x1110+-32000+-32000",
+                "state": "normal",
+            }
+        }
+    )
+
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1x1+0+0")
+    window.app_state = type(
+        "State",
+        (),
+        {"set_learning_enabled": lambda self, value: None},
+    )()
+
+    from unittest.mock import patch
+
+    with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
+        window._ensure_window_geometry()
+
+    assert window.root.geometry() == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+    assert window.root.deiconified == 1
+
+
+def test_save_ui_state_replaces_offscreen_geometry(tmp_path: Path) -> None:
+    store = UIStateStore(tmp_path / "ui_state.json")
+
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1984x1110+-32000+-32000")
+    window.center_notebook = _StubNotebook()
+    window.learning_tab = _StubLearningTab({})
+
+    from unittest.mock import patch
+
+    with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
+        window._save_ui_state()
+
+    saved = store.load_state()
+    assert saved is not None
+    assert saved["window"]["geometry"] == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"

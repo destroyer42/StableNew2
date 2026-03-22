@@ -214,6 +214,29 @@ def test_inbox_panel_rescan_callback(tk_root: tk.Tk) -> None:
 
 
 @pytest.mark.gui
+def test_inbox_panel_scan_folder_callback(tk_root: tk.Tk) -> None:
+    picked = [False]
+    panel = DiscoveredReviewInboxPanel(
+        tk_root,
+        on_pick_scan_root=lambda: picked.__setitem__(0, True),
+    )
+    panel._on_pick_scan_root_clicked()
+    assert picked[0]
+    panel.destroy()
+
+
+@pytest.mark.gui
+def test_inbox_panel_scan_root_label_updates(tk_root: tk.Tk, tmp_path) -> None:
+    panel = DiscoveredReviewInboxPanel(tk_root)
+    panel.set_scan_root(str(tmp_path / "Pipeline"))
+    assert "Scan Root:" in panel._scan_root_var.get()
+    assert "Pipeline" in panel._scan_root_var.get()
+    panel.set_scan_root(None)
+    assert panel._scan_root_var.get() == "Scan Root: Auto"
+    panel.destroy()
+
+
+@pytest.mark.gui
 def test_inbox_panel_varying_fields_shown(tk_root: tk.Tk) -> None:
     panel = DiscoveredReviewInboxPanel(tk_root)
     handle = _make_handle("g1", varying_fields=("sampler", "cfg_scale"))
@@ -488,10 +511,39 @@ def test_controller_load_staged_curation_group_returns_projection(tmp_path) -> N
     assert loaded.status == STATUS_IN_REVIEW
 
 
-def test_controller_record_staged_curation_selection_persists_event(tmp_path) -> None:
+def test_controller_get_staged_curation_workflow_summary_returns_decision_counts(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
 
+    store = DiscoveredReviewStore(tmp_path)
+    ctrl._discovered_review_store = store
+    exp = _make_experiment("disc-curation")
+    store.save_group(exp)
+    ctrl.record_staged_curation_selection(
+        "disc-curation",
+        exp.items[0].item_id,
+        "advanced_to_refine",
+        reason_tags=["good_composition"],
+    )
+
+    summary = ctrl.get_staged_curation_workflow_summary("disc-curation")
+
+    assert summary is not None
+    assert summary["workflow_id"] == "curation:disc-curation"
+    assert summary["decision_counts"] == {"advanced_to_refine": 1}
+    assert summary["reason_tag_counts"] == {"good_composition": 1}
+
+
+def test_controller_record_staged_curation_selection_persists_event(tmp_path) -> None:
+    from src.learning.learning_record import LearningRecordWriter
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+
+    writer = LearningRecordWriter(tmp_path / "learning_records.jsonl")
+    ctrl = LearningController(
+        learning_state=LearningState(),
+        pipeline_controller=MagicMock(),
+        learning_record_writer=writer,
+    )
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
     exp = _make_experiment("disc-curation")
@@ -510,6 +562,9 @@ def test_controller_record_staged_curation_selection_persists_event(tmp_path) ->
     assert len(saved) == 1
     assert saved[0].reason_tags == ["good_composition"]
     assert saved[0].notes == "promote this one"
+    records = writer.records_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(records) == 1
+    assert "\"record_kind\": \"staged_curation_event\"" in records[0]
 
 
 def test_controller_import_review_images_to_staged_curation(tmp_path) -> None:

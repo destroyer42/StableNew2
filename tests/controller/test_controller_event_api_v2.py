@@ -37,15 +37,31 @@ def make_event_controller(pipeline_controller: DummyPipelineController | None) -
     controller.pipeline_controller = pipeline_controller
     job_draft = SimpleNamespace(pack_id="")
     pipeline_state = SimpleNamespace(run_mode="")
-    controller.app_state = SimpleNamespace(job_draft=job_draft, pipeline_state=pipeline_state)
+    controller.app_state = SimpleNamespace(
+        job_draft=job_draft,
+        pipeline_state=pipeline_state,
+        preview_jobs=[],
+        clear_job_draft=lambda: None,
+        set_preview_jobs=lambda jobs: None,
+    )
     controller._last_run_config = {}
     controller._append_log = lambda text: None
+    controller._ui_dispatch = lambda fn: fn()
+    controller._queue_submit_in_progress = False
+    controller._spawn_tracked_thread = (
+        lambda *, target, args=(), kwargs=None, name=None, purpose=None, daemon=False: target(
+            *args, **(kwargs or {})
+        )
+    )
     controller._build_run_config = MethodType(AppController._build_run_config, controller)
     controller._ensure_run_mode_default = MethodType(
         AppController._ensure_run_mode_default, controller
     )
     controller._prepare_queue_run_config = MethodType(
         AppController._prepare_queue_run_config, controller
+    )
+    controller._submit_preview_jobs_to_queue_async = MethodType(
+        AppController._submit_preview_jobs_to_queue_async, controller
     )
     controller._start_run_v2_calls = 0
     controller._start_run_v2 = MethodType(_legacy_run, controller)

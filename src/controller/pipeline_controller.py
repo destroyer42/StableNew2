@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -1011,6 +1012,10 @@ class PipelineController(_GUIPipelineController):
         history_service.register_callback(self._on_history_entry_updated)
 
     def _on_history_entry_updated(self, entry: JobHistoryEntry) -> None:
+        status = getattr(entry, "status", None)
+        status_value = status.value if hasattr(status, "value") else str(status or "")
+        if status_value.lower() not in {"completed", "failed"}:
+            return
         self._refresh_app_state_history()
 
     def _refresh_app_state_queue(self) -> None:
@@ -1597,44 +1602,66 @@ class PipelineController(_GUIPipelineController):
         _logger.info(
             f"[PipelineController] Sorted {len(records)} jobs by model+vae to minimize WebUI switches"
         )
-        
+
+        submit_job = getattr(self._job_service, "submit_job_with_run_mode", None)
+        emit_queue_updated = getattr(self._job_service, "_emit_queue_updated", None)
+        queue = getattr(self._job_service, "job_queue", None)
+        coalesce_queue_state = getattr(queue, "coalesce_state_notifications", None)
         submitted = 0
         run_config_to_use = run_config or getattr(self, "_last_run_config", None)
-        for idx, record in enumerate(records):
-            _logger.info(f"[PipelineController] Submitting NJR {idx+1}/{len(records)}: pack={record.prompt_pack_id}, row={record.prompt_pack_row_index}")
-            prompt_pack_id = None
-            cfg = record.config
-            if isinstance(cfg, dict):
-                prompt_pack_id = cfg.get("prompt_pack_id")
-            if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
-                try:
-                    record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
-                except Exception:
-                    record.prompt_pack_id = prompt_pack_id
-            prompt_pack_name = None
-            if isinstance(cfg, dict):
-                prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
-            self._ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
-            job = self._to_queue_job(
-                record,
-                run_mode="queue",
-                source=source,
-                prompt_source=prompt_source,
-                prompt_pack_id=prompt_pack_id,
-                run_config=run_config_to_use,
-            )
-            job.payload = lambda j=job: self._run_job(j)
-            # PR-CORE1-B2: Enforce NJR-only invariant for new queue jobs
-            if not hasattr(job, "_normalized_record") or job._normalized_record is None:
-                _logger.warning(
-                    "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. "
-                    f"Job ID: {job.job_id}, Source: {source}"
+        batch_context = nullcontext()
+        if callable(coalesce_queue_state):
+            candidate_context = coalesce_queue_state()
+            if hasattr(candidate_context, "__enter__") and hasattr(candidate_context, "__exit__"):
+                batch_context = candidate_context
+        with batch_context:
+            for idx, record in enumerate(records):
+                _logger.info(f"[PipelineController] Submitting NJR {idx+1}/{len(records)}: pack={record.prompt_pack_id}, row={record.prompt_pack_row_index}")
+                prompt_pack_id = None
+                cfg = record.config
+                if isinstance(cfg, dict):
+                    prompt_pack_id = cfg.get("prompt_pack_id")
+                if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
+                    try:
+                        record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
+                    except Exception:
+                        record.prompt_pack_id = prompt_pack_id
+                prompt_pack_name = None
+                if isinstance(cfg, dict):
+                    prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
+                self._ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
+                job = self._to_queue_job(
+                    record,
+                    run_mode="queue",
+                    source=source,
+                    prompt_source=prompt_source,
+                    prompt_pack_id=prompt_pack_id,
+                    run_config=run_config_to_use,
+                )
+                job.payload = lambda j=job: self._run_job(j)
+                if not hasattr(job, "_normalized_record") or job._normalized_record is None:
+                    _logger.warning(
+                        "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. "
+                        f"Job ID: {job.job_id}, Source: {source}"
+                    )
+
+                if callable(submit_job):
+                    try:
+                        submit_job(job, emit_queue_updated=False)
+                    except TypeError:
+                        submit_job(job)
+                self._log_add_to_queue_event(job.job_id)
+                submitted += 1
+
+        if submitted > 0 and callable(emit_queue_updated):
+            try:
+                emit_queue_updated()
+            except Exception:
+                _logger.exception(
+                    "[PipelineController] Failed to emit coalesced queue update after batch submission",
+                    exc_info=True,
                 )
 
-            self._job_service.submit_job_with_run_mode(job)
-            self._log_add_to_queue_event(job.job_id)
-            submitted += 1
-        
         _logger.info(f"[PipelineController] Successfully submitted {submitted} jobs to queue")
         return submitted
 

@@ -5,7 +5,8 @@ PR-LEARN-010: Provides statistical analysis and trend detection.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from collections import Counter, defaultdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,9 @@ class AnalyticsSummary:
     avg_rating: float
     experiments: list[ExperimentSummary]
     parameter_stats: list[ParameterStats]
+    evidence_class_counts: dict[str, int] = field(default_factory=dict)
+    decision_counts: dict[str, int] = field(default_factory=dict)
+    reason_tag_counts: dict[str, int] = field(default_factory=dict)
 
 
 class LearningAnalytics:
@@ -60,17 +64,34 @@ class LearningAnalytics:
 
     def get_experiment_summary(self, experiment_id: str) -> ExperimentSummary | None:
         """Get summary statistics for a specific experiment."""
-        # Get all ratings for this experiment
-        ratings = self.record_writer.get_ratings_for_experiment(experiment_id)
-        if not ratings:
+        records = [
+            record
+            for record in self._read_all_records()
+            if self._extract_experiment_identifier(record) == experiment_id
+        ]
+        if not records:
             return None
 
-        # Group by parameter value
         value_ratings: dict[Any, list[int]] = {}
-        for img_path, rating in ratings.items():
-            # Extract parameter value from metadata (would need enhancement)
-            # For now, use simplified approach
-            value_ratings.setdefault(img_path, []).append(rating)
+        parameter_name = ""
+        for record in records:
+            metadata = record.get("metadata", {}) or {}
+            parameter_name = parameter_name or str(
+                metadata.get("variable_under_test")
+                or metadata.get("advancement_decision")
+                or ""
+            )
+            rating = metadata.get("user_rating")
+            if rating is None:
+                continue
+            try:
+                rating_int = int(round(float(rating)))
+            except (TypeError, ValueError):
+                continue
+            group_value = metadata.get("variant_value")
+            if group_value is None:
+                group_value = metadata.get("image_path") or record.get("run_id")
+            value_ratings.setdefault(group_value, []).append(rating_int)
 
         if not value_ratings:
             return None
@@ -88,7 +109,7 @@ class LearningAnalytics:
 
         return ExperimentSummary(
             experiment_id=experiment_id,
-            parameter_name="",  # Would extract from metadata
+            parameter_name=parameter_name,
             total_variants=len(value_ratings),
             total_ratings=len(all_ratings),
             best_value=best_value,
@@ -109,11 +130,10 @@ class LearningAnalytics:
         # Read all records
         all_records = self._read_all_records()
 
-        # Count total experiments (unique experiment IDs)
         experiment_ids = {
-            r.get("metadata", {}).get("experiment_name", "")
-            for r in all_records
-            if r.get("metadata", {}).get("experiment_name")
+            experiment_id
+            for record in all_records
+            if (experiment_id := self._extract_experiment_identifier(record))
         }
 
         # Count total ratings
@@ -138,13 +158,43 @@ class LearningAnalytics:
             if summary:
                 experiment_summaries.append(summary)
 
+        evidence_counts: Counter[str] = Counter()
+        decision_counts: Counter[str] = Counter()
+        reason_tag_counts: Counter[str] = Counter()
+        for record in all_records:
+            metadata = record.get("metadata", {}) or {}
+            evidence_class = str(metadata.get("evidence_class") or "").strip()
+            if evidence_class:
+                evidence_counts[evidence_class] += 1
+            decision = str(metadata.get("advancement_decision") or "").strip()
+            if decision:
+                decision_counts[decision] += 1
+            for tag in list(metadata.get("reason_tags") or metadata.get("selection_reason_tags") or []):
+                clean = str(tag or "").strip()
+                if clean:
+                    reason_tag_counts[clean] += 1
+
         return AnalyticsSummary(
             total_experiments=len(experiment_ids),
             total_ratings=total_ratings,
             avg_rating=avg_rating,
             experiments=experiment_summaries,
             parameter_stats=[],
+            evidence_class_counts=dict(evidence_counts),
+            decision_counts=dict(decision_counts),
+            reason_tag_counts=dict(reason_tag_counts),
         )
+
+    @staticmethod
+    def _extract_experiment_identifier(record: dict[str, Any]) -> str:
+        metadata = record.get("metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            return ""
+        for key in ("experiment_name", "curation_workflow_id"):
+            value = str(metadata.get(key) or "").strip()
+            if value:
+                return value
+        return ""
 
     def _read_all_records(self) -> list[dict[str, Any]]:
         """Read all records from the JSONL file."""

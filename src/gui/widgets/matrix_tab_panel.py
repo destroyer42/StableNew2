@@ -23,6 +23,8 @@ from src.gui.prompt_workspace_state import PromptWorkspaceState
 class MatrixTabPanel(ttk.Frame):
     """Matrix configuration editor panel."""
 
+    _PREVIEW_DEBOUNCE_MS = 200
+
     def __init__(
         self,
         parent,
@@ -40,6 +42,7 @@ class MatrixTabPanel(ttk.Frame):
         super().__init__(parent)
         self.workspace_state = workspace_state
         self.on_matrix_changed = on_matrix_changed
+        self._preview_refresh_after_id: str | None = None
 
         # Matrix slot entry widgets (list of tuples: name_entry, values_entry, delete_button)
         self.slot_widgets: list[tuple[tk.Entry, tk.Entry, ttk.Button]] = []
@@ -232,7 +235,7 @@ class MatrixTabPanel(ttk.Frame):
         matrix_config = self.workspace_state.get_matrix_config()
         matrix_config.enabled = enabled
         self.on_matrix_changed()
-        self._update_preview()
+        self._schedule_preview_update(immediate=True)
 
     def _on_mode_changed(self) -> None:
         """Update matrix mode."""
@@ -240,7 +243,7 @@ class MatrixTabPanel(ttk.Frame):
         matrix_config = self.workspace_state.get_matrix_config()
         matrix_config.mode = mode
         self.on_matrix_changed()
-        self._update_preview()
+        self._schedule_preview_update(immediate=True)
 
     def _on_limit_changed(self) -> None:
         """Update matrix limit."""
@@ -249,7 +252,7 @@ class MatrixTabPanel(ttk.Frame):
             matrix_config = self.workspace_state.get_matrix_config()
             matrix_config.limit = limit
             self.on_matrix_changed()
-            self._update_preview()
+            self._schedule_preview_update(immediate=True)
         except tk.TclError:
             pass  # Invalid input, ignore
 
@@ -264,7 +267,7 @@ class MatrixTabPanel(ttk.Frame):
         self._add_slot_row(row_index, "", "")
 
         self.on_matrix_changed()
-        self._update_preview()
+        self._schedule_preview_update(immediate=True)
 
     def _on_slot_deleted(self, index: int) -> None:
         """Remove slot at index."""
@@ -278,7 +281,7 @@ class MatrixTabPanel(ttk.Frame):
         # Refresh UI
         self.refresh()
         self.on_matrix_changed()
-        self._update_preview()
+        self._schedule_preview_update(immediate=True)
 
     def _on_slot_changed(self, index: int) -> None:
         """Update slot name/values when user types."""
@@ -302,6 +305,27 @@ class MatrixTabPanel(ttk.Frame):
             matrix_config.slots.append(MatrixSlot(name=name, values=values))
 
         self.on_matrix_changed()
+        self._schedule_preview_update()
+
+    def _schedule_preview_update(self, *, immediate: bool = False) -> None:
+        if self._preview_refresh_after_id is not None:
+            try:
+                self.after_cancel(self._preview_refresh_after_id)
+            except Exception:
+                pass
+            self._preview_refresh_after_id = None
+
+        if immediate:
+            self._update_preview()
+            return
+
+        self._preview_refresh_after_id = self.after(
+            self._PREVIEW_DEBOUNCE_MS,
+            self._run_scheduled_preview_update,
+        )
+
+    def _run_scheduled_preview_update(self) -> None:
+        self._preview_refresh_after_id = None
         self._update_preview()
 
     def _update_preview(self) -> None:
@@ -375,11 +399,7 @@ class MatrixTabPanel(ttk.Frame):
         slot_values = [slot.values for slot in valid_slots]
 
         if matrix_config.mode == "random":
-            all_combos = [dict(zip(slot_names, combo)) for combo in itertools.product(*slot_values)]
-            if not all_combos:
-                return []
-            random.shuffle(all_combos)
-            return all_combos[:limit]
+            return self._build_random_combinations(slot_names, slot_values, limit)
 
         combinations = []
 
@@ -398,6 +418,35 @@ class MatrixTabPanel(ttk.Frame):
                     break
 
         backtrack(0, {})
+        return combinations
+
+    def _build_random_combinations(
+        self,
+        slot_names: list[str],
+        slot_values: list[list[str]],
+        limit: int,
+    ) -> list[dict[str, str]]:
+        if not slot_names or not slot_values or limit <= 0:
+            return []
+
+        unique_total = 1
+        for values in slot_values:
+            unique_total *= max(1, len(values))
+        target_count = min(limit, unique_total)
+
+        combinations: list[dict[str, str]] = []
+        seen: set[tuple[str, ...]] = set()
+        max_attempts = max(target_count * 10, 20)
+        attempts = 0
+
+        while len(combinations) < target_count and attempts < max_attempts:
+            attempts += 1
+            combo_values = tuple(random.choice(values) for values in slot_values)
+            if combo_values in seen:
+                continue
+            seen.add(combo_values)
+            combinations.append(dict(zip(slot_names, combo_values)))
+
         return combinations
 
     def get_matrix_config(self) -> MatrixConfig:

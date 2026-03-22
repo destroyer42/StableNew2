@@ -50,6 +50,7 @@ class LearningTabFrame(ttk.Frame):
 
         # Initialize learning state and controller
         self.learning_state = LearningState()
+        self._custom_discovered_scan_root: str | None = None
         
         # PR-LEARN-002: Get LearningExecutionController from app_controller if available
         execution_controller = getattr(app_controller, "learning_execution_controller", None) if app_controller else None
@@ -241,6 +242,8 @@ class LearningTabFrame(ttk.Frame):
             on_close_group=self._on_discovered_close_group,
             on_ignore_group=self._on_discovered_ignore_group,
             on_rescan=self._on_discovered_rescan,
+            on_pick_scan_root=self._on_pick_discovered_scan_root,
+            on_reset_scan_root=self._on_reset_discovered_scan_root,
         )
         self.discovered_inbox_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
@@ -266,6 +269,8 @@ class LearningTabFrame(ttk.Frame):
         self._staged_syncing_face_tier = False
         self._staged_face_tier_var = tk.StringVar(value="medium")
         self._staged_job_status_var = tk.StringVar(value="No derived jobs submitted yet")
+        self._staged_workflow_summary_var = tk.StringVar(value="Workflow summary: n/a")
+        self._staged_replay_summary_var = tk.StringVar(value="Replay chain: n/a")
 
         self.staged_inbox_panel = DiscoveredReviewInboxPanel(
             self._staged_tab_frame,
@@ -273,6 +278,8 @@ class LearningTabFrame(ttk.Frame):
             on_close_group=self._on_staged_close_group,
             on_ignore_group=self._on_staged_ignore_group,
             on_rescan=self._on_staged_rescan,
+            on_pick_scan_root=self._on_pick_discovered_scan_root,
+            on_reset_scan_root=self._on_reset_discovered_scan_root,
         )
         self.staged_inbox_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
@@ -283,7 +290,7 @@ class LearningTabFrame(ttk.Frame):
         )
         staged_center.grid(row=0, column=1, sticky="nsew", padx=2, pady=4)
         staged_center.columnconfigure(0, weight=1)
-        staged_center.rowconfigure(1, weight=1)
+        staged_center.rowconfigure(2, weight=1)
 
         self._staged_group_var = tk.StringVar(value="Open a discovered group to start staged curation")
         ttk.Label(
@@ -293,9 +300,16 @@ class LearningTabFrame(ttk.Frame):
             justify="left",
             anchor="w",
         ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        ttk.Label(
+            staged_center,
+            textvariable=self._staged_workflow_summary_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+            anchor="w",
+        ).grid(row=1, column=0, sticky="ew", pady=(0, 4))
 
         candidate_frame = ttk.Frame(staged_center, style=SURFACE_FRAME_STYLE)
-        candidate_frame.grid(row=1, column=0, sticky="nsew")
+        candidate_frame.grid(row=2, column=0, sticky="nsew")
         candidate_frame.columnconfigure(0, weight=1)
         candidate_frame.rowconfigure(0, weight=1)
 
@@ -333,7 +347,7 @@ class LearningTabFrame(ttk.Frame):
         )
         staged_right.grid(row=0, column=2, sticky="nsew", padx=(2, 0), pady=4)
         staged_right.columnconfigure(0, weight=1)
-        staged_right.rowconfigure(1, weight=1)
+        staged_right.rowconfigure(2, weight=1)
 
         self._staged_preview_meta_var = tk.StringVar(
             value="Select a candidate to preview and record a staged-curation decision"
@@ -345,17 +359,24 @@ class LearningTabFrame(ttk.Frame):
             justify="left",
             anchor="w",
         ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        ttk.Label(
+            staged_right,
+            textvariable=self._staged_replay_summary_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+            anchor="w",
+        ).grid(row=1, column=0, sticky="ew", pady=(0, 4))
 
         self._staged_preview_thumbnail = ImageThumbnail(
             staged_right,
             max_width=1400,
             max_height=1400,
         )
-        self._staged_preview_thumbnail.grid(row=1, column=0, sticky="nsew")
+        self._staged_preview_thumbnail.grid(row=2, column=0, sticky="nsew")
         self._staged_preview_thumbnail.clear()
 
         reason_frame = ttk.LabelFrame(staged_right, text="Reason Tags", padding=(6, 4))
-        reason_frame.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        reason_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
         for index, tag in enumerate(self.learning_controller.get_staged_curation_reason_tag_options()):
             var = tk.BooleanVar(value=False)
             self._staged_reason_tag_vars[tag] = var
@@ -366,7 +387,7 @@ class LearningTabFrame(ttk.Frame):
             ).grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=1)
 
         tier_frame = ttk.LabelFrame(staged_right, text="Face Triage Tier", padding=(6, 4))
-        tier_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        tier_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
         tier_frame.columnconfigure(1, weight=1)
         ttk.Label(tier_frame, text="Tier", style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=2
@@ -385,7 +406,7 @@ class LearningTabFrame(ttk.Frame):
         )
 
         notes_frame = ttk.LabelFrame(staged_right, text="Decision Notes", padding=(6, 4))
-        notes_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        notes_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
         notes_frame.columnconfigure(0, weight=1)
         self._staged_notes_text = tk.Text(notes_frame, height=4, wrap="word")
         self._staged_notes_text.grid(row=0, column=0, sticky="ew")
@@ -395,10 +416,10 @@ class LearningTabFrame(ttk.Frame):
             staged_right,
             textvariable=self._staged_last_decision_var,
             style=BODY_LABEL_STYLE,
-        ).grid(row=5, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=6, column=0, sticky="w", pady=(6, 0))
 
         action_frame = ttk.Frame(staged_right, style=SURFACE_FRAME_STYLE)
-        action_frame.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+        action_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
         for label, decision in (
             ("Reject", "rejected_hard"),
             ("Hold", "not_advanced"),
@@ -414,7 +435,7 @@ class LearningTabFrame(ttk.Frame):
             ).pack(side="left", padx=(0, 4))
 
         derive_frame = ttk.LabelFrame(staged_right, text="Derived Jobs", padding=(6, 4))
-        derive_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+        derive_frame.grid(row=8, column=0, sticky="ew", pady=(6, 0))
         ttk.Button(
             derive_frame,
             text="Generate Refine Jobs",
@@ -435,10 +456,11 @@ class LearningTabFrame(ttk.Frame):
             textvariable=self._staged_job_status_var,
             style=BODY_LABEL_STYLE,
             justify="left",
-        ).grid(row=8, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=9, column=0, sticky="w", pady=(6, 0))
 
         # Refresh inbox when its tab is activated
         self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
+        self._set_discovered_scan_root(None)
 
     def _on_learning_toggle(self) -> None:
         """Handle the learning mode toggle button."""
@@ -760,10 +782,33 @@ class LearningTabFrame(ttk.Frame):
 
         return str(get_output_root(configured_root or "output", create=False))
 
+    def _get_effective_discovered_scan_root(self) -> str:
+        return str(self._custom_discovered_scan_root or self._resolve_discovered_output_root())
+
+    def _set_discovered_scan_root(self, scan_root: str | None) -> None:
+        self._custom_discovered_scan_root = str(scan_root) if scan_root else None
+        if hasattr(self, "discovered_inbox_panel"):
+            self.discovered_inbox_panel.set_scan_root(self._custom_discovered_scan_root)
+        if hasattr(self, "staged_inbox_panel"):
+            self.staged_inbox_panel.set_scan_root(self._custom_discovered_scan_root)
+
+    def _on_pick_discovered_scan_root(self) -> None:
+        selected = filedialog.askdirectory(
+            title="Choose Learning Scan Folder",
+            initialdir=self._get_effective_discovered_scan_root(),
+            mustexist=True,
+        )
+        if not selected:
+            return
+        self._set_discovered_scan_root(selected)
+
+    def _on_reset_discovered_scan_root(self) -> None:
+        self._set_discovered_scan_root(None)
+
     def _on_discovered_rescan(self) -> None:
         self.discovered_inbox_panel.set_scanning(True)
         self.learning_controller.trigger_background_scan(
-            output_root=self._resolve_discovered_output_root(),
+            output_root=self._get_effective_discovered_scan_root(),
             on_complete=self._on_discovered_scan_complete,
         )
 
@@ -804,6 +849,15 @@ class LearningTabFrame(ttk.Frame):
             f"{len(self._staged_items_by_id)} candidate(s) | "
             f"varying: {', '.join(list(getattr(experiment, 'varying_fields', []) or [])) or 'n/a'}"
         )
+        summary = self.learning_controller.get_staged_curation_workflow_summary(group_id) or {}
+        decision_counts = dict(summary.get("decision_counts") or {})
+        stage_counts = dict(summary.get("stage_counts") or {})
+        summary_bits = [
+            f"stages={', '.join(f'{k}:{v}' for k, v in sorted(stage_counts.items())) or 'n/a'}",
+            f"decisions={', '.join(f'{k}:{v}' for k, v in sorted(decision_counts.items())) or 'n/a'}",
+            f"rated={int(summary.get('rated_count', 0) or 0)}/{int(summary.get('candidate_count', 0) or 0)}",
+        ]
+        self._staged_workflow_summary_var.set("Workflow summary: " + " | ".join(summary_bits))
         self._staged_job_status_var.set("No derived jobs submitted yet")
         self._render_staged_candidates(candidates, latest_events)
         self._clear_staged_reason_tags()
@@ -856,6 +910,7 @@ class LearningTabFrame(ttk.Frame):
             self._staged_preview_meta_var.set(
                 "Select a candidate to preview and record a staged-curation decision"
             )
+            self._staged_replay_summary_var.set("Replay chain: n/a")
             self._staged_last_decision_var.set("Latest decision: none")
             self._staged_preview_thumbnail.clear()
             self._clear_staged_reason_tags()
@@ -871,6 +926,12 @@ class LearningTabFrame(ttk.Frame):
         self.learning_controller.learning_state.selected_staged_curation_item_id = candidate_id
         self.learning_controller.learning_state.selected_staged_curation_group_id = self._staged_current_group_id
         latest = self._staged_latest_events.get(candidate_id)
+        replay_summary = None
+        if self._staged_current_group_id:
+            replay_summary = self.learning_controller.get_staged_curation_candidate_replay_summary(
+                self._staged_current_group_id,
+                candidate_id,
+            )
         dimensions = ""
         if int(getattr(item, "width", 0) or 0) and int(getattr(item, "height", 0) or 0):
             dimensions = f"{item.width} x {item.height}"
@@ -892,6 +953,18 @@ class LearningTabFrame(ttk.Frame):
         self._staged_preview_thumbnail.load_image(str(getattr(item, "artifact_path", "") or ""))
         self._clear_staged_reason_tags()
         self._staged_notes_text.delete("1.0", tk.END)
+        if isinstance(replay_summary, dict):
+            replay_bits = [
+                f"root={replay_summary.get('root_candidate_id') or candidate_id}",
+                f"parent={replay_summary.get('parent_candidate_id') or 'none'}",
+                f"decision={replay_summary.get('decision') or 'unreviewed'}",
+            ]
+            face_tier = str(replay_summary.get("face_triage_tier") or "").strip()
+            if face_tier:
+                replay_bits.append(f"face_tier={face_tier}")
+            self._staged_replay_summary_var.set("Replay chain: " + " | ".join(replay_bits))
+        else:
+            self._staged_replay_summary_var.set("Replay chain: n/a")
         tier_value = str(getattr(item, "extra_fields", {}).get("face_triage_tier") or "medium")
         self._staged_syncing_face_tier = True
         self._staged_face_tier_var.set(tier_value)
@@ -1006,7 +1079,7 @@ class LearningTabFrame(ttk.Frame):
     def _on_staged_rescan(self) -> None:
         self.staged_inbox_panel.set_scanning(True)
         self.learning_controller.trigger_background_scan(
-            output_root=self._resolve_discovered_output_root(),
+            output_root=self._get_effective_discovered_scan_root(),
             on_complete=self._on_staged_scan_complete,
         )
 
@@ -1021,6 +1094,8 @@ class LearningTabFrame(ttk.Frame):
         self._staged_latest_events = {}
         self._staged_candidate_tree.delete(*self._staged_candidate_tree.get_children())
         self._staged_group_var.set("Open a discovered group to start staged curation")
+        self._staged_workflow_summary_var.set("Workflow summary: n/a")
+        self._staged_replay_summary_var.set("Replay chain: n/a")
         self._staged_job_status_var.set("No derived jobs submitted yet")
         self._update_staged_preview(None)
 

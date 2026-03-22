@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import MethodType
 from typing import Any
 
 from src.controller.app_controller import AppController, RunConfigDict, RunMode, RunSource
@@ -44,6 +45,18 @@ class DummyAppController(AppController):
         self.main_window = None
         self.job_service = None
         self._append_log = lambda *_: None
+        self._ui_dispatch = lambda fn: fn()
+        self._queue_submit_in_progress = False
+        self._spawn_tracked_thread = (
+            lambda *, target, args=(), kwargs=None, name=None, purpose=None, daemon=False: target(
+                *args,
+                **(kwargs or {}),
+            )
+        )
+        self._submit_preview_jobs_to_queue_async = MethodType(
+            AppController._submit_preview_jobs_to_queue_async,
+            self,
+        )
 
     # Override inherited handlers to ensure on_add_job_to_queue_v2 falls through to _start_run_v2
     on_add_job_to_queue = None

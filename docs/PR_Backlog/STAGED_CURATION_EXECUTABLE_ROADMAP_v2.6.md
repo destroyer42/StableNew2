@@ -103,6 +103,10 @@ Primary outcomes:
 
 ### `PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics`
 
+Status:
+
+- Completed 2026-03-21
+
 Purpose:
 
 - turn advancement behavior into structured learning signal without collapsing it into crude thumbs-up/down
@@ -115,6 +119,10 @@ Primary outcomes:
 - final ratings remain distinct from stage advancement
 
 ### `PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries`
+
+Status:
+
+- Completed 2026-03-21
 
 Purpose:
 

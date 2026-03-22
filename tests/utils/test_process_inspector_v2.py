@@ -158,3 +158,39 @@ def test_collect_process_risk_snapshot_marks_duplicate_main_processes_critical(m
     assert result["status"] == "critical"
     assert result["main_process_count"] == 2
     assert len(result["suspicious_processes"]) == 2
+
+
+def test_collect_process_risk_snapshot_ignores_tiny_duplicate_main_process(monkeypatch) -> None:
+    main_a = process_inspector_v2.ProcessInfo(
+        pid=1,
+        parent_pid=None,
+        name="python.exe",
+        cmdline=("python", "-m", "src.main"),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=900.0,
+        env_markers=(),
+    )
+    main_b = process_inspector_v2.ProcessInfo(
+        pid=2,
+        parent_pid=1,
+        name="python.exe",
+        cmdline=("python", "-m", "src.main"),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=8.0,
+        env_markers=(),
+    )
+
+    monkeypatch.setattr(
+        process_inspector_v2,
+        "iter_stablenew_like_processes",
+        lambda: iter([main_a, main_b]),
+    )
+
+    result = process_inspector_v2.collect_process_risk_snapshot()
+
+    assert result["status"] == "normal"
+    assert result["main_process_count"] == 2
+    assert result["significant_main_process_count"] == 1
+    assert result["suspicious_processes"] == []
