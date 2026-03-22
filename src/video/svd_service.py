@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import importlib
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,9 @@ from PIL import Image
 
 from src.video.svd_config import SVDInferenceConfig
 from src.video.svd_errors import SVDInferenceError, SVDInputError, SVDModelLoadError
+from src.video.svd_models import is_svd_model_cached, resolve_svd_cache_dir
+
+logger = logging.getLogger(__name__)
 
 
 class SVDService:
@@ -108,11 +112,12 @@ class SVDService:
             self._release_runtime_memory()
 
     def _get_pipeline(self, config: SVDInferenceConfig) -> Any:
+        resolved_cache_dir = str(self._resolve_cache_dir(config))
         cache_key = (
             config.model_id,
             config.torch_dtype,
             config.variant,
-            config.cache_dir or self._cache_dir,
+            resolved_cache_dir,
         )
         cached = self._pipeline_cache.get(cache_key)
         if cached is not None:
@@ -130,20 +135,51 @@ class SVDService:
             raise SVDModelLoadError(self._format_dependency_error(exc)) from exc
 
         dtype = self._resolve_torch_dtype(torch, config.torch_dtype)
+        cache_dir = self._resolve_cache_dir(config)
         kwargs: dict[str, Any] = {
             "torch_dtype": dtype,
-            "local_files_only": config.local_files_only,
+            "cache_dir": str(cache_dir),
         }
-        cache_dir = config.cache_dir or self._cache_dir
-        if cache_dir:
-            kwargs["cache_dir"] = cache_dir
         if config.variant:
             kwargs["variant"] = config.variant
+
+        cached_snapshot = is_svd_model_cached(config.model_id, cache_dir=cache_dir)
+        local_error: Exception | None = None
+        if cached_snapshot:
+            try:
+                pipeline = pipeline_cls.from_pretrained(
+                    config.model_id,
+                    local_files_only=True,
+                    **kwargs,
+                )
+            except Exception as exc:
+                local_error = exc
+                logger.warning(
+                    "[SVD] Failed to load %s from local cache %s; retrying remote refresh: %s",
+                    config.model_id,
+                    cache_dir,
+                    exc,
+                )
+            else:
+                return self._initialize_pipeline_device(pipeline, torch=torch, config=config)
+
         try:
-            pipeline = pipeline_cls.from_pretrained(config.model_id, **kwargs)
+            pipeline = pipeline_cls.from_pretrained(
+                config.model_id,
+                local_files_only=False,
+                **kwargs,
+            )
         except Exception as exc:
+            if local_error is not None:
+                raise SVDModelLoadError(
+                    f"Failed to load SVD model '{config.model_id}' from cache at '{cache_dir}' "
+                    f"and remote refresh also failed. Cache error: {local_error}. Remote error: {exc}"
+                ) from exc
             raise SVDModelLoadError(f"Failed to load SVD model '{config.model_id}': {exc}") from exc
 
+        return self._initialize_pipeline_device(pipeline, torch=torch, config=config)
+
+    def _initialize_pipeline_device(self, pipeline: Any, *, torch: Any, config: SVDInferenceConfig) -> Any:
         try:
             if config.cpu_offload and hasattr(pipeline, "enable_model_cpu_offload"):
                 pipeline.enable_model_cpu_offload()
@@ -163,6 +199,11 @@ class SVDService:
                     pass
 
         return pipeline
+
+    def _resolve_cache_dir(self, config: SVDInferenceConfig) -> Path:
+        cache_dir = resolve_svd_cache_dir(config.cache_dir or self._cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
 
     @classmethod
     def _release_pipelines(cls, pipelines: list[Any]) -> None:

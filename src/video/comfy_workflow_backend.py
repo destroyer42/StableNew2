@@ -26,6 +26,18 @@ from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 
+def _build_missing_runtime_message(base_url: str, reason: Exception | None = None) -> str:
+    message = (
+        "ComfyUI is not running and StableNew has no managed ComfyUI launch configuration. "
+        f"Tried base URL '{base_url}'. Configure ComfyUI in Engine Settings so presets/settings.json "
+        "contains a valid comfy_command and comfy_workdir, or start ComfyUI manually before running "
+        "the video_workflow stage."
+    )
+    if reason is not None:
+        message = f"{message} Last probe error: {reason}"
+    return message
+
+
 def _dedupe_paths(values: list[str]) -> list[str]:
     seen: set[str] = set()
     deduped: list[str] = []
@@ -315,6 +327,12 @@ class ComfyWorkflowVideoBackend:
             if default_config is not None:
                 manager = ComfyProcessManager(default_config)
                 self._managed_process_manager = manager
+            else:
+                try:
+                    wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
+                    return self._base_url
+                except Exception as exc:
+                    raise RuntimeError(_build_missing_runtime_message(self._base_url, exc)) from exc
         if manager is not None:
             if not manager.ensure_running():
                 raise RuntimeError("Managed ComfyUI process failed to become healthy")

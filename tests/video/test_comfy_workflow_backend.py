@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.video import ComfyWorkflowVideoBackend, VideoExecutionRequest
+from src.video import ComfyHealthCheckTimeout, ComfyWorkflowVideoBackend, VideoExecutionRequest
 
 
 def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
@@ -222,4 +222,37 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
     # Core execute fields still present.
     assert result.primary_path == str(output_video)
     assert result.backend_metadata["workflow_id"] == "ltx_multiframe_anchor_v1"
+
+
+def test_comfy_workflow_backend_reports_missing_managed_runtime_configuration(
+    monkeypatch,
+) -> None:
+    backend = ComfyWorkflowVideoBackend(history_poll_interval=0.01, history_timeout=1.0)
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.build_default_comfy_process_config",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.get_global_comfy_process_manager",
+        lambda: None,
+    )
+
+    def _unavailable(*_args, **_kwargs):
+        raise ComfyHealthCheckTimeout("connection refused")
+
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.wait_for_comfy_ready",
+        _unavailable,
+    )
+
+    try:
+        backend._ensure_runtime_ready()  # noqa: SLF001
+    except RuntimeError as exc:
+        message = str(exc)
+        assert "no managed ComfyUI launch configuration" in message
+        assert "presets/settings.json" in message
+        assert "comfy_command" in message
+        assert "comfy_workdir" in message
+    else:
+        raise AssertionError("Expected missing ComfyUI runtime configuration to fail")
 

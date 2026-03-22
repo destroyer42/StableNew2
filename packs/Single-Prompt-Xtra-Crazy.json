@@ -4,22 +4,24 @@
     "slots": [
       {
         "index": 0,
-        "text": "close up, portrait, a highly detailed fantasy scene centered on [[number]],\na female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nwearing [[clothes]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
-        "negative": "low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes,  glassy eyes, doll-like eyes",
+        "text": "close up, portrait, a highly detailed fantasy scene,\na female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nwearing [[clothes]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1",
-          "Stable_Yogis_Anatomy_Positives_V1"
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
         ],
         "negative_embeddings": [
           "Stable_Yogis_Anatomy_Negatives_V1-neg",
           "Stable_Yogis_PDXL_Negatives2-neg",
-          "NEGATIVE_HANDS"
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
         ],
         "loras": [
           [
             "add-detail-xl",
-            0.26249999999999996
+            0.7374999999999999
           ],
           [
             "CinematicStyle_v1",
@@ -28,6 +30,10 @@
           [
             "DetailedEyes_V3",
             0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       }
@@ -171,16 +177,6 @@
             "the moment history changed",
             "watching the world burn",
             "holding the line alone"
-          ]
-        },
-        {
-          "name": "number",
-          "values": [
-            "one lone figure",
-            "a single central figure",
-            "two allied figures",
-            "a small group of three women",
-            "twin mirrored figures"
           ]
         },
         {

@@ -101,3 +101,83 @@ def test_generate_frames_releases_inference_images_and_cuda_cache(monkeypatch, t
     assert len(frames) == 2
     assert calls.count("frame.close") == 2
     assert calls[-1] == "release"
+
+
+def test_load_pipeline_prefers_cached_local_snapshot_before_network(monkeypatch, tmp_path) -> None:
+    calls: list[dict[str, object]] = []
+
+    class _FakePipeline:
+        def to(self, _device: str) -> None:
+            return None
+
+    class _FakePipelineCls:
+        @staticmethod
+        def from_pretrained(_model_id: str, **kwargs):
+            calls.append(dict(kwargs))
+            return _FakePipeline()
+
+    fake_torch = SimpleNamespace(
+        float16="float16",
+        bfloat16="bfloat16",
+        float32="float32",
+        cuda=SimpleNamespace(is_available=lambda: False),
+    )
+    fake_diffusers = SimpleNamespace(StableVideoDiffusionPipeline=_FakePipelineCls)
+    monkeypatch.setattr(
+        "src.video.svd_service.importlib.import_module",
+        lambda name: fake_torch if name == "torch" else fake_diffusers,
+    )
+    monkeypatch.setattr(
+        "src.video.svd_service.resolve_svd_cache_dir",
+        lambda _cache_dir=None: tmp_path / "cache",
+    )
+    monkeypatch.setattr(
+        "src.video.svd_service.is_svd_model_cached",
+        lambda _model_id, *, cache_dir=None: True,
+    )
+
+    SVDService()._load_pipeline(SVDInferenceConfig(local_files_only=False))
+
+    assert len(calls) == 1
+    assert calls[0]["local_files_only"] is True
+    assert calls[0]["cache_dir"] == str(tmp_path / "cache")
+
+
+def test_load_pipeline_downloads_to_persistent_cache_when_snapshot_is_missing(monkeypatch, tmp_path) -> None:
+    calls: list[dict[str, object]] = []
+
+    class _FakePipeline:
+        def to(self, _device: str) -> None:
+            return None
+
+    class _FakePipelineCls:
+        @staticmethod
+        def from_pretrained(_model_id: str, **kwargs):
+            calls.append(dict(kwargs))
+            return _FakePipeline()
+
+    fake_torch = SimpleNamespace(
+        float16="float16",
+        bfloat16="bfloat16",
+        float32="float32",
+        cuda=SimpleNamespace(is_available=lambda: False),
+    )
+    fake_diffusers = SimpleNamespace(StableVideoDiffusionPipeline=_FakePipelineCls)
+    monkeypatch.setattr(
+        "src.video.svd_service.importlib.import_module",
+        lambda name: fake_torch if name == "torch" else fake_diffusers,
+    )
+    monkeypatch.setattr(
+        "src.video.svd_service.resolve_svd_cache_dir",
+        lambda _cache_dir=None: tmp_path / "cache",
+    )
+    monkeypatch.setattr(
+        "src.video.svd_service.is_svd_model_cached",
+        lambda _model_id, *, cache_dir=None: False,
+    )
+
+    SVDService()._load_pipeline(SVDInferenceConfig(local_files_only=True))
+
+    assert len(calls) == 1
+    assert calls[0]["local_files_only"] is False
+    assert calls[0]["cache_dir"] == str(tmp_path / "cache")

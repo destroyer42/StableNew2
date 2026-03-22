@@ -9,7 +9,12 @@ from typing import Any
 
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
-from src.video.svd_models import get_default_svd_model_id, get_svd_model_options, get_supported_svd_models
+from src.video.svd_models import (
+    get_default_svd_cache_dir,
+    get_default_svd_model_id,
+    get_svd_model_options,
+    get_supported_svd_models,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +154,9 @@ class SVDTabFrameV2(ttk.Frame):
         self.save_frames_var = tk.BooleanVar(value=False)
         self.cpu_offload_var = tk.BooleanVar(value=True)
         self.forward_chunking_var = tk.BooleanVar(value=True)
-        self.local_files_only_var = tk.BooleanVar(value=False)
+        self.local_files_only_var = tk.BooleanVar(value=True)
         self.decode_chunk_size_var = tk.IntVar(value=2)
-        self.cache_dir_var = tk.StringVar()
+        self.cache_dir_var = tk.StringVar(value=str(get_default_svd_cache_dir()))
         self.face_restore_enabled_var = tk.BooleanVar(value=False)
         self.face_restore_method_var = tk.StringVar(value="CodeFormer")
         self.face_restore_fidelity_var = tk.DoubleVar(value=0.7)
@@ -788,6 +793,8 @@ class SVDTabFrameV2(ttk.Frame):
             self.noise_aug_var.set(float(inference.get("noise_aug_strength", self.noise_aug_var.get())))
             self.inference_steps_var.set(int(inference.get("num_inference_steps", self.inference_steps_var.get())))
             self.decode_chunk_size_var.set(int(inference.get("decode_chunk_size", self.decode_chunk_size_var.get())))
+            self.local_files_only_var.set(bool(inference.get("local_files_only", self.local_files_only_var.get())))
+            self.cache_dir_var.set(str(inference.get("cache_dir") or self.cache_dir_var.get() or ""))
 
         output = defaults.get("output")
         if isinstance(output, dict):

@@ -7,6 +7,7 @@ import tkinter as tk
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
+from src.video.svd_models import get_default_svd_cache_dir
 
 
 def test_svd_tab_renders(tk_root: tk.Tk) -> None:
@@ -23,6 +24,8 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert tab.resize_mode_var.get() == "center_crop"
         assert tab.motion_bucket_var.get() == 48
         assert tab.noise_aug_var.get() == 0.01
+        assert tab.local_files_only_var.get() is True
+        assert tab.cache_dir_var.get() == str(get_default_svd_cache_dir())
     finally:
         tab.destroy()
 
@@ -136,6 +139,10 @@ def test_svd_tab_applies_runtime_recommended_defaults(tk_root: tk.Tk) -> None:
         "stabilityai/stable-video-diffusion-img2vid-xt"
     ]
     controller.build_svd_defaults.return_value = {
+        "inference": {
+            "local_files_only": True,
+            "cache_dir": "C:/cache/svd",
+        },
         "postprocess": {
             "face_restore": {
                 "enabled": True,
@@ -161,6 +168,8 @@ def test_svd_tab_applies_runtime_recommended_defaults(tk_root: tk.Tk) -> None:
         assert tab.interpolation_enabled_var.get() is True
         assert tab.frame_upscale_enabled_var.get() is True
         assert tab.rife_executable_var.get() == "C:/tools/rife/rife-ncnn-vulkan.exe"
+        assert tab.local_files_only_var.get() is True
+        assert tab.cache_dir_var.get() == "C:/cache/svd"
     finally:
         tab.destroy()
 

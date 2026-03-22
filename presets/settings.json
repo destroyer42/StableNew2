@@ -1,0 +1,19 @@
+{
+  "comfy_base_url": "http://127.0.0.1:8000",
+  "comfy_workdir": "E:\\Users\\rober\\AppData\\Local\\Programs\\ComfyUI\\resources\\ComfyUI",
+  "comfy_command": [
+    "E:\\Users\\rober\\ComfyUI\\.venv-explicit\\Scripts\\python.exe",
+    "E:\\Users\\rober\\AppData\\Local\\Programs\\ComfyUI\\resources\\ComfyUI\\main.py",
+    "--listen",
+    "127.0.0.1",
+    "--port",
+    "8000",
+    "--base-directory",
+    "E:\\Users\\rober\\ComfyUI",
+    "--extra-model-paths-config",
+    "E:\\Users\\rober\\ComfyUI\\user\\extra_model_paths.yaml",
+    "--disable-auto-launch"
+  ],
+  "comfy_autostart_enabled": true,
+  "comfy_health_total_timeout_seconds": 30.0
+}

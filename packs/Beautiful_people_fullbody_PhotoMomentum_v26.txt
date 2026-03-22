@@ -21,6 +21,6 @@ neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1>
 (masterpiece, best quality, photorealistic) portrait, detailed skin, natural light, romantic atmosphere a blonde-haired perky-large-breasted athletic beautiful blue-eyed sun-kissed tan woman lies atop another gorgeous woman with opposite orientations, each one with their head aligned with the groin of the other, as  they slowly caress and kiss each other's vaginas, in a bedroom, wearing  nothing, legs spread, detailed shaved aroused wet vagina dripping cum, incredible skin, slight perspiration, glistening, looking sultry
-<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.4945054945054945> <lora:DetailedEyes_V3:0.8>
+<lora:add-detail-xl:0.7> <lora:CinematicStyle_v1:0.4945054945054945> <lora:DetailedEyes_V3:0.8> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:ac_neg1> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:bad_prompt>
 neg: deformed hands, weird mouth, tongue distorted, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, glowing eyes, straps, shoulder straps, bra straps

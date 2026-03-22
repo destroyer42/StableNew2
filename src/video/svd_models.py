@@ -45,6 +45,17 @@ _SUPPORTED_SVD_MODELS: dict[str, SVDModelSpec] = {
 }
 
 
+def get_default_svd_cache_dir() -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    return repo_root / "cache"
+
+
+def resolve_svd_cache_dir(cache_dir: str | Path | None = None) -> Path:
+    if cache_dir:
+        return Path(cache_dir).expanduser()
+    return get_default_svd_cache_dir()
+
+
 def get_supported_svd_models() -> Mapping[str, SVDModelSpec]:
     return dict(_SUPPORTED_SVD_MODELS)
 
@@ -84,7 +95,7 @@ def get_svd_model_options(
     local_files_only: bool = False,
 ) -> list[str]:
     cached = discover_cached_svd_models(cache_dir=cache_dir)
-    if local_files_only:
+    if local_files_only and cached:
         return cached
 
     values: list[str] = []
@@ -124,18 +135,9 @@ def resolve_svd_model_spec(model_id: str) -> SVDModelSpec:
 
 def _iter_svd_cache_roots(*, cache_dir: str | Path | None = None) -> list[Path]:
     candidates: list[Path] = []
-    if cache_dir:
-        root = Path(cache_dir).expanduser()
-        candidates.extend((root, root / "hub", root / "huggingface" / "hub"))
-    else:
-        repo_root = Path(__file__).resolve().parents[2]
-        candidates.extend(
-            (
-                repo_root / "cache",
-                repo_root / "cache" / "hub",
-                repo_root / "cache" / "huggingface" / "hub",
-            )
-        )
+    root = resolve_svd_cache_dir(cache_dir)
+    candidates.extend((root, root / "hub", root / "huggingface" / "hub"))
+    if cache_dir is None:
         env_hub = os.getenv("HUGGINGFACE_HUB_CACHE")
         if env_hub:
             candidates.append(Path(env_hub).expanduser())

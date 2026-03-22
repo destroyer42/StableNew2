@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.video.svd_models import discover_cached_svd_models, is_svd_model_cached
+from src.video.svd_models import discover_cached_svd_models, get_svd_model_options, is_svd_model_cached
 
 
 def test_discover_cached_svd_models_requires_complete_snapshot(tmp_path: Path) -> None:
@@ -49,3 +49,12 @@ def test_is_svd_model_cached_checks_snapshot_integrity(tmp_path: Path) -> None:
         "stabilityai/stable-video-diffusion-img2vid-xt-1-1",
         cache_dir=cache_root,
     ) is False
+
+
+def test_get_svd_model_options_falls_back_to_supported_models_when_local_only_cache_is_empty(tmp_path: Path) -> None:
+    cache_root = tmp_path / "cache"
+
+    options = get_svd_model_options(cache_dir=cache_root, local_files_only=True)
+
+    assert "stabilityai/stable-video-diffusion-img2vid-xt" in options
+    assert "stabilityai/stable-video-diffusion-img2vid" in options

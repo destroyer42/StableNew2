@@ -7,6 +7,7 @@ from src.controller.svd_controller import SVDController
 from src.pipeline.job_requests_v2 import PipelineRunRequest
 from src.state.output_routing import OUTPUT_ROUTE_TESTING
 from src.video.svd_config import SVDConfig
+from src.video.svd_models import get_default_svd_cache_dir
 
 
 def test_submit_svd_job_enqueues_svd_native_njr(tmp_path) -> None:
@@ -81,6 +82,8 @@ def test_build_default_config_enables_available_postprocess(monkeypatch) -> None
     assert base_config.inference.motion_bucket_id == 48
     assert base_config.inference.noise_aug_strength == 0.01
     assert base_config.inference.num_inference_steps == 36
+    assert base_config.inference.local_files_only is True
+    assert base_config.inference.cache_dir == str(get_default_svd_cache_dir())
     assert result.postprocess.face_restore.enabled is True
     assert result.postprocess.interpolation.enabled is True
     assert result.postprocess.upscale.enabled is True

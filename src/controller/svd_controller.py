@@ -9,6 +9,7 @@ from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
 from src.video.svd_capabilities import apply_recommended_svd_defaults, get_svd_postprocess_capabilities
 from src.video.svd_config import SVDConfig
+from src.video.svd_models import get_default_svd_cache_dir
 from src.video.svd_postprocess import validate_svd_postprocess_config
 from src.video.svd_preprocess import validate_svd_source_image
 from src.video.svd_service import SVDService
@@ -47,6 +48,8 @@ class SVDController:
                     "noise_aug_strength": 0.01,
                     "decode_chunk_size": 4,
                     "num_inference_steps": 36,
+                    "local_files_only": True,
+                    "cache_dir": str(get_default_svd_cache_dir()),
                 },
                 "output": {
                     "output_format": "mp4",
