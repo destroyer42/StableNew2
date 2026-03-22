@@ -106,6 +106,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/CompletedPR/PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events.md`
 - `docs/CompletedPR/PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode.md`
 - `docs/CompletedPR/PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface.md`
+- `docs/CompletedPR/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md`
 - `docs/archive/` contains historical, superseded, and reference-only material
 
 ## 2. Canonical Reading Order

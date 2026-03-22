@@ -263,6 +263,9 @@ class LearningTabFrame(ttk.Frame):
         self._staged_items_by_id: dict[str, Any] = {}
         self._staged_latest_events: dict[str, Any] = {}
         self._staged_current_group_id: str | None = None
+        self._staged_syncing_face_tier = False
+        self._staged_face_tier_var = tk.StringVar(value="medium")
+        self._staged_job_status_var = tk.StringVar(value="No derived jobs submitted yet")
 
         self.staged_inbox_panel = DiscoveredReviewInboxPanel(
             self._staged_tab_frame,
@@ -362,8 +365,27 @@ class LearningTabFrame(ttk.Frame):
                 variable=var,
             ).grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=1)
 
+        tier_frame = ttk.LabelFrame(staged_right, text="Face Triage Tier", padding=(6, 4))
+        tier_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        tier_frame.columnconfigure(1, weight=1)
+        ttk.Label(tier_frame, text="Tier", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", pady=2
+        )
+        self._staged_face_tier_combo = ttk.Combobox(
+            tier_frame,
+            textvariable=self._staged_face_tier_var,
+            values=self.learning_controller.get_staged_curation_face_triage_tier_options(),
+            state="readonly",
+            width=18,
+        )
+        self._staged_face_tier_combo.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=2)
+        self._staged_face_tier_combo.bind(
+            "<<ComboboxSelected>>",
+            self._on_staged_face_triage_tier_changed,
+        )
+
         notes_frame = ttk.LabelFrame(staged_right, text="Decision Notes", padding=(6, 4))
-        notes_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        notes_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
         notes_frame.columnconfigure(0, weight=1)
         self._staged_notes_text = tk.Text(notes_frame, height=4, wrap="word")
         self._staged_notes_text.grid(row=0, column=0, sticky="ew")
@@ -373,10 +395,10 @@ class LearningTabFrame(ttk.Frame):
             staged_right,
             textvariable=self._staged_last_decision_var,
             style=BODY_LABEL_STYLE,
-        ).grid(row=4, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=5, column=0, sticky="w", pady=(6, 0))
 
         action_frame = ttk.Frame(staged_right, style=SURFACE_FRAME_STYLE)
-        action_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+        action_frame.grid(row=6, column=0, sticky="ew", pady=(6, 0))
         for label, decision in (
             ("Reject", "rejected_hard"),
             ("Hold", "not_advanced"),
@@ -390,6 +412,30 @@ class LearningTabFrame(ttk.Frame):
                 text=label,
                 command=lambda value=decision: self._apply_staged_decision(value),
             ).pack(side="left", padx=(0, 4))
+
+        derive_frame = ttk.LabelFrame(staged_right, text="Derived Jobs", padding=(6, 4))
+        derive_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+        ttk.Button(
+            derive_frame,
+            text="Generate Refine Jobs",
+            command=lambda: self._submit_staged_jobs("refine"),
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            derive_frame,
+            text="Generate Face Jobs",
+            command=lambda: self._submit_staged_jobs("face_triage"),
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            derive_frame,
+            text="Generate Upscale Jobs",
+            command=lambda: self._submit_staged_jobs("upscale"),
+        ).pack(side="left", padx=(0, 4))
+        ttk.Label(
+            staged_right,
+            textvariable=self._staged_job_status_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+        ).grid(row=8, column=0, sticky="w", pady=(6, 0))
 
         # Refresh inbox when its tab is activated
         self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
@@ -758,6 +804,7 @@ class LearningTabFrame(ttk.Frame):
             f"{len(self._staged_items_by_id)} candidate(s) | "
             f"varying: {', '.join(list(getattr(experiment, 'varying_fields', []) or [])) or 'n/a'}"
         )
+        self._staged_job_status_var.set("No derived jobs submitted yet")
         self._render_staged_candidates(candidates, latest_events)
         self._clear_staged_reason_tags()
         self._staged_notes_text.delete("1.0", tk.END)
@@ -813,6 +860,9 @@ class LearningTabFrame(ttk.Frame):
             self._staged_preview_thumbnail.clear()
             self._clear_staged_reason_tags()
             self._staged_notes_text.delete("1.0", tk.END)
+            self._staged_syncing_face_tier = True
+            self._staged_face_tier_var.set("medium")
+            self._staged_syncing_face_tier = False
             return
         row = self._staged_candidates_by_id.get(candidate_id) or {}
         item = row.get("item")
@@ -842,6 +892,10 @@ class LearningTabFrame(ttk.Frame):
         self._staged_preview_thumbnail.load_image(str(getattr(item, "artifact_path", "") or ""))
         self._clear_staged_reason_tags()
         self._staged_notes_text.delete("1.0", tk.END)
+        tier_value = str(getattr(item, "extra_fields", {}).get("face_triage_tier") or "medium")
+        self._staged_syncing_face_tier = True
+        self._staged_face_tier_var.set(tier_value)
+        self._staged_syncing_face_tier = False
         if latest is not None:
             self._staged_last_decision_var.set(
                 f"Latest decision: {str(getattr(latest, 'decision', 'unreviewed')).replace('_', ' ')}"
@@ -889,6 +943,54 @@ class LearningTabFrame(ttk.Frame):
         self._refresh_staged_curation_inbox()
         self._persist_learning_session_state()
 
+    def _on_staged_face_triage_tier_changed(self, _event: Any = None) -> None:
+        if self._staged_syncing_face_tier:
+            return
+        selection = self._staged_candidate_tree.selection()
+        candidate_id = selection[0] if selection else None
+        if not self._staged_current_group_id or not candidate_id:
+            return
+        tier = str(self._staged_face_tier_var.get() or "medium")
+        if not self.learning_controller.set_staged_curation_face_triage_tier(
+            self._staged_current_group_id,
+            candidate_id,
+            tier,
+        ):
+            return
+        row = self._staged_candidates_by_id.get(candidate_id) or {}
+        item = row.get("item")
+        if item is not None:
+            extra_fields = dict(getattr(item, "extra_fields", {}) or {})
+            extra_fields["face_triage_tier"] = tier
+            item.extra_fields = extra_fields
+        self._staged_job_status_var.set(f"Face triage tier set to {tier} for {candidate_id}")
+        self._persist_learning_session_state()
+
+    def _submit_staged_jobs(self, target_stage: str) -> None:
+        if not self._staged_current_group_id:
+            messagebox.showinfo("Staged Curation", "Open a staged-curation group first.")
+            return
+        try:
+            submitted = self.learning_controller.submit_staged_curation_advancement(
+                self._staged_current_group_id,
+                target_stage,
+            )
+        except Exception as exc:
+            self._staged_job_status_var.set(f"Failed to submit {target_stage} jobs: {exc}")
+            messagebox.showerror("Staged Curation", f"Failed to submit {target_stage} jobs:\n{exc}")
+            return
+        if submitted <= 0:
+            label = target_stage.replace("_", " ")
+            self._staged_job_status_var.set(f"No staged-curation candidates are marked for {label}.")
+            messagebox.showinfo(
+                "Staged Curation",
+                f"No candidates are currently marked for {label}.",
+            )
+            return
+        label = target_stage.replace("_", " ")
+        self._staged_job_status_var.set(f"Submitted {submitted} {label} job(s) to the queue.")
+        self._persist_learning_session_state()
+
     def _on_staged_close_group(self, group_id: str) -> None:
         self.learning_controller.close_discovered_group(group_id)
         if self._staged_current_group_id == group_id:
@@ -919,6 +1021,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_latest_events = {}
         self._staged_candidate_tree.delete(*self._staged_candidate_tree.get_children())
         self._staged_group_var.set("Open a discovered group to start staged curation")
+        self._staged_job_status_var.set("No derived jobs submitted yet")
         self._update_staged_preview(None)
 
 

@@ -8,6 +8,10 @@ from .curation_manifest import (
     build_curation_outcome_block,
     build_selection_event_block,
 )
+from .curation_workflow_builder import (
+    CurationSourceSelection,
+    CurationWorkflowBuilder,
+)
 from .models import (
     CurationCandidate,
     CurationOutcome,
@@ -21,9 +25,11 @@ __all__ = [
     "CURATION_OUTCOME_SCHEMA",
     "CURATION_SCHEMA",
     "SELECTION_EVENT_SCHEMA",
+    "CurationSourceSelection",
     "CurationCandidate",
     "CurationOutcome",
     "CurationWorkflow",
+    "CurationWorkflowBuilder",
     "FaceTriageProfile",
     "RefineProfile",
     "SelectionEvent",

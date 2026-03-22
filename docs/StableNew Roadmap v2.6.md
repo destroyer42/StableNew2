@@ -785,6 +785,7 @@ Planned rollout:
 - `PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface`
   Completed 2026-03-21
 - `PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing`
+  Completed 2026-03-21
 - `PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics`
 - `PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries`
 

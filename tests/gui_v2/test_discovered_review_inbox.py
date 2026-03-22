@@ -16,6 +16,8 @@ import pytest
 
 from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
 from src.gui.views.discovered_review_table import DiscoveredReviewTable
+from src.gui.controllers.learning_controller import LearningController
+from src.gui.learning_state import LearningState
 from src.queue.job_model import JobStatus
 from src.queue.job_history_store import JobHistoryEntry
 from src.learning.discovered_review_models import (
@@ -588,3 +590,113 @@ def test_controller_import_history_entry_to_staged_curation(tmp_path) -> None:
     experiment = store.load_group(group_id)
     assert experiment is not None
     assert experiment.display_name == "History Import - History Pack"
+
+
+def test_controller_set_staged_curation_face_triage_tier_persists_on_item(tmp_path) -> None:
+    ctrl = _make_controller()
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+
+    store = DiscoveredReviewStore(tmp_path)
+    ctrl._discovered_review_store = store
+    exp = _make_experiment("disc-face-tier")
+    store.save_group(exp)
+
+    saved = ctrl.set_staged_curation_face_triage_tier(
+        "disc-face-tier",
+        exp.items[0].item_id,
+        "heavy",
+    )
+
+    assert saved is True
+    loaded = store.load_group("disc-face-tier")
+    assert loaded is not None
+    assert loaded.items[0].extra_fields["face_triage_tier"] == "heavy"
+
+
+def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(tmp_path) -> None:
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.utils.image_metadata import ReadPayloadResult
+
+    pipeline_controller = MagicMock()
+    job_service = MagicMock()
+    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    pipeline_controller._job_service = job_service
+    pipeline_controller._config_manager = None
+    ctrl = LearningController(
+        learning_state=LearningState(),
+        pipeline_controller=pipeline_controller,
+    )
+    store = DiscoveredReviewStore(tmp_path / "discovered")
+    ctrl._discovered_review_store = store
+
+    image_path = tmp_path / "candidate.png"
+    image_path.write_text("placeholder", encoding="utf-8")
+    exp = DiscoveredReviewExperiment(
+        group_id="disc-face",
+        display_name="Face Group",
+        stage="txt2img",
+        prompt_hash="hash-1",
+        items=[
+            DiscoveredReviewItem(
+                item_id="cand-1",
+                artifact_path=str(image_path),
+                stage="txt2img",
+                model="juggernautXL",
+                sampler="DPM++ 2M",
+                scheduler="Karras",
+                steps=30,
+                cfg_scale=6.5,
+                positive_prompt="prompt text",
+                negative_prompt="negative text",
+                extra_fields={"face_triage_tier": "heavy"},
+            )
+        ],
+        varying_fields=["cfg_scale"],
+    )
+    store.save_group(exp)
+    ctrl.record_staged_curation_selection(
+        "disc-face",
+        "cand-1",
+        "advanced_to_face_triage",
+        reason_tags=["bad_face"],
+        notes="needs rescue",
+    )
+
+    payload = {
+        "stage_manifest": {
+            "stage": "txt2img",
+            "config": {
+                "steps": 30,
+                "cfg_scale": 6.5,
+                "sampler_name": "DPM++ 2M",
+                "scheduler": "Karras",
+            },
+        }
+    }
+
+    with patch(
+        "src.gui.controllers.learning_controller.extract_embedded_metadata",
+        return_value=ReadPayloadResult(payload=payload, status="ok"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_prompt_fields",
+        return_value=("prompt text", "negative text"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+        return_value=("juggernautXL", "Automatic"),
+    ), patch(
+        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+        return_value="output",
+    ):
+        submitted = ctrl.submit_staged_curation_advancement("disc-face", "face_triage")
+
+    assert submitted == 1
+    assert job_service.enqueue_njrs.called
+    submitted_records, run_request = job_service.enqueue_njrs.call_args[0]
+    assert len(submitted_records) == 1
+    record = submitted_records[0]
+    assert record.start_stage == "adetailer"
+    assert record.config["pipeline"]["output_route"] == "Learning"
+    assert record.config["adetailer"]["adetailer_denoise"] == 0.34
+    assert record.extra_metadata["curation"]["candidate_id"] == "cand-1"
+    assert record.extra_metadata["selection_event"]["decision"] == "advanced_to_face_triage"
+    assert run_request.requested_job_label == "Staged Curation: Face Triage"

@@ -244,3 +244,68 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
             assert events[0].reason_tags == ["good_composition"]
         finally:
             tab.destroy()
+
+
+def test_learning_tab_staged_curation_face_tier_and_submit_hooks(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    discovered_root = tmp_path / "discovered"
+    store = UIStateStore(state_path)
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=AppStateV2(),
+            pipeline_controller=_StubPipelineController(),
+        )
+        try:
+            discovered_store = DiscoveredReviewStore(discovered_root)
+            tab.learning_controller._discovered_review_store = discovered_store  # noqa: SLF001
+            image_path = tmp_path / "fake-tier.png"
+            image_path.write_text("placeholder", encoding="utf-8")
+            experiment = DiscoveredReviewExperiment(
+                group_id="disc-stage-tier",
+                display_name="Stage Group",
+                stage="txt2img",
+                prompt_hash="hash-1",
+                items=[
+                    DiscoveredReviewItem(
+                        item_id="item-1",
+                        artifact_path=str(image_path),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                    )
+                ],
+                varying_fields=["cfg_scale"],
+            )
+            discovered_store.save_group(experiment)
+
+            tab._on_staged_open_group("disc-stage-tier")  # noqa: SLF001
+
+            tab._staged_face_tier_var.set("heavy")  # noqa: SLF001
+            tab._on_staged_face_triage_tier_changed()  # noqa: SLF001
+            loaded = discovered_store.load_group("disc-stage-tier")
+            assert loaded is not None
+            assert loaded.items[0].extra_fields["face_triage_tier"] == "heavy"
+
+            with patch.object(
+                tab.learning_controller,
+                "submit_staged_curation_advancement",
+                return_value=2,
+            ) as submit_mock:
+                tab._submit_staged_jobs("face_triage")  # noqa: SLF001
+
+            submit_mock.assert_called_once_with("disc-stage-tier", "face_triage")
+            assert "Submitted 2 face triage job(s)" in tab._staged_job_status_var.get()  # noqa: SLF001
+        finally:
+            tab.destroy()

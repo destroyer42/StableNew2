@@ -14,6 +14,10 @@ from typing import Any
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.prompt_workspace_state import PromptWorkspaceState
+from src.curation.curation_workflow_builder import (
+    CurationSourceSelection,
+    CurationWorkflowBuilder,
+)
 from src.curation.models import CurationCandidate, CurationWorkflow, SelectionEvent
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.discovered_review_models import (
@@ -28,13 +32,15 @@ from src.learning.learning_controller_services.experiment_persistence import (
     extract_workflow_state,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
-from src.pipeline.reprocess_builder import ReprocessJobBuilder
+from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
 from src.pipeline.artifact_contract import extract_artifact_paths
+from src.state.output_routing import get_output_root
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
     resolve_prompt_fields,
 )
+from src.utils.config import ConfigManager
 
 
 class LearningController:
@@ -69,6 +75,7 @@ class LearningController:
         self._workflow_state = "idle"
         self._workflow_state_listeners: list[Any] = []
         self._resume_state_listeners: list[Any] = []
+        self._curation_workflow_builder = CurationWorkflowBuilder()
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -2314,6 +2321,10 @@ class LearningController:
             "keeper",
         ]
 
+    def get_staged_curation_face_triage_tier_options(self) -> list[str]:
+        """Return supported face-triage tiers for per-candidate routing."""
+        return self._curation_workflow_builder.get_face_triage_tier_options()
+
     def import_review_images_to_staged_curation(
         self,
         image_paths: list[str],
@@ -2439,6 +2450,83 @@ class LearningController:
         self._notify_resume_state_changed()
         return event
 
+    def set_staged_curation_face_triage_tier(
+        self,
+        group_id: str,
+        item_id: str,
+        tier: str,
+    ) -> bool:
+        """Persist a per-candidate face-triage tier in the discovered store."""
+        normalized = str(tier or "medium").strip().lower() or "medium"
+        if normalized not in set(self.get_staged_curation_face_triage_tier_options()):
+            normalized = "medium"
+        store = self._get_discovered_store()
+        saved = store.save_item_extra_fields(
+            group_id,
+            item_id,
+            {"face_triage_tier": normalized},
+        )
+        if saved:
+            self.learning_state.selected_staged_curation_group_id = group_id
+            self.learning_state.selected_staged_curation_item_id = item_id
+            self._notify_resume_state_changed()
+        return saved
+
+    def submit_staged_curation_advancement(
+        self,
+        group_id: str,
+        target_stage: str,
+    ) -> int:
+        """Compile staged-curation selections into queue-backed derived jobs."""
+        normalized_target = str(target_stage or "").strip().lower()
+        if normalized_target not in {"refine", "face_triage", "upscale"}:
+            raise ValueError(f"Unsupported staged-curation target stage: {target_stage!r}")
+
+        store = self._get_discovered_store()
+        experiment = store.load_group(group_id)
+        if experiment is None:
+            return 0
+
+        payload = self.load_staged_curation_group(group_id)
+        if not isinstance(payload, dict):
+            return 0
+        workflow = payload.get("workflow")
+        latest_events = dict(payload.get("latest_events") or {})
+        candidates = list(payload.get("candidates") or [])
+        if not isinstance(workflow, CurationWorkflow):
+            return 0
+
+        selected = self._build_curation_source_selections(
+            experiment=experiment,
+            candidates=candidates,
+            latest_events=latest_events,
+            target_stage=normalized_target,
+        )
+        if not selected:
+            return 0
+
+        fallback_config = self._get_baseline_config()
+        plan = self._curation_workflow_builder.build_derived_stage_plan(
+            workflow=workflow,
+            target_stage=normalized_target,
+            selections=selected,
+            fallback_config=fallback_config,
+            output_dir=self._resolve_learning_output_root(),
+        )
+        if not plan.jobs:
+            return 0
+
+        job_service = self._get_job_service()
+        if job_service is None or not hasattr(job_service, "enqueue_njrs"):
+            raise RuntimeError("Job service is not available for staged-curation advancement")
+
+        request = self._curation_workflow_builder.build_run_request(
+            plan.jobs,
+            target_stage=normalized_target,
+        )
+        job_ids = job_service.enqueue_njrs(plan.jobs, request)
+        return len(job_ids)
+
     def _build_curation_workflow(self, experiment: Any) -> CurationWorkflow:
         return CurationWorkflow(
             workflow_id=f"curation:{experiment.group_id}",
@@ -2487,6 +2575,145 @@ class LearningController:
             if model_name:
                 return model_name
         return ""
+
+    def _build_curation_source_selections(
+        self,
+        *,
+        experiment: Any,
+        candidates: list[Any],
+        latest_events: dict[str, SelectionEvent],
+        target_stage: str,
+    ) -> list[CurationSourceSelection]:
+        decision_map = {
+            "refine": "advanced_to_refine",
+            "face_triage": "advanced_to_face_triage",
+            "upscale": "advanced_to_upscale",
+        }
+        desired_decision = decision_map.get(str(target_stage or "").strip().lower())
+        if not desired_decision:
+            return []
+
+        item_by_id = {
+            str(getattr(item, "item_id", "") or ""): item
+            for item in list(getattr(experiment, "items", []) or [])
+        }
+        selections: list[CurationSourceSelection] = []
+        for candidate in candidates:
+            candidate_id = str(getattr(candidate, "candidate_id", "") or "")
+            if not candidate_id:
+                continue
+            latest = latest_events.get(candidate_id)
+            if latest is None or str(latest.decision or "") != desired_decision:
+                continue
+            item = item_by_id.get(candidate_id)
+            if item is None:
+                continue
+            reprocess_item = self._build_reprocess_source_item_from_discovered_item(item)
+            if reprocess_item is None:
+                continue
+            face_tier = str(getattr(item, "extra_fields", {}).get("face_triage_tier") or "medium")
+            reprocess_item.metadata["curation_candidate"] = candidate
+            reprocess_item.metadata["curation_selection_event"] = latest
+            selections.append(
+                CurationSourceSelection(
+                    candidate=candidate,
+                    source_item=item,
+                    selection_event=latest,
+                    reprocess_item=reprocess_item,
+                    face_triage_tier=face_tier,
+                )
+            )
+        return selections
+
+    def _build_reprocess_source_item_from_discovered_item(
+        self,
+        item: DiscoveredReviewItem,
+    ) -> ReprocessSourceItem | None:
+        image_path = Path(str(getattr(item, "artifact_path", "") or "").strip())
+        if not image_path.exists():
+            return None
+        baseline = self._extract_reprocess_baseline_from_image(image_path)
+        positive_prompt = str(baseline.get("prompt") or getattr(item, "positive_prompt", "") or "")
+        negative_prompt = str(baseline.get("negative_prompt") or getattr(item, "negative_prompt", "") or "")
+        model = baseline.get("model") or getattr(item, "model", "") or None
+        vae = baseline.get("vae")
+        config = baseline.get("config") if isinstance(baseline.get("config"), dict) else {}
+        metadata = {
+            "baseline_source": "embedded_metadata" if baseline else "discovered_review",
+        }
+        return ReprocessSourceItem(
+            input_image_path=str(image_path),
+            prompt=positive_prompt,
+            negative_prompt=negative_prompt,
+            model=str(model).strip() or None,
+            vae=str(vae).strip() if vae is not None and str(vae).strip() else None,
+            config=dict(config),
+            metadata=metadata,
+        )
+
+    def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
+        try:
+            metadata_result = extract_embedded_metadata(image_path)
+        except Exception:
+            return {}
+
+        if metadata_result.status != "ok" or not isinstance(metadata_result.payload, dict):
+            return {}
+
+        payload = metadata_result.payload
+        generation = payload.get("generation")
+        if not isinstance(generation, dict):
+            generation = {}
+        stage_manifest = payload.get("stage_manifest")
+        if not isinstance(stage_manifest, dict):
+            stage_manifest = {}
+
+        config = stage_manifest.get("config")
+        if not isinstance(config, dict):
+            config = {}
+
+        model_value, vae_value = resolve_model_vae_fields(payload)
+        if isinstance(model_value, str) and model_value.strip().lower() in {"unknown", "n/a"}:
+            model_value = None
+        if isinstance(vae_value, str) and vae_value.strip().lower() in {"unknown", "n/a"}:
+            vae_value = None
+        prompt_value, negative_prompt_value = resolve_prompt_fields(payload)
+        if not config and isinstance(generation, dict):
+            config = dict(generation)
+
+        return {
+            "prompt": prompt_value,
+            "negative_prompt": negative_prompt_value,
+            "model": model_value,
+            "vae": vae_value,
+            "config": config,
+        }
+
+    def _get_job_service(self) -> Any | None:
+        execution_controller = getattr(self, "execution_controller", None)
+        if execution_controller is not None:
+            job_service = getattr(execution_controller, "job_service", None)
+            if job_service is not None:
+                return job_service
+        if self.pipeline_controller is not None:
+            return getattr(self.pipeline_controller, "_job_service", None)
+        return None
+
+    def _resolve_learning_output_root(self) -> str:
+        configured_root = None
+        config_manager = getattr(self.pipeline_controller, "_config_manager", None)
+        getter = getattr(config_manager, "get_setting", None)
+        if callable(getter):
+            try:
+                configured_root = getter("output_dir", None)
+            except Exception:
+                configured_root = None
+        if not configured_root:
+            try:
+                configured_root = ConfigManager().get_setting("output_dir", "output")
+            except Exception:
+                configured_root = "output"
+        return str(get_output_root(configured_root or "output", create=True))
 
     def _build_discovered_item_from_image_path(
         self,

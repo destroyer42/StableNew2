@@ -160,6 +160,30 @@ class DiscoveredReviewStore:
                 return True
         return False
 
+    def save_item_extra_fields(
+        self,
+        group_id: str,
+        item_id: str,
+        extra_fields: dict[str, Any],
+    ) -> bool:
+        """Merge extra_fields into a single stored item."""
+        exp = self.load_group(group_id)
+        if exp is None:
+            return False
+        for item in exp.items:
+            if item.item_id != item_id:
+                continue
+            merged = dict(item.extra_fields or {})
+            for key, value in (extra_fields or {}).items():
+                if value is None:
+                    merged.pop(str(key), None)
+                else:
+                    merged[str(key)] = value
+            item.extra_fields = merged
+            self.save_group(exp)
+            return True
+        return False
+
     # ------------------------------------------------------------------
     # Staged-curation selection events
     # ------------------------------------------------------------------

@@ -86,6 +86,10 @@ Primary outcomes:
 
 ### `PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing`
 
+Status:
+
+- Completed 2026-03-21
+
 Purpose:
 
 - derive refine, face-triage, and upscale jobs from selected candidates using normal NJR-backed work
