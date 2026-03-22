@@ -109,6 +109,8 @@ class LearningState:
         self.selected_image_index: int = 0
         # PR-GUI-LEARN-041: Discovered-review inbox state
         self.selected_discovered_group_id: str | None = None
+        self.selected_staged_curation_group_id: str | None = None
+        self.selected_staged_curation_item_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         selected_variant_index = -1
@@ -124,6 +126,9 @@ class LearningState:
             "plan": [variant.to_dict() for variant in self.plan],
             "selected_variant_index": selected_variant_index,
             "selected_image_index": int(self.selected_image_index or 0),
+            "selected_discovered_group_id": self.selected_discovered_group_id,
+            "selected_staged_curation_group_id": self.selected_staged_curation_group_id,
+            "selected_staged_curation_item_id": self.selected_staged_curation_item_id,
         }
 
     @staticmethod
@@ -141,4 +146,14 @@ class LearningState:
         if 0 <= selected_variant_index < len(state.plan):
             state.selected_variant = state.plan[selected_variant_index]
         state.selected_image_index = int(payload.get("selected_image_index", 0) or 0)
+        selected_discovered_group_id = str(payload.get("selected_discovered_group_id") or "").strip()
+        state.selected_discovered_group_id = selected_discovered_group_id or None
+        selected_staged_curation_group_id = str(
+            payload.get("selected_staged_curation_group_id") or ""
+        ).strip()
+        state.selected_staged_curation_group_id = selected_staged_curation_group_id or None
+        selected_staged_curation_item_id = str(
+            payload.get("selected_staged_curation_item_id") or ""
+        ).strip()
+        state.selected_staged_curation_item_id = selected_staged_curation_item_id or None
         return state

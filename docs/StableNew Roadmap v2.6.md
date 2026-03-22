@@ -754,6 +754,46 @@ and before broader lower-leverage cleanup. The planned rollout is:
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
 - `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
 
+## 4AA. Learning/Review Staged Curation Tranche
+
+The next Learning/Review product tranche is tracked in:
+
+- `docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
+
+This tranche is accepted in direction, but it is intentionally shaped to fit
+the current product:
+
+- `Learning` becomes the canonical evidence-and-advancement workspace
+- `Review` remains the canonical advanced reprocess workspace
+- no standalone competing curation architecture is introduced
+
+Priority note:
+
+- this tranche is now explicitly prioritized ahead of the remaining
+  `PR-VIDEO-238` through `PR-VIDEO-241` sequence after the active image
+  output-route regression is closed
+- immediate order:
+  1. close the image output-route regression
+  2. begin `PR-LEARN-259A`
+
+Planned rollout:
+
+- `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
+  Completed 2026-03-21
+- `PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode`
+  Completed 2026-03-21
+- `PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface`
+  Completed 2026-03-21
+- `PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing`
+- `PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics`
+- `PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries`
+
+Sequencing note:
+
+- close the current image output-route regression before beginning this tranche,
+  because discovered/imported review quality depends on correct output
+  classification
+
 ## 4B. Post-`PR-VIDEO-241` Structural Queue
 
 The next major queue after the secondary motion tranche is tracked in:

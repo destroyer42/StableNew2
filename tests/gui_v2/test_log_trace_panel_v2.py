@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import tkinter as tk
 
 import pytest
@@ -17,6 +18,7 @@ def test_log_trace_panel_v2_smoke():
     root.withdraw()
     handler = InMemoryLogHandler(max_entries=20)
     logger = get_logger(__name__)
+    logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
 
     panel = LogTracePanelV2(root, log_handler=handler, audience="trace")
@@ -26,6 +28,7 @@ def test_log_trace_panel_v2_smoke():
     logger.error("Test error")
     panel.refresh()
     content = panel._log_text.get("1.0", tk.END).strip()
+    assert re.match(r"^\d{2}:\d{2}:\d{2}\.\d{3} \[ERROR\]", content)
     assert "Test error" in content
 
     logger.removeHandler(handler)
@@ -55,6 +58,7 @@ def test_log_trace_panel_highlights_structured_errors() -> None:
     root.withdraw()
     handler = InMemoryLogHandler(max_entries=20)
     logger = get_logger(__name__)
+    logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
 
     panel = LogTracePanelV2(root, log_handler=handler, audience="trace")
@@ -89,6 +93,7 @@ def test_log_trace_panel_renders_repeat_summary_and_filters_event_stage() -> Non
     root.withdraw()
     handler = InMemoryLogHandler(max_entries=20)
     logger = get_logger(f"{__name__}.repeat")
+    logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
 
     log_with_ctx(
@@ -111,6 +116,7 @@ def test_log_trace_panel_renders_repeat_summary_and_filters_event_stage() -> Non
     panel._stage_filter.set("txt2img")
     panel.refresh()
     content = panel._log_text.get("1.0", tk.END)
+    assert re.search(r"\d{2}:\d{2}:\d{2}\.\d{3} \[DEBUG \| pipeline \| txt2img", content)
     assert "repeated 2x" in content
     assert "payload_built" in content
 

@@ -306,6 +306,14 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
     def _bootstrap_worker():
         try:
             config = _load_webui_config()
+            controller = getattr(window, "app_controller", None)
+            client = getattr(controller, "_api_client", None) if controller is not None else None
+            if client is not None and hasattr(client, "set_startup_probe_grace"):
+                try:
+                    startup_timeout = float(config.get("webui_startup_timeout_seconds") or 60.0)
+                except Exception:
+                    startup_timeout = 60.0
+                client.set_startup_probe_grace(min(max(startup_timeout / 4.0, 10.0), 15.0))
             webui_manager = bootstrap_webui(config)
             if webui_manager:
                 # Update the window with the WebUI manager

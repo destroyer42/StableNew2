@@ -996,14 +996,228 @@ class Pipeline:
             return recommended
         return str(current_profile or "standard")
 
+    def _build_runtime_cause(
+        self,
+        *,
+        code: str,
+        severity: str,
+        message: str,
+        details: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload = {
+            "code": str(code),
+            "severity": str(severity),
+            "message": str(message),
+        }
+        if details:
+            payload["details"] = dict(details)
+        return payload
+
+    def _summarize_runtime_causes(self, causes: list[dict[str, Any]]) -> tuple[str, list[str], str | None]:
+        status = "healthy"
+        primary_cause = None
+        reasons: list[str] = []
+        severity_rank = {"healthy": 0, "degraded": 1, "poisoned": 2}
+        for cause in causes:
+            message = str(cause.get("message") or "").strip()
+            if message:
+                reasons.append(message)
+            cause_severity = str(cause.get("severity") or "healthy")
+            if severity_rank.get(cause_severity, 0) > severity_rank.get(status, 0):
+                status = cause_severity
+                primary_cause = str(cause.get("code") or "") or None
+        return status, reasons, primary_cause
+
+    def _runtime_cause_codes(self, runtime_state: Mapping[str, Any]) -> list[str]:
+        causes = runtime_state.get("runtime_causes")
+        if not isinstance(causes, list):
+            return []
+        return [
+            str(cause.get("code") or "")
+            for cause in causes
+            if isinstance(cause, Mapping) and str(cause.get("code") or "")
+        ]
+
+    def _attempt_runtime_soft_recovery(
+        self,
+        *,
+        stage_name: str,
+        runtime_state: Mapping[str, Any],
+        pressure_assessment: Mapping[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        recovery_trace: list[dict[str, Any]] = []
+
+        reprobed_state = self._assess_runtime_state(
+            stage_name=stage_name,
+            pressure_assessment=pressure_assessment,
+        )
+        recovery_trace.append(
+            {
+                "step": "reprobe",
+                "status": reprobed_state.get("status"),
+                "cause_codes": self._runtime_cause_codes(reprobed_state),
+            }
+        )
+        if str(reprobed_state.get("status") or "healthy") != "poisoned":
+            return reprobed_state, recovery_trace
+
+        cause_codes = set(self._runtime_cause_codes(reprobed_state))
+
+        if "stale_progress" in cause_codes and hasattr(self.client, "reset_stale_progress_state"):
+            reset_ok = False
+            try:
+                reset_ok = bool(self.client.reset_stale_progress_state(timeout_s=8.0, poll_interval_s=0.5))
+            except Exception as exc:
+                recovery_trace.append(
+                    {
+                        "step": "interrupt",
+                        "success": False,
+                        "error": str(exc),
+                    }
+                )
+            else:
+                recovery_trace.append(
+                    {
+                        "step": "interrupt",
+                        "success": reset_ok,
+                    }
+                )
+            reprobed_state = self._assess_runtime_state(
+                stage_name=stage_name,
+                pressure_assessment=pressure_assessment,
+            )
+            recovery_trace.append(
+                {
+                    "step": "reprobe_after_interrupt",
+                    "status": reprobed_state.get("status"),
+                    "cause_codes": self._runtime_cause_codes(reprobed_state),
+                }
+            )
+            if str(reprobed_state.get("status") or "healthy") != "poisoned":
+                return reprobed_state, recovery_trace
+            cause_codes = set(self._runtime_cause_codes(reprobed_state))
+
+        if "duplicate_process" in cause_codes:
+            manager = get_global_webui_process_manager()
+            killed_pids: list[int] = []
+            if manager is not None and hasattr(manager, "cleanup_orphaned_webui_processes"):
+                try:
+                    killed_pids = list(manager.cleanup_orphaned_webui_processes())
+                except Exception as exc:
+                    recovery_trace.append(
+                        {
+                            "step": "cleanup_orphans",
+                            "success": False,
+                            "error": str(exc),
+                        }
+                    )
+                else:
+                    recovery_trace.append(
+                        {
+                            "step": "cleanup_orphans",
+                            "success": bool(killed_pids),
+                            "killed_pids": killed_pids,
+                        }
+                    )
+                reprobed_state = self._assess_runtime_state(
+                    stage_name=stage_name,
+                    pressure_assessment=pressure_assessment,
+                )
+                recovery_trace.append(
+                    {
+                        "step": "reprobe_after_orphan_cleanup",
+                        "status": reprobed_state.get("status"),
+                        "cause_codes": self._runtime_cause_codes(reprobed_state),
+                    }
+                )
+                if str(reprobed_state.get("status") or "healthy") != "poisoned":
+                    return reprobed_state, recovery_trace
+
+        cleared_state = False
+        try:
+            if hasattr(self.client, "clear_runtime_failure_state"):
+                self.client.clear_runtime_failure_state()
+                cleared_state = True
+        except Exception as exc:
+            recovery_trace.append(
+                {
+                    "step": "clear_failure_state",
+                    "success": False,
+                    "error": str(exc),
+                }
+            )
+        else:
+            recovery_trace.append(
+                {
+                    "step": "clear_failure_state",
+                    "success": cleared_state,
+                }
+            )
+        reprobed_state = self._assess_runtime_state(
+            stage_name=stage_name,
+            pressure_assessment=pressure_assessment,
+        )
+        recovery_trace.append(
+            {
+                "step": "reprobe_after_clear",
+                "status": reprobed_state.get("status"),
+                "cause_codes": self._runtime_cause_codes(reprobed_state),
+            }
+        )
+        return reprobed_state, recovery_trace
+
+    def _maybe_autodowngrade_upscale_for_pressure(
+        self,
+        *,
+        config: dict[str, Any],
+        orig_width: int,
+        orig_height: int,
+        pressure_assessment: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        assessment = dict(pressure_assessment or {})
+        if str(assessment.get("status") or "normal") != "unsafe":
+            return assessment
+
+        current_resize = float(config.get("upscaling_resize", 2.0) or 2.0)
+        base_pixels = max(int(orig_width or 0) * int(orig_height or 0), 1)
+        safe_target_pixels = 3_600_000
+        safe_resize = math.sqrt(safe_target_pixels / float(base_pixels))
+        safe_resize = max(1.0, min(current_resize, round(safe_resize, 3)))
+        if safe_resize >= current_resize:
+            return assessment
+
+        config["upscaling_resize"] = safe_resize
+        downgraded_assessment = self._assess_stage_pressure(
+            stage_name="upscale",
+            width=int(orig_width * safe_resize),
+            height=int(orig_height * safe_resize),
+            batch_size=1,
+            steps=int(config.get("steps", 20) or 20),
+        )
+        log_with_ctx(
+            logger,
+            logging.WARNING,
+            "[executor/pressure] upscale unsafe pressure auto-downgraded resize",
+            ctx=LogContext(subsystem="pipeline", stage="upscale"),
+            extra_fields={
+                "event": "stage_pressure_autodowngrade",
+                "outcome": downgraded_assessment.get("status"),
+                "previous_resize": current_resize,
+                "new_resize": safe_resize,
+                "previous_megapixels": assessment.get("megapixels"),
+                "new_megapixels": downgraded_assessment.get("megapixels"),
+                "reasons": assessment.get("reasons"),
+            },
+        )
+        return downgraded_assessment
+
     def _assess_runtime_state(
         self,
         *,
         stage_name: str,
         pressure_assessment: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        status = "healthy"
-        reasons: list[str] = []
+        runtime_causes: list[dict[str, Any]] = []
         manager = get_global_webui_process_manager()
         launch_profile = manager.get_launch_profile() if manager and hasattr(manager, "get_launch_profile") else None
         connection_ok = False
@@ -1012,8 +1226,13 @@ class Pipeline:
         except Exception:
             connection_ok = False
         if not connection_ok:
-            status = "poisoned"
-            reasons.append("webui connection check failed")
+            runtime_causes.append(
+                self._build_runtime_cause(
+                    code="connection_dead",
+                    severity="poisoned",
+                    message="webui connection check failed",
+                )
+            )
 
         failure_state = {}
         try:
@@ -1026,16 +1245,33 @@ class Pipeline:
             cooldown_remaining = float(readiness.get("cooldown_remaining_s", 0.0) or 0.0)
             hard_failures = float(readiness.get("hard_failures", 0.0) or 0.0)
             if cooldown_remaining > 0.0:
-                status = "poisoned"
-                reasons.append(f"readiness backoff active ({cooldown_remaining:.1f}s)")
-            elif hard_failures >= 2.0 and status == "healthy":
-                status = "degraded"
-                reasons.append(f"recent readiness hard failures ({int(hard_failures)})")
+                runtime_causes.append(
+                    self._build_runtime_cause(
+                        code="startup_backoff",
+                        severity="poisoned",
+                        message=f"readiness backoff active ({cooldown_remaining:.1f}s)",
+                        details={"cooldown_remaining_s": cooldown_remaining},
+                    )
+                )
+            elif hard_failures >= 2.0:
+                runtime_causes.append(
+                    self._build_runtime_cause(
+                        code="recent_readiness_failures",
+                        severity="degraded",
+                        message=f"recent readiness hard failures ({int(hard_failures)})",
+                        details={"hard_failures": int(hard_failures)},
+                    )
+                )
         endpoint_cooldowns = failure_state.get("resource_endpoint_cooldowns") if isinstance(failure_state, Mapping) else None
         if isinstance(endpoint_cooldowns, Mapping) and endpoint_cooldowns:
-            if status == "healthy":
-                status = "degraded"
-            reasons.append("resource endpoint cooldowns active")
+            runtime_causes.append(
+                self._build_runtime_cause(
+                    code="resource_endpoint_backoff",
+                    severity="degraded",
+                    message="resource endpoint cooldowns active",
+                    details={"endpoints": dict(endpoint_cooldowns)},
+                )
+            )
 
         progress_snapshot = None
         try:
@@ -1048,31 +1284,63 @@ class Pipeline:
             progress = float(progress_snapshot.get("progress", 0.0) or 0.0)
             current_job = str(state.get("job") or "").strip()
             if progress >= 0.999 and current_job:
-                status = "poisoned"
-                reasons.append(f"stale progress state present ({current_job})")
+                runtime_causes.append(
+                    self._build_runtime_cause(
+                        code="stale_progress",
+                        severity="poisoned",
+                        message=f"stale progress state present ({current_job})",
+                        details={"job": current_job, "progress": progress},
+                    )
+                )
 
         process_risk = collect_process_risk_snapshot()
         risk_status = str(process_risk.get("status") or "normal")
         if risk_status == "critical":
-            status = "poisoned"
-            reasons.append("duplicate or suspicious StableNew/WebUI process state detected")
-        elif risk_status == "warning" and status == "healthy":
-            status = "degraded"
-            reasons.append("suspicious long-lived StableNew-like processes detected")
+            runtime_causes.append(
+                self._build_runtime_cause(
+                    code="duplicate_process",
+                    severity="poisoned",
+                    message="duplicate or suspicious StableNew/WebUI process state detected",
+                    details={"process_risk": dict(process_risk)},
+                )
+            )
+        elif risk_status == "warning":
+            runtime_causes.append(
+                self._build_runtime_cause(
+                    code="process_warning",
+                    severity="degraded",
+                    message="suspicious long-lived StableNew-like processes detected",
+                    details={"process_risk": dict(process_risk)},
+                )
+            )
 
         pressure_status = str((pressure_assessment or {}).get("status") or "normal")
         if pressure_status in {"high_pressure", "unsafe"} and not app_config.is_guarded_webui_launch_profile(launch_profile):
-            if status == "healthy":
-                status = "degraded"
-            reasons.append("guarded WebUI launch profile not active for heavy workload")
+            runtime_causes.append(
+                self._build_runtime_cause(
+                    code="unguarded_heavy_workload",
+                    severity="degraded",
+                    message="guarded WebUI launch profile not active for heavy workload",
+                )
+            )
         if pressure_status == "unsafe":
-            status = "poisoned"
-            reasons.append("stage pressure classified unsafe")
+            runtime_causes.append(
+                self._build_runtime_cause(
+                    code="unsafe_pressure",
+                    severity="poisoned",
+                    message="stage pressure classified unsafe",
+                    details={"pressure_assessment": dict(pressure_assessment or {})},
+                )
+            )
+
+        status, reasons, primary_cause = self._summarize_runtime_causes(runtime_causes)
 
         return {
             "schema": "stablenew.runtime-admission.v1",
             "stage": stage_name,
             "status": status,
+            "primary_cause": primary_cause,
+            "runtime_causes": runtime_causes,
             "launch_profile": launch_profile,
             "connection_ok": connection_ok,
             "failure_state": failure_state,
@@ -1123,13 +1391,29 @@ class Pipeline:
                 "event": "runtime_admission_state",
                 "outcome": status,
                 "reasons": runtime_state.get("reasons"),
+                "cause_codes": self._runtime_cause_codes(runtime_state),
                 "launch_profile": runtime_state.get("launch_profile"),
             },
         )
 
         pressure_status = str((pressure_assessment or {}).get("status") or "normal")
-        should_force_guarded = pressure_status in {"high_pressure", "unsafe"}
-        should_attempt_recovery = status == "poisoned" or should_force_guarded
+        runtime_state, recovery_trace = self._attempt_runtime_soft_recovery(
+            stage_name=stage_name,
+            runtime_state=runtime_state,
+            pressure_assessment=pressure_assessment,
+        )
+        runtime_state = dict(runtime_state)
+        runtime_state["recovery_trace"] = recovery_trace
+        status = str(runtime_state.get("status") or "healthy")
+        if status == "healthy":
+            return runtime_state
+
+        launch_profile = str(runtime_state.get("launch_profile") or "")
+        guarded_active = app_config.is_guarded_webui_launch_profile(launch_profile)
+        cause_codes = set(self._runtime_cause_codes(runtime_state))
+        has_unsafe_pressure = "unsafe_pressure" in cause_codes or pressure_status == "unsafe"
+        should_force_guarded = pressure_status == "high_pressure" and not guarded_active
+        should_attempt_recovery = (status == "poisoned" and not has_unsafe_pressure) or should_force_guarded
         if should_attempt_recovery and self._attempt_webui_recovery(
             stage=stage_name,
             reason="runtime_poisoned_or_guarded_required",
@@ -1144,6 +1428,14 @@ class Pipeline:
                 stage_name=stage_name,
                 pressure_assessment=pressure_assessment,
             )
+            runtime_state = dict(runtime_state)
+            runtime_state["recovery_trace"] = recovery_trace + [
+                {
+                    "step": "restart",
+                    "success": True,
+                    "profile_override": "sdxl_guarded" if should_force_guarded else None,
+                }
+            ]
             recovered_status = str(runtime_state.get("status") or "healthy")
             if recovered_status == "healthy":
                 return runtime_state
@@ -1374,6 +1666,11 @@ class Pipeline:
             profile_override,
         )
         try:
+            if hasattr(self.client, "set_startup_probe_grace"):
+                self.client.set_startup_probe_grace(15.0)
+        except Exception:
+            logger.debug("Failed to set startup probe grace before recovery", exc_info=True)
+        try:
             recovered = manager.restart_webui(
                 wait_ready=True,
                 max_attempts=max_attempts,
@@ -1399,6 +1696,11 @@ class Pipeline:
                     self.client.clear_runtime_failure_state()
             except Exception:
                 logger.debug("Failed to clear client runtime failure state after recovery", exc_info=True)
+            try:
+                if hasattr(self.client, "clear_startup_probe_grace"):
+                    self.client.clear_startup_probe_grace()
+            except Exception:
+                logger.debug("Failed to clear startup probe grace after recovery", exc_info=True)
         return bool(recovered)
 
     def _ensure_webui_true_ready(self) -> None:
@@ -4711,6 +5013,15 @@ class Pipeline:
                     batch_size=1,
                     steps=int(config.get("steps", 20) or 20),
                 )
+                pressure_assessment = self._maybe_autodowngrade_upscale_for_pressure(
+                    config=config,
+                    orig_width=orig_width,
+                    orig_height=orig_height,
+                    pressure_assessment=pressure_assessment,
+                )
+                upscale_factor = float(config.get("upscaling_resize", upscale_factor) or upscale_factor)
+                target_width = int(orig_width * upscale_factor)
+                target_height = int(orig_height * upscale_factor)
                 self._mitigate_stage_pressure(pressure_assessment)
                 self._maybe_apply_workload_launch_policy(
                     stage_name="upscale",
@@ -4845,6 +5156,13 @@ class Pipeline:
                         batch_size=1,
                         steps=int(config.get("steps", 20) or 20),
                     )
+                    pressure_assessment = self._maybe_autodowngrade_upscale_for_pressure(
+                        config=config,
+                        orig_width=orig_width,
+                        orig_height=orig_height,
+                        pressure_assessment=pressure_assessment,
+                    )
+                    upscaling_resize = float(config.get("upscaling_resize", upscaling_resize) or upscaling_resize)
                     self._mitigate_stage_pressure(pressure_assessment)
                     self._maybe_apply_workload_launch_policy(
                         stage_name="upscale",

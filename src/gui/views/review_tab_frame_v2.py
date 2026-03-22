@@ -5,6 +5,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.queue.job_history_store import JobHistoryEntry
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
@@ -14,6 +15,13 @@ from src.utils.image_metadata import (
     resolve_model_vae_fields,
     resolve_prompt_fields,
 )
+
+try:
+    from PIL import Image, ImageTk
+
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 
 class ReviewTabFrame(ttk.Frame):
@@ -62,6 +70,10 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path: Path | None = None
+        self._compare_window: tk.Toplevel | None = None
+        self._compare_canvas: tk.Canvas | None = None
+        self._compare_photo: Any = None
+        self._history_import_window: tk.Toplevel | None = None
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -83,7 +95,7 @@ class ReviewTabFrame(ttk.Frame):
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
         header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
-        header.columnconfigure(3, weight=1)
+        header.columnconfigure(5, weight=1)
 
         ttk.Button(
             header,
@@ -106,19 +118,33 @@ class ReviewTabFrame(ttk.Frame):
             command=self._on_clear,
         ).grid(row=0, column=2, sticky="w")
 
+        ttk.Button(
+            header,
+            text="Import Selected to Learning",
+            style="Dark.TButton",
+            command=self._on_import_selected_to_staged_curation,
+        ).grid(row=0, column=3, sticky="w", padx=(6, 0))
+
+        ttk.Button(
+            header,
+            text="Import Recent Job",
+            style="Dark.TButton",
+            command=self._on_open_history_import_picker,
+        ).grid(row=0, column=4, sticky="w", padx=(6, 0))
+
         self.selection_label = ttk.Label(
             header,
             text="No images selected",
             style="Dark.TLabel",
         )
-        self.selection_label.grid(row=0, column=3, sticky="e")
+        self.selection_label.grid(row=0, column=5, sticky="e")
 
         self.workflow_hint_label = ttk.Label(
             header,
             text="Review is the canonical advanced reprocess workspace.",
             style="Dark.TLabel",
         )
-        self.workflow_hint_label.grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=6, sticky="w", pady=(6, 0))
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
@@ -155,17 +181,39 @@ class ReviewTabFrame(ttk.Frame):
         right.grid(row=0, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
 
-        self.preview = ThumbnailWidget(right, width=420, height=420, placeholder_text="Select an image")
-        self.preview.grid(row=0, column=0, sticky="n", pady=(0, 8))
+        preview_actions = ttk.Frame(right, style="Panel.TFrame")
+        preview_actions.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(
+            preview_actions,
+            text="Prev",
+            style="Dark.TButton",
+            command=self._show_previous_image,
+        ).pack(side="left")
+        ttk.Button(
+            preview_actions,
+            text="Next",
+            style="Dark.TButton",
+            command=self._show_next_image,
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            preview_actions,
+            text="Large Compare",
+            style="Dark.TButton",
+            command=self._open_compare_viewer,
+        ).pack(side="left", padx=(12, 0))
+
+        self.preview = ThumbnailWidget(right, width=620, height=620, placeholder_text="Select an image")
+        self.preview.grid(row=1, column=0, sticky="n", pady=(0, 8))
+        self.preview._canvas.bind("<Double-Button-1>", lambda _event: self._open_compare_viewer())
 
         self.meta_label = ttk.Label(
             right,
             text="Metadata: n/a",
             style="Dark.TLabel",
             justify="left",
-            wraplength=420,
+            wraplength=620,
         )
-        self.meta_label.grid(row=1, column=0, sticky="ew")
+        self.meta_label.grid(row=2, column=0, sticky="ew")
 
     def _build_controls(self) -> None:
         controls = ttk.Frame(self, style="Panel.TFrame")
@@ -582,6 +630,234 @@ class ReviewTabFrame(ttk.Frame):
                 f"Prompt: {preview_prompt or '(empty)'}"
             )
         )
+
+    def _show_previous_image(self) -> None:
+        self._step_selected_image(-1)
+
+    def _show_next_image(self) -> None:
+        self._step_selected_image(1)
+
+    def _step_selected_image(self, delta: int) -> None:
+        if not self._image_index_by_row:
+            return
+        current = self.images_list.curselection()
+        current_index = int(current[0]) if current else 0
+        next_index = max(0, min(len(self._image_index_by_row) - 1, current_index + int(delta)))
+        self.images_list.selection_clear(0, tk.END)
+        self.images_list.selection_set(next_index)
+        self.images_list.activate(next_index)
+        self.images_list.see(next_index)
+        self._show_image(self._image_index_by_row[next_index])
+
+    def _open_compare_viewer(self) -> None:
+        image_path = self._selected_image_path
+        if image_path is None:
+            return
+        if not PIL_AVAILABLE:
+            messagebox.showinfo("Viewer unavailable", "Large compare viewer requires Pillow.")
+            return
+        self._render_compare_viewer(image_path)
+
+    def _render_compare_viewer(self, image_path: Path) -> None:
+        try:
+            with Image.open(image_path) as image:
+                image = image.convert("RGBA")
+                image_width, image_height = image.size
+                photo = ImageTk.PhotoImage(image)
+        except Exception as exc:
+            messagebox.showerror("Viewer failed", f"Failed to open image: {exc}")
+            return
+
+        if self._compare_window and self._compare_window.winfo_exists():
+            viewer = self._compare_window
+            for child in viewer.winfo_children():
+                child.destroy()
+        else:
+            viewer = tk.Toplevel(self)
+            self._compare_window = viewer
+            viewer.bind("<Left>", lambda _event: self._show_previous_image_and_refresh_viewer())
+            viewer.bind("<Right>", lambda _event: self._show_next_image_and_refresh_viewer())
+            viewer.bind("<Escape>", lambda _event: viewer.destroy())
+
+        viewer.title(f"Large Compare - {image_path.name}")
+        viewer.transient(self.winfo_toplevel())
+        viewer.resizable(True, True)
+
+        frame = ttk.Frame(viewer, padding=6)
+        frame.pack(fill=tk.BOTH, expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        nav = ttk.Frame(frame, style="Panel.TFrame")
+        nav.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(nav, text="Prev", style="Dark.TButton", command=self._show_previous_image_and_refresh_viewer).pack(side="left")
+        ttk.Button(nav, text="Next", style="Dark.TButton", command=self._show_next_image_and_refresh_viewer).pack(side="left", padx=(6, 0))
+        ttk.Label(
+            nav,
+            text="Left/Right arrows cycle through the loaded review images",
+            style="Dark.TLabel",
+        ).pack(side="left", padx=(12, 0))
+
+        canvas = tk.Canvas(frame, bg=TOKENS.colors.surface_secondary, highlightthickness=0)
+        canvas.grid(row=1, column=0, sticky="nsew")
+        v_scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+        h_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
+        canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+        v_scroll.grid(row=1, column=1, sticky="ns")
+        h_scroll.grid(row=2, column=0, sticky="ew")
+
+        self._compare_canvas = canvas
+        self._compare_photo = photo
+        canvas.create_image(0, 0, image=photo, anchor="nw")
+        canvas.configure(scrollregion=(0, 0, image_width, image_height))
+
+        width = min(max(image_width + 60, 960), int(viewer.winfo_screenwidth() * 0.92))
+        height = min(max(image_height + 120, 720), int(viewer.winfo_screenheight() * 0.92))
+        viewer.geometry(f"{width}x{height}")
+        viewer.lift()
+        viewer.focus_force()
+
+    def _show_previous_image_and_refresh_viewer(self) -> None:
+        self._step_selected_image(-1)
+        if self._selected_image_path is not None:
+            self._render_compare_viewer(self._selected_image_path)
+
+    def _show_next_image_and_refresh_viewer(self) -> None:
+        self._step_selected_image(1)
+        if self._selected_image_path is not None:
+            self._render_compare_viewer(self._selected_image_path)
+
+    def _on_import_selected_to_staged_curation(self) -> None:
+        learning_controller = self._resolve_learning_controller()
+        if learning_controller is None:
+            messagebox.showerror("Learning unavailable", "Learning controller is not connected.")
+            return
+        selected = self._get_selected_review_paths()
+        if not selected:
+            messagebox.showwarning("No selection", "Select one or more images to import.")
+            return
+        importer = getattr(learning_controller, "import_review_images_to_staged_curation", None)
+        if not callable(importer):
+            messagebox.showerror("Unsupported", "Connected learning controller does not support staged-curation import.")
+            return
+        group_id = importer([str(path) for path in selected], display_name=self._build_import_display_name(selected))
+        if not group_id:
+            messagebox.showerror("Import failed", "Unable to build a staged-curation group from the selected images.")
+            return
+        messagebox.showinfo("Imported", f"Imported {len(selected)} image(s) into Staged Curation.\nGroup: {group_id}")
+
+    def _on_open_history_import_picker(self) -> None:
+        history_items = list(getattr(self.app_state, "history_items", []) or [])
+        if not history_items:
+            messagebox.showinfo("No history", "No recent job history is available to import.")
+            return
+        if self._history_import_window and self._history_import_window.winfo_exists():
+            self._history_import_window.destroy()
+        window = tk.Toplevel(self)
+        self._history_import_window = window
+        window.title("Import Recent Job To Staged Curation")
+        window.transient(self.winfo_toplevel())
+        window.geometry("900x420")
+
+        frame = ttk.Frame(window, padding=8)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+
+        tree = ttk.Treeview(
+            frame,
+            columns=("status", "pack", "job_id"),
+            show="headings",
+            selectmode="browse",
+        )
+        for column_id, heading, width in (
+            ("status", "Status", 120),
+            ("pack", "Pack / Summary", 360),
+            ("job_id", "Job ID", 220),
+        ):
+            tree.heading(column_id, text=heading)
+            tree.column(column_id, width=width, anchor="w")
+        tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        for entry in history_items[:50]:
+            item_id = str(getattr(entry, "job_id", "") or "")
+            tree.insert(
+                "",
+                "end",
+                iid=item_id,
+                values=(
+                    str(getattr(getattr(entry, "status", None), "value", "") or ""),
+                    self._history_entry_summary(entry),
+                    item_id,
+                ),
+            )
+
+        action_bar = ttk.Frame(frame, style="Panel.TFrame")
+        action_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        ttk.Button(
+            action_bar,
+            text="Import Selected Job",
+            style="Dark.TButton",
+            command=lambda: self._import_selected_history_job(tree),
+        ).pack(side="left")
+
+    def _import_selected_history_job(self, tree: ttk.Treeview) -> None:
+        selection = tree.selection()
+        if not selection:
+            messagebox.showwarning("No selection", "Select a history job to import.")
+            return
+        job_id = selection[0]
+        entry = self._find_history_entry(job_id)
+        if entry is None:
+            messagebox.showerror("Import failed", "Unable to resolve the selected history job.")
+            return
+        learning_controller = self._resolve_learning_controller()
+        if learning_controller is None:
+            messagebox.showerror("Learning unavailable", "Learning controller is not connected.")
+            return
+        importer = getattr(learning_controller, "import_history_entry_to_staged_curation", None)
+        if not callable(importer):
+            messagebox.showerror("Unsupported", "Connected learning controller does not support history import.")
+            return
+        group_id = importer(entry)
+        if not group_id:
+            messagebox.showerror("Import failed", "No image outputs were found for the selected history job.")
+            return
+        if self._history_import_window and self._history_import_window.winfo_exists():
+            self._history_import_window.destroy()
+        messagebox.showinfo("Imported", f"Imported history job into Staged Curation.\nGroup: {group_id}")
+
+    def _find_history_entry(self, job_id: str) -> JobHistoryEntry | None:
+        history_items = list(getattr(self.app_state, "history_items", []) or [])
+        for entry in history_items:
+            if str(getattr(entry, "job_id", "") or "") == str(job_id or ""):
+                return entry
+        return None
+
+    def _history_entry_summary(self, entry: JobHistoryEntry) -> str:
+        prompt_pack_id = str(getattr(entry, "prompt_pack_id", "") or "").strip()
+        if prompt_pack_id:
+            return prompt_pack_id
+        payload_summary = str(getattr(entry, "payload_summary", "") or "").strip()
+        return payload_summary[:80] if payload_summary else "History job"
+
+    def _get_selected_review_paths(self) -> list[Path]:
+        idxs = list(self.images_list.curselection())
+        if not idxs and self._selected_image_path is not None:
+            return [self._selected_image_path]
+        paths: list[Path] = []
+        for idx in idxs:
+            if 0 <= int(idx) < len(self._image_index_by_row):
+                paths.append(self._image_index_by_row[int(idx)])
+        return paths
+
+    def _build_import_display_name(self, paths: list[Path]) -> str:
+        if len(paths) == 1:
+            return f"Review Import - {paths[0].stem}"
+        return f"Review Import - {len(paths)} images"
 
     def _set_readonly_text(self, widget: tk.Text, value: str) -> None:
         widget.configure(state="normal")

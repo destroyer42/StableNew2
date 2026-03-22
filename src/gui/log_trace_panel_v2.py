@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tkinter as tk
 from collections.abc import Callable, Iterable
+from datetime import datetime
 from tkinter import ttk
 from typing import Any
 
@@ -266,7 +267,9 @@ class LogTracePanelV2(ttk.Frame):
                 badges.append(event)
             if job_id and self._audience == "trace":
                 badges.append(f"job={job_id}")
-        line = f"[{' | '.join(badges)}] {message}"
+        created = float(entry.get("created", 0.0) or 0.0)
+        timestamp = self._format_timestamp(created)
+        line = f"{timestamp} [{' | '.join(badges)}] {message}"
         envelope_summary = self._format_payload_summary(payload) if payload else None
         if envelope_summary:
             line += f" {envelope_summary}"
@@ -276,6 +279,11 @@ class LogTracePanelV2(ttk.Frame):
             last_created = float(entry.get("last_created", entry.get("created", 0.0)) or 0.0)
             line += f" [repeated {repeat_count}x over {max(0.0, last_created - first_created):.1f}s]"
         return line
+
+    def _format_timestamp(self, created: float) -> str:
+        if created <= 0:
+            return "--:--:--.---"
+        return datetime.fromtimestamp(created).strftime("%H:%M:%S.%f")[:-3]
 
     def _format_payload_summary(self, payload: dict[str, Any] | None) -> str | None:
         if not payload:

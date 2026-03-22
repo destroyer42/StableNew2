@@ -93,6 +93,15 @@ class TestSDWebUIClient:
         assert second == []
         self.client._request_context.assert_called_once()
 
+    def test_get_models_skips_requests_during_startup_probe_grace(self):
+        self.client._request_context = MagicMock()
+        self.client.set_startup_probe_grace(15.0)
+
+        models = self.client.get_models()
+
+        assert models == []
+        self.client._request_context.assert_not_called()
+
     def test_get_vae_models_failure_enters_short_cooldown(self):
         """Repeated callers should not re-hit sd-vae immediately after a hard failure."""
         self.client._request_context = MagicMock()
@@ -108,12 +117,41 @@ class TestSDWebUIClient:
         assert second == []
         self.client._request_context.assert_called_once()
 
+    def test_get_vae_models_skips_requests_during_startup_probe_grace(self):
+        self.client._request_context = MagicMock()
+        self.client.set_startup_probe_grace(15.0)
+
+        vaes = self.client.get_vae_models()
+
+        assert vaes == []
+        self.client._request_context.assert_not_called()
+
     def test_get_current_model_success(self):
         """Test successful get_current_model call"""
         with requests_mock.Mocker() as m:
             m.get(f"{API_BASE_URL}/sdapi/v1/options", json={"sd_model_checkpoint": "current_model"})
             model = self.client.get_current_model()
             assert model == "current_model"
+
+    def test_reset_stale_progress_state_interrupts_until_idle(self):
+        self.client.interrupt = MagicMock(return_value=True)
+        self.client.get_progress_snapshot = MagicMock(
+            side_effect=[
+                {"progress": 1.0, "state": {"job": "txt2img"}},
+                {"progress": 0.0, "state": {}},
+            ]
+        )
+        self.client._sleep = MagicMock()
+
+        assert self.client.reset_stale_progress_state(timeout_s=2.0, poll_interval_s=0.1) is True
+        self.client.interrupt.assert_called_once()
+
+    def test_reset_stale_progress_state_returns_false_when_interrupt_rejected(self):
+        self.client.interrupt = MagicMock(return_value=False)
+        self.client.get_progress_snapshot = MagicMock()
+
+        assert self.client.reset_stale_progress_state(timeout_s=1.0, poll_interval_s=0.1) is False
+        self.client.get_progress_snapshot.assert_not_called()
 
     def test_get_options_success(self):
         """Ensure get_options returns parsed dict."""

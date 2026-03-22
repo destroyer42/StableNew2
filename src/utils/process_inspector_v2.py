@@ -216,13 +216,20 @@ def collect_process_risk_snapshot(
     for proc in processes:
         reasons: list[str] = []
         age_s = max(0.0, now - proc.create_time) if proc.create_time else None
-        if proc.rss_mb is not None and proc.rss_mb >= rss_mb_threshold:
+        is_main_process = _is_stablenew_main_process(proc.cmdline)
+        is_webui_process = _is_webui_process(proc.cmdline, proc.cwd)
+        if (
+            proc.rss_mb is not None
+            and proc.rss_mb >= rss_mb_threshold
+            and not is_main_process
+            and not is_webui_process
+        ):
             reasons.append(f"high_rss_{int(rss_mb_threshold)}mb_plus")
         if age_s is not None and age_s >= age_s_threshold and _is_pytest_process(proc.cmdline):
             reasons.append("stale_pytest_process")
-        if len(main_processes) > 1 and _is_stablenew_main_process(proc.cmdline):
+        if len(main_processes) > 1 and is_main_process:
             reasons.append("duplicate_stablenew_main")
-        if len(webui_processes) > 1 and _is_webui_process(proc.cmdline, proc.cwd):
+        if len(webui_processes) > 1 and is_webui_process:
             reasons.append("duplicate_webui_process")
         if not reasons:
             continue

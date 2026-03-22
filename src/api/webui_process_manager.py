@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
@@ -947,6 +948,7 @@ class WebUIProcessManager:
                 # DIAGNOSTIC: List ALL python.exe processes BEFORE cleanup
                 logger.warning(">>> LISTING ALL PYTHON.EXE PROCESSES BEFORE CLEANUP:")
                 all_python_pids = []
+                webui_candidate_pids = set()
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cwd', 'memory_info']):
                     try:
                         if proc.info['name'] and 'python' in proc.info['name'].lower():
@@ -955,6 +957,14 @@ class WebUIProcessManager:
                             mem_info = proc.info.get('memory_info')
                             mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
                             all_python_pids.append(proc.pid)
+                            match_reason = _get_webui_python_match_reasons(
+                                process_name=proc.info.get('name'),
+                                cmdline=cmdline,
+                                cwd=cwd,
+                                working_dir=webui_dir,
+                            )
+                            if match_reason:
+                                webui_candidate_pids.add(proc.pid)
                             logger.warning(
                                 "  PID %s: name=%s, mem=%.1f MB, cwd=%s, cmdline=%s",
                                 proc.pid,
@@ -1032,7 +1042,7 @@ class WebUIProcessManager:
                             mem_info = proc.info.get('memory_info')
                             mem_mb = mem_info.rss / (1024 * 1024) if mem_info else 0
                             remaining_python_pids.append(proc.pid)
-                            was_supposed_to_die = proc.pid in all_python_pids and proc.pid not in killed_pids
+                            was_supposed_to_die = proc.pid in webui_candidate_pids and proc.pid not in killed_pids
                             status = "⚠ LEAKED" if mem_mb > 500 else "OK (small)"
                             logger.warning(
                                 "  PID %s: mem=%.1f MB %s%s",
@@ -1343,6 +1353,18 @@ class WebUIProcessManager:
                 logger.debug("Error scanning for orphans: %s", exc)
         
         return orphans
+
+    def cleanup_orphaned_webui_processes(self) -> list[int]:
+        """Kill orphaned WebUI processes blocking the configured port/workdir."""
+
+        base_url = self._configured_base_url()
+        parsed = urlparse(base_url)
+        port = parsed.port or 7860
+        working_dir = self._config.working_dir
+        return kill_orphaned_webui_processes_blocking_port(
+            port=port,
+            working_dir=working_dir,
+        )
 
     def _force_kill_with_taskkill(self, pid: int) -> None:
         """Last resort: use Windows taskkill command to force-kill a process."""

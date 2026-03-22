@@ -33,6 +33,24 @@ def test_discover_packs_includes_json_prompt_packs(tmp_path):
     assert packs[0].path == pack_one
 
 
+def test_discover_packs_dedupes_companion_files_and_prefers_json(tmp_path):
+    json_pack = tmp_path / "alpha.json"
+    txt_pack = tmp_path / "alpha.txt"
+    tsv_pack = tmp_path / "alpha.tsv"
+    beta_pack = tmp_path / "beta.txt"
+
+    json_pack.write_text('{"pack_data":{"slots":[{"index":0,"text":"hero","negative":"bad"}]}}')
+    txt_pack.write_text("txt prompt", encoding="utf-8")
+    tsv_pack.write_text("tsv prompt\tbad", encoding="utf-8")
+    beta_pack.write_text("beta prompt", encoding="utf-8")
+
+    packs = discover_packs(tmp_path)
+
+    assert [p.name for p in packs] == ["alpha", "beta"]
+    assert packs[0].path == json_pack
+    assert packs[1].path == beta_pack
+
+
 def test_discover_packs_ensures_directory(tmp_path):
     target = tmp_path / "nested" / "packs"
     assert not target.exists()

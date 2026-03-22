@@ -17,6 +17,7 @@ from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.learning.experiment_store import LearningExperimentStore
 from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
@@ -248,6 +249,147 @@ class LearningTabFrame(ttk.Frame):
             on_rate_item=self._on_discovered_rate_item,
         )
         self.discovered_review_table.grid(row=0, column=1, sticky="nsew", padx=(2, 0), pady=4)
+
+        # ---- Tab 3: Staged Curation ----
+        self._staged_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
+        self._mode_notebook.add(self._staged_tab_frame, text="Staged Curation")
+        self._staged_tab_frame.columnconfigure(0, weight=1)
+        self._staged_tab_frame.columnconfigure(1, weight=2)
+        self._staged_tab_frame.columnconfigure(2, weight=2)
+        self._staged_tab_frame.rowconfigure(0, weight=1)
+
+        self._staged_reason_tag_vars: dict[str, tk.BooleanVar] = {}
+        self._staged_candidates_by_id: dict[str, dict[str, Any]] = {}
+        self._staged_items_by_id: dict[str, Any] = {}
+        self._staged_latest_events: dict[str, Any] = {}
+        self._staged_current_group_id: str | None = None
+
+        self.staged_inbox_panel = DiscoveredReviewInboxPanel(
+            self._staged_tab_frame,
+            on_open_group=self._on_staged_open_group,
+            on_close_group=self._on_staged_close_group,
+            on_ignore_group=self._on_staged_ignore_group,
+            on_rescan=self._on_staged_rescan,
+        )
+        self.staged_inbox_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
+
+        staged_center = ttk.LabelFrame(
+            self._staged_tab_frame,
+            text="Candidates",
+            padding=(6, 4),
+        )
+        staged_center.grid(row=0, column=1, sticky="nsew", padx=2, pady=4)
+        staged_center.columnconfigure(0, weight=1)
+        staged_center.rowconfigure(1, weight=1)
+
+        self._staged_group_var = tk.StringVar(value="Open a discovered group to start staged curation")
+        ttk.Label(
+            staged_center,
+            textvariable=self._staged_group_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+
+        candidate_frame = ttk.Frame(staged_center, style=SURFACE_FRAME_STYLE)
+        candidate_frame.grid(row=1, column=0, sticky="nsew")
+        candidate_frame.columnconfigure(0, weight=1)
+        candidate_frame.rowconfigure(0, weight=1)
+
+        self._staged_candidate_tree = ttk.Treeview(
+            candidate_frame,
+            columns=("decision", "rating", "stage", "model", "steps", "cfg", "file"),
+            show="headings",
+            selectmode="browse",
+        )
+        for column_id, heading, width, anchor in (
+            ("decision", "Decision", 130, "center"),
+            ("rating", "Rating", 70, "center"),
+            ("stage", "Stage", 80, "center"),
+            ("model", "Model", 150, "w"),
+            ("steps", "Steps", 55, "center"),
+            ("cfg", "CFG", 55, "center"),
+            ("file", "File", 220, "w"),
+        ):
+            self._staged_candidate_tree.heading(column_id, text=heading)
+            self._staged_candidate_tree.column(column_id, width=width, anchor=anchor)
+        self._staged_candidate_tree.grid(row=0, column=0, sticky="nsew")
+        self._staged_candidate_scrollbar = ttk.Scrollbar(
+            candidate_frame,
+            orient="vertical",
+            command=self._staged_candidate_tree.yview,
+        )
+        self._staged_candidate_scrollbar.grid(row=0, column=1, sticky="ns")
+        self._staged_candidate_tree.configure(yscrollcommand=self._staged_candidate_scrollbar.set)
+        self._staged_candidate_tree.bind("<<TreeviewSelect>>", self._on_staged_candidate_selected)
+
+        staged_right = ttk.LabelFrame(
+            self._staged_tab_frame,
+            text="Selection Workspace",
+            padding=(6, 4),
+        )
+        staged_right.grid(row=0, column=2, sticky="nsew", padx=(2, 0), pady=4)
+        staged_right.columnconfigure(0, weight=1)
+        staged_right.rowconfigure(1, weight=1)
+
+        self._staged_preview_meta_var = tk.StringVar(
+            value="Select a candidate to preview and record a staged-curation decision"
+        )
+        ttk.Label(
+            staged_right,
+            textvariable=self._staged_preview_meta_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+
+        self._staged_preview_thumbnail = ImageThumbnail(
+            staged_right,
+            max_width=1400,
+            max_height=1400,
+        )
+        self._staged_preview_thumbnail.grid(row=1, column=0, sticky="nsew")
+        self._staged_preview_thumbnail.clear()
+
+        reason_frame = ttk.LabelFrame(staged_right, text="Reason Tags", padding=(6, 4))
+        reason_frame.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        for index, tag in enumerate(self.learning_controller.get_staged_curation_reason_tag_options()):
+            var = tk.BooleanVar(value=False)
+            self._staged_reason_tag_vars[tag] = var
+            ttk.Checkbutton(
+                reason_frame,
+                text=tag.replace("_", " "),
+                variable=var,
+            ).grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=1)
+
+        notes_frame = ttk.LabelFrame(staged_right, text="Decision Notes", padding=(6, 4))
+        notes_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        notes_frame.columnconfigure(0, weight=1)
+        self._staged_notes_text = tk.Text(notes_frame, height=4, wrap="word")
+        self._staged_notes_text.grid(row=0, column=0, sticky="ew")
+
+        self._staged_last_decision_var = tk.StringVar(value="Latest decision: none")
+        ttk.Label(
+            staged_right,
+            textvariable=self._staged_last_decision_var,
+            style=BODY_LABEL_STYLE,
+        ).grid(row=4, column=0, sticky="w", pady=(6, 0))
+
+        action_frame = ttk.Frame(staged_right, style=SURFACE_FRAME_STYLE)
+        action_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+        for label, decision in (
+            ("Reject", "rejected_hard"),
+            ("Hold", "not_advanced"),
+            ("To Refine", "advanced_to_refine"),
+            ("To Face", "advanced_to_face_triage"),
+            ("To Upscale", "advanced_to_upscale"),
+            ("Final Keep", "curated_final"),
+        ):
+            ttk.Button(
+                action_frame,
+                text=label,
+                command=lambda value=decision: self._apply_staged_decision(value),
+            ).pack(side="left", padx=(0, 4))
 
         # Refresh inbox when its tab is activated
         self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
@@ -524,9 +666,10 @@ class LearningTabFrame(ttk.Frame):
         """Refresh the discovered inbox whenever its tab is activated."""
         try:
             selected = self._mode_notebook.index(self._mode_notebook.select())
-            # Tab 1 is Discovered Review Inbox
             if selected == 1:
                 self._refresh_discovered_inbox()
+            elif selected == 2:
+                self._refresh_staged_curation_inbox()
         except Exception:
             pass
 
@@ -589,5 +732,200 @@ class LearningTabFrame(ttk.Frame):
         self.learning_controller.save_discovered_item_rating(group_id, item_id, rating)
         self.discovered_review_table.refresh_item_rating(item_id, rating)
 
+    # ------------------------------------------------------------------
+    # PR-LEARN-259B: Staged-curation event handlers
+    # ------------------------------------------------------------------
+
+    def _refresh_staged_curation_inbox(self) -> None:
+        handles = self.learning_controller.list_staged_curation_handles()
+        self.staged_inbox_panel.load_handles(handles)
+
+    def _on_staged_open_group(self, group_id: str) -> None:
+        payload = self.learning_controller.load_staged_curation_group(group_id)
+        if not isinstance(payload, dict):
+            return
+        experiment = payload.get("experiment")
+        candidates = list(payload.get("candidates") or [])
+        latest_events = dict(payload.get("latest_events") or {})
+        self._staged_current_group_id = group_id
+        self._staged_latest_events = latest_events
+        self._staged_items_by_id = {
+            str(item.item_id): item for item in list(getattr(experiment, "items", []) or [])
+        }
+        self._staged_candidates_by_id = {}
+        self._staged_group_var.set(
+            f"{getattr(experiment, 'display_name', group_id)} | "
+            f"{len(self._staged_items_by_id)} candidate(s) | "
+            f"varying: {', '.join(list(getattr(experiment, 'varying_fields', []) or [])) or 'n/a'}"
+        )
+        self._render_staged_candidates(candidates, latest_events)
+        self._clear_staged_reason_tags()
+        self._staged_notes_text.delete("1.0", tk.END)
+
+    def _render_staged_candidates(self, candidates: list[Any], latest_events: dict[str, Any]) -> None:
+        self._staged_candidate_tree.delete(*self._staged_candidate_tree.get_children())
+        self._staged_candidates_by_id = {}
+        for candidate in candidates:
+            item = self._staged_items_by_id.get(str(getattr(candidate, "candidate_id", "") or ""))
+            if item is None:
+                continue
+            latest = latest_events.get(candidate.candidate_id)
+            decision = str(getattr(latest, "decision", "") or "unreviewed").replace("_", " ")
+            rating = "unrated"
+            if int(getattr(item, "rating", 0) or 0) > 0:
+                rating = f"{int(getattr(item, 'rating', 0))}/5"
+            values = (
+                decision,
+                rating,
+                str(getattr(item, "stage", "") or ""),
+                _truncate(str(getattr(item, "model", "") or ""), 24),
+                int(getattr(item, "steps", 0) or 0),
+                f"{float(getattr(item, 'cfg_scale', 0.0) or 0.0):.1f}",
+                _truncate(Path(str(getattr(item, "artifact_path", "") or "")).name, 32),
+            )
+            self._staged_candidates_by_id[candidate.candidate_id] = {
+                "candidate": candidate,
+                "item": item,
+            }
+            self._staged_candidate_tree.insert("", "end", iid=candidate.candidate_id, values=values)
+        children = self._staged_candidate_tree.get_children()
+        if children:
+            selected_item_id = self.learning_controller.learning_state.selected_staged_curation_item_id
+            first = selected_item_id if selected_item_id in children else children[0]
+            self._staged_candidate_tree.selection_set(first)
+            self._staged_candidate_tree.focus(first)
+            self._update_staged_preview(first)
+        else:
+            self._update_staged_preview(None)
+
+    def _on_staged_candidate_selected(self, _event: Any = None) -> None:
+        selection = self._staged_candidate_tree.selection()
+        candidate_id = selection[0] if selection else None
+        self._update_staged_preview(candidate_id)
+
+    def _update_staged_preview(self, candidate_id: str | None) -> None:
+        if not candidate_id:
+            self.learning_controller.learning_state.selected_staged_curation_item_id = None
+            self._staged_preview_meta_var.set(
+                "Select a candidate to preview and record a staged-curation decision"
+            )
+            self._staged_last_decision_var.set("Latest decision: none")
+            self._staged_preview_thumbnail.clear()
+            self._clear_staged_reason_tags()
+            self._staged_notes_text.delete("1.0", tk.END)
+            return
+        row = self._staged_candidates_by_id.get(candidate_id) or {}
+        item = row.get("item")
+        if item is None:
+            return
+        self.learning_controller.learning_state.selected_staged_curation_item_id = candidate_id
+        self.learning_controller.learning_state.selected_staged_curation_group_id = self._staged_current_group_id
+        latest = self._staged_latest_events.get(candidate_id)
+        dimensions = ""
+        if int(getattr(item, "width", 0) or 0) and int(getattr(item, "height", 0) or 0):
+            dimensions = f"{item.width} x {item.height}"
+        self._staged_preview_meta_var.set(
+            " | ".join(
+                [
+                    part
+                    for part in (
+                        str(getattr(item, "stage", "") or ""),
+                        str(getattr(item, "model", "") or ""),
+                        dimensions,
+                        f"sampler={getattr(item, 'sampler', '')}" if getattr(item, "sampler", "") else "",
+                    )
+                    if part
+                ]
+            )
+            or "Candidate selected"
+        )
+        self._staged_preview_thumbnail.load_image(str(getattr(item, "artifact_path", "") or ""))
+        self._clear_staged_reason_tags()
+        self._staged_notes_text.delete("1.0", tk.END)
+        if latest is not None:
+            self._staged_last_decision_var.set(
+                f"Latest decision: {str(getattr(latest, 'decision', 'unreviewed')).replace('_', ' ')}"
+            )
+            for tag in list(getattr(latest, "reason_tags", []) or []):
+                var = self._staged_reason_tag_vars.get(str(tag))
+                if var is not None:
+                    var.set(True)
+            notes = str(getattr(latest, "notes", "") or "")
+            if notes:
+                self._staged_notes_text.insert("1.0", notes)
+        else:
+            self._staged_last_decision_var.set("Latest decision: unreviewed")
+        self._persist_learning_session_state()
+
+    def _clear_staged_reason_tags(self) -> None:
+        for var in self._staged_reason_tag_vars.values():
+            var.set(False)
+
+    def _collect_staged_reason_tags(self) -> list[str]:
+        return [tag for tag, var in self._staged_reason_tag_vars.items() if bool(var.get())]
+
+    def _apply_staged_decision(self, decision: str) -> None:
+        selection = self._staged_candidate_tree.selection()
+        candidate_id = selection[0] if selection else None
+        if not self._staged_current_group_id or not candidate_id:
+            return
+        notes = self._staged_notes_text.get("1.0", tk.END).strip()
+        event = self.learning_controller.record_staged_curation_selection(
+            self._staged_current_group_id,
+            candidate_id,
+            decision,
+            reason_tags=self._collect_staged_reason_tags(),
+            notes=notes,
+        )
+        if event is None:
+            return
+        self._staged_latest_events[candidate_id] = event
+        latest_label = str(event.decision or "unreviewed").replace("_", " ")
+        try:
+            self._staged_candidate_tree.set(candidate_id, "decision", latest_label)
+        except Exception:
+            pass
+        self._staged_last_decision_var.set(f"Latest decision: {latest_label}")
+        self._refresh_staged_curation_inbox()
+        self._persist_learning_session_state()
+
+    def _on_staged_close_group(self, group_id: str) -> None:
+        self.learning_controller.close_discovered_group(group_id)
+        if self._staged_current_group_id == group_id:
+            self._clear_staged_group()
+        self._refresh_staged_curation_inbox()
+
+    def _on_staged_ignore_group(self, group_id: str) -> None:
+        self.learning_controller.ignore_discovered_group(group_id)
+        if self._staged_current_group_id == group_id:
+            self._clear_staged_group()
+        self._refresh_staged_curation_inbox()
+
+    def _on_staged_rescan(self) -> None:
+        self.staged_inbox_panel.set_scanning(True)
+        self.learning_controller.trigger_background_scan(
+            output_root=self._resolve_discovered_output_root(),
+            on_complete=self._on_staged_scan_complete,
+        )
+
+    def _on_staged_scan_complete(self, new_count: int) -> None:
+        self.staged_inbox_panel.set_scanning(False)
+        self._refresh_staged_curation_inbox()
+
+    def _clear_staged_group(self) -> None:
+        self._staged_current_group_id = None
+        self._staged_candidates_by_id = {}
+        self._staged_items_by_id = {}
+        self._staged_latest_events = {}
+        self._staged_candidate_tree.delete(*self._staged_candidate_tree.get_children())
+        self._staged_group_var.set("Open a discovered group to start staged curation")
+        self._update_staged_preview(None)
+
 
 LearningTabFrame = LearningTabFrame
+
+
+def _truncate(text: str, max_len: int) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3] + "..."

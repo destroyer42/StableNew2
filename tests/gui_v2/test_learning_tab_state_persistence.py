@@ -8,6 +8,8 @@ from src.gui.app_state_v2 import AppStateV2
 from src.gui.learning_state import LearningExperiment, LearningVariant
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.learning.discovered_review_models import DiscoveredReviewExperiment, DiscoveredReviewItem
+from src.learning.discovered_review_store import DiscoveredReviewStore
 from src.services.ui_state_store import UIStateStore
 from tests.gui_v2.tk_test_utils import get_shared_tk_root
 
@@ -157,3 +159,88 @@ def test_learning_review_panel_viewer_window_size_caps_to_screen() -> None:
 
     assert width == int(1600 * 0.9)
     assert height == int(900 * 0.9)
+
+
+def test_learning_tab_includes_staged_curation_mode() -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    with TemporaryDirectory() as tmp_dir:
+        state_path = Path(tmp_dir) / "ui_state.json"
+        experiments_root = Path(tmp_dir) / "experiments"
+        store = UIStateStore(state_path)
+
+        with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ):
+            tab = LearningTabFrame(
+                root,
+                app_state=AppStateV2(),
+                pipeline_controller=_StubPipelineController(),
+            )
+
+            labels = [
+                tab._mode_notebook.tab(tab_id, "text")  # noqa: SLF001
+                for tab_id in tab._mode_notebook.tabs()  # noqa: SLF001
+            ]
+            assert "Staged Curation" in labels
+            tab.destroy()
+
+
+def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    discovered_root = tmp_path / "discovered"
+    store = UIStateStore(state_path)
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=AppStateV2(),
+            pipeline_controller=_StubPipelineController(),
+        )
+        try:
+            discovered_store = DiscoveredReviewStore(discovered_root)
+            tab.learning_controller._discovered_review_store = discovered_store  # noqa: SLF001
+            experiment = DiscoveredReviewExperiment(
+                group_id="disc-stage",
+                display_name="Stage Group",
+                stage="txt2img",
+                prompt_hash="hash-1",
+                items=[
+                    DiscoveredReviewItem(
+                        item_id="item-1",
+                        artifact_path=str(tmp_path / "fake.png"),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                    )
+                ],
+                varying_fields=["cfg_scale"],
+            )
+            discovered_store.save_group(experiment)
+
+            tab._on_staged_open_group("disc-stage")  # noqa: SLF001
+            assert len(tab._staged_candidate_tree.get_children()) == 1  # noqa: SLF001
+
+            tab._staged_reason_tag_vars["good_composition"].set(True)  # noqa: SLF001
+            tab._staged_notes_text.insert("1.0", "promote this image")  # noqa: SLF001
+            tab._apply_staged_decision("advanced_to_refine")  # noqa: SLF001
+
+            events = discovered_store.load_selection_events("disc-stage")
+            assert len(events) == 1
+            assert events[0].decision == "advanced_to_refine"
+            assert events[0].reason_tags == ["good_composition"]
+        finally:
+            tab.destroy()

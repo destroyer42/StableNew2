@@ -43,6 +43,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/WebUI Restart and Lost Connection Investigation 2026-03-20.md`
 - `docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
 - `docs/Research Reports/deep-research-report-DEEP GPU memory and stall investigation - verdict.md`
+- `docs/Research Reports/staged-curation-learning-verdict-2026-03-21.md`
 - `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
 - `docs/Randomizer_Spec_v2.6.md`
 
@@ -52,6 +53,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 - `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
 - `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
@@ -91,10 +93,19 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters.md`
 - `docs/PR_Backlog/PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup.md`
 - `docs/PR_Backlog/PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split.md`
+- `docs/PR_Backlog/PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events.md`
+- `docs/PR_Backlog/PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode.md`
+- `docs/PR_Backlog/PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface.md`
+- `docs/PR_Backlog/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md`
+- `docs/PR_Backlog/PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics.md`
+- `docs/PR_Backlog/PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries.md`
 
 ### 1.5 Reference and history
 
 - `docs/CompletedPR/` contains completed PR records
+- `docs/CompletedPR/PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events.md`
+- `docs/CompletedPR/PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode.md`
+- `docs/CompletedPR/PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface.md`
 - `docs/archive/` contains historical, superseded, and reference-only material
 
 ## 2. Canonical Reading Order

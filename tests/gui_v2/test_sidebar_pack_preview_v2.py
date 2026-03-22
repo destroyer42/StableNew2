@@ -209,3 +209,26 @@ def test_refresh_prompt_packs_rediscovers_new_json_packs(tmp_path):
         assert panel.pack_listbox.get(0, "end") == ("alpha", "beta")
     finally:
         root.destroy()
+
+
+@pytest.mark.gui
+def test_refresh_prompt_packs_dedupes_companion_txt_and_json(tmp_path):
+    (tmp_path / "alpha.txt").write_text("txt prompt", encoding="utf-8")
+    (tmp_path / "alpha.json").write_text(
+        '{"pack_data":{"slots":[{"index":0,"text":"json prompt","negative":"bad"}]}}',
+        encoding="utf-8",
+    )
+
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk not available: {exc}")
+    root.withdraw()
+    try:
+        panel = SidebarPanelV2(root, prompt_pack_adapter=PromptPackAdapterV2(tmp_path))
+        root.update_idletasks()
+
+        assert panel._current_pack_names == ["alpha"]
+        assert panel.pack_listbox.get(0, "end") == ("alpha",)
+    finally:
+        root.destroy()

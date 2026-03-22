@@ -19,6 +19,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from src.curation.curation_manifest import build_selection_event_block
+from src.curation.models import SelectionEvent
 from src.learning.discovered_review_models import (
     RATING_UNRATED,
     STATUS_CLOSED,
@@ -37,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 _SCAN_INDEX_FILE = "scan_index.json"
 _GROUPS_DIR = "discovered_experiments"
+_SELECTION_EVENTS_FILE = "selection_events.json"
 
 
 class DiscoveredReviewStore:
@@ -156,6 +159,38 @@ class DiscoveredReviewStore:
                 self.save_group(exp)
                 return True
         return False
+
+    # ------------------------------------------------------------------
+    # Staged-curation selection events
+    # ------------------------------------------------------------------
+
+    def load_selection_events(self, group_id: str) -> list[SelectionEvent]:
+        """Return staged-curation selection events for *group_id*."""
+        group_dir = self._groups_root / group_id
+        raw = self._read_json(group_dir / _SELECTION_EVENTS_FILE) or []
+        events: list[SelectionEvent] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            payload = dict(entry)
+            payload.pop("schema", None)
+            try:
+                events.append(SelectionEvent.from_dict(payload))
+            except Exception as exc:
+                logger.warning("Skipping corrupt selection event for %s: %s", group_id, exc)
+        return events
+
+    def append_selection_event(self, group_id: str, event: SelectionEvent) -> bool:
+        """Append a staged-curation selection event for *group_id*."""
+        group_dir = self._groups_root / group_id
+        if not (group_dir / "meta.json").exists():
+            return False
+        existing = self._read_json(group_dir / _SELECTION_EVENTS_FILE) or []
+        if not isinstance(existing, list):
+            existing = []
+        existing.append(build_selection_event_block(event))
+        self._write_json(group_dir / _SELECTION_EVENTS_FILE, existing)
+        return True
 
     # ------------------------------------------------------------------
     # Handle listing

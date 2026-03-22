@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,12 @@ from typing import Any
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.prompt_workspace_state import PromptWorkspaceState
+from src.curation.models import CurationCandidate, CurationWorkflow, SelectionEvent
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
+from src.learning.discovered_review_models import (
+    DiscoveredReviewExperiment,
+    DiscoveredReviewItem,
+)
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.stage_capabilities import get_stage_capability
 from src.learning.learning_controller_services.experiment_persistence import (
@@ -23,6 +29,12 @@ from src.learning.learning_controller_services.experiment_persistence import (
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
+from src.pipeline.artifact_contract import extract_artifact_paths
+from src.utils.image_metadata import (
+    extract_embedded_metadata,
+    resolve_model_vae_fields,
+    resolve_prompt_fields,
+)
 
 
 class LearningController:
@@ -2279,6 +2291,319 @@ class LearningController:
         """Reopen a closed/ignored discovered group back to waiting_review."""
         store = self._get_discovered_store()
         store.reopen_group(group_id)
+
+    # ------------------------------------------------------------------
+    # PR-LEARN-259B: Staged-curation orchestration
+    # ------------------------------------------------------------------
+
+    def list_staged_curation_handles(self) -> list:
+        """Return active discovered groups for the staged-curation mode."""
+        return self.refresh_discovered_inbox(status="active")
+
+    def get_staged_curation_reason_tag_options(self) -> list[str]:
+        """Return curated reason tags for quick staged-review decisions."""
+        return [
+            "good_composition",
+            "good_lighting",
+            "strong_prompt_match",
+            "good_face",
+            "bad_face",
+            "anatomy_issue",
+            "prompt_drift",
+            "not_worth_upscaling",
+            "keeper",
+        ]
+
+    def import_review_images_to_staged_curation(
+        self,
+        image_paths: list[str],
+        *,
+        display_name: str | None = None,
+        source_label: str = "review_tab",
+    ) -> str | None:
+        """Create a staged-curation group from explicit review image paths."""
+        cleaned_paths = [str(Path(path)) for path in image_paths if str(path or "").strip()]
+        if not cleaned_paths:
+            return None
+
+        items: list[DiscoveredReviewItem] = []
+        for index, image_path in enumerate(cleaned_paths):
+            item = self._build_discovered_item_from_image_path(image_path, index=index)
+            if item is not None:
+                items.append(item)
+        if not items:
+            return None
+
+        prompt_hash = self._hash_prompt(items[0].positive_prompt)
+        group_id = f"curation-import-{uuid.uuid4().hex[:12]}"
+        experiment = DiscoveredReviewExperiment(
+            group_id=group_id,
+            display_name=str(display_name or f"Imported Review {group_id[-6:]}"),
+            stage=str(items[0].stage or "txt2img"),
+            prompt_hash=prompt_hash,
+            status="waiting_review",
+            items=items,
+            varying_fields=self._infer_varying_fields(items),
+            scan_source_dirs=sorted({str(Path(item.artifact_path).parent) for item in items}),
+            notes=f"Imported via {source_label}",
+        )
+        store = self._get_discovered_store()
+        store.save_group(experiment)
+        self.learning_state.selected_staged_curation_group_id = group_id
+        self.learning_state.selected_staged_curation_item_id = items[0].item_id if items else None
+        self._notify_resume_state_changed()
+        return group_id
+
+    def import_history_entry_to_staged_curation(
+        self,
+        entry: Any,
+        *,
+        display_name: str | None = None,
+    ) -> str | None:
+        """Import output artifacts from a history entry into staged curation."""
+        image_paths = self._extract_history_entry_image_paths(entry)
+        if not image_paths:
+            return None
+        default_name = display_name or self._build_history_import_display_name(entry)
+        return self.import_review_images_to_staged_curation(
+            image_paths,
+            display_name=default_name,
+            source_label="history_import",
+        )
+
+    def load_staged_curation_group(self, group_id: str) -> dict[str, Any] | None:
+        """Return staged-curation projection data for a discovered group."""
+        store = self._get_discovered_store()
+        experiment = store.load_group(group_id)
+        if experiment is None:
+            return None
+        if experiment.status == "waiting_review":
+            store.begin_review(group_id)
+            experiment = store.load_group(group_id) or experiment
+
+        workflow = self._build_curation_workflow(experiment)
+        candidates = [
+            self._build_curation_candidate(experiment, item)
+            for item in list(experiment.items or [])
+        ]
+        events = store.load_selection_events(group_id)
+        latest_events: dict[str, SelectionEvent] = {}
+        for event in events:
+            latest_events[event.candidate_id] = event
+
+        self.learning_state.selected_staged_curation_group_id = group_id
+        if candidates and not self.learning_state.selected_staged_curation_item_id:
+            self.learning_state.selected_staged_curation_item_id = candidates[0].candidate_id
+        self._notify_resume_state_changed()
+        return {
+            "workflow": workflow,
+            "experiment": experiment,
+            "candidates": candidates,
+            "selection_events": events,
+            "latest_events": latest_events,
+        }
+
+    def record_staged_curation_selection(
+        self,
+        group_id: str,
+        item_id: str,
+        decision: str,
+        *,
+        reason_tags: list[str] | None = None,
+        notes: str | None = None,
+    ) -> SelectionEvent | None:
+        """Persist a canonical staged-curation selection event."""
+        store = self._get_discovered_store()
+        experiment = store.load_group(group_id)
+        if experiment is None:
+            return None
+        item = next((entry for entry in experiment.items if entry.item_id == item_id), None)
+        if item is None:
+            return None
+        candidate = self._build_curation_candidate(experiment, item)
+        event = SelectionEvent(
+            event_id=str(uuid.uuid4()),
+            workflow_id=f"curation:{group_id}",
+            candidate_id=candidate.candidate_id,
+            stage=candidate.stage,
+            decision=str(decision or "not_advanced"),
+            timestamp=datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            actor="user",
+            reason_tags=[str(tag).strip() for tag in list(reason_tags or []) if str(tag).strip()],
+            notes=str(notes).strip() if notes is not None and str(notes).strip() else None,
+        )
+        if not store.append_selection_event(group_id, event):
+            return None
+        self.learning_state.selected_staged_curation_group_id = group_id
+        self.learning_state.selected_staged_curation_item_id = candidate.candidate_id
+        self._notify_resume_state_changed()
+        return event
+
+    def _build_curation_workflow(self, experiment: Any) -> CurationWorkflow:
+        return CurationWorkflow(
+            workflow_id=f"curation:{experiment.group_id}",
+            title=str(getattr(experiment, "display_name", "") or experiment.group_id),
+            created_at=str(getattr(experiment, "created_at", "") or ""),
+            status="scout_complete",
+            root_prompt_fingerprint=str(getattr(experiment, "prompt_hash", "") or ""),
+            root_config_fingerprint=f"discovered:{getattr(experiment, 'group_id', '')}",
+            root_model=self._resolve_discovered_root_model(experiment),
+            notes=str(getattr(experiment, "notes", "") or "") or None,
+        )
+
+    def _build_curation_candidate(self, experiment: Any, item: Any) -> CurationCandidate:
+        return CurationCandidate(
+            candidate_id=str(getattr(item, "item_id", "") or ""),
+            workflow_id=f"curation:{getattr(experiment, 'group_id', '')}",
+            stage=self._map_discovered_stage_to_curation_stage(str(getattr(item, "stage", "") or "")),
+            artifact_id=str(getattr(item, "artifact_path", "") or ""),
+            job_id=str(getattr(item, "extra_fields", {}).get("job_id", "") or ""),
+            njr_id=str(getattr(item, "extra_fields", {}).get("njr_id", "") or ""),
+            parent_candidate_id=None,
+            root_candidate_id=str(getattr(item, "item_id", "") or ""),
+            prompt_fingerprint=str(getattr(experiment, "prompt_hash", "") or ""),
+            config_fingerprint=f"discovered:{getattr(experiment, 'group_id', '')}:{getattr(item, 'item_id', '')}",
+            model_name=str(getattr(item, "model", "") or ""),
+            selected=False,
+        )
+
+    @staticmethod
+    def _map_discovered_stage_to_curation_stage(stage: str) -> str:
+        normalized = str(stage or "").strip().lower()
+        if normalized == "adetailer":
+            return "face_triage"
+        if normalized == "upscale":
+            return "upscale"
+        if normalized in {"img2img", "refine"}:
+            return "refine"
+        if normalized == "final":
+            return "final"
+        return "scout"
+
+    @staticmethod
+    def _resolve_discovered_root_model(experiment: Any) -> str:
+        for item in list(getattr(experiment, "items", []) or []):
+            model_name = str(getattr(item, "model", "") or "").strip()
+            if model_name:
+                return model_name
+        return ""
+
+    def _build_discovered_item_from_image_path(
+        self,
+        image_path: str,
+        *,
+        index: int,
+    ) -> DiscoveredReviewItem | None:
+        path_obj = Path(str(image_path or "").strip())
+        if not path_obj.exists():
+            return None
+        result = extract_embedded_metadata(path_obj)
+        payload = result.payload if result.status == "ok" and isinstance(result.payload, dict) else {}
+        stage_manifest = payload.get("stage_manifest", {}) if isinstance(payload, dict) else {}
+        if not isinstance(stage_manifest, dict):
+            stage_manifest = {}
+        config = stage_manifest.get("config", {})
+        if not isinstance(config, dict):
+            config = {}
+        generation = payload.get("generation", {}) if isinstance(payload, dict) else {}
+        if not isinstance(generation, dict):
+            generation = {}
+        resolved_prompt, resolved_negative_prompt = resolve_prompt_fields(payload)
+        model_name, _vae_name = resolve_model_vae_fields(payload)
+        stage_name = str(stage_manifest.get("stage") or payload.get("stage") or "txt2img")
+        seed_value = (
+            stage_manifest.get("final_seed")
+            or generation.get("seed")
+            or config.get("seed")
+            or -1
+        )
+        return DiscoveredReviewItem(
+            item_id=f"manual-{index + 1}-{uuid.uuid4().hex[:8]}",
+            artifact_path=str(path_obj),
+            manifest_path=str(stage_manifest.get("manifest_path") or ""),
+            stage=stage_name,
+            model=str(model_name or ""),
+            sampler=str(config.get("sampler_name") or config.get("sampler") or generation.get("sampler_name") or ""),
+            scheduler=str(config.get("scheduler") or generation.get("scheduler") or ""),
+            steps=int(config.get("steps") or generation.get("steps") or 0),
+            cfg_scale=float(config.get("cfg_scale") or generation.get("cfg_scale") or 0.0),
+            seed=int(seed_value or -1),
+            positive_prompt=str(resolved_prompt or ""),
+            negative_prompt=str(resolved_negative_prompt or ""),
+            width=int(config.get("width") or generation.get("width") or 0),
+            height=int(config.get("height") or generation.get("height") or 0),
+            extra_fields={
+                "job_id": str(payload.get("job_id") or ""),
+                "run_id": str(payload.get("run_id") or ""),
+                "source": "manual_import",
+            },
+        )
+
+    @staticmethod
+    def _infer_varying_fields(items: list[DiscoveredReviewItem]) -> list[str]:
+        fields = ("stage", "model", "sampler", "scheduler", "steps", "cfg_scale", "width", "height")
+        varying: list[str] = []
+        for field_name in fields:
+            values = {getattr(item, field_name, None) for item in items}
+            if len(values) > 1:
+                varying.append(field_name)
+        return varying
+
+    @staticmethod
+    def _hash_prompt(prompt_text: str) -> str:
+        normalized = " ".join(str(prompt_text or "").strip().lower().split())
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    def _extract_history_entry_image_paths(self, entry: Any) -> list[str]:
+        result = getattr(entry, "result", None)
+        paths: list[str] = []
+        if isinstance(result, dict):
+            artifact = result.get("artifact")
+            if isinstance(artifact, dict):
+                paths.extend(extract_artifact_paths({"artifact": artifact}))
+            variants = result.get("variants")
+            if isinstance(variants, list):
+                for variant in variants:
+                    if isinstance(variant, dict):
+                        paths.extend(extract_artifact_paths(variant))
+            output_dir = result.get("output_dir") or result.get("output_folder")
+            if output_dir:
+                paths.extend(self._glob_image_paths(output_dir))
+        snapshot = getattr(entry, "snapshot", None)
+        if isinstance(snapshot, dict):
+            normalized_job = snapshot.get("normalized_job", {})
+            if isinstance(normalized_job, dict):
+                output_dir = normalized_job.get("path_output_dir")
+                if output_dir:
+                    paths.extend(self._glob_image_paths(output_dir))
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for path in paths:
+            text = str(path or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            deduped.append(text)
+        return deduped
+
+    @staticmethod
+    def _glob_image_paths(root_path: str | Path) -> list[str]:
+        root = Path(root_path)
+        if not root.exists():
+            return []
+        paths: list[str] = []
+        for candidate in sorted(root.rglob("*")):
+            if candidate.is_file() and candidate.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+                paths.append(str(candidate))
+        return paths
+
+    @staticmethod
+    def _build_history_import_display_name(entry: Any) -> str:
+        prompt_pack_id = str(getattr(entry, "prompt_pack_id", "") or "").strip()
+        if prompt_pack_id:
+            return f"History Import - {prompt_pack_id}"
+        job_id = str(getattr(entry, "job_id", "") or "history")
+        return f"History Import - {job_id[:8]}"
 
     def trigger_background_scan(
         self, output_root: str, on_complete: "Any | None" = None

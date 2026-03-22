@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tkinter as tk
 import uuid
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,8 @@ import pytest
 
 from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
 from src.gui.views.discovered_review_table import DiscoveredReviewTable
+from src.queue.job_model import JobStatus
+from src.queue.job_history_store import JobHistoryEntry
 from src.learning.discovered_review_models import (
     STATUS_CLOSED,
     STATUS_IGNORED,
@@ -463,3 +466,125 @@ def test_controller_trigger_background_scan_noop_on_missing_root(tmp_path) -> No
     )
     done.wait(timeout=5.0)
     assert len(completed) == 1  # callback fires even with empty scan
+
+
+def test_controller_load_staged_curation_group_returns_projection(tmp_path) -> None:
+    ctrl = _make_controller()
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+
+    store = DiscoveredReviewStore(tmp_path)
+    ctrl._discovered_review_store = store
+    exp = _make_experiment("disc-curation")
+    store.save_group(exp)
+
+    payload = ctrl.load_staged_curation_group("disc-curation")
+
+    assert payload is not None
+    assert payload["workflow"].workflow_id == "curation:disc-curation"
+    assert len(payload["candidates"]) == len(exp.items)
+    loaded = store.load_group("disc-curation")
+    assert loaded.status == STATUS_IN_REVIEW
+
+
+def test_controller_record_staged_curation_selection_persists_event(tmp_path) -> None:
+    ctrl = _make_controller()
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+
+    store = DiscoveredReviewStore(tmp_path)
+    ctrl._discovered_review_store = store
+    exp = _make_experiment("disc-curation")
+    store.save_group(exp)
+
+    event = ctrl.record_staged_curation_selection(
+        "disc-curation",
+        exp.items[0].item_id,
+        "advanced_to_refine",
+        reason_tags=["good_composition"],
+        notes="promote this one",
+    )
+
+    assert event is not None
+    saved = store.load_selection_events("disc-curation")
+    assert len(saved) == 1
+    assert saved[0].reason_tags == ["good_composition"]
+    assert saved[0].notes == "promote this one"
+
+
+def test_controller_import_review_images_to_staged_curation(tmp_path) -> None:
+    ctrl = _make_controller()
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.utils.image_metadata import ReadPayloadResult
+
+    store = DiscoveredReviewStore(tmp_path / "discovered")
+    ctrl._discovered_review_store = store
+    image_path = tmp_path / "import.png"
+    image_path.write_text("placeholder", encoding="utf-8")
+    payload = {
+        "stage_manifest": {
+            "stage": "txt2img",
+            "config": {"sampler_name": "DPM++ 2M", "scheduler": "Karras", "steps": 30, "cfg_scale": 6.5},
+        },
+        "generation": {"width": 1024, "height": 1536},
+        "job_id": "job-import-1",
+        "run_id": "run-import-1",
+    }
+
+    with patch(
+        "src.gui.controllers.learning_controller.extract_embedded_metadata",
+        return_value=ReadPayloadResult(payload=payload, status="ok"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_prompt_fields",
+        return_value=("prompt text", "negative text"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+        return_value=("juggernautXL", "Automatic"),
+    ):
+        group_id = ctrl.import_review_images_to_staged_curation([str(image_path)], display_name="Imported Group")
+
+    assert group_id is not None
+    experiment = store.load_group(group_id)
+    assert experiment is not None
+    assert experiment.display_name == "Imported Group"
+    assert len(experiment.items) == 1
+    assert experiment.items[0].model == "juggernautXL"
+
+
+def test_controller_import_history_entry_to_staged_curation(tmp_path) -> None:
+    ctrl = _make_controller()
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.utils.image_metadata import ReadPayloadResult
+
+    store = DiscoveredReviewStore(tmp_path / "discovered")
+    ctrl._discovered_review_store = store
+    output_dir = tmp_path / "history-run"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    image_path = output_dir / "history.png"
+    image_path.write_text("placeholder", encoding="utf-8")
+    entry = JobHistoryEntry(
+        job_id="history-1",
+        created_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        prompt_pack_id="History Pack",
+        result={"output_dir": str(output_dir)},
+    )
+    payload = {
+        "stage_manifest": {"stage": "txt2img", "config": {"steps": 20, "cfg_scale": 7.0}},
+        "generation": {"width": 768, "height": 1152},
+    }
+
+    with patch(
+        "src.gui.controllers.learning_controller.extract_embedded_metadata",
+        return_value=ReadPayloadResult(payload=payload, status="ok"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_prompt_fields",
+        return_value=("prompt text", "negative text"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+        return_value=("juggernautXL", "Automatic"),
+    ):
+        group_id = ctrl.import_history_entry_to_staged_curation(entry)
+
+    assert group_id is not None
+    experiment = store.load_group(group_id)
+    assert experiment is not None
+    assert experiment.display_name == "History Import - History Pack"

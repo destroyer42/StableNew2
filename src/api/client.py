@@ -71,6 +71,16 @@ DEFAULT_READ_TIMEOUT = 60.0
 OPTIONS_POST_MIN_INTERVAL = 6.0
 UPSCALE_SINGLE_IMAGE_TIMEOUT = 300.0
 RESOURCE_ENDPOINT_RETRY_COOLDOWN_SEC = 15.0
+RESOURCE_STARTUP_GRACE_SEC = 15.0
+_STARTUP_GRACE_ENDPOINTS = {
+    "/sdapi/v1/sd-models",
+    "/sdapi/v1/sd-vae",
+    "/sdapi/v1/samplers",
+    "/sdapi/v1/schedulers",
+    "/sdapi/v1/upscalers",
+    "/sdapi/v1/hypernetworks",
+    "/sdapi/v1/scripts",
+}
 
 # PR-HARDEN-001: Reduced generation timeout for faster failure detection
 DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
@@ -178,6 +188,8 @@ class SDWebUIClient:
         self._session_id = id(self._session)
         self._last_http_500_summary: dict[str, Any] | None = None
         self._resource_endpoint_cooldowns: dict[str, float] = {}
+        self._startup_probe_grace_until = 0.0
+        self._startup_probe_grace_logged: set[str] = set()
 
     def _build_http_session(self) -> requests.Session:
         session = requests.Session()
@@ -247,6 +259,17 @@ class SDWebUIClient:
 
         self._resource_endpoint_cooldowns.clear()
         clear_readiness_failure_state(self.base_url)
+
+    def set_startup_probe_grace(self, duration_s: float = RESOURCE_STARTUP_GRACE_SEC) -> None:
+        """Suppress noisy resource probes during expected WebUI startup."""
+
+        duration = max(float(duration_s or 0.0), 0.0)
+        self._startup_probe_grace_until = time.monotonic() + duration if duration > 0.0 else 0.0
+        self._startup_probe_grace_logged.clear()
+
+    def clear_startup_probe_grace(self) -> None:
+        self._startup_probe_grace_until = 0.0
+        self._startup_probe_grace_logged.clear()
 
     def get_runtime_failure_state(self) -> dict[str, Any]:
         """Return current failure/backoff state for diagnostics and admission logic."""
@@ -725,6 +748,21 @@ class SDWebUIClient:
         if until:
             self._resource_endpoint_cooldowns.pop(endpoint, None)
         return False
+
+    def _resource_endpoint_startup_grace_active(self, endpoint: str) -> bool:
+        if endpoint not in _STARTUP_GRACE_ENDPOINTS:
+            return False
+        now = time.monotonic()
+        if self._startup_probe_grace_until <= now:
+            return False
+        if endpoint not in self._startup_probe_grace_logged:
+            logger.info(
+                "Deferring %s fetch during WebUI startup grace for %.1fs",
+                endpoint,
+                self._startup_probe_grace_until - now,
+            )
+            self._startup_probe_grace_logged.add(endpoint)
+        return True
 
     def _mark_resource_endpoint_failed(self, endpoint: str) -> None:
         self._resource_endpoint_cooldowns[endpoint] = (
@@ -1405,6 +1443,38 @@ class SDWebUIClient:
             logger.warning("Failed to send interrupt to WebUI: %s", exc)
             return False
 
+    def reset_stale_progress_state(
+        self,
+        *,
+        timeout_s: float = 10.0,
+        poll_interval_s: float = 0.5,
+    ) -> bool:
+        """Try to clear a stale active-job state without restarting WebUI."""
+
+        if not self.interrupt():
+            return False
+
+        deadline = time.monotonic() + max(float(timeout_s), 0.0)
+        poll_interval = max(float(poll_interval_s), 0.1)
+        while time.monotonic() <= deadline:
+            snapshot = self.get_progress_snapshot()
+            if not isinstance(snapshot, dict):
+                self._sleep(poll_interval)
+                continue
+            state = snapshot.get("state") or {}
+            current_job = str(state.get("job") or "").strip()
+            try:
+                progress = float(snapshot.get("progress", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                progress = 0.0
+            if progress <= 0.0 and not current_job:
+                logger.info("Cleared stale WebUI progress state via interrupt")
+                return True
+            self._sleep(poll_interval)
+
+        logger.warning("Interrupt did not clear stale WebUI progress state within %.1fs", timeout_s)
+        return False
+
     def get_models(self) -> list[dict[str, Any]]:
         """
         Get list of available SD models.
@@ -1413,6 +1483,8 @@ class SDWebUIClient:
             List of model information
         """
         endpoint = "/sdapi/v1/sd-models"
+        if self._resource_endpoint_startup_grace_active(endpoint):
+            return []
         if self._resource_endpoint_on_cooldown(endpoint):
             return []
 
@@ -1440,6 +1512,8 @@ class SDWebUIClient:
             List of VAE model information
         """
         endpoint = "/sdapi/v1/sd-vae"
+        if self._resource_endpoint_startup_grace_active(endpoint):
+            return []
         if self._resource_endpoint_on_cooldown(endpoint):
             return []
 
@@ -1466,6 +1540,8 @@ class SDWebUIClient:
         Returns:
             List of sampler information
         """
+        if self._resource_endpoint_startup_grace_active("/sdapi/v1/samplers"):
+            return []
         with self._request_context("get", "/sdapi/v1/samplers", timeout=10) as response:
             if response is None:
                 return []
@@ -1487,6 +1563,8 @@ class SDWebUIClient:
         Returns:
             List of upscaler information
         """
+        if self._resource_endpoint_startup_grace_active("/sdapi/v1/upscalers"):
+            return []
         with self._request_context("get", "/sdapi/v1/upscalers", timeout=10) as response:
             if response is None:
                 return []
@@ -1509,6 +1587,8 @@ class SDWebUIClient:
             List of hypernetwork metadata dictionaries
         """
 
+        if self._resource_endpoint_startup_grace_active("/sdapi/v1/hypernetworks"):
+            return []
         with self._request_context("get", "/sdapi/v1/hypernetworks", timeout=10) as response:
             if response is None:
                 logger.warning("Failed to retrieve hypernetworks from API")
@@ -1530,6 +1610,18 @@ class SDWebUIClient:
         Returns:
             List of scheduler names
         """
+        if self._resource_endpoint_startup_grace_active("/sdapi/v1/schedulers"):
+            return [
+                "Normal",
+                "Karras",
+                "Exponential",
+                "SGM Uniform",
+                "Simple",
+                "DDIM Uniform",
+                "Beta",
+                "Linear",
+                "Cosine",
+            ]
         with self._request_context("get", "/sdapi/v1/schedulers", timeout=10) as response:
             if response is None:
                 logger.warning("Failed to get schedulers from API; using defaults")
@@ -1572,6 +1664,8 @@ class SDWebUIClient:
     def get_scripts(self) -> dict[str, Any]:
         """Return the WebUI scripts catalog, or an empty payload on failure."""
 
+        if self._resource_endpoint_startup_grace_active("/sdapi/v1/scripts"):
+            return {}
         with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
             if response is None:
                 logger.warning("Failed to get scripts from API")

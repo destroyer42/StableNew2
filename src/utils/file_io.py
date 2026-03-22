@@ -315,13 +315,27 @@ def get_prompt_packs(packs_dir: Path) -> list[Path]:
             logger.info(f"Created packs directory: {packs_dir}")
             return []
 
-        pack_files = []
+        extension_priority = {".json": 0, ".txt": 1, ".tsv": 2}
+        selected_by_stem: dict[str, Path] = {}
+
+        pack_files: list[Path] = []
         for ext in ["*.json", "*.txt", "*.tsv"]:
             pack_files.extend(packs_dir.glob(ext))
 
-        pack_files.sort()
-        logger.debug(f"Found {len(pack_files)} prompt packs in {packs_dir}")
-        return pack_files
+        for pack_path in sorted(pack_files, key=lambda path: (path.stem.lower(), extension_priority.get(path.suffix.lower(), 99), path.name.lower())):
+            stem = pack_path.stem.lower()
+            current = selected_by_stem.get(stem)
+            if current is None:
+                selected_by_stem[stem] = pack_path
+                continue
+            current_priority = extension_priority.get(current.suffix.lower(), 99)
+            candidate_priority = extension_priority.get(pack_path.suffix.lower(), 99)
+            if candidate_priority < current_priority:
+                selected_by_stem[stem] = pack_path
+
+        deduped = sorted(selected_by_stem.values(), key=lambda path: path.stem.lower())
+        logger.debug(f"Found {len(deduped)} prompt packs in {packs_dir}")
+        return deduped
 
     except Exception as e:
         logger.error(f"Failed to scan prompt packs directory: {e}")

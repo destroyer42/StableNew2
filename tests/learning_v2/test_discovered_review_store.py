@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.curation.models import SelectionEvent
 from src.learning.discovered_review_models import (
     RATING_MAX,
     RATING_MIN,
@@ -294,6 +295,38 @@ def test_store_rating_persists_across_reload(store):
     loaded = store.load_group("g-persist")
     item = next(i for i in loaded.items if i.item_id == "item-1")
     assert item.rating == 4
+
+
+def test_store_append_and_load_selection_events(store):
+    exp = _make_experiment("g-curation")
+    store.save_group(exp)
+    event = SelectionEvent(
+        event_id="sel-1",
+        workflow_id="curation:g-curation",
+        candidate_id="item-1",
+        stage="scout",
+        decision="advanced_to_refine",
+        timestamp="2026-03-21T23:00:00Z",
+        reason_tags=["good_composition"],
+        notes="worth a refine pass",
+    )
+    assert store.append_selection_event("g-curation", event) is True
+    loaded = store.load_selection_events("g-curation")
+    assert len(loaded) == 1
+    assert loaded[0].candidate_id == "item-1"
+    assert loaded[0].decision == "advanced_to_refine"
+
+
+def test_store_append_selection_event_missing_group_returns_false(store):
+    event = SelectionEvent(
+        event_id="sel-missing",
+        workflow_id="curation:ghost",
+        candidate_id="item-1",
+        stage="scout",
+        decision="not_advanced",
+        timestamp="2026-03-21T23:05:00Z",
+    )
+    assert store.append_selection_event("ghost", event) is False
 
 
 # ---------------------------------------------------------------------------
