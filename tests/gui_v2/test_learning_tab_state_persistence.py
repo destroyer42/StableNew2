@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.gui.app_state_v2 import AppStateV2
@@ -11,12 +12,17 @@ from src.gui.views.learning_review_panel import LearningReviewPanel
 from src.learning.discovered_review_models import DiscoveredReviewExperiment, DiscoveredReviewItem
 from src.learning.discovered_review_store import DiscoveredReviewStore
 from src.services.ui_state_store import UIStateStore
+from src.utils.image_metadata import ReadPayloadResult
 from tests.gui_v2.tk_test_utils import get_shared_tk_root
 
 
 class _StubPipelineController:
     def set_learning_enabled(self, _enabled: bool) -> None:
         return
+
+
+def _text_value(widget) -> str:
+    return widget.get("1.0", "end-1c")
 
 
 def test_learning_tab_persists_and_restores_resume_session() -> None:
@@ -225,6 +231,8 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
                         sampler="DPM++ 2M",
                         steps=30,
                         cfg_scale=6.5,
+                        positive_prompt="cinematic portrait with dramatic backlight",
+                        negative_prompt="blurry, lowres",
                     )
                 ],
                 varying_fields=["cfg_scale"],
@@ -234,6 +242,11 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
             tab._on_staged_open_group("disc-stage")  # noqa: SLF001
             assert len(tab._staged_candidate_tree.get_children()) == 1  # noqa: SLF001
             assert "Workflow summary:" in tab._staged_workflow_summary_var.get()  # noqa: SLF001
+            assert "cinematic portrait with dramatic backlight" in _text_value(  # noqa: SLF001
+                tab._staged_source_prompt_text
+            )
+            assert "blurry, lowres" in _text_value(tab._staged_source_negative_prompt_text)  # noqa: SLF001
+            assert "not queued yet" in tab._staged_plan_preview_var.get()  # noqa: SLF001
 
             tab._staged_reason_tag_vars["good_composition"].set(True)  # noqa: SLF001
             tab._staged_notes_text.insert("1.0", "promote this image")  # noqa: SLF001
@@ -244,6 +257,8 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
             assert events[0].decision == "advanced_to_refine"
             assert events[0].reason_tags == ["good_composition"]
             assert "Replay chain:" in tab._staged_replay_summary_var.get()  # noqa: SLF001
+            assert "source=txt2img / juggernautXL" in tab._staged_replay_summary_var.get()  # noqa: SLF001
+            assert "Target stage: refine | Path: Queue Now" in tab._staged_plan_preview_var.get()  # noqa: SLF001
         finally:
             tab.destroy()
 
@@ -309,5 +324,373 @@ def test_learning_tab_staged_curation_face_tier_and_submit_hooks(tmp_path) -> No
 
             submit_mock.assert_called_once_with("disc-stage-tier", "face_triage")
             assert "Submitted 2 face triage job(s)" in tab._staged_job_status_var.get()  # noqa: SLF001
+        finally:
+            tab.destroy()
+
+
+def test_learning_tab_staged_curation_affordances_distinguish_queue_vs_review(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    discovered_root = tmp_path / "discovered"
+    store = UIStateStore(state_path)
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=AppStateV2(),
+            pipeline_controller=_StubPipelineController(),
+        )
+        try:
+            discovered_store = DiscoveredReviewStore(discovered_root)
+            tab.learning_controller._discovered_review_store = discovered_store  # noqa: SLF001
+            image_path = tmp_path / "affordance.png"
+            image_path.write_text("placeholder", encoding="utf-8")
+            experiment = DiscoveredReviewExperiment(
+                group_id="disc-affordance",
+                display_name="Affordance Group",
+                stage="txt2img",
+                prompt_hash="hash-1",
+                items=[
+                    DiscoveredReviewItem(
+                        item_id="item-1",
+                        artifact_path=str(image_path),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                    )
+                ],
+                varying_fields=["cfg_scale"],
+            )
+            discovered_store.save_group(experiment)
+
+            tab._on_staged_open_group("disc-affordance")  # noqa: SLF001
+
+            assert tab._staged_queue_buttons["face_triage"].cget("text") == "Queue Face Now"  # noqa: SLF001
+            assert str(tab._staged_queue_buttons["face_triage"].cget("state")) == "disabled"  # noqa: SLF001
+            assert str(tab._staged_review_buttons["face_triage"].cget("state")) == "disabled"  # noqa: SLF001
+            assert "single-candidate" in tab._staged_review_guidance_var.get().lower()  # noqa: SLF001
+
+            tab._apply_staged_decision("advanced_to_face_triage")  # noqa: SLF001
+
+            assert str(tab._staged_queue_buttons["face_triage"].cget("state")) == "normal"  # noqa: SLF001
+            assert str(tab._staged_review_buttons["face_triage"].cget("state")) == "normal"  # noqa: SLF001
+            assert "enqueue 1 marked candidate" in tab._staged_review_guidance_var.get().lower()  # noqa: SLF001
+            assert "face=1" in tab._staged_queue_guidance_var.get().lower()  # noqa: SLF001
+        finally:
+            tab.destroy()
+
+
+def test_learning_tab_opens_staged_curation_selection_in_review(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    discovered_root = tmp_path / "discovered"
+    store = UIStateStore(state_path)
+    review_calls: list[object] = []
+
+    class _NotebookStub:
+        def __init__(self) -> None:
+            self.selected = None
+
+        def select(self, tab) -> None:
+            self.selected = tab
+
+    class _ReviewTabStub:
+        def load_staged_curation_handoff(self, handoff) -> None:
+            review_calls.append(handoff)
+
+    review_tab = _ReviewTabStub()
+    notebook = _NotebookStub()
+    app_controller = SimpleNamespace(
+        main_window=SimpleNamespace(review_tab=review_tab, center_notebook=notebook)
+    )
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=AppStateV2(),
+            pipeline_controller=_StubPipelineController(),
+            app_controller=app_controller,
+        )
+        try:
+            discovered_store = DiscoveredReviewStore(discovered_root)
+            tab.learning_controller._discovered_review_store = discovered_store  # noqa: SLF001
+            image_path = tmp_path / "handoff.png"
+            image_path.write_text("placeholder", encoding="utf-8")
+            experiment = DiscoveredReviewExperiment(
+                group_id="disc-handoff",
+                display_name="Handoff Group",
+                stage="txt2img",
+                prompt_hash="hash-1",
+                items=[
+                    DiscoveredReviewItem(
+                        item_id="item-1",
+                        artifact_path=str(image_path),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                        positive_prompt="cinematic portrait with dramatic backlight",
+                        negative_prompt="blurry, lowres",
+                        extra_fields={"face_triage_tier": "heavy"},
+                    )
+                ],
+                varying_fields=["cfg_scale"],
+            )
+            discovered_store.save_group(experiment)
+
+            tab._on_staged_open_group("disc-handoff")  # noqa: SLF001
+            tab._apply_staged_decision("advanced_to_face_triage")  # noqa: SLF001
+
+            with patch(
+                "src.gui.controllers.learning_controller.extract_embedded_metadata",
+                return_value=ReadPayloadResult(
+                    payload={
+                        "stage_manifest": {
+                            "stage": "txt2img",
+                            "config": {
+                                "steps": 30,
+                                "cfg_scale": 6.5,
+                                "sampler_name": "DPM++ 2M",
+                                "scheduler": "Karras",
+                            },
+                        }
+                    },
+                    status="ok",
+                ),
+            ), patch(
+                "src.gui.controllers.learning_controller.resolve_prompt_fields",
+                return_value=(
+                    "cinematic portrait with dramatic backlight",
+                    "blurry, lowres",
+                ),
+            ), patch(
+                "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+                return_value=("juggernautXL", "Automatic"),
+            ), patch(
+                "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+                return_value="output",
+            ), patch.object(
+                tab.learning_controller,
+                "submit_staged_curation_advancement",
+            ) as submit_mock:
+                tab._open_staged_in_review("face_triage")  # noqa: SLF001
+
+            submit_mock.assert_not_called()
+            assert len(review_calls) == 1
+            handoff = review_calls[0]
+            assert handoff.target_stage == "face_triage"
+            assert [str(path) for path in handoff.image_paths] == [str(image_path)]
+            assert handoff.stage_adetailer is True
+            assert notebook.selected is review_tab
+            assert "Opened the selected face triage candidate in Review" in tab._staged_job_status_var.get()  # noqa: SLF001
+            assert "enqueue 1 marked candidate" in tab._staged_job_status_var.get().lower()  # noqa: SLF001
+        finally:
+            tab.destroy()
+
+
+def test_learning_tab_review_handoff_uses_selected_candidate_only(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    discovered_root = tmp_path / "discovered"
+    store = UIStateStore(state_path)
+    review_calls: list[object] = []
+
+    class _NotebookStub:
+        def __init__(self) -> None:
+            self.selected = None
+
+        def select(self, tab) -> None:
+            self.selected = tab
+
+    class _ReviewTabStub:
+        def load_staged_curation_handoff(self, handoff) -> None:
+            review_calls.append(handoff)
+
+    review_tab = _ReviewTabStub()
+    notebook = _NotebookStub()
+    app_controller = SimpleNamespace(
+        main_window=SimpleNamespace(review_tab=review_tab, center_notebook=notebook)
+    )
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=AppStateV2(),
+            pipeline_controller=_StubPipelineController(),
+            app_controller=app_controller,
+        )
+        try:
+            discovered_store = DiscoveredReviewStore(discovered_root)
+            tab.learning_controller._discovered_review_store = discovered_store  # noqa: SLF001
+            image_a = tmp_path / "handoff-a.png"
+            image_b = tmp_path / "handoff-b.png"
+            image_a.write_text("placeholder", encoding="utf-8")
+            image_b.write_text("placeholder", encoding="utf-8")
+            experiment = DiscoveredReviewExperiment(
+                group_id="disc-handoff-multi",
+                display_name="Handoff Group",
+                stage="txt2img",
+                prompt_hash="hash-1",
+                items=[
+                    DiscoveredReviewItem(
+                        item_id="item-1",
+                        artifact_path=str(image_a),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                        positive_prompt="prompt a",
+                        negative_prompt="negative a",
+                    ),
+                    DiscoveredReviewItem(
+                        item_id="item-2",
+                        artifact_path=str(image_b),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                        positive_prompt="prompt b",
+                        negative_prompt="negative b",
+                    ),
+                ],
+                varying_fields=["cfg_scale"],
+            )
+            discovered_store.save_group(experiment)
+
+            tab._on_staged_open_group("disc-handoff-multi")  # noqa: SLF001
+            tab._apply_staged_decision("advanced_to_face_triage")  # noqa: SLF001
+            tab._staged_candidate_tree.selection_set("item-2")  # noqa: SLF001
+            tab._update_staged_preview("item-2")  # noqa: SLF001
+            tab._apply_staged_decision("advanced_to_face_triage")  # noqa: SLF001
+            tab._staged_candidate_tree.selection_set("item-2")  # noqa: SLF001
+            tab._update_staged_preview("item-2")  # noqa: SLF001
+
+            with patch(
+                "src.gui.controllers.learning_controller.extract_embedded_metadata",
+                return_value=ReadPayloadResult(
+                    payload={
+                        "stage_manifest": {
+                            "stage": "txt2img",
+                            "config": {
+                                "steps": 30,
+                                "cfg_scale": 6.5,
+                                "sampler_name": "DPM++ 2M",
+                                "scheduler": "Karras",
+                            },
+                        }
+                    },
+                    status="ok",
+                ),
+            ), patch(
+                "src.gui.controllers.learning_controller.resolve_prompt_fields",
+                side_effect=[("prompt a", "negative a"), ("prompt b", "negative b")],
+            ), patch(
+                "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+                return_value=("juggernautXL", "Automatic"),
+            ), patch(
+                "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+                return_value="output",
+            ):
+                tab._open_staged_in_review("face_triage")  # noqa: SLF001
+
+            assert len(review_calls) == 1
+            handoff = review_calls[0]
+            assert [str(path) for path in handoff.image_paths] == [str(image_b)]
+            assert handoff.source_candidate_ids == ["item-2"]
+            assert notebook.selected is review_tab
+            assert "enqueue 2 marked candidate" in tab._staged_job_status_var.get().lower()  # noqa: SLF001
+        finally:
+            tab.destroy()
+
+
+def test_learning_tab_staged_curation_surfaces_prior_review_summary(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    discovered_root = tmp_path / "discovered"
+    store = UIStateStore(state_path)
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=AppStateV2(),
+            pipeline_controller=_StubPipelineController(),
+        )
+        try:
+            discovered_store = DiscoveredReviewStore(discovered_root)
+            tab.learning_controller._discovered_review_store = discovered_store  # noqa: SLF001
+            image_path = tmp_path / "prior-summary.png"
+            image_path.write_text("placeholder", encoding="utf-8")
+            experiment = DiscoveredReviewExperiment(
+                group_id="disc-prior-review",
+                display_name="Prior Review Group",
+                stage="txt2img",
+                prompt_hash="hash-1",
+                items=[
+                    DiscoveredReviewItem(
+                        item_id="item-1",
+                        artifact_path=str(image_path),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                    )
+                ],
+                varying_fields=["cfg_scale"],
+            )
+            discovered_store.save_group(experiment)
+
+            with patch.object(
+                tab.learning_controller,
+                "get_prior_review_summary",
+                return_value={
+                    "source_type": "sidecar_review_metadata",
+                    "review_timestamp": "2026-03-23T12:00:00",
+                    "user_rating": 5,
+                    "quality_label": "excellent",
+                    "user_notes": "favorite candidate",
+                    "prompt_delta": "refined lighting",
+                },
+            ):
+                tab._on_staged_open_group("disc-prior-review")  # noqa: SLF001
+
+            summary = tab._staged_prior_review_var.get()  # noqa: SLF001
+            assert "sidecar artifact metadata" in summary
+            assert "Rating: 5 (excellent)" in summary
+            assert "favorite candidate" in summary
+            assert "Prompt changed: yes" in summary
         finally:
             tab.destroy()

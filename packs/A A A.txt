@@ -1,0 +1,4 @@
+<embedding:Stable_Yogis_Anatomy_Positives_V1>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8>
+neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
+neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face

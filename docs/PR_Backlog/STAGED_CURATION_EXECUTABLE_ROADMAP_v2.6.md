@@ -39,6 +39,11 @@ The target product shape is:
 
 ### `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
 
+Status:
+
+- Completed 2026-03-21
+- Verified baseline 2026-03-22
+
 Purpose:
 
 - establish the canonical curation objects and manifest/history contracts

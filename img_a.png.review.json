@@ -1,0 +1,34 @@
+{
+  "stablenew_review": {
+    "schema": "stablenew.review.v2.6",
+    "review_timestamp": "2026-03-23T22:55:40",
+    "source": "review_tab",
+    "image_path": "img_a.png",
+    "user_rating": 5,
+    "user_rating_raw": 5,
+    "quality_label": "excellent",
+    "subscores": {
+      "anatomy": 5,
+      "composition": 5,
+      "prompt_adherence": 5
+    },
+    "weighted_score": 5.0,
+    "user_notes": "",
+    "prompt_before": "a",
+    "prompt_after": "a, better",
+    "negative_prompt_before": "",
+    "negative_prompt_after": "",
+    "prompt_delta": "",
+    "negative_prompt_delta": "",
+    "prompt_mode": "append",
+    "negative_prompt_mode": "append",
+    "stages": [],
+    "review_context": {},
+    "review_actor": "user",
+    "review_record_id": "1d0cabfd-ccba-4b16-9e14-69ae0d665834",
+    "run_id": "1d0cabfd-ccba-4b16-9e14-69ae0d665834",
+    "record_kind": "review_tab_feedback",
+    "steps": 0,
+    "cfg_scale": 0.0
+  }
+}

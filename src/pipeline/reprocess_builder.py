@@ -79,6 +79,27 @@ class ReprocessJobPlan:
     group_count: int = 0
 
 
+@dataclass(slots=True, frozen=True)
+class ReprocessStageSettingsPreview:
+    stage: str
+    sampler: str | None
+    scheduler: str | None
+    steps: int | None
+    cfg_scale: float | None
+    denoise: float | None
+
+
+@dataclass(slots=True, frozen=True)
+class ReprocessEffectiveSettingsPreview:
+    source_stage: str
+    source_model: str | None
+    source_vae: str | None
+    target_stages: list[str]
+    positive_prompt_behavior: str
+    negative_prompt_behavior: str
+    stage_settings: list[ReprocessStageSettingsPreview]
+
+
 class ReprocessJobBuilder:
     """Build NormalizedJobRecords for reprocessing existing images.
     
@@ -342,6 +363,77 @@ class ReprocessJobBuilder:
                 "inpainting_fill": int(image_edit.inpainting_fill),
                 "inpainting_mask_invert": bool(image_edit.inpainting_mask_invert),
             }
+        )
+
+    @staticmethod
+    def describe_prompt_behavior(mode: str, delta: str) -> str:
+        normalized_mode = str(mode or "append").strip().lower()
+        if not str(delta or "").strip():
+            return "inherited"
+        if normalized_mode in {"append", "replace", "modify"}:
+            return normalized_mode
+        return "inherited"
+
+    def build_effective_settings_preview(
+        self,
+        *,
+        source_stage: str,
+        source_model: str | None,
+        source_vae: str | None,
+        stages: list[str],
+        fallback_config: dict[str, Any] | None,
+        metadata_config: dict[str, Any] | None,
+        prompt: str,
+        negative_prompt: str,
+        prompt_mode: str,
+        negative_prompt_mode: str,
+        prompt_delta: str,
+        negative_prompt_delta: str,
+        image_edit: ImageEditSpec | None = None,
+    ) -> ReprocessEffectiveSettingsPreview:
+        merged_config = self._merge_nested_dicts(fallback_config or {}, metadata_config or {})
+        self.apply_model_vae_to_config(
+            merged_config,
+            model=source_model,
+            vae=source_vae,
+        )
+        self.apply_prompt_overrides(
+            merged_config,
+            stages=list(stages),
+            prompt=str(prompt or ""),
+            negative_prompt=str(negative_prompt or ""),
+        )
+        self.apply_image_edit_overrides(
+            merged_config,
+            stages=list(stages),
+            image_edit=image_edit,
+        )
+
+        stage_settings: list[ReprocessStageSettingsPreview] = []
+        for stage_name in stages:
+            stage_extra = merged_config.get(stage_name, {})
+            if not isinstance(stage_extra, dict):
+                stage_extra = {}
+            defaults = self.DEFAULT_STAGE_VALUES.get(stage_name, {})
+            stage_settings.append(
+                ReprocessStageSettingsPreview(
+                    stage=stage_name,
+                    sampler=self._resolve_stage_sampler(stage_name, merged_config, stage_extra, defaults),
+                    scheduler=self._resolve_stage_scheduler(stage_name, merged_config, stage_extra),
+                    steps=self._resolve_stage_steps(stage_name, merged_config, stage_extra, defaults),
+                    cfg_scale=self._resolve_stage_cfg_scale(stage_name, merged_config, stage_extra, defaults),
+                    denoise=self._resolve_stage_denoise(stage_name, merged_config, stage_extra, defaults),
+                )
+            )
+
+        return ReprocessEffectiveSettingsPreview(
+            source_stage=str(source_stage or "unknown"),
+            source_model=str(source_model).strip() if source_model else None,
+            source_vae=str(source_vae).strip() if source_vae else None,
+            target_stages=[str(stage) for stage in stages],
+            positive_prompt_behavior=self.describe_prompt_behavior(prompt_mode, prompt_delta),
+            negative_prompt_behavior=self.describe_prompt_behavior(negative_prompt_mode, negative_prompt_delta),
+            stage_settings=stage_settings,
         )
 
     def _resolve_stage_steps(

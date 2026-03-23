@@ -57,6 +57,7 @@ from src.gui.main_window_v2 import MainWindow
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
 from src.gui.views.error_modal_v2 import ErrorModalV2
+from src.curation.curation_manifest import build_review_chunk_lineage_block
 from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
     current_config_to_last_run,
@@ -64,6 +65,7 @@ from src.pipeline.last_run_store_v2_5 import (
 )
 from src.pipeline.reprocess_builder import (
     ImageEditSpec,
+    ReprocessEffectiveSettingsPreview,
     ReprocessJobBuilder,
     ReprocessSourceItem,
     extract_reprocess_output_paths,
@@ -1457,6 +1459,7 @@ class AppController:
         prompt_mode: str = "append",
         negative_prompt_mode: str = "append",
         batch_size: int = 1,
+        source_metadata_by_image: dict[str, dict[str, Any]] | None = None,
     ) -> int:
         """Reprocess images while preserving metadata-derived settings and editing prompts.
 
@@ -1509,6 +1512,14 @@ class AppController:
             effective_negative_prompt = self._apply_prompt_delta(
                 base_negative_prompt, negative_prompt_delta, negative_prompt_mode
             )
+            item_metadata: dict[str, Any] = {
+                "baseline_source": "embedded_metadata" if metadata_baseline else "fallback",
+            }
+            if isinstance(source_metadata_by_image, dict):
+                source_meta = source_metadata_by_image.get(str(image_file)) or source_metadata_by_image.get(str(image_file.resolve()))
+                if isinstance(source_meta, dict):
+                    item_metadata.update(source_meta)
+
             items.append(
                 ReprocessSourceItem(
                     input_image_path=str(image_file),
@@ -1517,11 +1528,16 @@ class AppController:
                     model=base_model,
                     vae=base_vae,
                     config=metadata_config,
-                    metadata={
-                        "baseline_source": "embedded_metadata" if metadata_baseline else "fallback",
-                    },
+                    metadata=item_metadata,
                 )
             )
+
+        def _extra_metadata_builder(chunk: list[ReprocessSourceItem], _job_output_dir: str) -> dict[str, Any]:
+            if not chunk:
+                return {}
+            first_item_metadata = dict(chunk[0].metadata or {})
+            target_stage = stages[0] if len(stages) == 1 else " -> ".join(stages)
+            return build_review_chunk_lineage_block(first_item_metadata, target_stage=target_stage)
 
         plan = builder.build_grouped_reprocess_jobs(
             items=items,
@@ -1530,6 +1546,7 @@ class AppController:
             batch_size=batch_size,
             pack_name="ReviewReprocess",
             source="review_tab",
+            extra_metadata_builder=_extra_metadata_builder,
         )
 
         submitted_count = self._submit_reprocess_njrs(plan.jobs, source="review_tab")
@@ -1539,6 +1556,53 @@ class AppController:
             f"across {plan.group_count} compatibility group(s), batch_size={batch_size}"
         )
         return submitted_count
+
+    def get_review_reprocess_effective_settings_preview(
+        self,
+        *,
+        image_path: str,
+        stages: list[str],
+        prompt_delta: str = "",
+        negative_prompt_delta: str = "",
+        prompt_mode: str = "append",
+        negative_prompt_mode: str = "append",
+    ) -> ReprocessEffectiveSettingsPreview:
+        """Return the effective merged settings the Review submit path would queue."""
+        if not image_path:
+            raise ValueError("An image path is required for Review settings preview")
+        if not stages:
+            raise ValueError("At least one target stage is required for Review settings preview")
+
+        image_file = Path(image_path)
+        baseline = self._extract_reprocess_baseline_from_image(image_file)
+        base_prompt = str(baseline.get("prompt") or "")
+        base_negative_prompt = str(baseline.get("negative_prompt") or "")
+        effective_prompt = self._apply_prompt_delta(base_prompt, prompt_delta, prompt_mode)
+        effective_negative_prompt = self._apply_prompt_delta(
+            base_negative_prompt,
+            negative_prompt_delta,
+            negative_prompt_mode,
+        )
+        metadata_config_dict: dict[str, Any] = {}
+        metadata_config = baseline.get("config")
+        if isinstance(metadata_config, dict):
+            metadata_config_dict = dict(metadata_config)
+        fallback_config = self._build_reprocess_config(stages)
+        builder = ReprocessJobBuilder()
+        return builder.build_effective_settings_preview(
+            source_stage=str(baseline.get("stage") or "unknown"),
+            source_model=baseline.get("model"),
+            source_vae=baseline.get("vae"),
+            stages=list(stages),
+            fallback_config=fallback_config,
+            metadata_config=metadata_config_dict,
+            prompt=effective_prompt,
+            negative_prompt=effective_negative_prompt,
+            prompt_mode=prompt_mode,
+            negative_prompt_mode=negative_prompt_mode,
+            prompt_delta=prompt_delta,
+            negative_prompt_delta=negative_prompt_delta,
+        )
 
     def on_submit_image_edits(
         self,
@@ -1850,6 +1914,7 @@ class AppController:
         prompt_value, negative_prompt_value = resolve_prompt_fields(payload)
 
         return {
+            "stage": str(stage_manifest.get("stage") or payload.get("stage") or "unknown"),
             "prompt": prompt_value,
             "negative_prompt": negative_prompt_value,
             "model": model_value,

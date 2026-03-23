@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from types import SimpleNamespace
+
 from src.curation.models import CurationCandidate, CurationWorkflow, SelectionEvent
 from src.curation.workflow_summary import (
     CURATION_REPLAY_DESCRIPTOR_SCHEMA,
@@ -7,6 +10,7 @@ from src.curation.workflow_summary import (
     build_candidate_replay_entry,
     build_curation_replay_descriptor_from_snapshot,
     build_workflow_summary,
+    find_latest_derived_descendant,
 )
 from src.learning.discovered_review_models import DiscoveredReviewExperiment, DiscoveredReviewItem
 
@@ -49,6 +53,8 @@ def _item(item_id: str = "item-1", rating: int = 4) -> DiscoveredReviewItem:
         scheduler="Karras",
         steps=30,
         cfg_scale=6.5,
+        positive_prompt="cinematic portrait with soft rim light",
+        negative_prompt="blurry, lowres",
         rating=rating,
         extra_fields={"face_triage_tier": "heavy"},
     )
@@ -94,6 +100,10 @@ def test_build_candidate_replay_entry_includes_lineage_and_face_tier() -> None:
     assert entry["root_candidate_id"] == "item-1"
     assert entry["decision"] == "advanced_to_face_triage"
     assert entry["face_triage_tier"] == "heavy"
+    assert entry["source_stage"] == "txt2img"
+    assert entry["source_model"] == "juggernautXL"
+    assert entry["positive_prompt"] == "cinematic portrait with soft rim light"
+    assert entry["negative_prompt"] == "blurry, lowres"
 
 
 def test_build_curation_replay_descriptor_from_snapshot() -> None:
@@ -128,3 +138,98 @@ def test_build_curation_replay_descriptor_from_snapshot() -> None:
     assert payload["candidate_id"] == "item-1"
     assert payload["target_stage"] == "face_triage"
     assert payload["face_triage_tier"] == "heavy"
+
+
+def test_build_curation_replay_descriptor_from_reprocess_source_metadata() -> None:
+    payload = build_curation_replay_descriptor_from_snapshot(
+        {
+            "normalized_job": {
+                "extra_metadata": {
+                    "reprocess": {
+                        "source_items": [
+                            {
+                                "metadata": {
+                                    "curation_candidate": {
+                                        "workflow_id": "curation:disc-1",
+                                        "candidate_id": "item-1",
+                                        "root_candidate_id": "item-1",
+                                        "parent_candidate_id": None,
+                                        "source_decision": "advanced_to_face_triage",
+                                    },
+                                    "curation_selection_event": {
+                                        "decision": "advanced_to_face_triage",
+                                    },
+                                    "curation_source_selection": {
+                                        "workflow_id": "curation:disc-1",
+                                        "candidate_id": "item-1",
+                                        "decision": "advanced_to_face_triage",
+                                        "face_triage_tier": "medium",
+                                    },
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    )
+
+    assert payload["schema"] == CURATION_REPLAY_DESCRIPTOR_SCHEMA
+    assert payload["workflow_id"] == "curation:disc-1"
+    assert payload["candidate_id"] == "item-1"
+    assert payload["source_decision"] == "advanced_to_face_triage"
+    assert payload["face_triage_tier"] == "medium"
+
+
+def test_find_latest_derived_descendant_returns_newest_history_match() -> None:
+    older = SimpleNamespace(
+        job_id="job-older",
+        created_at=datetime(2026, 3, 21, 20, 0, 0),
+        completed_at=datetime(2026, 3, 21, 20, 5, 0),
+        snapshot={
+            "normalized_job": {
+                "extra_metadata": {
+                    "curation": {
+                        "workflow_id": "curation:disc-1",
+                        "candidate_id": "item-1",
+                        "root_candidate_id": "item-1",
+                    },
+                    "curation_derived_stage": {
+                        "workflow_id": "curation:disc-1",
+                        "source_candidate_id": "item-1",
+                        "target_stage": "face_triage",
+                    },
+                }
+            }
+        },
+        result={"output_paths": ["output/Pipeline/item-1-face-old.png"]},
+    )
+    newer = SimpleNamespace(
+        job_id="job-newer",
+        created_at=datetime(2026, 3, 21, 21, 0, 0),
+        completed_at=datetime(2026, 3, 21, 21, 10, 0),
+        snapshot={
+            "normalized_job": {
+                "extra_metadata": {
+                    "curation": {
+                        "workflow_id": "curation:disc-1",
+                        "candidate_id": "item-1",
+                        "root_candidate_id": "item-1",
+                    },
+                    "curation_derived_stage": {
+                        "workflow_id": "curation:disc-1",
+                        "source_candidate_id": "item-1",
+                        "target_stage": "upscale",
+                    },
+                }
+            }
+        },
+        result={"output_paths": ["output/Pipeline/item-1-upscale-new.png"]},
+    )
+
+    latest = find_latest_derived_descendant([older, newer], "item-1")
+
+    assert latest is not None
+    assert latest["job_id"] == "job-newer"
+    assert latest["artifact_path"] == "output/Pipeline/item-1-upscale-new.png"
+    assert latest["target_stage"] == "upscale"

@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.queue.job_history_store import JobHistoryEntry
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
+from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
@@ -39,6 +39,7 @@ class ReviewTabFrame(ttk.Frame):
         self.app_controller = app_controller
         self.app_state = app_state
         self._workflow_adapter = ReviewWorkflowAdapter()
+        self._default_workflow_hint = "Review is the canonical advanced reprocess workspace."
 
         self.selected_images: list[Path] = []
         self._image_index_by_row: list[Path] = []
@@ -66,6 +67,8 @@ class ReviewTabFrame(ttk.Frame):
         self.composition_rating_var = tk.IntVar(value=3)
         self.prompt_adherence_rating_var = tk.IntVar(value=3)
         self.quality_var = tk.StringVar(value="okay")
+        self._effective_settings_var = tk.StringVar(value="Effective settings: select an image")
+        self._prior_review_summary_var = tk.StringVar(value="Prior Review Summary: none")
         self._feedback_undo_stack: list[list[dict[str, str]]] = []
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
@@ -73,7 +76,9 @@ class ReviewTabFrame(ttk.Frame):
         self._compare_window: tk.Toplevel | None = None
         self._compare_canvas: tk.Canvas | None = None
         self._compare_photo: Any = None
+        self._compare_mode = "single"
         self._history_import_window: tk.Toplevel | None = None
+        self._active_handoff: ReviewWorkspaceHandoff | None = None
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -84,6 +89,9 @@ class ReviewTabFrame(ttk.Frame):
 
         self.prompt_mode_var.trace_add("write", lambda *_: self._on_prompt_mode_changed())
         self.negative_mode_var.trace_add("write", lambda *_: self._on_negative_mode_changed())
+        self.stage_img2img_var.trace_add("write", lambda *_: self._refresh_effective_settings())
+        self.stage_adetailer_var.trace_add("write", lambda *_: self._refresh_effective_settings())
+        self.stage_upscale_var.trace_add("write", lambda *_: self._refresh_effective_settings())
         self.prompt_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self.negative_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self._set_readonly_text(self.current_prompt_text, "")
@@ -141,7 +149,7 @@ class ReviewTabFrame(ttk.Frame):
 
         self.workflow_hint_label = ttk.Label(
             header,
-            text="Review is the canonical advanced reprocess workspace.",
+            text=self._default_workflow_hint,
             style="Dark.TLabel",
         )
         self.workflow_hint_label.grid(row=1, column=0, columnspan=6, sticky="w", pady=(6, 0))
@@ -201,6 +209,12 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=self._open_compare_viewer,
         ).pack(side="left", padx=(12, 0))
+        ttk.Button(
+            preview_actions,
+            text="Compare Latest Derived",
+            style="Dark.TButton",
+            command=self._open_latest_derived_compare,
+        ).pack(side="left", padx=(6, 0))
 
         self.preview = ThumbnailWidget(right, width=620, height=620, placeholder_text="Select an image")
         self.preview.grid(row=1, column=0, sticky="n", pady=(0, 8))
@@ -214,6 +228,22 @@ class ReviewTabFrame(ttk.Frame):
             wraplength=620,
         )
         self.meta_label.grid(row=2, column=0, sticky="ew")
+
+        prior_review_box = ttk.LabelFrame(
+            right,
+            text="Prior Review Summary",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        prior_review_box.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+        prior_review_box.columnconfigure(0, weight=1)
+        ttk.Label(
+            prior_review_box,
+            textvariable=self._prior_review_summary_var,
+            style="Dark.TLabel",
+            justify="left",
+            wraplength=620,
+        ).grid(row=0, column=0, sticky="ew")
 
     def _build_controls(self) -> None:
         controls = ttk.Frame(self, style="Panel.TFrame")
@@ -365,8 +395,24 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TCheckbutton",
         ).grid(row=2, column=0, sticky="w", pady=(0, 8))
 
+        effective_box = ttk.LabelFrame(
+            run_box,
+            text="Effective Reprocess Settings",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        effective_box.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+        effective_box.columnconfigure(0, weight=1)
+        ttk.Label(
+            effective_box,
+            textvariable=self._effective_settings_var,
+            style="Dark.TLabel",
+            justify="left",
+            wraplength=520,
+        ).grid(row=0, column=0, sticky="ew")
+
         batch_row = ttk.Frame(run_box, style="Panel.TFrame")
-        batch_row.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+        batch_row.grid(row=4, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(batch_row, text="Batch size", style="Dark.TLabel").pack(side="left", padx=(0, 8))
         ttk.Spinbox(
             batch_row,
@@ -399,14 +445,14 @@ class ReviewTabFrame(ttk.Frame):
             text="Reprocess Selected",
             style="Primary.TButton",
             command=lambda: self._reprocess(batch_all=False),
-        ).grid(row=4, column=0, sticky="ew", pady=(0, 6))
+        ).grid(row=5, column=0, sticky="ew", pady=(0, 6))
 
         ttk.Button(
             run_box,
             text="Reprocess All",
             style="Dark.TButton",
             command=lambda: self._reprocess(batch_all=True),
-        ).grid(row=5, column=0, sticky="ew")
+        ).grid(row=6, column=0, sticky="ew")
 
         feedback_box = ttk.LabelFrame(
             run_box,
@@ -414,7 +460,7 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabelframe",
             padding=8,
         )
-        feedback_box.grid(row=6, column=0, sticky="ew", pady=(8, 0))
+        feedback_box.grid(row=7, column=0, sticky="ew", pady=(8, 0))
         feedback_box.columnconfigure(1, weight=1)
         ttk.Label(feedback_box, text="Rating", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
@@ -562,6 +608,68 @@ class ReviewTabFrame(ttk.Frame):
         self._set_readonly_text(self.current_negative_text, "")
         self._refresh_prompt_diff()
         self.preview.clear()
+        self._active_handoff = None
+        self._compare_mode = "single"
+        self._effective_settings_var.set("Effective settings: select an image")
+        self._prior_review_summary_var.set("Prior Review Summary: none")
+        self.workflow_hint_label.config(text=self._default_workflow_hint)
+
+    def load_staged_curation_handoff(self, handoff: ReviewWorkspaceHandoff) -> None:
+        image_paths = [Path(path) for path in list(handoff.image_paths or [])]
+        if not image_paths:
+            raise ValueError("No staged-curation images were provided for Review handoff")
+
+        self._active_handoff = handoff
+        self._set_selected_images(image_paths)
+        if len(image_paths) == 1:
+            self.workflow_hint_label.config(
+                text=(
+                    "Staged Curation handoff: deliberate single-candidate edit in Review. "
+                    "Use Queue Now in Learning for bulk throughput."
+                )
+            )
+        else:
+            self.workflow_hint_label.config(
+                text=(
+                    "Staged Curation handoff loaded in Review. Use Queue Now in Learning "
+                    "for bulk throughput."
+                )
+            )
+
+        self.stage_img2img_var.set(bool(handoff.stage_img2img))
+        self.stage_adetailer_var.set(bool(handoff.stage_adetailer))
+        self.stage_upscale_var.set(bool(handoff.stage_upscale))
+
+        self._selected_base_prompt = str(handoff.base_prompt or self._selected_base_prompt or "")
+        self._selected_base_negative_prompt = str(
+            handoff.base_negative_prompt or self._selected_base_negative_prompt or ""
+        )
+        self._set_readonly_text(self.current_prompt_text, self._selected_base_prompt)
+        self._set_readonly_text(self.current_negative_text, self._selected_base_negative_prompt)
+
+        prompt_mode = str(handoff.prompt_mode or "append")
+        negative_mode = str(handoff.negative_prompt_mode or "append")
+        self.prompt_mode_var.set(prompt_mode)
+        self.negative_mode_var.set(negative_mode)
+        self._prompt_mode_edits = {
+            "append": "",
+            "replace": "",
+            "modify": self._selected_base_prompt,
+        }
+        self._negative_mode_edits = {
+            "append": "",
+            "replace": "",
+            "modify": self._selected_base_negative_prompt,
+        }
+        if prompt_mode in self._prompt_mode_edits:
+            self._prompt_mode_edits[prompt_mode] = str(handoff.prompt_delta or "")
+        if negative_mode in self._negative_mode_edits:
+            self._negative_mode_edits[negative_mode] = str(handoff.negative_prompt_delta or "")
+        self._prompt_prev_mode = prompt_mode
+        self._negative_prev_mode = negative_mode
+        self._set_text(self.prompt_text, self._prompt_mode_edits.get(prompt_mode, ""))
+        self._set_text(self.negative_text, self._negative_mode_edits.get(negative_mode, ""))
+        self._refresh_prompt_diff()
 
     def _set_selected_images(self, paths: list[Path]) -> None:
         deduped: list[Path] = []
@@ -596,6 +704,7 @@ class ReviewTabFrame(ttk.Frame):
     def _show_image(self, path: Path) -> None:
         self._selected_image_path = path
         self.preview.set_image_from_path(path)
+        self._refresh_prior_review_summary(path)
         result = extract_embedded_metadata(path)
         if result.status != "ok" or not isinstance(result.payload, dict):
             self.meta_label.config(text=f"Metadata: {result.status}")
@@ -631,6 +740,57 @@ class ReviewTabFrame(ttk.Frame):
             )
         )
 
+    def _refresh_prior_review_summary(self, image_path: Path) -> None:
+        learning_controller = self._resolve_learning_controller()
+        getter = getattr(learning_controller, "get_prior_review_summary", None) if learning_controller is not None else None
+        if not callable(getter):
+            self._prior_review_summary_var.set("Prior Review Summary: unavailable")
+            return
+        try:
+            summary = getter(str(image_path))
+        except Exception:
+            self._prior_review_summary_var.set("Prior Review Summary: unavailable")
+            return
+        self._prior_review_summary_var.set(self._format_prior_review_summary(summary))
+
+    @staticmethod
+    def _format_prior_review_summary(summary: Any) -> str:
+        if not isinstance(summary, dict):
+            return "Prior Review Summary: none"
+        source_type = str(summary.get("source_type") or "unknown")
+        source_label_map = {
+            "internal_learning_record": "internal learning record",
+            "embedded_review_metadata": "embedded artifact metadata",
+            "sidecar_review_metadata": "sidecar artifact metadata",
+        }
+        source_label = source_label_map.get(source_type, source_type.replace("_", " "))
+        rating = summary.get("user_rating")
+        quality = str(summary.get("quality_label") or "")
+        timestamp = str(summary.get("review_timestamp") or "")
+        notes = str(summary.get("user_notes") or "").strip()
+        prompt_mode = str(summary.get("prompt_mode") or "").strip()
+        prompt_changed = bool(
+            str(summary.get("prompt_delta") or "").strip()
+            or str(summary.get("negative_prompt_delta") or "").strip()
+            or str(summary.get("prompt_before") or "").strip() != str(summary.get("prompt_after") or "").strip()
+            or str(summary.get("negative_prompt_before") or "").strip() != str(summary.get("negative_prompt_after") or "").strip()
+        )
+        bits = [f"Source: {source_label}"]
+        if rating is not None:
+            rating_text = f"Rating: {rating}"
+            if quality:
+                rating_text += f" ({quality})"
+            bits.append(rating_text)
+        elif quality:
+            bits.append(f"Quality: {quality}")
+        if timestamp:
+            bits.append(f"Reviewed: {timestamp}")
+        if notes:
+            trimmed = notes if len(notes) <= 120 else f"{notes[:117]}..."
+            bits.append(f"Notes: {trimmed}")
+        bits.append(f"Prompt change: {prompt_mode or ('yes' if prompt_changed else 'no')}")
+        return "\n".join(bits)
+
     def _show_previous_image(self) -> None:
         self._step_selected_image(-1)
 
@@ -656,14 +816,121 @@ class ReviewTabFrame(ttk.Frame):
         if not PIL_AVAILABLE:
             messagebox.showinfo("Viewer unavailable", "Large compare viewer requires Pillow.")
             return
+        self._compare_mode = "single"
         self._render_compare_viewer(image_path)
 
-    def _render_compare_viewer(self, image_path: Path) -> None:
+    def _lookup_handoff_source_metadata(self, image_path: Path) -> dict[str, Any] | None:
+        handoff = self._active_handoff
+        if handoff is None:
+            return None
+        source_map = dict(getattr(handoff, "source_metadata_by_path", {}) or {})
+        return source_map.get(str(image_path)) or source_map.get(str(image_path.resolve()))
+
+    def _get_selected_latest_derived_descendant(self) -> dict[str, Any] | None:
+        image_path = self._selected_image_path
+        if image_path is None:
+            return None
+        source_metadata = self._lookup_handoff_source_metadata(image_path)
+        selection_meta = source_metadata.get("curation_source_selection") if isinstance(source_metadata, dict) else None
+        if not isinstance(selection_meta, dict):
+            return None
+        candidate_id = str(selection_meta.get("candidate_id") or "").strip()
+        if not candidate_id:
+            return None
+        learning_controller = self._resolve_learning_controller()
+        if learning_controller is None:
+            return None
+        getter = getattr(learning_controller, "get_staged_curation_candidate_latest_descendant", None)
+        if not callable(getter):
+            return None
+        latest = getter(candidate_id)
+        return latest if isinstance(latest, dict) else None
+
+    def _open_latest_derived_compare(self, *, show_errors: bool = True) -> bool:
+        image_path = self._selected_image_path
+        if image_path is None:
+            if show_errors:
+                messagebox.showinfo("Compare unavailable", "Select a staged-curation source image first.")
+            return False
+        if not PIL_AVAILABLE:
+            if show_errors:
+                messagebox.showinfo("Viewer unavailable", "Large compare viewer requires Pillow.")
+            return False
+        latest = self._get_selected_latest_derived_descendant()
+        latest_path_value = str((latest or {}).get("artifact_path") or "").strip()
+        if not latest_path_value:
+            if show_errors:
+                messagebox.showinfo(
+                    "No latest derived",
+                    "No derived descendant has been found yet for the selected staged-curation source.",
+                )
+            return False
+        self._compare_mode = "latest_derived"
+        target_stage = str((latest or {}).get("target_stage") or "derived").replace("_", " ")
+        self._render_compare_viewer(
+            image_path,
+            secondary_path=Path(latest_path_value),
+            title_prefix=f"Source vs Latest Derived ({target_stage})",
+        )
+        return True
+
+    def open_staged_candidate_latest_derived_compare(
+        self,
+        *,
+        image_path: Path,
+        candidate_id: str,
+        workflow_title: str = "",
+    ) -> bool:
+        self.load_staged_curation_handoff(
+            ReviewWorkspaceHandoff(
+                source="staged_curation",
+                workflow_title=workflow_title,
+                target_stage="",
+                image_paths=[image_path],
+                base_prompt="",
+                base_negative_prompt="",
+                prompt_delta="",
+                negative_prompt_delta="",
+                prompt_mode="append",
+                negative_prompt_mode="append",
+                stage_img2img=False,
+                stage_adetailer=False,
+                stage_upscale=False,
+                source_candidate_ids=[candidate_id],
+                source_metadata_by_path={
+                    str(image_path): {
+                        "curation_source_selection": {
+                            "candidate_id": candidate_id,
+                        }
+                    }
+                },
+            )
+        )
+        return self._open_latest_derived_compare()
+
+    def _render_compare_viewer(
+        self,
+        image_path: Path,
+        *,
+        secondary_path: Path | None = None,
+        title_prefix: str = "Large Compare",
+    ) -> None:
         try:
             with Image.open(image_path) as image:
-                image = image.convert("RGBA")
-                image_width, image_height = image.size
-                photo = ImageTk.PhotoImage(image)
+                left_image = image.convert("RGBA")
+            if secondary_path is not None:
+                with Image.open(secondary_path) as image:
+                    right_image = image.convert("RGBA")
+                gutter = 24
+                image_width = left_image.size[0] + right_image.size[0] + gutter
+                image_height = max(left_image.size[1], right_image.size[1])
+                composite = Image.new("RGBA", (image_width, image_height), (20, 20, 20, 255))
+                composite.paste(left_image, (0, 0))
+                composite.paste(right_image, (left_image.size[0] + gutter, 0))
+                photo = ImageTk.PhotoImage(composite)
+            else:
+                image_width, image_height = left_image.size
+                photo = ImageTk.PhotoImage(left_image)
         except Exception as exc:
             messagebox.showerror("Viewer failed", f"Failed to open image: {exc}")
             return
@@ -679,7 +946,7 @@ class ReviewTabFrame(ttk.Frame):
             viewer.bind("<Right>", lambda _event: self._show_next_image_and_refresh_viewer())
             viewer.bind("<Escape>", lambda _event: viewer.destroy())
 
-        viewer.title(f"Large Compare - {image_path.name}")
+        viewer.title(f"{title_prefix} - {image_path.name}")
         viewer.transient(self.winfo_toplevel())
         viewer.resizable(True, True)
 
@@ -698,13 +965,23 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabel",
         ).pack(side="left", padx=(12, 0))
 
+        compare_label = f"Source: {image_path.name}"
+        if secondary_path is not None:
+            compare_label += f"    Latest derived: {secondary_path.name}"
+        ttk.Label(
+            frame,
+            text=compare_label,
+            style="Dark.TLabel",
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 6))
+
         canvas = tk.Canvas(frame, bg=TOKENS.colors.surface_secondary, highlightthickness=0)
-        canvas.grid(row=1, column=0, sticky="nsew")
+        canvas.grid(row=2, column=0, sticky="nsew")
         v_scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
         h_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
         canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
-        v_scroll.grid(row=1, column=1, sticky="ns")
-        h_scroll.grid(row=2, column=0, sticky="ew")
+        v_scroll.grid(row=2, column=1, sticky="ns")
+        h_scroll.grid(row=3, column=0, sticky="ew")
 
         self._compare_canvas = canvas
         self._compare_photo = photo
@@ -720,12 +997,18 @@ class ReviewTabFrame(ttk.Frame):
     def _show_previous_image_and_refresh_viewer(self) -> None:
         self._step_selected_image(-1)
         if self._selected_image_path is not None:
-            self._render_compare_viewer(self._selected_image_path)
+            if self._compare_mode == "latest_derived":
+                self._open_latest_derived_compare(show_errors=False)
+            else:
+                self._render_compare_viewer(self._selected_image_path)
 
     def _show_next_image_and_refresh_viewer(self) -> None:
         self._step_selected_image(1)
         if self._selected_image_path is not None:
-            self._render_compare_viewer(self._selected_image_path)
+            if self._compare_mode == "latest_derived":
+                self._open_latest_derived_compare(show_errors=False)
+            else:
+                self._render_compare_viewer(self._selected_image_path)
 
     def _on_import_selected_to_staged_curation(self) -> None:
         learning_controller = self._resolve_learning_controller()
@@ -881,6 +1164,42 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.diff_before_label.config(text=diff.before_text)
         self.diff_after_label.config(text=diff.after_text)
+        self._refresh_effective_settings()
+
+    def _refresh_effective_settings(self) -> None:
+        image_path = self._selected_image_path
+        if image_path is None:
+            self._effective_settings_var.set("Effective settings: select an image")
+            return
+
+        controller = self.app_controller
+        builder = getattr(controller, "get_review_reprocess_effective_settings_preview", None)
+        if not callable(builder):
+            self._effective_settings_var.set("Effective settings: controller preview unavailable")
+            return
+
+        try:
+            preview = builder(
+                image_path=str(image_path),
+                stages=self._selected_stages(),
+                prompt_delta=self.prompt_text.get("1.0", tk.END).strip(),
+                negative_prompt_delta=self.negative_text.get("1.0", tk.END).strip(),
+                prompt_mode=self.prompt_mode_var.get(),
+                negative_prompt_mode=self.negative_mode_var.get(),
+            )
+        except Exception as exc:
+            self._effective_settings_var.set(f"Effective settings: unavailable ({exc})")
+            return
+
+        direct_queue_preview = None
+        if self._active_handoff is not None:
+            direct_queue_preview = self._active_handoff.direct_queue_preview
+        self._effective_settings_var.set(
+            self._workflow_adapter.format_effective_settings_summary(
+                preview,
+                direct_queue_preview=direct_queue_preview,
+            )
+        )
 
     def _show_batch_logic_help(self) -> None:
         messagebox.showinfo(
@@ -974,6 +1293,15 @@ class ReviewTabFrame(ttk.Frame):
         try:
             handler = getattr(controller, "on_reprocess_images_with_prompt_delta", None)
             if callable(handler):
+                source_metadata_by_image = None
+                if self._active_handoff is not None:
+                    source_map = dict(getattr(self._active_handoff, "source_metadata_by_path", {}) or {})
+                    if source_map:
+                        source_metadata_by_image = {}
+                        for target in targets:
+                            source_metadata = source_map.get(str(target)) or source_map.get(str(target.resolve()))
+                            if isinstance(source_metadata, dict):
+                                source_metadata_by_image[str(target)] = source_metadata
                 submitted = handler(
                     image_paths=[str(p) for p in targets],
                     stages=stages,
@@ -982,6 +1310,7 @@ class ReviewTabFrame(ttk.Frame):
                     prompt_mode=self.prompt_mode_var.get(),
                     negative_prompt_mode=self.negative_mode_var.get(),
                     batch_size=batch_size,
+                    source_metadata_by_image=source_metadata_by_image,
                 )
             else:
                 fallback = getattr(controller, "on_reprocess_images", None)
@@ -1038,6 +1367,7 @@ class ReviewTabFrame(ttk.Frame):
             self._feedback_undo_stack.append(
                 [{"run_id": run_id, "image_path": str(self._selected_image_path)}]
             )
+            self._refresh_prior_review_summary(self._selected_image_path)
             messagebox.showinfo("Saved", "Review feedback saved to Learning records.")
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc))

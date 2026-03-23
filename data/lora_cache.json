@@ -47,6 +47,14 @@
     "source": "none",
     "description": ""
   },
+  "BetterThanWords-merged-SDXL-LoRA-v3": {
+    "name": "BetterThanWords-merged-SDXL-LoRA-v3",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\BetterThanWords-merged-SDXL-LoRA-v3.safetensors",
+    "file_size": 6939301466,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
   "CinematicStyle_v1": {
     "name": "CinematicStyle_v1",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\CinematicStyle_v1.safetensors",
@@ -183,6 +191,14 @@
     "source": "none",
     "description": ""
   },
+  "perfection style": {
+    "name": "perfection style",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\perfection style.safetensors",
+    "file_size": 912559572,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
   "PhotoDistressed01-00a_CE_SDXL_128OT": {
     "name": "PhotoDistressed01-00a_CE_SDXL_128OT",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\PhotoDistressed01-00a_CE_SDXL_128OT.safetensors",
@@ -267,6 +283,14 @@
     "name": "stvmccrr",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\stvmccrr.safetensors",
     "file_size": 170554980,
+    "keywords": [],
+    "source": "none",
+    "description": ""
+  },
+  "style_lora_realis": {
+    "name": "style_lora_realis",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\models\\Lora\\style_lora_realis.safetensors",
+    "file_size": 681233932,
     "keywords": [],
     "source": "none",
     "description": ""

@@ -9,18 +9,26 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.prompt_workspace_state import PromptWorkspaceState
+from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
+from src.review.review_metadata_service import (
+    INTERNAL_REVIEW_SUMMARY_SCHEMA,
+    PortableReviewSummary,
+    ReviewMetadataService,
+)
 from src.gui_v2.adapters.learning_adapter_v2 import (
     list_recent_learning_records,
     update_record_feedback,
 )
 from src.curation.curation_workflow_builder import (
+    CurationAdvancementPlan,
     CurationSourceSelection,
     CurationWorkflowBuilder,
+    DerivedStage,
 )
 from src.curation.learning_bridge import (
     CurationLearningBridge,
@@ -28,6 +36,7 @@ from src.curation.learning_bridge import (
 )
 from src.curation.workflow_summary import (
     build_candidate_replay_entry,
+    find_latest_derived_descendant,
     build_workflow_summary,
 )
 from src.curation.models import CurationCandidate, CurationWorkflow, SelectionEvent
@@ -88,6 +97,8 @@ class LearningController:
         self._workflow_state_listeners: list[Any] = []
         self._resume_state_listeners: list[Any] = []
         self._curation_workflow_builder = CurationWorkflowBuilder()
+        self._review_workflow_adapter = ReviewWorkflowAdapter()
+        self._review_metadata_service = ReviewMetadataService()
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -1894,6 +1905,27 @@ class LearningController:
             metadata=metadata,
         )
         self._learning_record_writer.append_record(record)
+        try:
+            stamp_result = self._review_metadata_service.stamp_review_metadata(
+                image_path=image_path,
+                feedback=feedback,
+                record=record,
+            )
+            record.metadata["artifact_review_metadata"] = {
+                "success": bool(stamp_result.success),
+                "storage": stamp_result.storage,
+                "stamped_path": stamp_result.stamped_path,
+                "sidecar_path": stamp_result.sidecar_path,
+                "error": stamp_result.error,
+            }
+        except Exception as exc:
+            record.metadata["artifact_review_metadata"] = {
+                "success": False,
+                "storage": "failed",
+                "stamped_path": image_path,
+                "sidecar_path": None,
+                "error": str(exc),
+            }
         self.refresh_recommendations()
         return record
 
@@ -1983,14 +2015,26 @@ class LearningController:
                         {
                             "run_id": payload.get("run_id"),
                             "timestamp": payload.get("timestamp"),
+                            "source_type": "internal_learning_record",
+                            "schema": INTERNAL_REVIEW_SUMMARY_SCHEMA,
                             "image_path": metadata.get("image_path"),
                             "rating": metadata.get("user_rating"),
+                            "user_rating": metadata.get("user_rating"),
+                            "user_rating_raw": metadata.get("user_rating_raw"),
                             "quality_label": metadata.get("quality_label"),
                             "notes": metadata.get("user_notes"),
+                            "user_notes": metadata.get("user_notes"),
+                            "subscores": metadata.get("subscores", {}),
+                            "weighted_score": metadata.get("weighted_score"),
                             "prompt_before": metadata.get("prompt_before"),
                             "prompt_after": metadata.get("prompt_after"),
                             "negative_prompt_before": metadata.get("negative_prompt_before"),
                             "negative_prompt_after": metadata.get("negative_prompt_after"),
+                            "prompt_delta": metadata.get("prompt_delta"),
+                            "negative_prompt_delta": metadata.get("negative_prompt_delta"),
+                            "prompt_mode": metadata.get("prompt_mode"),
+                            "negative_prompt_mode": metadata.get("negative_prompt_mode"),
+                            "review_context": metadata.get("review_context", {}),
                             "stages": metadata.get("stages", []),
                         }
                     )
@@ -1998,6 +2042,48 @@ class LearningController:
             return []
 
         return rows[: max(1, int(limit))]
+
+    def get_prior_review_summary(self, image_path: str | Path) -> dict[str, Any] | None:
+        """Return the latest normalized prior review summary for one image path.
+
+        Precedence:
+        1. internal learning-record review feedback
+        2. embedded portable review metadata
+        3. sidecar portable review metadata
+        """
+        normalized_path = str(Path(str(image_path or "").strip()))
+        if not normalized_path:
+            return None
+
+        recent_rows = self.list_recent_review_feedback(limit=1, image_path=normalized_path)
+        if recent_rows:
+            row = dict(recent_rows[0])
+            summary = PortableReviewSummary(
+                source_type="internal_learning_record",
+                schema=INTERNAL_REVIEW_SUMMARY_SCHEMA,
+                review_timestamp=str(row.get("timestamp") or ""),
+                user_rating=row.get("user_rating"),
+                user_rating_raw=row.get("user_rating_raw"),
+                quality_label=str(row.get("quality_label") or ""),
+                subscores=dict(row.get("subscores") or {}),
+                weighted_score=row.get("weighted_score"),
+                user_notes=str(row.get("user_notes") or row.get("notes") or ""),
+                prompt_before=str(row.get("prompt_before") or ""),
+                prompt_after=str(row.get("prompt_after") or ""),
+                negative_prompt_before=str(row.get("negative_prompt_before") or ""),
+                negative_prompt_after=str(row.get("negative_prompt_after") or ""),
+                prompt_delta=str(row.get("prompt_delta") or ""),
+                negative_prompt_delta=str(row.get("negative_prompt_delta") or ""),
+                prompt_mode=str(row.get("prompt_mode") or ""),
+                negative_prompt_mode=str(row.get("negative_prompt_mode") or ""),
+                stages=[str(stage) for stage in list(row.get("stages") or []) if str(stage or "").strip()],
+                review_context=dict(row.get("review_context") or {}),
+                review_record_id=str(row.get("run_id") or ""),
+            )
+            return summary.to_dict()
+
+        portable_summary = self._review_metadata_service.read_review_summary(normalized_path)
+        return portable_summary.to_dict() if portable_summary is not None else None
 
     def on_variant_selected(self, variant_index: int) -> None:
         """Handle selection of a variant in the table."""
@@ -2475,11 +2561,86 @@ class LearningController:
             str(getattr(item, "item_id", "") or ""): item
             for item in list(getattr(experiment, "items", []) or [])
         }
+        history_entries = []
+        app_state = getattr(self.app_controller, "app_state", None) if self.app_controller is not None else None
+        if app_state is not None:
+            history_entries = list(getattr(app_state, "history_items", []) or [])
         for candidate in candidates:
             if str(getattr(candidate, "candidate_id", "") or "") != str(candidate_id or ""):
                 continue
             item = item_by_id.get(str(candidate_id or ""))
-            return build_candidate_replay_entry(candidate, item, latest_events.get(str(candidate_id or "")))
+            latest_derived = find_latest_derived_descendant(history_entries, str(candidate_id or ""))
+            return build_candidate_replay_entry(
+                candidate,
+                item,
+                latest_events.get(str(candidate_id or "")),
+                latest_derived=latest_derived,
+            )
+        return None
+
+    def get_staged_curation_candidate_latest_descendant(self, candidate_id: str) -> dict[str, Any] | None:
+        """Return the newest derived descendant artifact for one staged-curation candidate."""
+        if not self.app_controller:
+            return None
+        app_state = getattr(self.app_controller, "app_state", None)
+        if app_state is None:
+            return None
+        history_entries = list(getattr(app_state, "history_items", []) or [])
+        return find_latest_derived_descendant(history_entries, str(candidate_id or ""))
+
+    def get_staged_curation_candidate_source_context(
+        self,
+        group_id: str,
+        candidate_id: str,
+    ) -> dict[str, str] | None:
+        """Return read-only source prompt and plan-preview context for one candidate."""
+        payload = self.load_staged_curation_group(group_id)
+        if not isinstance(payload, dict):
+            return None
+
+        candidates = list(payload.get("candidates") or [])
+        latest_events = dict(payload.get("latest_events") or {})
+        experiment = payload.get("experiment")
+        item_by_id = {
+            str(getattr(item, "item_id", "") or ""): item
+            for item in list(getattr(experiment, "items", []) or [])
+        }
+        for candidate in candidates:
+            if str(getattr(candidate, "candidate_id", "") or "") != str(candidate_id or ""):
+                continue
+
+            item = item_by_id.get(str(candidate_id or ""))
+            replay_summary = build_candidate_replay_entry(
+                candidate,
+                item,
+                latest_events.get(str(candidate_id or "")),
+            )
+            source_prompt = str(replay_summary.get("positive_prompt") or "")
+            source_negative_prompt = str(replay_summary.get("negative_prompt") or "")
+            source_model = str(replay_summary.get("source_model") or replay_summary.get("model") or "")
+            if item is not None and (
+                not source_prompt or not source_negative_prompt or not source_model
+            ):
+                image_path = Path(str(getattr(item, "artifact_path", "") or "").strip())
+                if image_path.exists():
+                    baseline = self._extract_reprocess_baseline_from_image(image_path)
+                    source_prompt = source_prompt or str(baseline.get("prompt") or "")
+                    source_negative_prompt = source_negative_prompt or str(
+                        baseline.get("negative_prompt") or ""
+                    )
+                    source_model = source_model or str(baseline.get("model") or "")
+
+            decision = str(replay_summary.get("decision") or "")
+            target_stage = self._resolve_staged_curation_target_stage_for_decision(decision)
+            return {
+                "source_prompt": source_prompt,
+                "source_negative_prompt": source_negative_prompt,
+                "source_stage": str(replay_summary.get("source_stage") or ""),
+                "source_model": source_model,
+                "decision": decision,
+                "target_stage": target_stage or "",
+                "path_label": "Queue Now",
+            }
         return None
 
     def record_staged_curation_selection(
@@ -2561,42 +2722,8 @@ class LearningController:
         target_stage: str,
     ) -> int:
         """Compile staged-curation selections into queue-backed derived jobs."""
-        normalized_target = str(target_stage or "").strip().lower()
-        if normalized_target not in {"refine", "face_triage", "upscale"}:
-            raise ValueError(f"Unsupported staged-curation target stage: {target_stage!r}")
-
-        store = self._get_discovered_store()
-        experiment = store.load_group(group_id)
-        if experiment is None:
-            return 0
-
-        payload = self.load_staged_curation_group(group_id)
-        if not isinstance(payload, dict):
-            return 0
-        workflow = payload.get("workflow")
-        latest_events = dict(payload.get("latest_events") or {})
-        candidates = list(payload.get("candidates") or [])
-        if not isinstance(workflow, CurationWorkflow):
-            return 0
-
-        selected = self._build_curation_source_selections(
-            experiment=experiment,
-            candidates=candidates,
-            latest_events=latest_events,
-            target_stage=normalized_target,
-        )
-        if not selected:
-            return 0
-
-        fallback_config = self._get_baseline_config()
-        plan = self._curation_workflow_builder.build_derived_stage_plan(
-            workflow=workflow,
-            target_stage=normalized_target,
-            selections=selected,
-            fallback_config=fallback_config,
-            output_dir=self._resolve_learning_output_root(),
-        )
-        if not plan.jobs:
+        plan = self.build_staged_curation_advancement_plan(group_id, target_stage)
+        if plan is None or not plan.jobs:
             return 0
 
         job_service = self._get_job_service()
@@ -2605,10 +2732,80 @@ class LearningController:
 
         request = self._curation_workflow_builder.build_run_request(
             plan.jobs,
-            target_stage=normalized_target,
+            target_stage=plan.target_stage,
         )
         job_ids = job_service.enqueue_njrs(plan.jobs, request)
         return len(job_ids)
+
+    def build_staged_curation_review_handoff(
+        self,
+        group_id: str,
+        target_stage: str,
+        *,
+        candidate_id: str | None = None,
+    ) -> ReviewWorkspaceHandoff | None:
+        """Build a Review workspace handoff without enqueueing staged-curation jobs."""
+        candidate_ids = [str(candidate_id)] if str(candidate_id or "").strip() else None
+        plan = self.build_staged_curation_advancement_plan(
+            group_id,
+            target_stage,
+            candidate_ids=candidate_ids,
+        )
+        if plan is None:
+            return None
+        return self._review_workflow_adapter.build_staged_curation_handoff(plan=plan)
+
+    def build_staged_curation_advancement_plan(
+        self,
+        group_id: str,
+        target_stage: str,
+        *,
+        candidate_ids: list[str] | None = None,
+    ) -> CurationAdvancementPlan | None:
+        """Build a staged-curation advancement plan without enqueueing it."""
+        normalized_target = str(target_stage or "").strip().lower()
+        if normalized_target not in {"refine", "face_triage", "upscale"}:
+            raise ValueError(f"Unsupported staged-curation target stage: {target_stage!r}")
+        target_stage_literal = cast(DerivedStage, normalized_target)
+
+        store = self._get_discovered_store()
+        experiment = store.load_group(group_id)
+        if experiment is None:
+            return None
+
+        payload = self.load_staged_curation_group(group_id)
+        if not isinstance(payload, dict):
+            return None
+        workflow = payload.get("workflow")
+        latest_events = dict(payload.get("latest_events") or {})
+        candidates = list(payload.get("candidates") or [])
+        if not isinstance(workflow, CurationWorkflow):
+            return None
+
+        selections = self._build_curation_source_selections(
+            experiment=experiment,
+            candidates=candidates,
+            latest_events=latest_events,
+            target_stage=target_stage_literal,
+            candidate_ids=candidate_ids,
+        )
+        fallback_config = self._get_baseline_config()
+        reprocess_plan = self._curation_workflow_builder.build_derived_stage_plan(
+            workflow=workflow,
+            target_stage=target_stage_literal,
+            selections=selections,
+            fallback_config=fallback_config,
+            output_dir=self._resolve_learning_output_root(),
+        )
+        return CurationAdvancementPlan(
+            workflow=workflow,
+            target_stage=target_stage_literal,
+            reprocess_plan=reprocess_plan,
+            selections=selections,
+            source_candidate_ids=[selection.candidate.candidate_id for selection in selections],
+            source_items=[selection.source_item for selection in selections],
+            selection_events=[selection.selection_event for selection in selections],
+        )
 
     def _build_curation_workflow(self, experiment: Any) -> CurationWorkflow:
         return CurationWorkflow(
@@ -2652,6 +2849,16 @@ class LearningController:
         return "scout"
 
     @staticmethod
+    def _resolve_staged_curation_target_stage_for_decision(decision: str) -> str | None:
+        normalized = str(decision or "").strip().lower()
+        mapping = {
+            "advanced_to_refine": "refine",
+            "advanced_to_face_triage": "face_triage",
+            "advanced_to_upscale": "upscale",
+        }
+        return mapping.get(normalized)
+
+    @staticmethod
     def _resolve_discovered_root_model(experiment: Any) -> str:
         for item in list(getattr(experiment, "items", []) or []):
             model_name = str(getattr(item, "model", "") or "").strip()
@@ -2666,6 +2873,7 @@ class LearningController:
         candidates: list[Any],
         latest_events: dict[str, SelectionEvent],
         target_stage: str,
+        candidate_ids: list[str] | None = None,
     ) -> list[CurationSourceSelection]:
         decision_map = {
             "refine": "advanced_to_refine",
@@ -2680,10 +2888,17 @@ class LearningController:
             str(getattr(item, "item_id", "") or ""): item
             for item in list(getattr(experiment, "items", []) or [])
         }
+        allowed_candidate_ids = {
+            str(candidate_id).strip()
+            for candidate_id in list(candidate_ids or [])
+            if str(candidate_id).strip()
+        }
         selections: list[CurationSourceSelection] = []
         for candidate in candidates:
             candidate_id = str(getattr(candidate, "candidate_id", "") or "")
             if not candidate_id:
+                continue
+            if allowed_candidate_ids and candidate_id not in allowed_candidate_ids:
                 continue
             latest = latest_events.get(candidate_id)
             if latest is None or str(latest.decision or "") != desired_decision:
@@ -2827,6 +3042,14 @@ class LearningController:
             or config.get("seed")
             or -1
         )
+        portable_review_summary = self._review_metadata_service.read_review_summary(path_obj)
+        extra_fields: dict[str, Any] = {
+            "job_id": str(payload.get("job_id") or ""),
+            "run_id": str(payload.get("run_id") or ""),
+            "source": "manual_import",
+        }
+        if portable_review_summary is not None:
+            extra_fields["portable_review_summary"] = portable_review_summary.to_dict()
         return DiscoveredReviewItem(
             item_id=f"manual-{index + 1}-{uuid.uuid4().hex[:8]}",
             artifact_path=str(path_obj),
@@ -2842,11 +3065,7 @@ class LearningController:
             negative_prompt=str(resolved_negative_prompt or ""),
             width=int(config.get("width") or generation.get("width") or 0),
             height=int(config.get("height") or generation.get("height") or 0),
-            extra_fields={
-                "job_id": str(payload.get("job_id") or ""),
-                "run_id": str(payload.get("run_id") or ""),
-                "source": "manual_import",
-            },
+            extra_fields=extra_fields,
         )
 
     @staticmethod

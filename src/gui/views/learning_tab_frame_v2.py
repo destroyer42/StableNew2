@@ -271,6 +271,16 @@ class LearningTabFrame(ttk.Frame):
         self._staged_job_status_var = tk.StringVar(value="No derived jobs submitted yet")
         self._staged_workflow_summary_var = tk.StringVar(value="Workflow summary: n/a")
         self._staged_replay_summary_var = tk.StringVar(value="Replay chain: n/a")
+        self._staged_plan_preview_var = tk.StringVar(value="Derived plan preview: n/a")
+        self._staged_prior_review_var = tk.StringVar(value="Prior Review: none")
+        self._staged_queue_guidance_var = tk.StringVar(
+            value="Queue Now submits all candidates currently marked for a derived stage."
+        )
+        self._staged_review_guidance_var = tk.StringVar(
+            value="Edit in Review opens the selected candidate only for deliberate edits before queueing."
+        )
+        self._staged_queue_buttons: dict[str, ttk.Button] = {}
+        self._staged_review_buttons: dict[str, ttk.Button] = {}
 
         self.staged_inbox_panel = DiscoveredReviewInboxPanel(
             self._staged_tab_frame,
@@ -375,8 +385,56 @@ class LearningTabFrame(ttk.Frame):
         self._staged_preview_thumbnail.grid(row=2, column=0, sticky="nsew")
         self._staged_preview_thumbnail.clear()
 
+        plan_frame = ttk.LabelFrame(staged_right, text="Derived Stage Plan Preview", padding=(6, 4))
+        plan_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        plan_frame.columnconfigure(0, weight=1)
+        ttk.Label(
+            plan_frame,
+            textvariable=self._staged_plan_preview_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew")
+
+        prompt_frame = ttk.LabelFrame(staged_right, text="Source Prompt", padding=(6, 4))
+        prompt_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        prompt_frame.columnconfigure(0, weight=1)
+        self._staged_source_prompt_text = tk.Text(
+            prompt_frame,
+            height=4,
+            wrap="word",
+            state="disabled",
+        )
+        self._staged_source_prompt_text.grid(row=0, column=0, sticky="ew")
+
+        negative_prompt_frame = ttk.LabelFrame(
+            staged_right,
+            text="Source Negative Prompt",
+            padding=(6, 4),
+        )
+        negative_prompt_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+        negative_prompt_frame.columnconfigure(0, weight=1)
+        self._staged_source_negative_prompt_text = tk.Text(
+            negative_prompt_frame,
+            height=3,
+            wrap="word",
+            state="disabled",
+        )
+        self._staged_source_negative_prompt_text.grid(row=0, column=0, sticky="ew")
+
+        prior_review_frame = ttk.LabelFrame(staged_right, text="Prior Review", padding=(6, 4))
+        prior_review_frame.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+        prior_review_frame.columnconfigure(0, weight=1)
+        ttk.Label(
+            prior_review_frame,
+            textvariable=self._staged_prior_review_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew")
+
         reason_frame = ttk.LabelFrame(staged_right, text="Reason Tags", padding=(6, 4))
-        reason_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        reason_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
         for index, tag in enumerate(self.learning_controller.get_staged_curation_reason_tag_options()):
             var = tk.BooleanVar(value=False)
             self._staged_reason_tag_vars[tag] = var
@@ -387,7 +445,7 @@ class LearningTabFrame(ttk.Frame):
             ).grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=1)
 
         tier_frame = ttk.LabelFrame(staged_right, text="Face Triage Tier", padding=(6, 4))
-        tier_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        tier_frame.grid(row=8, column=0, sticky="ew", pady=(6, 0))
         tier_frame.columnconfigure(1, weight=1)
         ttk.Label(tier_frame, text="Tier", style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=2
@@ -406,7 +464,7 @@ class LearningTabFrame(ttk.Frame):
         )
 
         notes_frame = ttk.LabelFrame(staged_right, text="Decision Notes", padding=(6, 4))
-        notes_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+        notes_frame.grid(row=9, column=0, sticky="ew", pady=(6, 0))
         notes_frame.columnconfigure(0, weight=1)
         self._staged_notes_text = tk.Text(notes_frame, height=4, wrap="word")
         self._staged_notes_text.grid(row=0, column=0, sticky="ew")
@@ -416,10 +474,10 @@ class LearningTabFrame(ttk.Frame):
             staged_right,
             textvariable=self._staged_last_decision_var,
             style=BODY_LABEL_STYLE,
-        ).grid(row=6, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=10, column=0, sticky="w", pady=(6, 0))
 
         action_frame = ttk.Frame(staged_right, style=SURFACE_FRAME_STYLE)
-        action_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+        action_frame.grid(row=11, column=0, sticky="ew", pady=(6, 0))
         for label, decision in (
             ("Reject", "rejected_hard"),
             ("Hold", "not_advanced"),
@@ -435,32 +493,97 @@ class LearningTabFrame(ttk.Frame):
             ).pack(side="left", padx=(0, 4))
 
         derive_frame = ttk.LabelFrame(staged_right, text="Derived Jobs", padding=(6, 4))
-        derive_frame.grid(row=8, column=0, sticky="ew", pady=(6, 0))
-        ttk.Button(
+        derive_frame.grid(row=12, column=0, sticky="ew", pady=(6, 0))
+        self._staged_queue_buttons["refine"] = ttk.Button(
             derive_frame,
-            text="Generate Refine Jobs",
+            text="Queue Refine Now",
             command=lambda: self._submit_staged_jobs("refine"),
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        )
+        self._staged_queue_buttons["refine"].pack(side="left", padx=(0, 4))
+        attach_tooltip(
+            self._staged_queue_buttons["refine"],
+            "Bulk path. Enqueue every candidate currently marked To Refine.",
+        )
+        self._staged_queue_buttons["face_triage"] = ttk.Button(
             derive_frame,
-            text="Generate Face Jobs",
+            text="Queue Face Now",
             command=lambda: self._submit_staged_jobs("face_triage"),
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        )
+        self._staged_queue_buttons["face_triage"].pack(side="left", padx=(0, 4))
+        attach_tooltip(
+            self._staged_queue_buttons["face_triage"],
+            "Bulk path. Enqueue every candidate currently marked To Face.",
+        )
+        self._staged_queue_buttons["upscale"] = ttk.Button(
             derive_frame,
-            text="Generate Upscale Jobs",
+            text="Queue Upscale Now",
             command=lambda: self._submit_staged_jobs("upscale"),
+        )
+        self._staged_queue_buttons["upscale"].pack(side="left", padx=(0, 4))
+        attach_tooltip(
+            self._staged_queue_buttons["upscale"],
+            "Bulk path. Enqueue every candidate currently marked To Upscale.",
+        )
+        ttk.Label(
+            derive_frame,
+            textvariable=self._staged_queue_guidance_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+        ).pack(side="left", padx=(8, 0))
+        review_frame = ttk.LabelFrame(staged_right, text="Edit in Review", padding=(6, 4))
+        review_frame.grid(row=13, column=0, sticky="ew", pady=(6, 0))
+        self._staged_review_buttons["refine"] = ttk.Button(
+            review_frame,
+            text="Edit Refine in Review",
+            command=lambda: self._open_staged_in_review("refine"),
+        )
+        self._staged_review_buttons["refine"].pack(side="left", padx=(0, 4))
+        attach_tooltip(
+            self._staged_review_buttons["refine"],
+            "Deliberate path. Open the selected candidate in Review when it is marked To Refine.",
+        )
+        self._staged_review_buttons["face_triage"] = ttk.Button(
+            review_frame,
+            text="Edit Face in Review",
+            command=lambda: self._open_staged_in_review("face_triage"),
+        )
+        self._staged_review_buttons["face_triage"].pack(side="left", padx=(0, 4))
+        attach_tooltip(
+            self._staged_review_buttons["face_triage"],
+            "Deliberate path. Open the selected candidate in Review when it is marked To Face.",
+        )
+        self._staged_review_buttons["upscale"] = ttk.Button(
+            review_frame,
+            text="Edit Upscale in Review",
+            command=lambda: self._open_staged_in_review("upscale"),
+        )
+        self._staged_review_buttons["upscale"].pack(side="left", padx=(0, 4))
+        attach_tooltip(
+            self._staged_review_buttons["upscale"],
+            "Deliberate path. Open the selected candidate in Review when it is marked To Upscale.",
+        )
+        ttk.Button(
+            review_frame,
+            text="Compare Latest Derived",
+            command=self._compare_staged_latest_derived,
         ).pack(side="left", padx=(0, 4))
+        ttk.Label(
+            review_frame,
+            textvariable=self._staged_review_guidance_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+        ).pack(side="left", padx=(8, 0))
         ttk.Label(
             staged_right,
             textvariable=self._staged_job_status_var,
             style=BODY_LABEL_STYLE,
             justify="left",
-        ).grid(row=9, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=14, column=0, sticky="w", pady=(6, 0))
 
         # Refresh inbox when its tab is activated
         self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
         self._set_discovered_scan_root(None)
+        self._update_staged_action_affordances(None)
 
     def _on_learning_toggle(self) -> None:
         """Handle the learning mode toggle button."""
@@ -911,13 +1034,18 @@ class LearningTabFrame(ttk.Frame):
                 "Select a candidate to preview and record a staged-curation decision"
             )
             self._staged_replay_summary_var.set("Replay chain: n/a")
+            self._staged_plan_preview_var.set("Derived plan preview: n/a")
+            self._staged_prior_review_var.set("Prior Review: none")
             self._staged_last_decision_var.set("Latest decision: none")
             self._staged_preview_thumbnail.clear()
+            self._set_readonly_text(self._staged_source_prompt_text, "")
+            self._set_readonly_text(self._staged_source_negative_prompt_text, "")
             self._clear_staged_reason_tags()
             self._staged_notes_text.delete("1.0", tk.END)
             self._staged_syncing_face_tier = True
             self._staged_face_tier_var.set("medium")
             self._staged_syncing_face_tier = False
+            self._update_staged_action_affordances(None)
             return
         row = self._staged_candidates_by_id.get(candidate_id) or {}
         item = row.get("item")
@@ -927,8 +1055,13 @@ class LearningTabFrame(ttk.Frame):
         self.learning_controller.learning_state.selected_staged_curation_group_id = self._staged_current_group_id
         latest = self._staged_latest_events.get(candidate_id)
         replay_summary = None
+        source_context = None
         if self._staged_current_group_id:
             replay_summary = self.learning_controller.get_staged_curation_candidate_replay_summary(
+                self._staged_current_group_id,
+                candidate_id,
+            )
+            source_context = self.learning_controller.get_staged_curation_candidate_source_context(
                 self._staged_current_group_id,
                 candidate_id,
             )
@@ -953,15 +1086,53 @@ class LearningTabFrame(ttk.Frame):
         self._staged_preview_thumbnail.load_image(str(getattr(item, "artifact_path", "") or ""))
         self._clear_staged_reason_tags()
         self._staged_notes_text.delete("1.0", tk.END)
+        prior_review_summary = self.learning_controller.get_prior_review_summary(
+            str(getattr(item, "artifact_path", "") or "")
+        )
+        source_prompt = ""
+        source_negative_prompt = ""
+        if isinstance(source_context, dict):
+            source_prompt = str(source_context.get("source_prompt") or "")
+            source_negative_prompt = str(source_context.get("source_negative_prompt") or "")
+            target_stage = str(source_context.get("target_stage") or "").replace("_", " ")
+            path_label = str(source_context.get("path_label") or "Queue Now")
+            if target_stage:
+                self._staged_plan_preview_var.set(
+                    f"Target stage: {target_stage} | Path: {path_label}"
+                )
+            else:
+                self._staged_plan_preview_var.set(f"Target stage: not queued yet | Path: {path_label}")
+        else:
+            self._staged_plan_preview_var.set("Derived plan preview: n/a")
+        self._set_readonly_text(self._staged_source_prompt_text, source_prompt)
+        self._set_readonly_text(self._staged_source_negative_prompt_text, source_negative_prompt)
+        self._staged_prior_review_var.set(self._format_prior_review_summary(prior_review_summary))
         if isinstance(replay_summary, dict):
             replay_bits = [
                 f"root={replay_summary.get('root_candidate_id') or candidate_id}",
                 f"parent={replay_summary.get('parent_candidate_id') or 'none'}",
                 f"decision={replay_summary.get('decision') or 'unreviewed'}",
             ]
+            source_stage = ""
+            source_model = ""
+            if isinstance(source_context, dict):
+                source_stage = str(source_context.get("source_stage") or "")
+                source_model = str(source_context.get("source_model") or "")
+            source_summary = " / ".join([part for part in (source_stage, source_model) if part])
+            if source_summary:
+                replay_bits.append(f"source={source_summary}")
+            prompt_summary = _truncate(" ".join(source_prompt.split()), 56) if source_prompt.strip() else ""
+            if prompt_summary:
+                replay_bits.append(f"prompt={prompt_summary}")
             face_tier = str(replay_summary.get("face_triage_tier") or "").strip()
             if face_tier:
                 replay_bits.append(f"face_tier={face_tier}")
+            latest_stage = str(replay_summary.get("latest_derived_stage") or "").strip()
+            latest_path = str(replay_summary.get("latest_derived_path") or "").strip()
+            if latest_stage:
+                replay_bits.append(f"latest={latest_stage}")
+            if latest_path:
+                replay_bits.append(f"derived={Path(latest_path).name}")
             self._staged_replay_summary_var.set("Replay chain: " + " | ".join(replay_bits))
         else:
             self._staged_replay_summary_var.set("Replay chain: n/a")
@@ -982,6 +1153,7 @@ class LearningTabFrame(ttk.Frame):
                 self._staged_notes_text.insert("1.0", notes)
         else:
             self._staged_last_decision_var.set("Latest decision: unreviewed")
+        self._update_staged_action_affordances(candidate_id)
         self._persist_learning_session_state()
 
     def _clear_staged_reason_tags(self) -> None:
@@ -990,6 +1162,99 @@ class LearningTabFrame(ttk.Frame):
 
     def _collect_staged_reason_tags(self) -> list[str]:
         return [tag for tag, var in self._staged_reason_tag_vars.items() if bool(var.get())]
+
+    @staticmethod
+    def _format_prior_review_summary(summary: Any) -> str:
+        if not isinstance(summary, dict):
+            return "Prior Review: none"
+        source_label_map = {
+            "internal_learning_record": "internal learning record",
+            "embedded_review_metadata": "embedded artifact metadata",
+            "sidecar_review_metadata": "sidecar artifact metadata",
+        }
+        source_type = str(summary.get("source_type") or "")
+        rating = summary.get("user_rating")
+        quality = str(summary.get("quality_label") or "")
+        timestamp = str(summary.get("review_timestamp") or "")
+        notes = str(summary.get("user_notes") or "").strip()
+        prompt_changed = bool(
+            str(summary.get("prompt_delta") or "").strip()
+            or str(summary.get("negative_prompt_delta") or "").strip()
+        )
+        bits = [
+            f"Source: {source_label_map.get(source_type, source_type.replace('_', ' ') or 'portable metadata')}",
+        ]
+        if rating is not None:
+            rating_text = f"Rating: {rating}"
+            if quality:
+                rating_text += f" ({quality})"
+            bits.append(rating_text)
+        elif quality:
+            bits.append(f"Quality: {quality}")
+        if timestamp:
+            bits.append(f"Reviewed on: {timestamp}")
+        if notes:
+            notes_excerpt = notes if len(notes) <= 80 else f"{notes[:77]}..."
+            bits.append(f"Notes: {notes_excerpt}")
+        bits.append(f"Prompt changed: {'yes' if prompt_changed else 'no'}")
+        return " | ".join(bits)
+
+    @staticmethod
+    def _target_stage_for_decision(decision: str) -> str | None:
+        mapping = {
+            "advanced_to_refine": "refine",
+            "advanced_to_face_triage": "face_triage",
+            "advanced_to_upscale": "upscale",
+        }
+        return mapping.get(str(decision or "").strip().lower())
+
+    def _count_marked_candidates_for_stage(self, target_stage: str) -> int:
+        count = 0
+        for event in self._staged_latest_events.values():
+            event_target = self._target_stage_for_decision(str(getattr(event, "decision", "") or ""))
+            if event_target == target_stage:
+                count += 1
+        return count
+
+    def _update_staged_action_affordances(self, candidate_id: str | None) -> None:
+        selected_target = None
+        if candidate_id:
+            latest = self._staged_latest_events.get(candidate_id)
+            selected_target = self._target_stage_for_decision(str(getattr(latest, "decision", "") or ""))
+
+        for target_stage, button in self._staged_queue_buttons.items():
+            marked_count = self._count_marked_candidates_for_stage(target_stage)
+            button.configure(state=("normal" if marked_count > 0 else "disabled"))
+
+        for target_stage, button in self._staged_review_buttons.items():
+            button.configure(state=("normal" if selected_target == target_stage else "disabled"))
+
+        refine_count = self._count_marked_candidates_for_stage("refine")
+        face_count = self._count_marked_candidates_for_stage("face_triage")
+        upscale_count = self._count_marked_candidates_for_stage("upscale")
+        self._staged_queue_guidance_var.set(
+            "Queue Now submits all marked candidates in bulk: "
+            f"refine={refine_count}, face={face_count}, upscale={upscale_count}."
+        )
+
+        if not candidate_id:
+            self._staged_review_guidance_var.set(
+                "Edit in Review opens the selected candidate only. Select one candidate marked for a derived stage."
+            )
+            return
+
+        if selected_target is None:
+            self._staged_review_guidance_var.set(
+                "Edit in Review stays single-candidate. Mark the selected candidate To Refine, To Face, or To Upscale first."
+            )
+            return
+
+        marked_count = self._count_marked_candidates_for_stage(selected_target)
+        target_label = selected_target.replace("_", " ")
+        self._staged_review_guidance_var.set(
+            f"Edit in Review opens only the selected {target_label} candidate. "
+            f"Queue {target_label} now would enqueue {marked_count} marked candidate(s)."
+        )
 
     def _apply_staged_decision(self, decision: str) -> None:
         selection = self._staged_candidate_tree.selection()
@@ -1014,6 +1279,7 @@ class LearningTabFrame(ttk.Frame):
             pass
         self._staged_last_decision_var.set(f"Latest decision: {latest_label}")
         self._refresh_staged_curation_inbox()
+        self._update_staged_preview(candidate_id)
         self._persist_learning_session_state()
 
     def _on_staged_face_triage_tier_changed(self, _event: Any = None) -> None:
@@ -1036,8 +1302,15 @@ class LearningTabFrame(ttk.Frame):
             extra_fields = dict(getattr(item, "extra_fields", {}) or {})
             extra_fields["face_triage_tier"] = tier
             item.extra_fields = extra_fields
+        self._update_staged_preview(candidate_id)
         self._staged_job_status_var.set(f"Face triage tier set to {tier} for {candidate_id}")
         self._persist_learning_session_state()
+
+    def _set_readonly_text(self, widget: tk.Text, value: str) -> None:
+        widget.configure(state="normal")
+        widget.delete("1.0", tk.END)
+        widget.insert("1.0", value.strip() or "(not available)")
+        widget.configure(state="disabled")
 
     def _submit_staged_jobs(self, target_stage: str) -> None:
         if not self._staged_current_group_id:
@@ -1062,6 +1335,129 @@ class LearningTabFrame(ttk.Frame):
             return
         label = target_stage.replace("_", " ")
         self._staged_job_status_var.set(f"Submitted {submitted} {label} job(s) to the queue.")
+        self._persist_learning_session_state()
+
+    def _open_staged_in_review(self, target_stage: str) -> None:
+        if not self._staged_current_group_id:
+            messagebox.showinfo("Staged Curation", "Open a staged-curation group first.")
+            return
+
+        selection = self._staged_candidate_tree.selection()
+        candidate_id = selection[0] if selection else None
+        if not candidate_id:
+            messagebox.showinfo("Staged Curation", "Select a candidate first.")
+            return
+
+        latest = self._staged_latest_events.get(candidate_id)
+        selected_target = self._target_stage_for_decision(str(getattr(latest, "decision", "") or ""))
+        if selected_target != target_stage:
+            label = target_stage.replace("_", " ")
+            self._staged_job_status_var.set(
+                f"Review stays single-candidate. Select one item marked for {label} first."
+            )
+            messagebox.showinfo(
+                "Staged Curation",
+                f"Select one candidate marked for {label} before opening Review.",
+            )
+            self._update_staged_action_affordances(candidate_id)
+            return
+
+        try:
+            handoff = self.learning_controller.build_staged_curation_review_handoff(
+                self._staged_current_group_id,
+                target_stage,
+                candidate_id=candidate_id,
+            )
+        except Exception as exc:
+            self._staged_job_status_var.set(f"Failed to open {target_stage} in Review: {exc}")
+            messagebox.showerror("Staged Curation", f"Failed to open {target_stage} in Review:\n{exc}")
+            return
+
+        if handoff is None or not handoff.image_paths:
+            label = target_stage.replace("_", " ")
+            self._staged_job_status_var.set(f"No staged-curation candidates are marked for {label}.")
+            messagebox.showinfo(
+                "Staged Curation",
+                f"No candidates are currently marked for {label}.",
+            )
+            return
+
+        main_window = getattr(self.app_controller, "main_window", None) if self.app_controller else None
+        review_tab = getattr(main_window, "review_tab", None)
+        if review_tab is None:
+            messagebox.showerror("Review unavailable", "Review tab is not connected.")
+            return
+
+        loader = getattr(review_tab, "load_staged_curation_handoff", None)
+        if not callable(loader):
+            messagebox.showerror(
+                "Review unavailable",
+                "Connected Review tab does not support staged-curation handoff.",
+            )
+            return
+
+        loader(handoff)
+        notebook = getattr(main_window, "center_notebook", None)
+        if notebook is not None:
+            try:
+                notebook.select(review_tab)
+            except Exception:
+                pass
+
+        label = target_stage.replace("_", " ")
+        marked_count = self._count_marked_candidates_for_stage(target_stage)
+        self._staged_job_status_var.set(
+            f"Opened the selected {label} candidate in Review. "
+            f"Queue {label} now would enqueue {marked_count} marked candidate(s)."
+        )
+        self._persist_learning_session_state()
+
+    def _compare_staged_latest_derived(self) -> None:
+        selection = self._staged_candidate_tree.selection()
+        candidate_id = selection[0] if selection else None
+        if not candidate_id:
+            messagebox.showinfo("Staged Curation", "Select a candidate first.")
+            return
+
+        row = self._staged_candidates_by_id.get(candidate_id) or {}
+        item = row.get("item")
+        image_path = Path(str(getattr(item, "artifact_path", "") or "").strip()) if item is not None else None
+        if image_path is None or not str(image_path):
+            messagebox.showinfo("Staged Curation", "The selected candidate does not have a source image.")
+            return
+
+        main_window = getattr(self.app_controller, "main_window", None) if self.app_controller else None
+        review_tab = getattr(main_window, "review_tab", None)
+        if review_tab is None:
+            messagebox.showerror("Review unavailable", "Review tab is not connected.")
+            return
+
+        opener = getattr(review_tab, "open_staged_candidate_latest_derived_compare", None)
+        if not callable(opener):
+            messagebox.showerror(
+                "Review unavailable",
+                "Connected Review tab does not support latest-derived comparison.",
+            )
+            return
+
+        opened = opener(
+            image_path=image_path,
+            candidate_id=str(candidate_id),
+            workflow_title=str(self._staged_group_var.get() or ""),
+        )
+        if not opened:
+            return
+
+        notebook = getattr(main_window, "center_notebook", None)
+        if notebook is not None:
+            try:
+                notebook.select(review_tab)
+            except Exception:
+                pass
+
+        self._staged_job_status_var.set(
+            f"Opened latest derived comparison in Review for {candidate_id}."
+        )
         self._persist_learning_session_state()
 
     def _on_staged_close_group(self, group_id: str) -> None:
@@ -1097,6 +1493,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_workflow_summary_var.set("Workflow summary: n/a")
         self._staged_replay_summary_var.set("Replay chain: n/a")
         self._staged_job_status_var.set("No derived jobs submitted yet")
+        self._update_staged_action_affordances(None)
         self._update_staged_preview(None)
 
 

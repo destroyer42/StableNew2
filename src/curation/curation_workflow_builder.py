@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import (
     ReprocessJobBuilder,
     ReprocessJobPlan,
@@ -35,6 +36,21 @@ class CurationSourceSelection:
     selection_event: SelectionEvent
     reprocess_item: ReprocessSourceItem
     face_triage_tier: str = "medium"
+
+
+@dataclass(slots=True)
+class CurationAdvancementPlan:
+    workflow: CurationWorkflow
+    target_stage: DerivedStage
+    reprocess_plan: ReprocessJobPlan
+    selections: list[CurationSourceSelection]
+    source_candidate_ids: list[str]
+    source_items: list[Any]
+    selection_events: list[SelectionEvent]
+
+    @property
+    def jobs(self) -> list[NormalizedJobRecord]:
+        return list(self.reprocess_plan.jobs)
 
 
 class CurationWorkflowBuilder:

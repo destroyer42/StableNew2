@@ -99,6 +99,56 @@ def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) 
     assert njr.config["steps"] == 20
 
 
+def test_reprocess_with_source_lineage_metadata_stamps_top_level_curation_blocks(tmp_path) -> None:
+    controller = _build_controller()
+    image = tmp_path / "img_lineage.png"
+    image.write_bytes(b"")
+
+    controller._extract_reprocess_baseline_from_image = Mock(
+        return_value={
+            "prompt": "portrait photo",
+            "negative_prompt": "blurry",
+            "model": "modelA.safetensors",
+            "vae": "vaeA",
+            "config": {},
+        }
+    )
+
+    submitted = controller.on_reprocess_images_with_prompt_delta(
+        image_paths=[str(image)],
+        stages=["adetailer"],
+        prompt_delta="fix eyes",
+        negative_prompt_delta="",
+        source_metadata_by_image={
+            str(image): {
+                "curation_source_selection": {
+                    "candidate_id": "cand-1",
+                    "workflow_id": "curation:disc-1",
+                    "decision": "advanced_to_face_triage",
+                    "face_triage_tier": "heavy",
+                },
+                "curation_candidate": {
+                    "workflow_id": "curation:disc-1",
+                    "candidate_id": "cand-1",
+                    "root_candidate_id": "cand-1",
+                    "parent_candidate_id": None,
+                    "source_decision": "advanced_to_face_triage",
+                },
+                "curation_selection_event": {
+                    "decision": "advanced_to_face_triage",
+                },
+            }
+        },
+    )
+
+    assert submitted == 1
+    njr = controller.job_service._enqueue_calls[0][0][0]
+    assert njr.extra_metadata["curation"]["candidate_id"] == "cand-1"
+    assert njr.extra_metadata["curation_derived_stage"]["source_candidate_id"] == "cand-1"
+    assert njr.extra_metadata["curation_derived_stage"]["target_stage"] == "adetailer"
+    assert njr.extra_metadata["selection_event"]["decision"] == "advanced_to_face_triage"
+
+
 def test_reprocess_with_prompt_modify_short_delta_preserves_baseline(tmp_path) -> None:
     controller = _build_controller()
     image = tmp_path / "img_modify.png"

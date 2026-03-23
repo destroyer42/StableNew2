@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Mapping
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 from .models import CurationCandidate, CurationWorkflow, SelectionEvent
 
@@ -29,23 +31,40 @@ def build_candidate_replay_entry(
     candidate: CurationCandidate,
     item: Any | None,
     latest_event: SelectionEvent | None,
+    latest_derived: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     item_data = item
     extra_fields = dict(getattr(item_data, "extra_fields", {}) or {}) if item_data is not None else {}
     artifact_path = str(getattr(item_data, "artifact_path", "") or candidate.artifact_id or "")
-    return {
+    positive_prompt = str(getattr(item_data, "positive_prompt", "") or "")
+    negative_prompt = str(getattr(item_data, "negative_prompt", "") or "")
+    payload = {
         "candidate_id": candidate.candidate_id,
         "workflow_id": candidate.workflow_id,
         "stage": str(candidate.stage or ""),
+        "source_stage": str(getattr(item_data, "stage", "") or candidate.stage or ""),
         "root_candidate_id": str(candidate.root_candidate_id or ""),
         "parent_candidate_id": candidate.parent_candidate_id,
         "artifact_path": artifact_path,
         "model": str(getattr(item_data, "model", "") or candidate.model_name or ""),
+        "source_model": str(getattr(item_data, "model", "") or candidate.model_name or ""),
+        "positive_prompt": positive_prompt,
+        "negative_prompt": negative_prompt,
         "decision": str(getattr(latest_event, "decision", "") or ""),
         "reason_tags": list(getattr(latest_event, "reason_tags", []) or []),
         "rating": _safe_int(getattr(item_data, "rating", 0) if item_data is not None else 0, 0),
         "face_triage_tier": str(extra_fields.get("face_triage_tier") or ""),
     }
+    if isinstance(latest_derived, Mapping):
+        payload.update(
+            {
+                "latest_derived_job_id": str(latest_derived.get("job_id") or ""),
+                "latest_derived_path": str(latest_derived.get("artifact_path") or ""),
+                "latest_derived_stage": str(latest_derived.get("target_stage") or latest_derived.get("stage") or ""),
+                "latest_derived_completed_at": latest_derived.get("completed_at"),
+            }
+        )
+    return payload
 
 
 def build_workflow_summary(
@@ -130,6 +149,40 @@ def build_curation_replay_descriptor_from_snapshot(
     curation = extra_metadata.get("curation")
     derived_stage = extra_metadata.get("curation_derived_stage")
     selection_event = extra_metadata.get("selection_event")
+    if not isinstance(curation, Mapping) or not isinstance(derived_stage, Mapping):
+        reprocess = extra_metadata.get("reprocess")
+        if isinstance(reprocess, Mapping):
+            source_items = list(reprocess.get("source_items") or [])
+            for source_item in source_items:
+                if not isinstance(source_item, Mapping):
+                    continue
+                metadata = source_item.get("metadata")
+                if not isinstance(metadata, Mapping):
+                    continue
+                if not isinstance(curation, Mapping):
+                    candidate_meta = metadata.get("curation_candidate")
+                    if isinstance(candidate_meta, Mapping):
+                        curation = candidate_meta
+                if not isinstance(selection_event, Mapping):
+                    event_meta = metadata.get("curation_selection_event")
+                    if isinstance(event_meta, Mapping):
+                        selection_event = event_meta
+                if not isinstance(derived_stage, Mapping):
+                    selection_meta = metadata.get("curation_source_selection")
+                    if isinstance(selection_meta, Mapping):
+                        derived_stage = {
+                            "workflow_id": str(
+                                selection_meta.get("workflow_id")
+                                or (curation.get("workflow_id") if isinstance(curation, Mapping) else "")
+                                or ""
+                            ),
+                            "source_candidate_id": str(selection_meta.get("candidate_id") or ""),
+                            "source_decision": str(selection_meta.get("decision") or ""),
+                            "face_triage_tier": str(selection_meta.get("face_triage_tier") or ""),
+                            "target_stage": "",
+                        }
+                if isinstance(curation, Mapping) and isinstance(derived_stage, Mapping):
+                    break
     if not isinstance(curation, Mapping) and not isinstance(derived_stage, Mapping):
         return {}
 
@@ -169,3 +222,77 @@ def build_curation_replay_descriptor_from_snapshot(
             }
         )
     return payload
+
+
+def _extract_history_image_candidates(entry: Any) -> list[str]:
+    candidates: list[str] = []
+    result = getattr(entry, "result", None)
+    if isinstance(result, Mapping):
+        output_paths = result.get("output_paths")
+        if isinstance(output_paths, list):
+            candidates.extend(str(item) for item in output_paths if item)
+        artifact = result.get("artifact")
+        if isinstance(artifact, Mapping):
+            primary_path = artifact.get("primary_path")
+            if primary_path:
+                candidates.append(str(primary_path))
+            artifact_outputs = artifact.get("output_paths")
+            if isinstance(artifact_outputs, list):
+                candidates.extend(str(item) for item in artifact_outputs if item)
+        variants = result.get("variants")
+        if isinstance(variants, list):
+            for variant in variants:
+                if not isinstance(variant, Mapping):
+                    continue
+                artifact = variant.get("artifact")
+                if isinstance(artifact, Mapping):
+                    primary_path = artifact.get("primary_path")
+                    if primary_path:
+                        candidates.append(str(primary_path))
+                    variant_outputs = artifact.get("output_paths")
+                    if isinstance(variant_outputs, list):
+                        candidates.extend(str(item) for item in variant_outputs if item)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append(candidate)
+    return deduped
+
+
+def find_latest_derived_descendant(
+    history_entries: Sequence[Any],
+    candidate_id: str,
+) -> dict[str, Any] | None:
+    target_candidate_id = str(candidate_id or "").strip()
+    if not target_candidate_id:
+        return None
+
+    latest_match: dict[str, Any] | None = None
+    latest_timestamp: datetime | None = None
+    for entry in list(history_entries or []):
+        snapshot = getattr(entry, "snapshot", None)
+        descriptor = build_curation_replay_descriptor_from_snapshot(snapshot)
+        if str(descriptor.get("candidate_id") or "") != target_candidate_id:
+            continue
+        artifact_path = ""
+        for candidate_path in _extract_history_image_candidates(entry):
+            if Path(candidate_path).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+                artifact_path = str(candidate_path)
+                break
+        if not artifact_path:
+            continue
+        completed_at = getattr(entry, "completed_at", None) or getattr(entry, "started_at", None) or getattr(entry, "created_at", None)
+        if latest_timestamp is not None and completed_at is not None and completed_at <= latest_timestamp:
+            continue
+        latest_timestamp = completed_at
+        latest_match = {
+            "job_id": str(getattr(entry, "job_id", "") or ""),
+            "artifact_path": artifact_path,
+            "target_stage": str(descriptor.get("target_stage") or ""),
+            "source_decision": str(descriptor.get("source_decision") or ""),
+            "completed_at": completed_at.isoformat() if hasattr(completed_at, "isoformat") else completed_at,
+        }
+    return latest_match

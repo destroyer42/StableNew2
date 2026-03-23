@@ -255,12 +255,18 @@ Execution gate:
 
 ## 5. Recommended Order
 
-1. `PR-LEARN-260A-Staged-Curation-Source-Prompt-Surface-and-Decision-Context`
-2. `PR-LEARN-260B-Staged-Curation-Plan-Build-vs-Enqueue-Seam`
-3. `PR-LEARN-260C-Learning-To-Review-Handoff-and-Review-Draft-Load`
-4. `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
-5. `PR-LEARN-260E-Source-vs-Derived-Outcome-Compare-and-Lineage-Jump`
-6. `PR-LEARN-260F-Queue-Now-vs-Edit-in-Review-UX-Polish-and-Bulk-Selection-Rules`
+Completed:
+
+- `PR-LEARN-260A-Staged-Curation-Source-Prompt-Surface-and-Decision-Context`
+- `PR-LEARN-260B-Staged-Curation-Plan-Build-vs-Enqueue-Seam`
+- `PR-LEARN-260C-Learning-To-Review-Handoff-and-Review-Draft-Load`
+- `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
+- `PR-LEARN-260E-Source-vs-Derived-Outcome-Compare-and-Lineage-Jump`
+- `PR-LEARN-260F-Queue-Now-vs-Edit-in-Review-UX-Polish-and-Bulk-Selection-Rules`
+
+Next:
+
+1. `PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI`
 
 ## 6. Validation Expectations
 

@@ -61,6 +61,27 @@ class ReadPayloadResult:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class PortableReviewMetadataResult:
+    payload: dict[str, Any] | None
+    source: str
+    path: str | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class PortableReviewMetadataWriteResult:
+    success: bool
+    storage: str
+    path: str | None = None
+    sidecar_path: str | None = None
+    error: str | None = None
+
+
+PORTABLE_REVIEW_KEY = "stablenew_review"
+PORTABLE_REVIEW_SIDECAR_SUFFIX = ".review.json"
+
+
 def canonical_json_bytes(obj: Any) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -301,6 +322,98 @@ def extract_embedded_metadata(image_path: Path) -> ReadPayloadResult:
     if kv.get(ImageMetadataContractV26.KEY_SCHEMA) != ImageMetadataContractV26.SCHEMA:
         return ReadPayloadResult(None, "missing")
     return decode_payload(kv)
+
+
+def read_embedded_review_metadata(image_path: Path) -> PortableReviewMetadataResult:
+    kv = read_image_metadata(image_path)
+    raw_value = str(kv.get(PORTABLE_REVIEW_KEY) or "").strip()
+    if not raw_value:
+        return PortableReviewMetadataResult(None, "missing")
+    try:
+        payload = json.loads(raw_value)
+    except Exception as exc:
+        return PortableReviewMetadataResult(None, "embedded", path=str(image_path), error=str(exc))
+    if not isinstance(payload, dict):
+        return PortableReviewMetadataResult(None, "embedded", path=str(image_path), error="payload_not_dict")
+    return PortableReviewMetadataResult(payload, "embedded", path=str(image_path))
+
+
+def build_review_sidecar_path(image_path: Path) -> Path:
+    return image_path.with_name(f"{image_path.name}{PORTABLE_REVIEW_SIDECAR_SUFFIX}")
+
+
+def write_review_sidecar(image_path: Path, payload: dict[str, Any]) -> PortableReviewMetadataWriteResult:
+    sidecar_path = build_review_sidecar_path(image_path)
+    try:
+        sidecar_path.write_text(
+            json.dumps({PORTABLE_REVIEW_KEY: payload}, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return PortableReviewMetadataWriteResult(
+            success=True,
+            storage="sidecar",
+            path=str(image_path),
+            sidecar_path=str(sidecar_path),
+        )
+    except Exception as exc:
+        logger.debug("Failed to write review sidecar for %s: %s", image_path, exc)
+        return PortableReviewMetadataWriteResult(
+            success=False,
+            storage="sidecar",
+            path=str(image_path),
+            sidecar_path=str(sidecar_path),
+            error=str(exc),
+        )
+
+
+def read_review_sidecar(image_path: Path) -> PortableReviewMetadataResult:
+    sidecar_path = build_review_sidecar_path(image_path)
+    if not sidecar_path.exists():
+        return PortableReviewMetadataResult(None, "missing")
+    try:
+        payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return PortableReviewMetadataResult(None, "sidecar", path=str(sidecar_path), error=str(exc))
+    review_payload = payload.get(PORTABLE_REVIEW_KEY) if isinstance(payload, dict) else None
+    if not isinstance(review_payload, dict):
+        return PortableReviewMetadataResult(None, "sidecar", path=str(sidecar_path), error="payload_not_dict")
+    return PortableReviewMetadataResult(review_payload, "sidecar", path=str(sidecar_path))
+
+
+def write_portable_review_metadata(
+    image_path: Path,
+    payload: dict[str, Any],
+) -> PortableReviewMetadataWriteResult:
+    metadata_text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    kv = {PORTABLE_REVIEW_KEY: metadata_text}
+    if write_image_metadata(image_path, kv):
+        return PortableReviewMetadataWriteResult(
+            success=True,
+            storage="embedded",
+            path=str(image_path),
+        )
+    sidecar_result = write_review_sidecar(image_path, payload)
+    if sidecar_result.success:
+        return sidecar_result
+    return PortableReviewMetadataWriteResult(
+        success=False,
+        storage="failed",
+        path=str(image_path),
+        sidecar_path=sidecar_result.sidecar_path,
+        error=sidecar_result.error,
+    )
+
+
+def read_portable_review_metadata(image_path: Path) -> PortableReviewMetadataResult:
+    embedded = read_embedded_review_metadata(image_path)
+    if embedded.payload is not None:
+        return embedded
+    sidecar = read_review_sidecar(image_path)
+    if sidecar.payload is not None:
+        return sidecar
+    if embedded.error:
+        return embedded
+    return sidecar if sidecar.error else PortableReviewMetadataResult(None, "missing")
 
 
 def build_public_metadata_payload(metadata_payload: dict[str, Any] | None) -> dict[str, Any]:

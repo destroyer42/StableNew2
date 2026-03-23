@@ -10,6 +10,11 @@
     "file_size": 131224
   },
   {
+    "name": "DeepNegative_xl_v1",
+    "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\DeepNegative_xl_v1.safetensors",
+    "file_size": 262648
+  },
+  {
     "name": "easynegative",
     "path": "C:\\Users\\rob\\stable-diffusion-webui\\embeddings\\easynegative.safetensors",
     "file_size": 24655

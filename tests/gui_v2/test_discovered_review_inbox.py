@@ -755,3 +755,298 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
     assert record.extra_metadata["curation"]["candidate_id"] == "cand-1"
     assert record.extra_metadata["selection_event"]["decision"] == "advanced_to_face_triage"
     assert run_request.requested_job_label == "Staged Curation: Face Triage"
+
+
+def test_controller_build_staged_curation_advancement_plan_preserves_source_details(tmp_path) -> None:
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.utils.image_metadata import ReadPayloadResult
+
+    pipeline_controller = MagicMock()
+    job_service = MagicMock()
+    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    pipeline_controller._job_service = job_service
+    pipeline_controller._config_manager = None
+    ctrl = LearningController(
+        learning_state=LearningState(),
+        pipeline_controller=pipeline_controller,
+    )
+    store = DiscoveredReviewStore(tmp_path / "discovered")
+    ctrl._discovered_review_store = store
+
+    image_path = tmp_path / "candidate-plan.png"
+    image_path.write_text("placeholder", encoding="utf-8")
+    exp = DiscoveredReviewExperiment(
+        group_id="disc-plan",
+        display_name="Plan Group",
+        stage="txt2img",
+        prompt_hash="hash-1",
+        items=[
+            DiscoveredReviewItem(
+                item_id="cand-1",
+                artifact_path=str(image_path),
+                stage="txt2img",
+                model="juggernautXL",
+                sampler="DPM++ 2M",
+                scheduler="Karras",
+                steps=30,
+                cfg_scale=6.5,
+                positive_prompt="prompt text",
+                negative_prompt="negative text",
+                extra_fields={"face_triage_tier": "heavy"},
+            )
+        ],
+        varying_fields=["cfg_scale"],
+    )
+    store.save_group(exp)
+    ctrl.record_staged_curation_selection(
+        "disc-plan",
+        "cand-1",
+        "advanced_to_face_triage",
+        reason_tags=["bad_face"],
+        notes="needs rescue",
+    )
+
+    payload = {
+        "stage_manifest": {
+            "stage": "txt2img",
+            "config": {
+                "steps": 30,
+                "cfg_scale": 6.5,
+                "sampler_name": "DPM++ 2M",
+                "scheduler": "Karras",
+            },
+        }
+    }
+
+    with patch(
+        "src.gui.controllers.learning_controller.extract_embedded_metadata",
+        return_value=ReadPayloadResult(payload=payload, status="ok"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_prompt_fields",
+        return_value=("prompt text", "negative text"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+        return_value=("juggernautXL", "Automatic"),
+    ), patch(
+        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+        return_value="output",
+    ):
+        plan = ctrl.build_staged_curation_advancement_plan("disc-plan", "face_triage")
+
+    assert plan is not None
+    assert plan.target_stage == "face_triage"
+    assert plan.source_candidate_ids == ["cand-1"]
+    assert len(plan.source_items) == 1
+    assert plan.source_items[0].item_id == "cand-1"
+    assert len(plan.selection_events) == 1
+    assert plan.selection_events[0].decision == "advanced_to_face_triage"
+    assert len(plan.jobs) == 1
+    assert job_service.enqueue_njrs.called is False
+
+
+def test_controller_build_staged_curation_review_handoff_preserves_review_inputs(tmp_path) -> None:
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.utils.image_metadata import ReadPayloadResult
+
+    pipeline_controller = MagicMock()
+    job_service = MagicMock()
+    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    pipeline_controller._job_service = job_service
+    pipeline_controller._config_manager = None
+    ctrl = LearningController(
+        learning_state=LearningState(),
+        pipeline_controller=pipeline_controller,
+    )
+    store = DiscoveredReviewStore(tmp_path / "discovered")
+    ctrl._discovered_review_store = store
+
+    image_path = tmp_path / "candidate-review.png"
+    image_path.write_text("placeholder", encoding="utf-8")
+    exp = DiscoveredReviewExperiment(
+        group_id="disc-review",
+        display_name="Review Group",
+        stage="txt2img",
+        prompt_hash="hash-1",
+        items=[
+            DiscoveredReviewItem(
+                item_id="cand-1",
+                artifact_path=str(image_path),
+                stage="txt2img",
+                model="juggernautXL",
+                sampler="DPM++ 2M",
+                scheduler="Karras",
+                steps=30,
+                cfg_scale=6.5,
+                positive_prompt="prompt text",
+                negative_prompt="negative text",
+                extra_fields={"face_triage_tier": "heavy"},
+            )
+        ],
+        varying_fields=["cfg_scale"],
+    )
+    store.save_group(exp)
+    ctrl.record_staged_curation_selection(
+        "disc-review",
+        "cand-1",
+        "advanced_to_face_triage",
+        reason_tags=["bad_face"],
+        notes="needs rescue",
+    )
+
+    payload = {
+        "stage_manifest": {
+            "stage": "txt2img",
+            "config": {
+                "steps": 30,
+                "cfg_scale": 6.5,
+                "sampler_name": "DPM++ 2M",
+                "scheduler": "Karras",
+            },
+        }
+    }
+
+    with patch(
+        "src.gui.controllers.learning_controller.extract_embedded_metadata",
+        return_value=ReadPayloadResult(payload=payload, status="ok"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_prompt_fields",
+        return_value=("prompt text", "negative text"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+        return_value=("juggernautXL", "Automatic"),
+    ), patch(
+        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+        return_value="output",
+    ):
+        handoff = ctrl.build_staged_curation_review_handoff("disc-review", "face_triage")
+
+    assert handoff is not None
+    assert [str(path) for path in handoff.image_paths] == [str(image_path)]
+    assert handoff.base_prompt == "prompt text"
+    assert handoff.base_negative_prompt == "negative text"
+    assert handoff.target_stage == "face_triage"
+    assert handoff.stage_img2img is False
+    assert handoff.stage_adetailer is True
+    assert handoff.stage_upscale is False
+    assert handoff.source_candidate_ids == ["cand-1"]
+    assert job_service.enqueue_njrs.called is False
+
+
+def test_controller_build_staged_curation_review_handoff_can_filter_single_candidate(tmp_path) -> None:
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.utils.image_metadata import ReadPayloadResult
+
+    pipeline_controller = MagicMock()
+    job_service = MagicMock()
+    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    pipeline_controller._job_service = job_service
+    pipeline_controller._config_manager = None
+    ctrl = LearningController(
+        learning_state=LearningState(),
+        pipeline_controller=pipeline_controller,
+    )
+    store = DiscoveredReviewStore(tmp_path / "discovered")
+    ctrl._discovered_review_store = store
+
+    image_a = tmp_path / "candidate-a.png"
+    image_b = tmp_path / "candidate-b.png"
+    image_a.write_text("placeholder", encoding="utf-8")
+    image_b.write_text("placeholder", encoding="utf-8")
+    exp = DiscoveredReviewExperiment(
+        group_id="disc-filter",
+        display_name="Filter Group",
+        stage="txt2img",
+        prompt_hash="hash-1",
+        items=[
+            DiscoveredReviewItem(
+                item_id="cand-1",
+                artifact_path=str(image_a),
+                stage="txt2img",
+                model="juggernautXL",
+                sampler="DPM++ 2M",
+                scheduler="Karras",
+                steps=30,
+                cfg_scale=6.5,
+                positive_prompt="prompt a",
+                negative_prompt="negative a",
+            ),
+            DiscoveredReviewItem(
+                item_id="cand-2",
+                artifact_path=str(image_b),
+                stage="txt2img",
+                model="juggernautXL",
+                sampler="DPM++ 2M",
+                scheduler="Karras",
+                steps=30,
+                cfg_scale=6.5,
+                positive_prompt="prompt b",
+                negative_prompt="negative b",
+            ),
+        ],
+        varying_fields=["cfg_scale"],
+    )
+    store.save_group(exp)
+    ctrl.record_staged_curation_selection("disc-filter", "cand-1", "advanced_to_face_triage")
+    ctrl.record_staged_curation_selection("disc-filter", "cand-2", "advanced_to_face_triage")
+
+    payload = {
+        "stage_manifest": {
+            "stage": "txt2img",
+            "config": {
+                "steps": 30,
+                "cfg_scale": 6.5,
+                "sampler_name": "DPM++ 2M",
+                "scheduler": "Karras",
+            },
+        }
+    }
+
+    def _resolve_prompts(payload):
+        marker = str(payload.get("prompt_marker") or "")
+        if marker == "candidate-b":
+            return ("prompt b", "negative b")
+        return ("prompt a", "negative a")
+
+    def _extract_payload(image_path):
+        marker = "candidate-b" if str(image_path).endswith("candidate-b.png") else "candidate-a"
+        return ReadPayloadResult(
+            payload={
+                "prompt_marker": marker,
+                "stage_manifest": {
+                    "stage": "txt2img",
+                    "config": {
+                        "steps": 30,
+                        "cfg_scale": 6.5,
+                        "sampler_name": "DPM++ 2M",
+                        "scheduler": "Karras",
+                    },
+                },
+            },
+            status="ok",
+        )
+
+    with patch(
+        "src.gui.controllers.learning_controller.extract_embedded_metadata",
+        side_effect=_extract_payload,
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_prompt_fields",
+        side_effect=_resolve_prompts,
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+        return_value=("juggernautXL", "Automatic"),
+    ), patch(
+        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+        return_value="output",
+    ):
+        handoff = ctrl.build_staged_curation_review_handoff(
+            "disc-filter",
+            "face_triage",
+            candidate_id="cand-2",
+        )
+
+    assert handoff is not None
+    assert [str(path) for path in handoff.image_paths] == [str(image_b)]
+    assert handoff.source_candidate_ids == ["cand-2"]
+    assert handoff.base_prompt == "prompt b"
+    assert handoff.base_negative_prompt == "negative b"
+    assert job_service.enqueue_njrs.called is False

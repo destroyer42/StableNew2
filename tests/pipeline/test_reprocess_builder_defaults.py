@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.pipeline.reprocess_builder import (
+    ReprocessEffectiveSettingsPreview,
     ImageEditSpec,
     ReprocessJobBuilder,
     ReprocessSourceItem,
@@ -155,3 +156,47 @@ def test_grouped_reprocess_jobs_preserve_image_edit_mask_config(tmp_path: Path) 
     source_item = job.extra_metadata["reprocess"]["source_items"][0]
     assert source_item["image_edit"]["schema"] == "stablenew.image_edit.v2.6"
     assert source_item["image_edit"]["mask_image_path"] == str(mask_path)
+
+
+def test_reprocess_builder_effective_settings_preview_uses_merged_stage_values() -> None:
+    builder = ReprocessJobBuilder()
+
+    preview = builder.build_effective_settings_preview(
+        source_stage="txt2img",
+        source_model="juggernautXL",
+        source_vae="vaeA",
+        stages=["img2img"],
+        fallback_config={
+            "steps": 24,
+            "cfg_scale": 6.5,
+            "sampler_name": "DPM++ 2M Karras",
+            "scheduler": "Karras",
+            "img2img": {"denoising_strength": 0.35},
+        },
+        metadata_config={
+            "steps": 30,
+            "img2img": {"steps": 28, "denoising_strength": 0.2},
+        },
+        prompt="portrait, cinematic lighting",
+        negative_prompt="blurry",
+        prompt_mode="append",
+        negative_prompt_mode="replace",
+        prompt_delta="cinematic lighting",
+        negative_prompt_delta="blurry",
+    )
+
+    assert isinstance(preview, ReprocessEffectiveSettingsPreview)
+    assert preview.source_stage == "txt2img"
+    assert preview.source_model == "juggernautXL"
+    assert preview.source_vae == "vaeA"
+    assert preview.target_stages == ["img2img"]
+    assert preview.positive_prompt_behavior == "append"
+    assert preview.negative_prompt_behavior == "replace"
+    assert len(preview.stage_settings) == 1
+    stage = preview.stage_settings[0]
+    assert stage.stage == "img2img"
+    assert stage.steps == 28
+    assert stage.cfg_scale == 6.5
+    assert stage.sampler == "DPM++ 2M Karras"
+    assert stage.scheduler == "Karras"
+    assert stage.denoise == 0.2

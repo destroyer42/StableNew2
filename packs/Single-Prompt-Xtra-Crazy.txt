@@ -13,7 +13,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:1.5>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -30,7 +30,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:1.5>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -47,7 +47,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:1.5>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -64,7 +64,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:1.5>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -81,7 +81,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:1.5>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -98,7 +98,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -115,7 +115,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -132,7 +132,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -149,7 +149,7 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks
 
 <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable-Yogis-Makeup-Enhancer-XL>
 close up, portrait, a highly detailed fantasy scene,
@@ -166,4 +166,4 @@ natural proportions, realistic anatomy, photorealism,
 high detail, sharp focus, rich color depth
 <lora:add-detail-xl:0.7374999999999999> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.33495145631067963> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:NEGATIVE_HANDS> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue
+neg: bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue, trans, transvestite, women with dicks

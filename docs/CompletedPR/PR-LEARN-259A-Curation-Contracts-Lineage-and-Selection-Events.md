@@ -37,3 +37,4 @@ without changing runtime behavior.
 
 - `pytest tests/state/test_output_routing.py tests/pipeline/test_output_folder_structure.py tests/curation/test_models.py tests/curation/test_curation_manifest.py -q`
 - `python -m compileall src/state/output_routing.py src/curation tests/state/test_output_routing.py tests/pipeline/test_output_folder_structure.py tests/curation`
+- baseline re-verified 2026-03-22 with `pytest tests/curation -q` (`13 passed`)

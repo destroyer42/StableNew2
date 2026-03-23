@@ -45,42 +45,26 @@ Reason:
 - this was explicitly called out as a sequencing requirement in the staged-curation
   roadmap
 
-#### 0.2 Finalize `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
+#### 0.2 `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events` is verified
 
 Reason:
 
 - this is the contract/foundation item for the staged-curation tranche
-- it should be treated as completed and verified before more dependent work is
-  layered on top
+- more dependent work should layer on top of this verified baseline instead of
+  reopening the contract PR
 
 ---
 
 ### Phase 1 - Highest-value staged-curation workflow fixes
 
-#### 1.1 `PR-LEARN-260A-Staged-Curation-Source-Prompt-Surface-and-Decision-Context`
+Completed in this tranche already:
 
-Why first:
+- `PR-LEARN-260A-Staged-Curation-Source-Prompt-Surface-and-Decision-Context`
+- `PR-LEARN-260B-Staged-Curation-Plan-Build-vs-Enqueue-Seam`
+- `PR-LEARN-260C-Learning-To-Review-Handoff-and-Review-Draft-Load`
+- `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
 
-- immediate user pain point
-- low-risk, high-value visibility improvement
-- grounds prompt-drift and prompt-adherence decisions in visible prompt context
-
-#### 1.2 `PR-LEARN-260B-Staged-Curation-Plan-Build-vs-Enqueue-Seam`
-
-Why second:
-
-- this is the structural seam needed for both direct queue and Review handoff
-- unlocks the hybrid flow cleanly without duplicating execution logic
-
-#### 1.3 `PR-LEARN-260C-Learning-To-Review-Handoff-and-Review-Draft-Load`
-
-Why third:
-
-- this delivers the biggest workflow correction:
-  Learning decides -> Review edits -> queue executes
-- directly addresses the current missing edit step before derived jobs enqueue
-
-#### 1.4 `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
+#### 1.1 `PR-LEARN-260E-Source-vs-Derived-Outcome-Compare-and-Lineage-Jump`
 
 Why fourth:
 
@@ -192,17 +176,10 @@ Why this tranche is last in the broad sequence:
 If you want the highest practical value fastest, prioritize this shorter path:
 
 1. close output-route regression
-2. finish/verify `PR-LEARN-259A`
-3. `PR-LEARN-260A`
-4. `PR-LEARN-260B`
-5. `PR-LEARN-260C`
-6. `PR-LEARN-260D`
-7. `PR-UX-265`
-8. `PR-UX-266`
-9. `PR-UX-268`
-10. `PR-LEARN-261`
-11. `PR-LEARN-262`
-12. `PR-LEARN-263`
+2. `PR-LEARN-263`
+3. `PR-UX-265`
+4. `PR-UX-266`
+5. `PR-UX-268`
 
 This path delivers:
 
@@ -215,29 +192,20 @@ This path delivers:
 ## 5. Full Ordered List
 
 1. close image output-route regression
-2. `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
-3. `PR-LEARN-260A-Staged-Curation-Source-Prompt-Surface-and-Decision-Context`
-4. `PR-LEARN-260B-Staged-Curation-Plan-Build-vs-Enqueue-Seam`
-5. `PR-LEARN-260C-Learning-To-Review-Handoff-and-Review-Draft-Load`
-6. `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
-7. `PR-LEARN-260E-Source-vs-Derived-Outcome-Compare-and-Lineage-Jump`
-8. `PR-LEARN-260F-Queue-Now-vs-Edit-in-Review-UX-Polish-and-Bulk-Selection-Rules`
-9. `PR-LEARN-261-Portable-Review-Metadata-Stamping`
-10. `PR-LEARN-262-Portable-Review-Metadata-Rehydration-and-UI-Surfacing`
-11. `PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI`
-12. `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
-13. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
-14. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
-15. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-Integration`
-16. `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
-17. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
-18. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
-19. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
-20. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-21. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
-22. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-23. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-24. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+2. `PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI`
+11. `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
+12. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+13. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+14. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-Integration`
+15. `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
+16. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
+17. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
+18. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
+19. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
+20. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
+21. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+22. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
+23. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
 
 ## 6. Recommendation
 

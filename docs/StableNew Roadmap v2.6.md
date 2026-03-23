@@ -789,7 +789,14 @@ Priority note:
   output-route regression is closed
 - immediate order:
   1. close the image output-route regression
-  2. begin `PR-LEARN-259A`
+  2. treat `PR-LEARN-259A` as verified baseline
+  3. treat `PR-LEARN-260A` through `PR-LEARN-260C` as completed
+  4. treat `PR-LEARN-260D` as completed
+  5. treat `PR-LEARN-260E` as completed
+  6. treat `PR-LEARN-260F` as completed
+  7. treat `PR-LEARN-261` as completed
+  8. treat `PR-LEARN-262` as completed
+  9. begin `PR-LEARN-263`
 
 Planned rollout:
 
@@ -805,6 +812,22 @@ Planned rollout:
   Completed 2026-03-21
 - `PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries`
   Completed 2026-03-21
+- `PR-LEARN-260A-Staged-Curation-Source-Prompt-Surface-and-Decision-Context`
+  Completed 2026-03-22
+- `PR-LEARN-260B-Staged-Curation-Plan-Build-vs-Enqueue-Seam`
+  Completed 2026-03-22
+- `PR-LEARN-260C-Learning-To-Review-Handoff-and-Review-Draft-Load`
+  Completed 2026-03-23
+- `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
+  Completed 2026-03-23
+- `PR-LEARN-260E-Source-vs-Derived-Outcome-Compare-and-Lineage-Jump`
+  Completed 2026-03-23
+- `PR-LEARN-260F-Queue-Now-vs-Edit-in-Review-UX-Polish-and-Bulk-Selection-Rules`
+  Completed 2026-03-23
+- `PR-LEARN-261-Portable-Review-Metadata-Stamping`
+  Completed 2026-03-23
+- `PR-LEARN-262-Portable-Review-Metadata-Rehydration-and-UI-Surfacing`
+  Completed 2026-03-23
 
 Sequencing note:
 
