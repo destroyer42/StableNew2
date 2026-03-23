@@ -630,11 +630,13 @@ class AppController:
     def _ui_dispatch(self, fn: Callable[[], None]) -> None:
         import threading
 
-        if threading.get_ident() == self._ui_thread_id:
+        ui_thread_id = getattr(self, "_ui_thread_id", threading.get_ident())
+        if threading.get_ident() == ui_thread_id:
             fn()
             return
-        if callable(self._ui_scheduler):
-            self._ui_scheduler(fn)
+        scheduler = getattr(self, "_ui_scheduler", None)
+        if callable(scheduler):
+            scheduler(fn)
             return
         if self._dispatch_via_root_after(0, fn):
             return
@@ -687,6 +689,16 @@ class AppController:
         PR-HB-003: Coalesces multiple rapid update requests into a single
         periodic refresh to prevent heartbeat stalls.
         """
+        if not hasattr(self, "_ui_preview_dirty"):
+            self._ui_preview_dirty = False
+        if not hasattr(self, "_ui_job_list_dirty"):
+            self._ui_job_list_dirty = False
+        if not hasattr(self, "_ui_history_dirty"):
+            self._ui_history_dirty = False
+        if not hasattr(self, "_ui_debounce_pending"):
+            self._ui_debounce_pending = False
+        if not hasattr(self, "_ui_debounce_delay_ms"):
+            self._ui_debounce_delay_ms = 0
         if preview:
             self._ui_preview_dirty = True
         if jobs:
@@ -2310,7 +2322,7 @@ class AppController:
                 result_payload = self.pipeline_controller._run_job(job)
             except Exception as exc:  # noqa: BLE001
                 self._append_log(f"[queue] NJR execution for job {job.job_id} failed: {exc!r}")
-                result_payload = {"error": str(exc)}
+                result_payload = {"success": False, "error": str(exc)}
         else:
             execution_path = "missing_njr"
             self._append_log(
@@ -5533,7 +5545,10 @@ class AppController:
         negative = (getattr(self.app_state, "negative_prompt", "") or "").strip()
         self.app_state.add_job_draft_part(prompt, negative, estimated_images=1)
         self._append_log("[controller] Added current prompt pair to job draft")
-        self._mark_ui_dirty(preview=True)
+        if hasattr(self, "_ui_thread_id") or getattr(self, "main_window", None) is not None:
+            self._mark_ui_dirty(preview=True)
+            return
+        self._refresh_preview_from_state()
 
     def _refresh_preview_from_state(self) -> None:
         """Refresh preview records using the current AppState/job draft."""

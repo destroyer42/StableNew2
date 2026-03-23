@@ -563,9 +563,18 @@ class PipelineController(_GUIPipelineController):
         self._last_stage_events: list[dict[Any, Any]] | None = None
         self._learning_enabled: bool = False
         self._learning_queue_cap: int = 3
+        injected_queue = getattr(job_service, "queue", None) if job_service is not None else None
+        injected_runner = getattr(job_service, "runner", None) if job_service is not None else None
+        injected_history_store = (
+            getattr(job_service, "history_store", None) if job_service is not None else None
+        )
         self._job_controller = JobExecutionController(
             execute_job=self._execute_job,
+            history_store=injected_history_store,
             replay_runner=self,
+            queue=injected_queue,
+            runner=injected_runner,
+            restore_state=job_service is None,
         )
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
@@ -856,9 +865,8 @@ class PipelineController(_GUIPipelineController):
     # Queue-backed execution -------------------------------------------------
     def start_pipeline(
         self,
-        pipeline_func: Callable[[], dict[Any, Any]] | None = None,
         *,
-        on_complete: Callable[[dict[Any, Any]], None] | None = None,
+        on_complete: Callable[[dict[str, Any]], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
         run_config: dict[str, Any] | None = None,
     ) -> bool:
@@ -892,8 +900,6 @@ class PipelineController(_GUIPipelineController):
                 run_mode = "queue"
         if run_config is not None:
             run_mode = "queue"
-        if pipeline_func is not None:
-            _logger.debug("Ignoring deprecated pipeline_func bridge in start_pipeline()")
 
         prompt_source = "manual"
         prompt_pack_id = None
@@ -1722,6 +1728,17 @@ class PipelineController(_GUIPipelineController):
     def get_job_service(self) -> JobService | None:
         """Return the queue service used by pipeline-facing GUI actions."""
         return self._job_service
+
+    def replace_queue_runner(self, runner: Any) -> None:
+        if self._job_service is None:
+            raise RuntimeError("PipelineController has no JobService to synchronize")
+        self._job_controller.replace_runner(runner)
+        replace_runner = getattr(self._job_service, "replace_runner", None)
+        if not callable(replace_runner):
+            raise RuntimeError("JobService does not support coordinated runner replacement")
+        replace_runner(runner)
+        if self._job_controller.get_runner() is not self._job_service.runner:
+            raise RuntimeError("Queue runner replacement left controller and service desynchronized")
 
     # -------------------------------------------------------------------------
     def get_diagnostics_snapshot(self) -> dict[str, Any]:

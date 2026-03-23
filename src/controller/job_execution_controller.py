@@ -78,15 +78,18 @@ class JobExecutionController:
         history_store: JobHistoryStore | None = None,
         worker_registry: WorkerRegistry | None = None,
         replay_runner: Any | None = None,
+        queue: JobQueue | None = None,
+        runner: SingleNodeJobRunner | None = None,
+        restore_state: bool = True,
     ) -> None:
         self._history_store = history_store or self._default_history_store()
         self._worker_registry = worker_registry or WorkerRegistry()
-        self._queue = JobQueue(history_store=self._history_store)
+        self._queue = queue or JobQueue(history_store=self._history_store)
         self._execute_job = execute_job
         self._auto_run_enabled = True
         self._queue_paused = False
         self._queue_persistence: QueuePersistenceManager | None = None
-        self._runner = SingleNodeJobRunner(
+        self._runner = runner or SingleNodeJobRunner(
             self._queue,
             self._run_job_callback,
             poll_interval=poll_interval,
@@ -117,9 +120,11 @@ class JobExecutionController:
         self._status_dispatcher: Callable[[Callable[[], None]], None] | None = None
         self._deferred_autostart = False  # PR-PERSIST-001: Track if we need to auto-start after init
         self._app_state: Any | None = None  # For runtime status updates
-        self._restore_queue_state()
+        if restore_state:
+            self._restore_queue_state()
         self._queue_persistence = QueuePersistenceManager(self)
-        self._persist_queue_state()
+        if restore_state:
+            self._persist_queue_state()
         
         # PR-STARTUP-PERF: Deferred autostart is now triggered externally after GUI is ready
         # (previously executed here, blocking GUI startup for ~10 seconds)
@@ -287,6 +292,23 @@ class JobExecutionController:
 
     def get_runner(self) -> SingleNodeJobRunner:
         return self._runner
+
+    def replace_runner(self, runner: SingleNodeJobRunner) -> None:
+        runner_queue = getattr(runner, "job_queue", None)
+        if runner_queue is not None and runner_queue is not self._queue:
+            raise ValueError("Replacement runner must use JobExecutionController queue")
+        with self._lock:
+            previous = self._runner
+            if previous is runner:
+                return
+            try:
+                if self._started or previous.is_running():
+                    previous.stop()
+            except Exception:
+                pass
+            self._runner = runner
+            self._started = False
+            self._worker_thread_name = None
 
     def _run_job_callback(self, job: Job) -> dict[str, Any]:
         """Wrapper that executes jobs via payload or the replay engine."""

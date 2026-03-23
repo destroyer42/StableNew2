@@ -62,14 +62,14 @@ def _setup_controller(
 
 def test_queue_mode_disabled_still_uses_job_controller(monkeypatch):
     controller, fake = _setup_controller(monkeypatch, queue_enabled=False)
-    started = controller.start_pipeline(lambda: {"ok": True})
+    started = controller.start_pipeline()
     assert started is True
     assert controller._job_service.submitted, "JobService should receive canonical queue submissions"
 
 
 def test_queue_mode_enabled_submits_and_handles_status(monkeypatch):
     controller, fake = _setup_controller(monkeypatch, queue_enabled=True)
-    started = controller.start_pipeline(lambda: {"ok": False})
+    started = controller.start_pipeline()
     assert started is True
     assert len(controller._job_service.submitted) == 1
     controller._active_job_id = "job-1"

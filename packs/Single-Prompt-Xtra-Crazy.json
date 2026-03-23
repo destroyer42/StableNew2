@@ -4,8 +4,323 @@
     "slots": [
       {
         "index": 0,
-        "text": "close up, portrait, a highly detailed fantasy scene,\na female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nwearing [[clothes]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
-        "negative": "low quality, blurry, bad anatomy, extra limbs, distorted face, plastic skin,, cartoonish, anime style, flat lighting, cross-eyed, misaligned pupils, asymmetrical eyes, glassy eyes, doll-like eyes",
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            1.5
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            1.5
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            1.5
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            1.5
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            1.5
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1",
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable-Yogis-Makeup-Enhancer-XL"
+        ],
+        "negative_embeddings": [
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "NEGATIVE_HANDS",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7374999999999999
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8241758241758242
+          ],
+          [
+            "DetailedEyes_V3",
+            0.33495145631067963
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 0,
+        "text": "close up, portrait, a highly detailed fantasy scene,\na naked female figure as the clear primary subject,\n[[hair]] hair, [[eyes]] eyes focused and looking directly at the viewer, with a coquettish expression,\n[[pose]] while [[activity]],\ncaptured from a [[perspective]],\nlit by [[lighting]],\nset within a visually rich [[environment]],\nthe scene conveys [[narrative]],\nstrong subject focus, balanced composition,\nfantasy realism, cinematic atmosphere,\nnatural proportions, realistic anatomy, photorealism,\nhigh detail, sharp focus, rich color depth",
+        "negative": "bad anatomy, bad proportions, deformed, disfigured, extra limbs, extra fingers, missing fingers, mutated hands, malformed hands, twisted wrists, blurry, low quality, low resolution, jpeg artifacts, distorted face, melted face, face mush, cropped, out of frame, underwear, bra straps, butterfly, butterflies, cow, horse, dog, fire, tongue",
         "positive_embeddings": [
           "Stable_Yogis_PDXL_Positives",
           "Stable_Yogis_Realism_Positives_V1",
@@ -41,7 +356,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 3,
+      "limit": 4,
       "slots": [
         {
           "name": "hair",
@@ -57,17 +372,8 @@
             "midnight blue",
             "raven black",
             "snow white",
-            "pastel pink",
-            "violet",
-            "emerald green",
             "fiery red",
-            "sun-bleached blonde",
-            "braided hair",
-            "loose flowing hair",
-            "windswept hair",
-            "intricately braided hair",
-            "partially tied hair",
-            "wild untamed hair"
+            "sun-bleached blonde"
           ]
         },
         {
@@ -77,16 +383,10 @@
             "storm gray",
             "emerald green",
             "golden amber",
-            "glowing violet",
-            "glowing cyan",
-            "molten gold",
             "deep brown",
             "piercing blue",
             "soft hazel",
-            "luminous teal",
-            "fiery orange",
-            "silver-gray",
-            "glowing runic eyes"
+            "luminous teal"
           ]
         },
         {
@@ -118,33 +418,20 @@
         {
           "name": "pose",
           "values": [
-            "standing firm",
-            "mid-stride",
-            "kneeling with head raised",
-            "leaning forward with intent",
-            "turning sharply mid-motion",
-            "seated calmly",
-            "braced against the wind",
-            "relaxed confident stance",
-            "poised battle-ready stance",
-            "balanced grounded posture"
+            "standing",
+            "kneeling",
+            "bending",
+            "on all fours"
           ]
         },
         {
           "name": "activity",
           "values": [
-            "summoning magic",
-            "preparing for battle",
-            "surveying the horizon",
-            "walking through ruins",
-            "casting a spell",
-            "gripping a weapon",
-            "channeling elemental energy",
-            "watching silently",
-            "advancing forward",
-            "standing guard",
-            "resting after combat",
-            "invoking ancient power"
+            "giving a blowjob",
+            "receiving a cumshot",
+            "doing doggystyle sex",
+            "having missionary sex",
+            "masturbating while orgasming"
           ]
         },
         {
@@ -167,27 +454,7 @@
         {
           "name": "narrative",
           "values": [
-            "before the final battle",
-            "calm before the storm",
-            "moments after victory",
-            "ancient power awakening",
-            "standing at the edge of destiny",
-            "after the magic was unleashed",
-            "guarding an ancient secret",
-            "the moment history changed",
-            "watching the world burn",
-            "holding the line alone"
-          ]
-        },
-        {
-          "name": "clothes",
-          "values": [
-            "nothing",
-            "nothing but an open cloak",
-            "nothing but some ornate jewelry",
-            "nothing but a g-string",
-            "nothing but an underboob tight shirt",
-            "nothing but beads"
+            "sexual tension"
           ]
         }
       ]

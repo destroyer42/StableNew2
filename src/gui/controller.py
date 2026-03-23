@@ -86,85 +86,17 @@ class PipelineController:
 
     def start_pipeline(
         self,
-        pipeline_func: Callable[[], dict[str, Any]],
+        *,
+        run_config: dict[str, Any] | None = None,
         on_complete: Callable[[dict[str, Any]], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
     ) -> bool:
-        if not self.state_manager.can_run():
-            logger.warning("Cannot start pipeline - not in valid state")
-            return False
-        if not self._cleanup_done.is_set():
-            logger.warning("Cannot start pipeline - previous cleanup is still running")
-            return False
-        if not self.state_manager.transition_to(GUIState.RUNNING):
-            return False
-
-        # 2) New epoch
-        with self._epoch_lock:
-            self._epoch_id += 1
-            eid = self._epoch_id
-        try:
-            self._log(f"[controller] Starting pipeline epoch {eid}", "DEBUG")
-        except Exception:
-            pass
-
-        # 3) Reset per-run signals
-        self._cleanup_started = False
-        self.lifecycle_event.clear()
-        self.cancel_token.reset()
-
-        def worker():
-            error_occurred = False
-            try:
-                self._log("Pipeline started", "INFO")
-                result = pipeline_func()
-                if on_complete:
-                    on_complete(result)
-            except CancellationError:
-                self._log("Pipeline cancelled by user", "WARNING")
-                self.report_progress("Cancelled", self._last_progress["percent"], "Cancelled")
-                try:
-                    self.lifecycle_event.set()
-                except Exception:
-                    logger.debug("Failed to signal lifecycle event on cancellation", exc_info=True)
-            except Exception as e:
-                error_occurred = True
-                self._log(f"Pipeline error: {e}", "ERROR")
-                self.state_manager.transition_to(GUIState.ERROR)
-                self.report_progress("Error", self._last_progress["percent"], "Error")
-                if on_error:
-                    on_error(e)
-                try:
-                    self.lifecycle_event.set()
-                except Exception:
-                    logger.debug("Failed to signal lifecycle event on error", exc_info=True)
-
-            def cleanup():
-                self._do_cleanup(eid, error_occurred)
-
-            if self._sync_cleanup:
-                cleanup()
-            else:
-                # PR-THREAD-001: Use ThreadRegistry for cleanup
-                from src.utils.thread_registry import get_thread_registry
-                registry = get_thread_registry()
-                registry.spawn(
-                    target=cleanup,
-                    name="GUI-Pipeline-Cleanup",
-                    daemon=False,
-                    purpose="Cleanup after GUI pipeline execution"
-                )
-
-        # PR-THREAD-001: Use ThreadRegistry for worker
-        from src.utils.thread_registry import get_thread_registry
-        registry = get_thread_registry()
-        self._worker = registry.spawn(
-            target=worker,
-            name="GUI-Pipeline-Worker",
-            daemon=False,
-            purpose="Execute GUI pipeline in background"
+        logger.error(
+            "Base GUI PipelineController.start_pipeline no longer supports direct callable execution; use the NJR-backed controller implementation with run_config."
         )
-        return True
+        if on_error is not None:
+            on_error(RuntimeError("Direct callable pipeline execution is retired in v2.6"))
+        return False
 
     def stop_pipeline(self) -> bool:
         if not self.state_manager.can_stop():

@@ -358,7 +358,7 @@
       "output_route": "Auto",
       "txt2img_enabled": true,
       "img2img_enabled": false,
-      "adetailer_enabled": false,
+      "adetailer_enabled": true,
       "upscale_enabled": false
     }
   }

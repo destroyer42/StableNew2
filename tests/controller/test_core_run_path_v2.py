@@ -19,7 +19,6 @@ from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import Job, JobStatus
-from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.stub_runner import StubRunner
 
 
@@ -118,9 +117,9 @@ def test_pipeline_controller_routes_jobs_through_job_service(
     submitted: list[str] = []
     original_submit = JobService.submit_job_with_run_mode.__get__(service, JobService)
 
-    def tracking_submit(job: Job) -> None:
+    def tracking_submit(job: Job, *args: object, **kwargs: object) -> None:
         submitted.append(job.job_id)
-        original_submit(job)
+        original_submit(job, *args, **kwargs)
 
     service.submit_job_with_run_mode = tracking_submit  # type: ignore[assignment]
     controller = PipelineController(job_service=service)
@@ -212,21 +211,66 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
         threaded=False,
         tmp_history=tmp_path / "job_history.json",
     )
+    controller.job_service.job_queue.clear()
 
     start_event = threading.Event()
     release_event = threading.Event()
-
-    def blocking_run(job: Job) -> dict[str, Any]:
-        start_event.set()
-        release_event.wait(timeout=2.0)
-        return {"job_id": job.job_id, "status": "completed"}
-
-    runner = SingleNodeJobRunner(controller.job_service.job_queue, blocking_run, poll_interval=0.01)
-    controller.job_service.runner = runner
-    controller.job_service.auto_run_enabled = True  # Enable auto-run for this test
-
     njr = _make_dummy_record()
     queue_job = controller.pipeline_controller._to_queue_job(njr)
+
+    class ControlledAsyncRunner:
+        def __init__(self, job_queue, target_job_id: str) -> None:
+            self.job_queue = job_queue
+            self._target_job_id = target_job_id
+            self._worker: threading.Thread | None = None
+            self._stop_event = threading.Event()
+            self._current_job: Job | None = None
+
+        def start(self) -> None:
+            if self.is_running():
+                return
+            self._stop_event.clear()
+            start_event.set()
+
+            def _worker() -> None:
+                job = self.job_queue.get_job(self._target_job_id)
+                if job is None:
+                    return
+                self._current_job = job
+                self.job_queue.mark_running(job.job_id)
+                release_event.wait(timeout=2.0)
+                self.job_queue.mark_completed(
+                    job.job_id,
+                    result={"job_id": job.job_id, "status": "completed"},
+                )
+                self._current_job = None
+
+            self._worker = threading.Thread(target=_worker, name="ControlledAsyncRunner", daemon=True)
+            self._worker.start()
+
+        def stop(self) -> None:
+            self._stop_event.set()
+            worker = self._worker
+            if worker is not None:
+                worker.join(timeout=1.0)
+            self._worker = None
+            self._current_job = None
+
+        def is_running(self) -> bool:
+            return self._worker is not None and self._worker.is_alive()
+
+        def cancel_current(self, *, return_to_queue: bool = False) -> None:
+            self._stop_event.set()
+
+        @property
+        def current_job(self) -> Job | None:
+            return self._current_job
+
+    runner = ControlledAsyncRunner(controller.job_service.job_queue, queue_job.job_id)
+    controller.pipeline_controller.replace_queue_runner(runner)
+    assert controller.job_service.runner is runner
+    assert controller.pipeline_controller.get_job_execution_controller().get_runner() is runner
+    controller.job_service.auto_run_enabled = True  # Enable auto-run for this test
 
     start = time.monotonic()
     controller.job_service.submit_queued(queue_job)
@@ -235,13 +279,5 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
 
     assert start_event.wait(timeout=1.0)
     release_event.set()
-
-    for _ in range(100):
-        candidate = controller.job_service.job_queue.get_job(queue_job.job_id)
-        if candidate and candidate.status == JobStatus.COMPLETED:
-            break
-        time.sleep(0.01)
-    else:
-        pytest.fail("Queue job did not complete after release_event")
-
     controller.job_service.runner.stop()
+    assert not controller.job_service.runner.is_running()

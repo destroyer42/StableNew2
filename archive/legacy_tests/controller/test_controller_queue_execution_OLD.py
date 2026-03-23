@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+"""Archived 2026-03-22.
+
+This test defended the deprecated start_pipeline(pipeline_func) bridge, which
+conflicts with the v2.6 architecture where fresh execution is queue-only and
+NJR-backed. It is preserved for reference only and must not be treated as
+active runtime coverage.
+"""
+
 from types import SimpleNamespace
 
 from src.controller.pipeline_controller import PipelineController
 from src.controller.webui_connection_controller import WebUIConnectionState
 
 
-def test_controller_submits_job_and_transitions_states():
+def test_controller_submits_job_and_transitions_states() -> None:
     controller = PipelineController()
     transitions: list[object] = []
 

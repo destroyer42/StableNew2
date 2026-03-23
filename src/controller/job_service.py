@@ -143,6 +143,27 @@ class JobService:
     EVENT_QUEUE_EMPTY = "queue_empty"
     EVENT_QUEUE_STATUS = "queue_status"
 
+    @property
+    def runner(self) -> RunnerProtocol:
+        return self._runner
+
+    def replace_runner(self, value: RunnerProtocol) -> None:
+        runner_queue = getattr(value, "job_queue", None)
+        if runner_queue is not None and runner_queue is not self.job_queue:
+            raise ValueError("Replacement runner must use JobService.job_queue")
+        with self._runner_lock:
+            previous = getattr(self, "_runner", None)
+            if previous is value:
+                return
+            if previous is not None:
+                try:
+                    if previous.is_running():
+                        previous.stop()
+                except Exception:
+                    pass
+            self._runner = value
+            self._worker_started = False
+
     def __init__(
         self,
         job_queue: JobQueue,
@@ -177,18 +198,19 @@ class JobService:
 
         # PR-0114C-T(x): Support runner injection via factory or direct instance
         if runner is not None:
-            self.runner = runner
+            selected_runner = runner
         elif runner_factory is not None:
-            self.runner = runner_factory(job_queue, run_callable)
+            selected_runner = runner_factory(job_queue, run_callable)
         else:
             # Default: create SingleNodeJobRunner (production behavior)
             # BUGFIX: Pass is_paused callback so runner respects pause state
-            self.runner = SingleNodeJobRunner(
+            selected_runner = SingleNodeJobRunner(
                 job_queue,
                 run_callable=run_callable,
                 poll_interval=0.05,
                 is_paused=lambda: getattr(self, '_queue_status', 'idle') == 'paused',
             )
+        self._runner = selected_runner
         log_with_ctx(
             logger,
             logging.DEBUG,
@@ -461,8 +483,11 @@ class JobService:
 
     def _ensure_runner_started(self) -> None:
         with self._runner_lock:
-            if self._worker_started or self.runner.is_running():
+            runner_is_running = self.runner.is_running()
+            if runner_is_running:
+                self._worker_started = True
                 return
+            self._worker_started = False
             runner_type = type(self.runner).__name__
             try:
                 self.runner.start()
