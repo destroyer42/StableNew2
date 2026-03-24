@@ -49,14 +49,20 @@ Completion record:
 
 ### 3. `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
 
-Status: Next
+Status: Completed 2026-03-24
 
 Primary outcome:
 
 - add stage-specific safe policy selection for missing or `AUTO` config fields
 - never override explicit user values
 
+Completion record:
+
+- `docs/CompletedPR/PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing.md`
+
 ### 4. `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
+
+Status: Next
 
 Primary outcome:
 

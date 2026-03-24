@@ -807,7 +807,8 @@ Priority note:
   14. treat `PR-VIDEO-241` as completed
   15. treat `PR-PROMPT-241A` as completed
   16. treat `PR-PROMPT-241B` as completed
-  17. begin `PR-PROMPT-241C`
+  17. treat `PR-PROMPT-241C` as completed
+  18. begin `PR-PROMPT-241D`
 
 Planned rollout:
 
@@ -815,6 +816,9 @@ Planned rollout:
   Completed 2026-03-24
 
 - `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
+  Completed 2026-03-24
+
+- `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
   Completed 2026-03-24
 
 - `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`

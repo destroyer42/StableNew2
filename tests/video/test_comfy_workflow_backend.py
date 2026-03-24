@@ -24,9 +24,8 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "ComfyUI-LTXVideo": {"nodes": ["LTXLoader"]},
+        "StableNewLTXAnchorBridge": {"input": {}},
         "models": {"checkpoints": ["ltx_video.safetensors"]},
-        "ltx_video": True,
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.side_effect = [
@@ -130,6 +129,7 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
     except RuntimeError as exc:
         assert "missing required Comfy dependencies" in str(exc)
         assert "ltx_model" in str(exc)
+        assert "restart ComfyUI" in str(exc)
     else:
         raise AssertionError("Expected missing workflow dependencies to fail execution")
 
@@ -154,9 +154,8 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "ComfyUI-LTXVideo": {"nodes": ["LTXLoader"]},
+        "StableNewLTXAnchorBridge": {"input": {}},
         "models": {"checkpoints": ["ltx_video.safetensors"]},
-        "ltx_video": True,
     }
     client.queue_prompt.return_value = {"prompt_id": "seg-prompt-001"}
     client.get_history.side_effect = [
@@ -279,9 +278,8 @@ def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "ComfyUI-LTXVideo": {"nodes": ["LTXLoader"]},
+        "StableNewLTXAnchorBridge": {"input": {}},
         "models": {"checkpoints": ["ltx_video.safetensors"]},
-        "ltx_video": True,
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.side_effect = [
@@ -381,9 +379,8 @@ def test_comfy_workflow_backend_preserves_original_video_when_secondary_motion_u
 
     client = Mock()
     client.get_object_info.return_value = {
-        "ComfyUI-LTXVideo": {"nodes": ["LTXLoader"]},
+        "StableNewLTXAnchorBridge": {"input": {}},
         "models": {"checkpoints": ["ltx_video.safetensors"]},
-        "ltx_video": True,
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.side_effect = [

@@ -160,9 +160,8 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
 
     client = Mock()
     client.get_object_info.return_value = {
-        "ComfyUI-LTXVideo": {"nodes": ["LTXLoader"]},
+        "StableNewLTXAnchorBridge": {"input": {}},
         "models": {"checkpoints": ["ltx_video.safetensors"]},
-        "ltx_video": True,
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.return_value = {

@@ -89,12 +89,109 @@ def test_txt2img_stage_uses_prompt_optimizer_and_records_manifest(
     assert result["prompt_optimization"]["positive"]["changed"] is True
     assert result["prompt_optimizer_analysis"]["mode"] == "recommend_only_v1"
     assert result["prompt_optimizer_analysis"]["intent"]["intent_band"] == "portrait"
+    assert result["prompt_optimizer_analysis"]["stage_policy"]["mode"] == "auto_safe_fill_v1"
+    assert any(
+        item["key"] == "sampler_name" and item["action"] == "preserved"
+        for item in result["prompt_optimizer_analysis"]["stage_policy"]["preserved_decisions"]
+    )
     manifest_path = tmp_path / "manifests" / "prompt_optimizer.json"
     assert manifest_path.exists()
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest_payload["prompt_optimizer_analysis"]["mode"] == "recommend_only_v1"
     sidecar_path = tmp_path / "manifests" / "prompt_optimizer.prompt_optimization.json"
     assert sidecar_path.exists()
+
+
+def test_txt2img_stage_auto_fills_missing_or_auto_policy_keys(tmp_path: Path, monkeypatch) -> None:
+    client = _Client()
+    pipeline = Pipeline(client=client, structured_logger=StructuredLogger())
+    _allow_runtime(pipeline, monkeypatch)
+    monkeypatch.setattr(pipeline, "_apply_webui_defaults_once", lambda: None)
+    monkeypatch.setattr(pipeline, "_ensure_model_and_vae", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pipeline, "_ensure_hypernetwork", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        pipeline,
+        "_generate_images_with_progress",
+        lambda _stage, _payload, **_kwargs: {
+            "images": ["ignored"],
+            "info": {"seed": 123, "subseed": 456, "all_seeds": [123], "all_subseeds": [456]},
+        },
+    )
+    monkeypatch.setattr("src.pipeline.executor.save_image_from_base64", _fake_save_image)
+
+    config = {
+        "txt2img": {
+            "width": 1024,
+            "height": 1024,
+            "sampler_name": "AUTO",
+            "scheduler": "AUTO",
+        },
+        "pipeline": {
+            "apply_global_positive_txt2img": False,
+            "apply_global_negative_txt2img": False,
+        },
+        "aesthetic": {"enabled": False},
+        "prompt_optimizer": {"enabled": True},
+    }
+
+    result = pipeline.run_txt2img_stage(
+        "masterpiece, beautiful woman, natural skin texture",
+        "watermark, blurry",
+        config,
+        tmp_path,
+        "prompt_optimizer_auto",
+    )
+
+    assert result is not None
+    assert result["config"]["sampler_name"] == "DPM++ 2M"
+    assert result["config"]["scheduler"] == "Karras"
+    assert result["config"]["steps"] == 28
+    assert result["config"]["cfg_scale"] == 6.5
+    assert result["prompt_optimizer_analysis"]["stage_policy"]["applied_settings"] == {
+        "cfg_scale": 6.5,
+        "steps": 28,
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+    }
+
+
+def test_adetailer_stage_records_stage_policy_auto_fills(tmp_path: Path, monkeypatch) -> None:
+    client = _Client()
+    pipeline = Pipeline(client=client, structured_logger=StructuredLogger())
+    _allow_runtime(pipeline, monkeypatch)
+    monkeypatch.setattr(pipeline, "_ensure_model_and_vae", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pipeline, "_load_image_base64", lambda _path: "ignored")
+    monkeypatch.setattr(
+        pipeline,
+        "_generate_images_with_progress",
+        lambda _stage, _payload, **_kwargs: {
+            "images": ["ignored"],
+            "info": {"seed": 123, "subseed": 456, "all_seeds": [123], "all_subseeds": [456]},
+        },
+    )
+    monkeypatch.setattr("src.pipeline.executor.save_image_from_base64", _fake_save_image)
+
+    input_image = tmp_path / "input.png"
+    input_image.write_text("image", encoding="utf-8")
+    config = {
+        "adetailer_enabled": True,
+        "adetailer_prompt": "beautiful woman, natural skin texture",
+        "adetailer_negative_prompt": "watermark, blurry",
+        "adetailer_sampler": "AUTO",
+        "adetailer_scheduler": "AUTO",
+        "prompt_optimizer": {"enabled": True},
+    }
+
+    result = pipeline.run_adetailer(input_image, "unused", "unused", config, tmp_path, image_name="adetailer_policy")
+
+    assert result is not None
+    stage_policy = result["prompt_optimizer_analysis"]["stage_policy"]
+    assert stage_policy["applied_settings"]["enable_face_pass"] is True
+    assert stage_policy["applied_settings"]["adetailer_sampler"] == "DPM++ 2M"
+    face_args = result["config"]["alwayson_scripts"]["ADetailer"]["args"][2]
+    assert face_args["ad_confidence"] == 0.28
+    assert face_args["ad_sampler"] == "DPM++ 2M"
+    assert face_args["ad_scheduler"] == "Use same scheduler"
 
 
 def test_adetailer_stage_respects_prompt_optimizer_opt_out(tmp_path: Path, monkeypatch) -> None:

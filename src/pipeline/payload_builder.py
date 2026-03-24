@@ -25,7 +25,10 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 
 from src.pipeline.config_normalizer import normalize_stage_payload_config
-from src.prompting.prompt_optimizer_service import optimize_with_config
+from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
+from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
+from src.prompting.prompt_optimizer_service import PromptOptimizerService
+from src.prompting.stage_policy_engine import StagePolicyEngine
 from src.pipeline.stage_models import StageType
 
 
@@ -138,14 +141,32 @@ def _apply_prompt_optimizer(
 ) -> None:
     if "prompt" not in payload and "negative_prompt" not in payload:
         return
-    result = optimize_with_config(
-        payload.get("prompt", ""),
-        payload.get("negative_prompt", ""),
-        config_payload=config.get("prompt_optimizer"),
-        pipeline_name=stage_type.value if isinstance(stage_type, StageType) else str(stage_type),
-    )
-    payload["prompt"] = result.positive.optimized_prompt
-    payload["negative_prompt"] = result.negative.optimized_prompt
+    try:
+        optimizer_config = PromptOptimizerConfig.from_dict(config.get("prompt_optimizer"))
+    except Exception:
+        optimizer_config = PromptOptimizerConfig(enabled=False)
+    try:
+        stage_name = stage_type.value if isinstance(stage_type, StageType) else str(stage_type)
+        service = PromptOptimizerService(optimizer_config)
+        orchestrator = PromptOptimizerOrchestrator(service=service)
+        orchestrated = orchestrator.orchestrate(
+            positive_prompt=payload.get("prompt", ""),
+            negative_prompt=payload.get("negative_prompt", ""),
+            stage_name=stage_name,
+            config=config,
+        )
+        payload["prompt"] = orchestrated.optimization.positive.optimized_prompt
+        payload["negative_prompt"] = orchestrated.optimization.negative.optimized_prompt
+        policy_application = StagePolicyEngine().apply(
+            stage_name=stage_name,
+            current_config=payload,
+            source_config=config,
+            prompt_context=orchestrated.analysis.context,
+            intent=orchestrated.analysis.intent,
+        )
+        payload.update(policy_application.config)
+    except Exception:
+        return
 
 
 def _apply_refiner_fields(payload: dict[str, Any], stage: StageExecutionLike) -> None:

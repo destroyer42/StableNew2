@@ -100,8 +100,8 @@ def _build_ltx_multiframe_anchor_v1() -> WorkflowSpec:
             WorkflowDependencySpec(
                 dependency_id="comfy_ltx_nodes",
                 dependency_kind="custom_node",
-                locator="ComfyUI-LTXVideo",
-                description="Custom Comfy nodes required to execute the pinned workflow.",
+                locator="StableNewLTXAnchorBridge",
+                description="StableNew LTX bridge nodes required to execute the pinned workflow.",
             ),
         ),
         backend_defaults={

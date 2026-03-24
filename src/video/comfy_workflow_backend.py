@@ -28,6 +28,26 @@ from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 
+def _format_missing_dependency_message(spec: Any, dependency_result: Any) -> str:
+    missing_entries: list[str] = []
+    spec_by_id = {dependency.dependency_id: dependency for dependency in spec.dependency_specs}
+    for dependency_id in dependency_result.missing_required:
+        dependency = spec_by_id.get(dependency_id)
+        if dependency is None:
+            missing_entries.append(str(dependency_id))
+            continue
+        description = str(dependency.description or dependency.locator or "").strip()
+        if description:
+            missing_entries.append(f"{dependency_id} ({description})")
+        else:
+            missing_entries.append(str(dependency_id))
+    missing_text = ", ".join(missing_entries) if missing_entries else "unknown"
+    return (
+        f"Workflow '{spec.workflow_id}' missing required Comfy dependencies: {missing_text}. "
+        "Install the required workflow nodes/models for this workflow and restart ComfyUI before running the video_workflow stage."
+    )
+
+
 def _build_missing_runtime_message(base_url: str, reason: Exception | None = None) -> str:
     message = (
         "ComfyUI is not running and StableNew has no managed ComfyUI launch configuration. "
@@ -138,10 +158,7 @@ class ComfyWorkflowVideoBackend:
         probe = self._dependency_probe or ComfyDependencyProbe(client)
         dependency_result = probe.probe_workflow(spec, object_info=object_info)
         if not dependency_result.ready:
-            missing = ", ".join(dependency_result.missing_required)
-            raise RuntimeError(
-                f"Workflow '{workflow_id}' missing required Comfy dependencies: {missing}"
-            )
+            raise RuntimeError(_format_missing_dependency_message(spec, dependency_result))
 
         compiled = self._compiler.compile(spec, request)
         queue_payload = self._build_queue_payload(compiled, request)

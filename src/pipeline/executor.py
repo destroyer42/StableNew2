@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import replace
 import json
 import logging
 import math
@@ -32,6 +33,7 @@ from src.prompting.prompt_optimizer_registry import (
 )
 from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
+from src.prompting.stage_policy_engine import StagePolicyEngine
 from src.prompting.prompt_splitter import split_prompt_chunks
 from src.prompting.prompt_types import PromptOptimizationPairResult
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
@@ -265,6 +267,7 @@ class Pipeline:
         self._run_started_at_monotonic: float | None = None
         self._run_model_switch_count: int = 0
         self._run_vae_switch_count: int = 0
+        self._stage_policy_engine = StagePolicyEngine()
 
     def _begin_run_metrics(self) -> None:
         """Reset per-run efficiency counters."""
@@ -392,6 +395,62 @@ class Pipeline:
                     result.negative.dropped_duplicates,
                 )
         return result, optimizer_config, orchestrated.analysis
+
+    def _build_prompt_analysis(
+        self,
+        *,
+        positive_prompt: str,
+        negative_prompt: str,
+        config: dict[str, Any] | None,
+        stage_name: str,
+    ) -> PromptOptimizerAnalysisBundle:
+        config_payload = dict((config or {}).get("prompt_optimizer") or {})
+        try:
+            optimizer_config = PromptOptimizerConfig.from_dict(config_payload)
+        except Exception:
+            optimizer_config = PromptOptimizerConfig(enabled=False)
+        service = PromptOptimizerService(optimizer_config)
+        orchestrator = PromptOptimizerOrchestrator(service=service)
+        return orchestrator.orchestrate(
+            positive_prompt=str(positive_prompt or ""),
+            negative_prompt=str(negative_prompt or ""),
+            stage_name=stage_name,
+            config=config,
+        ).analysis
+
+    def _apply_prompt_stage_policy(
+        self,
+        *,
+        stage_name: str,
+        current_config: dict[str, Any],
+        source_config: dict[str, Any],
+        prompt_optimizer_analysis: PromptOptimizerAnalysisBundle,
+    ) -> tuple[dict[str, Any], PromptOptimizerAnalysisBundle]:
+        application = self._stage_policy_engine.apply(
+            stage_name=stage_name,
+            current_config=current_config,
+            source_config=source_config,
+            prompt_context=prompt_optimizer_analysis.context,
+            intent=prompt_optimizer_analysis.intent,
+        )
+        if application.bundle.applied_decisions:
+            logger.info(
+                "PROMPT STAGE POLICY APPLIED | stage=%s | settings=%s",
+                stage_name,
+                application.bundle.applied_settings,
+            )
+        elif application.bundle.recommended_decisions:
+            logger.info(
+                "PROMPT STAGE POLICY RECOMMENDATIONS | stage=%s | count=%d",
+                stage_name,
+                len(application.bundle.recommended_decisions),
+            )
+        updated_analysis = replace(
+            prompt_optimizer_analysis,
+            stage_policy=application.bundle,
+            warnings=list(dict.fromkeys([*prompt_optimizer_analysis.warnings, *application.bundle.warnings])),
+        )
+        return application.config, updated_analysis
 
     def _maybe_write_prompt_optimization_sidecar(
         self,
@@ -2989,6 +3048,12 @@ class Pipeline:
         )
         final_prompt = prompt_optimizer_result.positive.optimized_prompt
         ad_neg_final = prompt_optimizer_result.negative.optimized_prompt
+        config, prompt_optimizer_analysis = self._apply_prompt_stage_policy(
+            stage_name="adetailer",
+            current_config=dict(config or {}),
+            source_config=dict(config or {}),
+            prompt_optimizer_analysis=prompt_optimizer_analysis,
+        )
         logger.debug("[adetailer/prompt] adetailer_prompt='%s' txt2img_prompt='%s' final_prompt='%s'",
                     adetailer_prompt[:60] if adetailer_prompt else "(empty)",
                     prompt[:60] if prompt else "(empty)",
@@ -4090,6 +4155,12 @@ class Pipeline:
             )
             payload["prompt"] = prompt_optimizer_result.positive.optimized_prompt
             payload["negative_prompt"] = prompt_optimizer_result.negative.optimized_prompt
+            payload, prompt_optimizer_analysis = self._apply_prompt_stage_policy(
+                stage_name="txt2img",
+                current_config=payload,
+                source_config=dict(txt2img_config or {}),
+                prompt_optimizer_analysis=prompt_optimizer_analysis,
+            )
             try:
                 logger.info(
                     "[executor/txt2img] final negative prompt='%s'",
@@ -4501,6 +4572,12 @@ class Pipeline:
             )
             payload["prompt"] = prompt_optimizer_result.positive.optimized_prompt
             payload["negative_prompt"] = prompt_optimizer_result.negative.optimized_prompt
+            payload, prompt_optimizer_analysis = self._apply_prompt_stage_policy(
+                stage_name="img2img",
+                current_config=payload,
+                source_config=dict(config or {}),
+                prompt_optimizer_analysis=prompt_optimizer_analysis,
+            )
             try:
                 logger.info(
                     "[executor/img2img] final negative prompt (with%s global + aesthetic): '%s'",
@@ -5045,6 +5122,18 @@ class Pipeline:
             )
             patched_positive_prompt = patch_application.positive.patched
             patched_negative_prompt = patch_application.negative.patched
+            prompt_optimizer_analysis = self._build_prompt_analysis(
+                positive_prompt=patched_positive_prompt,
+                negative_prompt=patched_negative_prompt,
+                config=config,
+                stage_name="upscale",
+            )
+            config, prompt_optimizer_analysis = self._apply_prompt_stage_policy(
+                stage_name="upscale",
+                current_config=dict(config or {}),
+                source_config=dict(config or {}),
+                prompt_optimizer_analysis=prompt_optimizer_analysis,
+            )
 
             # DEBUG: Log full upscale config
             logger.info(
@@ -5379,6 +5468,7 @@ class Pipeline:
                     "status": "healthy",
                     "reasons": [],
                 },
+                "prompt_optimizer_analysis": prompt_optimizer_analysis.to_dict(),
                 # Accumulated stage history from previous stages
                 "stage_history": stage_history,
             }

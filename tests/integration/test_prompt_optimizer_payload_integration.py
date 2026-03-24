@@ -40,3 +40,21 @@ def test_payload_builder_respects_disabled_prompt_optimizer() -> None:
     payload = build_sdxl_payload(_make_stage({"prompt_optimizer": {"enabled": False}}))
     assert payload["prompt"] == "masterpiece, beautiful woman, cinematic lighting"
     assert payload["negative_prompt"] == "watermark, blurry, bad anatomy"
+
+
+def test_payload_builder_applies_stage_policy_for_auto_values() -> None:
+    payload = build_sdxl_payload(
+        _make_stage(
+            {
+                "sampler_name": "AUTO",
+                "scheduler": "AUTO",
+                "steps": "AUTO",
+                "cfg_scale": "AUTO",
+            }
+        )
+    )
+
+    assert payload["sampler_name"] == "DPM++ 2M"
+    assert payload["scheduler"] == "Karras"
+    assert payload["steps"] == 28
+    assert payload["cfg_scale"] == 6.5

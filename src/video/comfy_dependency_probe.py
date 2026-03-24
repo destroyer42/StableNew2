@@ -21,6 +21,20 @@ def _contains_locator(payload: Any, locator: str) -> bool:
     return needle in str(payload).lower()
 
 
+def _has_model_inventory(payload: Any) -> bool:
+    if isinstance(payload, Mapping):
+        for key, value in payload.items():
+            normalized = str(key or "").strip().lower()
+            if normalized in {"models", "checkpoints", "loras", "vae"}:
+                return True
+            if _has_model_inventory(value):
+                return True
+        return False
+    if isinstance(payload, (list, tuple, set)):
+        return any(_has_model_inventory(item) for item in payload)
+    return False
+
+
 @dataclass(frozen=True, slots=True)
 class DependencyProbeResult:
     ready: bool
@@ -64,14 +78,20 @@ class ComfyDependencyProbe:
 
         for dependency in spec.dependency_specs:
             found = _contains_locator(payload, dependency.locator)
+            verifiable = True
+            if dependency.dependency_kind == "checkpoint":
+                verifiable = _has_model_inventory(payload)
             details[dependency.dependency_id] = {
                 "found": found,
                 "locator": dependency.locator,
                 "dependency_kind": dependency.dependency_kind,
                 "required": bool(dependency.required),
+                "verifiable": verifiable,
             }
             if found:
                 present.append(dependency.dependency_id)
+            elif not verifiable:
+                details[dependency.dependency_id]["status"] = "unverified"
             elif dependency.required:
                 missing_required.append(dependency.dependency_id)
             else:

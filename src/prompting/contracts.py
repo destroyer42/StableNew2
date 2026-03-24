@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 
 RecommendationPriority = Literal["low", "medium", "high"]
+StagePolicyDecisionAction = Literal["applied", "preserved", "recommended"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,12 +115,53 @@ class PromptRecommendation:
 
 
 @dataclass(frozen=True, slots=True)
+class StagePolicyDecision:
+    key: str
+    value: Any
+    action: StagePolicyDecisionAction
+    rationale: str
+    source_state: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "value": self.value,
+            "action": self.action,
+            "rationale": self.rationale,
+            "source_state": self.source_state,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class StagePolicyBundle:
+    stage: str
+    mode: str
+    applied_settings: dict[str, Any] = field(default_factory=dict)
+    applied_decisions: list[StagePolicyDecision] = field(default_factory=list)
+    preserved_decisions: list[StagePolicyDecision] = field(default_factory=list)
+    recommended_decisions: list[StagePolicyDecision] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stage": self.stage,
+            "mode": self.mode,
+            "applied_settings": dict(self.applied_settings),
+            "applied_decisions": [item.to_dict() for item in self.applied_decisions],
+            "preserved_decisions": [item.to_dict() for item in self.preserved_decisions],
+            "recommended_decisions": [item.to_dict() for item in self.recommended_decisions],
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class PromptOptimizerAnalysisBundle:
     stage: str
     mode: str
     context: PromptContext
     intent: PromptIntentBundle
     recommendations: list[PromptRecommendation] = field(default_factory=list)
+    stage_policy: StagePolicyBundle | None = None
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -130,6 +172,7 @@ class PromptOptimizerAnalysisBundle:
             "context": self.context.to_dict(),
             "intent": self.intent.to_dict(),
             "recommendations": [item.to_dict() for item in self.recommendations],
+            "stage_policy": self.stage_policy.to_dict() if self.stage_policy is not None else None,
             "warnings": list(self.warnings),
             "errors": list(self.errors),
         }

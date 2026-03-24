@@ -164,6 +164,8 @@ Why second:
 
 #### 4.3 `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
 
+Status: Completed 2026-03-24
+
 Why third:
 
 - adds bounded stage policy behavior only for missing or `AUTO` config values
@@ -303,7 +305,6 @@ Why this fast-track works:
 
 1. close image output-route regression
 1. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
-1. `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
 1. `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
 1. `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
 1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
