@@ -17,6 +17,7 @@ from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.widgets.image_thumbnail import ImageThumbnail
@@ -283,10 +284,10 @@ class LearningTabFrame(ttk.Frame):
         self._staged_plan_preview_var = tk.StringVar(value="Derived plan preview: n/a")
         self._staged_prior_review_var = tk.StringVar(value="Prior Review: none")
         self._staged_queue_guidance_var = tk.StringVar(
-            value="Queue Now submits all candidates currently marked for a derived stage."
+            value="Queue Now submits every candidate currently marked for that derived stage, using the staged decisions already shown in this tab."
         )
         self._staged_review_guidance_var = tk.StringVar(
-            value="Edit in Review opens the selected candidate only for deliberate edits before queueing."
+            value="Edit in Review stays single-candidate so you can make deliberate prompt or stage edits before anything is queued."
         )
         self._staged_queue_buttons: dict[str, ttk.Button] = {}
         self._staged_review_buttons: dict[str, ttk.Button] = {}
@@ -508,6 +509,21 @@ class LearningTabFrame(ttk.Frame):
 
         derive_frame = ttk.LabelFrame(staged_right, text="Derived Jobs", padding=(6, 4))
         derive_frame.grid(row=12, column=0, sticky="ew", pady=(6, 0))
+        self.staged_queue_help_panel = ActionExplainerPanel(
+            derive_frame,
+            content=ActionExplainerContent(
+                title="Queue Now vs Review",
+                summary="Use Queue Now for bulk stage submission after you have already triaged a batch. Use Edit in Review when one candidate needs careful prompt or stage changes first.",
+                bullets=(
+                    "Queue Refine Now submits every candidate marked To Refine in one bulk pass.",
+                    "Queue Face Now submits every candidate marked To Face for face-triage work without opening them one by one.",
+                    "Queue Upscale Now submits every candidate marked To Upscale using the current staged decisions.",
+                    "If one candidate needs custom edits before queueing, open it in Review instead of using the bulk Queue Now path.",
+                ),
+            ),
+            wraplength=520,
+        )
+        self.staged_queue_help_panel.pack(fill="x", pady=(0, 6))
         self._staged_queue_buttons["refine"] = ttk.Button(
             derive_frame,
             text="Queue Refine Now",
@@ -516,7 +532,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_queue_buttons["refine"].pack(side="left", padx=(0, 4))
         attach_tooltip(
             self._staged_queue_buttons["refine"],
-            "Bulk path. Enqueue every candidate currently marked To Refine.",
+            "Bulk path. Enqueue every candidate currently marked To Refine. Use this after triage when the whole marked set is ready to run.",
         )
         self._staged_queue_buttons["face_triage"] = ttk.Button(
             derive_frame,
@@ -526,7 +542,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_queue_buttons["face_triage"].pack(side="left", padx=(0, 4))
         attach_tooltip(
             self._staged_queue_buttons["face_triage"],
-            "Bulk path. Enqueue every candidate currently marked To Face.",
+            "Bulk path. Enqueue every candidate currently marked To Face. This does not open Review for per-image edits first.",
         )
         self._staged_queue_buttons["upscale"] = ttk.Button(
             derive_frame,
@@ -536,7 +552,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_queue_buttons["upscale"].pack(side="left", padx=(0, 4))
         attach_tooltip(
             self._staged_queue_buttons["upscale"],
-            "Bulk path. Enqueue every candidate currently marked To Upscale.",
+            "Bulk path. Enqueue every candidate currently marked To Upscale using the staged curation decisions already captured here.",
         )
         ttk.Label(
             derive_frame,
@@ -546,6 +562,20 @@ class LearningTabFrame(ttk.Frame):
         ).pack(side="left", padx=(8, 0))
         review_frame = ttk.LabelFrame(staged_right, text="Edit in Review", padding=(6, 4))
         review_frame.grid(row=13, column=0, sticky="ew", pady=(6, 0))
+        self.staged_review_help_panel = ActionExplainerPanel(
+            review_frame,
+            content=ActionExplainerContent(
+                title="Single-Candidate Review Edits",
+                summary="These buttons open one selected candidate in Review so you can inspect metadata, adjust prompts, and then queue a deliberate reprocess path.",
+                bullets=(
+                    "Choose this path when one candidate needs custom edits instead of the batch-wide Queue Now behavior.",
+                    "The selected candidate must already be marked for the matching derived stage.",
+                    "Compare Latest Derived helps you inspect the most recent derived result before deciding whether to queue again.",
+                ),
+            ),
+            wraplength=520,
+        )
+        self.staged_review_help_panel.pack(fill="x", pady=(0, 6))
         self._staged_review_buttons["refine"] = ttk.Button(
             review_frame,
             text="Edit Refine in Review",
@@ -554,7 +584,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_review_buttons["refine"].pack(side="left", padx=(0, 4))
         attach_tooltip(
             self._staged_review_buttons["refine"],
-            "Deliberate path. Open the selected candidate in Review when it is marked To Refine.",
+            "Deliberate path. Open only the selected candidate in Review when it is marked To Refine, so you can make custom edits before queueing.",
         )
         self._staged_review_buttons["face_triage"] = ttk.Button(
             review_frame,
@@ -564,7 +594,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_review_buttons["face_triage"].pack(side="left", padx=(0, 4))
         attach_tooltip(
             self._staged_review_buttons["face_triage"],
-            "Deliberate path. Open the selected candidate in Review when it is marked To Face.",
+            "Deliberate path. Open only the selected candidate in Review when it is marked To Face for custom inspection or edits.",
         )
         self._staged_review_buttons["upscale"] = ttk.Button(
             review_frame,
@@ -574,7 +604,7 @@ class LearningTabFrame(ttk.Frame):
         self._staged_review_buttons["upscale"].pack(side="left", padx=(0, 4))
         attach_tooltip(
             self._staged_review_buttons["upscale"],
-            "Deliberate path. Open the selected candidate in Review when it is marked To Upscale.",
+            "Deliberate path. Open only the selected candidate in Review when it is marked To Upscale and needs manual adjustment first.",
         )
         ttk.Button(
             review_frame,

@@ -10,6 +10,7 @@ from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspector
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.utils.image_metadata import (
@@ -136,19 +137,21 @@ class ReviewTabFrame(ttk.Frame):
             command=self._on_clear,
         ).grid(row=0, column=2, sticky="w")
 
-        ttk.Button(
+        self.import_selected_button = ttk.Button(
             header,
             text="Import Selected to Learning",
             style="Dark.TButton",
             command=self._on_import_selected_to_staged_curation,
-        ).grid(row=0, column=3, sticky="w", padx=(6, 0))
+        )
+        self.import_selected_button.grid(row=0, column=3, sticky="w", padx=(6, 0))
 
-        ttk.Button(
+        self.import_recent_button = ttk.Button(
             header,
             text="Import Recent Job",
             style="Dark.TButton",
             command=self._on_open_history_import_picker,
-        ).grid(row=0, column=4, sticky="w", padx=(6, 0))
+        )
+        self.import_recent_button.grid(row=0, column=4, sticky="w", padx=(6, 0))
 
         self.selection_label = ttk.Label(
             header,
@@ -163,6 +166,29 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabel",
         )
         self.workflow_hint_label.grid(row=1, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        self.action_help_panel = ActionExplainerPanel(
+            header,
+            content=ActionExplainerContent(
+                title="Review Actions",
+                summary="Use Review when you need deliberate, metadata-aware decisions about existing images instead of sending everything straight back into generation.",
+                bullets=(
+                    "Import Selected to Learning copies the chosen review items into staged curation evidence so they can drive later decisions without reprocessing immediately.",
+                    "Import Recent Job opens a picker for a recent run when you want to start from history instead of the current folder selection.",
+                    "Reprocess Selected queues only the selected images with the stage toggles and prompt edits shown here.",
+                    "Reprocess All uses the current Review settings across the full loaded set, so confirm the effective settings box before clicking it.",
+                ),
+            ),
+            wraplength=980,
+        )
+        self.action_help_panel.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(8, 0))
+        self.import_selected_tooltip = attach_tooltip(
+            self.import_selected_button,
+            "Move the selected reviewed images into Learning staged curation. This records them as evidence candidates; it does not queue a new reprocess job by itself.",
+        )
+        self.import_recent_tooltip = attach_tooltip(
+            self.import_recent_button,
+            "Open a recent history job and import its outputs into this Review workspace so you can inspect metadata or make deliberate edits.",
+        )
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
@@ -456,19 +482,29 @@ class ReviewTabFrame(ttk.Frame):
             "Different settings are split into separate jobs.",
         )
 
-        ttk.Button(
+        self.reprocess_selected_button = ttk.Button(
             run_box,
             text="Reprocess Selected",
             style="Primary.TButton",
             command=lambda: self._reprocess(batch_all=False),
-        ).grid(row=5, column=0, sticky="ew", pady=(0, 6))
+        )
+        self.reprocess_selected_button.grid(row=5, column=0, sticky="ew", pady=(0, 6))
 
-        ttk.Button(
+        self.reprocess_all_button = ttk.Button(
             run_box,
             text="Reprocess All",
             style="Dark.TButton",
             command=lambda: self._reprocess(batch_all=True),
-        ).grid(row=6, column=0, sticky="ew")
+        )
+        self.reprocess_all_button.grid(row=6, column=0, sticky="ew")
+        attach_tooltip(
+            self.reprocess_selected_button,
+            "Queue only the currently selected images for reprocessing with the checked stages and prompt edits shown in Review.",
+        )
+        attach_tooltip(
+            self.reprocess_all_button,
+            "Queue every loaded image with the current Review settings. Use this only after confirming the effective settings summary and batch behavior.",
+        )
 
         feedback_box = ttk.LabelFrame(
             run_box,

@@ -12,6 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
+from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.movie_clips_contract import (
     DEFAULT_CODEC,
@@ -30,6 +31,7 @@ from src.gui.view_contracts.movie_clips_contract import (
     format_source_mode_label,
     sort_image_names,
 )
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.view_contracts.video_workspace_contract import summarize_movie_clips_source
 
@@ -148,6 +150,10 @@ class MovieClipsTabFrameV2(ttk.Frame):
             command=self._on_use_latest_video_output,
         )
         self.latest_video_btn.grid(row=0, column=6, sticky="w", padx=(6, 0))
+        self.latest_video_tooltip = attach_tooltip(
+            self.latest_video_btn,
+            "Pull the most recent compatible video-output bundle into Movie Clips so you can assemble its frames without browsing manually.",
+        )
 
         self.status_label = ttk.Label(
             header,
@@ -241,10 +247,24 @@ class MovieClipsTabFrameV2(ttk.Frame):
         settings_frame.grid(row=0, column=1, sticky="ns")
         settings_frame.columnconfigure(1, weight=1)
 
-        _lbl_cfg = {"style": "Dark.TLabel", "anchor": "w"}
+        self.workflow_help_panel = ActionExplainerPanel(
+            settings_frame,
+            content=ActionExplainerContent(
+                title="When To Use Movie Clips",
+                summary="Choose Movie Clips when you already have an ordered image sequence or a compatible workflow/SVD output bundle and want explicit clip assembly control.",
+                bullets=(
+                    "FPS controls playback speed. Higher values make the clip play faster and smoother if enough frames exist.",
+                    "Codec and Quality affect export compatibility and file size rather than generation semantics.",
+                    "Mode controls how the clip is assembled for output, so confirm it before building if the destination matters.",
+                    "Use Latest Video Output is the fastest handoff when another video tab already produced frames you want to package into a clip.",
+                ),
+            ),
+            wraplength=240,
+        )
+        self.workflow_help_panel.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
-        ttk.Label(settings_frame, text="FPS", **_lbl_cfg).grid(
-            row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
+        ttk.Label(settings_frame, text="FPS", style="Dark.TLabel", anchor="w").grid(
+            row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
         ttk.Spinbox(
             settings_frame,
@@ -254,10 +274,10 @@ class MovieClipsTabFrameV2(ttk.Frame):
             textvariable=self.fps_var,
             width=6,
             style="Dark.TSpinbox",
-        ).grid(row=0, column=1, sticky="ew", pady=(0, 6))
+        ).grid(row=1, column=1, sticky="ew", pady=(0, 6))
 
-        ttk.Label(settings_frame, text="Codec", **_lbl_cfg).grid(
-            row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
+        ttk.Label(settings_frame, text="Codec", style="Dark.TLabel", anchor="w").grid(
+            row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
         ttk.Combobox(
             settings_frame,
@@ -266,10 +286,10 @@ class MovieClipsTabFrameV2(ttk.Frame):
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=1, column=1, sticky="ew", pady=(0, 6))
+        ).grid(row=2, column=1, sticky="ew", pady=(0, 6))
 
-        ttk.Label(settings_frame, text="Quality", **_lbl_cfg).grid(
-            row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
+        ttk.Label(settings_frame, text="Quality", style="Dark.TLabel", anchor="w").grid(
+            row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
         ttk.Combobox(
             settings_frame,
@@ -278,10 +298,10 @@ class MovieClipsTabFrameV2(ttk.Frame):
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=2, column=1, sticky="ew", pady=(0, 6))
+        ).grid(row=3, column=1, sticky="ew", pady=(0, 6))
 
-        ttk.Label(settings_frame, text="Mode", **_lbl_cfg).grid(
-            row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 12)
+        ttk.Label(settings_frame, text="Mode", style="Dark.TLabel", anchor="w").grid(
+            row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 12)
         )
         ttk.Combobox(
             settings_frame,
@@ -290,10 +310,10 @@ class MovieClipsTabFrameV2(ttk.Frame):
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=3, column=1, sticky="ew", pady=(0, 12))
+        ).grid(row=4, column=1, sticky="ew", pady=(0, 12))
 
         ttk.Separator(settings_frame, orient="horizontal").grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=(0, 10)
+            row=5, column=0, columnspan=2, sticky="ew", pady=(0, 10)
         )
 
         self.build_btn = ttk.Button(
@@ -302,7 +322,11 @@ class MovieClipsTabFrameV2(ttk.Frame):
             style="Primary.TButton",
             command=self._on_build_clip,
         )
-        self.build_btn.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.build_btn.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.build_tooltip = attach_tooltip(
+            self.build_btn,
+            "Assemble the currently ordered image list into a rendered clip using the FPS, codec, quality, and mode shown here.",
+        )
 
         self.build_status_label = ttk.Label(
             settings_frame,
@@ -311,7 +335,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
             wraplength=160,
             justify="center",
         )
-        self.build_status_label.grid(row=6, column=0, columnspan=2, sticky="ew")
+        self.build_status_label.grid(row=7, column=0, columnspan=2, sticky="ew")
 
     # ------------------------------------------------------------------
     # Event handlers

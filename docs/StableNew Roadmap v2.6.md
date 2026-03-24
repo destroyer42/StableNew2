@@ -811,7 +811,8 @@ Priority note:
   18. treat `PR-PROMPT-241D` as completed
   19. treat `PR-PROMPT-241E` as completed
   20. treat `PR-UX-265` as completed
-  21. begin `PR-UX-266`
+  21. treat `PR-UX-266` as completed
+  22. begin `PR-UX-271`
 
 Planned rollout:
 
@@ -822,6 +823,9 @@ Planned rollout:
   Completed 2026-03-24
 
 - `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
+  Completed 2026-03-24
+
+- `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
   Completed 2026-03-24
 
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`

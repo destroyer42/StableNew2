@@ -3,8 +3,10 @@ from __future__ import annotations
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any
+from typing import Any, cast
 
+from src.gui.tooltip import attach_tooltip
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
 from src.state.output_routing import (
     OUTPUT_ROUTE_MOVIE_CLIPS,
     OUTPUT_ROUTE_REPROCESS,
@@ -114,12 +116,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ttk.Button(header, text="Browse...", style="Dark.TButton", command=self._on_browse_source).grid(
             row=0, column=2, sticky="ew", padx=(0, 6)
         )
-        ttk.Button(
+        self.use_latest_output_button = ttk.Button(
             header,
             text="Use Latest Output",
             style="Dark.TButton",
             command=self._on_use_latest_output,
-        ).grid(row=0, column=3, sticky="ew")
+        )
+        self.use_latest_output_button.grid(row=0, column=3, sticky="ew")
+        self.use_latest_output_tooltip = attach_tooltip(
+            self.use_latest_output_button,
+            "Load the newest compatible image output into this workflow tab. This prepares the source input only; it does not queue the workflow yet.",
+        )
         ttk.Label(header, textvariable=self.status_var, style="Dark.TLabel").grid(
             row=1, column=0, columnspan=4, sticky="w", pady=(6, 0)
         )
@@ -133,12 +140,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         body.columnconfigure(1, weight=1)
         body.columnconfigure(3, weight=1)
 
-        self.workflow_combo = self._add_labeled_entry(
+        self.workflow_combo: ttk.Combobox = cast(
+            ttk.Combobox,
+            self._add_labeled_entry(
             body,
             0,
             "Workflow",
             combo=True,
             variable=self.workflow_var,
+            ),
         )
         ttk.Label(body, textvariable=self.workflow_detail_var, style="Muted.TLabel", wraplength=640, justify="left").grid(
             row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
@@ -176,9 +186,24 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             variable=self.output_route_var,
             values=_OUTPUT_ROUTES,
         )
+        self.workflow_help_panel = ActionExplainerPanel(
+            body,
+            content=ActionExplainerContent(
+                title="When To Use Video Workflow",
+                summary="Choose Video Workflow when a named workflow and optional anchors should drive the motion plan. Use SVD for a quick single-image animation, and use Movie Clips when you already have a set of frames or outputs to assemble into a clip.",
+                bullets=(
+                    "Workflow picks the authored generation recipe and capability limits for this job.",
+                    "End Anchor and Mid Anchors are for workflows that need guide images across the sequence; leave them empty when the selected workflow does not require them.",
+                    "Motion changes the intended movement profile, not the workflow identity itself.",
+                    "Output Route decides whether the resulting artifacts should be easier to pick up in reprocess-oriented areas or in clip-assembly flows.",
+                ),
+            ),
+            wraplength=900,
+        )
+        self.workflow_help_panel.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(8, 6))
 
         ttk.Label(body, text="Prompt", style="Dark.TLabel").grid(
-            row=5, column=0, sticky="nw", padx=(0, 8), pady=(8, 6)
+            row=6, column=0, sticky="nw", padx=(0, 8), pady=(8, 6)
         )
         self.prompt_text = tk.Text(
             body,
@@ -188,10 +213,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             fg="#f2f2f2",
             insertbackground="#f2f2f2",
         )
-        self.prompt_text.grid(row=5, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
+        self.prompt_text.grid(row=6, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
 
         ttk.Label(body, text="Negative", style="Dark.TLabel").grid(
-            row=6, column=0, sticky="nw", padx=(0, 8), pady=(0, 6)
+            row=7, column=0, sticky="nw", padx=(0, 8), pady=(0, 6)
         )
         self.negative_prompt_text = tk.Text(
             body,
@@ -201,16 +226,21 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             fg="#f2f2f2",
             insertbackground="#f2f2f2",
         )
-        self.negative_prompt_text.grid(row=6, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
+        self.negative_prompt_text.grid(row=7, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
 
         submit_frame = ttk.Frame(body, style="Panel.TFrame")
-        submit_frame.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(10, 0))
-        ttk.Button(
+        submit_frame.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        self.queue_workflow_button = ttk.Button(
             submit_frame,
             text="Queue Video Workflow",
             style="Primary.TButton",
             command=self._on_submit,
-        ).pack(side="left")
+        )
+        self.queue_workflow_button.pack(side="left")
+        self.queue_workflow_tooltip = attach_tooltip(
+            self.queue_workflow_button,
+            "Queue a workflow-driven video job using the selected workflow, anchors, prompts, and route shown in this tab.",
+        )
 
     def _add_labeled_entry(
         self,
@@ -223,11 +253,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         values: tuple[str, ...] | list[str] = (),
         width: int = 40,
         helper: str = "",
-    ) -> ttk.Widget:
+    ) -> ttk.Combobox | ttk.Entry:
         ttk.Label(parent, text=label, style="Dark.TLabel").grid(
             row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
-        widget: Any
+        widget: ttk.Combobox | ttk.Entry
         if combo:
             widget = ttk.Combobox(
                 parent,
@@ -261,7 +291,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             if item.get("workflow_id")
         }
         values = list(self._workflow_map.keys())
-        self.workflow_combo.configure(values=values)
+        self.workflow_combo["values"] = values
         if not self.workflow_var.get() and values:
             self.workflow_var.set(values[0])
         self._refresh_workspace_summary()

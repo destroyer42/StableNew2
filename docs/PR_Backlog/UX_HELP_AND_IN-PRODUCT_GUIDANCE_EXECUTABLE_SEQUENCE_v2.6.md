@@ -92,6 +92,8 @@ Completion record:
 
 ### PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained
 
+Status: Completed 2026-03-24
+
 Purpose:
 
 - make buttons and actions much more understandable before the user clicks them
@@ -122,6 +124,10 @@ Primary file targets:
 Execution gate:
 
 - button semantics are no longer ambiguous to the operator
+
+Completion record:
+
+- `docs/CompletedPR/PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained.md`
 
 ### PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions
 

@@ -67,4 +67,9 @@ class Tooltip:
 
 def attach_tooltip(widget: tk.Widget, text: str, *, delay_ms: int = 500) -> Tooltip:
     """Attach a tooltip helper to a widget."""
-    return Tooltip(widget, text, delay_ms=delay_ms)
+    tooltip = Tooltip(widget, text, delay_ms=delay_ms)
+    try:
+        setattr(widget, "tooltip", tooltip)
+    except Exception:
+        pass
+    return tooltip

@@ -22,11 +22,13 @@ from src.gui.theme_v2 import (
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
+from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.queue_status_contract import (
     resolve_queue_status_display,
     resolve_queue_status_from_label,
 )
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
 from src.pipeline.job_models_v2 import (
     JobQueueItemDTO,
     NormalizedJobRecord,
@@ -105,6 +107,32 @@ class QueuePanelV2(ttk.Frame):
             width=10,
         )
         self.send_job_button.pack(side="right", padx=(0, 4))
+        self.queue_action_help_panel = ActionExplainerPanel(
+            self,
+            content=ActionExplainerContent(
+                title="Queue Actions",
+                summary="Every job runs through the queue. These controls decide whether queued work starts automatically, is manually dispatched, or is temporarily held in place.",
+                bullets=(
+                    "Auto-run queue starts the next pending job as soon as the queue is allowed to continue.",
+                    "Send Job manually dispatches only the current top queued job when you want deliberate step-by-step control.",
+                    "Pause Queue stops new dispatches but does not delete or rewrite queued jobs.",
+                    "Reorder, Remove, and Clear All change queue order or membership before execution, so use them before a job starts running.",
+                ),
+            ),
+        )
+        self.queue_action_help_panel.pack(fill="x", pady=(0, 4))
+        attach_tooltip(
+            self.auto_run_check,
+            "When enabled, the queue automatically starts the next pending job after the previous one finishes.",
+        )
+        attach_tooltip(
+            self.send_job_button,
+            "Manually dispatch the top queued job now. Use this when you want review checkpoints between jobs instead of continuous auto-run.",
+        )
+        attach_tooltip(
+            self.pause_resume_button,
+            "Pause prevents new queued jobs from starting. Resume allows normal dispatch again without changing queue contents.",
+        )
         # Queue status label with dark-mode styling
         self.queue_status_label = ttk.Label(
             self,
@@ -209,6 +237,12 @@ class QueuePanelV2(ttk.Frame):
             width=8,
         )
         self.clear_button.grid(row=0, column=5, sticky="ew", padx=(2, 0))
+        attach_tooltip(self.move_to_front_button, "Move the selected job to the top so it will dispatch before the other queued jobs.")
+        attach_tooltip(self.move_up_button, "Move the selected job one position earlier in queue order.")
+        attach_tooltip(self.move_down_button, "Move the selected job one position later in queue order.")
+        attach_tooltip(self.move_to_back_button, "Move the selected job to the end of the queue.")
+        attach_tooltip(self.remove_button, "Remove only the selected queued job before it starts running.")
+        attach_tooltip(self.clear_button, "Remove every pending queued job. Running work is not rewritten, but pending jobs will be dropped.")
 
         # Initial button state
         self._update_button_states()
