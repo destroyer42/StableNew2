@@ -1,7 +1,7 @@
 # StableNew Comfy-Aware Backlog v2.6
 
 Status: Active subordinate backlog  
-Updated: 2026-03-21
+Updated: 2026-03-24
 
 ## Purpose
 
@@ -249,7 +249,7 @@ Execution spec:
 
 ### `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
-Status: Planned
+Status: Completed 2026-03-24
 
 Use the safest current postprocess seam to land the first real motion runtime.
 
@@ -259,13 +259,17 @@ Required outputs:
 - shared-engine application as SVD postprocess stage zero
 - canonical motion provenance in SVD artifacts
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
+
 Execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
 ### `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
-Status: Planned
+Status: Completed 2026-03-24
 
 Insert the shared engine into the AnimateDiff frame pipeline.
 
@@ -275,13 +279,17 @@ Required outputs:
 - skip-safe AnimateDiff motion behavior with stable output-path semantics
 - canonical motion provenance in AnimateDiff artifacts
 
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
+
 Execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
 ### `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
-Status: Planned
+Status: Completed 2026-03-24
 
 Close the last major parity gap for the shared motion carrier without adding a
 new custom Comfy node dependency.
@@ -291,10 +299,16 @@ Required outputs:
 - StableNew-owned extract/apply/re-encode parity path for workflow-video
 - canonical replay closure for the final video artifact
 - consistent motion summary shape across all current video backends
+- skip-safe fallback to the original workflow artifact when local prerequisites
+  or re-encode steps are unavailable
 
 Execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
+
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
 ### `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 

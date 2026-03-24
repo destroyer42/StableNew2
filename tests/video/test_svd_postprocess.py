@@ -223,6 +223,68 @@ def test_postprocess_runner_runs_secondary_motion_before_other_stages(tmp_path: 
     assert metadata["secondary_motion"]["summary"]["status"] == "applied"
 
 
+def test_postprocess_runner_records_unavailable_secondary_motion_and_continues(tmp_path: Path, monkeypatch) -> None:
+    frames = [Image.new("RGB", (32, 32), "white"), Image.new("RGB", (32, 32), "black")]
+    config = SVDConfig.from_dict(
+        {
+            "postprocess": {
+                "secondary_motion": {
+                    "enabled": True,
+                    "policy_id": "svd_secondary_motion_v1",
+                    "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway", "regions": ["hair"]},
+                    "policy": {
+                        "enabled": True,
+                        "policy_id": "svd_secondary_motion_v1",
+                        "backend_mode": "apply_shared_postprocess_candidate",
+                        "intensity": 0.25,
+                        "damping": 0.9,
+                        "frequency_hz": 0.2,
+                        "cap_pixels": 12,
+                    },
+                    "intensity": 0.25,
+                    "damping": 0.9,
+                    "frequency_hz": 0.2,
+                    "cap_pixels": 12,
+                    "regions": ["hair"],
+                },
+                "upscale": {
+                    "enabled": True,
+                    "model_path": str(tmp_path / "realesrgan.pth"),
+                },
+            }
+        }
+    )
+    (tmp_path / "realesrgan.pth").write_bytes(b"weights")
+    stage_actions: list[str] = []
+
+    def _fake_run(cmd, cwd, capture_output, text, check):
+        payload = __import__("json").loads(cmd[-1])
+        stage_actions.append(payload["action"])
+        if payload["action"] == "secondary_motion":
+            return SimpleNamespace(returncode=1, stdout="", stderr="motion unavailable")
+        output_dir = Path(payload["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (32, 32), "red").save(output_dir / "frame_000000.png")
+        Image.new("RGB", (32, 32), "blue").save(output_dir / "frame_000001.png")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("src.video.svd_postprocess.subprocess.run", _fake_run)
+
+    processed, metadata = SVDPostprocessRunner().process_frames(
+        frames=frames,
+        config=config,
+        work_dir=tmp_path,
+    )
+
+    assert [frame.getpixel((0, 0)) for frame in processed] == [(255, 0, 0), (0, 0, 255)]
+    assert stage_actions[:2] == ["secondary_motion", "upscale"]
+    assert metadata is not None
+    assert metadata["applied"] == ["upscale"]
+    assert metadata["secondary_motion"]["summary"]["status"] == "unavailable"
+    assert metadata["secondary_motion"]["summary"]["skip_reason"] == "worker_failed"
+    assert metadata["skipped"][0]["stage"] == "secondary_motion"
+
+
 def test_postprocess_runner_face_restore_stage_returns_worker_outputs(tmp_path: Path, monkeypatch) -> None:
     frames = [Image.new("RGB", (32, 32), "white"), Image.new("RGB", (32, 32), "black")]
     codeformer_weight = tmp_path / "codeformer.pth"

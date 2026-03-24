@@ -17,6 +17,7 @@ from typing import Any, cast
 from PIL import Image
 
 from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
+from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.video_export import save_video_frames
@@ -171,6 +172,7 @@ class SVDPostprocessRunner:
         metadata: dict[str, Any] = {
             "input_frame_count": len(frames),
             "applied": [],
+            "skipped": [],
         }
         enabled_stage_names = [
             stage_name
@@ -196,8 +198,18 @@ class SVDPostprocessRunner:
                 postprocess=postprocess,
                 work_dir=root,
             )
-            metadata["applied"].append("secondary_motion")
             metadata["secondary_motion"] = secondary_motion_block
+            summary = dict(secondary_motion_block.get("summary") or {}) if isinstance(secondary_motion_block, dict) else {}
+            if str(summary.get("status") or "") == "applied":
+                metadata["applied"].append("secondary_motion")
+            else:
+                metadata["skipped"].append(
+                    {
+                        "stage": "secondary_motion",
+                        "status": str(summary.get("status") or ""),
+                        "skip_reason": str(summary.get("skip_reason") or ""),
+                    }
+                )
             self._emit_status(
                 stage_detail="postprocess: secondary_motion",
                 progress=len(metadata["applied"]) / total_enabled_stages,
@@ -299,17 +311,48 @@ class SVDPostprocessRunner:
         work_dir: Path,
     ) -> tuple[list[Image.Image], dict[str, Any]]:
         motion_payload = postprocess.secondary_motion.to_dict()
-        processed, apply_result = cast(
-            tuple[list[Image.Image], dict[str, Any]],
-            self._run_worker_stage(
-            stage_name="secondary_motion",
-            action="secondary_motion",
-            frames=frames,
-            payload=motion_payload,
-            work_dir=work_dir,
-            expect_result=True,
-            ),
-        )
+        fallback_frames = [frame.copy() for frame in frames]
+        try:
+            processed, apply_result = cast(
+                tuple[list[Image.Image], dict[str, Any]],
+                self._run_worker_stage(
+                    stage_name="secondary_motion",
+                    action="secondary_motion",
+                    frames=frames,
+                    payload=motion_payload,
+                    work_dir=work_dir,
+                    expect_result=True,
+                ),
+            )
+        except SVDPostprocessError as exc:
+            logger.warning("[SVD][postprocess] secondary motion unavailable; continuing without motion: %s", exc)
+            apply_result = {
+                "schema": SECONDARY_MOTION_APPLY_SCHEMA_V1,
+                "status": "unavailable",
+                "policy_id": str(motion_payload.get("policy_id") or ""),
+                "application_path": "shared_postprocess_engine",
+                "backend_mode": str(motion_payload.get("backend_mode") or ""),
+                "frames_in": len(fallback_frames),
+                "frames_out": len(fallback_frames),
+                "seed": motion_payload.get("seed"),
+                "regions_applied": list(motion_payload.get("regions") or []),
+                "skip_reason": "worker_failed",
+                "metrics": {"applied_frame_count": 0},
+                "error": str(exc),
+            }
+            manifest_block = build_secondary_motion_manifest_block(
+                intent=motion_payload.get("intent"),
+                policy=motion_payload.get("policy"),
+                apply_result=apply_result,
+            )
+            return fallback_frames, manifest_block
+        for frame in fallback_frames:
+            close = getattr(frame, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
         manifest_block = build_secondary_motion_manifest_block(
             intent=motion_payload.get("intent"),
             policy=motion_payload.get("policy"),

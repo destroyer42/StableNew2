@@ -71,10 +71,17 @@ def _build_secondary_motion_runtime_block(observation: Mapping[str, Any] | None)
         return None
     return {
         "enabled": bool(policy.get("enabled", intent.get("enabled", False))),
+        "policy_id": str(policy.get("policy_id") or ""),
         "intent": intent,
         "policy": policy,
         "seed": intent.get("seed"),
         "backend_mode": str(policy.get("backend_mode") or ""),
+        "intensity": float(policy.get("intensity", 0.0) or 0.0),
+        "damping": float(policy.get("damping", 1.0) or 1.0),
+        "frequency_hz": float(policy.get("frequency_hz", 0.0) or 0.0),
+        "cap_pixels": int(policy.get("cap_pixels", 0) or 0),
+        "regions": list(intent.get("regions") or []),
+        "skip_reason": "",
     }
 
 

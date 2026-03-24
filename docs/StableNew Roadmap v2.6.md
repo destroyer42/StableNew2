@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-22  
+Updated: 2026-03-24  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -57,9 +57,9 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
   cleanup rather than missing refinement foundations
 - Pipeline sidebar and review/reprocess UX still carry product-level cleanup
   debt around pack discovery, scan roots, and duplicated surfaces
-- StableNew-owned secondary motion now exists across SVD native,
-  AnimateDiff, and workflow-video backends with canonical provenance,
-  container metadata, replay summaries, and learning integration
+- StableNew-owned secondary motion now has a shared engine/provenance layer and
+  an active SVD-native backend path with canonical manifest, replay, and
+  container summaries; AnimateDiff and workflow-video rollout remain queued
 
 ## 3. Status of the Older Revised Video Queue
 
@@ -674,7 +674,7 @@ Detailed execution spec:
 
 ### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
-Status: Completed 2026-03-22
+Status: Completed 2026-03-24
 
 Use the safest existing postprocess seam to land the first real runtime motion
 path.
@@ -695,7 +695,7 @@ Detailed execution spec:
 
 ### 23. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
-Status: Completed 2026-03-22
+Status: Completed 2026-03-24
 
 Insert the shared engine into the existing AnimateDiff frame pipeline.
 
@@ -715,7 +715,7 @@ Detailed execution spec:
 
 ### 24. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
-Status: Completed 2026-03-22
+Status: Completed 2026-03-24
 
 Close the last major backend parity gap for the shared motion carrier.
 
@@ -724,6 +724,8 @@ Primary outcomes:
 - StableNew-owned extract/apply/re-encode parity path for workflow-video
 - canonical replay closure without a new custom Comfy node dependency
 - consistent motion summary shape across all three current video backends
+- skip-safe fallback to the original workflow artifact when local prerequisites
+  or re-encode steps are unavailable
 
 Completion record:
 
@@ -798,7 +800,10 @@ Priority note:
   8. treat `PR-LEARN-262` as completed
   9. treat `PR-LEARN-263` as completed
   10. treat `PR-LEARN-264` as completed
-  11. begin `PR-VIDEO-238`
+  11. treat `PR-VIDEO-238` as completed
+  12. treat `PR-VIDEO-239` as completed
+  13. treat `PR-VIDEO-240` as completed
+  14. begin `PR-VIDEO-241`
 
 Planned rollout:
 

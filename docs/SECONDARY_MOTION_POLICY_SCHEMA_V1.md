@@ -1,7 +1,7 @@
 SECONDARY_MOTION_POLICY_SCHEMA_V1.md
 
 Status: Active
-Updated: 2026-03-22
+Updated: 2026-03-24
 
 ## Purpose
 
@@ -170,6 +170,115 @@ Rules:
 - prompt text is not mutated by secondary motion rollout
 - summaries remain replay-safe and scalar-only outside manifest provenance
 
+## SVD Runtime Carriage
+
+Added in `PR-VIDEO-238`.
+
+Carrier:
+
+- copied SVD runtime config under `postprocess.secondary_motion`
+
+Canonical transient shape:
+
+```json
+{
+  "enabled": true,
+  "mode": "apply",
+  "policy_id": "svd_native_apply_v1",
+  "intensity": 0.25,
+  "damping": 0.9,
+  "frequency_hz": 0.2,
+  "cap_pixels": 12,
+  "regions": ["hair", "fabric"],
+  "skip_reason": null,
+  "seed": 1234
+}
+```
+
+Rules:
+
+- this block is runner-injected and backend-local; it is not a second outer job
+  carrier
+- SVD applies secondary motion as postprocess stage zero before later postprocess
+  steps such as upscale
+- secondary-motion worker failure is skip-safe and must preserve later SVD
+  postprocess execution with `status="unavailable"` and `skip_reason="worker_failed"`
+
+## AnimateDiff Runtime Carriage
+
+Added in `PR-VIDEO-239`.
+
+Carrier:
+
+- copied AnimateDiff runtime config under `secondary_motion`
+
+Canonical transient shape:
+
+```json
+{
+  "enabled": true,
+  "mode": "apply",
+  "policy_id": "animatediff_apply_v1",
+  "intensity": 0.25,
+  "damping": 0.9,
+  "frequency_hz": 0.2,
+  "cap_pixels": 12,
+  "regions": ["hair", "fabric"],
+  "skip_reason": "",
+  "seed": 1234
+}
+```
+
+Rules:
+
+- this block is runner-injected and backend-local; it is not a second outer job
+  carrier
+- AnimateDiff applies secondary motion after frame write and before MP4 assembly
+- secondary-motion worker failure is skip-safe and must preserve original frame
+  encode with `status="unavailable"` and `skip_reason="worker_failed"`
+- compact secondary-motion summaries must be preserved in the stage result,
+  replay fragment, and container metadata
+
+## Workflow-Video Runtime Carriage
+
+Completed in `PR-VIDEO-240`.
+
+Carrier:
+
+- copied workflow-video runtime config under `secondary_motion`
+
+Canonical transient shape:
+
+```json
+{
+  "enabled": true,
+  "mode": "apply",
+  "policy_id": "workflow_video_apply_v1",
+  "intensity": 0.25,
+  "damping": 0.9,
+  "frequency_hz": 0.2,
+  "cap_pixels": 12,
+  "regions": ["hair", "fabric"],
+  "skip_reason": "",
+  "seed": 1234
+}
+```
+
+Rules:
+
+- this block is runner-injected and backend-local; it is not a second outer job
+  carrier
+- workflow-video applies secondary motion by extracting frames from the original
+  workflow output, running the shared worker, and re-encoding a promoted MP4
+- when motion applies, the re-encoded artifact becomes the final primary video
+  while the original workflow output path remains preserved in detailed
+  provenance and replay metadata as `secondary_motion_source_video_path`
+- missing FFmpeg, extraction failure, worker failure, or re-encode failure are
+  skip-safe and must preserve the original workflow output with
+  `status="unavailable"`
+- compact secondary-motion summaries must be preserved in the StableNew-owned
+  manifest, replay fragment, and container metadata
+
 ## Non-Goals for v1
 
 - no new video stage type
@@ -181,7 +290,7 @@ Rules:
 ## Follow-On Owners
 
 - shared engine and provenance closure: `PR-VIDEO-237`
-- backend application paths: `PR-VIDEO-238`, `PR-VIDEO-239`, `PR-VIDEO-240`
+- backend application paths: `PR-VIDEO-238`, `PR-VIDEO-239`, `PR-VIDEO-240` completed
 - learning integration: `PR-VIDEO-241`
 
 ## Shared Provenance Summary Contract

@@ -42,7 +42,8 @@ from src.pipeline.animatediff_models import (
 from src.pipeline.video import VideoCreator, write_video_frames
 from src.refinement.prompt_patcher import apply_prompt_patch
 from src.video.container_metadata import write_video_container_metadata
-from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
+from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
+from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block, extract_secondary_motion_summary
 from src.video.motion.secondary_motion_worker import run_secondary_motion_worker
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
@@ -4725,22 +4726,44 @@ class Pipeline:
 
             secondary_motion_block = config.get("secondary_motion") if isinstance(config.get("secondary_motion"), dict) else None
             secondary_motion_manifest = None
+            secondary_motion_summary = None
             if isinstance(secondary_motion_block, dict) and secondary_motion_block.get("enabled"):
                 motion_frames_dir = output_dir / f"{video_path.stem}_secondary_motion_frames"
-                apply_result = _apply_secondary_motion_frame_directory(
-                    runtime_block=secondary_motion_block,
-                    input_dir=frames_dir,
-                    output_dir=motion_frames_dir,
-                )
-                if apply_result:
+                try:
+                    apply_result = _apply_secondary_motion_frame_directory(
+                        runtime_block=secondary_motion_block,
+                        input_dir=frames_dir,
+                        output_dir=motion_frames_dir,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "AnimateDiff secondary motion unavailable; continuing with original frames: %s",
+                        exc,
+                    )
+                    apply_result = {
+                        "schema": SECONDARY_MOTION_APPLY_SCHEMA_V1,
+                        "status": "unavailable",
+                        "policy_id": str(secondary_motion_block.get("policy_id") or ""),
+                        "application_path": "frame_directory_worker",
+                        "backend_mode": str(secondary_motion_block.get("backend_mode") or ""),
+                        "frames_in": len(frame_paths),
+                        "frames_out": len(frame_paths),
+                        "seed": secondary_motion_block.get("seed"),
+                        "regions_applied": list(secondary_motion_block.get("regions") or []),
+                        "skip_reason": "worker_failed",
+                        "metrics": {"applied_frame_count": 0},
+                        "error": str(exc),
+                    }
+                if isinstance(apply_result, dict):
                     motion_output_paths = [Path(path) for path in apply_result.get("output_paths") or []]
                     if motion_output_paths:
                         frame_paths = motion_output_paths
-                        secondary_motion_manifest = build_secondary_motion_manifest_block(
-                            intent=secondary_motion_block.get("intent"),
-                            policy=secondary_motion_block.get("policy"),
-                            apply_result=apply_result,
-                        )
+                    secondary_motion_manifest = build_secondary_motion_manifest_block(
+                        intent=secondary_motion_block.get("intent"),
+                        policy=secondary_motion_block.get("policy"),
+                        apply_result=apply_result,
+                    )
+                    secondary_motion_summary = dict(secondary_motion_manifest.get("summary") or {})
 
             video_creator = VideoCreator()
             if not video_creator.create_video_from_images(
@@ -4776,6 +4799,9 @@ class Pipeline:
             }
             if secondary_motion_manifest is not None:
                 metadata["secondary_motion"] = secondary_motion_manifest
+                metadata["secondary_motion_summary"] = secondary_motion_summary or extract_secondary_motion_summary(
+                    {"secondary_motion": secondary_motion_manifest}
+                )
 
             manifest_dir = output_dir / "manifests"
             manifest_dir.mkdir(exist_ok=True, parents=True)
@@ -4816,6 +4842,7 @@ class Pipeline:
                     "config": self._clean_metadata_payload(payload),
                     "artifact": metadata["artifact"],
                     "secondary_motion": secondary_motion_manifest,
+                    "secondary_motion_summary": metadata.get("secondary_motion_summary"),
                 },
             )
 
@@ -4924,6 +4951,9 @@ class Pipeline:
             secondary_motion = ((result.postprocess or {}).get("secondary_motion") if isinstance(result.postprocess, dict) else None)
             if isinstance(secondary_motion, dict):
                 metadata["secondary_motion"] = secondary_motion
+                metadata["secondary_motion_summary"] = extract_secondary_motion_summary(
+                    {"secondary_motion": secondary_motion}
+                )
             metadata["artifact"] = artifact_manifest_payload(
                 stage="svd_native",
                 image_or_output_path=primary_path or "",

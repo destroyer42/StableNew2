@@ -260,34 +260,63 @@ class SVDUpscaleConfig:
 @dataclass(frozen=True)
 class SVDSecondaryMotionConfig:
     enabled: bool = False
+    policy_id: str = ""
     intent: dict[str, Any] = field(default_factory=dict)
     policy: dict[str, Any] = field(default_factory=dict)
     seed: int | None = None
     backend_mode: str = ""
+    intensity: float = 0.0
+    damping: float = 1.0
+    frequency_hz: float = 0.0
+    cap_pixels: int = 0
+    regions: tuple[str, ...] = ()
+    skip_reason: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> SVDSecondaryMotionConfig:
         payload = dict(data or {})
-        seed = payload.get("seed")
+        raw_seed = payload.get("seed")
+        seed = None if raw_seed in (None, "") else int(raw_seed)
         intent = dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
         policy = dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+        regions_raw = payload.get("regions", intent.get("regions"))
+        if isinstance(regions_raw, str):
+            regions = (regions_raw.strip(),) if regions_raw.strip() else ()
+        elif isinstance(regions_raw, (list, tuple)):
+            regions = tuple(str(item).strip() for item in regions_raw if str(item or "").strip())
+        else:
+            regions = ()
         backend_mode = str(payload.get("backend_mode") or policy.get("backend_mode") or "")
         enabled = bool(payload.get("enabled", policy.get("enabled", intent.get("enabled", False))))
         return cls(
             enabled=enabled,
+            policy_id=str(payload.get("policy_id") or policy.get("policy_id") or ""),
             intent=intent,
             policy=policy,
-            seed=None if seed in (None, "") else int(seed),
+            seed=seed,
             backend_mode=backend_mode,
+            intensity=float(payload.get("intensity", policy.get("intensity", 0.0)) or 0.0),
+            damping=float(payload.get("damping", policy.get("damping", 1.0)) or 1.0),
+            frequency_hz=float(payload.get("frequency_hz", policy.get("frequency_hz", 0.0)) or 0.0),
+            cap_pixels=int(payload.get("cap_pixels", policy.get("cap_pixels", 0)) or 0),
+            regions=regions,
+            skip_reason=str(payload.get("skip_reason") or ""),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
+            "policy_id": self.policy_id,
             "intent": dict(self.intent),
             "policy": dict(self.policy),
             "seed": self.seed,
             "backend_mode": self.backend_mode,
+            "intensity": self.intensity,
+            "damping": self.damping,
+            "frequency_hz": self.frequency_hz,
+            "cap_pixels": self.cap_pixels,
+            "regions": list(self.regions),
+            "skip_reason": self.skip_reason,
         }
 
 

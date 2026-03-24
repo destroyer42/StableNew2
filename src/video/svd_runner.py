@@ -96,6 +96,7 @@ class SVDRunner:
             logger.info("[SVD] inference completed frame_count=%s", len(frames))
             postprocess_enabled = any(
                 (
+                    config.postprocess.secondary_motion.enabled,
                     config.postprocess.face_restore.enabled,
                     config.postprocess.interpolation.enabled,
                     config.postprocess.upscale.enabled,
@@ -109,6 +110,7 @@ class SVDRunner:
                     total_steps=sum(
                         1
                         for enabled in (
+                            config.postprocess.secondary_motion.enabled,
                             config.postprocess.face_restore.enabled,
                             config.postprocess.interpolation.enabled,
                             config.postprocess.upscale.enabled,

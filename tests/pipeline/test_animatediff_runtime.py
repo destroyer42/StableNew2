@@ -112,13 +112,20 @@ def test_run_animatediff_stage_applies_secondary_motion_between_frames_and_encod
             "output_paths": [str(first), str(second)],
         }
 
+    encoded_paths: list[str] = []
+    container_payloads: list[dict[str, object]] = []
+
     def _fake_create_video(self, image_paths, output_path, fps=24, codec="libx264", quality="medium"):
+        encoded_paths[:] = [str(path) for path in image_paths]
         output_path.write_bytes(b"video")
         return True
 
     monkeypatch.setattr("src.pipeline.executor._apply_secondary_motion_frame_directory", _fake_apply)
     monkeypatch.setattr("src.pipeline.executor.VideoCreator.create_video_from_images", _fake_create_video)
-    monkeypatch.setattr("src.pipeline.executor.write_video_container_metadata", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "src.pipeline.executor.write_video_container_metadata",
+        lambda _path, payload: container_payloads.append(dict(payload)) or True,
+    )
 
     result = pipeline.run_animatediff_stage(
         input_image_path=tmp_path / "seed.png",
@@ -140,6 +147,12 @@ def test_run_animatediff_stage_applies_secondary_motion_between_frames_and_encod
 
     assert result is not None
     assert result["secondary_motion"]["summary"]["status"] == "applied"
+    assert result["secondary_motion_summary"]["status"] == "applied"
+    assert encoded_paths == [
+        str(tmp_path / "animatediff_motion_test_secondary_motion_frames" / "frame_000000.png"),
+        str(tmp_path / "animatediff_motion_test_secondary_motion_frames" / "frame_000001.png"),
+    ]
+    assert container_payloads[0]["secondary_motion_summary"]["status"] == "applied"
 
 
 def test_run_animatediff_stage_returns_none_when_capability_missing(tmp_path: Path) -> None:

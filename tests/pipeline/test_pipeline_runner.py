@@ -938,6 +938,224 @@ def test_run_njr_injects_apply_mode_secondary_motion_and_collects_summary(tmp_pa
     assert result.metadata["secondary_motion"]["summary"]["application_path"] == "shared_postprocess_engine"
 
 
+def test_run_njr_injects_apply_mode_secondary_motion_under_svd_postprocess(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    output_video = tmp_path / "svd.mp4"
+    input_path.write_bytes(b"seed")
+    output_video.write_bytes(b"mp4")
+
+    class _SVDBackend:
+        backend_id = "svd_native"
+        capabilities = VideoBackendCapabilities(
+            backend_id="svd_native",
+            stage_types=("svd_native",),
+            requires_input_image=True,
+            supports_prompt_text=False,
+            supports_negative_prompt=False,
+        )
+
+        def execute(self, pipeline, request):
+            assert "secondary_motion" not in request.stage_config
+            postprocess = request.stage_config.get("postprocess")
+            assert isinstance(postprocess, dict)
+            runtime_block = postprocess.get("secondary_motion")
+            assert isinstance(runtime_block, dict)
+            assert runtime_block["enabled"] is True
+            assert runtime_block["intent"]["mode"] == "apply"
+            assert runtime_block["policy_id"]
+            assert runtime_block["intensity"] > 0.0
+            assert runtime_block["cap_pixels"] > 0
+            assert runtime_block["regions"] == ["hair"]
+            return VideoExecutionResult.from_stage_result(
+                backend_id="svd_native",
+                stage_name="svd_native",
+                result={
+                    "path": str(output_video),
+                    "video_path": str(output_video),
+                    "output_paths": [str(output_video)],
+                    "secondary_motion": {
+                        "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
+                        "policy": {
+                            "enabled": True,
+                            "policy_id": str(runtime_block["policy_id"]),
+                            "backend_mode": str(runtime_block["backend_mode"]),
+                        },
+                        "apply_result": {
+                            "status": "applied",
+                            "application_path": "frame_directory_worker",
+                            "metrics": {"frames_in": 25, "frames_out": 25},
+                        },
+                    },
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "svd_native",
+                        "artifact_type": "video",
+                        "primary_path": str(output_video),
+                        "output_paths": [str(output_video)],
+                        "input_image_path": str(input_path),
+                    },
+                },
+            )
+
+    registry = VideoBackendRegistry()
+    registry.register(_SVDBackend())
+    runner._video_backends = registry
+    record = NormalizedJobRecord(
+        job_id="runner-svd-secondary-motion-apply",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[
+            StageConfig(
+                stage_type="svd_native",
+                enabled=True,
+                extra={"postprocess": {"upscale": {"enabled": False}}},
+            )
+        ],
+        input_image_paths=[str(input_path)],
+        start_stage="svd_native",
+    )
+    record.positive_prompt = "portrait woman with flowing hair"
+    record.negative_prompt = "camera shake"
+    record.intent_config = {
+        "secondary_motion": {
+            "schema": "stablenew.secondary-motion.v1",
+            "enabled": True,
+            "mode": "apply",
+            "intent": "micro_sway",
+            "regions": ["hair"],
+            "allow_native_backend": False,
+            "algorithm_version": "v1",
+        }
+    }
+    original_extra = dict(record.stage_chain[0].extra or {})
+    runner._pipeline = Mock()
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert record.stage_chain[0].extra == original_extra
+    assert result.metadata["secondary_motion"]["summary"]["status"] == "applied"
+    assert result.metadata["secondary_motion"]["summary"]["application_path"] == "frame_directory_worker"
+
+
+def test_run_njr_injects_apply_mode_secondary_motion_into_animatediff_stage(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    input_path = tmp_path / "seed.png"
+    output_video = tmp_path / "animatediff.mp4"
+    input_path.write_bytes(b"seed")
+    output_video.write_bytes(b"mp4")
+
+    class _AnimateDiffBackend:
+        backend_id = "animatediff"
+        capabilities = VideoBackendCapabilities(
+            backend_id="animatediff",
+            stage_types=("animatediff",),
+            requires_input_image=True,
+            supports_prompt_text=True,
+            supports_negative_prompt=True,
+        )
+
+        def execute(self, pipeline, request):
+            runtime_block = request.stage_config.get("secondary_motion")
+            assert isinstance(runtime_block, dict)
+            assert runtime_block["enabled"] is True
+            assert runtime_block["intent"]["mode"] == "apply"
+            assert runtime_block["policy_id"]
+            assert runtime_block["intensity"] > 0.0
+            assert runtime_block["cap_pixels"] > 0
+            assert runtime_block["regions"] == ["hair"]
+            return VideoExecutionResult.from_stage_result(
+                backend_id="animatediff",
+                stage_name="animatediff",
+                result={
+                    "path": str(output_video),
+                    "video_path": str(output_video),
+                    "output_paths": [str(output_video)],
+                    "secondary_motion": {
+                        "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
+                        "policy": {
+                            "enabled": True,
+                            "policy_id": str(runtime_block["policy_id"]),
+                            "backend_mode": str(runtime_block["backend_mode"]),
+                        },
+                        "apply_result": {
+                            "status": "applied",
+                            "application_path": "frame_directory_worker",
+                            "metrics": {"frames_in": 16, "frames_out": 16},
+                        },
+                    },
+                    "secondary_motion_summary": {
+                        "schema": "stablenew.secondary-motion-summary.v1",
+                        "enabled": True,
+                        "status": "applied",
+                        "policy_id": str(runtime_block["policy_id"]),
+                        "application_path": "frame_directory_worker",
+                        "intent": {"mode": "apply", "intent": "micro_sway"},
+                        "backend_mode": str(runtime_block["backend_mode"]),
+                        "skip_reason": "",
+                        "metrics": {"frames_in": 16, "frames_out": 16},
+                    },
+                    "artifact": {
+                        "schema": "stablenew.artifact.v2.6",
+                        "stage": "animatediff",
+                        "artifact_type": "video",
+                        "primary_path": str(output_video),
+                        "output_paths": [str(output_video)],
+                        "input_image_path": str(input_path),
+                    },
+                },
+            )
+
+    registry = VideoBackendRegistry()
+    registry.register(_AnimateDiffBackend())
+    runner._video_backends = registry
+    record = NormalizedJobRecord(
+        job_id="runner-animatediff-secondary-motion-apply",
+        config={},
+        path_output_dir="output",
+        filename_template="{seed}",
+        seed=42,
+        variant_index=0,
+        variant_total=1,
+        batch_index=0,
+        batch_total=1,
+        created_ts=0.0,
+        stage_chain=[StageConfig(stage_type="animatediff", enabled=True, extra={"enabled": True, "fps": 12})],
+        input_image_paths=[str(input_path)],
+        start_stage="animatediff",
+    )
+    record.positive_prompt = "portrait woman with flowing hair"
+    record.negative_prompt = "camera shake"
+    record.intent_config = {
+        "secondary_motion": {
+            "schema": "stablenew.secondary-motion.v1",
+            "enabled": True,
+            "mode": "apply",
+            "intent": "micro_sway",
+            "regions": ["hair"],
+            "allow_native_backend": False,
+            "algorithm_version": "v1",
+        }
+    }
+    original_extra = dict(record.stage_chain[0].extra or {})
+    runner._pipeline = Mock()
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    assert record.stage_chain[0].extra == original_extra
+    assert result.metadata["secondary_motion"]["summary"]["status"] == "applied"
+    assert result.metadata["secondary_motion"]["summary"]["application_path"] == "frame_directory_worker"
+
+
 def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Path) -> None:
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     record = NormalizedJobRecord(

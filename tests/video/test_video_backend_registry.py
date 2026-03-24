@@ -51,6 +51,18 @@ def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
         "output_paths": [str(tmp_path / "clip.mp4")],
         "frame_paths": [str(tmp_path / "frame_0001.png")],
         "manifest_path": str(tmp_path / "clip.json"),
+        "secondary_motion": {
+            "summary": {
+                "schema": "stablenew.secondary-motion-summary.v1",
+                "status": "applied",
+                "policy_id": "animatediff_motion_v1",
+            }
+        },
+        "secondary_motion_summary": {
+            "schema": "stablenew.secondary-motion-summary.v1",
+            "status": "applied",
+            "policy_id": "animatediff_motion_v1",
+        },
         "artifact": {
             "schema": "stablenew.artifact.v2.6",
             "stage": "animatediff",
@@ -84,6 +96,7 @@ def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
     variant_payload = result.to_variant_payload()
     assert variant_payload["video_backend_id"] == "animatediff"
     assert variant_payload["artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
+    assert variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
 
 
 def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
@@ -132,12 +145,16 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
     start_anchor = tmp_path / "start.png"
     end_anchor = tmp_path / "end.png"
     output_video = tmp_path / "clip.mp4"
+    promoted_video = tmp_path / "clip_secondary_motion.mp4"
     preview_frame = tmp_path / "preview.png"
+    motion_frame = tmp_path / "motion_frame.png"
     for path, payload in (
         (start_anchor, b"png"),
         (end_anchor, b"png"),
         (output_video, b"mp4"),
+        (promoted_video, b"mp4"),
         (preview_frame, b"png"),
+        (motion_frame, b"png"),
     ):
         path.write_bytes(payload)
 
@@ -163,6 +180,31 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
         "src.video.comfy_workflow_backend.wait_for_comfy_ready",
         lambda *_args, **_kwargs: True,
     )
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.apply_secondary_motion_to_video",
+        lambda **_kwargs: {
+            "primary_path": str(promoted_video),
+            "output_paths": [str(promoted_video)],
+            "video_path": str(promoted_video),
+            "video_paths": [str(promoted_video)],
+            "frame_paths": [str(motion_frame)],
+            "thumbnail_path": str(motion_frame),
+            "secondary_motion": {
+                "summary": {
+                    "schema": "stablenew.secondary-motion-summary.v1",
+                    "status": "applied",
+                    "policy_id": "workflow_motion_v1",
+                }
+            },
+            "secondary_motion_summary": {
+                "schema": "stablenew.secondary-motion-summary.v1",
+                "status": "applied",
+                "policy_id": "workflow_motion_v1",
+                "application_path": "video_reencode_worker",
+            },
+            "source_video_path": str(output_video),
+        },
+    )
     backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
 
     result = backend.execute(
@@ -170,7 +212,15 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
         VideoExecutionRequest(
             backend_id="comfy",
             stage_name="video_workflow",
-            stage_config={"enabled": True, "workflow_id": "ltx_multiframe_anchor_v1"},
+            stage_config={
+                "enabled": True,
+                "workflow_id": "ltx_multiframe_anchor_v1",
+                "secondary_motion": {
+                    "enabled": True,
+                    "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
+                    "policy": {"enabled": True, "policy_id": "workflow_motion_v1"},
+                },
+            },
             output_dir=tmp_path,
             input_image_path=start_anchor,
             end_anchor_path=end_anchor,
@@ -183,8 +233,10 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
 
     assert result is not None
     assert result.backend_id == "comfy"
-    assert result.primary_path == str(output_video)
+    assert result.primary_path == str(promoted_video)
     assert result.manifest_path is not None
     variant_payload = result.to_variant_payload()
     assert variant_payload["video_backend_id"] == "comfy"
-    assert variant_payload["artifact"]["primary_path"] == str(output_video)
+    assert variant_payload["artifact"]["primary_path"] == str(promoted_video)
+    assert variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
+    assert variant_payload["video_replay_manifest"]["secondary_motion_source_video_path"] == str(output_video)

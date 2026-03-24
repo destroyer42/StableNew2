@@ -17,6 +17,7 @@ from src.video.comfy_process_manager import (
     build_default_comfy_process_config,
     get_global_comfy_process_manager,
 )
+from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.motion.secondary_motion_video_reencode import apply_secondary_motion_to_video
 from src.video.video_backend_types import (
     VideoBackendCapabilities,
@@ -162,18 +163,27 @@ class ComfyWorkflowVideoBackend:
                 runtime_block=secondary_motion_block,
                 fps=int(stage_config.get("fps") or stage_config.get("video_fps") or 8),
             )
+            motion_summary = motion_result.get("secondary_motion_summary") or extract_secondary_motion_summary(motion_result)
             resolved_outputs.update(
                 {
-                    "primary_path": motion_result["primary_path"],
-                    "output_paths": list(motion_result["output_paths"]),
-                    "video_path": motion_result["video_path"],
-                    "video_paths": list(motion_result["video_paths"]),
-                    "frame_paths": list(motion_result["frame_paths"]),
-                    "thumbnail_path": motion_result["thumbnail_path"],
-                    "secondary_motion_source_video_path": str(resolved_outputs.get("video_path") or ""),
+                    "secondary_motion_source_video_path": str(
+                        motion_result.get("source_video_path") or resolved_outputs.get("video_path") or ""
+                    ),
                     "secondary_motion": motion_result["secondary_motion"],
+                    "secondary_motion_summary": motion_summary,
                 }
             )
+            if motion_summary.get("status") == "applied":
+                resolved_outputs.update(
+                    {
+                        "primary_path": motion_result["primary_path"],
+                        "output_paths": list(motion_result["output_paths"]),
+                        "video_path": motion_result["video_path"],
+                        "video_paths": list(motion_result["video_paths"]),
+                        "frame_paths": list(motion_result["frame_paths"]),
+                        "thumbnail_path": motion_result["thumbnail_path"],
+                    }
+                )
         primary_path = resolved_outputs["primary_path"]
         output_paths = resolved_outputs["output_paths"]
         if not primary_path or not output_paths:
@@ -230,6 +240,7 @@ class ComfyWorkflowVideoBackend:
         }
         if resolved_outputs.get("secondary_motion"):
             metadata_payload["secondary_motion"] = dict(resolved_outputs["secondary_motion"])
+            metadata_payload["secondary_motion_summary"] = dict(resolved_outputs.get("secondary_motion_summary") or {})
             metadata_payload["secondary_motion_source_video_path"] = resolved_outputs.get("secondary_motion_source_video_path")
         for candidate_path in [
             *resolved_outputs["video_paths"],
@@ -257,6 +268,7 @@ class ComfyWorkflowVideoBackend:
             "dependency_probe": dependency_result.to_dict(),
             "compiled_workflow": compiled.to_dict(),
             "secondary_motion": dict(resolved_outputs.get("secondary_motion") or {}),
+            "secondary_motion_summary": dict(resolved_outputs.get("secondary_motion_summary") or {}),
             "secondary_motion_source_video_path": resolved_outputs.get("secondary_motion_source_video_path"),
             "artifact": artifact_manifest_payload(
                 stage=request.stage_name,
@@ -311,6 +323,8 @@ class ComfyWorkflowVideoBackend:
                 "dependency_snapshot": dict(compiled.dependency_snapshot),
                 "compiled_inputs": dict(compiled.compiled_inputs),
                 "secondary_motion": dict(resolved_outputs.get("secondary_motion") or {}),
+                "secondary_motion_summary": dict(resolved_outputs.get("secondary_motion_summary") or {}),
+                "secondary_motion_source_video_path": resolved_outputs.get("secondary_motion_source_video_path"),
             },
         )
 
@@ -441,9 +455,11 @@ class ComfyWorkflowVideoBackend:
             output_name = str(compiled_outputs.get("output_name") or "").strip()
             if output_name:
                 discovered_paths = _dedupe_paths(
-                    str(path)
+                    [
+                        str(path)
                     for path in sorted(output_dir.glob(f"{output_name}*"))
                     if path.is_file()
+                    ]
                 )
 
         video_paths = [path for path in discovered_paths if Path(path).suffix.lower() in {".mp4", ".mov", ".webm", ".mkv"}]
@@ -540,6 +556,7 @@ class ComfyWorkflowVideoBackend:
         }
         if resolved_outputs.get("secondary_motion"):
             payload["secondary_motion"] = dict(resolved_outputs["secondary_motion"])
+            payload["secondary_motion_summary"] = dict(resolved_outputs.get("secondary_motion_summary") or {})
             payload["secondary_motion_source_video_path"] = resolved_outputs.get("secondary_motion_source_video_path")
         manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         return manifest_path

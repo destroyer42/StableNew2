@@ -1,7 +1,7 @@
 # Master PR Sequence From Current Repo State v2.6
 
 Status: Proposed  
-Date: 2026-03-22  
+Date: 2026-03-24  
 Branch baseline: `feature/video-secondary-motion-pr-236`  
 Applies to: all currently planned / unfinished work referenced in `docs/` and `docs/PR_Backlog/`
 
@@ -124,24 +124,19 @@ Why now:
 
 ### Phase 3 - Finish the remaining secondary-motion video rollout
 
-#### 3.1 `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+Completed in this tranche already:
 
-Why first in video:
+- `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+- `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+- `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+
+#### 3.1 `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+
+Why next in video:
 
 - the shared secondary-motion foundation is already complete through `236`/`237`
-- this is the first real backend-runtime application path
-
-#### 3.2 `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
-
-#### 3.3 `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
-
-#### 3.4 `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
-
-Why this order:
-
-- backend application first
-- backend parity second
-- learning/recommendation closure last
+- all three current video backends now have runtime closure, so learning and
+  recommendation feedback is the next secondary-motion rollout step
 
 ---
 
@@ -286,15 +281,14 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-2. `PR-VIDEO-238`
-3. `PR-UX-265`
-4. `PR-UX-266`
-5. `PR-UX-271`
-6. `PR-UX-268`
-7. `PR-VIDEO-238`
-8. `PR-PROMPT-241A`
-9. `PR-PROMPT-241B`
-10. `PR-PROMPT-241D`
+1. `PR-VIDEO-241`
+1. `PR-UX-265`
+1. `PR-UX-266`
+1. `PR-UX-271`
+1. `PR-UX-268`
+1. `PR-PROMPT-241A`
+1. `PR-PROMPT-241B`
+1. `PR-PROMPT-241D`
 
 Why this fast-track works:
 
@@ -302,49 +296,46 @@ Why this fast-track works:
 - makes prompt/config behavior visible before more automation lands
 - improves user comprehension early
 - gives artifact-level review portability and inspection
-- starts real secondary-motion backend rollout
+- continues secondary-motion learning closure after backend parity completion
 - gets recommend-only smart-prompting evidence and replay-grade manifest proof moving
 
 ## 5. Master Ordered List
 
 1. close image output-route regression
-2. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
-3. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
-4. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
-5. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
-6. `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
-7. `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
-8. `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
-9. `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
-10. `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
-11. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
-12. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-13. `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
-14. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
-15. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-16. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-17. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
-18. `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
-19. `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
-20. `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
-21. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
-22. `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
-23. `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
-24. `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
-25. `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
-26. `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
-27. `PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation`
-28. `PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement`
-29. `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
-30. `PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards`
-31. `PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction`
-32. `PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes`
-33. `PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation`
-34. `PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition`
-35. `PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes`
-36. `PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion`
-37. `PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure`
-38. `PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure`
+1. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+1. `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
+1. `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
+1. `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
+1. `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
+1. `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
+1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
+1. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
+1. `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
+1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
+1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
+1. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+1. `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
+1. `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
+1. `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
+1. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
+1. `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
+1. `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
+1. `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
+1. `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
+1. `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
+1. `PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation`
+1. `PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement`
+1. `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
+1. `PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards`
+1. `PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction`
+1. `PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes`
+1. `PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation`
+1. `PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition`
+1. `PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes`
+1. `PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion`
+1. `PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure`
+1. `PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure`
 
 ## 6. Recommendation
 

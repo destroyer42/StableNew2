@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.pipeline.video import resolve_ffmpeg_executable
-from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
+from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
+from src.video.motion.secondary_motion_provenance import (
+    build_secondary_motion_manifest_block,
+    extract_secondary_motion_summary,
+)
 from src.video.motion.secondary_motion_worker import run_secondary_motion_worker
 from src.video.svd_errors import SVDExportError
 from src.video.video_export import export_image_sequence_video
@@ -32,6 +36,51 @@ def _extract_video_frames(*, video_path: Path, output_dir: Path) -> list[Path]:
     return sorted(output_dir.glob("frame_*.png"))
 
 
+def _build_unavailable_result(
+    *,
+    payload: Mapping[str, Any],
+    source_video_path: Path,
+    promoted_video_path: Path,
+    skip_reason: str,
+    error: Exception,
+    frames_in: int = 0,
+    frames_out: int = 0,
+) -> dict[str, Any]:
+    apply_result = {
+        "schema": SECONDARY_MOTION_APPLY_SCHEMA_V1,
+        "status": "unavailable",
+        "policy_id": str(payload.get("policy_id") or ""),
+        "application_path": "video_reencode_worker",
+        "backend_mode": str(payload.get("backend_mode") or ""),
+        "frames_in": frames_in,
+        "frames_out": frames_out,
+        "seed": payload.get("seed"),
+        "regions_applied": list(payload.get("regions") or []),
+        "skip_reason": skip_reason,
+        "metrics": {"applied_frame_count": 0},
+        "error": str(error),
+        "source_video_path": str(source_video_path),
+        "reencoded_video_path": str(promoted_video_path),
+    }
+    manifest_block = build_secondary_motion_manifest_block(
+        intent=payload.get("intent"),
+        policy=payload.get("policy"),
+        apply_result=apply_result,
+    )
+    summary = extract_secondary_motion_summary({"secondary_motion": manifest_block})
+    return {
+        "primary_path": str(source_video_path),
+        "output_paths": [str(source_video_path)],
+        "video_path": str(source_video_path),
+        "video_paths": [str(source_video_path)],
+        "frame_paths": [],
+        "thumbnail_path": None,
+        "secondary_motion": manifest_block,
+        "secondary_motion_summary": summary,
+        "source_video_path": str(source_video_path),
+    }
+
+
 def apply_secondary_motion_to_video(
     *,
     video_path: str | Path,
@@ -45,28 +94,84 @@ def apply_secondary_motion_to_video(
     work_dir = root / f"{source_video_path.stem}_secondary_motion"
     extracted_dir = work_dir / "extracted_frames"
     motion_dir = work_dir / "motion_frames"
-    extracted_frames = _extract_video_frames(video_path=source_video_path, output_dir=extracted_dir)
+    promoted_video_path = root / f"{source_video_path.stem}_secondary_motion.mp4"
+    try:
+        extracted_frames = _extract_video_frames(video_path=source_video_path, output_dir=extracted_dir)
+    except Exception as exc:
+        skip_reason = "ffmpeg_unavailable"
+        if not isinstance(exc, SVDExportError) or "ffmpeg is not available" not in str(exc).lower():
+            skip_reason = "extract_failed"
+        return _build_unavailable_result(
+            payload=payload,
+            source_video_path=source_video_path,
+            promoted_video_path=promoted_video_path,
+            skip_reason=skip_reason,
+            error=exc,
+        )
     if not extracted_frames:
-        raise SVDExportError("Secondary motion re-encode could not extract any frames")
-    apply_result = run_secondary_motion_worker(
-        {
-            "input_dir": str(extracted_dir),
-            "output_dir": str(motion_dir),
-            "intent": dict(payload.get("intent") or {}),
-            "policy": dict(payload.get("policy") or {}),
-            "seed": payload.get("seed"),
-        }
-    )
+        return _build_unavailable_result(
+            payload=payload,
+            source_video_path=source_video_path,
+            promoted_video_path=promoted_video_path,
+            skip_reason="extract_failed",
+            error=SVDExportError("Secondary motion re-encode could not extract any frames"),
+        )
+    try:
+        apply_result = run_secondary_motion_worker(
+            {
+                "input_dir": str(extracted_dir),
+                "output_dir": str(motion_dir),
+                "intent": dict(payload.get("intent") or {}),
+                "policy": dict(payload.get("policy") or {}),
+                "seed": payload.get("seed"),
+            }
+        )
+    except Exception as exc:
+        return _build_unavailable_result(
+            payload=payload,
+            source_video_path=source_video_path,
+            promoted_video_path=promoted_video_path,
+            skip_reason="worker_failed",
+            error=exc,
+            frames_in=len(extracted_frames),
+        )
     output_frame_paths = [Path(path) for path in apply_result.get("output_paths") or []]
     if not output_frame_paths:
-        raise SVDExportError("Secondary motion re-encode produced no output frames")
-    promoted_video_path = root / f"{source_video_path.stem}_secondary_motion.mp4"
-    export_image_sequence_video(
-        image_paths=output_frame_paths,
-        output_path=promoted_video_path,
-        fps=max(1, int(fps or 8)),
-    )
+        return _build_unavailable_result(
+            payload=payload,
+            source_video_path=source_video_path,
+            promoted_video_path=promoted_video_path,
+            skip_reason="worker_failed",
+            error=SVDExportError("Secondary motion re-encode produced no output frames"),
+            frames_in=len(extracted_frames),
+        )
+    try:
+        export_image_sequence_video(
+            image_paths=output_frame_paths,
+            output_path=promoted_video_path,
+            fps=max(1, int(fps or 8)),
+        )
+    except Exception as exc:
+        return _build_unavailable_result(
+            payload=payload,
+            source_video_path=source_video_path,
+            promoted_video_path=promoted_video_path,
+            skip_reason="reencode_failed",
+            error=exc,
+            frames_in=len(extracted_frames),
+            frames_out=len(output_frame_paths),
+        )
     apply_result = dict(apply_result)
+    apply_result.setdefault("schema", SECONDARY_MOTION_APPLY_SCHEMA_V1)
+    apply_result.setdefault("status", "applied")
+    apply_result.setdefault("policy_id", str(payload.get("policy_id") or ""))
+    apply_result.setdefault("application_path", "video_reencode_worker")
+    apply_result.setdefault("backend_mode", str(payload.get("backend_mode") or ""))
+    apply_result.setdefault("frames_in", len(extracted_frames))
+    apply_result.setdefault("frames_out", len(output_frame_paths))
+    apply_result.setdefault("seed", payload.get("seed"))
+    apply_result.setdefault("regions_applied", list(payload.get("regions") or []))
+    apply_result.setdefault("metrics", {"applied_frame_count": len(output_frame_paths)})
     apply_result["source_video_path"] = str(source_video_path)
     apply_result["reencoded_video_path"] = str(promoted_video_path)
     manifest_block = build_secondary_motion_manifest_block(
@@ -74,6 +179,7 @@ def apply_secondary_motion_to_video(
         policy=payload.get("policy"),
         apply_result=apply_result,
     )
+    summary = extract_secondary_motion_summary({"secondary_motion": manifest_block})
     return {
         "primary_path": str(promoted_video_path),
         "output_paths": [str(promoted_video_path)],
@@ -82,6 +188,7 @@ def apply_secondary_motion_to_video(
         "frame_paths": [str(path) for path in output_frame_paths],
         "thumbnail_path": str(output_frame_paths[0]) if output_frame_paths else None,
         "secondary_motion": manifest_block,
+        "secondary_motion_summary": summary,
         "source_video_path": str(source_video_path),
     }
 

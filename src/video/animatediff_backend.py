@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.video_backend_types import (
     VideoBackendCapabilities,
     VideoExecutionRequest,
@@ -46,6 +47,8 @@ class AnimateDiffVideoBackend:
                 "manifest_path": result.get("manifest_path"),
                 "input_image_path": str(request.input_image_path) if request.input_image_path else None,
                 "secondary_motion": result.get("secondary_motion"),
+                "secondary_motion_summary": result.get("secondary_motion_summary")
+                or extract_secondary_motion_summary(result),
             },
         )
 

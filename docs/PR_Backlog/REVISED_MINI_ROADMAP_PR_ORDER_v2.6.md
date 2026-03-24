@@ -1,7 +1,7 @@
 # Revised Mini-Roadmap PR Order v2.6
 
 Status: Proposed  
-Date: 2026-03-22  
+Date: 2026-03-24  
 Branch baseline: `feature/video-secondary-motion-pr-236`  
 Applies to: stabilization, staged curation, review, metadata portability, video, UX
 
@@ -124,22 +124,23 @@ Why fourth:
 
 ### Phase 3 - Finish the remaining video and secondary-motion rollout
 
-#### 3.1 `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+Completed in this tranche already:
+
+- `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+- `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+- `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+
+#### 3.1 `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
 
 Why first:
 
-- the shared secondary-motion foundation already exists
-- SVD-native integration is the most direct backend rollout step
+- the shared secondary-motion foundation and all three backend rollout steps
+  are now complete
+- learning and evidence closure is the next secondary-motion step
 
-#### 3.2 `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+#### 3.2 `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
 
-#### 3.3 `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-Integration`
-
-#### 3.4 `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
-
-#### 3.5 `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
-
-#### 3.6 `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
+#### 3.3 `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
 
 Why this tranche is after Phase 2:
 
@@ -176,7 +177,7 @@ Why this tranche is last in the broad sequence:
 If you want the highest practical value fastest, prioritize this shorter path:
 
 1. close output-route regression
-2. `PR-VIDEO-238`
+2. `PR-VIDEO-241`
 3. `PR-UX-265`
 4. `PR-UX-266`
 5. `PR-UX-268`
@@ -192,18 +193,15 @@ This path delivers:
 ## 5. Full Ordered List
 
 1. close image output-route regression
-2. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
-3. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
-4. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-Integration`
-5. `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
-6. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
-7. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
-8. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
-9. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-10. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
-11. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-12. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-13. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+1. `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
+1. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
+1. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
+1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
+1. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
+1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
+1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
+1. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
 
 ## 6. Recommendation
 
