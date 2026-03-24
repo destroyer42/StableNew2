@@ -10,6 +10,7 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_TESTING,
 )
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
@@ -54,7 +55,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.source_summary_var = tk.StringVar(value="Source: none selected")
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=0)
+        self.rowconfigure(2, weight=1)
+
+        self.overview_panel = TabOverviewPanel(
+            self,
+            content=get_tab_overview_content("video_workflow"),
+        )
+        self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
         self._build_header()
         self._build_body()
@@ -93,7 +102,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
-        header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
+        header.grid(row=1, column=0, sticky="ew", padx=6, pady=(6, 4))
         header.columnconfigure(1, weight=1)
 
         ttk.Label(header, text="Source Image", style="Dark.TLabel").grid(
@@ -120,7 +129,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame", padding=8)
-        body.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
         body.columnconfigure(1, weight=1)
         body.columnconfigure(3, weight=1)
 
@@ -214,10 +223,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         values: tuple[str, ...] | list[str] = (),
         width: int = 40,
         helper: str = "",
-    ):
+    ) -> ttk.Widget:
         ttk.Label(parent, text=label, style="Dark.TLabel").grid(
             row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
+        widget: Any
         if combo:
             widget = ttk.Combobox(
                 parent,

@@ -48,6 +48,8 @@ Target UX behavior:
 
 ### PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers
 
+Status: Completed 2026-03-24
+
 Purpose:
 
 - give each major tab a built-in overview explaining what it is for, when to use
@@ -83,6 +85,10 @@ Execution gate:
 
 - a new user can open a major tab and immediately understand what it does and
   when they should use it
+
+Completion record:
+
+- `docs/CompletedPR/PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers.md`
 
 ### PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained
 

@@ -207,3 +207,102 @@ def test_learning_record_builder_includes_compact_secondary_motion_metadata() ->
     assert secondary_motion["applied_motion_strength"] == 0.25
     assert secondary_motion["frame_count_delta"] == 0
     assert secondary_motion["quality_risk_score"] > 0.0
+
+
+def test_learning_record_builder_includes_opt_in_prompt_optimizer_learning_metadata() -> None:
+    cfg = MinimalLearningConfig(
+        prompt="portrait woman, cinematic lighting",
+        model="m",
+        sampler="Euler",
+        width=512,
+        height=512,
+        steps=20,
+        cfg_scale=7.5,
+        base_model="m",
+        metadata={
+            "prompt_optimizer_learning_enabled": True,
+            "prompt_optimizer_learning_preset": "score_classifier_v1",
+        },
+        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+    )
+    result = _run_result_stub("run-prompt-optimizer")
+    result.metadata["prompt_optimizer_v3"] = {
+        "schema": "stablenew.prompt-optimizer.v3",
+        "version": "3.0.0",
+        "stage": "txt2img",
+        "mode": "recommend_only_v1",
+        "inputs": {
+            "positive_original": "portrait woman, cinematic lighting",
+            "negative_original": "blurry",
+            "prompt_source": {
+                "prompt_source": "pack",
+                "prompt_pack_id": "portrait-pack",
+                "run_mode": "queue",
+                "source": "prompt_pack",
+                "tags": ["portrait"],
+            },
+        },
+        "outputs": {
+            "positive_final": "portrait woman, cinematic lighting, masterpiece",
+            "negative_final": "blurry",
+        },
+        "context": {
+            "bucket_counts": {
+                "positive": {"subject": 2, "lighting_atmosphere": 1},
+                "negative": {"render_artifacts": 1},
+            },
+            "chunk_counts": {"positive": 3, "negative": 1},
+            "loras": [{"name": "detailer", "weight": 0.8}],
+            "embeddings": [{"name": "negfix", "weight": 1.0}],
+        },
+        "intent": {
+            "intent_band": "portrait",
+            "requested_pose": "profile",
+            "wants_face_detail": True,
+            "has_people_tokens": True,
+            "conflicts": [],
+        },
+        "policy": {
+            "stage_policy": {
+                "mode": "auto_safe_fill_v1",
+                "applied_settings": {"cfg_scale": 6.5, "steps": 28},
+            },
+            "recommendations": [
+                {"recommendation_id": "consider_face_pass"},
+            ],
+        },
+        "warnings": ["large_chunk_count"],
+        "errors": [],
+    }
+
+    record = build_learning_record(cfg, result)
+
+    prompt_optimizer = record.metadata["prompt_optimizer_learning"]
+    assert prompt_optimizer["preset_id"] == "score_classifier_v1"
+    assert prompt_optimizer["stage"] == "txt2img"
+    assert prompt_optimizer["mode"] == "recommend_only_v1"
+    assert prompt_optimizer["stage_policy_mode"] == "auto_safe_fill_v1"
+    assert prompt_optimizer["positive_changed"] is True
+    assert prompt_optimizer["negative_changed"] is False
+    assert prompt_optimizer["positive_bucket_count"] == 3
+    assert prompt_optimizer["recommendation_ids"] == ["consider_face_pass"]
+
+
+def test_learning_record_builder_skips_prompt_optimizer_learning_without_opt_in() -> None:
+    cfg = MinimalLearningConfig(
+        prompt="portrait woman",
+        model="m",
+        sampler="Euler",
+        width=512,
+        height=512,
+        steps=20,
+        cfg_scale=7.5,
+        base_model="m",
+        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+    )
+    result = _run_result_stub("run-prompt-opt-out")
+    result.metadata["prompt_optimizer_v3"] = {"schema": "stablenew.prompt-optimizer.v3", "stage": "txt2img"}
+
+    record = build_learning_record(cfg, result)
+
+    assert "prompt_optimizer_learning" not in record.metadata

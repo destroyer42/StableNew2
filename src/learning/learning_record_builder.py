@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
@@ -63,6 +64,128 @@ def _extract_output_paths(run_result: PipelineRunResult) -> list[str]:
     return deduped
 
 
+def _truthy_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(value, Mapping):
+        return _truthy_flag(value.get("enabled"))
+    return bool(value)
+
+
+def _prompt_optimizer_learning_enabled(
+    metadata: Mapping[str, Any],
+    run_metadata: Mapping[str, Any],
+) -> bool:
+    for candidate in (
+        metadata.get("prompt_optimizer_learning"),
+        run_metadata.get("prompt_optimizer_learning"),
+    ):
+        if isinstance(candidate, Mapping):
+            return _truthy_flag(candidate.get("enabled"))
+
+    for candidate in (
+        metadata.get("prompt_optimizer_learning_enabled"),
+        run_metadata.get("prompt_optimizer_learning_enabled"),
+    ):
+        if candidate is not None:
+            return _truthy_flag(candidate)
+
+    return False
+
+
+def _extract_prompt_optimizer_v3_record(run_result: PipelineRunResult) -> dict[str, Any]:
+    run_metadata = getattr(run_result, "metadata", {}) or {}
+    direct_record = run_metadata.get("prompt_optimizer_v3")
+    if isinstance(direct_record, Mapping):
+        return dict(direct_record)
+
+    for variant in getattr(run_result, "variants", []) or []:
+        if not isinstance(variant, Mapping):
+            continue
+        variant_record = variant.get("prompt_optimizer_v3")
+        if isinstance(variant_record, Mapping):
+            return dict(variant_record)
+
+    return {}
+
+
+def _build_prompt_optimizer_learning_context(
+    run_result: PipelineRunResult,
+    *,
+    metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    bundle = _extract_prompt_optimizer_v3_record(run_result)
+    if not bundle:
+        return {}
+
+    inputs = dict(bundle.get("inputs") or {})
+    outputs = dict(bundle.get("outputs") or {})
+    context = dict(bundle.get("context") or {})
+    intent = dict(bundle.get("intent") or {})
+    policy = dict(bundle.get("policy") or {})
+    stage_policy = dict(policy.get("stage_policy") or {})
+    recommendation_ids = [
+        str(item.get("recommendation_id"))
+        for item in policy.get("recommendations") or []
+        if isinstance(item, Mapping) and str(item.get("recommendation_id") or "").strip()
+    ]
+    prompt_source = dict(inputs.get("prompt_source") or {})
+    prompt_optimizer_learning = metadata.get("prompt_optimizer_learning")
+    preset_id = str(metadata.get("prompt_optimizer_learning_preset") or "").strip()
+    if not preset_id and isinstance(prompt_optimizer_learning, Mapping):
+        preset_id = str(prompt_optimizer_learning.get("preset_id") or "").strip()
+    positive_original = str(inputs.get("positive_original") or "")
+    negative_original = str(inputs.get("negative_original") or "")
+    positive_final = str(outputs.get("positive_final") or "")
+    negative_final = str(outputs.get("negative_final") or "")
+    bucket_counts = dict(context.get("bucket_counts") or {})
+    positive_bucket_counts = dict(bucket_counts.get("positive") or {})
+    negative_bucket_counts = dict(bucket_counts.get("negative") or {})
+    chunk_counts = dict(context.get("chunk_counts") or {})
+
+    return {
+        "schema": str(bundle.get("schema") or ""),
+        "version": str(bundle.get("version") or ""),
+        "stage": str(bundle.get("stage") or ""),
+        "mode": str(bundle.get("mode") or ""),
+        "preset_id": preset_id,
+        "stage_policy_mode": str(stage_policy.get("mode") or ""),
+        "applied_setting_keys": sorted(
+            str(key) for key in (stage_policy.get("applied_settings") or {}).keys()
+        ),
+        "recommendation_ids": recommendation_ids,
+        "recommendation_count": len(recommendation_ids),
+        "positive_changed": positive_original != positive_final,
+        "negative_changed": negative_original != negative_final,
+        "positive_chunk_count": int(chunk_counts.get("positive") or 0),
+        "negative_chunk_count": int(chunk_counts.get("negative") or 0),
+        "positive_bucket_count": sum(int(value or 0) for value in positive_bucket_counts.values()),
+        "negative_bucket_count": sum(int(value or 0) for value in negative_bucket_counts.values()),
+        "lora_count": len(context.get("loras") or []),
+        "embedding_count": len(context.get("embeddings") or []),
+        "intent_band": str(intent.get("intent_band") or ""),
+        "requested_pose": str(intent.get("requested_pose") or ""),
+        "wants_face_detail": bool(intent.get("wants_face_detail")),
+        "has_people_tokens": bool(intent.get("has_people_tokens")),
+        "has_conflicts": bool(intent.get("conflicts")),
+        "warning_count": len(bundle.get("warnings") or []),
+        "error_count": len(bundle.get("errors") or []),
+        "prompt_source": {
+            "prompt_source": str(prompt_source.get("prompt_source") or ""),
+            "prompt_pack_id": str(prompt_source.get("prompt_pack_id") or ""),
+            "run_mode": str(prompt_source.get("run_mode") or ""),
+            "source": str(prompt_source.get("source") or ""),
+            "tags": [
+                str(item)
+                for item in prompt_source.get("tags") or []
+                if str(item or "").strip()
+            ],
+        },
+    }
+
+
 def build_learning_record(
     pipeline_config: Any,
     run_result: PipelineRunResult,
@@ -96,6 +219,13 @@ def build_learning_record(
         secondary_motion_context = build_secondary_motion_learning_context(rr_meta)
         if secondary_motion_context:
             metadata["secondary_motion"] = secondary_motion_context
+    if "prompt_optimizer_learning" not in metadata and _prompt_optimizer_learning_enabled(metadata, rr_meta):
+        prompt_optimizer_context = _build_prompt_optimizer_learning_context(
+            run_result,
+            metadata=metadata,
+        )
+        if prompt_optimizer_context:
+            metadata["prompt_optimizer_learning"] = prompt_optimizer_context
     timestamp_value = metadata.get("timestamp") or rr_meta.get("timestamp") or _now_iso()
 
     base_config: dict[str, Any] = (variant_configs[0] if variant_configs else config_dict) or {}

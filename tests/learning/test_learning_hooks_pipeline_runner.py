@@ -214,3 +214,63 @@ def test_pipeline_runner_emits_compact_secondary_motion_learning_context(tmp_pat
     assert secondary_motion["application_path"] == "video_reencode_worker"
     assert secondary_motion["applied_motion_strength"] == 0.25
     assert secondary_motion["quality_risk_score"] > 0.0
+
+
+def test_pipeline_runner_emits_opt_in_prompt_optimizer_learning_context(tmp_path):
+    writer = MemoryWriter()
+    runner = PipelineRunner(
+        DummyClient(),
+        DummyLogger(),
+        learning_record_writer=writer,
+        runs_base_dir=tmp_path / "runs",
+        learning_enabled=True,
+    )
+
+    record = _make_learning_record(tmp_path)
+    record.metadata = {
+        "prompt_optimizer_learning_enabled": True,
+        "prompt_optimizer_learning_preset": "baseline_safe_v1",
+    }
+    result = runner.run_njr(record, cancel_token=_cancel_token())
+    result.metadata["prompt_optimizer_v3"] = {
+        "schema": "stablenew.prompt-optimizer.v3",
+        "version": "3.0.0",
+        "stage": "txt2img",
+        "mode": "recommend_only_v1",
+        "inputs": {
+            "positive_original": "Test prompt",
+            "negative_original": "",
+            "prompt_source": {"prompt_source": "manual", "source": "ui", "tags": []},
+        },
+        "outputs": {
+            "positive_final": "Test prompt, masterpiece",
+            "negative_final": "",
+        },
+        "context": {
+            "bucket_counts": {"positive": {"subject": 1}, "negative": {}},
+            "chunk_counts": {"positive": 2, "negative": 0},
+            "loras": [],
+            "embeddings": [],
+        },
+        "intent": {
+            "intent_band": "portrait",
+            "requested_pose": "",
+            "wants_face_detail": False,
+            "has_people_tokens": True,
+            "conflicts": [],
+        },
+        "policy": {
+            "stage_policy": {"mode": "auto_safe_fill_v1", "applied_settings": {"steps": 28}},
+            "recommendations": [],
+        },
+        "warnings": [],
+        "errors": [],
+    }
+
+    learning_record = runner._emit_learning_record(record, result)
+
+    assert learning_record is not None
+    prompt_optimizer = learning_record.metadata["prompt_optimizer_learning"]
+    assert prompt_optimizer["preset_id"] == "baseline_safe_v1"
+    assert prompt_optimizer["stage_policy_mode"] == "auto_safe_fill_v1"
+    assert prompt_optimizer["positive_changed"] is True

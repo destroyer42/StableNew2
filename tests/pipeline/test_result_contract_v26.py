@@ -73,3 +73,52 @@ def test_result_contract_carries_curation_replay_summary_from_snapshot() -> None
     assert replay["curation"]["target_stage"] == "face_triage"
     assert diagnostics["curation"]["candidate_id"] == "item-1"
     assert diagnostics["replay_descriptor"]["curation"]["face_triage_tier"] == "heavy"
+
+
+def test_result_contract_carries_prompt_optimizer_v3_bundle() -> None:
+    prompt_optimizer_v3 = {
+        "schema": "stablenew.prompt-optimizer.v3",
+        "version": "3.0.0",
+        "stage": "txt2img",
+        "mode": "recommend_only_v1",
+        "inputs": {
+            "positive_original": "masterpiece, beautiful woman",
+            "negative_original": "watermark",
+        },
+        "outputs": {
+            "positive_final": "beautiful woman, masterpiece",
+            "negative_final": "watermark",
+        },
+        "context": {
+            "bucket_counts": {"positive": {"subject": 1}, "negative": {}},
+            "chunk_counts": {"positive": 2, "negative": 1},
+            "loras": [],
+            "embeddings": [],
+        },
+        "intent": {"intent_band": "portrait"},
+        "policy": {"stage_policy": None, "recommendations": [], "rationale": []},
+        "delta_guard": {
+            "status": "pass",
+            "added_tokens": [],
+            "removed_tokens": [],
+            "weight_changes": [],
+            "lora_changes": [],
+        },
+        "warnings": [],
+        "errors": [],
+    }
+    result = {
+        "run_id": "run-123",
+        "success": True,
+        "variants": [{"stage": "txt2img", "prompt_optimizer_v3": prompt_optimizer_v3}],
+        "metadata": {"output_dir": "output/test"},
+        "stage_events": [{"stage": "txt2img"}],
+    }
+
+    replay = build_replay_descriptor(result, njr_snapshot={"normalized_job": {"job_id": "job-123"}})
+    diagnostics = build_diagnostics_descriptor(result, njr_snapshot={"normalized_job": {"job_id": "job-123"}})
+
+    assert replay["prompt_optimizer_v3"]["schema"] == "stablenew.prompt-optimizer.v3"
+    assert replay["prompt_optimizer_v3"]["outputs"]["positive_final"] == "beautiful woman, masterpiece"
+    assert diagnostics["prompt_optimizer_v3"]["stage"] == "txt2img"
+    assert diagnostics["replay_descriptor"]["prompt_optimizer_v3"]["mode"] == "recommend_only_v1"

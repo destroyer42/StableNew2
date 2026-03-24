@@ -17,6 +17,7 @@ from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.learning.experiment_store import LearningExperimentStore
@@ -85,12 +86,19 @@ class LearningTabFrame(ttk.Frame):
 
         # Configure main layout
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=0)  # Header
-        self.rowconfigure(1, weight=1)  # Body
+        self.rowconfigure(0, weight=0)  # Overview
+        self.rowconfigure(1, weight=0)  # Header
+        self.rowconfigure(2, weight=1)  # Body
+
+        self.overview_panel = TabOverviewPanel(
+            self,
+            content=get_tab_overview_content("learning"),
+        )
+        self.overview_panel.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
 
         # Header
         self.header_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
-        self.header_frame.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        self.header_frame.grid(row=1, column=0, sticky="ew", padx=4, pady=(4, 2))
         self.header_frame.columnconfigure(0, weight=1)
 
         header_label = ttk.Label(
@@ -189,7 +197,7 @@ class LearningTabFrame(ttk.Frame):
 
         # Body: mode notebook (Designed Experiments | Discovered Review Inbox)
         self._mode_notebook = ttk.Notebook(self)
-        self._mode_notebook.grid(row=1, column=0, sticky="nsew", padx=4, pady=(2, 4))
+        self._mode_notebook.grid(row=2, column=0, sticky="nsew", padx=4, pady=(2, 4))
 
         # ---- Tab 1: Designed Experiments (existing 3-column layout) ----
         self.body_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)

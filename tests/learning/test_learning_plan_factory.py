@@ -6,6 +6,7 @@ import pytest
 
 from src.learning.learning_plan import (
     LearningPlan,
+    build_prompt_optimizer_preset_plan,
     build_learning_plan_from_dict,
 )
 
@@ -47,3 +48,19 @@ def test_build_learning_plan_from_dict_missing_fields():
     payload = {"mode": "single_variable_sweep"}
     with pytest.raises(ValueError):
         build_learning_plan_from_dict(payload)
+
+
+def test_build_prompt_optimizer_preset_plan_uses_named_presets():
+    plan = build_prompt_optimizer_preset_plan(
+        stage="img2img",
+        preset_ids=["baseline_safe_v1", "score_classifier_v1"],
+        images_per_step=3,
+    )
+
+    assert isinstance(plan, LearningPlan)
+    assert plan.mode == "prompt_optimizer_preset_comparison"
+    assert plan.stage == "img2img"
+    assert plan.target_variable == "prompt_optimizer_preset"
+    assert plan.sweep_values == ["baseline_safe_v1", "score_classifier_v1"]
+    assert plan.images_per_step == 3
+    assert plan.metadata["comparison_type"] == "prompt_optimizer_preset"

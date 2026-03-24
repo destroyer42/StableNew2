@@ -14,6 +14,7 @@ from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.state import PipelineState
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.view_contracts.pipeline_layout_contract import (
@@ -63,9 +64,16 @@ class PipelineTabFrame(ttk.Frame):
             except Exception:
                 pass
 
-        self.rowconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=1)
         for idx in range(3):
             self.columnconfigure(idx, weight=1, minsize=self.DEFAULT_COLUMN_WIDTH)
+
+        self.overview_panel = TabOverviewPanel(
+            self,
+            content=get_tab_overview_content("pipeline"),
+        )
+        self.overview_panel.grid(row=0, column=0, columnspan=3, sticky="ew", padx=8, pady=(8, 0))
 
         def _create_card(parent: ttk.Frame) -> ttk.Frame:
             card = ttk.Frame(parent, padding=12, style=CARD_FRAME_STYLE)
@@ -73,7 +81,7 @@ class PipelineTabFrame(ttk.Frame):
             return card
 
         self.left_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
-        self.left_column.grid(row=0, column=0, sticky="nsew")
+        self.left_column.grid(row=1, column=0, sticky="nsew")
         self.left_column.rowconfigure(0, weight=1)
         self.left_column.columnconfigure(0, weight=1)
         self.left_scroll = ScrollableFrame(self.left_column, style=CARD_FRAME_STYLE)
@@ -100,7 +108,7 @@ class PipelineTabFrame(ttk.Frame):
         self.input_image_path: str = ""
 
         self.center_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
-        self.center_column.grid(row=0, column=1, sticky="nsew")
+        self.center_column.grid(row=1, column=1, sticky="nsew")
         self.center_column.rowconfigure(0, weight=1)
         self.center_column.columnconfigure(0, weight=1)
         self.stage_scroll = ScrollableFrame(self.center_column, style=CARD_FRAME_STYLE)
@@ -108,7 +116,7 @@ class PipelineTabFrame(ttk.Frame):
         self.stage_cards_frame = self.stage_scroll.inner
 
         self.right_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
-        self.right_column.grid(row=0, column=2, sticky="nsew")
+        self.right_column.grid(row=1, column=2, sticky="nsew")
         self.right_column.rowconfigure(0, weight=1)
         self.right_column.columnconfigure(0, weight=1)
         queue_controller = self.app_controller or self.pipeline_controller

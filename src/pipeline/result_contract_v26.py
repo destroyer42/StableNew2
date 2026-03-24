@@ -85,6 +85,27 @@ def _normalized_stage_name(value: Any) -> str:
     return "" if not stage_name or stage_name == "unknown" else stage_name
 
 
+def extract_prompt_optimizer_v3_record(result: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(result, Mapping):
+        return {}
+
+    direct_record = result.get("prompt_optimizer_v3")
+    if isinstance(direct_record, Mapping):
+        return dict(direct_record)
+
+    metadata = _result_metadata(result)
+    metadata_record = metadata.get("prompt_optimizer_v3")
+    if isinstance(metadata_record, Mapping):
+        return dict(metadata_record)
+
+    for variant in canonicalize_variant_entries(result.get("variants") or []):
+        variant_record = variant.get("prompt_optimizer_v3")
+        if isinstance(variant_record, Mapping):
+            return dict(variant_record)
+
+    return {}
+
+
 def collect_canonical_artifacts(result: Mapping[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(result, Mapping):
         return []
@@ -202,9 +223,9 @@ def _collect_stage_types(result: Mapping[str, Any] | None) -> list[str]:
         enabled_stages = stage_plan.get("enabled_stages")
         if isinstance(enabled_stages, list):
             return [str(stage) for stage in enabled_stages if stage]
-        stage_types = stage_plan.get("stage_types")
-        if isinstance(stage_types, list):
-            return [str(stage) for stage in stage_types if stage]
+        planned_stage_types = stage_plan.get("stage_types")
+        if isinstance(planned_stage_types, list):
+            return [str(stage) for stage in planned_stage_types if stage]
 
     seen: set[str] = set()
     stage_types: list[str] = []
@@ -265,6 +286,7 @@ def build_replay_descriptor(
         "primary_artifact": dict(primary_artifact or {}),
         "primary_output_paths": list(primary_paths),
         "backends": backends,
+        "prompt_optimizer_v3": extract_prompt_optimizer_v3_record(result),
         "secondary_motion": extract_secondary_motion_summary(metadata),
         "curation": build_curation_replay_descriptor_from_snapshot(njr_snapshot),
     }
@@ -304,6 +326,7 @@ def build_diagnostics_descriptor(
         ),
         "primary_artifact": dict(primary_artifact or {}),
         "backends": collect_backend_descriptors(result),
+        "prompt_optimizer_v3": extract_prompt_optimizer_v3_record(result),
         "secondary_motion": extract_secondary_motion_summary(metadata),
         "curation": build_curation_replay_descriptor_from_snapshot(njr_snapshot),
         "replay_descriptor": build_replay_descriptor(result, njr_snapshot=njr_snapshot),
@@ -317,5 +340,6 @@ __all__ = [
     "build_replay_descriptor",
     "collect_backend_descriptors",
     "collect_canonical_artifacts",
+    "extract_prompt_optimizer_v3_record",
     "extract_primary_artifact",
 ]

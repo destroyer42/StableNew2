@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
 from src.video.svd_models import (
     get_default_svd_cache_dir,
@@ -168,7 +169,15 @@ class SVDTabFrameV2(ttk.Frame):
         self.local_files_only_var.trace_add("write", self._on_model_availability_changed)
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=0)
+        self.rowconfigure(2, weight=1)
+
+        self.overview_panel = TabOverviewPanel(
+            self,
+            content=get_tab_overview_content("svd"),
+        )
+        self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
         self._build_header()
         self._build_body(model_options)
@@ -186,7 +195,7 @@ class SVDTabFrameV2(ttk.Frame):
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
-        header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
+        header.grid(row=1, column=0, sticky="ew", padx=6, pady=(6, 4))
         header.columnconfigure(1, weight=1)
         header.columnconfigure(5, weight=1)
 
@@ -218,7 +227,7 @@ class SVDTabFrameV2(ttk.Frame):
 
     def _build_body(self, model_options: list[str]) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
-        body.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=0)
         body.rowconfigure(0, weight=0)

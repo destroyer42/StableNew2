@@ -178,12 +178,16 @@ Why fourth:
 - turns optimizer output into replay-grade manifest evidence
 - creates the strongest observable proof that smart prompting is working
 
+Status: Completed 2026-03-24
+
 #### 4.5 `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
 
 Why fifth:
 
 - only after safe recommend/policy/replay behavior exists should the optimizer
   become learning-aware
+
+Status: Completed 2026-03-24
 
 ---
 
@@ -198,6 +202,8 @@ Why first:
 
 - the highest-value embedded guidance item
 - gives users a built-in readme for each major surface
+
+Status: Completed 2026-03-24
 
 #### 5.2 `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
 
@@ -285,12 +291,11 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-1. `PR-VIDEO-241`
-1. `PR-UX-265`
 1. `PR-UX-266`
 1. `PR-UX-271`
+1. `PR-UX-267`
 1. `PR-UX-268`
-1. `PR-PROMPT-241D`
+1. `PR-UX-269`
 
 Why this fast-track works:
 
@@ -298,16 +303,12 @@ Why this fast-track works:
 - makes prompt/config behavior visible before more automation lands
 - improves user comprehension early
 - gives artifact-level review portability and inspection
-- continues secondary-motion learning closure after backend parity completion
-- gets recommend-only smart-prompting evidence and replay-grade manifest proof moving
+- carries the queue forward from the now-complete prompt-optimizer learning closure
+- focuses the next sequence on the highest-value user-facing UX explanations and guardrails
 
 ## 5. Master Ordered List
 
 1. close image output-route regression
-1. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
-1. `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
-1. `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
-1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
 1. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
 1. `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
 1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`

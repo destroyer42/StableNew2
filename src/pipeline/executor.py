@@ -29,7 +29,10 @@ from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_registry import (
     build_prompt_optimizer_analysis_record,
     build_prompt_optimization_record,
+    build_prompt_optimizer_v3_record,
+    build_prompt_optimizer_v3_record_from_prompts,
     write_prompt_optimization_record,
+    write_prompt_optimizer_v3_payload,
 )
 from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
@@ -467,6 +470,18 @@ class Pipeline:
         except Exception as exc:
             logger.debug("Failed to write prompt optimization sidecar %s: %s", sidecar, exc)
 
+    def _maybe_write_prompt_optimizer_v3_sidecar(
+        self,
+        *,
+        manifest_path: Path,
+        payload: dict[str, Any],
+    ) -> None:
+        sidecar = manifest_path.with_name(f"{manifest_path.stem}.prompt_optimizer_v3.json")
+        try:
+            write_prompt_optimizer_v3_payload(sidecar, payload)
+        except Exception as exc:
+            logger.debug("Failed to write prompt optimizer v3 sidecar %s: %s", sidecar, exc)
+
     def _attach_manifest_artifact(
         self,
         *,
@@ -498,10 +513,25 @@ class Pipeline:
         metadata: dict[str, Any],
         prompt_optimizer_result: PromptOptimizationPairResult | None = None,
         prompt_optimizer_config: PromptOptimizerConfig | None = None,
+        prompt_optimizer_analysis: PromptOptimizerAnalysisBundle | None = None,
+        prompt_optimizer_v3: dict[str, Any] | None = None,
     ) -> None:
+        prompt_optimizer_v3_payload = dict(prompt_optimizer_v3 or {})
+        if not prompt_optimizer_v3_payload and prompt_optimizer_result is not None and prompt_optimizer_analysis is not None:
+            prompt_optimizer_v3_payload = build_prompt_optimizer_v3_record(
+                prompt_optimizer_result,
+                prompt_optimizer_analysis,
+            )
+        if prompt_optimizer_v3_payload:
+            metadata["prompt_optimizer_v3"] = dict(prompt_optimizer_v3_payload)
         manifest_path.parent.mkdir(exist_ok=True, parents=True)
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
+        if prompt_optimizer_v3_payload:
+            self._maybe_write_prompt_optimizer_v3_sidecar(
+                manifest_path=manifest_path,
+                payload=prompt_optimizer_v3_payload,
+            )
         if prompt_optimizer_result is not None and prompt_optimizer_config is not None:
             self._maybe_write_prompt_optimization_sidecar(
                 manifest_path=manifest_path,
@@ -3265,6 +3295,10 @@ class Pipeline:
             "path": str(image_path),
             "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
             "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
+            "prompt_optimizer_v3": build_prompt_optimizer_v3_record(
+                prompt_optimizer_result,
+                prompt_optimizer_analysis,
+            ),
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
@@ -3338,6 +3372,7 @@ class Pipeline:
                     metadata=metadata,
                     prompt_optimizer_result=prompt_optimizer_result,
                     prompt_optimizer_config=prompt_optimizer_config,
+                    prompt_optimizer_analysis=prompt_optimizer_analysis,
                 )
             except Exception as e:
                 logger.error(f"Error writing manifest file {manifest_path}: {e}")
@@ -4280,6 +4315,10 @@ class Pipeline:
                 "runtime_admission": runtime_admission,
                 "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
                 "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
+                "prompt_optimizer_v3": build_prompt_optimizer_v3_record(
+                    prompt_optimizer_result,
+                    prompt_optimizer_analysis,
+                ),
             }
             if str(runtime_admission.get("status") or "healthy") != "healthy":
                 base_metadata["runtime_warnings"] = [
@@ -4381,6 +4420,7 @@ class Pipeline:
                         metadata=image_metadata,
                         prompt_optimizer_result=prompt_optimizer_result,
                         prompt_optimizer_config=prompt_optimizer_config,
+                        prompt_optimizer_analysis=prompt_optimizer_analysis,
                     )
                     logger.debug(f"Saved variant manifest: {variant_manifest_path.name}")
                 except Exception as e:
@@ -4416,6 +4456,10 @@ class Pipeline:
                     "runtime_admission": runtime_admission,
                     "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
                     "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
+                    "prompt_optimizer_v3": build_prompt_optimizer_v3_record(
+                        prompt_optimizer_result,
+                        prompt_optimizer_analysis,
+                    ),
                 }
                 if str(runtime_admission.get("status") or "healthy") != "healthy":
                     metadata["runtime_warnings"] = [
@@ -4636,6 +4680,10 @@ class Pipeline:
                 "seeds": self._build_seed_metadata(payload, gen_info),  # D-MANIFEST-001
                 "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
                 "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
+                "prompt_optimizer_v3": build_prompt_optimizer_v3_record(
+                    prompt_optimizer_result,
+                    prompt_optimizer_analysis,
+                ),
                 # Legacy fields for backward compatibility
                 "requested_seed": payload.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),
@@ -4680,6 +4728,7 @@ class Pipeline:
                         metadata=metadata,
                         prompt_optimizer_result=prompt_optimizer_result,
                         prompt_optimizer_config=prompt_optimizer_config,
+                        prompt_optimizer_analysis=prompt_optimizer_analysis,
                     )
                 except Exception as e:
                     logger.error(f"Error writing manifest file {manifest_path}: {e}")
@@ -5134,6 +5183,13 @@ class Pipeline:
                 source_config=dict(config or {}),
                 prompt_optimizer_analysis=prompt_optimizer_analysis,
             )
+            prompt_optimizer_v3 = build_prompt_optimizer_v3_record_from_prompts(
+                positive_original=patched_positive_prompt,
+                negative_original=patched_negative_prompt,
+                positive_final=patched_positive_prompt,
+                negative_final=patched_negative_prompt,
+                bundle=prompt_optimizer_analysis,
+            )
 
             # DEBUG: Log full upscale config
             logger.info(
@@ -5468,7 +5524,8 @@ class Pipeline:
                     "status": "healthy",
                     "reasons": [],
                 },
-                "prompt_optimizer_analysis": prompt_optimizer_analysis.to_dict(),
+                "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
+                "prompt_optimizer_v3": prompt_optimizer_v3,
                 # Accumulated stage history from previous stages
                 "stage_history": stage_history,
             }
@@ -5532,6 +5589,7 @@ class Pipeline:
                     self._write_manifest_file(
                         manifest_path=manifest_path,
                         metadata=metadata,
+                        prompt_optimizer_v3=prompt_optimizer_v3,
                     )
                 except Exception as e:
                     logger.error(f"Error writing manifest file {manifest_path}: {e}")

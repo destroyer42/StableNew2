@@ -15,6 +15,10 @@ class LearningMode(str, Enum):
 
     SINGLE_VARIABLE_SWEEP = "single_variable_sweep"
     MULTI_VARIABLE_EXPERIMENT = "multi_variable_experiment"
+    PROMPT_OPTIMIZER_PRESET_COMPARISON = "prompt_optimizer_preset_comparison"
+
+
+PROMPT_OPTIMIZER_PRESET_VARIABLE = "prompt_optimizer_preset"
 
 
 @dataclass
@@ -83,4 +87,32 @@ def build_learning_plan_from_dict(payload: dict[str, Any]) -> LearningPlan:
         sweep_values=sweep_values,
         images_per_step=images_per_step,
         metadata=dict(metadata),
+    )
+
+
+def build_prompt_optimizer_preset_plan(
+    *,
+    stage: str = "txt2img",
+    preset_ids: list[str] | None = None,
+    images_per_step: int = 1,
+    metadata: dict[str, Any] | None = None,
+) -> LearningPlan:
+    """Build a deterministic learning plan for bounded prompt-optimizer preset comparisons."""
+
+    resolved_preset_ids = list(preset_ids or [])
+    if not resolved_preset_ids:
+        from src.learning.learning_contract import get_prompt_optimizer_learning_presets
+
+        resolved_preset_ids = list(get_prompt_optimizer_learning_presets().keys())
+
+    resolved_metadata = dict(metadata or {})
+    resolved_metadata.setdefault("comparison_type", PROMPT_OPTIMIZER_PRESET_VARIABLE)
+
+    return LearningPlan(
+        mode=LearningMode.PROMPT_OPTIMIZER_PRESET_COMPARISON.value,
+        stage=str(stage),
+        target_variable=PROMPT_OPTIMIZER_PRESET_VARIABLE,
+        sweep_values=resolved_preset_ids,
+        images_per_step=images_per_step,
+        metadata=resolved_metadata,
     )

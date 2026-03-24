@@ -62,7 +62,11 @@ Completion record:
 
 ### 4. `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
 
-Status: Next
+Status: Completed 2026-03-24
+
+Completion record:
+
+- `docs/CompletedPR/PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract.md`
 
 Primary outcome:
 
@@ -71,10 +75,20 @@ Primary outcome:
 
 ### 5. `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
 
+Status: Completed 2026-03-24
+
+Completion record:
+
+- `docs/CompletedPR/PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding.md`
+
 Primary outcome:
 
 - add opt-in learning hooks and bounded tuning scaffolding for optimizer and
   policy evaluation
+
+Prompt-optimizer tranche status:
+
+- `PR-PROMPT-241A` through `PR-PROMPT-241E` are now complete
 
 ## Guardrails
 

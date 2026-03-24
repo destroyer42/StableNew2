@@ -98,6 +98,12 @@ def test_txt2img_stage_uses_prompt_optimizer_and_records_manifest(
     assert manifest_path.exists()
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest_payload["prompt_optimizer_analysis"]["mode"] == "recommend_only_v1"
+    assert manifest_payload["prompt_optimizer_v3"]["schema"] == "stablenew.prompt-optimizer.v3"
+    assert manifest_payload["prompt_optimizer_v3"]["policy"]["stage_policy"]["mode"] == "auto_safe_fill_v1"
+    v3_sidecar_path = tmp_path / "manifests" / "prompt_optimizer.prompt_optimizer_v3.json"
+    assert v3_sidecar_path.exists()
+    v3_sidecar_payload = json.loads(v3_sidecar_path.read_text(encoding="utf-8"))
+    assert v3_sidecar_payload == manifest_payload["prompt_optimizer_v3"]
     sidecar_path = tmp_path / "manifests" / "prompt_optimizer.prompt_optimization.json"
     assert sidecar_path.exists()
 
@@ -147,6 +153,7 @@ def test_txt2img_stage_auto_fills_missing_or_auto_policy_keys(tmp_path: Path, mo
     assert result["config"]["scheduler"] == "Karras"
     assert result["config"]["steps"] == 28
     assert result["config"]["cfg_scale"] == 6.5
+    assert result["prompt_optimizer_v3"]["outputs"]["positive_final"] == "beautiful woman, natural skin texture, masterpiece"
     assert result["prompt_optimizer_analysis"]["stage_policy"]["applied_settings"] == {
         "cfg_scale": 6.5,
         "steps": 28,
@@ -188,6 +195,7 @@ def test_adetailer_stage_records_stage_policy_auto_fills(tmp_path: Path, monkeyp
     stage_policy = result["prompt_optimizer_analysis"]["stage_policy"]
     assert stage_policy["applied_settings"]["enable_face_pass"] is True
     assert stage_policy["applied_settings"]["adetailer_sampler"] == "DPM++ 2M"
+    assert result["prompt_optimizer_v3"]["policy"]["stage_policy"]["applied_settings"]["enable_face_pass"] is True
     face_args = result["config"]["alwayson_scripts"]["ADetailer"]["args"][2]
     assert face_args["ad_confidence"] == 0.28
     assert face_args["ad_sampler"] == "DPM++ 2M"

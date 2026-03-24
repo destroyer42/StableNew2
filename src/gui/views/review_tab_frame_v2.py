@@ -10,6 +10,7 @@ from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspector
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.utils.image_metadata import (
     extract_embedded_metadata,
@@ -82,7 +83,15 @@ class ReviewTabFrame(ttk.Frame):
         self._active_handoff: ReviewWorkspaceHandoff | None = None
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=0)
+        self.rowconfigure(2, weight=1)
+
+        self.overview_panel = TabOverviewPanel(
+            self,
+            content=get_tab_overview_content("review"),
+        )
+        self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
         self._build_header()
         self._build_body()
@@ -103,7 +112,7 @@ class ReviewTabFrame(ttk.Frame):
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
-        header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
+        header.grid(row=1, column=0, sticky="ew", padx=6, pady=(6, 4))
         header.columnconfigure(5, weight=1)
 
         ttk.Button(
@@ -157,7 +166,7 @@ class ReviewTabFrame(ttk.Frame):
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
-        body.grid(row=1, column=0, sticky="nsew", padx=6, pady=4)
+        body.grid(row=2, column=0, sticky="nsew", padx=6, pady=4)
         body.columnconfigure(0, weight=1, uniform="review")
         body.columnconfigure(1, weight=1, uniform="review")
         body.rowconfigure(0, weight=1)

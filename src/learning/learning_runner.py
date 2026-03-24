@@ -8,13 +8,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from .learning_contract import get_prompt_optimizer_learning_presets
 from .learning_plan import LearningPlan, LearningRunResult, LearningRunStep
+from .learning_plan import LearningMode, PROMPT_OPTIMIZER_PRESET_VARIABLE
 
 
 class LearningRunner:
     """Stub runner that prepares deterministic learning batches."""
 
-    def __init__(self, base_config: dict | None = None) -> None:
+    def __init__(self, base_config: dict[str, Any] | None = None) -> None:
         self._base_config = deepcopy(base_config) if base_config else {}
         self._last_plan: LearningPlan | None = None
 
@@ -23,13 +25,26 @@ class LearningRunner:
 
         self._last_plan = plan
         steps: list[LearningRunStep] = []
+        presets = get_prompt_optimizer_learning_presets()
         for idx, value in enumerate(plan.sweep_values):
             config_snapshot: dict[str, Any] = deepcopy(self._base_config)
-            stage_cfg = config_snapshot.setdefault(plan.stage, {})
-            if isinstance(stage_cfg, dict):
-                stage_cfg[plan.target_variable] = value
+            if (
+                plan.mode == LearningMode.PROMPT_OPTIMIZER_PRESET_COMPARISON.value
+                or plan.target_variable == PROMPT_OPTIMIZER_PRESET_VARIABLE
+            ):
+                preset_id = str(value)
+                preset_payload = dict(presets.get(preset_id) or {})
+                config_snapshot["prompt_optimizer"] = deepcopy(preset_payload.get("settings") or {})
+                metadata = config_snapshot.setdefault("metadata", {})
+                if isinstance(metadata, dict):
+                    metadata["prompt_optimizer_learning_enabled"] = True
+                    metadata["prompt_optimizer_learning_preset"] = preset_id
             else:
-                config_snapshot[plan.stage] = {plan.target_variable: value}
+                stage_cfg = config_snapshot.setdefault(plan.stage, {})
+                if isinstance(stage_cfg, dict):
+                    stage_cfg[plan.target_variable] = value
+                else:
+                    config_snapshot[plan.stage] = {plan.target_variable: value}
             steps.append(
                 LearningRunStep(
                     index=idx,
@@ -67,6 +82,8 @@ class LearningRunner:
             "steps": len(steps),
             "mode": plan.mode,
         }
+        if plan.mode == LearningMode.PROMPT_OPTIMIZER_PRESET_COMPARISON.value:
+            summary["compared_presets"] = [str(step.value) for step in steps]
 
         return LearningRunResult(
             plan=plan,
@@ -84,4 +101,7 @@ class LearningRunner:
             "total_steps": len(result.steps),
             "unique_values": sorted(set(values)),
             "artifacts": len(result.artifacts),
+            "compared_presets": [str(step.value) for step in result.steps]
+            if result.plan.mode == LearningMode.PROMPT_OPTIMIZER_PRESET_COMPARISON.value
+            else [],
         }

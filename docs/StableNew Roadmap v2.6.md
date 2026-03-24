@@ -808,7 +808,10 @@ Priority note:
   15. treat `PR-PROMPT-241A` as completed
   16. treat `PR-PROMPT-241B` as completed
   17. treat `PR-PROMPT-241C` as completed
-  18. begin `PR-PROMPT-241D`
+  18. treat `PR-PROMPT-241D` as completed
+  19. treat `PR-PROMPT-241E` as completed
+  20. treat `PR-UX-265` as completed
+  21. begin `PR-UX-266`
 
 Planned rollout:
 
@@ -819,6 +822,15 @@ Planned rollout:
   Completed 2026-03-24
 
 - `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
+  Completed 2026-03-24
+
+- `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
+  Completed 2026-03-24
+
+- `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
+  Completed 2026-03-24
+
+- `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
   Completed 2026-03-24
 
 - `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
