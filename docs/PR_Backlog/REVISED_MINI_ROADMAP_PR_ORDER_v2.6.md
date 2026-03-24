@@ -131,21 +131,18 @@ Completed in this tranche already:
 - `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 - `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
 
-#### 3.1 `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
+Follow-on note:
 
-Why first:
-
-- the secondary-motion backend and learning tranche is now complete
-- the remaining video work shifts to UX and inspection surfaces
-
-#### 3.2 `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
-
-Why this tranche is after Phase 2:
-
-- video rollout is important, but the non-video Review/Learning/metadata workflow
-  is more immediately blocking and affects broader operator experience
-- finishing inspectability and metadata semantics first will also improve the
-  quality of the later video UX and metadata work
+- the older `PR-VIDEO-242` and `PR-VIDEO-243` items are no longer separate
+  queued video PRs in the current canonical sequence
+- `PR-VIDEO-242` intent was absorbed into the shared UX/help tranche,
+  primarily `PR-UX-265`, `PR-UX-266`, `PR-UX-267`, `PR-UX-269`, and
+  `PR-UX-270`
+- `PR-VIDEO-243` intent was absorbed into the metadata portability and
+  inspection tranche, primarily `PR-LEARN-261` through `PR-LEARN-264`, with
+  remaining presentation polish under `PR-UX-270`
+- see `docs/PR_Backlog/VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md`
+  for the explicit historical mapping
 
 ---
 
@@ -175,9 +172,9 @@ Why this tranche is last in the broad sequence:
 If you want the highest practical value fastest, prioritize this shorter path:
 
 1. close output-route regression
-2. `PR-VIDEO-242`
-3. `PR-UX-265`
-4. `PR-UX-266`
+2. `PR-UX-265`
+3. `PR-UX-266`
+4. `PR-UX-267`
 5. `PR-UX-268`
 
 This path delivers:
@@ -191,8 +188,6 @@ This path delivers:
 ## 5. Full Ordered List
 
 1. close image output-route regression
-1. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
-1. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
 1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
 1. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
 1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`

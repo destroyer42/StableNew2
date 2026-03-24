@@ -131,6 +131,10 @@ Completed in this tranche already:
 - `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 - `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
+Historical mapping note: the older proposed `PR-VIDEO-242` and `PR-VIDEO-243`
+follow-ons were absorbed into the current UX/help and metadata tranches; see
+`docs/PR_Backlog/VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md`.
+
 #### 3.1 `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
 
 Why next:
