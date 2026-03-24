@@ -263,10 +263,11 @@ Completed:
 - `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
 - `PR-LEARN-260E-Source-vs-Derived-Outcome-Compare-and-Lineage-Jump`
 - `PR-LEARN-260F-Queue-Now-vs-Edit-in-Review-UX-Polish-and-Bulk-Selection-Rules`
+- `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
 
 Next:
 
-1. `PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI`
+1. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
 ## 6. Validation Expectations
 

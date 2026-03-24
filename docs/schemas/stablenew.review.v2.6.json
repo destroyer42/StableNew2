@@ -1,0 +1,101 @@
+{
+  "contract": "portable_review_metadata",
+  "schema_id": "stablenew.review.v2.6",
+  "namespace_key": "stablenew_review",
+  "sidecar_suffix": ".review.json",
+  "write_policy": {
+    "preferred_storage": "embedded",
+    "fallback_storage": "sidecar",
+    "write_after_internal_record": true,
+    "non_fatal_if_portable_write_fails": true
+  },
+  "always_emitted_fields": [
+    "schema",
+    "review_timestamp",
+    "source",
+    "image_path",
+    "user_rating",
+    "user_rating_raw",
+    "quality_label",
+    "subscores",
+    "weighted_score",
+    "user_notes",
+    "prompt_before",
+    "prompt_after",
+    "negative_prompt_before",
+    "negative_prompt_after",
+    "prompt_delta",
+    "negative_prompt_delta",
+    "prompt_mode",
+    "negative_prompt_mode",
+    "stages",
+    "review_context",
+    "review_actor",
+    "review_record_id",
+    "run_id",
+    "record_kind"
+  ],
+  "conditionally_emitted_fields": [
+    "model",
+    "sampler",
+    "scheduler",
+    "steps",
+    "cfg_scale",
+    "review_tags",
+    "lineage",
+    "selection_event",
+    "curation_decision",
+    "source_candidate_id",
+    "derived_candidate_id"
+  ],
+  "subscores_contract": {
+    "known_keys": [
+      "anatomy",
+      "composition",
+      "prompt_adherence"
+    ],
+    "omit_null_entries": true
+  },
+  "example_payload": {
+    "schema": "stablenew.review.v2.6",
+    "review_timestamp": "2026-03-23T12:00:00",
+    "source": "review_tab",
+    "image_path": "C:/images/output.png",
+    "user_rating": 4,
+    "user_rating_raw": 4,
+    "quality_label": "good",
+    "subscores": {
+      "anatomy": 4,
+      "composition": 5,
+      "prompt_adherence": 4
+    },
+    "weighted_score": 4.4,
+    "user_notes": "Strong prompt match.",
+    "prompt_before": "portrait",
+    "prompt_after": "portrait, dramatic light",
+    "negative_prompt_before": "blurry",
+    "negative_prompt_after": "blurry, extra limbs",
+    "prompt_delta": ", dramatic light",
+    "negative_prompt_delta": ", extra limbs",
+    "prompt_mode": "append",
+    "negative_prompt_mode": "append",
+    "stages": [
+      "img2img"
+    ],
+    "review_context": {
+      "actor": "user"
+    },
+    "review_actor": "user",
+    "review_record_id": "review-run-1",
+    "run_id": "review-run-1",
+    "record_kind": "review_tab_feedback",
+    "model": "juggernautXL",
+    "sampler": "DPM++ 2M",
+    "scheduler": "Karras",
+    "steps": 30,
+    "cfg_scale": 6.5,
+    "review_tags": [
+      "strong_prompt_match"
+    ]
+  }
+}

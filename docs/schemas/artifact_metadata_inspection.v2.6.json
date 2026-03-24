@@ -1,0 +1,91 @@
+{
+  "contract": "artifact_metadata_inspection",
+  "type_name": "ArtifactMetadataInspection",
+  "required_top_level_fields": [
+    "artifact_path",
+    "normalized_generation_summary",
+    "normalized_review_summary",
+    "source_diagnostics",
+    "raw_embedded_payload",
+    "raw_embedded_review_payload",
+    "raw_sidecar_review_payload",
+    "raw_internal_review_summary"
+  ],
+  "normalized_generation_summary_fields": [
+    "present",
+    "prompt",
+    "negative_prompt",
+    "model",
+    "vae",
+    "sampler",
+    "scheduler",
+    "steps",
+    "cfg_scale",
+    "width",
+    "height",
+    "seed",
+    "stage",
+    "manifest_present"
+  ],
+  "source_diagnostics_fields": [
+    "embedded_generation_present",
+    "embedded_review_present",
+    "sidecar_review_present",
+    "internal_review_present",
+    "active_review_precedence",
+    "warnings"
+  ],
+  "active_review_precedence_values": [
+    "internal_learning_record",
+    "embedded_review_metadata",
+    "sidecar_review_metadata",
+    "none"
+  ],
+  "warning_semantics": "Warnings are diagnostic strings prefixed by the failing source family, for example embedded_generation:payload_sha256_mismatch.",
+  "example_payload": {
+    "artifact_path": "C:/images/output.png",
+    "normalized_generation_summary": {
+      "present": true,
+      "prompt": "cinematic portrait",
+      "negative_prompt": "blurry",
+      "model": "juggernautXL",
+      "vae": "Automatic",
+      "sampler": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 30,
+      "cfg_scale": 6.5,
+      "width": 1024,
+      "height": 1024,
+      "seed": 123456789,
+      "stage": "txt2img",
+      "manifest_present": true
+    },
+    "normalized_review_summary": {
+      "source_type": "internal_learning_record",
+      "schema": "stablenew.internal-review-summary.v2.6",
+      "review_timestamp": "2026-03-23T12:30:00",
+      "user_rating": 5,
+      "quality_label": "excellent"
+    },
+    "source_diagnostics": {
+      "embedded_generation_present": true,
+      "embedded_review_present": true,
+      "sidecar_review_present": false,
+      "internal_review_present": true,
+      "active_review_precedence": "internal_learning_record",
+      "warnings": []
+    },
+    "raw_embedded_payload": {
+      "stage": "txt2img"
+    },
+    "raw_embedded_review_payload": {
+      "schema": "stablenew.review.v2.6",
+      "user_rating": 4
+    },
+    "raw_sidecar_review_payload": null,
+    "raw_internal_review_summary": {
+      "schema": "stablenew.internal-review-summary.v2.6",
+      "user_rating": 5
+    }
+  }
+}

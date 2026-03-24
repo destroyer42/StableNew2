@@ -1,0 +1,94 @@
+{
+  "contract": "embedded_generation_metadata",
+  "schema_id": "stablenew.image-metadata.v2.6",
+  "public_schema_id": "stablenew.public-image-metadata.v2.6",
+  "required_carrier_keys": [
+    "stablenew:schema",
+    "stablenew:job_id",
+    "stablenew:run_id",
+    "stablenew:stage",
+    "stablenew:created_utc",
+    "stablenew:payload_sha256"
+  ],
+  "payload_carrier_keys": [
+    "stablenew:payload",
+    "stablenew:payload_gz_b64",
+    "stablenew:payload_omitted"
+  ],
+  "optional_carrier_keys": [
+    "stablenew:payload_reason",
+    "stablenew:njr_sha256",
+    "stablenew:history_ref",
+    "Description",
+    "Comment",
+    "parameters",
+    "Software"
+  ],
+  "payload_families": {
+    "required_top_level_fields": [
+      "job_id",
+      "run_id",
+      "stage"
+    ],
+    "recommended_top_level_fields": [
+      "generation",
+      "image",
+      "seeds",
+      "stage_manifest",
+      "artifact"
+    ],
+    "generation_fields": [
+      "prompt",
+      "negative_prompt",
+      "model",
+      "vae",
+      "sampler_name",
+      "scheduler",
+      "steps",
+      "cfg_scale",
+      "width",
+      "height",
+      "seed"
+    ]
+  },
+  "example_payload": {
+    "job_id": "job-123",
+    "run_id": "run-123",
+    "stage": "txt2img",
+    "generation": {
+      "prompt": "cinematic portrait",
+      "negative_prompt": "blurry",
+      "model": "juggernautXL",
+      "vae": "Automatic",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "steps": 30,
+      "cfg_scale": 6.5,
+      "width": 1024,
+      "height": 1024,
+      "seed": 123456789
+    },
+    "image": {
+      "path": "images/output.png",
+      "width": 1024,
+      "height": 1024,
+      "format": "png"
+    },
+    "seeds": {
+      "requested_seed": -1,
+      "actual_seed": 123456789
+    },
+    "stage_manifest": {
+      "stage": "txt2img",
+      "config": {
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 30,
+        "cfg_scale": 6.5,
+        "width": 1024,
+        "height": 1024,
+        "seed": 123456789
+      }
+    }
+  }
+}

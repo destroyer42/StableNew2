@@ -10,6 +10,7 @@ from tkinter import ttk
 
 from src.pipeline.reprocess_builder import ReprocessEffectiveSettingsPreview, ReprocessStageSettingsPreview
 from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
+from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.queue.job_history_store import JobHistoryEntry
@@ -329,6 +330,50 @@ def test_review_tab_surfaces_prior_review_summary_from_learning_controller(tk_ro
         assert "Rating: 4 (good)" in summary
         assert "hands improved" in summary
         assert "Prompt change: append" in summary
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
+def test_review_tab_opens_metadata_inspector_for_selected_image(tk_root: tk.Tk, tmp_path: Path) -> None:
+    image_path = tmp_path / "inspect.png"
+    image_path.write_text("placeholder", encoding="utf-8")
+    opened: list[dict[str, object]] = []
+
+    learning_controller = SimpleNamespace(
+        get_prior_review_summary=lambda _image_path: None,
+        inspect_artifact_metadata=lambda _image_path: {
+            "artifact_path": str(image_path),
+            "normalized_generation_summary": {"stage": "txt2img"},
+            "normalized_review_summary": {"user_rating": 4},
+            "source_diagnostics": {"active_review_precedence": "embedded_review_metadata"},
+            "raw_embedded_payload": {"stage": "txt2img"},
+            "raw_embedded_review_payload": {"user_rating": 4},
+            "raw_sidecar_review_payload": None,
+            "raw_internal_review_summary": None,
+        },
+    )
+    app_controller = SimpleNamespace(
+        main_window=SimpleNamespace(learning_tab=SimpleNamespace(learning_controller=learning_controller))
+    )
+
+    tab = ReviewTabFrame(tk_root, app_controller=app_controller)
+    try:
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(tab.preview, "set_image_from_path", lambda path: None)
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.extract_embedded_metadata",
+                lambda _path: ReadPayloadResult(payload=None, status="missing"),
+            )
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.ArtifactMetadataInspectorDialog",
+                lambda parent, *, inspection_payload, on_refresh=None: opened.append(inspection_payload),
+            )
+            tab._set_selected_images([image_path])  # noqa: SLF001
+            tab._open_metadata_inspector()  # noqa: SLF001
+
+        assert len(opened) == 1
+        assert opened[0]["artifact_path"] == str(image_path)
     finally:
         tab.destroy()
 

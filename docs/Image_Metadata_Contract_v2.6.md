@@ -1,9 +1,15 @@
 # Image Metadata Contract v2.6
 
 Status: Canonical Addendum
-Updated: 2026-03-20
+Updated: 2026-03-23
 
 ## Purpose
+
+Field-level metadata semantics are defined in
+`docs/Architecture/ARTIFACT_METADATA_CONTRACTS_v2.6.md`.
+
+This document remains the low-level carrier and encoding addendum for embedded
+still-image metadata only.
 
 StableNew embeds a compact, deterministic metadata capsule inside output images (PNG preferred; JPG supported).
 This metadata is portable for inspection and DebugHub bundling, but History remains authoritative.

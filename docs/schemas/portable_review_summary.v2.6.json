@@ -1,0 +1,75 @@
+{
+  "contract": "portable_review_summary",
+  "type_name": "PortableReviewSummary",
+  "normalized_shape_version": "v2.6",
+  "internal_schema_id": "stablenew.internal-review-summary.v2.6",
+  "underlying_source_schema_examples": [
+    "stablenew.internal-review-summary.v2.6",
+    "stablenew.review.v2.6"
+  ],
+  "source_type_values": [
+    "internal_learning_record",
+    "embedded_review_metadata",
+    "sidecar_review_metadata",
+    "portable_review_metadata"
+  ],
+  "normalized_fields": [
+    "source_type",
+    "schema",
+    "review_timestamp",
+    "user_rating",
+    "user_rating_raw",
+    "quality_label",
+    "subscores",
+    "weighted_score",
+    "user_notes",
+    "prompt_before",
+    "prompt_after",
+    "negative_prompt_before",
+    "negative_prompt_after",
+    "prompt_delta",
+    "negative_prompt_delta",
+    "prompt_mode",
+    "negative_prompt_mode",
+    "stages",
+    "review_context",
+    "review_record_id"
+  ],
+  "normalization_rules": {
+    "non_mapping_subscores_become_empty_object": true,
+    "non_mapping_review_context_become_empty_object": true,
+    "non_list_stages_become_empty_list": true,
+    "missing_text_fields_become_empty_string": true,
+    "missing_numeric_fields_may_be_null": true
+  },
+  "example_payload": {
+    "source_type": "embedded_review_metadata",
+    "schema": "stablenew.review.v2.6",
+    "review_timestamp": "2026-03-23T12:00:00",
+    "user_rating": 4,
+    "user_rating_raw": 4,
+    "quality_label": "good",
+    "subscores": {
+      "anatomy": 4,
+      "composition": 5,
+      "prompt_adherence": 4
+    },
+    "weighted_score": 4.4,
+    "user_notes": "Strong prompt match.",
+    "prompt_before": "portrait",
+    "prompt_after": "portrait, dramatic light",
+    "negative_prompt_before": "blurry",
+    "negative_prompt_after": "blurry, extra limbs",
+    "prompt_delta": ", dramatic light",
+    "negative_prompt_delta": ", extra limbs",
+    "prompt_mode": "append",
+    "negative_prompt_mode": "append",
+    "stages": [
+      "img2img"
+    ],
+    "review_context": {
+      "actor": "user"
+    },
+    "review_record_id": "review-run-1"
+  }
+}

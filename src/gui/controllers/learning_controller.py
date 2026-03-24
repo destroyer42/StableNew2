@@ -15,6 +15,7 @@ from src.gui.learning_state import LearningExperiment, LearningState, LearningVa
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
+from src.review.artifact_metadata_inspector import ArtifactMetadataInspector
 from src.review.review_metadata_service import (
     INTERNAL_REVIEW_SUMMARY_SCHEMA,
     PortableReviewSummary,
@@ -99,6 +100,7 @@ class LearningController:
         self._curation_workflow_builder = CurationWorkflowBuilder()
         self._review_workflow_adapter = ReviewWorkflowAdapter()
         self._review_metadata_service = ReviewMetadataService()
+        self._artifact_metadata_inspector = ArtifactMetadataInspector(self._review_metadata_service)
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -2084,6 +2086,15 @@ class LearningController:
 
         portable_summary = self._review_metadata_service.read_review_summary(normalized_path)
         return portable_summary.to_dict() if portable_summary is not None else None
+
+    def inspect_artifact_metadata(self, image_path: str | Path) -> dict[str, Any]:
+        """Return a unified inspection payload for one artifact path."""
+        internal_summary = self.get_prior_review_summary(image_path)
+        inspection = self._artifact_metadata_inspector.inspect_artifact(
+            image_path,
+            internal_review_summary=internal_summary,
+        )
+        return inspection.to_dict()
 
     def on_variant_selected(self, variant_index: int) -> None:
         """Handle selection of a variant in the table."""

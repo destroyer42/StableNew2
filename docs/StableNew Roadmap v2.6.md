@@ -796,7 +796,9 @@ Priority note:
   6. treat `PR-LEARN-260F` as completed
   7. treat `PR-LEARN-261` as completed
   8. treat `PR-LEARN-262` as completed
-  9. begin `PR-LEARN-263`
+  9. treat `PR-LEARN-263` as completed
+  10. treat `PR-LEARN-264` as completed
+  11. begin `PR-VIDEO-238`
 
 Planned rollout:
 
@@ -827,6 +829,10 @@ Planned rollout:
 - `PR-LEARN-261-Portable-Review-Metadata-Stamping`
   Completed 2026-03-23
 - `PR-LEARN-262-Portable-Review-Metadata-Rehydration-and-UI-Surfacing`
+  Completed 2026-03-23
+- `PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI`
+  Completed 2026-03-23
+- `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
   Completed 2026-03-23
 
 Sequencing note:

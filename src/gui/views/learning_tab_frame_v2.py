@@ -17,6 +17,7 @@ from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.learning.experiment_store import LearningExperimentStore
 from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
@@ -432,6 +433,11 @@ class LearningTabFrame(ttk.Frame):
             justify="left",
             anchor="w",
         ).grid(row=0, column=0, sticky="ew")
+        ttk.Button(
+            prior_review_frame,
+            text="Inspect Metadata",
+            command=self._open_staged_metadata_inspector,
+        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
         reason_frame = ttk.LabelFrame(staged_right, text="Reason Tags", padding=(6, 4))
         reason_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
@@ -1162,6 +1168,29 @@ class LearningTabFrame(ttk.Frame):
 
     def _collect_staged_reason_tags(self) -> list[str]:
         return [tag for tag, var in self._staged_reason_tag_vars.items() if bool(var.get())]
+
+    def _open_staged_metadata_inspector(self) -> None:
+        selection = self._staged_candidate_tree.selection()
+        candidate_id = selection[0] if selection else None
+        if not candidate_id:
+            messagebox.showinfo("Metadata Inspector", "Select a candidate first.")
+            return
+        row = self._staged_candidates_by_id.get(candidate_id) or {}
+        item = row.get("item")
+        image_path = str(getattr(item, "artifact_path", "") or "").strip() if item is not None else ""
+        if not image_path:
+            messagebox.showinfo("Metadata Inspector", "Selected candidate does not have an artifact path.")
+            return
+
+        def _refresh() -> dict[str, Any] | None:
+            return self.learning_controller.inspect_artifact_metadata(image_path)
+
+        try:
+            payload = self.learning_controller.inspect_artifact_metadata(image_path)
+        except Exception as exc:
+            messagebox.showerror("Metadata Inspector", str(exc))
+            return
+        ArtifactMetadataInspectorDialog(self, inspection_payload=payload, on_refresh=_refresh)
 
     @staticmethod
     def _format_prior_review_summary(summary: Any) -> str:

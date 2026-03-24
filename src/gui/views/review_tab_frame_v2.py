@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.queue.job_history_store import JobHistoryEntry
+from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
@@ -214,6 +215,12 @@ class ReviewTabFrame(ttk.Frame):
             text="Compare Latest Derived",
             style="Dark.TButton",
             command=self._open_latest_derived_compare,
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            preview_actions,
+            text="Inspect Metadata",
+            style="Dark.TButton",
+            command=self._open_metadata_inspector,
         ).pack(side="left", padx=(6, 0))
 
         self.preview = ThumbnailWidget(right, width=620, height=620, placeholder_text="Select an image")
@@ -818,6 +825,31 @@ class ReviewTabFrame(ttk.Frame):
             return
         self._compare_mode = "single"
         self._render_compare_viewer(image_path)
+
+    def _open_metadata_inspector(self) -> None:
+        image_path = self._selected_image_path
+        if image_path is None:
+            messagebox.showinfo("Metadata Inspector", "Select an image first.")
+            return
+        learning_controller = self._resolve_learning_controller()
+        inspector = getattr(learning_controller, "inspect_artifact_metadata", None) if learning_controller is not None else None
+        if not callable(inspector):
+            messagebox.showerror("Metadata Inspector", "Metadata inspector is unavailable.")
+            return
+
+        def _refresh() -> dict[str, Any] | None:
+            refreshed = inspector(str(image_path))
+            return dict(refreshed) if isinstance(refreshed, dict) else None
+
+        try:
+            payload = inspector(str(image_path))
+        except Exception as exc:
+            messagebox.showerror("Metadata Inspector", str(exc))
+            return
+        if not isinstance(payload, dict):
+            messagebox.showerror("Metadata Inspector", "Inspector returned an invalid payload.")
+            return
+        ArtifactMetadataInspectorDialog(self, inspection_payload=payload, on_refresh=_refresh)
 
     def _lookup_handoff_source_metadata(self, image_path: Path) -> dict[str, Any] | None:
         handoff = self._active_handoff

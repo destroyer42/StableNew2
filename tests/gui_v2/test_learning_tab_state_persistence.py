@@ -694,3 +694,78 @@ def test_learning_tab_staged_curation_surfaces_prior_review_summary(tmp_path) ->
             assert "Prompt changed: yes" in summary
         finally:
             tab.destroy()
+
+
+def test_learning_tab_opens_staged_metadata_inspector(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    discovered_root = tmp_path / "discovered"
+    store = UIStateStore(state_path)
+    opened: list[dict[str, object]] = []
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=AppStateV2(),
+            pipeline_controller=_StubPipelineController(),
+        )
+        try:
+            discovered_store = DiscoveredReviewStore(discovered_root)
+            tab.learning_controller._discovered_review_store = discovered_store  # noqa: SLF001
+            image_path = tmp_path / "inspect-candidate.png"
+            image_path.write_text("placeholder", encoding="utf-8")
+            experiment = DiscoveredReviewExperiment(
+                group_id="disc-inspect",
+                display_name="Inspect Group",
+                stage="txt2img",
+                prompt_hash="hash-1",
+                items=[
+                    DiscoveredReviewItem(
+                        item_id="item-1",
+                        artifact_path=str(image_path),
+                        stage="txt2img",
+                        model="juggernautXL",
+                        sampler="DPM++ 2M",
+                        steps=30,
+                        cfg_scale=6.5,
+                    )
+                ],
+                varying_fields=["cfg_scale"],
+            )
+            discovered_store.save_group(experiment)
+
+            with patch.object(
+                tab.learning_controller,
+                "get_prior_review_summary",
+                return_value=None,
+            ), patch.object(
+                tab.learning_controller,
+                "inspect_artifact_metadata",
+                return_value={
+                    "artifact_path": str(image_path),
+                    "normalized_generation_summary": {"stage": "txt2img"},
+                    "normalized_review_summary": None,
+                    "source_diagnostics": {"active_review_precedence": "none"},
+                    "raw_embedded_payload": {"stage": "txt2img"},
+                    "raw_embedded_review_payload": None,
+                    "raw_sidecar_review_payload": None,
+                    "raw_internal_review_summary": None,
+                },
+            ), patch(
+                "src.gui.views.learning_tab_frame_v2.ArtifactMetadataInspectorDialog",
+                lambda parent, *, inspection_payload, on_refresh=None: opened.append(inspection_payload),
+            ):
+                tab._on_staged_open_group("disc-inspect")  # noqa: SLF001
+                tab._open_staged_metadata_inspector()  # noqa: SLF001
+
+            assert len(opened) == 1
+            assert opened[0]["artifact_path"] == str(image_path)
+        finally:
+            tab.destroy()

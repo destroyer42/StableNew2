@@ -31,10 +31,15 @@ which files are canonical, operational, backlog-driving, or archived.
 
 ### 1.3 Tier 3 - Active subsystem references
 
+- `docs/Architecture/ARTIFACT_METADATA_CONTRACTS_v2.6.md`
 - `docs/Learning_System_Spec_v2.6.md`
 - `docs/GUI_Ownership_Map_v2.6.md`
 - `docs/Movie_Clips_Workflow_v2.6.md`
 - `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/schemas/stablenew.image-metadata.v2.6.json`
+- `docs/schemas/stablenew.review.v2.6.json`
+- `docs/schemas/portable_review_summary.v2.6.json`
+- `docs/schemas/artifact_metadata_inspection.v2.6.json`
 - `docs/StableNew Secondary Motion Layer Design.md`
 - `docs/Prompt_Optimizer_WorldClass_v3_Design.md`
 - `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
@@ -131,8 +136,10 @@ Read in this order:
 ## 3. Root Folder Rule
 
 - `docs/` root is reserved for active docs only
+- `docs/Architecture/` is for active architecture and contract references
 - `docs/PR_Backlog/` is for active and historical planning docs
 - `docs/CompletedPR/` is for completed PR records
+- `docs/schemas/` is for active machine-readable contract companions
 - `docs/archive/` is reference-only and not active canon
 
 ## 4. Explicit Non-Active Documents

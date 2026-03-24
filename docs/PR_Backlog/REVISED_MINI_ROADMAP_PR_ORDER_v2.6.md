@@ -176,7 +176,7 @@ Why this tranche is last in the broad sequence:
 If you want the highest practical value fastest, prioritize this shorter path:
 
 1. close output-route regression
-2. `PR-LEARN-263`
+2. `PR-VIDEO-238`
 3. `PR-UX-265`
 4. `PR-UX-266`
 5. `PR-UX-268`
@@ -192,20 +192,18 @@ This path delivers:
 ## 5. Full Ordered List
 
 1. close image output-route regression
-2. `PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI`
-11. `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
-12. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
-13. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
-14. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-Integration`
-15. `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
-16. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
-17. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
-18. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
-19. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-20. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
-21. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-22. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-23. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+2. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
+3. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
+4. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-Integration`
+5. `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
+6. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
+7. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
+8. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
+9. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
+10. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
+11. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+12. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
+13. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
 
 ## 6. Recommendation
 
