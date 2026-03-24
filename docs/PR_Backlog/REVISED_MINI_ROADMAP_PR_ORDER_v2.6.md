@@ -129,18 +129,16 @@ Completed in this tranche already:
 - `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 - `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 - `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+- `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
 
-#### 3.1 `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
+#### 3.1 `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
 
 Why first:
 
-- the shared secondary-motion foundation and all three backend rollout steps
-  are now complete
-- learning and evidence closure is the next secondary-motion step
+- the secondary-motion backend and learning tranche is now complete
+- the remaining video work shifts to UX and inspection surfaces
 
-#### 3.2 `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
-
-#### 3.3 `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
+#### 3.2 `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
 
 Why this tranche is after Phase 2:
 
@@ -177,7 +175,7 @@ Why this tranche is last in the broad sequence:
 If you want the highest practical value fastest, prioritize this shorter path:
 
 1. close output-route regression
-2. `PR-VIDEO-241`
+2. `PR-VIDEO-242`
 3. `PR-UX-265`
 4. `PR-UX-266`
 5. `PR-UX-268`
@@ -193,7 +191,6 @@ This path delivers:
 ## 5. Full Ordered List
 
 1. close image output-route regression
-1. `PR-VIDEO-241-Secondary-Motion-Learning-and-Evidence-Integration`
 1. `PR-VIDEO-242-Video-UX-Exposure-and-Operator-Controls`
 1. `PR-VIDEO-243-Video-Metadata-and-Result-Inspection-UX-Polish`
 1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`

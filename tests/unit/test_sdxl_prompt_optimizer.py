@@ -45,14 +45,56 @@ def test_optimizer_moves_lora_tokens_to_absolute_end_of_positive_prompt() -> Non
         pipeline_name="txt2img",
     )
 
-    assert result.positive.optimized_prompt.endswith(
-        "<lora:add-detail-xl:0.3>, <lora:cinematic:0.8>"
+    assert result.positive.optimized_prompt == (
+        "beautiful woman, <lora:add-detail-xl:0.3>, <lora:cinematic:0.8>, low angle full body shot, photorealistic"
     )
-    assert "low angle full body shot <lora:add-detail-xl:0.3>" not in result.positive.optimized_prompt
     assert result.positive.buckets["lora_tokens"] == [
         "<lora:add-detail-xl:0.3>",
         "<lora:cinematic:0.8>",
     ]
+
+
+def test_optimizer_can_disable_lora_relative_order_preservation() -> None:
+    service = PromptOptimizerService(
+        PromptOptimizerConfig(preserve_lora_relative_order=False, preserve_unknown_order=False)
+    )
+    result = service.optimize_prompts(
+        "beautiful woman, low angle full body shot <lora:add-detail-xl:0.3> <lora:cinematic:0.8>, photorealistic",
+        "",
+        pipeline_name="txt2img",
+    )
+
+    assert result.positive.optimized_prompt.endswith(
+        "<lora:add-detail-xl:0.3>, <lora:cinematic:0.8>"
+    )
+
+
+def test_optimizer_preserves_unknown_chunk_order_when_enabled() -> None:
+    service = PromptOptimizerService(PromptOptimizerConfig())
+    result = service.optimize_prompts(
+        "masterpiece, crystal sigil, beautiful woman, cinematic lighting",
+        "",
+        pipeline_name="txt2img",
+    )
+
+    assert result.positive.optimized_prompt == (
+        "beautiful woman, crystal sigil, cinematic lighting, masterpiece"
+    )
+
+
+def test_optimizer_can_disable_unknown_chunk_order_preservation() -> None:
+    service = PromptOptimizerService(
+        PromptOptimizerConfig(preserve_unknown_order=False, preserve_lora_relative_order=False)
+    )
+    result = service.optimize_prompts(
+        "masterpiece, crystal sigil, beautiful woman, cinematic lighting",
+        "",
+        pipeline_name="txt2img",
+    )
+
+    assert result.positive.optimized_prompt == (
+        "beautiful woman, cinematic lighting, masterpiece, crystal sigil"
+    )
 
 
 def test_optimizer_preserves_negative_embedding_prefix() -> None:
@@ -92,7 +134,7 @@ def test_optimizer_preserves_legacy_bare_embedding_tokens_at_front() -> None:
         pipeline_name="adetailer",
     )
 
-    assert result.positive.optimized_prompt.startswith(
-        "<stable_yogis_pdxl_positives>, woman portrait"
+    assert result.positive.optimized_prompt == (
+        "<stable_yogis_pdxl_positives>, dramatic light, woman portrait, sharp focus"
     )
     assert result.positive.buckets["embedding_tokens"] == ["<stable_yogis_pdxl_positives>"]

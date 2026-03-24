@@ -90,10 +90,11 @@ def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
                     "user_rating": 5,
                     "stage": "video_workflow",
                     "secondary_motion": {
+                        "backend_id": "comfy",
                         "enabled": True,
                         "status": "applied",
                         "policy_id": "workflow_motion_v1",
-                        "application_path": "shared_postprocess_engine",
+                        "application_path": "video_reencode_worker",
                         "backend_mode": "apply_shared_postprocess_candidate",
                         "intent_mode": "apply",
                     },
@@ -105,6 +106,7 @@ def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
                     "user_rating": 2,
                     "stage": "video_workflow",
                     "secondary_motion": {
+                        "backend_id": "animatediff",
                         "enabled": True,
                         "status": "applied",
                         "policy_id": "other_motion_v1",
@@ -122,10 +124,11 @@ def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
         "portrait studio",
         "video_workflow",
         secondary_motion_context={
+            "backend_id": "comfy",
             "enabled": True,
             "status": "applied",
             "policy_id": "workflow_motion_v1",
-            "application_path": "shared_postprocess_engine",
+            "application_path": "video_reencode_worker",
             "backend_mode": "apply_shared_postprocess_candidate",
             "intent_mode": "apply",
         },
@@ -134,5 +137,6 @@ def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
     best = recs.get_best_for_parameter("sampler")
     assert best is not None
     assert best.recommended_value == "Euler a"
+    assert "comfy" in best.context_key
     assert "workflow_motion_v1" in best.context_key
 

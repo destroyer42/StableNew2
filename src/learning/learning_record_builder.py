@@ -93,7 +93,7 @@ def build_learning_record(
         if refinement_context:
             metadata["adaptive_refinement"] = refinement_context
     if "secondary_motion" not in metadata:
-        secondary_motion_context = build_secondary_motion_learning_context(rr_meta.get("secondary_motion"))
+        secondary_motion_context = build_secondary_motion_learning_context(rr_meta)
         if secondary_motion_context:
             metadata["secondary_motion"] = secondary_motion_context
     timestamp_value = metadata.get("timestamp") or rr_meta.get("timestamp") or _now_iso()

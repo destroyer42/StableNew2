@@ -737,7 +737,7 @@ Detailed execution spec:
 
 ### 25. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
-Status: Completed 2026-03-22
+Status: Completed 2026-03-24
 
 Close the loop by making the shared motion carrier visible to learning and
 recommendation flows without weakening evidence-tier safeguards.
@@ -746,6 +746,7 @@ Primary outcomes:
 
 - scalar motion metrics in learning records
 - backend-aware and application-path-aware motion recommendation context
+- explicit backend/policy/path/status cohorting for motion evidence
 - no raw frame or dense motion payload retention in centralized learning data
 
 Completion record:
@@ -803,9 +804,18 @@ Priority note:
   11. treat `PR-VIDEO-238` as completed
   12. treat `PR-VIDEO-239` as completed
   13. treat `PR-VIDEO-240` as completed
-  14. begin `PR-VIDEO-241`
+  14. treat `PR-VIDEO-241` as completed
+  15. treat `PR-PROMPT-241A` as completed
+  16. treat `PR-PROMPT-241B` as completed
+  17. begin `PR-PROMPT-241C`
 
 Planned rollout:
+
+- `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
+  Completed 2026-03-24
+
+- `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
+  Completed 2026-03-24
 
 - `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
   Completed 2026-03-21

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
+from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.prompting.prompt_types import PromptOptimizationPairResult
 
 
@@ -28,6 +29,12 @@ def build_prompt_optimization_record(
     }
 
 
+def build_prompt_optimizer_analysis_record(
+    bundle: PromptOptimizerAnalysisBundle,
+) -> Dict[str, Any]:
+    return bundle.to_dict()
+
+
 def write_prompt_optimization_record(
     output_path: Path,
     result: PromptOptimizationPairResult,
@@ -35,6 +42,18 @@ def write_prompt_optimization_record(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(build_prompt_optimization_record(result), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return output_path
+
+
+def write_prompt_optimizer_analysis_record(
+    output_path: Path,
+    bundle: PromptOptimizerAnalysisBundle,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(build_prompt_optimizer_analysis_record(bundle), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     return output_path

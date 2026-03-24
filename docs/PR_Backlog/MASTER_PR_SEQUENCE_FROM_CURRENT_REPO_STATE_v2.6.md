@@ -129,14 +129,14 @@ Completed in this tranche already:
 - `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 - `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 - `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
+- `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
-#### 3.1 `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
+#### 3.1 `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
 
-Why next in video:
+Why next:
 
-- the shared secondary-motion foundation is already complete through `236`/`237`
-- all three current video backends now have runtime closure, so learning and
-  recommendation feedback is the next secondary-motion rollout step
+- the secondary-motion tranche is now complete through `PR-VIDEO-241`
+- the canonical roadmap queues the prompt-optimizer tranche next
 
 ---
 
@@ -154,6 +154,8 @@ Why first:
 - hardens the base before orchestration/policy work
 
 #### 4.2 `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
+
+Status: Completed 2026-03-24
 
 Why second:
 
@@ -286,8 +288,6 @@ execute this shorter path:
 1. `PR-UX-266`
 1. `PR-UX-271`
 1. `PR-UX-268`
-1. `PR-PROMPT-241A`
-1. `PR-PROMPT-241B`
 1. `PR-PROMPT-241D`
 
 Why this fast-track works:
@@ -303,8 +303,6 @@ Why this fast-track works:
 
 1. close image output-route regression
 1. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
-1. `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
-1. `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
 1. `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
 1. `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
 1. `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`

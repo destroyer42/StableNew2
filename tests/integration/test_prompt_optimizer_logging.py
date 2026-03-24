@@ -17,7 +17,7 @@ def test_prompt_optimizer_logs_before_after(caplog) -> None:
     }
 
     with caplog.at_level(logging.INFO):
-        result, _ = pipeline._run_prompt_optimizer(
+        result, _, analysis = pipeline._run_prompt_optimizer(
             positive_prompt="masterpiece, beautiful woman",
             negative_prompt="watermark, blurry",
             config=config,
@@ -25,6 +25,7 @@ def test_prompt_optimizer_logs_before_after(caplog) -> None:
         )
 
     assert result.positive.optimized_prompt == "beautiful woman, masterpiece"
+    assert analysis.mode == "recommend_only_v1"
     assert "PROMPT OPTIMIZER ENABLED" in caplog.text
     assert "ORIGINAL POSITIVE:" in caplog.text
     assert "OPTIMIZED NEGATIVE:" in caplog.text

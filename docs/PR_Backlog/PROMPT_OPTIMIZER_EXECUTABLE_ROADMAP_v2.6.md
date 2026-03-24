@@ -1,7 +1,7 @@
 PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md
 
 Status: Active planning document
-Updated: 2026-03-21
+Updated: 2026-03-24
 
 ## Purpose
 
@@ -19,6 +19,8 @@ work, but it should not interrupt `PR-VIDEO-237` through `PR-VIDEO-241`.
 
 ### 1. `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
 
+Status: Completed 2026-03-24
+
 Primary outcome:
 
 - make the default optimizer path strictly safe and non-semantic
@@ -27,7 +29,13 @@ Primary outcome:
 - make current config flags like `preserve_unknown_order` and
   `preserve_lora_relative_order` real and testable
 
+Completion record:
+
+- `docs/CompletedPR/PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening.md`
+
 ### 2. `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
+
+Status: Completed 2026-03-24
 
 Primary outcome:
 
@@ -35,7 +43,13 @@ Primary outcome:
 - emit structured prompt context and recommendations without mutating prompts
   or configs
 
+Completion record:
+
+- `docs/CompletedPR/PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only.md`
+
 ### 3. `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
+
+Status: Next
 
 Primary outcome:
 

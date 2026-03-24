@@ -56,6 +56,7 @@ NEGATIVE_BUCKET_ORDER: tuple[NegativeBucket, ...] = (
 
 @dataclass(slots=True)
 class PromptChunk:
+    sequence_index: int
     original_text: str
     normalized_text: str
     dedupe_key: str

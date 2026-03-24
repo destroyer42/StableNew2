@@ -1,61 +1,86 @@
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1>
 (masterpiece, 8k, photorealistic) POV, looking down on woman, she is on her knees a beautiful, red-haired large-breasted athletic gorgeous lightly tanned woman is leaning back as cum is sprayed all over her face head and chest. She is wearing nothing, on knees looking up, and her hands are grasped around her vagina, that is cumming on her, blue eyes wide, looking sultry, detailed shaved vagina dripping cum.
-<lora:add-detail-xl:0.30000000000000004> <lora:CinematicStyle_v1:0.8076923076923077> <lora:DetailedEyes_V3:0.34951456310679613>
+<lora:add-detail-xl:0.9134615384615383> <lora:CinematicStyle_v1:0.8076923076923077> <lora:DetailedEyes_V3:0.34951456310679613> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1> <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives2>
 (masterpiece, 8k, photorealistic, modelshot) low angle, a gorgeous red-haired huge-breasted athletic lightly tanned woman is on her knees facing partly away away, she is having her wet vagina licked as she looks over her shoulder, her vagina is dripping cum, she is wearing nothing, blue eyes wide, facial expresseion is of ectasy
-<lora:add-detail-xl:0.7124999999999999> <lora:CinematicStyle_v1:0.8406593406593407> <lora:DetailedEyes_V3:0.6844660194174758>
+<lora:add-detail-xl:0.9519230769230769> <lora:CinematicStyle_v1:0.8406593406593407> <lora:DetailedEyes_V3:0.6844660194174758> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg> <embedding:bad_prompt>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, 8k, photorealistic model shot) POV, looking down on woman, she is on her back, in her bedroom, a red-haired large-breasted athletic gorgeous lightly tanned woman is inserting a finger deep into her vagina, she is wearing nothing, face in pleasure, vagina wet and dripping semen or cum.
-<lora:add-detail-xl:0.26249999999999996> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.34951456310679613> <lora:finenude_v0_2a:0.19811320754716982>
+<lora:add-detail-xl:0.9903846153846154> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.34951456310679613> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) photorealistic portrait, detailed skin, natural light, kneeling on floor of room, a red-haired large-breasted athletic beautiful woman with mouth open, cumshot, cum dribbling down forehead, into her face and into her eyes, and off her tongue, wearing nothing, on knees looking up, and one hand pulling back her hair,  high angle perspective, detailed vagina and breasts, incredible skin. A penis is poking her in the face.
-<lora:add-detail-xl:0.2375> <lora:CinematicStyle_v1:0.8076923076923077> <lora:DetailedEyes_V3:0.3058252427184466> <lora:NsfwPovAllInOneLoraSdxl-000009:0.19780219780219782>
+<lora:add-detail-xl:1.048076923076923> <lora:CinematicStyle_v1:0.8076923076923077> <lora:DetailedEyes_V3:0.3058252427184466> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) portrait, detailed skin, natural light, high fantasy, magical atmosphere
 kneeling on floor of room facing away at an angle, a red-haired large-breasted athletic beautiful woman has her ass in the air, as a man stands behind her and drives his penis into her wet vagina, low angle perspective, detailed vagina and breasts, incredible skin, facial expression is orgasming
-<lora:add-detail-xl:0.22499999999999998> <lora:CinematicStyle_v1:0.8076923076923077> <lora:DetailedEyes_V3:0.48058252427184467> <lora:NSFWFilterXL_animagine:0.2802197802197802>
+<lora:add-detail-xl:0.9903846153846154> <lora:CinematicStyle_v1:0.8076923076923077> <lora:DetailedEyes_V3:0.48058252427184467> <lora:NSFWFilterXL_animagine:0.576923076923077>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) photorealistic portrait,on balcony bent over a railing, looking over shoulder at viewer, huge-breasted, small waisted, athletic beautiful woman, wearing nothing, bending forward her hands grabbing her butt cheeks and spreading them wide, detailed wet vagina, detailed butt hole, incredible skin,  glistening, looking sultry, back arched.
-<lora:add-detail-xl:0.2375> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.3640776699029126>
+<lora:add-detail-xl:0.2375> <lora:CinematicStyle_v1:0.8241758241758242> <lora:DetailedEyes_V3:0.3640776699029126> <lora:NSFWFilterXL_animagine:1.0054945054945055>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, gorgeous faced woman, silver-haired big-breasted athletic beautiful, wearing nothing in a forest, right hand with one finger pushed deep into vagina, while left hand grasps her own breast forcefully while playing with her nipple, legs spread wide sitting arched back against a tree, bright daylight, full body shot, direct view, looking directly into camera, detailed juicy pink vagina dripping cum, incredible skin, looking sultry
-<lora:add-detail-xl:0.28750000000000003> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.3932038834951456>
+<lora:add-detail-xl:0.28750000000000003> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.3932038834951456> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, gorgeous faced woman, silver-haired big-breasted athletic beautiful, wearing nothing in a forest, right hand with one finger pushed deep into vagina, while left hand grasps her own breast forcefully while playing with her nipple, legs spread wide sitting arched back against a tree, bright daylight, full body shot, direct view, looking directly into camera, detailed juicy pink vagina dripping cum, incredible skin, looking sultry
+<lora:add-detail-xl:0.28750000000000003> <lora:CinematicStyle_v1:0.5> <lora:DetailedEyes_V3:0.3932038834951456> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality) phtorealistic portrait, detailed skin, natural light, high fantasy, magical atmosphere,
 braided fire-red hair, fine-breasted athletic fit beautiful woman, wearing nothing, lying on back, biting bottom lip while looking directly at viewer, flirtatious expression, direct gaze, grasping both knees and pulling her knees wide and high, spreading them apart invitingly, looking from below perspective, full-body shot, detailed shaved wet pink vagina oozing cum, incredible skin, looking sultry
-<lora:add-detail-xl:0.175> <lora:CinematicStyle_v1:0.6923076923076923> <lora:DetailedEyes_V3:0.18932038834951456>
+<lora:add-detail-xl:0.7930327868852458> <lora:CinematicStyle_v1:0.6923076923076923> <lora:DetailedEyes_V3:0.18932038834951456> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality) phtorealistic portrait, detailed skin, natural light, high fantasy, magical atmosphere,
+braided fire-red hair, fine-breasted athletic fit beautiful woman, wearing nothing, lying on back, biting bottom lip while looking directly at viewer, flirtatious expression, direct gaze, grasping both knees and pulling her knees wide and high, spreading them apart invitingly, looking from below perspective, full-body shot, detailed shaved wet pink vagina oozing cum, incredible skin, looking sultry
+<lora:add-detail-xl:0.7115384615384615> <lora:CinematicStyle_v1:0.6923076923076923> <lora:DetailedEyes_V3:0.18932038834951456> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
 (masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, a kneeling, red-haired large-breasted gorgeous and athletic beautiful woman is giving a blowjob, she has cum all over her face, wearing nothing, on knees looking up, blue eyes wide, high angle pov perspective, detailed breasts, incredible skin, looking sultry
-<lora:add-detail-xl:0.26249999999999996> <lora:CinematicStyle_v1:0.8901098901098901> <lora:DetailedEyes_V3:0.34951456310679613>
+<lora:add-detail-xl:0.7868852459016393> <lora:CinematicStyle_v1:0.8901098901098901> <lora:DetailedEyes_V3:0.34951456310679613> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8>
+neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
+
+<embedding:stable_yogis_pdxl_positives> <embedding:stable_yogis_realism_positives_v1>
+(masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, a kneeling, red-haired large-breasted gorgeous and athletic beautiful woman is giving a blowjob, she has cum all over her face, wearing nothing, on knees looking up, blue eyes wide, high angle pov perspective, detailed breasts, incredible skin, looking sultry
+<lora:add-detail-xl:0.7884615384615385> <lora:CinematicStyle_v1:0.8901098901098901> <lora:DetailedEyes_V3:0.34951456310679613> <lora:NSFWFilterXL_animagine:0.8>
 neg: <embedding:negative_hands> <embedding:stable_yogis_anatomy_negatives_v1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg> <embedding:stable_yogis_pdxl_negatives2-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
 
 <embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
 (masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, a naked red-haired large-breasted athletic beautiful woman faces partially away, bending over at the waist, touching toes, while keeping knees straight, low angle perspective, detailed vagina, butt hole, and breasts, incredible skin, smiling at viewer, detailed eyes
-<lora:add-detail-xl:0.2473684210526316> <lora:CinematicStyle_v1:0.8155339805825242> <lora:Photoshoot_Realism:0.6263736263736264>
+<lora:add-detail-xl:0.7692307692307692> <lora:CinematicStyle_v1:0.8155339805825242> <lora:Photoshoot_Realism:0.6263736263736264> <lora:NSFWFilterXL_animagine:0.8>
+neg: <embedding:NEGATIVE_HANDS> <embedding:SDXLnegXL> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:ac_neg1> <embedding:bad_prompt> <embedding:sdxl_cyberrealistic_simpleneg-neg>
+neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)
+
+<embedding:Stable-Yogis-Makeup-Enhancer-XL> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_Realism_Positives_V1>
+(masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, a naked red-haired large-breasted athletic beautiful woman faces partially away, bending over at the waist, touching toes, while keeping knees straight, low angle perspective, detailed vagina, butt hole, and breasts, incredible skin, smiling at viewer, detailed eyes
+<lora:add-detail-xl:0.8237704918032788> <lora:CinematicStyle_v1:0.8155339805825242> <lora:Photoshoot_Realism:0.6263736263736264> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8>
 neg: <embedding:NEGATIVE_HANDS> <embedding:SDXLnegXL> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:ac_neg1> <embedding:bad_prompt> <embedding:sdxl_cyberrealistic_simpleneg-neg>
 neg: deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)

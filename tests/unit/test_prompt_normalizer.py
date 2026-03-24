@@ -12,8 +12,16 @@ def test_normalize_for_match_collapses_case_and_spacing() -> None:
 
 
 def test_build_dedupe_key_strips_weight_noise_but_keeps_lora_identity() -> None:
-    assert build_dedupe_key("(Beautiful Woman:1.2)") == "beautiful woman"
-    assert build_dedupe_key("<lora:foo:0.8>") == "lora:foo"
+    assert build_dedupe_key("(Beautiful Woman:1.2)") == "(beautiful woman:1.2)"
+    assert build_dedupe_key("<lora:foo:0.8>") == "<lora:foo:0.8>"
+
+
+def test_build_dedupe_key_distinguishes_different_lora_weights() -> None:
+    assert build_dedupe_key("<lora:foo:0.8>") != build_dedupe_key("<lora:foo:0.6>")
+
+
+def test_build_dedupe_key_preserves_weighted_syntax_identity() -> None:
+    assert build_dedupe_key("(Beautiful Woman:1.2)") != build_dedupe_key("beautiful woman")
 
 
 def test_prompt_optimizer_config_round_trip() -> None:

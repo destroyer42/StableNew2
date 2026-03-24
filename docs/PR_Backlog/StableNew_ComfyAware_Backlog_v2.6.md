@@ -312,7 +312,7 @@ Completion record:
 
 ### `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
-Status: Planned
+Status: Completed 2026-03-24
 
 Make the shared motion carrier visible to learning and recommendation flows.
 
@@ -320,11 +320,16 @@ Required outputs:
 
 - scalar motion metrics in learning records
 - backend-aware and application-path-aware recommendation context
+- backend, policy, application-path, and status cohorting for motion evidence
 - no raw frame or dense motion payload retention in centralized learning data
 
 Execution spec:
 
 - `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
+
+Completion record:
+
+- `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
 ## Adjacent Tranche Coordination
 

@@ -169,12 +169,16 @@ class RecommendationEngine:
         return {
             "enabled": bool(payload.get("enabled")),
             "status": str(payload.get("status") or ""),
+            "backend_id": str(payload.get("backend_id") or ""),
             "policy_id": str(payload.get("policy_id") or ""),
             "application_path": str(payload.get("application_path") or ""),
             "backend_mode": str(payload.get("backend_mode") or ""),
             "intent_mode": str(payload.get("intent_mode") or ""),
             "intent_label": str(payload.get("intent_label") or ""),
             "skip_reason": str(payload.get("skip_reason") or ""),
+            "applied_motion_strength": float(payload.get("applied_motion_strength") or 0.0),
+            "frame_count_delta": int(payload.get("frame_count_delta") or 0),
+            "quality_risk_score": float(payload.get("quality_risk_score") or 0.0),
         }
 
     def _build_query_context(
@@ -208,12 +212,50 @@ class RecommendationEngine:
             "refinement_prompt_intent_band": str(refinement.get("prompt_intent_band") or ""),
             "refinement_has_prompt_patch": str(bool(refinement.get("has_prompt_patch"))),
             "refinement_has_applied_overrides": str(bool(refinement.get("has_applied_overrides"))),
+            "secondary_motion_backend_id": str(secondary_motion.get("backend_id") or ""),
             "secondary_motion_policy_id": str(secondary_motion.get("policy_id") or ""),
             "secondary_motion_application_path": str(secondary_motion.get("application_path") or ""),
             "secondary_motion_backend_mode": str(secondary_motion.get("backend_mode") or ""),
             "secondary_motion_intent_mode": str(secondary_motion.get("intent_mode") or ""),
             "secondary_motion_status": str(secondary_motion.get("status") or ""),
         }
+
+    def _exclude_diagnostic_only_motion_record(
+        self,
+        record: dict[str, Any],
+        query_context: dict[str, str],
+    ) -> bool:
+        query_has_motion_context = any(
+            str(query_context.get(key, "") or "").strip()
+            for key in (
+                "secondary_motion_backend_id",
+                "secondary_motion_policy_id",
+                "secondary_motion_application_path",
+                "secondary_motion_status",
+            )
+        )
+        if not query_has_motion_context:
+            return False
+        secondary_motion = self._normalize_secondary_motion_context(record.get("secondary_motion"))
+        if str(secondary_motion.get("status") or "") != "applied":
+            return True
+
+        query_motion_backend = str(query_context.get("secondary_motion_backend_id", "") or "")
+        if query_motion_backend and str(secondary_motion.get("backend_id") or ""):
+            if query_motion_backend != str(secondary_motion.get("backend_id") or ""):
+                return True
+
+        query_motion_policy = str(query_context.get("secondary_motion_policy_id", "") or "")
+        if query_motion_policy and str(secondary_motion.get("policy_id") or ""):
+            if query_motion_policy != str(secondary_motion.get("policy_id") or ""):
+                return True
+
+        query_motion_path = str(query_context.get("secondary_motion_application_path", "") or "")
+        if query_motion_path and str(secondary_motion.get("application_path") or ""):
+            if query_motion_path != str(secondary_motion.get("application_path") or ""):
+                return True
+
+        return False
 
     def _load_records(self) -> list[dict[str, Any]]:
         """Load and parse all learning records from JSONL file."""
@@ -412,6 +454,25 @@ class RecommendationEngine:
                 weight -= 0.05
                 rationale_bits.append("secondary-motion-path-mismatch")
 
+        query_motion_backend = str(query_context.get("secondary_motion_backend_id", "") or "")
+        if query_motion_backend and secondary_motion.get("backend_id"):
+            if query_motion_backend == secondary_motion.get("backend_id"):
+                weight += 0.18
+                rationale_bits.append("secondary-motion-backend-match")
+            else:
+                weight -= 0.08
+                rationale_bits.append("secondary-motion-backend-mismatch")
+
+        query_motion_status = str(query_context.get("secondary_motion_status", "") or "")
+        record_motion_status = str(secondary_motion.get("status") or "")
+        if query_motion_status and record_motion_status:
+            if query_motion_status == record_motion_status:
+                weight += 0.08
+                rationale_bits.append("secondary-motion-status-match")
+            else:
+                weight -= 0.12
+                rationale_bits.append("secondary-motion-status-mismatch")
+
         # PR-046: conservative rating-detail adjustment (bounded ±0.15)
         query_has_people = str(query_context.get("has_people", "")).lower() == "true"
         weight, detail_tag = self._apply_rating_detail_adjustment(weight, record, query_has_people)
@@ -519,6 +580,8 @@ class RecommendationEngine:
         )
 
         for record in records:
+            if self._exclude_diagnostic_only_motion_record(record, query_context):
+                continue
             weight, rationale = self._compute_context_weight(record, query_context, query_prompt)
             rating = record["rating"] * weight
 
@@ -627,6 +690,7 @@ class RecommendationEngine:
                         f"{query_context.get('resolution_bucket','unknown')}|"
                         f"{query_context.get('refinement_policy_id','')}|"
                         f"{query_context.get('refinement_scale_band','')}|"
+                        f"{query_context.get('secondary_motion_backend_id','')}|"
                         f"{query_context.get('secondary_motion_policy_id','')}|"
                         f"{query_context.get('secondary_motion_application_path','')}"
                     ),

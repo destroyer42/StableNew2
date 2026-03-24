@@ -22,7 +22,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.30000000000000004
+            0.9134615384615383
           ],
           [
             "CinematicStyle_v1",
@@ -31,6 +31,10 @@
           [
             "DetailedEyes_V3",
             0.34951456310679613
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -56,7 +60,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.7124999999999999
+            0.9519230769230769
           ],
           [
             "CinematicStyle_v1",
@@ -65,6 +69,10 @@
           [
             "DetailedEyes_V3",
             0.6844660194174758
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -85,7 +93,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.26249999999999996
+            0.9903846153846154
           ],
           [
             "CinematicStyle_v1",
@@ -96,8 +104,8 @@
             0.34951456310679613
           ],
           [
-            "finenude_v0_2a",
-            0.19811320754716982
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -118,7 +126,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.2375
+            1.048076923076923
           ],
           [
             "CinematicStyle_v1",
@@ -129,8 +137,8 @@
             0.3058252427184466
           ],
           [
-            "NsfwPovAllInOneLoraSdxl-000009",
-            0.19780219780219782
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -151,7 +159,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.22499999999999998
+            0.9903846153846154
           ],
           [
             "CinematicStyle_v1",
@@ -163,7 +171,7 @@
           ],
           [
             "NSFWFilterXL_animagine",
-            0.2802197802197802
+            0.576923076923077
           ]
         ]
       },
@@ -193,6 +201,10 @@
           [
             "DetailedEyes_V3",
             0.3640776699029126
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            1.0054945054945055
           ]
         ]
       },
@@ -222,6 +234,43 @@
           [
             "DetailedEyes_V3",
             0.3932038834951456
+          ],
+          [
+            "BetterThanWords-merged-SDXL-LoRA-v3",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 4,
+        "text": "(masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, gorgeous faced woman, silver-haired big-breasted athletic beautiful, wearing nothing in a forest, right hand with one finger pushed deep into vagina, while left hand grasps her own breast forcefully while playing with her nipple, legs spread wide sitting arched back against a tree, bright daylight, full body shot, direct view, looking directly into camera, detailed juicy pink vagina dripping cum, incredible skin, looking sultry",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.28750000000000003
+          ],
+          [
+            "CinematicStyle_v1",
+            0.5
+          ],
+          [
+            "DetailedEyes_V3",
+            0.3932038834951456
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -242,7 +291,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.175
+            0.7930327868852458
           ],
           [
             "CinematicStyle_v1",
@@ -251,6 +300,43 @@
           [
             "DetailedEyes_V3",
             0.18932038834951456
+          ],
+          [
+            "BetterThanWords-merged-SDXL-LoRA-v3",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 5,
+        "text": "(masterpiece, best quality) phtorealistic portrait, detailed skin, natural light, high fantasy, magical atmosphere,\nbraided fire-red hair, fine-breasted athletic fit beautiful woman, wearing nothing, lying on back, biting bottom lip while looking directly at viewer, flirtatious expression, direct gaze, grasping both knees and pulling her knees wide and high, spreading them apart invitingly, looking from below perspective, full-body shot, detailed shaved wet pink vagina oozing cum, incredible skin, looking sultry",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7115384615384615
+          ],
+          [
+            "CinematicStyle_v1",
+            0.6923076923076923
+          ],
+          [
+            "DetailedEyes_V3",
+            0.18932038834951456
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -271,7 +357,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.26249999999999996
+            0.7868852459016393
           ],
           [
             "CinematicStyle_v1",
@@ -280,6 +366,43 @@
           [
             "DetailedEyes_V3",
             0.34951456310679613
+          ],
+          [
+            "BetterThanWords-merged-SDXL-LoRA-v3",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 6,
+        "text": "(masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, a kneeling, red-haired large-breasted gorgeous and athletic beautiful woman is giving a blowjob, she has cum all over her face, wearing nothing, on knees looking up, blue eyes wide, high angle pov perspective, detailed breasts, incredible skin, looking sultry",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)",
+        "positive_embeddings": [
+          "stable_yogis_pdxl_positives",
+          "stable_yogis_realism_positives_v1"
+        ],
+        "negative_embeddings": [
+          "negative_hands",
+          "stable_yogis_anatomy_negatives_v1-neg",
+          "sdxl_cyberrealistic_simpleneg-neg",
+          "stable_yogis_pdxl_negatives2-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.7884615384615385
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8901098901098901
+          ],
+          [
+            "DetailedEyes_V3",
+            0.34951456310679613
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
@@ -304,7 +427,7 @@
         "loras": [
           [
             "add-detail-xl",
-            0.2473684210526316
+            0.7692307692307692
           ],
           [
             "CinematicStyle_v1",
@@ -313,6 +436,47 @@
           [
             "Photoshoot_Realism",
             0.6263736263736264
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
+          ]
+        ]
+      },
+      {
+        "index": 7,
+        "text": "(masterpiece, best quality, model shot) photorealistic portrait, detailed skin, natural light, a naked red-haired large-breasted athletic beautiful woman faces partially away, bending over at the waist, touching toes, while keeping knees straight, low angle perspective, detailed vagina, butt hole, and breasts, incredible skin, smiling at viewer, detailed eyes",
+        "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, bad anatomy, extra limbs, missing legs, fused legs,, broken feet, twisted hips, malformed pelvis, cropped body, out of frame, (watermark)",
+        "positive_embeddings": [
+          "Stable-Yogis-Makeup-Enhancer-XL",
+          "Stable_Yogis_PDXL_Positives",
+          "Stable_Yogis_Realism_Positives_V1"
+        ],
+        "negative_embeddings": [
+          "NEGATIVE_HANDS",
+          "SDXLnegXL",
+          "Stable_Yogis_Anatomy_Negatives_V1-neg",
+          "Stable_Yogis_PDXL_Negatives2-neg",
+          "ac_neg1",
+          "bad_prompt",
+          "sdxl_cyberrealistic_simpleneg-neg"
+        ],
+        "loras": [
+          [
+            "add-detail-xl",
+            0.8237704918032788
+          ],
+          [
+            "CinematicStyle_v1",
+            0.8155339805825242
+          ],
+          [
+            "Photoshoot_Realism",
+            0.6263736263736264
+          ],
+          [
+            "BetterThanWords-merged-SDXL-LoRA-v3",
+            0.8
           ]
         ]
       }

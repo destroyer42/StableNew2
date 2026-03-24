@@ -30,7 +30,7 @@ class DummyLogger:
 
 @pytest.fixture(autouse=True)
 def stub_pipeline(monkeypatch):
-    monkeypatch.setattr("src.pipeline.pipeline_runner.Pipeline", FakePipeline)
+    monkeypatch.setattr("src.pipeline.pipeline_runner.Pipeline", FakePipeline, raising=False)
 
 
 def _cancel_token():
@@ -168,3 +168,49 @@ def test_pipeline_runner_emits_compact_refinement_learning_context(tmp_path):
     assert refinement["scale_band"] == "small"
     assert refinement["face_detected"] is True
     assert refinement["has_prompt_patch"] is True
+
+
+def test_pipeline_runner_emits_compact_secondary_motion_learning_context(tmp_path):
+    writer = MemoryWriter()
+    runner = PipelineRunner(
+        DummyClient(),
+        DummyLogger(),
+        learning_record_writer=writer,
+        runs_base_dir=tmp_path / "runs",
+        learning_enabled=True,
+    )
+
+    record = _make_learning_record(tmp_path)
+    result = runner.run_njr(record, cancel_token=_cancel_token())
+    result.metadata["video_primary_backend_id"] = "comfy"
+    result.metadata["secondary_motion"] = {
+        "summary": {
+            "enabled": True,
+            "status": "applied",
+            "policy_id": "workflow_motion_v1",
+            "application_path": "video_reencode_worker",
+            "backend_mode": "apply_shared_postprocess_candidate",
+            "intent": {"mode": "apply", "intent": "micro_sway"},
+            "metrics": {
+                "frames_in": 16,
+                "frames_out": 16,
+                "applied_frame_count": 10,
+                "intensity": 0.25,
+                "avg_abs_dx": 1.0,
+                "avg_abs_dy": 0.25,
+                "max_abs_dx": 2,
+                "max_abs_dy": 1,
+                "cap_pixels": 12,
+            },
+        }
+    }
+
+    learning_record = runner._emit_learning_record(record, result)
+
+    assert learning_record is not None
+    secondary_motion = learning_record.metadata["secondary_motion"]
+    assert secondary_motion["backend_id"] == "comfy"
+    assert secondary_motion["policy_id"] == "workflow_motion_v1"
+    assert secondary_motion["application_path"] == "video_reencode_worker"
+    assert secondary_motion["applied_motion_strength"] == 0.25
+    assert secondary_motion["quality_risk_score"] > 0.0

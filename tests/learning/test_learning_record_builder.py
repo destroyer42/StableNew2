@@ -173,21 +173,37 @@ def test_learning_record_builder_includes_compact_secondary_motion_metadata() ->
         config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
     )
     result = _run_result_stub("run-motion")
+    result.metadata["video_primary_backend_id"] = "comfy"
     result.metadata["secondary_motion"] = {
         "summary": {
             "enabled": True,
             "status": "applied",
             "policy_id": "workflow_motion_v1",
-            "application_path": "shared_postprocess_engine",
+            "application_path": "video_reencode_worker",
             "backend_mode": "apply_shared_postprocess_candidate",
             "intent": {"mode": "apply", "intent": "micro_sway"},
-            "metrics": {"regions_applied": 2, "frames_in": 16, "frames_out": 16},
+            "metrics": {
+                "regions_applied": 2,
+                "frames_in": 16,
+                "frames_out": 16,
+                "applied_frame_count": 12,
+                "intensity": 0.25,
+                "avg_abs_dx": 1.2,
+                "avg_abs_dy": 0.4,
+                "max_abs_dx": 2,
+                "max_abs_dy": 1,
+                "cap_pixels": 12,
+            },
         }
     }
 
     record = build_learning_record(cfg, result)
 
     secondary_motion = record.metadata["secondary_motion"]
+    assert secondary_motion["backend_id"] == "comfy"
     assert secondary_motion["status"] == "applied"
     assert secondary_motion["policy_id"] == "workflow_motion_v1"
-    assert secondary_motion["application_path"] == "shared_postprocess_engine"
+    assert secondary_motion["application_path"] == "video_reencode_worker"
+    assert secondary_motion["applied_motion_strength"] == 0.25
+    assert secondary_motion["frame_count_delta"] == 0
+    assert secondary_motion["quality_risk_score"] > 0.0

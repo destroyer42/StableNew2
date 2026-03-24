@@ -291,7 +291,7 @@ Rules:
 
 - shared engine and provenance closure: `PR-VIDEO-237`
 - backend application paths: `PR-VIDEO-238`, `PR-VIDEO-239`, `PR-VIDEO-240` completed
-- learning integration: `PR-VIDEO-241`
+- learning integration: `PR-VIDEO-241` completed
 
 ## Shared Provenance Summary Contract
 
@@ -339,6 +339,64 @@ Rules:
 - compact summaries carry scalar metrics only
 - full frame-level details stay in manifest-only provenance blocks
 - replay and diagnostics descriptors must not embed raw frame data
+
+## Learning Context Shape
+
+Completed in `PR-VIDEO-241`.
+
+Learning record carrier:
+
+- `LearningRecord.metadata["secondary_motion"]`
+
+Recommendation stratification keys:
+
+- `backend_id`
+- `policy_id`
+- `application_path`
+- `status`
+
+Canonical learning context shape:
+
+```json
+{
+  "enabled": true,
+  "status": "applied",
+  "backend_id": "comfy",
+  "policy_id": "workflow_motion_v1",
+  "application_path": "video_reencode_worker",
+  "backend_mode": "apply_shared_postprocess_candidate",
+  "intent_mode": "apply",
+  "intent_label": "micro_sway",
+  "skip_reason": "",
+  "regions_applied": 2,
+  "frames_in": 16,
+  "frames_out": 16,
+  "frame_count_delta": 0,
+  "applied_frame_count": 12,
+  "applied_frame_ratio": 0.75,
+  "applied_motion_strength": 0.25,
+  "quality_risk_score": 0.1875,
+  "intensity": 0.25,
+  "damping": 0.9,
+  "frequency_hz": 0.2,
+  "cap_pixels": 12,
+  "avg_abs_dx": 1.0,
+  "avg_abs_dy": 0.3,
+  "max_abs_dx": 2,
+  "max_abs_dy": 1
+}
+```
+
+Rules:
+
+- learning consumes canonical result metadata and manifest summaries only
+- stored motion learning context remains scalar-only and bounded
+- no raw frame paths, masks, dense flow fields, or binary motion payloads may
+  be persisted into centralized learning storage
+- recommendation and evidence matching must stratify by `backend_id`,
+  `policy_id`, `application_path`, and `status`
+- unavailable or skipped motion runs may inform diagnostics, but they must not
+  be treated as positive tuning evidence for applied-motion recommendations
 
 Applied backend closure delivered across:
 

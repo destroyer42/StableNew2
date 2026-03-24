@@ -26,12 +26,15 @@ from src.api.webui_process_manager import get_global_webui_process_manager
 from src.config import app_config
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_registry import (
+    build_prompt_optimizer_analysis_record,
     build_prompt_optimization_record,
     write_prompt_optimization_record,
 )
+from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.prompting.prompt_splitter import split_prompt_chunks
 from src.prompting.prompt_types import PromptOptimizationPairResult
+from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.pipeline.animatediff_models import (
     AnimateDiffConfig,
@@ -317,7 +320,7 @@ class Pipeline:
         negative_prompt: str,
         config: dict[str, Any] | None,
         stage_name: str,
-    ) -> tuple[PromptOptimizationPairResult, PromptOptimizerConfig]:
+    ) -> tuple[PromptOptimizationPairResult, PromptOptimizerConfig, PromptOptimizerAnalysisBundle]:
         config_payload = dict((config or {}).get("prompt_optimizer") or {})
         try:
             optimizer_config = PromptOptimizerConfig.from_dict(config_payload)
@@ -325,6 +328,7 @@ class Pipeline:
             logger.warning("Prompt optimizer disabled due to invalid config for %s: %s", stage_name, exc)
             optimizer_config = PromptOptimizerConfig(enabled=False)
         service = PromptOptimizerService(optimizer_config)
+        orchestrator = PromptOptimizerOrchestrator(service=service)
         enabled = service.should_optimize_for_pipeline(stage_name)
         positive_prompt = str(positive_prompt or "")
         negative_prompt = str(negative_prompt or "")
@@ -344,7 +348,13 @@ class Pipeline:
                 positive_chunks,
                 negative_chunks,
             )
-        result = service.optimize_prompts(positive_prompt, negative_prompt, pipeline_name=stage_name)
+        orchestrated = orchestrator.orchestrate(
+            positive_prompt=positive_prompt,
+            negative_prompt=negative_prompt,
+            stage_name=stage_name,
+            config=config,
+        )
+        result = orchestrated.optimization
         logger.info(
             "PROMPT OPTIMIZER RESULT | pipeline=%s | positive_changed=%s | negative_changed=%s | positive_len=%d->%d | negative_len=%d->%d",
             stage_name,
@@ -381,7 +391,7 @@ class Pipeline:
                     result.positive.dropped_duplicates,
                     result.negative.dropped_duplicates,
                 )
-        return result, optimizer_config
+        return result, optimizer_config, orchestrated.analysis
 
     def _maybe_write_prompt_optimization_sidecar(
         self,
@@ -2971,7 +2981,7 @@ class Pipeline:
         )
         final_prompt = patch_application.positive.patched
         ad_neg_final = patch_application.negative.patched
-        prompt_optimizer_result, prompt_optimizer_config = self._run_prompt_optimizer(
+        prompt_optimizer_result, prompt_optimizer_config, prompt_optimizer_analysis = self._run_prompt_optimizer(
             positive_prompt=final_prompt,
             negative_prompt=ad_neg_final,
             config=config,
@@ -3189,6 +3199,7 @@ class Pipeline:
             "config": self._clean_metadata_payload(payload),
             "path": str(image_path),
             "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
+            "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
             # PR-PIPE-001: Enhanced metadata fields
             "job_id": getattr(self, "_current_job_id", None),
             "run_id": run_dir.name,  # PR-METADATA-001: Cross-reference to run_metadata.json
@@ -4071,7 +4082,7 @@ class Pipeline:
             prompt_after, negative_after = self._apply_aesthetic_to_payload(payload, config)
             payload["prompt"] = prompt_after
             payload["negative_prompt"] = negative_after
-            prompt_optimizer_result, prompt_optimizer_config = self._run_prompt_optimizer(
+            prompt_optimizer_result, prompt_optimizer_config, prompt_optimizer_analysis = self._run_prompt_optimizer(
                 positive_prompt=payload.get("prompt", ""),
                 negative_prompt=payload.get("negative_prompt", ""),
                 config=config,
@@ -4197,6 +4208,7 @@ class Pipeline:
                 "pressure_assessment": pressure_assessment,
                 "runtime_admission": runtime_admission,
                 "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
+                "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
             }
             if str(runtime_admission.get("status") or "healthy") != "healthy":
                 base_metadata["runtime_warnings"] = [
@@ -4332,6 +4344,7 @@ class Pipeline:
                     "pressure_assessment": pressure_assessment,
                     "runtime_admission": runtime_admission,
                     "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
+                    "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
                 }
                 if str(runtime_admission.get("status") or "healthy") != "healthy":
                     metadata["runtime_warnings"] = [
@@ -4480,7 +4493,7 @@ class Pipeline:
             )
             payload["prompt"] = prompt_after
             payload["negative_prompt"] = negative_after
-            prompt_optimizer_result, prompt_optimizer_config = self._run_prompt_optimizer(
+            prompt_optimizer_result, prompt_optimizer_config, prompt_optimizer_analysis = self._run_prompt_optimizer(
                 positive_prompt=payload.get("prompt", ""),
                 negative_prompt=payload.get("negative_prompt", ""),
                 config=full_config or config,
@@ -4545,6 +4558,7 @@ class Pipeline:
                 "path": str(image_path),
                 "seeds": self._build_seed_metadata(payload, gen_info),  # D-MANIFEST-001
                 "prompt_optimization": build_prompt_optimization_record(prompt_optimizer_result),
+                "prompt_optimizer_analysis": build_prompt_optimizer_analysis_record(prompt_optimizer_analysis),
                 # Legacy fields for backward compatibility
                 "requested_seed": payload.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),

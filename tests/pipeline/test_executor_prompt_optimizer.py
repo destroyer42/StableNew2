@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import json
 
 from src.pipeline.executor import Pipeline
 from src.utils import StructuredLogger
@@ -30,19 +31,28 @@ def _fake_save_image(_data: str, path: Path, metadata_builder=None) -> Path:
     return path
 
 
+def _allow_runtime(pipeline: Pipeline, monkeypatch) -> None:
+    monkeypatch.setattr(
+        pipeline,
+        "_ensure_runtime_admissible",
+        lambda **_kwargs: {"status": "healthy", "reasons": []},
+    )
+
+
 def test_txt2img_stage_uses_prompt_optimizer_and_records_manifest(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     client = _Client()
     pipeline = Pipeline(client=client, structured_logger=StructuredLogger())
+    _allow_runtime(pipeline, monkeypatch)
     monkeypatch.setattr(pipeline, "_apply_webui_defaults_once", lambda: None)
     monkeypatch.setattr(pipeline, "_ensure_model_and_vae", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(pipeline, "_ensure_hypernetwork", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         pipeline,
-        "_generate_images",
-        lambda _stage, _payload: {
+        "_generate_images_with_progress",
+        lambda _stage, _payload, **_kwargs: {
             "images": ["ignored"],
             "info": {"seed": 123, "subseed": 456, "all_seeds": [123], "all_subseeds": [456]},
         },
@@ -77,8 +87,12 @@ def test_txt2img_stage_uses_prompt_optimizer_and_records_manifest(
     assert result["final_prompt"] == "beautiful woman, cinematic lighting, masterpiece"
     assert result["final_negative_prompt"] == "bad anatomy, blurry, watermark"
     assert result["prompt_optimization"]["positive"]["changed"] is True
+    assert result["prompt_optimizer_analysis"]["mode"] == "recommend_only_v1"
+    assert result["prompt_optimizer_analysis"]["intent"]["intent_band"] == "portrait"
     manifest_path = tmp_path / "manifests" / "prompt_optimizer.json"
     assert manifest_path.exists()
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest_payload["prompt_optimizer_analysis"]["mode"] == "recommend_only_v1"
     sidecar_path = tmp_path / "manifests" / "prompt_optimizer.prompt_optimization.json"
     assert sidecar_path.exists()
 
@@ -86,6 +100,7 @@ def test_txt2img_stage_uses_prompt_optimizer_and_records_manifest(
 def test_adetailer_stage_respects_prompt_optimizer_opt_out(tmp_path: Path, monkeypatch) -> None:
     client = _Client()
     pipeline = Pipeline(client=client, structured_logger=StructuredLogger())
+    _allow_runtime(pipeline, monkeypatch)
     monkeypatch.setattr(pipeline, "_ensure_model_and_vae", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         pipeline,
@@ -94,8 +109,8 @@ def test_adetailer_stage_respects_prompt_optimizer_opt_out(tmp_path: Path, monke
     )
     monkeypatch.setattr(
         pipeline,
-        "_generate_images",
-        lambda _stage, _payload: {
+        "_generate_images_with_progress",
+        lambda _stage, _payload, **_kwargs: {
             "images": ["ignored"],
             "info": {"seed": 123, "subseed": 456, "all_seeds": [123], "all_subseeds": [456]},
         },
@@ -120,11 +135,13 @@ def test_adetailer_stage_respects_prompt_optimizer_opt_out(tmp_path: Path, monke
     assert result["final_prompt"] == "masterpiece, beautiful woman"
     assert result["final_negative_prompt"] == "watermark, blurry"
     assert result["prompt_optimization"]["positive"]["changed"] is False
+    assert result["prompt_optimizer_analysis"]["mode"] == "recommend_only_v1"
 
 
 def test_adetailer_stage_applies_prompt_patch_before_optimizer(tmp_path: Path, monkeypatch) -> None:
     client = _Client()
     pipeline = Pipeline(client=client, structured_logger=StructuredLogger())
+    _allow_runtime(pipeline, monkeypatch)
     monkeypatch.setattr(pipeline, "_ensure_model_and_vae", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(pipeline, "_load_image_base64", lambda _path: "ignored")
     monkeypatch.setattr(
@@ -178,6 +195,7 @@ def test_adetailer_stage_applies_prompt_patch_before_optimizer(tmp_path: Path, m
 def test_txt2img_stage_ignores_forbidden_prompt_patch_tokens(tmp_path: Path, monkeypatch) -> None:
     client = _Client()
     pipeline = Pipeline(client=client, structured_logger=StructuredLogger())
+    _allow_runtime(pipeline, monkeypatch)
     monkeypatch.setattr(pipeline, "_apply_webui_defaults_once", lambda: None)
     monkeypatch.setattr(pipeline, "_ensure_model_and_vae", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(pipeline, "_ensure_hypernetwork", lambda *_args, **_kwargs: None)
