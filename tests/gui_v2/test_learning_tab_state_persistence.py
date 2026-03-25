@@ -259,6 +259,8 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
             assert "Replay chain:" in tab._staged_replay_summary_var.get()  # noqa: SLF001
             assert "source=txt2img / juggernautXL" in tab._staged_replay_summary_var.get()  # noqa: SLF001
             assert "Target stage: refine | Path: Queue Now" in tab._staged_plan_preview_var.get()  # noqa: SLF001
+            assert "Source: stage=txt2img" in tab._staged_effective_settings_var.get()  # noqa: SLF001
+            assert "target-stage preset" in tab._staged_effective_settings_var.get()  # noqa: SLF001
         finally:
             tab.destroy()
 
@@ -378,6 +380,7 @@ def test_learning_tab_staged_curation_affordances_distinguish_queue_vs_review(tm
             assert str(tab._staged_queue_buttons["face_triage"].cget("state")) == "disabled"  # noqa: SLF001
             assert str(tab._staged_review_buttons["face_triage"].cget("state")) == "disabled"  # noqa: SLF001
             assert "single-candidate" in tab._staged_review_guidance_var.get().lower()  # noqa: SLF001
+            assert "bulk staged-curation path" in tab._staged_queue_guidance_var.get().lower()  # noqa: SLF001
 
             tab._apply_staged_decision("advanced_to_face_triage")  # noqa: SLF001
 

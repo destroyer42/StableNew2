@@ -5,9 +5,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, cast
 
+from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
 from src.gui.tooltip import attach_tooltip
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.state.output_routing import (
     OUTPUT_ROUTE_MOVIE_CLIPS,
     OUTPUT_ROUTE_REPROCESS,
@@ -57,6 +58,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.status_var = tk.StringVar(value="Ready to queue a workflow-driven video job.")
         self.workflow_detail_var = tk.StringVar(value="No workflow selected.")
         self.source_summary_var = tk.StringVar(value="Source: none selected")
+        self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
+        self._defaults = dict(defaults)
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -66,6 +69,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("video_workflow"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
@@ -135,6 +139,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ttk.Label(header, textvariable=self.source_summary_var, style="Muted.TLabel").grid(
             row=2, column=0, columnspan=4, sticky="w", pady=(4, 0)
         )
+        ttk.Label(header, textvariable=self.effective_settings_var, style="Muted.TLabel").grid(
+            row=3, column=0, columnspan=4, sticky="w", pady=(2, 0)
+        )
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame", padding=8)
@@ -200,16 +207,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.workflow_help_panel = ActionExplainerPanel(
             body,
-            content=ActionExplainerContent(
-                title="When To Use Video Workflow",
-                summary="Choose Video Workflow when a named workflow and optional anchors should drive the motion plan. Use SVD for a quick single-image animation, and use Movie Clips when you already have a set of frames or outputs to assemble into a clip.",
-                bullets=(
-                    "Workflow picks the authored generation recipe and capability limits for this job.",
-                    "End Anchor and Mid Anchors are for workflows that need guide images across the sequence; leave them empty when the selected workflow does not require them.",
-                    "Motion changes the intended movement profile, not the workflow identity itself.",
-                    "Output Route decides whether the resulting artifacts should be easier to pick up in reprocess-oriented areas or in clip-assembly flows.",
-                ),
-            ),
+            content=build_video_workflow_guidance(),
+            app_state=self.app_state,
             wraplength=900,
         )
         self.workflow_help_panel.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(8, 6))
@@ -410,6 +409,28 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.source_summary_var.set(f"{summary.headline} | {detail}")
         else:
             self.source_summary_var.set(summary.headline or summary.empty_state)
+        workflow_value = self.workflow_var.get().strip() or "none"
+        workflow_source = (
+            "default"
+            if workflow_value == str(self._defaults.get("workflow_id") or "").strip()
+            else "selected here"
+        )
+        motion_value = self.motion_profile_var.get().strip() or "gentle"
+        motion_source = (
+            "default"
+            if motion_value == str(self._defaults.get("motion_profile") or "gentle").strip()
+            else "selected here"
+        )
+        output_value = self.output_route_var.get().strip() or OUTPUT_ROUTE_REPROCESS
+        output_source = (
+            "default"
+            if output_value == str(self._defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS).strip()
+            else "selected here"
+        )
+        anchor_state = "explicit anchors" if (self.end_anchor_var.get().strip() or self.mid_anchors_var.get().strip()) else "source-only"
+        self.effective_settings_var.set(
+            f"Effective settings: workflow={workflow_value} [{workflow_source}] | motion={motion_value} [{motion_source}] | output={output_value} [{output_source}] | anchor plan={anchor_state}"
+        )
 
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")

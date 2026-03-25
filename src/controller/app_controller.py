@@ -1602,6 +1602,8 @@ class AppController:
             negative_prompt_mode=negative_prompt_mode,
             prompt_delta=prompt_delta,
             negative_prompt_delta=negative_prompt_delta,
+            source_baseline_label="selected artifact baseline",
+            fallback_source_label="current Review stage baseline",
         )
 
     def on_submit_image_edits(
@@ -3835,8 +3837,13 @@ class AppController:
     # ------------------------------------------------------------------
 
     def on_help_clicked(self) -> None:
-        self._append_log("[controller] Help clicked (stub).")
-        # TODO: open docs/README in browser or show help overlay.
+        app_state = getattr(self, "app_state", None)
+        toggle = getattr(app_state, "toggle_help_mode", None) if app_state is not None else None
+        if callable(toggle):
+            enabled = bool(toggle())
+            self._append_log(f"[controller] Help mode {'enabled' if enabled else 'disabled'}.")
+            return
+        self._append_log("[controller] Help clicked, but no app state help-mode toggle is available.")
 
     def on_refresh_clicked(self) -> None:
         self._append_log("[controller] Refresh clicked.")
@@ -5377,6 +5384,12 @@ class AppController:
             HiresOverrides,
             ADetailerOverrides,
         )
+
+        def _first_defined(*values: Any) -> Any:
+            for value in values:
+                if value is not None:
+                    return value
+            return None
         
         # Extract txt2img settings (stage cards export under "txt2img")
         txt2img_overrides = None
@@ -5441,27 +5454,132 @@ class AppController:
         adetailer_config = current_config.get("adetailer", {})
         if adetailer_config:
             adetailer_overrides = ADetailerOverrides(  # Note: class name is "ADetailerOverrides"
-                enabled=adetailer_config.get("adetailer_enabled", False),
-                model=adetailer_config.get("model") or adetailer_config.get("adetailer_model"),
-                confidence=adetailer_config.get("confidence") or adetailer_config.get("adetailer_confidence"),
-                denoise_strength=adetailer_config.get("denoising_strength") or adetailer_config.get("adetailer_denoise"),
+                enabled=_first_defined(
+                    adetailer_config.get("adetailer_enabled"),
+                    adetailer_config.get("enabled"),
+                    False,
+                ),
+                checkpoint_model=_first_defined(
+                    adetailer_config.get("adetailer_checkpoint_model"),
+                    adetailer_config.get("sd_model_checkpoint"),
+                ),
+                model=_first_defined(
+                    adetailer_config.get("model"),
+                    adetailer_config.get("adetailer_model"),
+                ),
+                confidence=_first_defined(
+                    adetailer_config.get("confidence"),
+                    adetailer_config.get("ad_confidence"),
+                    adetailer_config.get("adetailer_confidence"),
+                ),
+                max_detections=adetailer_config.get("max_detections"),
+                denoise_strength=_first_defined(
+                    adetailer_config.get("denoising_strength"),
+                    adetailer_config.get("ad_denoising_strength"),
+                    adetailer_config.get("adetailer_denoise"),
+                ),
                 # Additional settings from GUI
-                sampler=adetailer_config.get("sampler_name") or adetailer_config.get("adetailer_sampler"),
-                scheduler=adetailer_config.get("scheduler") or adetailer_config.get("adetailer_scheduler"),
-                steps=adetailer_config.get("steps") or adetailer_config.get("adetailer_steps"),
-                cfg_scale=adetailer_config.get("cfg_scale") or adetailer_config.get("adetailer_cfg"),
+                sampler=_first_defined(
+                    adetailer_config.get("sampler_name"),
+                    adetailer_config.get("ad_sampler"),
+                    adetailer_config.get("adetailer_sampler"),
+                ),
+                scheduler=_first_defined(
+                    adetailer_config.get("scheduler"),
+                    adetailer_config.get("ad_scheduler"),
+                    adetailer_config.get("adetailer_scheduler"),
+                ),
+                steps=_first_defined(
+                    adetailer_config.get("steps"),
+                    adetailer_config.get("ad_steps"),
+                    adetailer_config.get("adetailer_steps"),
+                ),
+                cfg_scale=_first_defined(
+                    adetailer_config.get("cfg_scale"),
+                    adetailer_config.get("ad_cfg_scale"),
+                    adetailer_config.get("adetailer_cfg"),
+                ),
                 prompt=adetailer_config.get("adetailer_prompt"),
                 negative_prompt=adetailer_config.get("adetailer_negative_prompt"),
                 # Mask processing
-                mask_blur=adetailer_config.get("mask_blur") or adetailer_config.get("ad_mask_blur"),
-                mask_feather=adetailer_config.get("mask_feather") or adetailer_config.get("ad_mask_feather"),
-                dilate_erode=adetailer_config.get("mask_dilate_erode") or adetailer_config.get("ad_dilate_erode"),
-                inpaint_padding=adetailer_config.get("ad_inpaint_only_masked_padding") or adetailer_config.get("inpaint_padding"),
+                mask_blur=_first_defined(
+                    adetailer_config.get("mask_blur"),
+                    adetailer_config.get("ad_mask_blur"),
+                ),
+                mask_feather=_first_defined(
+                    adetailer_config.get("mask_feather"),
+                    adetailer_config.get("ad_mask_feather"),
+                    adetailer_config.get("adetailer_mask_feather"),
+                ),
+                dilate_erode=_first_defined(
+                    adetailer_config.get("mask_dilate_erode"),
+                    adetailer_config.get("ad_dilate_erode"),
+                ),
+                inpaint_padding=_first_defined(
+                    adetailer_config.get("ad_inpaint_only_masked_padding"),
+                    adetailer_config.get("adetailer_padding"),
+                    adetailer_config.get("inpaint_padding"),
+                ),
+                inpaint_only_masked=adetailer_config.get("ad_inpaint_only_masked"),
+                use_inpaint_width_height=adetailer_config.get("ad_use_inpaint_width_height"),
+                inpaint_width=adetailer_config.get("ad_inpaint_width"),
+                inpaint_height=adetailer_config.get("ad_inpaint_height"),
+                mask_merge_invert=_first_defined(
+                    adetailer_config.get("ad_mask_merge_invert"),
+                    adetailer_config.get("mask_merge_mode"),
+                ),
+                enable_face_pass=adetailer_config.get("enable_face_pass"),
                 # Mask filtering
-                mask_filter_method=adetailer_config.get("mask_filter_method") or adetailer_config.get("ad_mask_filter_method"),
-                mask_k_largest=adetailer_config.get("mask_k_largest") or adetailer_config.get("ad_mask_k_largest"),
-                mask_min_ratio=adetailer_config.get("mask_min_ratio") or adetailer_config.get("ad_mask_min_ratio"),
-                mask_max_ratio=adetailer_config.get("mask_max_ratio") or adetailer_config.get("ad_mask_max_ratio"),
+                mask_filter_method=_first_defined(
+                    adetailer_config.get("mask_filter_method"),
+                    adetailer_config.get("ad_mask_filter_method"),
+                ),
+                mask_k_largest=_first_defined(
+                    adetailer_config.get("mask_k_largest"),
+                    adetailer_config.get("ad_mask_k_largest"),
+                ),
+                mask_min_ratio=_first_defined(
+                    adetailer_config.get("mask_min_ratio"),
+                    adetailer_config.get("ad_mask_min_ratio"),
+                ),
+                mask_max_ratio=_first_defined(
+                    adetailer_config.get("mask_max_ratio"),
+                    adetailer_config.get("ad_mask_max_ratio"),
+                ),
+                hands_model=_first_defined(
+                    adetailer_config.get("adetailer_hands_model"),
+                    adetailer_config.get("hands_model"),
+                ),
+                enable_hands_pass=_first_defined(
+                    adetailer_config.get("enable_hands_pass"),
+                    adetailer_config.get("ad_hands_enabled"),
+                ),
+                hands_confidence=adetailer_config.get("adetailer_hands_confidence"),
+                hands_steps=adetailer_config.get("adetailer_hands_steps"),
+                hands_cfg_scale=adetailer_config.get("adetailer_hands_cfg"),
+                hands_denoise_strength=adetailer_config.get("adetailer_hands_denoise"),
+                hands_sampler=adetailer_config.get("adetailer_hands_sampler"),
+                hands_scheduler=adetailer_config.get("adetailer_hands_scheduler"),
+                hands_prompt=adetailer_config.get("adetailer_hands_prompt"),
+                hands_negative_prompt=adetailer_config.get("adetailer_hands_negative_prompt"),
+                hands_inpaint_only_masked=adetailer_config.get("ad_hands_inpaint_only_masked"),
+                hands_padding=_first_defined(
+                    adetailer_config.get("ad_hands_padding"),
+                    adetailer_config.get("hands_padding"),
+                ),
+                hands_use_inpaint_width_height=adetailer_config.get(
+                    "ad_hands_use_inpaint_width_height"
+                ),
+                hands_inpaint_width=adetailer_config.get("ad_hands_inpaint_width"),
+                hands_inpaint_height=adetailer_config.get("ad_hands_inpaint_height"),
+                hands_mask_filter_method=adetailer_config.get("ad_hands_mask_filter_method"),
+                hands_mask_k_largest=adetailer_config.get("ad_hands_mask_k"),
+                hands_mask_min_ratio=adetailer_config.get("ad_hands_mask_min_ratio"),
+                hands_mask_max_ratio=adetailer_config.get("ad_hands_mask_max_ratio"),
+                hands_dilate_erode=adetailer_config.get("ad_hands_dilate_erode"),
+                hands_mask_blur=adetailer_config.get("ad_hands_mask_blur"),
+                hands_mask_feather=adetailer_config.get("ad_hands_mask_feather"),
+                hands_mask_merge_invert=adetailer_config.get("ad_hands_mask_merge_invert"),
             )
         
         return StageOverridesBundle(

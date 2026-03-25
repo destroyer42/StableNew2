@@ -814,7 +814,10 @@ Priority note:
   21. treat `PR-UX-266` as completed
   22. treat `PR-UX-271` as completed
   23. treat `PR-UX-267` as completed
-  24. begin `PR-UX-268`
+  24. treat `PR-UX-268` as completed
+  25. treat `PR-UX-269` as completed
+  26. treat `PR-UX-270` as completed
+  27. begin `PR-UX-272`
 
 Planned rollout:
 
@@ -829,6 +832,15 @@ Planned rollout:
 
 - `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
   Completed 2026-03-24
+
+- `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+  Completed 2026-03-25
+
+- `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
+  Completed 2026-03-25
+
+- `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+  Completed 2026-03-25
 
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
   Completed 2026-03-24

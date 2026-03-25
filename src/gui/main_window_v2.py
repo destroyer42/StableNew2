@@ -43,7 +43,7 @@ class HeaderZone(ttk.Frame):
         self.preview_button = ttk.Button(self, text="Preview", style="Secondary.TButton")
         self.settings_button = ttk.Button(self, text="Settings", style="Secondary.TButton")
         self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
-        self.help_button = ttk.Button(self, text="Help", style="Secondary.TButton")
+        self.help_button = ttk.Button(self, text="Help Mode: Off", style="Secondary.TButton")
         self.debug_button = ttk.Button(self, text="Debug", style="Secondary.TButton")
 
         for idx, btn in enumerate(
@@ -671,6 +671,7 @@ class MainWindowV2:
                     header.run_button.configure(command=start_cb)
                 if callable(stop_cb):
                     header.stop_button.configure(command=stop_cb)
+            header.help_button.configure(command=self._toggle_help_mode)
 
         if getattr(self, "app_state", None) and hasattr(self.app_state, "subscribe"):
             try:
@@ -681,7 +682,12 @@ class MainWindowV2:
                 self.app_state.subscribe("current_pack", self._update_run_button_state)
             except Exception:
                 pass
+            try:
+                self.app_state.subscribe("help_mode", self._update_help_button_state)
+            except Exception:
+                pass
         self._update_run_button_state()
+        self._update_help_button_state()
 
     def _update_run_button_state(self, *_: Any) -> None:
         header = getattr(self, "header_zone", None)
@@ -700,6 +706,24 @@ class MainWindowV2:
             button.state(["!disabled"])
         else:
             button.state(["disabled"])
+
+    def _toggle_help_mode(self) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None:
+            return
+        toggle = getattr(app_state, "toggle_help_mode", None)
+        if callable(toggle):
+            toggle()
+
+    def _update_help_button_state(self, *_: Any) -> None:
+        header = getattr(self, "header_zone", None)
+        if header is None:
+            return
+        button = getattr(header, "help_button", None)
+        if button is None:
+            return
+        enabled = bool(getattr(self.app_state, "help_mode_enabled", False))
+        button.configure(text=f"Help Mode: {'On' if enabled else 'Off'}")
 
     def set_graceful_exit_handler(self, handler: Callable[[str], None] | None) -> None:
         """Register the handler used for canonical shutdown."""

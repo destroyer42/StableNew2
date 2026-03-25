@@ -7,9 +7,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.gui.help_text.workflow_guidance_v2 import build_svd_workflow_guidance
 from src.gui.help_text.stage_setting_help_v2 import SVD_SETTING_HELP
 from src.gui.tooltip import attach_tooltip
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
@@ -180,6 +181,7 @@ class SVDTabFrameV2(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("svd"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
@@ -277,16 +279,8 @@ class SVDTabFrameV2(ttk.Frame):
         self.capabilities_label.grid(row=2, column=0, sticky="nw", pady=(10, 0))
         self.workflow_help_panel = ActionExplainerPanel(
             help_frame,
-            content=ActionExplainerContent(
-                title="When To Use SVD",
-                summary="Choose SVD when you have one strong still image and want a short native animation. Use Video Workflow for anchored, workflow-authored motion plans, and use Movie Clips when you already have frames or outputs to assemble.",
-                bullets=(
-                    "Motion bucket controls how much movement the clip tries to introduce; lower values usually stay steadier and higher values push more motion.",
-                    "Noise aug adds variation before animation; low values preserve the source image more closely.",
-                    "Output Route decides where the finished clip lands so later tabs can pick it up more easily.",
-                    "Face cleanup, interpolation, and frame upscale are postprocess steps. Turn them on only when the base SVD clip needs that extra pass.",
-                ),
-            ),
+            content=build_svd_workflow_guidance(),
+            app_state=self.app_state,
             wraplength=520,
         )
         self.workflow_help_panel.grid(row=3, column=0, sticky="ew", pady=(10, 0))

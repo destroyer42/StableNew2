@@ -27,10 +27,27 @@ def test_tab_overview_panel_defaults_to_compact_state(tk_root: tk.Tk) -> None:
     try:
         assert panel.title_label.cget("text") == "About This Tab: Pipeline"
         assert panel.is_expanded() is False
-        assert panel.toggle_button.cget("text") == "Show Details"
+        assert panel.toggle_button.cget("text") == "Show Guidance"
         panel.toggle_button.invoke()
         assert panel.is_expanded() is True
         assert "Purpose:" in panel.details_label.cget("text")
+    finally:
+        panel.destroy()
+
+
+def test_tab_overview_panel_expands_with_help_mode(tk_root: tk.Tk) -> None:
+    app_state = AppStateV2()
+    panel = TabOverviewPanel(
+        tk_root,
+        content=get_tab_overview_content("pipeline"),
+        app_state=app_state,
+    )
+    try:
+        assert panel.is_expanded() is False
+        app_state.set_help_mode_enabled(True)
+        assert panel.is_expanded() is True
+        assert panel.toggle_button.cget("text") == "Help Mode On"
+        assert str(panel.toggle_button.cget("state")) == "disabled"
     finally:
         panel.destroy()
 

@@ -108,6 +108,15 @@ def _apply_secondary_motion_frame_directory(
 logger = logging.getLogger(__name__)
 
 _RECOVERY_TIMEOUT_KEYWORDS = ("read timed out", "readtimeout", "timeout", "timed out")
+_NONRECOVERABLE_HTTP_500_MARKERS = (
+    "nansexception",
+    "tensor with nans",
+    "cuda out of memory",
+    "out of memory",
+    "outofmemoryerror",
+    "not enough precision to represent the picture",
+    "does not support half type",
+)
 
 
 def _capture_webui_tail() -> dict[str, Any] | None:
@@ -115,6 +124,29 @@ def _capture_webui_tail() -> dict[str, Any] | None:
     if manager is None:
         return None
     return manager.get_recent_output_tail()
+
+
+def _extract_http_500_application_signature(summary: Mapping[str, Any] | None) -> str:
+    if not isinstance(summary, Mapping):
+        return ""
+    response_snippet = summary.get("response_snippet")
+    if not isinstance(response_snippet, str) or not response_snippet.strip():
+        return ""
+    parsed: Any
+    try:
+        parsed = json.loads(response_snippet)
+    except Exception:
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    parts = [
+        str(parsed.get("error") or "").strip(),
+        str(parsed.get("errors") or "").strip(),
+        str(parsed.get("detail") or "").strip(),
+        str(parsed.get("body") or "").strip(),
+    ]
+    signature = " | ".join(part for part in parts if part)
+    return signature.lower()
 
 
 _MAX_IMAGE_DIMENSION = 4096
@@ -1088,8 +1120,24 @@ class Pipeline:
             if manager and hasattr(manager, "get_launch_profile")
             else app_config.get_webui_launch_profile()
         )
+        experiment_profile = None
+        if str(stage_name or "").strip().lower() == "adetailer":
+            experiment_profile = app_config.get_adetailer_experiment_launch_profile(
+                model_name=requested_model
+            )
+            if experiment_profile:
+                recommended = experiment_profile
 
-        if recommended == "standard" or app_config.is_guarded_webui_launch_profile(current_profile):
+        if experiment_profile and current_profile == experiment_profile:
+            return experiment_profile
+
+        if (
+            not experiment_profile
+            and (
+                recommended == "standard"
+                or app_config.is_guarded_webui_launch_profile(current_profile)
+            )
+        ):
             return str(current_profile or recommended or "standard")
 
         log_with_ctx(
@@ -1102,6 +1150,7 @@ class Pipeline:
                 "outcome": "guarded_upgrade",
                 "current_profile": current_profile,
                 "recommended_profile": recommended,
+                "experiment_profile": experiment_profile,
                 "model_name": requested_model,
                 "downstream_stages": self._remaining_stage_chain(),
                 "megapixels": assessment.get("megapixels"),
@@ -1585,6 +1634,7 @@ class Pipeline:
         stage_name: str,
         requested_model: str | None,
         when: str,
+        request_local_override_expected: bool = False,
     ) -> dict[str, Any] | None:
         if not requested_model:
             return None
@@ -1595,6 +1645,21 @@ class Pipeline:
         if not current_model:
             return None
         if self._normalize_model_name(current_model) == self._normalize_model_name(requested_model):
+            return None
+        if request_local_override_expected:
+            log_with_ctx(
+                logger,
+                logging.INFO,
+                f"[executor/model-context] {stage_name} stage ambient /options model differs while request-local override is active",
+                ctx=LogContext(subsystem="pipeline", stage=stage_name),
+                extra_fields={
+                    "event": "stage_ambient_model_mismatch_request_local",
+                    "outcome": "expected_request_local_override",
+                    "requested_model": requested_model,
+                    "live_model": current_model,
+                    "when": when,
+                },
+            )
             return None
         warning = {
             "type": "model_drift",
@@ -1738,6 +1803,11 @@ class Pipeline:
                 return "request_timeout_escalated"
             return "request_connection_failure"
         if status_code == 500:
+            signature = _extract_http_500_application_signature(summary)
+            if signature and any(marker in signature for marker in _NONRECOVERABLE_HTTP_500_MARKERS):
+                return "request_http_500_application_error"
+            if signature:
+                return "request_http_500_application_error"
             return "request_http_500"
         if any(keyword in error_message for keyword in _RECOVERY_TIMEOUT_KEYWORDS):
             return "request_timeout_escalated"
@@ -2959,6 +3029,8 @@ class Pipeline:
             if "vae" in config
             else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
         )
+        use_request_local_pinning = app_config.adetailer_request_local_pinning_enabled()
+        legacy_safe_payload = app_config.adetailer_experiment_legacy_safe_payload_enabled()
         
         # Filter out ADetailer model names (they end with .pt and start with face_/hand_/person_/mediapipe)
         if requested_model:
@@ -3032,6 +3104,16 @@ class Pipeline:
             stage_name="adetailer",
             pressure_assessment=pressure_assessment,
         )
+
+        if use_request_local_pinning:
+            logger.info(
+                "[adetailer/model-context] using request-local model/VAE pinning path"
+            )
+        else:
+            logger.info(
+                "[adetailer/model-context] using global model/VAE switch path"
+            )
+            self._ensure_model_and_vae(requested_model, requested_vae)
 
         # Use adetailer-specific negative prompt if provided, otherwise use txt2img negative
         # NOTE: ADetailer has its own custom prompts and should NOT get global positive/negative applied
@@ -3188,6 +3270,17 @@ class Pipeline:
             ),
         }
 
+        if legacy_safe_payload:
+            logger.info(
+                "[adetailer/experiment] applying legacy-safe payload sanitization"
+            )
+            for pass_args in (face_args, hand_args):
+                pass_args["ad_inpaint_only_masked"] = True
+                pass_args["ad_use_inpaint_width_height"] = False
+                pass_args["ad_inpaint_width"] = payload_width
+                pass_args["ad_inpaint_height"] = payload_height
+                pass_args["ad_scheduler"] = "Use same scheduler"
+
         payload = {
             "init_images": [init_image],
             "prompt": final_prompt,
@@ -3210,14 +3303,15 @@ class Pipeline:
             },
         }
         override_settings: dict[str, Any] = {}
-        if requested_model:
-            payload["sd_model"] = requested_model
-            override_settings["sd_model_checkpoint"] = requested_model
-        if requested_vae:
-            payload["sd_vae"] = requested_vae
-            override_settings["sd_vae"] = requested_vae
-        if override_settings:
-            payload["override_settings"] = override_settings
+        if use_request_local_pinning:
+            if requested_model:
+                payload["sd_model"] = requested_model
+                override_settings["sd_model_checkpoint"] = requested_model
+            if requested_vae:
+                payload["sd_vae"] = requested_vae
+                override_settings["sd_vae"] = requested_vae
+            if override_settings:
+                payload["override_settings"] = override_settings
         entry_drift_warning = self._check_model_drift(
             stage_name="adetailer",
             requested_model=requested_model,
@@ -3230,18 +3324,32 @@ class Pipeline:
             if normalized_payload_scheduler != "Use same scheduler":
                 payload["scheduler"] = normalized_payload_scheduler
 
-        actual_loaded_vae = ""
-        try:
-            actual_loaded_vae = normalize_vae_config_value(self.client.get_current_vae())
-        except Exception:
-            logger.debug("Failed to query current WebUI VAE for ADetailer diagnostics", exc_info=True)
+        payload_override_settings = payload.get("override_settings")
+        if not isinstance(payload_override_settings, dict):
+            payload_override_settings = {}
+        adetailer_args_payload = self._clean_metadata_payload(
+            payload.get("alwayson_scripts", {}).get("ADetailer", {}).get("args", [])
+        )
+
+        # Request-local sd_vae/sd_model overrides are the authoritative signal for
+        # the ADetailer pass. WebUI's ambient /options state may still report the
+        # base VAE/model because ADetailer applies request-scoped overrides.
+        payload_sd_model = str(payload.get("sd_model") or "")
+        payload_sd_vae = str(payload.get("sd_vae") or "")
+        payload_override_model = str(payload_override_settings.get("sd_model_checkpoint") or "")
+        payload_override_vae = str(payload_override_settings.get("sd_vae") or "")
 
         logger.info(
-            "[adetailer/diagnostics] requested_model=%s requested_vae=%s normalized_vae=%s actual_webui_vae=%s width=%s height=%s face_enabled=%s face_use_inpaint_wh=%s face_inpaint=%sx%s hands_enabled=%s hands_use_inpaint_wh=%s hands_inpaint=%sx%s",
+            "[adetailer/diagnostics] requested_model=%s requested_vae=%s normalized_vae=%s request_local_pinning=%s experiment_legacy_safe_payload=%s payload_sd_model=%s payload_sd_vae=%s payload_override_model=%s payload_override_vae=%s width=%s height=%s face_enabled=%s face_use_inpaint_wh=%s face_inpaint=%sx%s hands_enabled=%s hands_use_inpaint_wh=%s hands_inpaint=%sx%s",
             requested_model or "",
             requested_vae or "",
             self._normalize_vae_name(requested_vae),
-            actual_loaded_vae or "Automatic",
+            use_request_local_pinning,
+            legacy_safe_payload,
+            payload_sd_model,
+            payload_sd_vae,
+            payload_override_model,
+            payload_override_vae,
             payload_width,
             payload_height,
             face_args.get("ad_tab_enable"),
@@ -3252,6 +3360,10 @@ class Pipeline:
             hand_args.get("ad_use_inpaint_width_height"),
             hand_args.get("ad_inpaint_width"),
             hand_args.get("ad_inpaint_height"),
+        )
+        logger.info(
+            "[adetailer/args] %s",
+            json.dumps(adetailer_args_payload, ensure_ascii=False, sort_keys=True),
         )
         for pass_label, pass_args in (("face", face_args), ("hands", hand_args)):
             if bool(pass_args.get("ad_use_inpaint_width_height")) and (
@@ -3287,11 +3399,16 @@ class Pipeline:
             )
         except Exception:
             logger.error(
-                "[adetailer/diagnostics] request failed | requested_model=%s requested_vae=%s normalized_vae=%s actual_webui_vae=%s width=%s height=%s face_use_inpaint_wh=%s face_inpaint=%sx%s hands_use_inpaint_wh=%s hands_inpaint=%sx%s",
+                "[adetailer/diagnostics] request failed | requested_model=%s requested_vae=%s normalized_vae=%s request_local_pinning=%s experiment_legacy_safe_payload=%s payload_sd_model=%s payload_sd_vae=%s payload_override_model=%s payload_override_vae=%s width=%s height=%s face_use_inpaint_wh=%s face_inpaint=%sx%s hands_use_inpaint_wh=%s hands_inpaint=%sx%s",
                 requested_model or "",
                 requested_vae or "",
                 self._normalize_vae_name(requested_vae),
-                actual_loaded_vae or "Automatic",
+                use_request_local_pinning,
+                legacy_safe_payload,
+                payload_sd_model,
+                payload_sd_vae,
+                payload_override_model,
+                payload_override_vae,
                 payload_width,
                 payload_height,
                 face_args.get("ad_use_inpaint_width_height"),
@@ -4156,6 +4273,7 @@ class Pipeline:
                 stage_name="txt2img",
                 requested_model=requested_model,
                 when="entry",
+                request_local_override_expected=bool(requested_model),
             )
             
             # Use the requested model/VAE for manifest (what we asked for)
@@ -5370,6 +5488,7 @@ class Pipeline:
                     stage_name="upscale",
                     requested_model=requested_model,
                     when="entry",
+                    request_local_override_expected=bool(requested_model),
                 )
 
                 try:
@@ -5603,6 +5722,7 @@ class Pipeline:
                     stage_name="upscale",
                     requested_model=requested_model,
                     when="exit",
+                    request_local_override_expected=bool(requested_model and upscale_mode == "img2img"),
                 ),
             )
             if adaptive_refinement:

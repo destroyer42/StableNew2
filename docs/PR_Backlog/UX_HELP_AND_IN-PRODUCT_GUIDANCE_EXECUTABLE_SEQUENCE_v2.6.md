@@ -169,6 +169,8 @@ Completion record:
 
 ### PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used
 
+Status: Completed 2026-03-25
+
 Purpose:
 
 - surface the effective config that the product is actually using, especially
@@ -195,7 +197,13 @@ Execution gate:
 
 - the operator can tell not just what value is active, but why that value is active
 
+Completion record:
+
+- `docs/CompletedPR/PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used.md`
+
 ### PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations
+
+Status: Completed 2026-03-25
 
 Purpose:
 
@@ -227,7 +235,13 @@ Execution gate:
 - the product helps the user choose the right pathway instead of forcing them to
   infer architecture from labels
 
+Completion record:
+
+- `docs/CompletedPR/PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations.md`
+
 ### PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish
+
+Status: Completed 2026-03-25
 
 Purpose:
 
@@ -251,14 +265,18 @@ Execution gate:
 
 - guidance feels cohesive across the product rather than added piecemeal
 
+Completion record:
+
+- `docs/CompletedPR/PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish.md`
+
 ## 5. Recommended Order
 
 1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
 2. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
 3. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 4. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-5. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-6. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+5. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations` Completed 2026-03-25
+6. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish` Completed 2026-03-25
 
 ## 6. Validation Expectations
 

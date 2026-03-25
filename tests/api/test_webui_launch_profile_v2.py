@@ -6,6 +6,8 @@ from src.config import app_config
 
 def test_resolve_webui_launch_command_supports_guarded_profiles() -> None:
     assert "--medvram-sdxl" in app_config.resolve_webui_launch_command("sdxl_guarded")
+    assert "--no-half-vae" in app_config.resolve_webui_launch_command("sdxl_adetailer_guarded")
+    assert "--no-half" in app_config.resolve_webui_launch_command("sdxl_adetailer_no_half")
     assert "--medvram" in app_config.resolve_webui_launch_command("low_memory")
     assert "--medvram-sdxl" not in app_config.resolve_webui_launch_command("standard")
 
@@ -55,3 +57,33 @@ def test_recommend_webui_launch_profile_keeps_light_jobs_standard() -> None:
 
 def test_low_memory_profile_counts_as_guarded() -> None:
     assert app_config.is_guarded_webui_launch_profile("low_memory") is True
+    assert app_config.is_guarded_webui_launch_profile("sdxl_adetailer_guarded") is True
+
+
+def test_adetailer_experiment_launch_profile_only_applies_to_sdxl(monkeypatch) -> None:
+    monkeypatch.setenv("STABLENEW_ADETAILER_EXPERIMENT_LAUNCH_PROFILE", "sdxl_adetailer_guarded")
+
+    assert (
+        app_config.get_adetailer_experiment_launch_profile(
+            model_name="juggernautXL_ragnarokBy.safetensors"
+        )
+        == "sdxl_adetailer_guarded"
+    )
+    assert app_config.get_adetailer_experiment_launch_profile(
+        model_name="deliberate_v2.safetensors"
+    ) is None
+
+
+def test_adetailer_request_local_pinning_defaults_off_and_can_be_enabled(monkeypatch) -> None:
+    monkeypatch.delenv("STABLENEW_ADETAILER_REQUEST_LOCAL_PINNING", raising=False)
+    monkeypatch.delenv("STABLENEW_ADETAILER_EXPERIMENT_DISABLE_REQUEST_PINNING", raising=False)
+    assert app_config.adetailer_request_local_pinning_enabled() is False
+
+    monkeypatch.setenv("STABLENEW_ADETAILER_REQUEST_LOCAL_PINNING", "1")
+    assert app_config.adetailer_request_local_pinning_enabled() is True
+
+
+def test_adetailer_request_local_pinning_honors_legacy_disable_flag(monkeypatch) -> None:
+    monkeypatch.delenv("STABLENEW_ADETAILER_REQUEST_LOCAL_PINNING", raising=False)
+    monkeypatch.setenv("STABLENEW_ADETAILER_EXPERIMENT_DISABLE_REQUEST_PINNING", "1")
+    assert app_config.adetailer_request_local_pinning_enabled() is False

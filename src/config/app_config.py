@@ -38,6 +38,20 @@ STABLENEW_WEBUI_COMMAND = "webui-user.bat --api --xformers"
 _WEBUI_LAUNCH_PROFILES: dict[str, list[str]] = {
     "standard": ["webui-user.bat", "--api", "--xformers"],
     "sdxl_guarded": ["webui-user.bat", "--api", "--xformers", "--medvram-sdxl"],
+    "sdxl_adetailer_guarded": [
+        "webui-user.bat",
+        "--api",
+        "--xformers",
+        "--medvram-sdxl",
+        "--no-half-vae",
+    ],
+    "sdxl_adetailer_no_half": [
+        "webui-user.bat",
+        "--api",
+        "--xformers",
+        "--medvram-sdxl",
+        "--no-half",
+    ],
     "low_memory": ["webui-user.bat", "--api", "--xformers", "--medvram"],
 }
 
@@ -572,7 +586,34 @@ def resolve_webui_launch_command(profile: str | None) -> list[str]:
 
 def is_guarded_webui_launch_profile(profile: str | None) -> bool:
     candidate = str(profile or "").strip() or "standard"
-    return candidate in {"sdxl_guarded", "low_memory"}
+    return candidate in {
+        "sdxl_guarded",
+        "sdxl_adetailer_guarded",
+        "sdxl_adetailer_no_half",
+        "low_memory",
+    }
+
+
+def adetailer_request_local_pinning_enabled() -> bool:
+    legacy_disable = os.environ.get("STABLENEW_ADETAILER_EXPERIMENT_DISABLE_REQUEST_PINNING")
+    if legacy_disable is not None:
+        return not _bool_env_flag("STABLENEW_ADETAILER_EXPERIMENT_DISABLE_REQUEST_PINNING", False)
+    return _bool_env_flag("STABLENEW_ADETAILER_REQUEST_LOCAL_PINNING", False)
+
+
+def adetailer_experiment_legacy_safe_payload_enabled() -> bool:
+    return _bool_env_flag("STABLENEW_ADETAILER_EXPERIMENT_LEGACY_SAFE_PAYLOAD", False)
+
+
+def get_adetailer_experiment_launch_profile(*, model_name: str | None) -> str | None:
+    if infer_webui_workload_model_family(model_name) != "sdxl":
+        return None
+    candidate = str(
+        os.environ.get("STABLENEW_ADETAILER_EXPERIMENT_LAUNCH_PROFILE", "") or ""
+    ).strip()
+    if candidate not in _WEBUI_LAUNCH_PROFILES:
+        return None
+    return candidate
 
 
 def infer_webui_workload_model_family(model_name: str | None) -> str:

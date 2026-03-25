@@ -78,6 +78,7 @@ def test_review_tab_marks_itself_as_canonical_reprocess_workspace(tk_root: tk.Tk
     tab = ReviewTabFrame(tk_root)
 
     assert "canonical advanced reprocess" in tab.workflow_hint_label.cget("text").lower()
+    assert "use learning" in tab.workflow_hint_label.cget("text").lower()
 
     tab.destroy()
 
@@ -208,6 +209,7 @@ def test_review_tab_loads_staged_curation_handoff(tk_root: tk.Tk, tmp_path: Path
         assert tab.current_negative_text.get("1.0", "end-1c") == "source negative"
         assert tab.prompt_text.get("1.0", "end-1c") == ""
         assert tab.negative_text.get("1.0", "end-1c") == ""
+        assert "bulk throughput for the marked set" in tab.workflow_hint_label.cget("text").lower()
     finally:
         tab.destroy()
 
@@ -285,11 +287,12 @@ def test_review_tab_shows_effective_reprocess_settings_summary(tk_root: tk.Tk, t
         summary = tab._effective_settings_var.get()  # noqa: SLF001
         assert "Source: stage=txt2img | model=juggernautXL | vae=Automatic" in summary
         assert "Targets: adetailer" in summary
-        assert "Positive prompt: append" in summary
-        assert "Negative prompt: inherited" in summary
-        assert "adetailer | sampler=DPM++ 2M Karras | scheduler=Karras | steps=12 | cfg=5.7 | denoise=0.25" in summary
+        assert "Why these values are active:" in summary
+        assert "Positive prompt: append [explicit edit]" in summary
+        assert "Negative prompt: inherited [source artifact baseline]" in summary
+        assert "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=12 [active resolution] | cfg=5.7 [active resolution] | denoise=0.25 [active resolution]" in summary
         assert "Direct Queue Now baseline:" in summary
-        assert "adetailer | sampler=DPM++ 2M Karras | scheduler=Karras | steps=8 | cfg=5.7 | denoise=0.34" in summary
+        assert "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=8 [active resolution] | cfg=5.7 [active resolution] | denoise=0.34 [active resolution]" in summary
     finally:
         tab.destroy()
 

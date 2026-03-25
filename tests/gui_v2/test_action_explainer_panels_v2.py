@@ -30,8 +30,34 @@ def test_action_explainer_panel_renders_summary_and_bullets(tk_root) -> None:
     )
     try:
         assert panel.title_label.cget("text") == "Test Actions"
+        assert panel.is_expanded() is False
+        assert panel.toggle_button.cget("text") == "Show Guidance"
         assert "safe path" in panel.summary_label.cget("text").lower()
         assert "- First action" in panel.details_label.cget("text")
+        panel.toggle_button.invoke()
+        assert panel.is_expanded() is True
+        assert panel.toggle_button.cget("text") == "Hide Guidance"
+    finally:
+        panel.destroy()
+
+
+def test_action_explainer_panel_expands_with_help_mode(tk_root) -> None:
+    app_state = AppStateV2()
+    panel = ActionExplainerPanel(
+        tk_root,
+        content=ActionExplainerContent(
+            title="Test Actions",
+            summary="Choose the safe path before you click.",
+            bullets=("First action",),
+        ),
+        app_state=app_state,
+    )
+    try:
+        assert panel.is_expanded() is False
+        app_state.set_help_mode_enabled(True)
+        assert panel.is_expanded() is True
+        assert panel.toggle_button.cget("text") == "Help Mode On"
+        assert str(panel.toggle_button.cget("state")) == "disabled"
     finally:
         panel.destroy()
 
@@ -51,6 +77,7 @@ def test_review_tab_exposes_action_help_and_tooltips(tk_root) -> None:
     try:
         assert isinstance(tab.action_help_panel, ActionExplainerPanel)
         assert "metadata-aware decisions" in tab.action_help_panel.summary_label.cget("text").lower()
+        assert "use learning" in tab.action_help_panel.summary_label.cget("text").lower()
         assert "does not queue a new reprocess job" in tab.import_selected_tooltip.text.lower()
         assert "queue every loaded image" in tab.reprocess_all_button.tooltip.text.lower()
     finally:
@@ -72,6 +99,8 @@ def test_learning_tab_exposes_staged_queue_and_review_help(tk_root, tmp_path: Pa
             pipeline_controller=_StubPipelineController(),
         )
         try:
+            assert isinstance(tab.discovered_help_panel, ActionExplainerPanel)
+            assert "discovered review inbox" in tab.discovered_help_panel.summary_label.cget("text").lower()
             assert isinstance(tab.staged_queue_help_panel, ActionExplainerPanel)
             assert isinstance(tab.staged_review_help_panel, ActionExplainerPanel)
             assert "queue now for bulk stage submission" in tab.staged_queue_help_panel.summary_label.cget("text").lower()
@@ -85,6 +114,7 @@ def test_svd_tab_exposes_workflow_help_and_tooltips(tk_root) -> None:
     try:
         assert isinstance(tab.workflow_help_panel, ActionExplainerPanel)
         assert "choose svd when you have one strong still image" in tab.workflow_help_panel.summary_label.cget("text").lower()
+        assert "secondary motion" in tab.workflow_help_panel.summary_label.cget("text").lower()
         assert "does not queue a job yet" in tab.use_latest_output_tooltip.text.lower()
         assert "queue a native svd animation job" in tab.animate_tooltip.text.lower()
     finally:
@@ -95,7 +125,7 @@ def test_video_workflow_tab_exposes_workflow_help_and_queue_tooltip(tk_root) -> 
     tab = VideoWorkflowTabFrameV2(tk_root)
     try:
         assert isinstance(tab.workflow_help_panel, ActionExplainerPanel)
-        assert "named workflow and optional anchors" in tab.workflow_help_panel.summary_label.cget("text").lower()
+        assert "secondary motion" in tab.workflow_help_panel.summary_label.cget("text").lower()
         assert "does not queue the workflow yet" in tab.use_latest_output_tooltip.text.lower()
         assert "queue a workflow-driven video job" in tab.queue_workflow_tooltip.text.lower()
     finally:
@@ -106,7 +136,7 @@ def test_movie_clips_tab_exposes_workflow_help_and_build_tooltip(tk_root) -> Non
     tab = MovieClipsTabFrameV2(tk_root)
     try:
         assert isinstance(tab.workflow_help_panel, ActionExplainerPanel)
-        assert "ordered image sequence" in tab.workflow_help_panel.summary_label.cget("text").lower()
+        assert "generate new motion" in tab.workflow_help_panel.summary_label.cget("text").lower()
         assert "video-output bundle" in tab.latest_video_tooltip.text.lower()
         assert "assemble the currently ordered image list" in tab.build_tooltip.text.lower()
     finally:

@@ -515,6 +515,50 @@ class TestPipelineLevelMerge:
         assert result["adetailer"]["confidence"] == 0.5
         assert result["adetailer"]["enabled"] is True
 
+    def test_merge_pipeline_with_adetailer_pass_local_override_fields(self, base_pipeline_config: dict) -> None:
+        """Override-only ADetailer merges should preserve pass-local enable and inpaint settings."""
+        flags = StageOverrideFlags(adetailer_override_enabled=True)
+        bundle = StageOverridesBundle(
+            adetailer=ADetailerOverrides(
+                enabled=True,
+                checkpoint_model="juggernautXL_ragnarokBy.safetensors",
+                enable_face_pass=False,
+                inpaint_only_masked=False,
+                use_inpaint_width_height=True,
+                inpaint_width=768,
+                inpaint_height=1024,
+                hands_model="hand_yolov8s.pt",
+                enable_hands_pass=False,
+                hands_inpaint_only_masked=True,
+                hands_use_inpaint_width_height=True,
+                hands_inpaint_width=768,
+                hands_inpaint_height=1024,
+                hands_mask_filter_method="Area",
+            )
+        )
+
+        result = ConfigMergerV2.merge_pipeline(
+            base_config=base_pipeline_config,
+            stage_overrides=bundle,
+            override_flags=flags,
+        )
+
+        assert result["adetailer"]["adetailer_checkpoint_model"] == "juggernautXL_ragnarokBy.safetensors"
+        assert result["adetailer"]["sd_model_checkpoint"] == "juggernautXL_ragnarokBy.safetensors"
+        assert result["adetailer"]["enable_face_pass"] is False
+        assert result["adetailer"]["ad_inpaint_only_masked"] is False
+        assert result["adetailer"]["ad_use_inpaint_width_height"] is True
+        assert result["adetailer"]["ad_inpaint_width"] == 768
+        assert result["adetailer"]["ad_inpaint_height"] == 1024
+        assert result["adetailer"]["adetailer_hands_model"] == "hand_yolov8s.pt"
+        assert result["adetailer"]["enable_hands_pass"] is False
+        assert result["adetailer"]["ad_hands_enabled"] is False
+        assert result["adetailer"]["ad_hands_inpaint_only_masked"] is True
+        assert result["adetailer"]["ad_hands_use_inpaint_width_height"] is True
+        assert result["adetailer"]["ad_hands_inpaint_width"] == 768
+        assert result["adetailer"]["ad_hands_inpaint_height"] == 1024
+        assert result["adetailer"]["ad_hands_mask_filter_method"] == "Area"
+
     def test_merge_adetailer_config_canonicalizes_legacy_model_key(self) -> None:
         """Legacy detector model keys should be normalized to adetailer_model."""
         result = ConfigMergerV2.merge_adetailer_config(

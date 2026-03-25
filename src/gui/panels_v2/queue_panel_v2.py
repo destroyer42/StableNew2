@@ -119,6 +119,7 @@ class QueuePanelV2(ttk.Frame):
                     "Reorder, Remove, and Clear All change queue order or membership before execution, so use them before a job starts running.",
                 ),
             ),
+            app_state=self.app_state,
         )
         self.queue_action_help_panel.pack(fill="x", pady=(0, 4))
         attach_tooltip(

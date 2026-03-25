@@ -100,8 +100,10 @@ class ADetailerOverrides:
     """ADetailer override settings."""
 
     enabled: bool | None = None
+    checkpoint_model: str | None = None
     model: str | None = None
     confidence: float | None = None
+    max_detections: int | None = None
     mask_blur: int | None = None
     denoise_strength: float | None = None
     # Additional override fields for full ADetailer support
@@ -115,11 +117,40 @@ class ADetailerOverrides:
     mask_feather: int | None = None
     dilate_erode: int | None = None
     inpaint_padding: int | None = None
+    inpaint_only_masked: bool | None = None
+    use_inpaint_width_height: bool | None = None
+    inpaint_width: int | None = None
+    inpaint_height: int | None = None
+    mask_merge_invert: str | None = None
+    enable_face_pass: bool | None = None
     # Mask filtering
     mask_filter_method: str | None = None
     mask_k_largest: int | None = None
     mask_min_ratio: float | None = None
     mask_max_ratio: float | None = None
+    hands_model: str | None = None
+    enable_hands_pass: bool | None = None
+    hands_confidence: float | None = None
+    hands_steps: int | None = None
+    hands_cfg_scale: float | None = None
+    hands_denoise_strength: float | None = None
+    hands_sampler: str | None = None
+    hands_scheduler: str | None = None
+    hands_prompt: str | None = None
+    hands_negative_prompt: str | None = None
+    hands_inpaint_only_masked: bool | None = None
+    hands_padding: int | None = None
+    hands_use_inpaint_width_height: bool | None = None
+    hands_inpaint_width: int | None = None
+    hands_inpaint_height: int | None = None
+    hands_mask_filter_method: str | None = None
+    hands_mask_k_largest: int | None = None
+    hands_mask_min_ratio: float | None = None
+    hands_mask_max_ratio: float | None = None
+    hands_dilate_erode: int | None = None
+    hands_mask_blur: int | None = None
+    hands_mask_feather: int | None = None
+    hands_mask_merge_invert: str | None = None
 
 
 @dataclass
@@ -379,39 +410,52 @@ class ConfigMergerV2:
 
         if override_adetailer.enabled is not None:
             merged["enabled"] = override_adetailer.enabled
+            merged["adetailer_enabled"] = override_adetailer.enabled
             if not override_adetailer.enabled:
                 return merged
 
         # Core detection settings
+        if override_adetailer.checkpoint_model is not None:
+            merged["adetailer_checkpoint_model"] = override_adetailer.checkpoint_model
+            merged["sd_model_checkpoint"] = override_adetailer.checkpoint_model
         if override_adetailer.model is not None:
             merged["adetailer_model"] = override_adetailer.model
         if override_adetailer.confidence is not None:
             merged["confidence"] = override_adetailer.confidence
             merged["adetailer_confidence"] = override_adetailer.confidence  # Dual key
-        
+            merged["ad_confidence"] = override_adetailer.confidence
+        if override_adetailer.max_detections is not None:
+            merged["max_detections"] = override_adetailer.max_detections
+
         # Generation settings
         if override_adetailer.sampler is not None:
             merged["sampler_name"] = override_adetailer.sampler
             merged["adetailer_sampler"] = override_adetailer.sampler  # Dual key
+            merged["ad_sampler"] = override_adetailer.sampler
         if override_adetailer.scheduler is not None:
             merged["scheduler"] = override_adetailer.scheduler
             merged["adetailer_scheduler"] = override_adetailer.scheduler  # Dual key
         if override_adetailer.steps is not None:
             merged["steps"] = override_adetailer.steps
             merged["adetailer_steps"] = override_adetailer.steps  # Dual key
+            merged["ad_steps"] = override_adetailer.steps
         if override_adetailer.cfg_scale is not None:
             merged["cfg_scale"] = override_adetailer.cfg_scale
             merged["adetailer_cfg"] = override_adetailer.cfg_scale  # Dual key
+            merged["ad_cfg_scale"] = override_adetailer.cfg_scale
         if override_adetailer.denoise_strength is not None:
             merged["denoise_strength"] = override_adetailer.denoise_strength
             merged["adetailer_denoise"] = override_adetailer.denoise_strength  # Dual key
-        
+            merged["ad_denoising_strength"] = override_adetailer.denoise_strength
+
         # Prompt settings
         if override_adetailer.prompt is not None:
             merged["adetailer_prompt"] = override_adetailer.prompt
+            merged["ad_prompt"] = override_adetailer.prompt
         if override_adetailer.negative_prompt is not None:
             merged["adetailer_negative_prompt"] = override_adetailer.negative_prompt
-        
+            merged["ad_negative_prompt"] = override_adetailer.negative_prompt
+
         # Mask processing settings
         if override_adetailer.mask_blur is not None:
             merged["mask_blur"] = override_adetailer.mask_blur
@@ -427,7 +471,20 @@ class ConfigMergerV2:
             merged["inpaint_padding"] = override_adetailer.inpaint_padding
             merged["adetailer_padding"] = override_adetailer.inpaint_padding  # Dual key
             merged["ad_inpaint_only_masked_padding"] = override_adetailer.inpaint_padding  # Dual key
-        
+        if override_adetailer.inpaint_only_masked is not None:
+            merged["ad_inpaint_only_masked"] = override_adetailer.inpaint_only_masked
+        if override_adetailer.use_inpaint_width_height is not None:
+            merged["ad_use_inpaint_width_height"] = override_adetailer.use_inpaint_width_height
+        if override_adetailer.inpaint_width is not None:
+            merged["ad_inpaint_width"] = override_adetailer.inpaint_width
+        if override_adetailer.inpaint_height is not None:
+            merged["ad_inpaint_height"] = override_adetailer.inpaint_height
+        if override_adetailer.mask_merge_invert is not None:
+            merged["mask_merge_mode"] = override_adetailer.mask_merge_invert
+            merged["ad_mask_merge_invert"] = override_adetailer.mask_merge_invert
+        if override_adetailer.enable_face_pass is not None:
+            merged["enable_face_pass"] = override_adetailer.enable_face_pass
+
         # Mask filtering settings
         if override_adetailer.mask_filter_method is not None:
             merged["mask_filter_method"] = override_adetailer.mask_filter_method
@@ -441,6 +498,58 @@ class ConfigMergerV2:
         if override_adetailer.mask_max_ratio is not None:
             merged["mask_max_ratio"] = override_adetailer.mask_max_ratio
             merged["ad_mask_max_ratio"] = override_adetailer.mask_max_ratio  # Dual key
+
+        # Hands pass settings
+        if override_adetailer.hands_model is not None:
+            merged["adetailer_hands_model"] = override_adetailer.hands_model
+            merged["hands_model"] = override_adetailer.hands_model
+        if override_adetailer.enable_hands_pass is not None:
+            merged["enable_hands_pass"] = override_adetailer.enable_hands_pass
+            merged["ad_hands_enabled"] = override_adetailer.enable_hands_pass
+        if override_adetailer.hands_confidence is not None:
+            merged["adetailer_hands_confidence"] = override_adetailer.hands_confidence
+        if override_adetailer.hands_steps is not None:
+            merged["adetailer_hands_steps"] = override_adetailer.hands_steps
+        if override_adetailer.hands_cfg_scale is not None:
+            merged["adetailer_hands_cfg"] = override_adetailer.hands_cfg_scale
+        if override_adetailer.hands_denoise_strength is not None:
+            merged["adetailer_hands_denoise"] = override_adetailer.hands_denoise_strength
+        if override_adetailer.hands_sampler is not None:
+            merged["adetailer_hands_sampler"] = override_adetailer.hands_sampler
+        if override_adetailer.hands_scheduler is not None:
+            merged["adetailer_hands_scheduler"] = override_adetailer.hands_scheduler
+        if override_adetailer.hands_prompt is not None:
+            merged["adetailer_hands_prompt"] = override_adetailer.hands_prompt
+        if override_adetailer.hands_negative_prompt is not None:
+            merged["adetailer_hands_negative_prompt"] = override_adetailer.hands_negative_prompt
+        if override_adetailer.hands_inpaint_only_masked is not None:
+            merged["ad_hands_inpaint_only_masked"] = override_adetailer.hands_inpaint_only_masked
+        if override_adetailer.hands_padding is not None:
+            merged["ad_hands_padding"] = override_adetailer.hands_padding
+        if override_adetailer.hands_use_inpaint_width_height is not None:
+            merged["ad_hands_use_inpaint_width_height"] = (
+                override_adetailer.hands_use_inpaint_width_height
+            )
+        if override_adetailer.hands_inpaint_width is not None:
+            merged["ad_hands_inpaint_width"] = override_adetailer.hands_inpaint_width
+        if override_adetailer.hands_inpaint_height is not None:
+            merged["ad_hands_inpaint_height"] = override_adetailer.hands_inpaint_height
+        if override_adetailer.hands_mask_filter_method is not None:
+            merged["ad_hands_mask_filter_method"] = override_adetailer.hands_mask_filter_method
+        if override_adetailer.hands_mask_k_largest is not None:
+            merged["ad_hands_mask_k"] = override_adetailer.hands_mask_k_largest
+        if override_adetailer.hands_mask_min_ratio is not None:
+            merged["ad_hands_mask_min_ratio"] = override_adetailer.hands_mask_min_ratio
+        if override_adetailer.hands_mask_max_ratio is not None:
+            merged["ad_hands_mask_max_ratio"] = override_adetailer.hands_mask_max_ratio
+        if override_adetailer.hands_dilate_erode is not None:
+            merged["ad_hands_dilate_erode"] = override_adetailer.hands_dilate_erode
+        if override_adetailer.hands_mask_blur is not None:
+            merged["ad_hands_mask_blur"] = override_adetailer.hands_mask_blur
+        if override_adetailer.hands_mask_feather is not None:
+            merged["ad_hands_mask_feather"] = override_adetailer.hands_mask_feather
+        if override_adetailer.hands_mask_merge_invert is not None:
+            merged["ad_hands_mask_merge_invert"] = override_adetailer.hands_mask_merge_invert
 
         return merged
 

@@ -72,6 +72,7 @@ class PipelineTabFrame(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("pipeline"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, columnspan=3, sticky="ew", padx=8, pady=(8, 0))
 

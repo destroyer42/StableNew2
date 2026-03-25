@@ -16,6 +16,7 @@ class DropdownLoader:
 
     _RESOURCE_KEYS: Sequence[str] = CANONICAL_WEBUI_RESOURCE_KEYS
     _MODEL_HASH_PATTERN = re.compile(r"(?:\s*\[[^\]]+\])+\s*$")
+    _NO_VAE_DISPLAY = "No VAE (model default)"
 
     def __init__(self, config_manager: ConfigManager | None = None) -> None:
         self._config_manager = config_manager or ConfigManager()
@@ -251,6 +252,9 @@ class DropdownLoader:
     ) -> tuple[str, ...]:
         options: list[str] = []
         seen: set[str] = set()
+        if resource_key == "vaes":
+            seen.add(self._NO_VAE_DISPLAY)
+            options.append(self._NO_VAE_DISPLAY)
         for entry in values or []:
             display = self._resource_display_value(entry, resource_key)
             if not display or display in seen:

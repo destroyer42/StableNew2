@@ -155,6 +155,7 @@ class AppStateV2:
     adetailer_enabled: bool = True  # PR-DEFAULT-ADETAILER: Default to True for visibility
     adetailer_config: dict[str, Any] = field(default_factory=dict)
     collapse_states: dict[str, bool] = field(default_factory=dict)
+    help_mode_enabled: bool = False
 
     # PR-111: Run Controls UX state flags
     is_run_in_progress: bool = False
@@ -237,6 +238,17 @@ class AppStateV2:
         if self.negative_prompt != value:
             self.negative_prompt = value
             self._notify("negative_prompt")
+
+    def set_help_mode_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if self.help_mode_enabled != enabled:
+            self.help_mode_enabled = enabled
+            self._notify("help_mode")
+
+    def toggle_help_mode(self) -> bool:
+        enabled = not bool(self.help_mode_enabled)
+        self.set_help_mode_enabled(enabled)
+        return enabled
 
     def set_current_pack(self, value: str | None) -> None:
         """DEPRECATED: Use set_selected_prompt_pack instead."""

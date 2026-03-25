@@ -297,6 +297,8 @@ def test_tab_source_summary_updates_from_manual_image_list(tk_root: tk.Tk, tmp_p
         image_path.write_bytes(b"")
         tab._set_image_list([image_path])
         assert "img.png" in tab.source_summary_var.get()
+        assert "Effective settings:" in tab.effective_settings_var.get()
+        assert "fps=24 [default]" in tab.effective_settings_var.get()
     finally:
         tab.destroy()
 

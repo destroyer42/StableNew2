@@ -231,9 +231,15 @@ Status: Completed 2026-03-25
 
 #### 5.5 `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
 
+Status: Completed 2026-03-25
+
 #### 5.6 `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
 
+Status: Completed 2026-03-25
+
 #### 5.7 `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+
+Status: Completed 2026-03-25
 
 Why this order:
 
@@ -299,8 +305,7 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-1. `PR-UX-268`
-1. `PR-UX-269`
+1. `PR-UX-272`
 
 Why this fast-track works:
 
@@ -314,9 +319,6 @@ Why this fast-track works:
 ## 5. Master Ordered List
 
 1. close image output-route regression
-1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-1. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
 1. `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
 1. `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
 1. `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`

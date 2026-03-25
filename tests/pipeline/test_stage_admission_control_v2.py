@@ -229,3 +229,41 @@ def test_workload_launch_policy_respects_existing_low_memory_profile(monkeypatch
     )
 
     assert profile == "low_memory"
+
+
+def test_workload_launch_policy_can_force_adetailer_experiment_profile(monkeypatch) -> None:
+    client = Mock()
+    pipeline = Pipeline(client, Mock())
+
+    class _Manager:
+        def get_launch_profile(self) -> str:
+            return "standard"
+
+    monkeypatch.setenv(
+        "STABLENEW_ADETAILER_EXPERIMENT_LAUNCH_PROFILE",
+        "sdxl_adetailer_guarded",
+    )
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager())
+    recovered = []
+    monkeypatch.setattr(
+        pipeline,
+        "_attempt_webui_recovery",
+        lambda **kwargs: recovered.append(kwargs) or True,
+    )
+
+    profile = pipeline._maybe_apply_workload_launch_policy(
+        stage_name="adetailer",
+        requested_model="epicrealismXL_vxviiCrystalclear.safetensors",
+        pressure_assessment={
+            "width": 768,
+            "height": 1024,
+            "batch_size": 1,
+            "steps": 10,
+            "megapixels": 0.786,
+            "effective_load": 1.2,
+        },
+    )
+
+    assert profile == "sdxl_adetailer_guarded"
+    assert recovered
+    assert recovered[0]["profile_override"] == "sdxl_adetailer_guarded"

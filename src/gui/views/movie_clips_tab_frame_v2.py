@@ -12,6 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
+from src.gui.help_text.workflow_guidance_v2 import build_movie_clips_guidance
 from src.gui.help_text.stage_setting_help_v2 import MOVIE_CLIPS_SETTING_HELP
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
@@ -32,7 +33,7 @@ from src.gui.view_contracts.movie_clips_contract import (
     format_source_mode_label,
     sort_image_names,
 )
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.view_contracts.video_workspace_contract import summarize_movie_clips_source
 
@@ -77,6 +78,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.quality_var = tk.StringVar(value=DEFAULT_QUALITY)
         self.mode_var = tk.StringVar(value=DEFAULT_MODE)
         self.source_summary_var = tk.StringVar(value=summarize_movie_clips_source().empty_state)
+        self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -86,11 +88,15 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("movie_clips"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
         self._build_header()
         self._build_body()
+        for variable in (self.fps_var, self.codec_var, self.quality_var, self.mode_var):
+            variable.trace_add("write", lambda *_: self._update_effective_settings_summary())
+        self._update_effective_settings_summary()
 
         # Trace source mode toggle
         self.source_mode_var.trace_add("write", lambda *_: self._on_source_mode_changed())
@@ -168,6 +174,11 @@ class MovieClipsTabFrameV2(ttk.Frame):
             textvariable=self.source_summary_var,
             style="Muted.TLabel",
         ).grid(row=1, column=0, columnspan=8, sticky="w", pady=(6, 0))
+        ttk.Label(
+            header,
+            textvariable=self.effective_settings_var,
+            style="Muted.TLabel",
+        ).grid(row=2, column=0, columnspan=8, sticky="w", pady=(2, 0))
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
@@ -251,16 +262,8 @@ class MovieClipsTabFrameV2(ttk.Frame):
 
         self.workflow_help_panel = ActionExplainerPanel(
             settings_frame,
-            content=ActionExplainerContent(
-                title="When To Use Movie Clips",
-                summary="Choose Movie Clips when you already have an ordered image sequence or a compatible workflow/SVD output bundle and want explicit clip assembly control.",
-                bullets=(
-                    "FPS controls playback speed. Higher values make the clip play faster and smoother if enough frames exist.",
-                    "Codec and Quality affect export compatibility and file size rather than generation semantics.",
-                    "Mode controls how the clip is assembled for output, so confirm it before building if the destination matters.",
-                    "Use Latest Video Output is the fastest handoff when another video tab already produced frames you want to package into a clip.",
-                ),
-            ),
+            content=build_movie_clips_guidance(),
+            app_state=self.app_state,
             wraplength=240,
         )
         self.workflow_help_panel.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
@@ -555,6 +558,21 @@ class MovieClipsTabFrameV2(ttk.Frame):
         if not self._image_paths and not self._source_bundle:
             text = summary.empty_state
         self.source_summary_var.set(text)
+
+    def _update_effective_settings_summary(self) -> None:
+        summary = build_clip_settings_summary(
+            self.fps_var.get(),
+            self.codec_var.get(),
+            self.quality_var.get(),
+            self.mode_var.get(),
+        )
+        bits = [
+            f"fps={summary.fps} [{'default' if summary.fps == DEFAULT_FPS else 'selected here'}]",
+            f"codec={summary.codec} [{'default' if summary.codec == DEFAULT_CODEC else 'selected here'}]",
+            f"quality={summary.quality} [{'default' if summary.quality == DEFAULT_QUALITY else 'selected here'}]",
+            f"mode={summary.mode} [{'default' if summary.mode == DEFAULT_MODE else 'selected here'}]",
+        ]
+        self.effective_settings_var.set("Effective settings: " + " | ".join(bits))
 
     def _set_build_status(self, msg: str) -> None:
         self._build_status = msg

@@ -6,11 +6,16 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.queue.job_history_store import JobHistoryEntry
+from src.gui.help_text.workflow_guidance_v2 import (
+    REVIEW_DEFAULT_WORKFLOW_HINT,
+    build_review_action_guidance,
+    get_review_handoff_hint,
+)
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.utils.image_metadata import (
@@ -42,7 +47,7 @@ class ReviewTabFrame(ttk.Frame):
         self.app_controller = app_controller
         self.app_state = app_state
         self._workflow_adapter = ReviewWorkflowAdapter()
-        self._default_workflow_hint = "Review is the canonical advanced reprocess workspace."
+        self._default_workflow_hint = REVIEW_DEFAULT_WORKFLOW_HINT
 
         self.selected_images: list[Path] = []
         self._image_index_by_row: list[Path] = []
@@ -91,6 +96,7 @@ class ReviewTabFrame(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("review"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
@@ -168,16 +174,8 @@ class ReviewTabFrame(ttk.Frame):
         self.workflow_hint_label.grid(row=1, column=0, columnspan=6, sticky="w", pady=(6, 0))
         self.action_help_panel = ActionExplainerPanel(
             header,
-            content=ActionExplainerContent(
-                title="Review Actions",
-                summary="Use Review when you need deliberate, metadata-aware decisions about existing images instead of sending everything straight back into generation.",
-                bullets=(
-                    "Import Selected to Learning copies the chosen review items into staged curation evidence so they can drive later decisions without reprocessing immediately.",
-                    "Import Recent Job opens a picker for a recent run when you want to start from history instead of the current folder selection.",
-                    "Reprocess Selected queues only the selected images with the stage toggles and prompt edits shown here.",
-                    "Reprocess All uses the current Review settings across the full loaded set, so confirm the effective settings box before clicking it.",
-                ),
-            ),
+            content=build_review_action_guidance(),
+            app_state=self.app_state,
             wraplength=980,
         )
         self.action_help_panel.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(8, 0))
@@ -673,20 +671,7 @@ class ReviewTabFrame(ttk.Frame):
 
         self._active_handoff = handoff
         self._set_selected_images(image_paths)
-        if len(image_paths) == 1:
-            self.workflow_hint_label.config(
-                text=(
-                    "Staged Curation handoff: deliberate single-candidate edit in Review. "
-                    "Use Queue Now in Learning for bulk throughput."
-                )
-            )
-        else:
-            self.workflow_hint_label.config(
-                text=(
-                    "Staged Curation handoff loaded in Review. Use Queue Now in Learning "
-                    "for bulk throughput."
-                )
-            )
+        self.workflow_hint_label.config(text=get_review_handoff_hint(len(image_paths)))
 
         self.stage_img2img_var.set(bool(handoff.stage_img2img))
         self.stage_adetailer_var.set(bool(handoff.stage_adetailer))

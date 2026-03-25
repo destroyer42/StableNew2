@@ -2603,7 +2603,7 @@ class LearningController:
         self,
         group_id: str,
         candidate_id: str,
-    ) -> dict[str, str] | None:
+    ) -> dict[str, Any] | None:
         """Return read-only source prompt and plan-preview context for one candidate."""
         payload = self.load_staged_curation_group(group_id)
         if not isinstance(payload, dict):
@@ -2629,6 +2629,7 @@ class LearningController:
             source_prompt = str(replay_summary.get("positive_prompt") or "")
             source_negative_prompt = str(replay_summary.get("negative_prompt") or "")
             source_model = str(replay_summary.get("source_model") or replay_summary.get("model") or "")
+            baseline: dict[str, Any] = {}
             if item is not None and (
                 not source_prompt or not source_negative_prompt or not source_model
             ):
@@ -2640,9 +2641,42 @@ class LearningController:
                         baseline.get("negative_prompt") or ""
                     )
                     source_model = source_model or str(baseline.get("model") or "")
+            elif item is not None:
+                image_path = Path(str(getattr(item, "artifact_path", "") or "").strip())
+                if image_path.exists():
+                    baseline = self._extract_reprocess_baseline_from_image(image_path)
 
             decision = str(replay_summary.get("decision") or "")
             target_stage = self._resolve_staged_curation_target_stage_for_decision(decision)
+            effective_settings_summary = ""
+            if target_stage:
+                stage_flags = ReviewWorkflowAdapter._TARGET_TO_STAGE_FLAGS(target_stage)
+                if stage_flags:
+                    fallback_builder = getattr(self.app_controller, "_build_reprocess_config", None)
+                    if callable(fallback_builder):
+                        fallback_config = fallback_builder(stage_flags)
+                    else:
+                        fallback_config = self._get_baseline_config()
+                    metadata_config = (
+                        baseline.get("config") if isinstance(baseline.get("config"), dict) else {}
+                    )
+                    preview = ReprocessJobBuilder().build_effective_settings_preview(
+                        source_stage=str(replay_summary.get("source_stage") or "unknown"),
+                        source_model=source_model or None,
+                        source_vae=baseline.get("vae"),
+                        stages=list(stage_flags),
+                        fallback_config=fallback_config,
+                        metadata_config=metadata_config,
+                        prompt=source_prompt,
+                        negative_prompt=source_negative_prompt,
+                        prompt_mode="append",
+                        negative_prompt_mode="append",
+                        prompt_delta="",
+                        negative_prompt_delta="",
+                        source_baseline_label="staged curation source baseline",
+                        fallback_source_label="target-stage preset",
+                    )
+                    effective_settings_summary = ReviewWorkflowAdapter().format_effective_settings_summary(preview)
             return {
                 "source_prompt": source_prompt,
                 "source_negative_prompt": source_negative_prompt,
@@ -2651,6 +2685,7 @@ class LearningController:
                 "decision": decision,
                 "target_stage": target_stage or "",
                 "path_label": "Queue Now",
+                "effective_settings_summary": effective_settings_summary,
             }
         return None
 
