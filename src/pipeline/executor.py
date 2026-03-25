@@ -53,6 +53,7 @@ from src.video.container_metadata import write_video_container_metadata
 from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
 from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block, extract_secondary_motion_summary
 from src.video.motion.secondary_motion_worker import run_secondary_motion_worker
+from src.utils.webui_resource_names import canonicalize_vae_lookup_key, normalize_vae_config_value
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
 
@@ -897,12 +898,7 @@ class Pipeline:
         return cleaned.lower()
 
     def _normalize_vae_name(self, raw: str | None) -> str:
-        if raw is None:
-            return "automatic"
-        cleaned = str(raw).strip().lower()
-        if cleaned in {"", "automatic", "none"}:
-            return "automatic"
-        return cleaned
+        return canonicalize_vae_lookup_key(raw)
 
     def _discover_current_model_if_needed(self) -> None:
         if self._model_discovery_attempted or self._current_model is not None:
@@ -2801,7 +2797,9 @@ class Pipeline:
         # Set model and VAE if specified
         requested_model = config.get("model")
         # Handle VAE: only set if non-empty
-        requested_vae = config.get("vae") if "vae" in config else config.get("vae_name")
+        requested_vae = normalize_vae_config_value(
+            config.get("vae") if "vae" in config else config.get("vae_name")
+        )
         self._ensure_model_and_vae(requested_model, requested_vae)
 
         # Apply optional prompt adjustments from config
@@ -2822,6 +2820,15 @@ class Pipeline:
             "seed": config.get("seed", -1),
             "clip_skip": config.get("clip_skip", 2),
         }
+        override_settings: dict[str, Any] = {}
+        if requested_model:
+            payload["sd_model"] = requested_model
+            override_settings["sd_model_checkpoint"] = requested_model
+        if requested_vae:
+            payload["sd_vae"] = requested_vae
+            override_settings["sd_vae"] = requested_vae
+        if override_settings:
+            payload["override_settings"] = override_settings
 
         payload.update(sampler_config)
 
@@ -2863,7 +2870,7 @@ class Pipeline:
 
         # Query WebUI for ACTUAL current model and VAE (what's really being used)
         model_name = config.get("model") or config.get("sd_model_checkpoint") or self.client.get_current_model() or "Unknown"
-        vae_name = self.client.get_current_vae() or config.get("vae") or "Automatic"
+        vae_name = requested_vae or self.client.get_current_vae() or config.get("vae") or "Automatic"
         logger.info("[manifest/img2img] model=%s vae=%s", model_name, vae_name)
 
         metadata = {
@@ -2947,7 +2954,11 @@ class Pipeline:
             or config.get("sd_model_checkpoint")
         )
         # Handle VAE: get from config but don't default to fallback if empty
-        requested_vae = config.get("vae") if "vae" in config else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
+        requested_vae = normalize_vae_config_value(
+            config.get("vae")
+            if "vae" in config
+            else (config.get("sd_vae") if "sd_vae" in config else config.get("vae_name"))
+        )
         
         # Filter out ADetailer model names (they end with .pt and start with face_/hand_/person_/mediapipe)
         if requested_model:
@@ -3219,15 +3230,42 @@ class Pipeline:
             if normalized_payload_scheduler != "Use same scheduler":
                 payload["scheduler"] = normalized_payload_scheduler
 
-        # DEBUG: Log ADetailer payload dimensions to verify no resizing
-        logger.warning(
-            "[adetailer/payload] width=%s height=%s face.ad_use_inpaint_width_height=%s face.ad_inpaint_width=%s face.ad_inpaint_height=%s",
+        actual_loaded_vae = ""
+        try:
+            actual_loaded_vae = normalize_vae_config_value(self.client.get_current_vae())
+        except Exception:
+            logger.debug("Failed to query current WebUI VAE for ADetailer diagnostics", exc_info=True)
+
+        logger.info(
+            "[adetailer/diagnostics] requested_model=%s requested_vae=%s normalized_vae=%s actual_webui_vae=%s width=%s height=%s face_enabled=%s face_use_inpaint_wh=%s face_inpaint=%sx%s hands_enabled=%s hands_use_inpaint_wh=%s hands_inpaint=%sx%s",
+            requested_model or "",
+            requested_vae or "",
+            self._normalize_vae_name(requested_vae),
+            actual_loaded_vae or "Automatic",
             payload_width,
             payload_height,
+            face_args.get("ad_tab_enable"),
             face_args.get("ad_use_inpaint_width_height"),
             face_args.get("ad_inpaint_width"),
             face_args.get("ad_inpaint_height"),
+            hand_args.get("ad_tab_enable"),
+            hand_args.get("ad_use_inpaint_width_height"),
+            hand_args.get("ad_inpaint_width"),
+            hand_args.get("ad_inpaint_height"),
         )
+        for pass_label, pass_args in (("face", face_args), ("hands", hand_args)):
+            if bool(pass_args.get("ad_use_inpaint_width_height")) and (
+                int(pass_args.get("ad_inpaint_width") or payload_width) != payload_width
+                or int(pass_args.get("ad_inpaint_height") or payload_height) != payload_height
+            ):
+                logger.warning(
+                    "[adetailer/inpaint-resolution] %s pass uses explicit inpaint size %sx%s against source %sx%s",
+                    pass_label,
+                    pass_args.get("ad_inpaint_width"),
+                    pass_args.get("ad_inpaint_height"),
+                    payload_width,
+                    payload_height,
+                )
 
         # Create progress callback that reports to controller
         def on_adetailer_progress(percent: float, eta: float | None, current_step: int | None = None, total_steps: int | None = None) -> None:
@@ -3239,13 +3277,32 @@ class Pipeline:
 
         # Call adetailer endpoint (internally routes to img2img with ADETAILER_RETRY_POLICY)
         stage_start = time.monotonic()
-        response = self._generate_images_with_progress(
-            "adetailer",
-            payload,
-            poll_interval=0.5,
-            progress_callback=on_adetailer_progress,
-            stage_label="adetailer",
-        )
+        try:
+            response = self._generate_images_with_progress(
+                "adetailer",
+                payload,
+                poll_interval=0.5,
+                progress_callback=on_adetailer_progress,
+                stage_label="adetailer",
+            )
+        except Exception:
+            logger.error(
+                "[adetailer/diagnostics] request failed | requested_model=%s requested_vae=%s normalized_vae=%s actual_webui_vae=%s width=%s height=%s face_use_inpaint_wh=%s face_inpaint=%sx%s hands_use_inpaint_wh=%s hands_inpaint=%sx%s",
+                requested_model or "",
+                requested_vae or "",
+                self._normalize_vae_name(requested_vae),
+                actual_loaded_vae or "Automatic",
+                payload_width,
+                payload_height,
+                face_args.get("ad_use_inpaint_width_height"),
+                face_args.get("ad_inpaint_width"),
+                face_args.get("ad_inpaint_height"),
+                hand_args.get("ad_use_inpaint_width_height"),
+                hand_args.get("ad_inpaint_width"),
+                hand_args.get("ad_inpaint_height"),
+                exc_info=True,
+            )
+            raise
         stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
         
         # Extract actual seed from response

@@ -227,6 +227,8 @@ Why third:
 
 #### 5.4 `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 
+Status: Completed 2026-03-25
+
 #### 5.5 `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
 
 #### 5.6 `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
@@ -297,7 +299,6 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-1. `PR-UX-267`
 1. `PR-UX-268`
 1. `PR-UX-269`
 
@@ -313,7 +314,6 @@ Why this fast-track works:
 ## 5. Master Ordered List
 
 1. close image output-route regression
-1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
 1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
 1. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`

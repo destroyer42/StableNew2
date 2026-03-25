@@ -813,7 +813,8 @@ Priority note:
   20. treat `PR-UX-265` as completed
   21. treat `PR-UX-266` as completed
   22. treat `PR-UX-271` as completed
-  23. begin `PR-UX-267`
+  23. treat `PR-UX-267` as completed
+  24. begin `PR-UX-268`
 
 Planned rollout:
 
@@ -839,6 +840,9 @@ Planned rollout:
   Completed 2026-03-24
 
 - `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
+  Completed 2026-03-25
+
+- `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
   Completed 2026-03-25
 
 - `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`

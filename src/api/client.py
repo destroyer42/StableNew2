@@ -650,6 +650,7 @@ class SDWebUIClient:
                     reason=str(last_exception),
                     original_exception=last_exception,
                 )
+            raise last_exception
 
         return None
 
@@ -1330,6 +1331,31 @@ class SDWebUIClient:
             error=GenerateError(code=code, message=message, stage=stage, details=details),
         )
 
+    def _describe_http_error(
+        self,
+        exc: requests.HTTPError,
+        diagnostics: dict[str, Any] | None,
+    ) -> str:
+        summary = diagnostics.get("request_summary") if isinstance(diagnostics, dict) else None
+        response_snippet = summary.get("response_snippet") if isinstance(summary, dict) else None
+        if isinstance(response_snippet, str) and response_snippet:
+            try:
+                parsed = json.loads(response_snippet)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                error_name = str(parsed.get("error") or "").strip()
+                error_detail = str(
+                    parsed.get("errors") or parsed.get("detail") or parsed.get("body") or ""
+                ).strip()
+                if error_name and error_detail:
+                    return f"{error_name}: {error_detail}"
+                if error_name:
+                    return error_name
+                if error_detail:
+                    return error_detail
+        return str(exc)
+
     def generate_images(
         self,
         *,
@@ -1370,6 +1396,15 @@ class SDWebUIClient:
                 stage_normalized,
                 str(exc),
                 GenerateErrorCode.CONNECTION,
+                details=details,
+            )
+        except requests.HTTPError as exc:
+            diag = getattr(exc, "diagnostics_context", None)
+            details = {"diagnostics": diag} if diag else None
+            return self._generate_error_outcome(
+                stage_normalized,
+                self._describe_http_error(exc, diag if isinstance(diag, dict) else None),
+                GenerateErrorCode.UNKNOWN,
                 details=details,
             )
         except requests.RequestException as exc:

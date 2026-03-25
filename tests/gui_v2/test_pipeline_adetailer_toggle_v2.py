@@ -74,6 +74,7 @@ def test_pipeline_adetailer_toggle_controls_stage_card_visibility(tk_root) -> No
 
     sidebar = pipeline_tab.sidebar
     ad_card = pipeline_tab.stage_cards_panel.adetailer_card
+    tk_root.update_idletasks()
 
     # PR-DEFAULT-ADETAILER: Card should be visible by default
     assert ad_card.winfo_ismapped(), "ADetailer card should be visible by default"

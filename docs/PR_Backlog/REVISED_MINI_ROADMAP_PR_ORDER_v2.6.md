@@ -154,6 +154,8 @@ Follow-on note:
 
 #### 4.3 `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 
+Status: Completed 2026-03-25
+
 #### 4.4 `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
 
 #### 4.5 `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
@@ -174,8 +176,8 @@ If you want the highest practical value fastest, prioritize this shorter path:
 1. close output-route regression
 2. `PR-UX-265`
 3. `PR-UX-266`
-4. `PR-UX-267`
-5. `PR-UX-268`
+4. `PR-UX-268`
+5. `PR-UX-269`
 
 This path delivers:
 
@@ -190,7 +192,6 @@ This path delivers:
 1. close image output-route regression
 1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
 1. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
 1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
 1. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`

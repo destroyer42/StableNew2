@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from src.gui.help_text.stage_setting_help_v2 import UPSCALE_SETTING_HELP
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
@@ -39,9 +40,8 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         self.sampler_var = tk.StringVar(value="Euler a")
         self.scheduler_var = tk.StringVar(value="normal")
 
-        ttk.Label(parent, text="Upscaler", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", padx=(0, 4)
-        )
+        upscaler_label = ttk.Label(parent, text="Upscaler", style=BODY_LABEL_STYLE)
+        upscaler_label.grid(row=0, column=0, sticky="w", padx=(0, 4))
         self.upscaler_combo = ttk.Combobox(
             parent,
             textvariable=self.upscaler_var,
@@ -51,23 +51,34 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.upscaler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-
-        ttk.Label(parent, text="Mode", style=BODY_LABEL_STYLE).grid(
-            row=0, column=2, sticky="w", padx=(0, 4)
+        self._attach_setting_help(
+            "upscaler",
+            UPSCALE_SETTING_HELP["upscaler"],
+            upscaler_label,
+            self.upscaler_combo,
         )
-        ttk.Combobox(
+
+        mode_label = ttk.Label(parent, text="Mode", style=BODY_LABEL_STYLE)
+        mode_label.grid(row=0, column=2, sticky="w", padx=(0, 4))
+        self.mode_combo = ttk.Combobox(
             parent,
             textvariable=self.mode_var,
             values=["single", "batch"],
             state="readonly",
             width=12,
             style="Dark.TCombobox",
-        ).grid(row=0, column=3, sticky="ew")
-
-        ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", pady=(6, 2)
         )
-        ttk.Spinbox(
+        self.mode_combo.grid(row=0, column=3, sticky="ew")
+        self._attach_setting_help(
+            "mode",
+            UPSCALE_SETTING_HELP["mode"],
+            mode_label,
+            self.mode_combo,
+        )
+
+        steps_label = ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE)
+        steps_label.grid(row=1, column=0, sticky="w", pady=(6, 2))
+        self.steps_spin = ttk.Spinbox(
             parent,
             from_=1,
             to=150,
@@ -75,11 +86,17 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             textvariable=self.steps_var,
             width=8,
             style="Dark.TSpinbox",
-        ).grid(row=1, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(parent, text="Denoise", style=BODY_LABEL_STYLE).grid(
-            row=1, column=2, sticky="w", pady=(6, 2)
         )
-        ttk.Spinbox(
+        self.steps_spin.grid(row=1, column=1, sticky="ew", padx=(0, 8))
+        self._attach_setting_help(
+            "steps",
+            UPSCALE_SETTING_HELP["steps"],
+            steps_label,
+            self.steps_spin,
+        )
+        denoise_label = ttk.Label(parent, text="Denoise", style=BODY_LABEL_STYLE)
+        denoise_label.grid(row=1, column=2, sticky="w", pady=(6, 2))
+        self.denoise_spin = ttk.Spinbox(
             parent,
             from_=0.0,
             to=1.0,
@@ -87,11 +104,17 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             textvariable=self.denoise_var,
             width=8,
             style="Dark.TSpinbox",
-        ).grid(row=1, column=3, sticky="ew")
-
-        ttk.Label(parent, text="Scale", style=BODY_LABEL_STYLE).grid(
-            row=2, column=0, sticky="w", pady=(6, 2)
         )
+        self.denoise_spin.grid(row=1, column=3, sticky="ew")
+        self._attach_setting_help(
+            "denoise",
+            UPSCALE_SETTING_HELP["denoise"],
+            denoise_label,
+            self.denoise_spin,
+        )
+
+        scale_label = ttk.Label(parent, text="Scale", style=BODY_LABEL_STYLE)
+        scale_label.grid(row=2, column=0, sticky="w", pady=(6, 2))
         self._scale_spinbox = ttk.Spinbox(
             parent,
             from_=1.0,
@@ -102,10 +125,15 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TSpinbox",
         )
         self._scale_spinbox.grid(row=2, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(parent, text="Tile size", style=BODY_LABEL_STYLE).grid(
-            row=2, column=2, sticky="w", pady=(6, 2)
+        self._attach_setting_help(
+            "scale",
+            UPSCALE_SETTING_HELP["scale"],
+            scale_label,
+            self._scale_spinbox,
         )
-        ttk.Spinbox(
+        tile_size_label = ttk.Label(parent, text="Tile size", style=BODY_LABEL_STYLE)
+        tile_size_label.grid(row=2, column=2, sticky="w", pady=(6, 2))
+        self.tile_size_spin = ttk.Spinbox(
             parent,
             from_=0,
             to=4096,
@@ -113,12 +141,18 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             textvariable=self.tile_size_var,
             width=8,
             style="Dark.TSpinbox",
-        ).grid(row=2, column=3, sticky="ew")
+        )
+        self.tile_size_spin.grid(row=2, column=3, sticky="ew")
+        self._attach_setting_help(
+            "tile_size",
+            UPSCALE_SETTING_HELP["tile_size"],
+            tile_size_label,
+            self.tile_size_spin,
+        )
 
         # BUGFIX: Add sampler and scheduler fields for upscale
-        ttk.Label(parent, text="Sampler", style=BODY_LABEL_STYLE).grid(
-            row=3, column=0, sticky="w", pady=(6, 2)
-        )
+        sampler_label = ttk.Label(parent, text="Sampler", style=BODY_LABEL_STYLE)
+        sampler_label.grid(row=3, column=0, sticky="w", pady=(6, 2))
         self.sampler_combo = ttk.Combobox(
             parent,
             textvariable=self.sampler_var,
@@ -128,10 +162,15 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.sampler_combo.grid(row=3, column=1, sticky="ew", padx=(0, 8))
-        
-        ttk.Label(parent, text="Scheduler", style=BODY_LABEL_STYLE).grid(
-            row=3, column=2, sticky="w", pady=(6, 2)
+        self._attach_setting_help(
+            "sampler",
+            UPSCALE_SETTING_HELP["sampler"],
+            sampler_label,
+            self.sampler_combo,
         )
+        
+        scheduler_label = ttk.Label(parent, text="Scheduler", style=BODY_LABEL_STYLE)
+        scheduler_label.grid(row=3, column=2, sticky="w", pady=(6, 2))
         self.scheduler_combo = ttk.Combobox(
             parent,
             textvariable=self.scheduler_var,
@@ -141,18 +180,30 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.scheduler_combo.grid(row=3, column=3, sticky="ew")
+        self._attach_setting_help(
+            "scheduler",
+            UPSCALE_SETTING_HELP["scheduler"],
+            scheduler_label,
+            self.scheduler_combo,
+        )
 
         # Face restore row with checkbox and method dropdown
         face_restore_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         face_restore_frame.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(6, 0))
         
-        ttk.Checkbutton(
+        face_restore_check = ttk.Checkbutton(
             face_restore_frame,
             text="Face restore",
             variable=self.face_restore_var,
             command=self._on_face_restore_toggle,
             style="Dark.TCheckbutton",
-        ).pack(side="left")
+        )
+        face_restore_check.pack(side="left")
+        self._attach_setting_help(
+            "face_restore",
+            UPSCALE_SETTING_HELP["face_restore"],
+            face_restore_check,
+        )
         
         self.face_restore_method_combo = ttk.Combobox(
             face_restore_frame,
@@ -163,17 +214,27 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.face_restore_method_combo.pack(side="left", padx=(8, 0))
+        self._attach_setting_help(
+            "face_restore_method",
+            UPSCALE_SETTING_HELP["face_restore_method"],
+            self.face_restore_method_combo,
+        )
 
         # Final dimensions display
-        ttk.Label(parent, text="Final size", style=BODY_LABEL_STYLE).grid(
-            row=5, column=0, sticky="w", pady=(6, 2)
-        )
+        final_size_label = ttk.Label(parent, text="Final size", style=BODY_LABEL_STYLE)
+        final_size_label.grid(row=5, column=0, sticky="w", pady=(6, 2))
         self.final_dimensions_label = ttk.Label(
             parent,
             text=self._compute_final_size_text(),
             style="Dark.TLabel",
         )
         self.final_dimensions_label.grid(row=5, column=1, columnspan=3, sticky="w", pady=(6, 2))
+        self._attach_setting_help(
+            "final_size",
+            UPSCALE_SETTING_HELP["final_size"],
+            final_size_label,
+            self.final_dimensions_label,
+        )
 
         for col in range(4):
             parent.columnconfigure(col, weight=1 if col in (1, 3) else 0)

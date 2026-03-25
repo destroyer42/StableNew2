@@ -5,6 +5,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, cast
 
+from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
 from src.state.output_routing import (
@@ -44,6 +45,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._workflow_map: dict[str, dict[str, Any]] = {}
         self._last_folder = ""
         self._source_bundle: dict[str, Any] | None = None
+        self._setting_tooltips: dict[str, Any] = {}
 
         defaults = self._load_defaults()
         self.workflow_var = tk.StringVar(value=str(defaults.get("workflow_id") or ""))
@@ -148,12 +150,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "Workflow",
             combo=True,
             variable=self.workflow_var,
+            help_key="workflow",
             ),
         )
         ttk.Label(body, textvariable=self.workflow_detail_var, style="Muted.TLabel", wraplength=640, justify="left").grid(
             row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
         )
-        self._add_labeled_entry(body, 1, "End Anchor", variable=self.end_anchor_var)
+        self._add_labeled_entry(
+            body,
+            1,
+            "End Anchor",
+            variable=self.end_anchor_var,
+            help_key="end_anchor",
+        )
         ttk.Button(body, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor).grid(
             row=1, column=2, sticky="ew", padx=(6, 0)
         )
@@ -165,6 +174,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             variable=self.mid_anchors_var,
             width=60,
             helper="Optional, separated by ';'",
+            help_key="mid_anchors",
         )
         ttk.Button(body, text="Browse...", style="Dark.TButton", command=self._on_browse_mid_anchors).grid(
             row=2, column=2, sticky="ew", padx=(6, 0)
@@ -177,6 +187,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             combo=True,
             variable=self.motion_profile_var,
             values=_MOTION_PROFILES,
+            help_key="motion",
         )
         self._add_labeled_entry(
             body,
@@ -185,6 +196,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             combo=True,
             variable=self.output_route_var,
             values=_OUTPUT_ROUTES,
+            help_key="output_route",
         )
         self.workflow_help_panel = ActionExplainerPanel(
             body,
@@ -202,9 +214,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.workflow_help_panel.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(8, 6))
 
-        ttk.Label(body, text="Prompt", style="Dark.TLabel").grid(
-            row=6, column=0, sticky="nw", padx=(0, 8), pady=(8, 6)
-        )
+        prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
+        prompt_label.grid(row=6, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
         self.prompt_text = tk.Text(
             body,
             height=5,
@@ -214,10 +225,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             insertbackground="#f2f2f2",
         )
         self.prompt_text.grid(row=6, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
-
-        ttk.Label(body, text="Negative", style="Dark.TLabel").grid(
-            row=7, column=0, sticky="nw", padx=(0, 8), pady=(0, 6)
+        self._attach_setting_help(
+            "prompt",
+            VIDEO_WORKFLOW_SETTING_HELP["prompt"],
+            prompt_label,
+            self.prompt_text,
         )
+
+        negative_label = ttk.Label(body, text="Negative", style="Dark.TLabel")
+        negative_label.grid(row=7, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
         self.negative_prompt_text = tk.Text(
             body,
             height=4,
@@ -227,6 +243,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             insertbackground="#f2f2f2",
         )
         self.negative_prompt_text.grid(row=7, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
+        self._attach_setting_help(
+            "negative",
+            VIDEO_WORKFLOW_SETTING_HELP["negative"],
+            negative_label,
+            self.negative_prompt_text,
+        )
 
         submit_frame = ttk.Frame(body, style="Panel.TFrame")
         submit_frame.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(10, 0))
@@ -253,10 +275,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         values: tuple[str, ...] | list[str] = (),
         width: int = 40,
         helper: str = "",
+        help_key: str | None = None,
     ) -> ttk.Combobox | ttk.Entry:
-        ttk.Label(parent, text=label, style="Dark.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
+        label_widget = ttk.Label(parent, text=label, style="Dark.TLabel")
+        label_widget.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         widget: ttk.Combobox | ttk.Entry
         if combo:
             widget = ttk.Combobox(
@@ -270,11 +292,22 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             widget = ttk.Entry(parent, textvariable=variable, style="Dark.TEntry", width=width)
         widget.grid(row=row, column=1, sticky="ew", pady=(0, 6))
+        if help_key:
+            self._attach_setting_help(help_key, VIDEO_WORKFLOW_SETTING_HELP[help_key], label_widget, widget)
         if helper:
             ttk.Label(parent, text=helper, style="Muted.TLabel").grid(
                 row=row, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
             )
         return widget
+
+    def _attach_setting_help(self, key: str, text: str, *widgets: tk.Widget | None) -> None:
+        live_widgets = [widget for widget in widgets if widget is not None]
+        if not live_widgets:
+            return
+        primary = live_widgets[0]
+        self._setting_tooltips[key] = attach_tooltip(primary, text)
+        for widget in live_widgets[1:]:
+            attach_tooltip(widget, text)
 
     def _refresh_workflow_choices(self) -> None:
         controller = getattr(self, "app_controller", None)

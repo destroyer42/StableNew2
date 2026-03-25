@@ -131,6 +131,8 @@ Completion record:
 
 ### PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions
 
+Status: Completed 2026-03-25
+
 Purpose:
 
 - expand the useful hover-help model seen in the ADetailer settings card across
@@ -160,6 +162,10 @@ Primary file targets:
 Execution gate:
 
 - users can hover key settings and understand what they do without leaving the app
+
+Completion record:
+
+- `docs/CompletedPR/PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions.md`
 
 ### PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used
 

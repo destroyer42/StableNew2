@@ -7,6 +7,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.gui.help_text.stage_setting_help_v2 import SVD_SETTING_HELP
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
@@ -133,6 +134,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._recent_runs_by_item: dict[str, dict[str, Any]] = {}
         self._recent_selected_item: str | None = None
         self._applied_runtime_defaults = False
+        self._setting_tooltips: dict[str, Any] = {}
 
         model_options = self._get_model_options()
         preferred_model = get_default_svd_model_id()
@@ -294,73 +296,162 @@ class SVDTabFrameV2(ttk.Frame):
         settings.columnconfigure(1, weight=1)
 
         row = 0
-        self.preset_combo = self._add_combo(settings, row, "Preset", self.preset_var, list(_SVD_PRESETS.keys()))
+        self.preset_combo = self._add_combo(
+            settings,
+            row,
+            "Preset",
+            self.preset_var,
+            list(_SVD_PRESETS.keys()),
+            help_key="preset",
+        )
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_selected)
         row += 1
-        self.model_combo = self._add_combo(settings, row, "Model", self.model_var, model_options)
-        row += 1
-        self._add_spinbox(settings, row, "Frames", self.frames_var, from_=1, to=64)
-        row += 1
-        self._add_spinbox(settings, row, "FPS", self.fps_var, from_=1, to=30)
-        row += 1
-        self._add_spinbox(settings, row, "Motion bucket", self.motion_bucket_var, from_=0, to=255)
-        row += 1
-        self._add_spinbox(settings, row, "Noise aug", self.noise_aug_var, from_=0.0, to=1.0, increment=0.01)
-        row += 1
-        self._add_spinbox(settings, row, "Inference steps", self.inference_steps_var, from_=1, to=100)
-        row += 1
-
-        ttk.Label(settings, text="Seed", style="Dark.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
-        ttk.Entry(settings, textvariable=self.seed_var, style="Dark.TEntry", width=14).grid(
-            row=row, column=1, sticky="ew", pady=(0, 6)
+        self.model_combo = self._add_combo(
+            settings,
+            row,
+            "Model",
+            self.model_var,
+            model_options,
+            help_key="model",
         )
         row += 1
+        self._add_spinbox(settings, row, "Frames", self.frames_var, from_=1, to=64, help_key="frames")
+        row += 1
+        self._add_spinbox(settings, row, "FPS", self.fps_var, from_=1, to=30, help_key="fps")
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "Motion bucket",
+            self.motion_bucket_var,
+            from_=0,
+            to=255,
+            help_key="motion_bucket",
+        )
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "Noise aug",
+            self.noise_aug_var,
+            from_=0.0,
+            to=1.0,
+            increment=0.01,
+            help_key="noise_aug",
+        )
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "Inference steps",
+            self.inference_steps_var,
+            from_=1,
+            to=100,
+            help_key="inference_steps",
+        )
+        row += 1
 
-        self._add_combo(settings, row, "Target size", self.target_preset_var, list(_TARGET_PRESETS.keys()))
-        row += 1
-        self._add_combo(settings, row, "Resize mode", self.resize_mode_var, list(_RESIZE_MODES))
-        row += 1
-        self._add_combo(settings, row, "Output", self.output_format_var, list(_OUTPUT_FORMATS))
-        row += 1
-        self._add_combo(settings, row, "Route", self.output_route_var, list(_SVD_OUTPUT_ROUTES))
-        row += 1
-        self._add_spinbox(settings, row, "Decode chunk", self.decode_chunk_size_var, from_=1, to=16)
+        seed_label = ttk.Label(settings, text="Seed", style="Dark.TLabel")
+        seed_label.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.seed_entry = ttk.Entry(settings, textvariable=self.seed_var, style="Dark.TEntry", width=14)
+        self.seed_entry.grid(row=row, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help("seed", SVD_SETTING_HELP["seed"], seed_label, self.seed_entry)
         row += 1
 
-        ttk.Checkbutton(
+        self._add_combo(
+            settings,
+            row,
+            "Target size",
+            self.target_preset_var,
+            list(_TARGET_PRESETS.keys()),
+            help_key="target_size",
+        )
+        row += 1
+        self._add_combo(
+            settings,
+            row,
+            "Resize mode",
+            self.resize_mode_var,
+            list(_RESIZE_MODES),
+            help_key="resize_mode",
+        )
+        row += 1
+        self._add_combo(
+            settings,
+            row,
+            "Output",
+            self.output_format_var,
+            list(_OUTPUT_FORMATS),
+            help_key="output",
+        )
+        row += 1
+        self._add_combo(
+            settings,
+            row,
+            "Route",
+            self.output_route_var,
+            list(_SVD_OUTPUT_ROUTES),
+            help_key="route",
+        )
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "Decode chunk",
+            self.decode_chunk_size_var,
+            from_=1,
+            to=16,
+            help_key="decode_chunk",
+        )
+        row += 1
+
+        save_frames_check = ttk.Checkbutton(
             settings,
             text="Save frames",
             variable=self.save_frames_var,
             style="Dark.TCheckbutton",
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        )
+        save_frames_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self._attach_setting_help("save_frames", SVD_SETTING_HELP["save_frames"], save_frames_check)
         row += 1
-        ttk.Checkbutton(
+        cpu_offload_check = ttk.Checkbutton(
             settings,
             text="CPU offload",
             variable=self.cpu_offload_var,
             style="Dark.TCheckbutton",
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        )
+        cpu_offload_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self._attach_setting_help("cpu_offload", SVD_SETTING_HELP["cpu_offload"], cpu_offload_check)
         row += 1
-        ttk.Checkbutton(
+        forward_chunking_check = ttk.Checkbutton(
             settings,
             text="Forward chunking",
             variable=self.forward_chunking_var,
             style="Dark.TCheckbutton",
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        )
+        forward_chunking_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self._attach_setting_help(
+            "forward_chunking",
+            SVD_SETTING_HELP["forward_chunking"],
+            forward_chunking_check,
+        )
         row += 1
-        ttk.Checkbutton(
+        local_files_check = ttk.Checkbutton(
             settings,
             text="Local files only",
             variable=self.local_files_only_var,
             style="Dark.TCheckbutton",
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        )
+        local_files_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        self._attach_setting_help(
+            "local_files_only",
+            SVD_SETTING_HELP["local_files_only"],
+            local_files_check,
+        )
         row += 1
 
-        ttk.Label(settings, text="Cache dir", style="Dark.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
+        cache_label = ttk.Label(settings, text="Cache dir", style="Dark.TLabel")
+        cache_label.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         cache_frame = ttk.Frame(settings, style="Panel.TFrame")
         cache_frame.grid(row=row, column=1, sticky="ew", pady=(0, 6))
         cache_frame.columnconfigure(0, weight=1)
@@ -373,16 +464,26 @@ class SVDTabFrameV2(ttk.Frame):
             style="Dark.TButton",
             command=self._on_browse_cache_dir,
         ).grid(row=0, column=1, sticky="e")
+        self._attach_setting_help("cache_dir", SVD_SETTING_HELP["cache_dir"], cache_label, self.cache_entry)
         row += 1
 
-        ttk.Checkbutton(
+        face_cleanup_check = ttk.Checkbutton(
             settings,
             text="Face cleanup",
             variable=self.face_restore_enabled_var,
             style="Dark.TCheckbutton",
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        )
+        face_cleanup_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self._attach_setting_help("face_cleanup", SVD_SETTING_HELP["face_cleanup"], face_cleanup_check)
         row += 1
-        self._add_combo(settings, row, "Face method", self.face_restore_method_var, list(_FACE_RESTORE_METHODS))
+        self._add_combo(
+            settings,
+            row,
+            "Face method",
+            self.face_restore_method_var,
+            list(_FACE_RESTORE_METHODS),
+            help_key="face_method",
+        )
         row += 1
         self._add_spinbox(
             settings,
@@ -392,14 +493,21 @@ class SVDTabFrameV2(ttk.Frame):
             from_=0.0,
             to=1.0,
             increment=0.05,
+            help_key="face_fidelity",
         )
         row += 1
-        ttk.Checkbutton(
+        rife_interpolate_check = ttk.Checkbutton(
             settings,
             text="RIFE interpolate",
             variable=self.interpolation_enabled_var,
             style="Dark.TCheckbutton",
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        )
+        rife_interpolate_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self._attach_setting_help(
+            "rife_interpolate",
+            SVD_SETTING_HELP["rife_interpolate"],
+            rife_interpolate_check,
+        )
         row += 1
         self._add_spinbox(
             settings,
@@ -408,17 +516,16 @@ class SVDTabFrameV2(ttk.Frame):
             self.interpolation_multiplier_var,
             from_=2,
             to=4,
+            help_key="rife_multiplier",
         )
         row += 1
-        ttk.Label(settings, text="RIFE exe", style="Dark.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
+        rife_label = ttk.Label(settings, text="RIFE exe", style="Dark.TLabel")
+        rife_label.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         rife_frame = ttk.Frame(settings, style="Panel.TFrame")
         rife_frame.grid(row=row, column=1, sticky="ew", pady=(0, 6))
         rife_frame.columnconfigure(0, weight=1)
-        ttk.Entry(rife_frame, textvariable=self.rife_executable_var, style="Dark.TEntry", width=22).grid(
-            row=0, column=0, sticky="ew", padx=(0, 4)
-        )
+        self.rife_entry = ttk.Entry(rife_frame, textvariable=self.rife_executable_var, style="Dark.TEntry", width=22)
+        self.rife_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         ttk.Button(
             rife_frame,
             text="...",
@@ -426,13 +533,16 @@ class SVDTabFrameV2(ttk.Frame):
             style="Dark.TButton",
             command=self._on_browse_rife_executable,
         ).grid(row=0, column=1, sticky="e")
+        self._attach_setting_help("rife_exe", SVD_SETTING_HELP["rife_exe"], rife_label, self.rife_entry)
         row += 1
-        ttk.Checkbutton(
+        upscale_frames_check = ttk.Checkbutton(
             settings,
             text="Upscale frames",
             variable=self.frame_upscale_enabled_var,
             style="Dark.TCheckbutton",
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        )
+        upscale_frames_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self._attach_setting_help("upscale_frames", SVD_SETTING_HELP["upscale_frames"], upscale_frames_check)
         row += 1
         self._add_spinbox(
             settings,
@@ -442,6 +552,7 @@ class SVDTabFrameV2(ttk.Frame):
             from_=1.0,
             to=4.0,
             increment=0.5,
+            help_key="upscale_frames",
         )
         row += 1
 
@@ -564,10 +675,11 @@ class SVDTabFrameV2(ttk.Frame):
         label: str,
         variable: tk.Variable,
         values: list[str],
+        *,
+        help_key: str | None = None,
     ) -> ttk.Combobox:
-        ttk.Label(parent, text=label, style="Dark.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
+        label_widget = ttk.Label(parent, text=label, style="Dark.TLabel")
+        label_widget.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         combo = ttk.Combobox(
             parent,
             textvariable=variable,
@@ -577,6 +689,8 @@ class SVDTabFrameV2(ttk.Frame):
             width=28,
         )
         combo.grid(row=row, column=1, sticky="ew", pady=(0, 6))
+        if help_key:
+            self._attach_setting_help(help_key, SVD_SETTING_HELP[help_key], label_widget, combo)
         return combo
 
     def _add_spinbox(
@@ -589,11 +703,11 @@ class SVDTabFrameV2(ttk.Frame):
         from_: float,
         to: float,
         increment: float = 1,
+        help_key: str | None = None,
     ) -> None:
-        ttk.Label(parent, text=label, style="Dark.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
-        ttk.Spinbox(
+        label_widget = ttk.Label(parent, text=label, style="Dark.TLabel")
+        label_widget.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        spinbox = ttk.Spinbox(
             parent,
             from_=from_,
             to=to,
@@ -601,7 +715,19 @@ class SVDTabFrameV2(ttk.Frame):
             textvariable=variable,
             width=10,
             style="Dark.TSpinbox",
-        ).grid(row=row, column=1, sticky="ew", pady=(0, 6))
+        )
+        spinbox.grid(row=row, column=1, sticky="ew", pady=(0, 6))
+        if help_key:
+            self._attach_setting_help(help_key, SVD_SETTING_HELP[help_key], label_widget, spinbox)
+
+    def _attach_setting_help(self, key: str, text: str, *widgets: tk.Widget | None) -> None:
+        live_widgets = [widget for widget in widgets if widget is not None]
+        if not live_widgets:
+            return
+        primary = live_widgets[0]
+        self._setting_tooltips[key] = attach_tooltip(primary, text)
+        for widget in live_widgets[1:]:
+            attach_tooltip(widget, text)
 
     def _get_model_options(self) -> list[str]:
         cache_dir = None

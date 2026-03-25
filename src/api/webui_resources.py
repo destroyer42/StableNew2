@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.api.client import SDWebUIClient
+from src.utils.webui_resource_names import normalize_vae_config_value
 
 
 class WebUIResourceType(Enum):
@@ -98,22 +99,29 @@ class WebUIResourceService:
         try:
             api_vaes = self.client.get_vae_models()
             if api_vaes:
-                return [
-                    WebUIResource(
-                        type=WebUIResourceType.VAE,
-                        name=v.get("model_name", v.get("title", "")),
-                        display_name=v.get("title", v.get("model_name", "")),
-                        raw=v,
+                resources: list[WebUIResource] = []
+                for item in api_vaes:
+                    name = normalize_vae_config_value(
+                        item.get("model_name", item.get("title", ""))
                     )
-                    for v in api_vaes
-                ]
+                    if not name:
+                        continue
+                    resources.append(
+                        WebUIResource(
+                            type=WebUIResourceType.VAE,
+                            name=name,
+                            display_name=name,
+                            raw=item,
+                        )
+                    )
+                return resources
         except Exception:
             pass
         vae_dir = self.root_path / "models" / "VAE"
         resources = []
         for file in vae_dir.glob("*"):
             if file.is_file():
-                name = file.stem
+                name = normalize_vae_config_value(file.name)
                 resources.append(
                     WebUIResource(
                         type=WebUIResourceType.VAE,

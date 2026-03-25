@@ -3,12 +3,12 @@ from __future__ import annotations
 import re
 import tkinter as tk
 from collections.abc import Iterable, Sequence
-from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
 from src.api.webui_resource_service import CANONICAL_WEBUI_RESOURCE_KEYS, normalize_resource_map
 from src.utils.config import ConfigManager
+from src.utils.webui_resource_names import normalize_vae_config_value, strip_webui_resource_suffix
 
 
 class DropdownLoader:
@@ -24,23 +24,11 @@ class DropdownLoader:
 
     @staticmethod
     def normalize_model_label(raw: str) -> str:
-        label = str(raw or "").strip()
-        if not label:
-            return ""
-        cleaned = DropdownLoader._MODEL_HASH_PATTERN.sub("", label).strip()
-        return cleaned
+        return strip_webui_resource_suffix(raw)
 
     @staticmethod
     def normalize_vae_label(raw: str) -> str:
-        label = str(raw or "").strip()
-        if not label:
-            return ""
-        cleaned = DropdownLoader._MODEL_HASH_PATTERN.sub("", label).strip()
-        try:
-            stem = Path(cleaned).stem
-        except Exception:
-            stem = cleaned
-        return stem or cleaned
+        return normalize_vae_config_value(raw)
 
     def load_dropdowns(
         self,

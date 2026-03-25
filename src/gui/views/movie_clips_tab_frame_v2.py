@@ -12,6 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
+from src.gui.help_text.stage_setting_help_v2 import MOVIE_CLIPS_SETTING_HELP
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.movie_clips_contract import (
@@ -66,6 +67,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._image_paths: list[Path] = []
         self._source_bundle: dict[str, Any] | None = None
         self._build_status: str = ""
+        self._setting_tooltips: dict[str, Any] = {}
 
         # Tk variables
         self.source_mode_var = tk.StringVar(value=SOURCE_MODE_FOLDER)
@@ -263,10 +265,9 @@ class MovieClipsTabFrameV2(ttk.Frame):
         )
         self.workflow_help_panel.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
-        ttk.Label(settings_frame, text="FPS", style="Dark.TLabel", anchor="w").grid(
-            row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
-        ttk.Spinbox(
+        fps_label = ttk.Label(settings_frame, text="FPS", style="Dark.TLabel", anchor="w")
+        fps_label.grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.fps_spin = ttk.Spinbox(
             settings_frame,
             from_=1,
             to=120,
@@ -274,43 +275,63 @@ class MovieClipsTabFrameV2(ttk.Frame):
             textvariable=self.fps_var,
             width=6,
             style="Dark.TSpinbox",
-        ).grid(row=1, column=1, sticky="ew", pady=(0, 6))
-
-        ttk.Label(settings_frame, text="Codec", style="Dark.TLabel", anchor="w").grid(
-            row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
-        ttk.Combobox(
+        self.fps_spin.grid(row=1, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help("fps", MOVIE_CLIPS_SETTING_HELP["fps"], fps_label, self.fps_spin)
+
+        codec_label = ttk.Label(settings_frame, text="Codec", style="Dark.TLabel", anchor="w")
+        codec_label.grid(row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.codec_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.codec_var,
             values=CODEC_OPTIONS,
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=2, column=1, sticky="ew", pady=(0, 6))
-
-        ttk.Label(settings_frame, text="Quality", style="Dark.TLabel", anchor="w").grid(
-            row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
-        ttk.Combobox(
+        self.codec_combo.grid(row=2, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help(
+            "codec",
+            MOVIE_CLIPS_SETTING_HELP["codec"],
+            codec_label,
+            self.codec_combo,
+        )
+
+        quality_label = ttk.Label(settings_frame, text="Quality", style="Dark.TLabel", anchor="w")
+        quality_label.grid(row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.quality_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.quality_var,
             values=QUALITY_OPTIONS,
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=3, column=1, sticky="ew", pady=(0, 6))
-
-        ttk.Label(settings_frame, text="Mode", style="Dark.TLabel", anchor="w").grid(
-            row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 12)
         )
-        ttk.Combobox(
+        self.quality_combo.grid(row=3, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help(
+            "quality",
+            MOVIE_CLIPS_SETTING_HELP["quality"],
+            quality_label,
+            self.quality_combo,
+        )
+
+        mode_label = ttk.Label(settings_frame, text="Mode", style="Dark.TLabel", anchor="w")
+        mode_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 12))
+        self.mode_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.mode_var,
             values=MODE_OPTIONS,
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=4, column=1, sticky="ew", pady=(0, 12))
+        )
+        self.mode_combo.grid(row=4, column=1, sticky="ew", pady=(0, 12))
+        self._attach_setting_help(
+            "mode",
+            MOVIE_CLIPS_SETTING_HELP["mode"],
+            mode_label,
+            self.mode_combo,
+        )
 
         ttk.Separator(settings_frame, orient="horizontal").grid(
             row=5, column=0, columnspan=2, sticky="ew", pady=(0, 10)
@@ -336,6 +357,15 @@ class MovieClipsTabFrameV2(ttk.Frame):
             justify="center",
         )
         self.build_status_label.grid(row=7, column=0, columnspan=2, sticky="ew")
+
+    def _attach_setting_help(self, key: str, text: str, *widgets: tk.Widget | None) -> None:
+        live_widgets = [widget for widget in widgets if widget is not None]
+        if not live_widgets:
+            return
+        primary = live_widgets[0]
+        self._setting_tooltips[key] = attach_tooltip(primary, text)
+        for widget in live_widgets[1:]:
+            attach_tooltip(widget, text)
 
     # ------------------------------------------------------------------
     # Event handlers
