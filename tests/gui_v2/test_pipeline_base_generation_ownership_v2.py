@@ -82,3 +82,17 @@ def test_base_generation_steps_and_cfg_do_not_overlap_resolution_row(gui_app_fac
 
     assert steps_row == cfg_row
     assert steps_row < width_row
+
+
+@pytest.mark.gui
+def test_base_generation_applies_minimum_column_width_rules(gui_app_factory) -> None:
+    app = gui_app_factory()
+    base_generation = app.pipeline_tab.sidebar.base_generation_panel
+
+    primary = int(base_generation.grid_columnconfigure(1)["minsize"])
+    secondary = int(base_generation.grid_columnconfigure(3)["minsize"])
+    labels = int(base_generation.grid_columnconfigure(0)["minsize"])
+
+    assert labels >= base_generation.LABEL_COLUMN_MIN_WIDTH
+    assert primary >= base_generation.PRIMARY_CONTROL_MIN_WIDTH
+    assert secondary >= base_generation.SECONDARY_CONTROL_MIN_WIDTH

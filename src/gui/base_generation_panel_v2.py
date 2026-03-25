@@ -18,6 +18,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
 
     MIN_DIMENSION = 64
     MAX_DIMENSION = 4096
+    LABEL_COLUMN_MIN_WIDTH = 88
+    PRIMARY_CONTROL_MIN_WIDTH = 180
+    SECONDARY_CONTROL_MIN_WIDTH = 110
 
     def __init__(
         self,
@@ -140,12 +143,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._attach_change_traces()
 
     def _build_body(self, parent: ttk.Frame) -> None:
-        parent.columnconfigure(0, weight=0)
-        parent.columnconfigure(1, weight=1)
-        parent.columnconfigure(2, weight=0)
-        parent.columnconfigure(3, weight=0)
-        parent.columnconfigure(4, weight=0)
-        parent.columnconfigure(5, weight=0)
+        self._configure_layout_columns(parent)
 
         row_idx = 0
         helper = ttk.Label(
@@ -190,27 +188,27 @@ class BaseGenerationPanelV2(BaseStageCardV2):
     def _build_sampler_row(self, parent: ttk.Frame, row_idx: int) -> None:
         sampler_label = ttk.Label(parent, text="Sampler", style=BODY_LABEL_STYLE)
         sampler_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
-        self._sampler_combo.grid(row=row_idx, column=1, sticky="w", padx=(0, 4), pady=(0, 4))
+        self._sampler_combo.grid(row=row_idx, column=1, sticky="ew", padx=(0, 12), pady=(0, 4))
 
         scheduler_values = self._available_schedulers()
         self._scheduler_combo = self._build_combo(parent, self.scheduler_var, scheduler_values)
         scheduler_label = ttk.Label(parent, text="Scheduler", style=BODY_LABEL_STYLE)
         scheduler_label.grid(row=row_idx, column=2, sticky="w", padx=(0, 4), pady=(0, 4))
-        self._scheduler_combo.grid(row=row_idx, column=3, sticky="ew", padx=(0, 16), pady=(0, 4))
+        self._scheduler_combo.grid(row=row_idx, column=3, sticky="ew", padx=(0, 12), pady=(0, 4))
 
         steps_label = ttk.Label(parent, text="Steps", style=BODY_LABEL_STYLE)
         steps_label.grid(row=row_idx + 1, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         self._steps_spin = self._build_spin(
             parent, self.steps_var, from_=1, to=200, increment=1, width=6
         )
-        self._steps_spin.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
+        self._steps_spin.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 12), pady=(0, 4))
 
         cfg_label = ttk.Label(parent, text="CFG", style=BODY_LABEL_STYLE)
         cfg_label.grid(row=row_idx + 1, column=2, sticky="w", padx=(0, 4), pady=(0, 4))
         self._cfg_spin = self._build_spin(
             parent, self.cfg_var, from_=0.0, to=30.0, increment=0.5, width=6
         )
-        self._cfg_spin.grid(row=row_idx + 1, column=3, sticky="ew", pady=(0, 4))
+        self._cfg_spin.grid(row=row_idx + 1, column=3, sticky="ew", padx=(0, 12), pady=(0, 4))
 
     def _build_resolution_row(self, parent: ttk.Frame, row_idx: int) -> None:
         preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
@@ -241,9 +239,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             text="Blank or -1 = random.",
             style=MUTED_LABEL_STYLE,
         )
-        seed_hint.grid(row=row_idx, column=2, sticky="w", pady=(0, 4))
+        seed_hint.grid(row=row_idx, column=2, columnspan=2, sticky="ew", padx=(0, 8), pady=(0, 4))
         seed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_seed)
-        seed_button.grid(row=row_idx, column=3, sticky="w", pady=(0, 4))
+        seed_button.grid(row=row_idx, column=4, sticky="w", pady=(0, 4))
 
         subseed_label = ttk.Label(parent, text="Subseed", style=BODY_LABEL_STYLE)
         subseed_label.grid(row=row_idx + 1, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
@@ -254,20 +252,33 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             text="Blank or -1 = disabled.",
             style=MUTED_LABEL_STYLE,
         )
-        subseed_hint.grid(row=row_idx + 1, column=2, sticky="w", pady=(0, 4))
+        subseed_hint.grid(row=row_idx + 1, column=2, columnspan=2, sticky="ew", padx=(0, 8), pady=(0, 4))
         subseed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_subseed)
-        subseed_button.grid(row=row_idx + 1, column=3, sticky="w", pady=(0, 4))
+        subseed_button.grid(row=row_idx + 1, column=4, sticky="w", pady=(0, 4))
 
         subseed_strength_label = ttk.Label(
             parent, text="Subseed Strength", style=BODY_LABEL_STYLE
         )
-        subseed_strength_label.grid(
-            row=row_idx + 1, column=4, sticky="w", padx=(0, 4), pady=(0, 4)
-        )
+        subseed_strength_label.grid(row=row_idx + 2, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         subseed_strength_entry = ttk.Entry(
             parent, textvariable=self.subseed_strength_var, style="Dark.TEntry"
         )
-        subseed_strength_entry.grid(row=row_idx + 1, column=5, sticky="ew", pady=(0, 4))
+        subseed_strength_entry.grid(
+            row=row_idx + 2,
+            column=1,
+            columnspan=2,
+            sticky="ew",
+            padx=(0, 12),
+            pady=(0, 4),
+        )
+
+    def _configure_layout_columns(self, parent: ttk.Frame) -> None:
+        label_columns = (0, 2, 4)
+        for column in label_columns:
+            parent.columnconfigure(column, weight=0, minsize=self.LABEL_COLUMN_MIN_WIDTH)
+        parent.columnconfigure(1, weight=3, minsize=self.PRIMARY_CONTROL_MIN_WIDTH)
+        parent.columnconfigure(3, weight=2, minsize=self.SECONDARY_CONTROL_MIN_WIDTH)
+        parent.columnconfigure(5, weight=2, minsize=self.SECONDARY_CONTROL_MIN_WIDTH)
 
     def _attach_change_traces(self) -> None:
         for var in (

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Any
+from typing import Any, cast
 
 from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
+from src.gui.enhanced_slider import EnhancedSlider
 from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
@@ -31,7 +32,7 @@ class PipelinePanelV2(ttk.Frame):
         app_state: object = None,
         theme: object = None,
         config_manager: object = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         # Pop GUI-only kwargs that ttk.Frame doesn't accept (sanitization).
         # These kwargs may be passed by tests or GUI wiring; store them on self
@@ -89,6 +90,12 @@ class PipelinePanelV2(ttk.Frame):
         )
         self.config_sweep_widget.pack(fill=tk.X, pady=(8, 8))
 
+        self._lora_controls: dict[str, tuple[tk.BooleanVar, tk.DoubleVar]] = {}
+        self._lora_control_widgets: dict[str, dict[str, object]] = {}
+        self._lora_section = ttk.LabelFrame(self, text="Runtime LoRAs")
+        self._lora_section.pack(fill=tk.X, pady=(0, 8))
+        self._refresh_lora_runtime_controls()
+
         # Scrollable frame with stage cards
         self._scroll: ScrollableFrame = ScrollableFrame(self)
         self.body = self._scroll.inner
@@ -113,6 +120,69 @@ class PipelinePanelV2(ttk.Frame):
 
         self._apply_stage_visibility()
         self._bind_app_state()
+
+    def _refresh_lora_runtime_controls(self) -> None:
+        for child in self._lora_section.winfo_children():
+            child.destroy()
+        self._lora_controls.clear()
+        self._lora_control_widgets.clear()
+
+        getter = getattr(self.controller, "get_lora_runtime_settings", None)
+        settings = getter() if callable(getter) else []
+        if not settings:
+            ttk.Label(
+                self._lora_section,
+                text="No runtime LoRAs detected from the active prompt or config.",
+                style=STATUS_LABEL_STYLE,
+            ).pack(anchor=tk.W, padx=6, pady=6)
+            return
+
+        for item in settings:
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            enabled_var = tk.BooleanVar(value=bool(item.get("enabled", True)))
+            strength_var = tk.DoubleVar(value=float(item.get("strength", 1.0) or 1.0))
+
+            row = ttk.Frame(self._lora_section)
+            row.pack(fill=tk.X, padx=6, pady=(4, 6))
+            name_label = ttk.Label(row, text=name, style=STATUS_LABEL_STYLE, wraplength=260, justify="left")
+            name_label.pack(anchor=tk.W)
+
+            controls = ttk.Frame(row)
+            controls.pack(fill=tk.X, pady=(4, 0))
+            def on_enabled_toggle(
+                lora_name: str = name,
+                variable: tk.BooleanVar = enabled_var,
+            ) -> None:
+                self._on_lora_enabled_change(lora_name, variable.get())
+
+            enabled_check = ttk.Checkbutton(
+                controls,
+                text="Enable",
+                variable=enabled_var,
+                command=on_enabled_toggle,
+            )
+            enabled_check.pack(side=tk.LEFT, padx=(0, 8))
+
+            slider = cast(Any, EnhancedSlider)(
+                controls,
+                from_=0.0,
+                to=1.5,
+                variable=strength_var,
+                resolution=0.01,
+                command=lambda value, lora_name=name: self._on_lora_strength_change(lora_name, value),
+                length=150,
+            )
+            slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            self._lora_controls[name] = (enabled_var, strength_var)
+            self._lora_control_widgets[name] = {
+                "frame": row,
+                "enabled_check": enabled_check,
+                "slider": slider,
+                "name_label": name_label,
+            }
 
     def _bind_app_state(self) -> None:
         if not self.app_state:
@@ -306,6 +376,21 @@ class PipelinePanelV2(ttk.Frame):
                 self.run_button.config(state="disabled")
         except Exception:
             pass
+
+    def _on_lora_strength_change(self, lora_name: str, strength: float | str) -> None:
+        updater = getattr(self.controller, "update_lora_runtime_strength", None)
+        if not callable(updater):
+            return
+        try:
+            normalized = round(float(strength), 2)
+        except (TypeError, ValueError):
+            return
+        updater(lora_name, normalized)
+
+    def _on_lora_enabled_change(self, lora_name: str, enabled: bool) -> None:
+        updater = getattr(self.controller, "update_lora_runtime_enabled", None)
+        if callable(updater):
+            updater(lora_name, bool(enabled))
 
     def _on_sweep_change(self) -> None:
         """PR-CORE-E: Handle config sweep changes."""

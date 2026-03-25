@@ -812,7 +812,8 @@ Priority note:
   19. treat `PR-PROMPT-241E` as completed
   20. treat `PR-UX-265` as completed
   21. treat `PR-UX-266` as completed
-  22. begin `PR-UX-271`
+  22. treat `PR-UX-271` as completed
+  23. begin `PR-UX-267`
 
 Planned rollout:
 
@@ -836,6 +837,9 @@ Planned rollout:
 
 - `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
   Completed 2026-03-24
+
+- `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
+  Completed 2026-03-25
 
 - `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
   Completed 2026-03-21

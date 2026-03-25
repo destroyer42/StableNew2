@@ -218,6 +218,8 @@ Why second:
 
 #### 5.3 `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
 
+Status: Completed 2026-03-25
+
 Why third:
 
 - this is a real usability blocker, not cosmetic polish
@@ -295,7 +297,6 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-1. `PR-UX-271`
 1. `PR-UX-267`
 1. `PR-UX-268`
 1. `PR-UX-269`
@@ -312,7 +313,6 @@ Why this fast-track works:
 ## 5. Master Ordered List
 
 1. close image output-route regression
-1. `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
 1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
 1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`

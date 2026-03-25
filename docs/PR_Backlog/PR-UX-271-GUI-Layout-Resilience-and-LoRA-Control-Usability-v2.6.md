@@ -1,6 +1,6 @@
 # PR-UX-271 - GUI Layout Resilience and LoRA Control Usability v2.6
 
-Status: Proposed  
+Status: Completed 2026-03-25  
 Date: 2026-03-22  
 Branch baseline: `feature/video-secondary-motion-pr-236`  
 Applies to: Pipeline tab, base config card, Prompt tab, LoRA controls, resizing behavior, widget minimum sizing

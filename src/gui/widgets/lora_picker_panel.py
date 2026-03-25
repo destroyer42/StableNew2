@@ -15,7 +15,10 @@ import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
+from typing import Any, cast
 
+from src.gui.enhanced_slider import EnhancedSlider
+from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.lora_keyword_dialog import LoRAKeywordDialog
 from src.utils.lora_keyword_detector import detect_lora_keywords
 from src.utils.lora_scanner import get_lora_scanner
@@ -23,19 +26,23 @@ from src.utils.lora_scanner import get_lora_scanner
 
 class LoRAPickerPanel(ttk.Frame):
     """Panel for managing LoRAs with add/remove/strength controls."""
+
+    NAME_WRAP_LENGTH = 280
+    SLIDER_MAX = 1.5
+    SLIDER_RESOLUTION = 0.01
     
     def __init__(
         self,
         parent: tk.Misc,
         on_change_callback: Callable[[], None] | None = None,
         webui_root: str | None = None,
-        **kwargs
+        **kwargs: Any,
     ):
         super().__init__(parent, **kwargs)
         self.on_change_callback = on_change_callback
         self.webui_root = webui_root
         self._lora_entries: list[tuple[str, tk.DoubleVar, ttk.Frame]] = []  # (name, strength_var, frame)
-        
+        self._entry_widgets: dict[str, dict[str, object]] = {}
         # Initialize scanner
         self.scanner = get_lora_scanner(webui_root)
         self._available_loras: list[str] = []
@@ -122,46 +129,69 @@ class LoRAPickerPanel(ttk.Frame):
     
     def _add_lora_entry(self, name: str, strength: float) -> None:
         """Add a LoRA entry widget to the list."""
-        entry_frame = ttk.Frame(self.lora_list_frame, relief="solid", borderwidth=1)
+        entry_frame = ttk.Frame(self.lora_list_frame, relief="solid", borderwidth=1, padding=(6, 4))
         entry_frame.pack(fill="x", padx=2, pady=2)
-        
-        # Name label
-        name_label = ttk.Label(entry_frame, text=name, font=("Segoe UI", 9))
-        name_label.pack(side="left", padx=5)
-        
-        # Strength label
+
+        name_row = ttk.Frame(entry_frame)
+        name_row.pack(fill="x")
+        controls_row = ttk.Frame(entry_frame)
+        controls_row.pack(fill="x", pady=(4, 0))
+
+        name_label = ttk.Label(
+            name_row,
+            text=name,
+            font=("Segoe UI", 9),
+            justify="left",
+            wraplength=self.NAME_WRAP_LENGTH,
+        )
+        name_label.pack(side="left", fill="x", expand=True)
+        attach_tooltip(name_label, name)
+
         strength_var = tk.DoubleVar(value=strength)
-        strength_label = ttk.Label(entry_frame, text=f"{strength:.2f}", width=5)
-        strength_label.pack(side="right", padx=(0, 5))
         
-        # Delete button
-        def on_delete():
+        def on_delete() -> None:
             self._remove_lora_entry(name)
-        ttk.Button(entry_frame, text="X", width=3, command=on_delete).pack(side="right", padx=2)
-        
-        # Keywords button
-        def on_keywords():
+
+        remove_button = ttk.Button(controls_row, text="X", width=3, command=on_delete)
+        remove_button.pack(side="right", padx=(4, 0))
+
+        def on_keywords() -> None:
             self._show_keywords(name)
-        ttk.Button(entry_frame, text="Keywords", command=on_keywords).pack(side="right", padx=2)
-        
-        # Strength slider
-        def on_strength_change(val):
-            strength_label.config(text=f"{float(val):.2f}")
+
+        keywords_button = ttk.Button(controls_row, text="Keywords", command=on_keywords)
+        keywords_button.pack(side="right", padx=(4, 0))
+
+        def on_strength_change(value: float | str) -> None:
+            try:
+                normalized = round(float(value), 2)
+            except (TypeError, ValueError):
+                normalized = round(strength_var.get(), 2)
+            strength_var.set(normalized)
             if self.on_change_callback:
                 self.on_change_callback()
-        
-        slider = ttk.Scale(
-            entry_frame,
+
+        slider = cast(Any, EnhancedSlider)(
+            controls_row,
             from_=0.0,
-            to=1.5,
+            to=self.SLIDER_MAX,
             variable=strength_var,
-            orient="horizontal",
-            command=on_strength_change
+            resolution=self.SLIDER_RESOLUTION,
+            command=on_strength_change,
+            length=180,
         )
-        slider.pack(side="right", fill="x", expand=True, padx=5)
-        
-        # Store entry
+        slider.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
         self._lora_entries.append((name, strength_var, entry_frame))
+        self._entry_widgets[name] = {
+            "frame": entry_frame,
+            "name_row": name_row,
+            "controls_row": controls_row,
+            "name_label": name_label,
+            "strength_var": strength_var,
+            "strength_slider": slider,
+            "keywords_button": keywords_button,
+            "remove_button": remove_button,
+        }
     
     def _remove_lora_entry(self, name: str) -> None:
         """Remove a LoRA entry from the list."""
@@ -169,6 +199,7 @@ class LoRAPickerPanel(ttk.Frame):
             if lora_name == name:
                 frame.destroy()
                 self._lora_entries.pop(i)
+                self._entry_widgets.pop(name, None)
                 if self.on_change_callback:
                     self.on_change_callback()
                 break
@@ -183,6 +214,7 @@ class LoRAPickerPanel(ttk.Frame):
         for _, _, frame in self._lora_entries:
             frame.destroy()
         self._lora_entries.clear()
+        self._entry_widgets.clear()
         
         # Add new
         for name, strength in loras:
@@ -193,6 +225,7 @@ class LoRAPickerPanel(ttk.Frame):
         for _, _, frame in self._lora_entries:
             frame.destroy()
         self._lora_entries.clear()
+        self._entry_widgets.clear()
         
         if self.on_change_callback:
             self.on_change_callback()
