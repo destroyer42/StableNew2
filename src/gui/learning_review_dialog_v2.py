@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from tkinter import ttk
 from typing import Any
 
+from src.gui.theme_v2 import apply_toplevel_theme
 from src.gui_v2.adapters.learning_adapter_v2 import LearningRecordSummary
 from src.learning.learning_record import LearningRecord
 
@@ -25,6 +26,7 @@ class LearningReviewDialogV2(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title("Review Recent Runs")
+        apply_toplevel_theme(self)
         self.controller = controller
         self._rows: list[tuple[LearningRecordSummary, tk.StringVar, tk.StringVar]] = []
         self._build_ui(records or [])

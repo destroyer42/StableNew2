@@ -817,7 +817,9 @@ Priority note:
   24. treat `PR-UX-268` as completed
   25. treat `PR-UX-269` as completed
   26. treat `PR-UX-270` as completed
-  27. begin `PR-UX-272`
+  27. treat `PR-UX-272` as completed
+  28. treat `PR-UX-273` as completed
+  29. begin `PR-UX-274`
 
 Planned rollout:
 
@@ -840,6 +842,12 @@ Planned rollout:
   Completed 2026-03-25
 
 - `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+  Completed 2026-03-25
+
+- `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
+  Completed 2026-03-25
+
+- `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
   Completed 2026-03-25
 
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`

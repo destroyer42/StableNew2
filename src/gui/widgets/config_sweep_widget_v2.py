@@ -96,6 +96,7 @@ class ConfigSweepWidgetV2(ttk.Frame):
             yscrollcommand=scrollbar.set,
             selectmode=tk.SINGLE,
         )
+        theme_mod.style_listbox_widget(self.variant_listbox)
         self.variant_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.variant_listbox.yview)
 
@@ -130,6 +131,7 @@ class ConfigSweepWidgetV2(ttk.Frame):
             relief=tk.SUNKEN,
             borderwidth=1,
         )
+        theme_mod.style_text_widget(self.global_neg_text, elevated=True)
         self.global_neg_text.pack(fill=tk.X, pady=(0, 4))
 
         # Apply global negative toggles per stage
@@ -281,6 +283,7 @@ class ConfigVariantDialog(tk.Toplevel):
         super().__init__(parent)
         self.title(title)
         self.result: dict[str, Any] | None = None
+        theme_mod.apply_toplevel_theme(self)
 
         self.transient(parent)
         self.grab_set()

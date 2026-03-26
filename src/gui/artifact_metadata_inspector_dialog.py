@@ -8,6 +8,8 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
+from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
+
 
 class ArtifactMetadataInspectorDialog(tk.Toplevel):
     """Modal dialog for inspecting normalized and raw metadata payloads."""
@@ -25,6 +27,7 @@ class ArtifactMetadataInspectorDialog(tk.Toplevel):
         self.grab_set()
         self.geometry("860x720")
         self.minsize(720, 560)
+        apply_toplevel_theme(self)
 
         self._payload = dict(inspection_payload or {})
         self._on_refresh = on_refresh
@@ -68,6 +71,7 @@ class ArtifactMetadataInspectorDialog(tk.Toplevel):
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         text = tk.Text(frame, wrap="word", state="disabled")
+        style_text_widget(text, elevated=True)
         text.grid(row=0, column=0, sticky="nsew")
         scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         scroll.grid(row=0, column=1, sticky="ns")

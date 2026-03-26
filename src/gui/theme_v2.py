@@ -50,6 +50,52 @@ SECONDARY_BUTTON_STYLE = design_system.SECONDARY_BUTTON
 GHOST_BUTTON_STYLE = design_system.GHOST_BUTTON
 
 
+def _configure_base_widget_styles(style: ttk.Style) -> None:
+    style.configure("TFrame", background=BACKGROUND_DARK)
+    style.configure(
+        "TLabel",
+        background=BACKGROUND_DARK,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+    )
+    style.configure(
+        "TButton",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        focusthickness=1,
+    )
+    style.map(
+        "TButton",
+        background=[("active", BACKGROUND_DARK), ("disabled", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+    style.configure(
+        "TLabelframe",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        font=(design_system.Typography.FAMILY, design_system.Typography.SM, "bold"),
+    )
+    style.configure("TNotebook", background=BACKGROUND_DARK, borderwidth=0)
+    style.configure(
+        "TNotebook.Tab",
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", BACKGROUND_ELEVATED), ("active", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+
+
 def _configure_global_colors(root: tk.Tk | tk.Toplevel) -> None:
     try:
         root.configure(bg=BACKGROUND_DARK)
@@ -100,6 +146,21 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
 
     style.configure(
+        "TCombobox",
+        fieldbackground=BACKGROUND_ELEVATED,
+        background=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+        arrowcolor=design_system.Colors.TEXT_PRIMARY,
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+        background=[("readonly", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+
+    style.configure(
         "Dark.TCombobox",
         fieldbackground=BACKGROUND_ELEVATED,
         background=BACKGROUND_ELEVATED,
@@ -123,6 +184,18 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
 
     style.configure(
+        "TSpinbox",
+        fieldbackground=BACKGROUND_ELEVATED,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+    )
+    style.map(
+        "TSpinbox",
+        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_MUTED)],
+    )
+
+    style.configure(
         "Dark.TSpinbox",
         fieldbackground=BACKGROUND_ELEVATED,
         foreground=design_system.Colors.TEXT_PRIMARY,
@@ -131,6 +204,27 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     style.map(
         "Dark.TSpinbox",
         fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+    )
+
+    style.configure(
+        "TCheckbutton",
+        background=BACKGROUND_DARK,
+        foreground=design_system.Colors.TEXT_PRIMARY,
+        bordercolor=BORDER_SUBTLE,
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", BACKGROUND_DARK)],
+        foreground=[("disabled", TEXT_MUTED)],
+        indicatorcolor=[
+            ("selected", ACCENT_GOLD),
+            ("alternate", ACCENT_GOLD),
+            ("!selected", TEXT_MUTED),
+        ],
+        indicatorbackground=[
+            ("selected", BACKGROUND_DARK),
+            ("!selected", BACKGROUND_DARK),
+        ],
     )
 
     style.configure(
@@ -284,6 +378,64 @@ def apply_validation_colors(widget: tk.Widget, state: str = "normal") -> None:
         pass
 
 
+def apply_toplevel_theme(window: tk.Tk | tk.Toplevel) -> ttk.Style:
+    style = apply_theme(window)
+    try:
+        window.configure(bg=BACKGROUND_DARK)
+    except Exception:
+        pass
+    return style
+
+
+def style_text_widget(widget: tk.Text, *, elevated: bool = False) -> None:
+    background = BACKGROUND_ELEVATED if elevated else BACKGROUND_DARK
+    try:
+        widget.configure(
+            bg=background,
+            fg=TEXT_PRIMARY,
+            insertbackground=TEXT_PRIMARY,
+            selectbackground=ACCENT_GOLD,
+            selectforeground=TEXT_PRIMARY,
+            highlightbackground=BORDER_SUBTLE,
+            highlightcolor=ACCENT_GOLD_HOVER,
+            highlightthickness=1,
+            relief="solid",
+            borderwidth=1,
+        )
+    except Exception:
+        pass
+
+
+def style_listbox_widget(widget: tk.Listbox, *, elevated: bool = True) -> None:
+    background = BACKGROUND_ELEVATED if elevated else BACKGROUND_DARK
+    try:
+        widget.configure(
+            bg=background,
+            fg=TEXT_PRIMARY,
+            selectbackground=ACCENT_GOLD,
+            selectforeground=TEXT_PRIMARY,
+            highlightbackground=BORDER_SUBTLE,
+            highlightcolor=ACCENT_GOLD_HOVER,
+            highlightthickness=1,
+            relief="solid",
+            borderwidth=1,
+        )
+    except Exception:
+        pass
+
+
+def style_canvas_widget(widget: tk.Canvas, *, elevated: bool = False) -> None:
+    background = BACKGROUND_ELEVATED if elevated else BACKGROUND_DARK
+    try:
+        widget.configure(
+            bg=background,
+            highlightbackground=BORDER_SUBTLE,
+            highlightcolor=ACCENT_GOLD_HOVER,
+        )
+    except Exception:
+        pass
+
+
 def init_theme(root: tk.Tk | tk.Toplevel) -> ttk.Style:
     style = ttk.Style(master=root)
     for candidate in ("alt", "clam"):
@@ -295,6 +447,7 @@ def init_theme(root: tk.Tk | tk.Toplevel) -> ttk.Style:
     _configure_global_colors(root)
     _configure_fonts(root)
     design_system.apply_design_system(style)
+    _configure_base_widget_styles(style)
     style.configure("Panel.TFrame", background=BACKGROUND_ELEVATED)
     _configure_entry_styles(style)
     _configure_treeview_styles(style)
@@ -375,6 +528,10 @@ __all__ = [
     "EXPANDER_ICON_EXPANDED",
     "get_validation_palette",
     "apply_validation_colors",
+    "apply_toplevel_theme",
+    "style_text_widget",
+    "style_listbox_widget",
+    "style_canvas_widget",
 ]
 STATUS_LABEL_STYLE = "Status.TLabel"
 STATUS_STRONG_LABEL_STYLE = "StatusStrong.TLabel"

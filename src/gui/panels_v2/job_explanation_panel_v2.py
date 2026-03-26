@@ -12,6 +12,8 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
+from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +45,7 @@ class JobExplanationPanelV2(tk.Toplevel):
         self.geometry("860x620")
         self.minsize(640, 480)
         self._protocol = self.protocol("WM_DELETE_WINDOW", self.destroy)
+        apply_toplevel_theme(self)
 
         container = ttk.Frame(self, padding=12)
         container.pack(fill=tk.BOTH, expand=True)
@@ -86,6 +89,7 @@ class JobExplanationPanelV2(tk.Toplevel):
         metadata_frame = ttk.LabelFrame(container, text="Config Snapshot")
         metadata_frame.pack(fill=tk.BOTH, expand=True)
         self._metadata_text = tk.Text(metadata_frame, height=6, wrap=tk.NONE)
+        style_text_widget(self._metadata_text, elevated=True)
         self._metadata_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         self._metadata_text.configure(state=tk.DISABLED)
 

@@ -87,6 +87,8 @@ Add targeted tests/checks and a reusable checklist so future panels stay aligned
 
 ### PR-UX-272-GUI-Audit-and-Consistency-Inventory
 
+Status: Completed 2026-03-25
+
 Purpose:
 
 - perform a structured inventory of all major GUI panels and identify dark-mode,
@@ -120,7 +122,14 @@ Execution gate:
 - there is one structured audit artifact identifying which GUI surfaces still fail
   dark-mode or layout expectations
 
+Completion record:
+
+- `docs/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
+- `docs/CompletedPR/PR-UX-272-GUI-Audit-and-Consistency-Inventory.md`
+
 ### PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline
+
+Status: Completed 2026-03-25
 
 Purpose:
 
@@ -142,6 +151,10 @@ Execution gate:
 
 - major GUI surfaces render consistently in dark mode without obvious light-theme
   leftovers or unreadable contrast
+
+Completion record:
+
+- `docs/CompletedPR/PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline.md`
 
 ### PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline
 
@@ -287,7 +300,7 @@ Execution gate:
 
 ## 6. Recommended Order
 
-1. `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
+1. `PR-UX-272-GUI-Audit-and-Consistency-Inventory` Completed 2026-03-25
 2. `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
 3. `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
 4. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`

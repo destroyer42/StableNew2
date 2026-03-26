@@ -256,7 +256,11 @@ This is broader than individual UX help PRs and should be handled as a structure
 sweep.
 
 #### 6.1 `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
+
+Status: Completed 2026-03-25
 #### 6.2 `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
+
+Status: Completed 2026-03-25
 #### 6.3 `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
 #### 6.4 `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
 #### 6.5 `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
@@ -305,7 +309,7 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-1. `PR-UX-272`
+1. `PR-UX-274`
 
 Why this fast-track works:
 
@@ -319,8 +323,6 @@ Why this fast-track works:
 ## 5. Master Ordered List
 
 1. close image output-route regression
-1. `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
-1. `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
 1. `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
 1. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
 1. `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
