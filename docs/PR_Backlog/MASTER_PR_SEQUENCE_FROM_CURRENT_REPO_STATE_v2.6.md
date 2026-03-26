@@ -262,6 +262,8 @@ Status: Completed 2026-03-25
 
 Status: Completed 2026-03-25
 #### 6.3 `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
+
+Status: Completed 2026-03-26
 #### 6.4 `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
 #### 6.5 `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
 #### 6.6 `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`

@@ -9,6 +9,7 @@ from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.gui.stage_cards_v2.advanced_upscale_stage_card_v2 import AdvancedUpscaleStageCardV2
+from src.gui.view_contracts.pipeline_layout_contract import get_stage_card_min_width
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 
 
@@ -27,7 +28,7 @@ class StageCardsPanel(ttk.Frame):
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
-        self.columnconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
         self._on_change = on_change
         self.app_state = app_state
         self.base_generation_panel = base_generation_panel

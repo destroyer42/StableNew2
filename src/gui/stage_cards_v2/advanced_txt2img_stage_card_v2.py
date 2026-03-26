@@ -8,10 +8,15 @@ from typing import Any
 
 from src.gui.app_state_v2 import CurrentConfig
 from src.gui.help_text.stage_setting_help_v2 import TXT2IMG_SETTING_HELP
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import LabeledSlider, SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_stage_card_min_width,
+    get_two_pair_form_column_specs,
+)
 from src.utils.webui_resource_names import normalize_vae_config_value, vae_names_match
 
 
@@ -155,8 +160,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 cfg_label,
                 self.cfg_slider,
             )
-            for col in range(4):
-                self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+            configure_grid_columns(self.sampler_section, get_two_pair_form_column_specs())
             next_row = 1
 
         meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
@@ -309,8 +313,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             self.final_size_label,
         )
         
-        for col in range(4):
-            meta.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        configure_grid_columns(meta, get_two_pair_form_column_specs())
 
         # Seed/randomize
         self.seed_section = SeedSection(parent)
@@ -349,7 +352,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.width_var.trace_add("write", lambda *_: self._update_final_size())
         self.height_var.trace_add("write", lambda *_: self._update_final_size())
 
-        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
         # --- Refiner & Hires helpers --------------------------------------------
         self.refiner_enabled_var = tk.BooleanVar(value=False)

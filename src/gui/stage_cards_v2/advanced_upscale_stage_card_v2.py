@@ -7,9 +7,11 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.help_text.stage_setting_help_v2 import UPSCALE_SETTING_HELP
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.view_contracts.pipeline_layout_contract import get_two_pair_form_column_specs
 
 
 class AdvancedUpscaleStageCardV2(BaseStageCardV2):
@@ -236,8 +238,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             self.final_dimensions_label,
         )
 
-        for col in range(4):
-            parent.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        configure_grid_columns(parent, get_two_pair_form_column_specs())
     
     def _on_face_restore_toggle(self) -> None:
         """Show/hide face restore method dropdown based on checkbox state."""

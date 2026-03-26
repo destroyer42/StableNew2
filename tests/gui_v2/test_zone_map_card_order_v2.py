@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.gui.view_contracts.pipeline_layout_contract import get_stage_card_min_width
 from src.gui.views.stage_cards_panel_v2 import StageCardsPanel
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 
@@ -13,3 +14,8 @@ def test_stage_cards_panel_follows_zone_map_order(tk_root) -> None:
     for idx, stage_name in enumerate(panel.stage_order):
         card = getattr(panel, f"{stage_name}_card")
         assert card.grid_info().get("row") == idx
+
+
+def test_stage_cards_panel_uses_shared_minimum_width(tk_root) -> None:
+    panel = StageCardsPanel(tk_root, controller=None, theme=None)
+    assert panel.columnconfigure(0)["minsize"] == get_stage_card_min_width()

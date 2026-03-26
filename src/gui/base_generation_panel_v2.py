@@ -10,8 +10,10 @@ from typing import Any
 
 from src.config import app_config
 from src.gui.help_text.stage_setting_help_v2 import BASE_GENERATION_SETTING_HELP
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import BODY_LABEL_STYLE, MUTED_LABEL_STYLE
+from src.gui.view_contracts.pipeline_layout_contract import get_three_pair_form_column_specs
 from src.utils.webui_resource_names import normalize_vae_config_value, vae_names_match
 
 
@@ -20,9 +22,6 @@ class BaseGenerationPanelV2(BaseStageCardV2):
 
     MIN_DIMENSION = 64
     MAX_DIMENSION = 4096
-    LABEL_COLUMN_MIN_WIDTH = 88
-    PRIMARY_CONTROL_MIN_WIDTH = 180
-    SECONDARY_CONTROL_MIN_WIDTH = 110
 
     def __init__(
         self,
@@ -349,12 +348,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         )
 
     def _configure_layout_columns(self, parent: ttk.Frame) -> None:
-        label_columns = (0, 2, 4)
-        for column in label_columns:
-            parent.columnconfigure(column, weight=0, minsize=self.LABEL_COLUMN_MIN_WIDTH)
-        parent.columnconfigure(1, weight=3, minsize=self.PRIMARY_CONTROL_MIN_WIDTH)
-        parent.columnconfigure(3, weight=2, minsize=self.SECONDARY_CONTROL_MIN_WIDTH)
-        parent.columnconfigure(5, weight=2, minsize=self.SECONDARY_CONTROL_MIN_WIDTH)
+        configure_grid_columns(
+            parent,
+            get_three_pair_form_column_specs(primary_weight=3, secondary_weight=2),
+        )
 
     def _attach_change_traces(self) -> None:
         for var in (

@@ -4,6 +4,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui import theme_v2
 from src.gui.theme_v2 import (
     BODY_LABEL_STYLE,
@@ -11,6 +12,7 @@ from src.gui.theme_v2 import (
     SLIDER_VALUE_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
+from src.gui.view_contracts.pipeline_layout_contract import get_two_pair_form_column_specs
 
 
 class LabeledSlider(ttk.Frame):
@@ -178,8 +180,7 @@ class SamplerSection(ttk.Frame):
             row=2, column=1, sticky="ew", pady=(4, 0)
         )
 
-        for col in range(4):
-            self.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        configure_grid_columns(self, get_two_pair_form_column_specs())
 
 
 class SeedSection(ttk.Frame):

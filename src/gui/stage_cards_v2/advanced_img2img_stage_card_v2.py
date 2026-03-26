@@ -8,10 +8,15 @@ from typing import Any
 
 from src.gui.enhanced_slider import EnhancedSlider
 from src.gui.help_text.stage_setting_help_v2 import IMG2IMG_SETTING_HELP
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_stage_card_min_width,
+    get_two_pair_form_column_specs,
+)
 from src.utils.webui_resource_names import normalize_vae_config_value
 
 
@@ -104,8 +109,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             cfg_label,
             self.cfg_slider,
         )
-        for col in range(4):
-            self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        configure_grid_columns(self.sampler_section, get_two_pair_form_column_specs())
 
         meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         meta.grid(row=1, column=0, sticky="ew", pady=(0, 8))
@@ -187,8 +191,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             height_label,
             self.height_combo,
         )
-        for col in range(4):
-            meta.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        configure_grid_columns(meta, get_two_pair_form_column_specs())
 
         self.seed_section = SeedSection(parent)
         self.seed_section.grid(row=2, column=0, sticky="ew")
@@ -200,7 +203,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             except Exception:
                 pass
 
-        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
     def _notify_change(self) -> None:
         if self._on_change:

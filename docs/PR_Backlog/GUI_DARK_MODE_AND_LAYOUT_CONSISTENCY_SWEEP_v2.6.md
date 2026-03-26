@@ -158,6 +158,8 @@ Completion record:
 
 ### PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline
 
+Status: Completed 2026-03-26
+
 Purpose:
 
 - create shared layout rules so controls do not collapse or vanish under resize
@@ -178,6 +180,10 @@ Primary file targets:
 Execution gate:
 
 - the repo has a reusable layout baseline that future panels can adopt
+
+Completion record:
+
+- `docs/CompletedPR/PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline.md`
 
 ### PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep
 
