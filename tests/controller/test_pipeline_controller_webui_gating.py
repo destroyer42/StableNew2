@@ -82,3 +82,25 @@ def test_on_queue_remove_refreshes_app_state_when_job_removed():
     assert result is True
     controller._job_service.job_queue.remove.assert_called_once_with("job-1")
     controller._refresh_app_state_queue.assert_called_once()
+
+
+def test_queue_updated_skips_duplicate_refresh_when_managed_externally():
+    controller = PipelineController()
+    controller._app_state = mock.Mock()
+    controller._app_state_queue_updates_managed_externally = True
+    controller._refresh_app_state_queue = mock.Mock()
+
+    controller._on_queue_updated(["job-1"])
+
+    controller._refresh_app_state_queue.assert_not_called()
+
+
+def test_queue_updated_refreshes_when_not_managed_externally():
+    controller = PipelineController()
+    controller._app_state = mock.Mock()
+    controller._app_state_queue_updates_managed_externally = False
+    controller._refresh_app_state_queue = mock.Mock()
+
+    controller._on_queue_updated(["job-1"])
+
+    controller._refresh_app_state_queue.assert_called_once()

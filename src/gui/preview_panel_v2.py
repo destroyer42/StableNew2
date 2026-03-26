@@ -658,7 +658,11 @@ class PreviewPanelV2(ttk.Frame):
         if not self.controller:
             return
         try:
-            self.controller.on_add_to_queue()
+            add_to_queue_v2 = getattr(self.controller, "on_add_job_to_queue_v2", None)
+            if callable(add_to_queue_v2):
+                add_to_queue_v2()
+            else:
+                self.controller.on_add_to_queue()
         except ValueError as exc:
             logger.debug(f"[PreviewPanel] _on_add_to_queue validation error: {exc}")
         except Exception as exc:

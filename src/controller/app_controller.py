@@ -366,6 +366,7 @@ class AppController:
         self._ui_preview_dirty = False
         self._ui_job_list_dirty = False
         self._ui_history_dirty = False
+        self._ui_queue_dirty = False
         self._ui_debounce_pending = False
         self._ui_debounce_delay_ms = 150  # Coalesce updates within 150ms window
         self._preview_refresh_request_id = 0
@@ -451,6 +452,10 @@ class AppController:
                 app_state=self.app_state,
                 app_controller=self,  # PR-HEARTBEAT-FIX: Pass self for heartbeat updates
             )
+        try:
+            setattr(self.pipeline_controller, "_app_state_queue_updates_managed_externally", True)
+        except Exception:
+            pass
 
         pipeline_job_service = None
         get_job_service = getattr(self.pipeline_controller, "get_job_service", None)
@@ -685,7 +690,13 @@ class AppController:
             return
         fn()
     
-    def _mark_ui_dirty(self, preview: bool = False, jobs: bool = False, history: bool = False) -> None:
+    def _mark_ui_dirty(
+        self,
+        preview: bool = False,
+        jobs: bool = False,
+        history: bool = False,
+        queue: bool = False,
+    ) -> None:
         """Mark UI components as needing refresh and schedule debounced update.
         
         PR-HB-003: Coalesces multiple rapid update requests into a single
@@ -697,6 +708,8 @@ class AppController:
             self._ui_job_list_dirty = False
         if not hasattr(self, "_ui_history_dirty"):
             self._ui_history_dirty = False
+        if not hasattr(self, "_ui_queue_dirty"):
+            self._ui_queue_dirty = False
         if not hasattr(self, "_ui_debounce_pending"):
             self._ui_debounce_pending = False
         if not hasattr(self, "_ui_debounce_delay_ms"):
@@ -707,6 +720,8 @@ class AppController:
             self._ui_job_list_dirty = True
         if history:
             self._ui_history_dirty = True
+        if queue:
+            self._ui_queue_dirty = True
         
         # Schedule debounced update if not already pending
         if not self._ui_debounce_pending:
@@ -757,6 +772,13 @@ class AppController:
                         self.main_window.refresh_history()
                 except Exception as exc:
                     logger.exception(f"[AppController] Error refreshing history: {exc}")
+
+            if getattr(self, "_ui_queue_dirty", False):
+                self._ui_queue_dirty = False
+                try:
+                    self._refresh_app_state_queue()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing queue state: {exc}")
         
         except Exception as exc:
             logger.exception(f"[AppController] Error in _apply_pending_ui_updates: {exc}")
@@ -1004,14 +1026,8 @@ class AppController:
         return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
 
     def on_add_to_queue(self) -> None:
-        """Explicit event API: enqueue preview-built jobs."""
-        run_config = self._prepare_queue_run_config()
-        controller = self.pipeline_controller
-        if controller is None:
-            return
-        count = controller.enqueue_draft_jobs(run_config=run_config)
-        if count:
-            self._append_log(f"[controller] Submitted {count} job(s) from preview to queue")
+        """Legacy compatibility shim for preview-backed Add to Queue."""
+        self.on_add_job_to_queue_v2()
 
     def on_clear_draft(self) -> None:
         """Explicit event API: clear the current job draft state."""
@@ -2494,12 +2510,9 @@ class AppController:
         self._run_in_gui_thread(_apply_panel_updates)
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
-        def _apply() -> None:
-            if not self.app_state:
-                return
-            self._refresh_app_state_queue()
-
-        self._run_in_gui_thread(_apply)
+        if not self.app_state:
+            return
+        self._mark_ui_dirty(queue=True)
 
     def _on_queue_status_changed(self, status: str) -> None:
         def _apply() -> None:

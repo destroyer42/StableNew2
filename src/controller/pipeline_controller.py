@@ -598,6 +598,9 @@ class PipelineController(_GUIPipelineController):
         self._active_job_id: str | None = None
         self._last_run_config: dict[str, Any] | None = None
         self._app_state: AppStateV2 | None = app_state
+        self._app_state_queue_updates_managed_externally = bool(
+            getattr(self, "_app_controller", None)
+        )
         self._job_lifecycle_logger = job_lifecycle_logger
 
         queue = self._job_controller.get_queue()
@@ -989,6 +992,11 @@ class PipelineController(_GUIPipelineController):
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self._app_state:
+            return
+        if self._app_state_queue_updates_managed_externally:
+            _logger.debug(
+                "_on_queue_updated: external app-state owner present, skipping duplicate refresh"
+            )
             return
         _logger.debug(f"_on_queue_updated: Received {len(summaries)} summaries, refreshing app_state")
         self._refresh_app_state_queue()

@@ -21,14 +21,14 @@ class TestUIDebounce:
         
         # Track how many times _refresh_preview_from_state is called
         refresh_count = 0
-        original_refresh = controller._refresh_preview_from_state
+        original_refresh = controller._refresh_preview_from_state_async
         
         def _counting_refresh():
             nonlocal refresh_count
             refresh_count += 1
             original_refresh()
         
-        controller._refresh_preview_from_state = _counting_refresh
+        controller._refresh_preview_from_state_async = _counting_refresh
         
         # Mark preview dirty multiple times rapidly
         controller._mark_ui_dirty(preview=True)
@@ -55,6 +55,7 @@ class TestUIDebounce:
         assert not controller._ui_preview_dirty
         assert not controller._ui_job_list_dirty
         assert not controller._ui_history_dirty
+        assert not controller._ui_queue_dirty
         assert not controller._ui_debounce_pending
     
     def test_multiple_dirty_types_handled(self):
@@ -72,7 +73,7 @@ class TestUIDebounce:
             nonlocal preview_called
             preview_called = True
         
-        controller._refresh_preview_from_state = _mock_preview
+        controller._refresh_preview_from_state_async = _mock_preview
         
         # Mark multiple types dirty
         controller._mark_ui_dirty(preview=True, jobs=True, history=True)
@@ -87,6 +88,7 @@ class TestUIDebounce:
         assert not controller._ui_preview_dirty
         assert not controller._ui_job_list_dirty
         assert not controller._ui_history_dirty
+        assert not controller._ui_queue_dirty
     
     def test_debounce_updates_heartbeat_timestamp(self):
         """Test that applying UI updates updates the heartbeat timestamp."""
@@ -117,7 +119,7 @@ class TestUIDebounce:
         def _failing_refresh():
             raise RuntimeError("Test exception")
         
-        controller._refresh_preview_from_state = _failing_refresh
+        controller._refresh_preview_from_state_async = _failing_refresh
         
         # This should not raise
         controller._mark_ui_dirty(preview=True)
@@ -126,3 +128,29 @@ class TestUIDebounce:
         # Debounce should still work after exception
         assert not controller._ui_debounce_pending
         assert not controller._ui_preview_dirty
+
+    def test_queue_updates_are_coalesced_into_one_refresh(self):
+        """Queue update events should mark queue dirty and coalesce refresh work."""
+        from src.controller.app_controller import AppController
+
+        controller = AppController(main_window=None, threaded=False)
+        controller.app_state = MagicMock()
+
+        scheduled = []
+        controller._ui_dispatch_later = lambda delay, fn: scheduled.append(fn)
+        controller._refresh_app_state_queue = MagicMock()
+
+        controller._on_queue_updated(["job-1"])
+        controller._on_queue_updated(["job-1", "job-2"])
+        controller._on_queue_updated(["job-1", "job-2", "job-3"])
+
+        assert controller._ui_queue_dirty is True
+        assert controller._ui_debounce_pending is True
+        assert len(scheduled) == 1
+        controller._refresh_app_state_queue.assert_not_called()
+
+        scheduled[0]()
+
+        controller._refresh_app_state_queue.assert_called_once()
+        assert controller._ui_queue_dirty is False
+        assert controller._ui_debounce_pending is False
