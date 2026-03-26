@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from tkinter import ttk
 from typing import Any
 
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.help_text.stage_setting_help_v2 import ADETAILER_STAGE_HELP
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import (
@@ -15,6 +16,11 @@ from src.gui.theme_v2 import (
     DARK_ENTRY_STYLE,
     DARK_SPINBOX_STYLE,
     SURFACE_FRAME_STYLE,
+)
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_single_pair_form_column_specs,
+    get_stage_card_min_width,
+    get_two_pair_form_column_specs,
 )
 
 
@@ -139,7 +145,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
         )
 
     def _build_body(self, parent: ttk.Frame) -> None:
-        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
         helper = ttk.Label(
             parent,
@@ -152,8 +158,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
         overall = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         overall.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        for column in range(4):
-            overall.columnconfigure(column, weight=1 if column % 2 == 1 else 0)
+        configure_grid_columns(overall, get_two_pair_form_column_specs())
+        self._overall_frame = overall
 
         stage_model_label = ttk.Label(overall, text="Stage Model Override", style=BODY_LABEL_STYLE)
         stage_model_label.grid(row=0, column=0, sticky="w", padx=(0, 4), pady=2)
@@ -206,12 +212,16 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
         notebook = ttk.Notebook(parent)
         notebook.grid(row=2, column=0, sticky="nsew")
+        self._notebook = notebook
 
         face_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
         hand_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
         prompt_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
         for tab in (face_tab, hand_tab, prompt_tab):
-            tab.columnconfigure(1, weight=1)
+            configure_grid_columns(tab, get_single_pair_form_column_specs())
+        self._face_tab = face_tab
+        self._hand_tab = hand_tab
+        self._prompt_tab = prompt_tab
 
         notebook.add(face_tab, text="Face Pass")
         notebook.add(hand_tab, text="Hand Pass")
@@ -435,7 +445,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def _build_prompt_tab(self, parent: ttk.Frame) -> None:
         face_frame = ttk.LabelFrame(parent, text="Face Pass Prompts", style="Dark.TLabelframe")
         face_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        face_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(face_frame, get_single_pair_form_column_specs())
+        self._face_prompt_frame = face_frame
 
         face_prompt_label = ttk.Label(face_frame, text="Prompt", style=BODY_LABEL_STYLE)
         face_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
@@ -458,7 +469,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
         hand_frame = ttk.LabelFrame(parent, text="Hand Pass Prompts", style="Dark.TLabelframe")
         hand_frame.grid(row=1, column=0, sticky="ew")
-        hand_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(hand_frame, get_single_pair_form_column_specs())
+        self._hand_prompt_frame = hand_frame
 
         hand_prompt_label = ttk.Label(hand_frame, text="Prompt", style=BODY_LABEL_STYLE)
         hand_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
@@ -520,7 +532,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             width=10,
             style=DARK_SPINBOX_STYLE,
         )
-        spin.grid(row=row, column=1, sticky="w", pady=2, padx=(8, 0))
+        spin.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
         if help_key:
             self._attach_setting_help(help_key, ADETAILER_STAGE_HELP[help_key], label_widget, spin)
         return spin

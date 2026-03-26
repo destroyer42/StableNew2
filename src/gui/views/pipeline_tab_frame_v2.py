@@ -18,6 +18,7 @@ from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_over
 
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.view_contracts.pipeline_layout_contract import (
+    get_stage_card_min_width,
     get_visible_stage_order,
     normalize_window_geometry,
 )
@@ -67,7 +68,7 @@ class PipelineTabFrame(ttk.Frame):
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=1)
         for idx in range(3):
-            self.columnconfigure(idx, weight=1, minsize=self.DEFAULT_COLUMN_WIDTH)
+            self.columnconfigure(idx, weight=1, minsize=self.MIN_COLUMN_WIDTH)
 
         self.overview_panel = TabOverviewPanel(
             self,
@@ -84,9 +85,11 @@ class PipelineTabFrame(ttk.Frame):
         self.left_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.left_column.grid(row=1, column=0, sticky="nsew")
         self.left_column.rowconfigure(0, weight=1)
-        self.left_column.columnconfigure(0, weight=1)
+        self.left_column.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 16)
         self.left_scroll = ScrollableFrame(self.left_column, style=CARD_FRAME_STYLE)
         self.left_scroll.grid(row=0, column=0, sticky="nsew")
+        self.left_scroll.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
+        self.left_scroll.inner.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
         self.left_inner = self.left_scroll.inner
 
         # PR-GUI-H: Remove redundant sidebar_card wrapper - SidebarPanelV2 directly in scroll inner
@@ -111,20 +114,23 @@ class PipelineTabFrame(ttk.Frame):
         self.center_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.center_column.grid(row=1, column=1, sticky="nsew")
         self.center_column.rowconfigure(0, weight=1)
-        self.center_column.columnconfigure(0, weight=1)
+        self.center_column.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 16)
         self.stage_scroll = ScrollableFrame(self.center_column, style=CARD_FRAME_STYLE)
         self.stage_scroll.grid(row=0, column=0, sticky="nsew")
+        self.stage_scroll.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
+        self.stage_scroll.inner.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
         self.stage_cards_frame = self.stage_scroll.inner
 
         self.right_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.right_column.grid(row=1, column=2, sticky="nsew")
         self.right_column.rowconfigure(0, weight=1)
-        self.right_column.columnconfigure(0, weight=1)
+        self.right_column.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 16)
         queue_controller = self.app_controller or self.pipeline_controller
 
         self.right_scroll = ScrollableFrame(self.right_column, style=CARD_FRAME_STYLE)
         self.right_scroll.grid(row=0, column=0, sticky="nsew")
-        self.right_scroll.inner.columnconfigure(0, weight=1)
+        self.right_scroll.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
+        self.right_scroll.inner.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
         self.right_scroll.inner.rowconfigure(0, weight=1)
         self.right_scroll.inner.rowconfigure(3, weight=1)  # History row gets weight
 

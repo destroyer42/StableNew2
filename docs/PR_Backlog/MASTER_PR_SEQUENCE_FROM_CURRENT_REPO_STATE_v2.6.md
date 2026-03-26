@@ -265,7 +265,11 @@ Status: Completed 2026-03-25
 
 Status: Completed 2026-03-26
 #### 6.4 `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
+
+Status: Completed 2026-03-26
 #### 6.5 `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
+
+Status: Completed 2026-03-26
 #### 6.6 `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
 #### 6.7 `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
 #### 6.8 `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
@@ -311,7 +315,7 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-1. `PR-UX-274`
+1. `PR-UX-277`
 
 Why this fast-track works:
 
@@ -325,9 +329,6 @@ Why this fast-track works:
 ## 5. Master Ordered List
 
 1. close image output-route regression
-1. `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
-1. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
-1. `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
 1. `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
 1. `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
 1. `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`

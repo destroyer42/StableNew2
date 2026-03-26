@@ -53,6 +53,17 @@ def get_two_pair_form_column_specs(
     )
 
 
+def get_single_pair_form_column_specs(
+    *,
+    primary_weight: int = 1,
+) -> tuple[dict[str, int], ...]:
+    return build_form_column_specs(
+        label_columns=(0,),
+        primary_columns=(1,),
+        primary_weight=primary_weight,
+    )
+
+
 def get_three_pair_form_column_specs(
     *,
     primary_weight: int = 3,
@@ -109,6 +120,7 @@ __all__ = [
     "SECONDARY_CONTROL_MIN_WIDTH",
     "STAGE_CARD_HORIZONTAL_PADDING",
     "build_form_column_specs",
+    "get_single_pair_form_column_specs",
     "get_two_pair_form_column_specs",
     "get_three_pair_form_column_specs",
     "get_form_min_width",

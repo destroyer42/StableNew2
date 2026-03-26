@@ -14,6 +14,7 @@ from src.gui.main_window_v2 import (
     MIN_MAIN_WINDOW_WIDTH,
     MainWindowV2,
 )
+from src.gui.view_contracts.pipeline_layout_contract import get_stage_card_min_width
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 
@@ -63,3 +64,8 @@ def test_pipeline_columns_use_single_scrollable_frame(tk_root):
     assert len(tab.left_scroll.inner.winfo_children()) >= 2
     assert len(tab.stage_scroll.inner.winfo_children()) == 1
     assert len(tab.right_scroll.inner.winfo_children()) >= 3
+
+    for idx in range(3):
+        assert tab.columnconfigure(idx)["minsize"] == tab.MIN_COLUMN_WIDTH
+
+    assert tab.stage_scroll.inner.columnconfigure(0)["minsize"] == get_stage_card_min_width()

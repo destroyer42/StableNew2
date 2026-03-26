@@ -18,6 +18,8 @@ def test_lora_picker_long_name_preserves_controls(tk_root) -> None:
         assert widgets["keywords_button"].winfo_exists()
         assert widgets["strength_slider"].winfo_exists()
         assert widgets["name_row"] is not widgets["controls_row"]
+        assert widgets["controls_row"].columnconfigure(0)["minsize"] == panel.CONTROL_ROW_MIN_WIDTH
+        assert widgets["remove_button"].winfo_manager() == "grid"
     finally:
         panel.destroy()
 

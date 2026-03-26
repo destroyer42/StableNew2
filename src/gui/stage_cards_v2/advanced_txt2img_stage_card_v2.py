@@ -14,6 +14,7 @@ from src.gui.stage_cards_v2.components import LabeledSlider, SamplerSection, See
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.view_contracts.pipeline_layout_contract import (
+    get_single_pair_form_column_specs,
     get_stage_card_min_width,
     get_two_pair_form_column_specs,
 )
@@ -380,7 +381,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # --- Refiner Frame with collapsible options (PR-GUI-E) ---
         refiner_frame = ttk.LabelFrame(parent, text="SDXL Refiner", style="Dark.TLabelframe")
         refiner_frame.grid(row=3, column=0, sticky="ew", pady=(8, 4))
-        refiner_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(refiner_frame, get_single_pair_form_column_specs())
         self._refiner_frame = refiner_frame
 
         refiner_toggle = ttk.Checkbutton(
@@ -400,7 +401,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # PR-GUI-E: Container frame for refiner options (hidden when disabled)
         self._refiner_options_frame = ttk.Frame(refiner_frame, style=SURFACE_FRAME_STYLE)
         self._refiner_options_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
-        self._refiner_options_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(self._refiner_options_frame, get_single_pair_form_column_specs())
 
         refiner_model_label = ttk.Label(
             self._refiner_options_frame,
@@ -449,7 +450,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # --- Hires Frame with collapsible options (PR-GUI-E) ---
         hires_frame = ttk.LabelFrame(parent, text="Hires fix", style="Dark.TLabelframe")
         hires_frame.grid(row=4, column=0, sticky="ew", pady=(0, 4))
-        hires_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(hires_frame, get_single_pair_form_column_specs())
         self._hires_frame = hires_frame
 
         hires_toggle = ttk.Checkbutton(
@@ -469,7 +470,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # PR-GUI-E: Container frame for hires options (hidden when disabled)
         self._hires_options_frame = ttk.Frame(hires_frame, style=SURFACE_FRAME_STYLE)
         self._hires_options_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
-        self._hires_options_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(self._hires_options_frame, get_single_pair_form_column_specs())
 
         hires_upscaler_label = ttk.Label(
             self._hires_options_frame,

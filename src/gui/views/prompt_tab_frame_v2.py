@@ -23,10 +23,14 @@ from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.view_contracts.prompt_editor_contract import (
     build_editor_warning_text,
     build_slot_labels,
     find_undefined_slots,
+    get_prompt_tab_column_specs,
+    PROMPT_PICKER_COLUMN_MIN_WIDTH,
+    PROMPT_PICKER_ROW_MIN_HEIGHT,
 )
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
@@ -78,9 +82,7 @@ class PromptTabFrame(ttk.Frame):
         # Validation state
         self._undefined_slots: set[str] = set()
 
-        self.columnconfigure(0, weight=1, uniform="prompt_col")
-        self.columnconfigure(1, weight=2, uniform="prompt_col")
-        self.columnconfigure(2, weight=1, uniform="prompt_col")
+        configure_grid_columns(self, get_prompt_tab_column_specs())
         self.rowconfigure(0, weight=1)
 
         self.left_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
@@ -202,9 +204,9 @@ class PromptTabFrame(ttk.Frame):
         # Configure grid layout for split view
         self.prompts_tab.rowconfigure(1, weight=3)  # positive editor row
         self.prompts_tab.rowconfigure(3, weight=1)  # negative editor row
-        self.prompts_tab.rowconfigure(5, weight=1)  # LoRA/embedding panels row
-        self.prompts_tab.columnconfigure(0, weight=1)
-        self.prompts_tab.columnconfigure(1, weight=1)
+        self.prompts_tab.rowconfigure(5, weight=1, minsize=PROMPT_PICKER_ROW_MIN_HEIGHT)
+        self.prompts_tab.columnconfigure(0, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
+        self.prompts_tab.columnconfigure(1, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
 
         # Positive prompt header (row 0)
         positive_header = ttk.Frame(self.prompts_tab)

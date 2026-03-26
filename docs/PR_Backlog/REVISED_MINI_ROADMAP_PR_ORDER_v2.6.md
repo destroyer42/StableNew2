@@ -182,7 +182,7 @@ If you want the highest practical value fastest, prioritize this shorter path:
 1. close output-route regression
 2. `PR-UX-265`
 3. `PR-UX-266`
-4. `PR-UX-275`
+4. `PR-UX-277`
 
 This path delivers:
 
@@ -197,7 +197,7 @@ This path delivers:
 1. close image output-route regression
 1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
 1. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-1. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
+1. `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
 
 ## 6. Recommendation
 

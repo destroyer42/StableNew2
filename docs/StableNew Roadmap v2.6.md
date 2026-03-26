@@ -820,7 +820,9 @@ Priority note:
   27. treat `PR-UX-272` as completed
   28. treat `PR-UX-273` as completed
   29. treat `PR-UX-274` as completed
-  30. begin `PR-UX-275`
+  30. treat `PR-UX-275` as completed
+  31. treat `PR-UX-276` as completed
+  32. begin `PR-UX-277`
 
 Planned rollout:
 
@@ -852,6 +854,12 @@ Planned rollout:
   Completed 2026-03-25
 
 - `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
+  Completed 2026-03-26
+
+- `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
+  Completed 2026-03-26
+
+- `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
   Completed 2026-03-26
 
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`

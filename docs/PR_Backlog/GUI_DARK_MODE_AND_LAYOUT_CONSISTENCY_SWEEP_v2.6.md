@@ -187,6 +187,8 @@ Completion record:
 
 ### PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep
 
+Status: Completed 2026-03-26
+
 Purpose:
 
 - fix pipeline/base-config/stage-card resize issues and hidden controls
@@ -209,7 +211,13 @@ Execution gate:
 - Pipeline/base-config/stage-card surfaces behave consistently and keep critical
   controls visible
 
+Completion record:
+
+- `docs/CompletedPR/PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep.md`
+
 ### PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep
+
+Status: Completed 2026-03-26
 
 Purpose:
 
@@ -231,6 +239,10 @@ Primary file targets:
 Execution gate:
 
 - prompt/LoRA controls remain usable without over-widening the window
+
+Completion record:
+
+- `docs/CompletedPR/PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep.md`
 
 ### PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep
 

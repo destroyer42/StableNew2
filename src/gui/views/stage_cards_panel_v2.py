@@ -112,7 +112,8 @@ class StageCardsPanel(ttk.Frame):
             pady = (0, 0) if idx == last_idx else (0, 6)
             card.grid(row=idx, column=0, sticky="nsew", pady=pady)
         for idx in range(len(self.stage_order)):
-            self.rowconfigure(idx, weight=1)
+            self.rowconfigure(idx, weight=0)
+        self.rowconfigure(len(self.stage_order), weight=1)
 
     def _attach_watchers(self) -> None:
         if not callable(self._on_change):

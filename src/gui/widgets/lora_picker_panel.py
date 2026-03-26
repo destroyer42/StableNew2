@@ -28,6 +28,8 @@ class LoRAPickerPanel(ttk.Frame):
     """Panel for managing LoRAs with add/remove/strength controls."""
 
     NAME_WRAP_LENGTH = 280
+    COMBO_MIN_WIDTH = 180
+    CONTROL_ROW_MIN_WIDTH = 220
     SLIDER_MAX = 1.5
     SLIDER_RESOLUTION = 0.01
     
@@ -54,22 +56,29 @@ class LoRAPickerPanel(ttk.Frame):
     
     def _build_ui(self) -> None:
         """Build the LoRA picker UI."""
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
+
         # Header
         header_frame = ttk.Frame(self)
-        header_frame.pack(fill="x", padx=5, pady=(5, 2))
+        header_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=(5, 2))
+        header_frame.columnconfigure(0, weight=1)
         
-        ttk.Label(header_frame, text="LoRAs", font=("Segoe UI", 10, "bold")).pack(side="left")
+        ttk.Label(header_frame, text="LoRAs", font=("Segoe UI", 10, "bold")).grid(
+            row=0, column=0, sticky="w"
+        )
         
         ttk.Button(
             header_frame,
             text="↻ Refresh",
             command=self.refresh_loras,
             width=10
-        ).pack(side="right")
+        ).grid(row=0, column=1, sticky="e")
         
         # Add button frame
         add_frame = ttk.Frame(self)
-        add_frame.pack(fill="x", padx=5, pady=5)
+        add_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        add_frame.columnconfigure(0, weight=1, minsize=self.COMBO_MIN_WIDTH)
         
         self.lora_name_var = tk.StringVar()
         self.lora_name_combo = ttk.Combobox(
@@ -78,19 +87,24 @@ class LoRAPickerPanel(ttk.Frame):
             width=28,
             state="readonly"
         )
-        self.lora_name_combo.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.lora_name_combo.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         self.lora_name_combo.bind("<Return>", lambda e: self._on_add_lora())
         
-        ttk.Button(add_frame, text="Add LoRA", command=self._on_add_lora).pack(side="left")
+        ttk.Button(add_frame, text="Add LoRA", command=self._on_add_lora).grid(
+            row=0, column=1, sticky="e"
+        )
         
         # Scrollable list of LoRAs
         list_frame = ttk.Frame(self, relief="sunken", borderwidth=1)
-        list_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        list_frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
         
         canvas = tk.Canvas(list_frame, height=150, bg="#2b2b2b", highlightthickness=0)
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
         
         self.lora_list_frame = ttk.Frame(canvas)
+        self.lora_list_frame.columnconfigure(0, weight=1)
         self.lora_list_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
@@ -99,8 +113,10 @@ class LoRAPickerPanel(ttk.Frame):
         canvas.create_window((0, 0), window=self.lora_list_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        self._canvas = canvas
         
         # Enable mousewheel scrolling
         canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
@@ -131,11 +147,14 @@ class LoRAPickerPanel(ttk.Frame):
         """Add a LoRA entry widget to the list."""
         entry_frame = ttk.Frame(self.lora_list_frame, relief="solid", borderwidth=1, padding=(6, 4))
         entry_frame.pack(fill="x", padx=2, pady=2)
+        entry_frame.columnconfigure(0, weight=1)
 
         name_row = ttk.Frame(entry_frame)
-        name_row.pack(fill="x")
+        name_row.grid(row=0, column=0, sticky="ew")
+        name_row.columnconfigure(0, weight=1)
         controls_row = ttk.Frame(entry_frame)
-        controls_row.pack(fill="x", pady=(4, 0))
+        controls_row.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        controls_row.columnconfigure(0, weight=1, minsize=self.CONTROL_ROW_MIN_WIDTH)
 
         name_label = ttk.Label(
             name_row,
@@ -144,7 +163,7 @@ class LoRAPickerPanel(ttk.Frame):
             justify="left",
             wraplength=self.NAME_WRAP_LENGTH,
         )
-        name_label.pack(side="left", fill="x", expand=True)
+        name_label.grid(row=0, column=0, sticky="ew")
         attach_tooltip(name_label, name)
 
         strength_var = tk.DoubleVar(value=strength)
@@ -153,13 +172,13 @@ class LoRAPickerPanel(ttk.Frame):
             self._remove_lora_entry(name)
 
         remove_button = ttk.Button(controls_row, text="X", width=3, command=on_delete)
-        remove_button.pack(side="right", padx=(4, 0))
+        remove_button.grid(row=0, column=2, sticky="e", padx=(4, 0))
 
         def on_keywords() -> None:
             self._show_keywords(name)
 
         keywords_button = ttk.Button(controls_row, text="Keywords", command=on_keywords)
-        keywords_button.pack(side="right", padx=(4, 0))
+        keywords_button.grid(row=0, column=1, sticky="e", padx=(4, 0))
 
         def on_strength_change(value: float | str) -> None:
             try:
@@ -179,7 +198,7 @@ class LoRAPickerPanel(ttk.Frame):
             command=on_strength_change,
             length=180,
         )
-        slider.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        slider.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
         self._lora_entries.append((name, strength_var, entry_frame))
         self._entry_widgets[name] = {
