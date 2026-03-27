@@ -51,3 +51,47 @@ def test_gui_invoker_dispose_prevents_future_callbacks() -> None:
     pump()
 
     assert state["ran"] is False
+
+
+def test_gui_invoker_coalesces_duplicate_pending_callbacks() -> None:
+    root = _FakeRoot()
+    invoker = GuiInvoker(root)
+    state = {"count": 0}
+
+    def _cb() -> None:
+        state["count"] += 1
+
+    invoker.invoke(_cb)
+    invoker.invoke(_cb)
+    invoker.invoke(_cb)
+
+    _, pump = root.calls[0]
+    pump()
+
+    assert state["count"] == 1
+
+
+def test_gui_invoker_yields_large_backlogs_across_multiple_pumps() -> None:
+    root = _FakeRoot()
+    invoker = GuiInvoker(root)
+    invoker._max_callbacks_per_pump = 2
+    invoker._max_pump_duration_ms = 1000.0
+    state = {"count": 0}
+
+    def _make_cb() -> callable:
+        return lambda: state.__setitem__("count", state["count"] + 1)
+
+    for _ in range(5):
+        invoker.invoke(_make_cb())
+
+    _, first_pump = root.calls[0]
+    first_pump()
+
+    assert state["count"] == 2
+    assert len(root.calls) == 2
+
+    _, second_pump = root.calls[1]
+    second_pump()
+
+    assert state["count"] == 4
+    assert len(root.calls) == 3

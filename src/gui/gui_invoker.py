@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import tkinter as tk
 from collections.abc import Callable
 from collections import deque
@@ -16,7 +17,10 @@ class GuiInvoker:
         self._disposed = False
         self._lock = threading.Lock()
         self._pending: deque[Callable[[], None]] = deque()
+        self._pending_ids: set[int] = set()
         self._pump_interval_ms = 15
+        self._max_callbacks_per_pump = 32
+        self._max_pump_duration_ms = 8.0
         self._pump_scheduled = False
         self._schedule_pump()
 
@@ -25,7 +29,11 @@ class GuiInvoker:
         with self._lock:
             if self._disposed:
                 return
+            key = id(fn)
+            if key in self._pending_ids:
+                return
             self._pending.append(fn)
+            self._pending_ids.add(key)
 
     def _schedule_pump(self) -> None:
         with self._lock:
@@ -45,15 +53,30 @@ class GuiInvoker:
             if self._disposed:
                 self._pump_scheduled = False
                 return
-            callbacks = list(self._pending)
-            self._pending.clear()
+            while self._pending and len(callbacks) < self._max_callbacks_per_pump:
+                callbacks.append(self._pending.popleft())
             self._pump_scheduled = False
 
+        started = time.monotonic()
+        executed_count = 0
         for callback in callbacks:
             try:
                 callback()
             except Exception:
                 logger.exception("GuiInvoker callback failed")
+            finally:
+                with self._lock:
+                    self._pending_ids.discard(id(callback))
+            executed_count += 1
+            elapsed_ms = (time.monotonic() - started) * 1000.0
+            if elapsed_ms >= self._max_pump_duration_ms:
+                break
+
+        leftovers = callbacks[executed_count:]
+        if leftovers:
+            with self._lock:
+                for pending_cb in reversed(leftovers):
+                    self._pending.appendleft(pending_cb)
 
         self._schedule_pump()
 
@@ -62,3 +85,4 @@ class GuiInvoker:
         with self._lock:
             self._disposed = True
             self._pending.clear()
+            self._pending_ids.clear()

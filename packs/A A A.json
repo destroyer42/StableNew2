@@ -175,8 +175,8 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "sdxlNuclearGeneralPurposeV3Semi_v30BakedVAE.safetensors",
-      "model_name": "sdxlNuclearGeneralPurposeV3Semi_v30BakedVAE.safetensors",
+      "model": "sdxlUnstableDiffusers_nihilmania.safetensors",
+      "model_name": "sdxlUnstableDiffusers_nihilmania.safetensors",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
@@ -196,7 +196,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.19782608695652174,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "sdxlNuclearGeneralPurposeV3Semi_v30BakedVAE.safetensors"
+      "hr_checkpoint_name": "sdxlUnstableDiffusers_nihilmania.safetensors"
     },
     "img2img": {
       "model": "",
