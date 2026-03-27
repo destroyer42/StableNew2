@@ -12,10 +12,16 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.help_text.workflow_guidance_v2 import build_movie_clips_guidance
 from src.gui.help_text.stage_setting_help_v2 import MOVIE_CLIPS_SETTING_HELP
+from src.gui.theme_v2 import style_listbox_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.pipeline_layout_contract import (
+    PRIMARY_CONTROL_MIN_WIDTH,
+    get_two_pane_workspace_column_specs,
+)
 from src.gui.view_contracts.movie_clips_contract import (
     DEFAULT_CODEC,
     DEFAULT_FPS,
@@ -183,9 +189,17 @@ class MovieClipsTabFrameV2(ttk.Frame):
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
         body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
-        body.columnconfigure(0, weight=1)
-        body.columnconfigure(1, weight=0)
+        configure_grid_columns(
+            body,
+            get_two_pane_workspace_column_specs(
+                left_weight=3,
+                right_weight=2,
+                left_min_width=420,
+                right_min_width=320,
+            ),
+        )
         body.rowconfigure(0, weight=1)
+        self._body_frame = body
 
         # Left: ordered image list
         list_frame = ttk.LabelFrame(
@@ -210,6 +224,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
             highlightbackground=TOKENS.colors.border_subtle,
             exportselection=False,
         )
+        style_listbox_widget(self.image_list)
         self.image_list.grid(row=0, column=0, sticky="nsew")
         _sb = ttk.Scrollbar(list_frame, orient="vertical", command=self.image_list.yview)
         _sb.grid(row=0, column=1, sticky="ns")
@@ -258,7 +273,8 @@ class MovieClipsTabFrameV2(ttk.Frame):
             padding=8,
         )
         settings_frame.grid(row=0, column=1, sticky="ns")
-        settings_frame.columnconfigure(1, weight=1)
+        settings_frame.columnconfigure(1, weight=1, minsize=PRIMARY_CONTROL_MIN_WIDTH)
+        self._settings_frame = settings_frame
 
         self.workflow_help_panel = ActionExplainerPanel(
             settings_frame,

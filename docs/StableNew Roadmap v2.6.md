@@ -822,7 +822,8 @@ Priority note:
   29. treat `PR-UX-274` as completed
   30. treat `PR-UX-275` as completed
   31. treat `PR-UX-276` as completed
-  32. begin `PR-UX-277`
+  32. treat `PR-UX-277` as completed
+  33. begin `PR-UX-278`
 
 Planned rollout:
 
@@ -860,6 +861,9 @@ Planned rollout:
   Completed 2026-03-26
 
 - `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
+  Completed 2026-03-26
+
+- `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
   Completed 2026-03-26
 
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Keep a unique basename to avoid pytest import-file collisions across suites."""
+
 from src.prompting.contracts import PromptContext, PromptSourceContext
 from src.prompting.prompt_intent_analyzer import PromptIntentAnalyzer
 

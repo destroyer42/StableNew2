@@ -246,6 +246,8 @@ Completion record:
 
 ### PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep
 
+Status: Completed 2026-03-26
+
 Purpose:
 
 - apply the same dark-mode and resize consistency rules to Review, Learning,
@@ -268,6 +270,10 @@ Primary file targets:
 Execution gate:
 
 - the main advanced workflow surfaces behave consistently under dark mode and resize
+
+Completion record:
+
+- `docs/CompletedPR/PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep.md`
 
 ### PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep
 

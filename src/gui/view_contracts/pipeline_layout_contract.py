@@ -9,6 +9,9 @@ LABEL_COLUMN_MIN_WIDTH = 88
 PRIMARY_CONTROL_MIN_WIDTH = 180
 SECONDARY_CONTROL_MIN_WIDTH = 110
 STAGE_CARD_HORIZONTAL_PADDING = 24
+WORKSPACE_LEFT_COLUMN_MIN_WIDTH = 260
+WORKSPACE_CENTER_COLUMN_MIN_WIDTH = 420
+WORKSPACE_RIGHT_COLUMN_MIN_WIDTH = 320
 
 
 def build_form_column_specs(
@@ -78,6 +81,35 @@ def get_three_pair_form_column_specs(
     )
 
 
+def get_two_pane_workspace_column_specs(
+    *,
+    left_weight: int = 2,
+    right_weight: int = 3,
+    left_min_width: int = WORKSPACE_LEFT_COLUMN_MIN_WIDTH,
+    right_min_width: int = WORKSPACE_CENTER_COLUMN_MIN_WIDTH,
+) -> tuple[dict[str, int], ...]:
+    return (
+        {"index": 0, "weight": int(left_weight), "minsize": int(left_min_width)},
+        {"index": 1, "weight": int(right_weight), "minsize": int(right_min_width)},
+    )
+
+
+def get_three_pane_workspace_column_specs(
+    *,
+    left_weight: int = 2,
+    center_weight: int = 3,
+    right_weight: int = 3,
+    left_min_width: int = WORKSPACE_LEFT_COLUMN_MIN_WIDTH,
+    center_min_width: int = WORKSPACE_CENTER_COLUMN_MIN_WIDTH,
+    right_min_width: int = WORKSPACE_RIGHT_COLUMN_MIN_WIDTH,
+) -> tuple[dict[str, int], ...]:
+    return (
+        {"index": 0, "weight": int(left_weight), "minsize": int(left_min_width)},
+        {"index": 1, "weight": int(center_weight), "minsize": int(center_min_width)},
+        {"index": 2, "weight": int(right_weight), "minsize": int(right_min_width)},
+    )
+
+
 def get_form_min_width(column_specs: Sequence[dict[str, int]], *, padding: int = 0) -> int:
     return sum(max(0, int(spec.get("minsize", 0))) for spec in column_specs) + max(0, int(padding))
 
@@ -119,8 +151,13 @@ __all__ = [
     "PRIMARY_CONTROL_MIN_WIDTH",
     "SECONDARY_CONTROL_MIN_WIDTH",
     "STAGE_CARD_HORIZONTAL_PADDING",
+    "WORKSPACE_LEFT_COLUMN_MIN_WIDTH",
+    "WORKSPACE_CENTER_COLUMN_MIN_WIDTH",
+    "WORKSPACE_RIGHT_COLUMN_MIN_WIDTH",
     "build_form_column_specs",
     "get_single_pair_form_column_specs",
+    "get_two_pane_workspace_column_specs",
+    "get_three_pane_workspace_column_specs",
     "get_two_pair_form_column_specs",
     "get_three_pair_form_column_specs",
     "get_form_min_width",

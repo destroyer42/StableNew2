@@ -5,6 +5,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.gui.layout_v2 import configure_grid_columns
 from src.queue.job_history_store import JobHistoryEntry
 from src.gui.help_text.workflow_guidance_v2 import (
     REVIEW_DEFAULT_WORKFLOW_HINT,
@@ -13,8 +14,14 @@ from src.gui.help_text.workflow_guidance_v2 import (
 )
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
+from src.gui.theme_v2 import style_listbox_widget, style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.pipeline_layout_contract import (
+    PRIMARY_CONTROL_MIN_WIDTH,
+    get_single_pair_form_column_specs,
+    get_two_pane_workspace_column_specs,
+)
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
@@ -92,6 +99,7 @@ class ReviewTabFrame(ttk.Frame):
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=0)
         self.rowconfigure(2, weight=1)
+        self.rowconfigure(3, weight=0)
 
         self.overview_panel = TabOverviewPanel(
             self,
@@ -191,9 +199,9 @@ class ReviewTabFrame(ttk.Frame):
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
         body.grid(row=2, column=0, sticky="nsew", padx=6, pady=4)
-        body.columnconfigure(0, weight=1, uniform="review")
-        body.columnconfigure(1, weight=1, uniform="review")
+        configure_grid_columns(body, get_two_pane_workspace_column_specs())
         body.rowconfigure(0, weight=1)
+        self._body_frame = body
 
         left = ttk.LabelFrame(body, text="Images", style="Dark.TLabelframe", padding=8)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
@@ -212,6 +220,7 @@ class ReviewTabFrame(ttk.Frame):
             highlightbackground=TOKENS.colors.border_subtle,
             exportselection=False,
         )
+        style_listbox_widget(self.images_list)
         self.images_list.grid(row=0, column=0, sticky="nsew")
         self.images_list.bind("<<ListboxSelect>>", self._on_image_select)
 
@@ -287,9 +296,15 @@ class ReviewTabFrame(ttk.Frame):
 
     def _build_controls(self) -> None:
         controls = ttk.Frame(self, style="Panel.TFrame")
-        controls.grid(row=2, column=0, sticky="ew", padx=6, pady=(4, 6))
-        controls.columnconfigure(0, weight=1)
-        controls.columnconfigure(1, weight=1)
+        controls.grid(row=3, column=0, sticky="ew", padx=6, pady=(4, 6))
+        configure_grid_columns(
+            controls,
+            get_two_pane_workspace_column_specs(
+                left_min_width=420,
+                right_min_width=360,
+            ),
+        )
+        self._controls_frame = controls
 
         prompt_box = ttk.LabelFrame(
             controls,
@@ -298,7 +313,7 @@ class ReviewTabFrame(ttk.Frame):
             padding=8,
         )
         prompt_box.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        prompt_box.columnconfigure(1, weight=1)
+        configure_grid_columns(prompt_box, get_single_pair_form_column_specs())
         prompt_box.rowconfigure(1, weight=0)
         prompt_box.rowconfigure(3, weight=0)
 
@@ -314,6 +329,11 @@ class ReviewTabFrame(ttk.Frame):
             wrap="word",
             borderwidth=1,
             relief="solid",
+        )
+        style_text_widget(self.current_prompt_text, elevated=True)
+        self.current_prompt_text.configure(
+            fg=TOKENS.colors.text_muted,
+            insertbackground=TOKENS.colors.text_muted,
         )
         self.current_prompt_text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
@@ -339,6 +359,7 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
+        style_text_widget(self.prompt_text, elevated=True)
         self.prompt_text.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
         ttk.Label(prompt_box, text="Current - prompt", style="Dark.TLabel").grid(
@@ -353,6 +374,11 @@ class ReviewTabFrame(ttk.Frame):
             wrap="word",
             borderwidth=1,
             relief="solid",
+        )
+        style_text_widget(self.current_negative_text, elevated=True)
+        self.current_negative_text.configure(
+            fg=TOKENS.colors.text_muted,
+            insertbackground=TOKENS.colors.text_muted,
         )
         self.current_negative_text.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
@@ -378,6 +404,7 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
+        style_text_widget(self.negative_text, elevated=True)
         self.negative_text.grid(row=7, column=0, columnspan=2, sticky="ew")
 
         diff_box = ttk.LabelFrame(
@@ -511,7 +538,7 @@ class ReviewTabFrame(ttk.Frame):
             padding=8,
         )
         feedback_box.grid(row=7, column=0, sticky="ew", pady=(8, 0))
-        feedback_box.columnconfigure(1, weight=1)
+        configure_grid_columns(feedback_box, get_single_pair_form_column_specs())
         ttk.Label(feedback_box, text="Rating", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
         )
@@ -548,6 +575,7 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
+        style_text_widget(self.feedback_notes, elevated=True)
         self.feedback_notes.grid(row=2, column=1, sticky="ew")
         feedback_btn = ttk.Button(
             feedback_box,
@@ -577,6 +605,9 @@ class ReviewTabFrame(ttk.Frame):
         )
         subscores = ttk.Frame(feedback_box, style="Panel.TFrame")
         subscores.grid(row=6, column=1, sticky="w", pady=(8, 4))
+        subscores.columnconfigure(1, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
+        subscores.columnconfigure(3, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
+        subscores.columnconfigure(5, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
         ttk.Label(subscores, text="Anatomy", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(
             subscores,

@@ -4,9 +4,14 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     LABEL_COLUMN_MIN_WIDTH,
     PRIMARY_CONTROL_MIN_WIDTH,
     SECONDARY_CONTROL_MIN_WIDTH,
+    WORKSPACE_CENTER_COLUMN_MIN_WIDTH,
+    WORKSPACE_LEFT_COLUMN_MIN_WIDTH,
+    WORKSPACE_RIGHT_COLUMN_MIN_WIDTH,
     get_form_min_width,
+    get_three_pane_workspace_column_specs,
     get_stage_card_min_width,
     get_three_pair_form_column_specs,
+    get_two_pane_workspace_column_specs,
     get_two_pair_form_column_specs,
     get_visible_stage_order,
     normalize_window_geometry,
@@ -46,3 +51,15 @@ def test_shared_form_column_specs_define_consistent_minimums() -> None:
 def test_stage_card_min_width_rolls_up_shared_form_columns() -> None:
     expected = get_form_min_width(get_two_pair_form_column_specs(), padding=24)
     assert get_stage_card_min_width() == expected
+
+
+def test_workspace_column_specs_define_shared_surface_minimums() -> None:
+    assert get_two_pane_workspace_column_specs() == (
+        {"index": 0, "weight": 2, "minsize": WORKSPACE_LEFT_COLUMN_MIN_WIDTH},
+        {"index": 1, "weight": 3, "minsize": WORKSPACE_CENTER_COLUMN_MIN_WIDTH},
+    )
+    assert get_three_pane_workspace_column_specs() == (
+        {"index": 0, "weight": 2, "minsize": WORKSPACE_LEFT_COLUMN_MIN_WIDTH},
+        {"index": 1, "weight": 3, "minsize": WORKSPACE_CENTER_COLUMN_MIN_WIDTH},
+        {"index": 2, "weight": 3, "minsize": WORKSPACE_RIGHT_COLUMN_MIN_WIDTH},
+    )

@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.help_text.workflow_guidance_v2 import (
     build_discovered_review_guidance,
     build_staged_queue_guidance,
@@ -16,8 +17,12 @@ from src.gui.help_text.workflow_guidance_v2 import (
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_review_dialog_v2 import LearningReviewDialogV2
 from src.gui.learning_state import LearningState
-from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE, style_text_widget
 from src.gui.tooltip import attach_tooltip
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_three_pane_workspace_column_specs,
+    get_two_pane_workspace_column_specs,
+)
 from src.gui.view_contracts.status_banner_contract import update_status_banner
 from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
 from src.gui.views.discovered_review_table import DiscoveredReviewTable
@@ -213,9 +218,7 @@ class LearningTabFrame(ttk.Frame):
         self._mode_notebook.add(self.body_frame, text="Designed Experiments")
 
         # Configure body layout
-        self.body_frame.columnconfigure(0, weight=1, uniform="learning_col")
-        self.body_frame.columnconfigure(1, weight=3, uniform="learning_col")
-        self.body_frame.columnconfigure(2, weight=2, uniform="learning_col")
+        configure_grid_columns(self.body_frame, get_three_pane_workspace_column_specs())
         self.body_frame.rowconfigure(0, weight=1)
         self.body_frame.rowconfigure(1, weight=3)
 
@@ -250,8 +253,7 @@ class LearningTabFrame(ttk.Frame):
         # ---- Tab 2: Discovered Review Inbox ----
         self._discovered_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
         self._mode_notebook.add(self._discovered_tab_frame, text="Discovered Review Inbox")
-        self._discovered_tab_frame.columnconfigure(0, weight=1)
-        self._discovered_tab_frame.columnconfigure(1, weight=2)
+        configure_grid_columns(self._discovered_tab_frame, get_two_pane_workspace_column_specs())
         self._discovered_tab_frame.rowconfigure(1, weight=1)
 
         self.discovered_help_panel = ActionExplainerPanel(
@@ -282,9 +284,7 @@ class LearningTabFrame(ttk.Frame):
         # ---- Tab 3: Staged Curation ----
         self._staged_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
         self._mode_notebook.add(self._staged_tab_frame, text="Staged Curation")
-        self._staged_tab_frame.columnconfigure(0, weight=1)
-        self._staged_tab_frame.columnconfigure(1, weight=2)
-        self._staged_tab_frame.columnconfigure(2, weight=2)
+        configure_grid_columns(self._staged_tab_frame, get_three_pane_workspace_column_specs())
         self._staged_tab_frame.rowconfigure(0, weight=1)
 
         self._staged_reason_tag_vars: dict[str, tk.BooleanVar] = {}
@@ -443,6 +443,7 @@ class LearningTabFrame(ttk.Frame):
             wrap="word",
             state="disabled",
         )
+        style_text_widget(self._staged_source_prompt_text, elevated=True)
         self._staged_source_prompt_text.grid(row=0, column=0, sticky="ew")
 
         negative_prompt_frame = ttk.LabelFrame(
@@ -458,6 +459,7 @@ class LearningTabFrame(ttk.Frame):
             wrap="word",
             state="disabled",
         )
+        style_text_widget(self._staged_source_negative_prompt_text, elevated=True)
         self._staged_source_negative_prompt_text.grid(row=0, column=0, sticky="ew")
 
         prior_review_frame = ttk.LabelFrame(staged_right, text="Prior Review", padding=(6, 4))
@@ -510,6 +512,7 @@ class LearningTabFrame(ttk.Frame):
         notes_frame.grid(row=10, column=0, sticky="ew", pady=(6, 0))
         notes_frame.columnconfigure(0, weight=1)
         self._staged_notes_text = tk.Text(notes_frame, height=4, wrap="word")
+        style_text_widget(self._staged_notes_text, elevated=True)
         self._staged_notes_text.grid(row=0, column=0, sticky="ew")
 
         self._staged_last_decision_var = tk.StringVar(value="Latest decision: none")
@@ -521,6 +524,7 @@ class LearningTabFrame(ttk.Frame):
 
         action_frame = ttk.Frame(staged_right, style=SURFACE_FRAME_STYLE)
         action_frame.grid(row=12, column=0, sticky="ew", pady=(6, 0))
+        self._staged_action_frame = action_frame
         for label, decision in (
             ("Reject", "rejected_hard"),
             ("Hold", "not_advanced"),
@@ -536,7 +540,8 @@ class LearningTabFrame(ttk.Frame):
             ).pack(side="left", padx=(0, 4))
 
         derive_frame = ttk.LabelFrame(staged_right, text="Derived Jobs", padding=(6, 4))
-        derive_frame.grid(row=12, column=0, sticky="ew", pady=(6, 0))
+        derive_frame.grid(row=13, column=0, sticky="ew", pady=(6, 0))
+        self._staged_derive_frame = derive_frame
         self.staged_queue_help_panel = ActionExplainerPanel(
             derive_frame,
             content=build_staged_queue_guidance(),
@@ -581,7 +586,8 @@ class LearningTabFrame(ttk.Frame):
             justify="left",
         ).pack(side="left", padx=(8, 0))
         review_frame = ttk.LabelFrame(staged_right, text="Edit in Review", padding=(6, 4))
-        review_frame.grid(row=13, column=0, sticky="ew", pady=(6, 0))
+        review_frame.grid(row=14, column=0, sticky="ew", pady=(6, 0))
+        self._staged_review_frame = review_frame
         self.staged_review_help_panel = ActionExplainerPanel(
             review_frame,
             content=build_staged_review_guidance(),
@@ -635,7 +641,7 @@ class LearningTabFrame(ttk.Frame):
             textvariable=self._staged_job_status_var,
             style=BODY_LABEL_STYLE,
             justify="left",
-        ).grid(row=14, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=15, column=0, sticky="w", pady=(6, 0))
 
         # Refresh inbox when its tab is activated
         self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)

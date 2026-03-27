@@ -7,8 +7,13 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.help_text.workflow_guidance_v2 import build_svd_workflow_guidance
 from src.gui.help_text.stage_setting_help_v2 import SVD_SETTING_HELP
+from src.gui.view_contracts.pipeline_layout_contract import (
+    PRIMARY_CONTROL_MIN_WIDTH,
+    get_two_pane_workspace_column_specs,
+)
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
@@ -239,10 +244,18 @@ class SVDTabFrameV2(ttk.Frame):
     def _build_body(self, model_options: list[str]) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
         body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
-        body.columnconfigure(0, weight=1)
-        body.columnconfigure(1, weight=0)
+        configure_grid_columns(
+            body,
+            get_two_pane_workspace_column_specs(
+                left_weight=3,
+                right_weight=2,
+                left_min_width=420,
+                right_min_width=320,
+            ),
+        )
         body.rowconfigure(0, weight=0)
         body.rowconfigure(1, weight=1)
+        self._body_frame = body
 
         help_frame = ttk.LabelFrame(body, text="SVD Img2Vid", style="Dark.TLabelframe", padding=8)
         help_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
@@ -287,7 +300,8 @@ class SVDTabFrameV2(ttk.Frame):
 
         settings = ttk.LabelFrame(body, text="Settings", style="Dark.TLabelframe", padding=8)
         settings.grid(row=0, column=1, sticky="ns")
-        settings.columnconfigure(1, weight=1)
+        settings.columnconfigure(1, weight=1, minsize=PRIMARY_CONTROL_MIN_WIDTH)
+        self._settings_frame = settings
 
         row = 0
         self.preset_combo = self._add_combo(

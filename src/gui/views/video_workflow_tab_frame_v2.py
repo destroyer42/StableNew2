@@ -5,8 +5,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, cast
 
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
+from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.state.output_routing import (
@@ -15,6 +17,7 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_TESTING,
 )
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
+from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
@@ -146,8 +149,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame", padding=8)
         body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
-        body.columnconfigure(1, weight=1)
-        body.columnconfigure(3, weight=1)
+        configure_grid_columns(
+            body,
+            build_form_column_specs(
+                label_columns=(0,),
+                primary_columns=(1,),
+                secondary_columns=(2, 3),
+                secondary_min_width=140,
+                secondary_weight=1,
+            ),
+        )
+        body.rowconfigure(6, weight=1)
+        body.rowconfigure(7, weight=1)
+        self._body_frame = body
 
         self.workflow_combo: ttk.Combobox = cast(
             ttk.Combobox,
@@ -219,10 +233,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             body,
             height=5,
             wrap="word",
-            bg="#232323",
-            fg="#f2f2f2",
-            insertbackground="#f2f2f2",
         )
+        style_text_widget(self.prompt_text, elevated=True)
         self.prompt_text.grid(row=6, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
         self._attach_setting_help(
             "prompt",
@@ -237,10 +249,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             body,
             height=4,
             wrap="word",
-            bg="#232323",
-            fg="#f2f2f2",
-            insertbackground="#f2f2f2",
         )
+        style_text_widget(self.negative_prompt_text, elevated=True)
         self.negative_prompt_text.grid(row=7, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
         self._attach_setting_help(
             "negative",
