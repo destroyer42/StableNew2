@@ -2,7 +2,7 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-26
+Updated: 2026-03-27
 
 ## 0. Purpose
 
@@ -106,6 +106,11 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md`
 - `docs/PR_Backlog/PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics.md`
 - `docs/PR_Backlog/PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries.md`
+- `docs/PR_Backlog/D-NSFW-SFW-001-Content-Visibility-Mode-Discovery.md`
+- `docs/PR_Backlog/PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence.md`
+- `docs/PR_Backlog/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
+- `docs/PR_Backlog/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
+- `docs/PR_Backlog/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
 
 ### 1.5 Reference and history
 
